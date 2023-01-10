@@ -415,7 +415,7 @@ printCooldownParametersV1 cp = do
     putStrLn $ "  - pool owner cooldown epochs: " ++ show (cp ^. cpPoolOwnerCooldown)
     putStrLn $ "  - delegator cooldown epochs: " ++ show (cp ^. cpDelegatorCooldown)
 
-printTimeParametersV1 :: TimeParameters cpv -> IO ()
+printTimeParametersV1 :: TimeParameters -> IO ()
 printTimeParametersV1 tp = do
     putStrLn $ "  - time parameters:"
     putStrLn $ "    + reward period length (in epochs): " ++ show (tp ^. tpRewardPeriodLength)
@@ -434,8 +434,7 @@ printConsensusParametersV1 ConsensusParametersV1{..} = do
     putStrLn $ "  + Block energy limit" ++ show _cpBlockEnergyLimit
 
 printPoolParametersV1 ::
-    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
-    PoolParameters cpv ->
+    PoolParameters' 'PoolParametersVersion1 ->
     IO ()
 printPoolParametersV1 pp = do
     putStrLn $ "  - Passive delegation parameters:"

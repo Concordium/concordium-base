@@ -29,7 +29,7 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- |Cooldown parameters.
       gcpCooldownParameters :: !(CooldownParameters cpv),
       -- |Time parameters.
-      gcpTimeParameters :: !(OParam 'PTTimeParameters cpv (TimeParameters cpv)),
+      gcpTimeParameters :: !(OParam 'PTTimeParameters cpv TimeParameters),
       -- |LimitAccountCreation: the maximum number of accounts
       -- that may be created in one block.
       gcpAccountCreationLimit :: !CredentialsPerBlockLimit,

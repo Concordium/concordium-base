@@ -454,7 +454,7 @@ genCooldownParametersV1 =
 genRewardPeriodLength :: Gen RewardPeriodLength
 genRewardPeriodLength = RewardPeriodLength <$> choose (1, maxBound) -- to make sure that reward period length is >= 1
 
-genTimeParametersV1 :: Gen (TimeParameters cpv)
+genTimeParametersV1 :: Gen TimeParameters
 genTimeParametersV1 = TimeParametersV1 <$> genRewardPeriodLength <*> genMintRate
 
 genPoolParametersV0 :: Gen (PoolParameters 'ChainParametersV0)

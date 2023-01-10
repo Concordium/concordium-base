@@ -148,7 +148,7 @@ data PendingUpdates cpv = PendingUpdates
       -- |Updates to the transaction fee distribution.
       _pTransactionFeeDistributionQueue :: !(UpdateQueue TransactionFeeDistribution),
       -- |Updates to the GAS rewards.
-      _pGASRewardsQueue :: !(UpdateQueue (GASRewards cpv)),
+      _pGASRewardsQueue :: !(UpdateQueue (GASRewards (GasRewardsVersionFor cpv))),
       -- |Updates pool parameters.
       _pPoolParametersQueue :: !(UpdateQueue (PoolParameters cpv)),
       -- |Adds a new anonymity revoker.
@@ -158,7 +158,7 @@ data PendingUpdates cpv = PendingUpdates
       -- |Updates to cooldown parameters (CPV1 onwards).
       _pCooldownParametersQueue :: !(OUpdateQueue 'PTCooldownParametersAccessStructure cpv (CooldownParameters cpv)),
       -- |Updates to time parameters (CPV1 onwards).
-      _pTimeParametersQueue :: !(OUpdateQueue 'PTTimeParameters cpv (TimeParameters cpv)),
+      _pTimeParametersQueue :: !(OUpdateQueue 'PTTimeParameters cpv TimeParameters),
       -- |Updates to the consensus version 2 timeout parameters (CPV2 onwards).
       _pTimeoutParametersQueue :: !(OUpdateQueue 'PTTimeoutParameters cpv TimeoutParameters),
       -- |Minimum block time for consensus version 2 (CPV2 onwards).
@@ -181,9 +181,9 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                 <> hsh _pEuroPerEnergyQueue
                 <> hsh _pMicroGTUPerEuroQueue
                 <> hsh _pFoundationAccountQueue
-                <> withIsMintDistributionVersion (chainParametersVersion @cpv) (hsh _pMintDistributionQueue)
+                <> withIsMintDistributionVersionFor (chainParametersVersion @cpv) (hsh _pMintDistributionQueue)
                 <> hsh _pTransactionFeeDistributionQueue
-                <> hsh _pGASRewardsQueue
+                <> withIsGASRewardsVersionFor (chainParametersVersion @cpv) (hsh _pGASRewardsQueue)
                 <> hsh _pPoolParametersQueue
                 <> hsh _pAddAnonymityRevokerQueue
                 <> hsh _pAddIdentityProviderQueue
@@ -197,9 +197,6 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
         ohsh :: HashableTo H.Hash e => OUpdateQueue pt cpv e -> BS.ByteString
         ohsh = foldMap hsh
 
--- ohsh NoParam = BS.empty
--- ohsh (SomeParam uq) = hsh uq
-
 -- |Serialize the pending updates.
 putPendingUpdatesV0 :: forall cpv. IsChainParametersVersion cpv => Putter (PendingUpdates cpv)
 putPendingUpdatesV0 PendingUpdates{..} = do
@@ -211,10 +208,10 @@ putPendingUpdatesV0 PendingUpdates{..} = do
     putUpdateQueueV0 _pEuroPerEnergyQueue
     putUpdateQueueV0 _pMicroGTUPerEuroQueue
     putUpdateQueueV0 _pFoundationAccountQueue
-    withIsMintDistributionVersion (chainParametersVersion @cpv) $ putUpdateQueueV0 _pMintDistributionQueue
+    withIsMintDistributionVersionFor (chainParametersVersion @cpv) $ putUpdateQueueV0 _pMintDistributionQueue
     putUpdateQueueV0 _pTransactionFeeDistributionQueue
-    putUpdateQueueV0 _pGASRewardsQueue
-    putUpdateQueueV0 _pPoolParametersQueue
+    withIsGASRewardsVersionFor (chainParametersVersion @cpv) $ putUpdateQueueV0 _pGASRewardsQueue
+    withIsPoolParametersVersionFor (chainParametersVersion @cpv) $ putUpdateQueueV0 _pPoolParametersQueue
     putUpdateQueueV0 _pAddAnonymityRevokerQueue
     putUpdateQueueV0 _pAddIdentityProviderQueue
     withIsCooldownParametersVersionFor (chainParametersVersion @cpv) $ mapM_ putUpdateQueueV0 _pCooldownParametersQueue
@@ -234,10 +231,10 @@ getPendingUpdates migration = do
     _pEuroPerEnergyQueue <- getUpdateQueueV0 @ExchangeRate
     _pMicroGTUPerEuroQueue <- getUpdateQueueV0 @ExchangeRate
     _pFoundationAccountQueue <- getUpdateQueueV0 @AccountIndex
-    _pMintDistributionQueue <- withIsMintDistributionVersion (chainParametersVersion @(ChainParametersVersionFor oldpv)) $ getUpdateQueueV0With (migrateMintDistribution migration <$> get)
+    _pMintDistributionQueue <- withIsMintDistributionVersionFor (chainParametersVersion @(ChainParametersVersionFor oldpv)) $ getUpdateQueueV0With (migrateMintDistribution migration <$> get)
     _pTransactionFeeDistributionQueue <- getUpdateQueueV0 @TransactionFeeDistribution
-    _pGASRewardsQueue <- getUpdateQueueV0With (migrateGASRewards migration <$> get)
-    _pPoolParametersQueue <- getUpdateQueueV0With (migratePoolParameters migration <$> get)
+    _pGASRewardsQueue <- withIsGASRewardsVersionFor (chainParametersVersion @(ChainParametersVersionFor oldpv)) $ getUpdateQueueV0With (migrateGASRewards migration <$> get)
+    _pPoolParametersQueue <- withIsPoolParametersVersionFor (chainParametersVersion @(ChainParametersVersionFor oldpv)) $ getUpdateQueueV0With (migratePoolParameters migration <$> get)
     _pAddAnonymityRevokerQueue <- getUpdateQueueV0 @ARS.ArInfo
     _pAddIdentityProviderQueue <- getUpdateQueueV0 @IPS.IpInfo
     oldCooldownParametersQueue <-
@@ -246,7 +243,7 @@ getPendingUpdates migration = do
                 getUpdateQueueV0 @(CooldownParameters (ChainParametersVersionFor oldpv))
     oldTimeParametersQueue <-
         whenSupported @'PTTimeParameters @(ChainParametersVersionFor oldpv) $
-            getUpdateQueueV0 @(TimeParameters (ChainParametersVersionFor oldpv))
+            getUpdateQueueV0 @TimeParameters
     oldTimeoutParametersQueue <-
         whenSupported @'PTTimeoutParameters @(ChainParametersVersionFor oldpv) $
             getUpdateQueueV0 @TimeoutParameters

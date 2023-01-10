@@ -79,12 +79,12 @@ migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migrateGASRewards ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    GASRewards (ChainParametersVersionFor oldpv) ->
-    GASRewards (ChainParametersVersionFor pv)
+    GASRewards (GasRewardsVersionFor (ChainParametersVersionFor oldpv)) ->
+    GASRewards (GasRewardsVersionFor (ChainParametersVersionFor pv))
 migrateGASRewards StateMigrationParametersTrivial gr = gr
 migrateGASRewards StateMigrationParametersP1P2 gr = gr
 migrateGASRewards StateMigrationParametersP2P3 gr = gr
-migrateGASRewards StateMigrationParametersP3ToP4{} GASRewards{_gasFinalizationProof = SomeParam fp, ..} = GASRewards{_gasFinalizationProof = SomeParam fp, ..}
+migrateGASRewards StateMigrationParametersP3ToP4{} gr = gr
 migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
 
 -- FIXME: Add P5 -> P6

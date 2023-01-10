@@ -28,7 +28,7 @@ import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
-import Concordium.Types.Parameters (CooldownParameters, GASRewards, MintDistribution, MintDistributionVersion (MintDistributionVersion0, MintDistributionVersion1), PoolParameters, TimeParameters, TransactionFeeDistribution)
+import Concordium.Types.Parameters (CooldownParameters, GASRewards, GASRewardsVersion (..), MintDistribution, MintDistributionVersion (..), PoolParameters, TimeParameters, TransactionFeeDistribution)
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
@@ -266,9 +266,12 @@ instance FromJSON BlockSummary where
         parse :: SomeProtocolVersion -> Object -> Parser BlockSummary
         parse (SomeProtocolVersion (spv :: SProtocolVersion pv)) v =
             BlockSummary
-                <$> v .: "transactionSummaries"
-                <*> v .: "specialEvents"
-                <*> v .: "finalizationData"
+                <$> v
+                .: "transactionSummaries"
+                <*> v
+                .: "specialEvents"
+                <*> v
+                .: "finalizationData"
                 <*> (v .: "updates" :: Parser (UQ.Updates pv))
                 <*> pure spv
 
@@ -586,9 +589,9 @@ data PendingUpdateEffect
     | -- |Updates to the transaction fee distribution.
       PUETransactionFeeDistribution !TransactionFeeDistribution
     | -- |Updates to the GAS rewards in CPV0 and CPV1.
-      PUEGASRewardsV0 !(GASRewards 'ChainParametersV0)
+      PUEGASRewardsV0 !(GASRewards 'GASRewardsVersion0)
     | -- |Updates to the GAS rewards in CPV2.
-      PUEGASRewardsV1 !(GASRewards 'ChainParametersV2)
+      PUEGASRewardsV1 !(GASRewards 'GASRewardsVersion1)
     | -- |Updates pool parameters.
       PUEPoolParametersV0 !(PoolParameters 'ChainParametersV0)
     | PUEPoolParametersV1 !(PoolParameters 'ChainParametersV1)
@@ -599,7 +602,7 @@ data PendingUpdateEffect
     | -- |Updates to cooldown parameters for chain parameters version 1.
       PUECooldownParameters !(CooldownParameters 'ChainParametersV1)
     | -- |Updates to time parameters for chain parameters version 1.
-      PUETimeParameters !(TimeParameters 'ChainParametersV1)
+      PUETimeParameters !TimeParameters
 
 -- | Next available sequence numbers for updating any of the chain parameters.
 data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers

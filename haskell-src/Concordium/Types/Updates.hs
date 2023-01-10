@@ -829,7 +829,7 @@ data UpdatePayload
     | -- |Update the distribution of transaction fees
       TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
     | -- |Update the GAS rewards
-      GASRewardsUpdatePayload !(GASRewards 'ChainParametersV0)
+      GASRewardsUpdatePayload !(GASRewards 'GASRewardsVersion0)
     | -- |Update the minimum amount to register as a baker with chain parameter version 0
       BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
     | -- |Root level update
@@ -845,7 +845,7 @@ data UpdatePayload
     | -- |Pool parameters with chain parameter version 1
       PoolParametersCPV1UpdatePayload !(PoolParameters 'ChainParametersV1)
     | -- |Time parameters with chain parameter version 1
-      TimeParametersCPV1UpdatePayload !(TimeParameters 'ChainParametersV1)
+      TimeParametersCPV1UpdatePayload !TimeParameters
     | -- |Update the distribution of newly minted GTU in chain parameters version 1
       MintDistributionCPV1UpdatePayload !(MintDistribution 'MintDistributionVersion1)
     | -- |Update the timeout parameters
@@ -855,7 +855,7 @@ data UpdatePayload
     | -- |Update block energy limit
       BlockEnergyLimitUpdatePayload !Energy
     | -- |Update the GAS rewards
-      GASRewardsCPV2UpdatePayload !(GASRewards 'ChainParametersV2)
+      GASRewardsCPV2UpdatePayload !(GASRewards 'GASRewardsVersion1)
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -886,38 +886,43 @@ getUpdatePayload spv =
     getWord8 >>= \case
         1 -> ProtocolUpdatePayload <$> get
         2
-            | isCPV ChainParametersV0 || isCPV ChainParametersV1 ->
+            | isSupported PTElectionDifficulty cpv ->
                 ElectionDifficultyUpdatePayload <$> get
         3 -> EuroPerEnergyUpdatePayload <$> get
         4 -> MicroGTUPerEuroUpdatePayload <$> get
         5 -> FoundationAccountUpdatePayload <$> get
-        6 | isCPV ChainParametersV0 -> MintDistributionUpdatePayload <$> get
+        6
+            | MintDistributionVersion0 <- mintDistributionVersionFor cpv ->
+                MintDistributionUpdatePayload <$> get
         7 -> TransactionFeeDistributionUpdatePayload <$> get
         8 -> GASRewardsUpdatePayload <$> get
-        9 | isCPV ChainParametersV0 -> BakerStakeThresholdUpdatePayload <$> getPoolParameters
+        9
+            | PoolParametersVersion0 <- poolParametersVersionFor cpv ->
+                BakerStakeThresholdUpdatePayload <$> getPoolParameters SPoolParametersVersion0
         10 -> RootUpdatePayload <$> getRootUpdate scpv
         11 -> Level1UpdatePayload <$> getLevel1Update scpv
         12 -> AddAnonymityRevokerUpdatePayload <$> get
         13 -> AddIdentityProviderUpdatePayload <$> get
         14
-            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
-                CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
+            | CooldownParametersVersion1 <- cooldownParametersVersionFor cpv ->
+                CooldownParametersCPV1UpdatePayload <$> getCooldownParameters SCooldownParametersVersion1
         15
-            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
-                PoolParametersCPV1UpdatePayload <$> getPoolParameters
+            | PoolParametersVersion1 <- poolParametersVersionFor cpv ->
+                PoolParametersCPV1UpdatePayload <$> getPoolParameters SPoolParametersVersion1
         16
             | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
                 TimeParametersCPV1UpdatePayload <$> getTimeParameters
         17
-            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
+            | MintDistributionVersion1 <- mintDistributionVersionFor cpv ->
                 MintDistributionCPV1UpdatePayload <$> get
         18 | isCPV ChainParametersV2 -> TimeoutParametersUpdatePayload <$> get
         19 | isCPV ChainParametersV2 -> MinBlockTimeUpdatePayload <$> get
         20 | isCPV ChainParametersV2 -> BlockEnergyLimitUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
-    isCPV cpv = cpv == demoteChainParameterVersion scpv
+    isCPV = (== demoteChainParameterVersion scpv)
     scpv = sChainParametersVersionFor spv
+    cpv = demoteChainParameterVersion scpv
 
 $( deriveJSON
     defaultOptions
@@ -1014,7 +1019,7 @@ checkEnoughKeys ::
     Bool
 checkEnoughKeys (knownIndices, thr) ks =
     let numOfAuthorizedKeysReceived = Set.size (ks `Set.intersection` knownIndices)
-    in  numOfAuthorizedKeysReceived >= fromIntegral thr
+     in numOfAuthorizedKeysReceived >= fromIntegral thr
             && numOfAuthorizedKeysReceived == Set.size ks
 
 --------------------

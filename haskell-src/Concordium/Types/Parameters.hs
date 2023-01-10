@@ -22,7 +22,6 @@ module Concordium.Types.Parameters where
 
 import Control.Monad
 import qualified Data.Aeson as AE
-import Data.Aeson.TH
 import Data.Aeson.Types
 import Data.Bool.Singletons
 import Data.Maybe
@@ -38,7 +37,6 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
-import Concordium.Utils
 
 $( singletons
     [d|
@@ -54,6 +52,33 @@ $( singletons
         supportsMintPerSlot :: MintDistributionVersion -> Bool
         supportsMintPerSlot MintDistributionVersion0 = True
         supportsMintPerSlot MintDistributionVersion1 = False
+
+        data GASRewardsVersion
+            = GASRewardsVersion0
+            | GASRewardsVersion1
+
+        gasRewardsVersionFor :: ChainParametersVersion -> GASRewardsVersion
+        gasRewardsVersionFor ChainParametersV0 = GASRewardsVersion0
+        gasRewardsVersionFor ChainParametersV1 = GASRewardsVersion0
+        gasRewardsVersionFor ChainParametersV2 = GASRewardsVersion1
+
+        supportsGASFinalizationProof :: GASRewardsVersion -> Bool
+        supportsGASFinalizationProof GASRewardsVersion0 = True
+        supportsGASFinalizationProof GASRewardsVersion1 = False
+
+        data CooldownParametersVersion = CooldownParametersVersion0 | CooldownParametersVersion1
+
+        cooldownParametersVersionFor :: ChainParametersVersion -> CooldownParametersVersion
+        cooldownParametersVersionFor ChainParametersV0 = CooldownParametersVersion0
+        cooldownParametersVersionFor ChainParametersV1 = CooldownParametersVersion1
+        cooldownParametersVersionFor ChainParametersV2 = CooldownParametersVersion1
+
+        data PoolParametersVersion = PoolParametersVersion0 | PoolParametersVersion1
+
+        poolParametersVersionFor :: ChainParametersVersion -> PoolParametersVersion
+        poolParametersVersionFor ChainParametersV0 = PoolParametersVersion0
+        poolParametersVersionFor ChainParametersV1 = PoolParametersVersion1
+        poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
 
         -- \|Consensus parameters
         data ConsensusParametersVersion
@@ -225,8 +250,8 @@ type IsMintDistributionVersion (mdv :: MintDistributionVersion) = SingI mdv
 withSupportsMintPerSlot :: forall mdv a. SMintDistributionVersion mdv -> (SingI (SupportsMintPerSlot mdv) => a) -> a
 withSupportsMintPerSlot smdv = withSingI (sSupportsMintPerSlot smdv)
 
-withIsMintDistributionVersion :: SChainParametersVersion t -> (SingI (MintDistributionVersionFor t) => r) -> r
-withIsMintDistributionVersion scpv = withSingI (sMintDistributionVersionFor scpv)
+withIsMintDistributionVersionFor :: SChainParametersVersion t -> (SingI (MintDistributionVersionFor t) => r) -> r
+withIsMintDistributionVersionFor scpv = withSingI (sMintDistributionVersionFor scpv)
 
 -- |The minting rate and the distribution of newly-minted GTU
 -- among bakers, finalizers, and the foundation account.
@@ -329,14 +354,22 @@ instance HashableTo Hash.Hash TransactionFeeDistribution where
 
 instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
 
+type IsGASRewardsVersion (grv :: GASRewardsVersion) = SingI grv
+
+withSupportsGASFinalizationProof :: forall grv a. SGASRewardsVersion grv -> (SingI (SupportsGASFinalizationProof grv) => a) -> a
+withSupportsGASFinalizationProof sgrv = withSingI (sSupportsGASFinalizationProof sgrv)
+
+withIsGASRewardsVersionFor :: SChainParametersVersion t -> (SingI (GasRewardsVersionFor t) => r) -> r
+withIsGASRewardsVersionFor scpv = withSingI (sGasRewardsVersionFor scpv)
+
 -- |Parameters that determine the proportion of the GAS account that is paid to the baker (pool)
 -- under various circumstances.
-data GASRewards cpv = GASRewards
+data GASRewards (grv :: GASRewardsVersion) = GASRewards
     { -- |BakerPrevTransFrac: fraction paid to baker
       _gasBaker :: !AmountFraction,
       -- |FeeAddFinalisationProof: fraction paid for including a
       -- finalization proof in a block.
-      _gasFinalizationProof :: !(OParam 'PTFinalizationProof cpv AmountFraction),
+      _gasFinalizationProof :: !(Conditionally (SupportsGASFinalizationProof grv) AmountFraction),
       -- |FeeAccountCreation: fraction paid for including each
       -- account creation transaction in a block.
       _gasAccountCreation :: !AmountFraction,
@@ -361,10 +394,12 @@ instance AE.ToJSON (GASRewards cpv) where
       where
         finalizationProof = foldMap (\finProof -> ["finalizationProof" AE..= finProof]) _gasFinalizationProof
 
-instance IsChainParametersVersion cpv => AE.FromJSON (GASRewards cpv) where
+instance IsGASRewardsVersion grv => AE.FromJSON (GASRewards grv) where
     parseJSON = withObject "RewardParameters" $ \v -> do
         _gasBaker <- v .: "baker"
-        _gasFinalizationProof <- whenSupported $ v .: "finalizationProof"
+        _gasFinalizationProof <-
+            conditionallyA (sSupportsGASFinalizationProof (sing @grv)) $
+                v .: "finalizationProof"
         _gasAccountCreation <- v .: "accountCreation"
         _gasChainUpdate <- v .: "chainUpdate"
         return GASRewards{..}
@@ -374,23 +409,23 @@ instance IsChainParametersVersion cpv => AE.FromJSON (GASRewards cpv) where
 
 -- $(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
 
-instance IsChainParametersVersion cpv => Serialize (GASRewards cpv) where
+instance IsGASRewardsVersion grv => Serialize (GASRewards grv) where
     put GASRewards{..} = do
         put _gasBaker
-        put _gasFinalizationProof
+        withSupportsGASFinalizationProof (sing @grv) $ put _gasFinalizationProof
         put _gasAccountCreation
         put _gasChainUpdate
     get = do
         _gasBaker <- get
-        _gasFinalizationProof <- get
+        _gasFinalizationProof <- withSupportsGASFinalizationProof (sing @grv) get
         _gasAccountCreation <- get
         _gasChainUpdate <- get
         return GASRewards{..}
 
-instance IsChainParametersVersion cpv => HashableTo Hash.Hash (GASRewards cpv) where
+instance IsGASRewardsVersion grv => HashableTo Hash.Hash (GASRewards grv) where
     getHash = Hash.hash . encode
 
-instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (GASRewards cpv)
+instance (Monad m, IsGASRewardsVersion grv) => MHashableTo m Hash.Hash (GASRewards grv)
 
 -- |Parameters affecting rewards.
 -- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
@@ -400,7 +435,7 @@ data RewardParameters cpv = RewardParameters
       -- |Distribution of transaction fees.
       _rpTransactionFeeDistribution :: !TransactionFeeDistribution,
       -- |Rewards paid from the GAS account.
-      _rpGASRewards :: !(GASRewards cpv)
+      _rpGASRewards :: !(GASRewards (GasRewardsVersionFor cpv))
     }
     deriving (Eq, Show)
 
@@ -412,7 +447,7 @@ instance (mdv ~ MintDistributionVersionFor cpv) => HasMintDistribution (RewardPa
 instance HasTransactionFeeDistribution (RewardParameters cpv) where
     transactionFeeDistribution = rpTransactionFeeDistribution
 
-instance HasGASRewards (RewardParameters cpv) cpv where
+instance (grv ~ GasRewardsVersionFor cpv) => HasGASRewards (RewardParameters cpv) grv where
     gASRewards = rpGASRewards
 
 instance AE.ToJSON (RewardParameters cpv) where
@@ -425,20 +460,20 @@ instance AE.ToJSON (RewardParameters cpv) where
 
 instance IsChainParametersVersion cpv => AE.FromJSON (RewardParameters cpv) where
     parseJSON = withObject "RewardParameters" $ \v -> do
-        _rpMintDistribution <- withIsMintDistributionVersion (chainParametersVersion @cpv) $ v .: "mintDistribution"
+        _rpMintDistribution <- withIsMintDistributionVersionFor (chainParametersVersion @cpv) $ v .: "mintDistribution"
         _rpTransactionFeeDistribution <- v .: "transactionFeeDistribution"
-        _rpGASRewards <- v .: "gASRewards"
+        _rpGASRewards <- withIsGASRewardsVersionFor (sing @cpv) $ v .: "gASRewards"
         return RewardParameters{..}
 
 instance IsChainParametersVersion cpv => Serialize (RewardParameters cpv) where
     put RewardParameters{..} = do
-        withIsMintDistributionVersion (chainParametersVersion @cpv) $ put _rpMintDistribution
+        withIsMintDistributionVersionFor (chainParametersVersion @cpv) $ put _rpMintDistribution
         put _rpTransactionFeeDistribution
-        put _rpGASRewards
+        withIsGASRewardsVersionFor (sing @cpv) $ put _rpGASRewards
     get = do
-        _rpMintDistribution <- withIsMintDistributionVersion (chainParametersVersion @cpv) get
+        _rpMintDistribution <- withIsMintDistributionVersionFor (chainParametersVersion @cpv) get
         _rpTransactionFeeDistribution <- get
-        _rpGASRewards <- get
+        _rpGASRewards <- withIsGASRewardsVersionFor (sing @cpv) get
         return RewardParameters{..}
 
 data ExchangeRates = ExchangeRates
@@ -500,17 +535,6 @@ instance HasExchangeRates ExchangeRates where
     {-# INLINE energyRate #-}
     energyRate = to _erEnergyRate
 
-$( singletons
-    [d|
-        data CooldownParametersVersion = CooldownParametersVersion0 | CooldownParametersVersion1
-
-        cooldownParametersVersionFor :: ChainParametersVersion -> CooldownParametersVersion
-        cooldownParametersVersionFor ChainParametersV0 = CooldownParametersVersion0
-        cooldownParametersVersionFor ChainParametersV1 = CooldownParametersVersion1
-        cooldownParametersVersionFor ChainParametersV2 = CooldownParametersVersion1
-        |]
- )
-
 type IsCooldownParametersVersion (cpv :: CooldownParametersVersion) = SingI cpv
 
 withIsCooldownParametersVersionFor ::
@@ -561,9 +585,9 @@ parseCooldownParametersJSON = case sing @cpv of
     SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
             <$> v
-                .: "poolOwnerCooldown"
+            .: "poolOwnerCooldown"
             <*> v
-                .: "delegatorCooldown"
+            .: "delegatorCooldown"
 
 instance SingI cpv => FromJSON (CooldownParameters' cpv) where
     parseJSON = parseCooldownParametersJSON
@@ -604,19 +628,19 @@ instance HashableTo Hash.Hash (CooldownParameters' cpv) where
 
 instance Monad m => MHashableTo m Hash.Hash (CooldownParameters' cpv)
 
-getCooldownParameters :: forall cpv. SingI cpv => Get (CooldownParameters' cpv)
-getCooldownParameters = case sing @cpv of
+getCooldownParameters :: forall cpv. SCooldownParametersVersion cpv -> Get (CooldownParameters' cpv)
+getCooldownParameters = \case
     SCooldownParametersVersion0 -> CooldownParametersV0 <$> get
     SCooldownParametersVersion1 -> CooldownParametersV1 <$> get <*> get
 
 instance SingI cpv => Serialize (CooldownParameters' cpv) where
     put = putCooldownParameters
-    get = getCooldownParameters
+    get = getCooldownParameters (sing @cpv)
 
 -- |The time parameters are introduced as of 'ChainParametersV1', and consist of the reward period
 -- length and the mint rate per payday.  These are coupled as a change to either affects the
 -- overall rate of minting.
-data TimeParameters (cpv :: ChainParametersVersion) where
+data TimeParameters where
     -- |For 'ChainParametersV1', the time parameters are the reward period length and mint rate per
     -- payday.
     TimeParametersV1 ::
@@ -625,49 +649,47 @@ data TimeParameters (cpv :: ChainParametersVersion) where
           -- |Mint rate per payday (as a proportion of the extant supply).
           _tpMintPerPayday :: !MintRate
         } ->
-        TimeParameters cpv
+        TimeParameters
+    deriving (Eq, Show)
 
 makeClassy ''TimeParameters
 
-instance IsSupported 'PTTimeParameters cpv ~ 'True => HasTimeParameters (OParam 'PTTimeParameters cpv (TimeParameters cpv)) cpv where
+instance IsSupported 'PTTimeParameters cpv ~ 'True => HasTimeParameters (OParam 'PTTimeParameters cpv TimeParameters) where
     timeParameters = supportedOParam
-
-deriving instance Eq (TimeParameters cpv)
-deriving instance Show (TimeParameters cpv)
 
 -- |Serialize 'TimeParameters'.
 -- (This dispatches on the GADT, and so does not require @IsChainParameters cpv@.)
-putTimeParameters :: Putter (TimeParameters cpv)
+putTimeParameters :: Putter TimeParameters
 putTimeParameters TimeParametersV1{..} = do
     put _tpRewardPeriodLength
     put _tpMintPerPayday
 
 -- |Deserialize 'TimeParameters'.
-getTimeParameters :: forall cpv. Get (TimeParameters cpv)
+getTimeParameters :: Get TimeParameters
 getTimeParameters = TimeParametersV1 <$> get <*> get
 
-instance Serialize (TimeParameters cpv) where
+instance Serialize TimeParameters where
     put = putTimeParameters
     get = getTimeParameters
 
-instance ToJSON (TimeParameters cpv) where
+instance ToJSON TimeParameters where
     toJSON TimeParametersV1{..} =
         object
             [ "rewardPeriodLength" AE..= _tpRewardPeriodLength,
               "mintPerPayday" AE..= _tpMintPerPayday
             ]
 
-instance FromJSON (TimeParameters cpv) where
+instance FromJSON TimeParameters where
     parseJSON = withObject "TimeParametersV1" $ \v ->
         TimeParametersV1 <$> v .: "rewardPeriodLength" <*> v .: "mintPerPayday"
 
 -- |The 'HashableTo' instance for 'TimeParameters' is used in hashing the state for queued updates.
 -- It is not necessary to include the version in the hash computation, as it is implicit from the
 -- context.
-instance HashableTo Hash.Hash (TimeParameters cpv) where
+instance HashableTo Hash.Hash TimeParameters where
     getHash = Hash.hash . runPut . putTimeParameters
 
-instance Monad m => MHashableTo m Hash.Hash (TimeParameters cpv)
+instance Monad m => MHashableTo m Hash.Hash TimeParameters
 
 -- |A range that includes both endpoints.
 data InclusiveRange a = InclusiveRange {irMin :: !a, irMax :: !a}
@@ -787,32 +809,24 @@ instance FromJSON CapitalBound where
         when (cb == AmountFraction 0) $ fail "zero-valued capital bound"
         return $ CapitalBound cb
 
-$( singletons
-    [d|
-        data PoolParametersVersion = PoolParametersVersion0 | PoolParametersVersion1
-
-        poolParametersVersionFor :: ChainParametersVersion -> PoolParametersVersion
-        poolParametersVersionFor ChainParametersV0 = PoolParametersVersion0
-        poolParametersVersionFor ChainParametersV1 = PoolParametersVersion1
-        poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
-        |]
- )
-
 deriving instance Eq PoolParametersVersion
 deriving instance Show PoolParametersVersion
+
+type IsPoolParametersVersion (ppv :: PoolParametersVersion) = SingI ppv
+
+withIsPoolParametersVersionFor :: SChainParametersVersion cpv -> (IsPoolParametersVersion (PoolParametersVersionFor cpv) => a) -> a
+withIsPoolParametersVersionFor scpv = withSingI (sPoolParametersVersionFor scpv)
 
 -- |The 'PoolParameters' abstracts the parameters that affect baking pools. Prior to P4, there
 -- is no concept of a baking pool as such, so the pool parameters are considered just to be the
 -- baker stake threshold. From P4 onwards, a broader range of parameters is included.
-data PoolParameters cpv where
+data PoolParameters' (ppv :: PoolParametersVersion) where
     PoolParametersV0 ::
-        (PoolParametersVersionFor cpv ~ 'PoolParametersVersion0) =>
         { -- |Minimum threshold required for registering as a baker.
           _ppBakerStakeThreshold :: Amount
         } ->
-        PoolParameters cpv
+        PoolParameters' 'PoolParametersVersion0
     PoolParametersV1 ::
-        (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
         { -- |Commission rates charged for passive delegation.
           _ppPassiveCommissions :: !CommissionRates,
           -- |Bounds on the commission rates that may be charged by bakers.
@@ -825,9 +839,11 @@ data PoolParameters cpv where
           -- to equity capital.
           _ppLeverageBound :: !LeverageFactor
         } ->
-        PoolParameters cpv
+        PoolParameters' 'PoolParametersVersion1
 
-instance ToJSON (PoolParameters cpv) where
+type PoolParameters (cpv :: ChainParametersVersion) = PoolParameters' (PoolParametersVersionFor cpv)
+
+instance ToJSON (PoolParameters' ppv) where
     toJSON PoolParametersV0{..} =
         object
             [ "minimumThresholdForBaking" AE..= _ppBakerStakeThreshold
@@ -845,8 +861,8 @@ instance ToJSON (PoolParameters cpv) where
               "leverageBound" AE..= _ppLeverageBound
             ]
 
-parsePoolParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (PoolParameters cpv)
-parsePoolParametersJSON = case sPoolParametersVersionFor (chainParametersVersion @cpv) of
+parsePoolParametersJSON :: SPoolParametersVersion ppv -> Value -> Parser (PoolParameters' ppv)
+parsePoolParametersJSON = \case
     SPoolParametersVersion0 -> withObject "PoolParametersV0" $ \v -> PoolParametersV0 <$> v .: "minimumThresholdForBaking"
     SPoolParametersVersion1 -> withObject "PoolParametersV1" $ \v -> do
         _finalizationCommission <- v .: "passiveFinalizationCommission"
@@ -862,58 +878,52 @@ parsePoolParametersJSON = case sPoolParametersVersionFor (chainParametersVersion
         let _ppCommissionBounds = CommissionRanges{..}
         return PoolParametersV1{..}
 
-instance IsChainParametersVersion cpv => FromJSON (PoolParameters cpv) where
-    parseJSON = parsePoolParametersJSON
+instance IsPoolParametersVersion ppv => FromJSON (PoolParameters' ppv) where
+    parseJSON = parsePoolParametersJSON (sing @ppv)
 
 -- |Lens for '_ppBakerStakeThreshold'
 {-# INLINE ppBakerStakeThreshold #-}
 ppBakerStakeThreshold ::
-    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion0) =>
-    Lens' (PoolParameters cpv) Amount
+    Lens' (PoolParameters' 'PoolParametersVersion0) Amount
 ppBakerStakeThreshold =
     lens _ppBakerStakeThreshold (\pp x -> pp{_ppBakerStakeThreshold = x})
 
 -- |Lens for '_ppPassiveCommissions'
 {-# INLINE ppPassiveCommissions #-}
 ppPassiveCommissions ::
-    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
-    Lens' (PoolParameters cpv) CommissionRates
+    Lens' (PoolParameters' 'PoolParametersVersion1) CommissionRates
 ppPassiveCommissions =
     lens _ppPassiveCommissions (\pp x -> pp{_ppPassiveCommissions = x})
 
 -- |Lens for '_ppCommissionBounds'
 {-# INLINE ppCommissionBounds #-}
 ppCommissionBounds ::
-    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
-    Lens' (PoolParameters cpv) CommissionRanges
+    Lens' (PoolParameters' 'PoolParametersVersion1) CommissionRanges
 ppCommissionBounds =
     lens _ppCommissionBounds (\pp x -> pp{_ppCommissionBounds = x})
 
 -- |Lens for '_ppMinimumEquityCapital'
 {-# INLINE ppMinimumEquityCapital #-}
 ppMinimumEquityCapital ::
-    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
-    Lens' (PoolParameters cpv) Amount
+    Lens' (PoolParameters' 'PoolParametersVersion1) Amount
 ppMinimumEquityCapital =
     lens _ppMinimumEquityCapital (\pp x -> pp{_ppMinimumEquityCapital = x})
 
 -- |Lens for '_ppCapitalBound'
 {-# INLINE ppCapitalBound #-}
 ppCapitalBound ::
-    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
-    Lens' (PoolParameters cpv) CapitalBound
+    Lens' (PoolParameters' 'PoolParametersVersion1) CapitalBound
 ppCapitalBound =
     lens _ppCapitalBound (\pp x -> pp{_ppCapitalBound = x})
 
 -- |Lens for '_ppLeverageBound'
 {-# INLINE ppLeverageBound #-}
 ppLeverageBound ::
-    (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) =>
-    Lens' (PoolParameters cpv) LeverageFactor
+    Lens' (PoolParameters' 'PoolParametersVersion1) LeverageFactor
 ppLeverageBound =
     lens _ppLeverageBound (\pp x -> pp{_ppLeverageBound = x})
 
-putPoolParameters :: Putter (PoolParameters cpv)
+putPoolParameters :: Putter (PoolParameters' ppv)
 putPoolParameters PoolParametersV0{..} = do
     put _ppBakerStakeThreshold
 putPoolParameters PoolParametersV1{..} = do
@@ -923,22 +933,22 @@ putPoolParameters PoolParametersV1{..} = do
     put _ppCapitalBound
     put _ppLeverageBound
 
-instance HashableTo Hash.Hash (PoolParameters cpv) where
+instance HashableTo Hash.Hash (PoolParameters' ppv) where
     getHash = Hash.hash . runPut . putPoolParameters
 
-instance Monad m => MHashableTo m Hash.Hash (PoolParameters cpv)
+instance Monad m => MHashableTo m Hash.Hash (PoolParameters' ppv)
 
-getPoolParameters :: forall cpv. IsChainParametersVersion cpv => Get (PoolParameters cpv)
-getPoolParameters = case sPoolParametersVersionFor (chainParametersVersion @cpv) of
+getPoolParameters :: forall ppv. SPoolParametersVersion ppv -> Get (PoolParameters' ppv)
+getPoolParameters = \case
     SPoolParametersVersion0 -> PoolParametersV0 <$> get
     SPoolParametersVersion1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
 
-instance IsChainParametersVersion cpv => Serialize (PoolParameters cpv) where
+instance IsPoolParametersVersion ppv => Serialize (PoolParameters' ppv) where
     put = putPoolParameters
-    get = getPoolParameters
+    get = getPoolParameters sing
 
-deriving instance Eq (PoolParameters cpv)
-deriving instance Show (PoolParameters cpv)
+deriving instance Eq (PoolParameters' ppv)
+deriving instance Show (PoolParameters' ppv)
 
 -- |Parameters controlling consensus timeouts for the consensus protocol version 2.
 data TimeoutParameters = TimeoutParameters
@@ -1078,7 +1088,7 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       -- |Cooldown parameters.
       _cpCooldownParameters :: !(CooldownParameters cpv),
       -- |Time parameters.
-      _cpTimeParameters :: !(OParam 'PTTimeParameters cpv (TimeParameters cpv)),
+      _cpTimeParameters :: !(OParam 'PTTimeParameters cpv TimeParameters),
       -- |LimitAccountCreation: the maximum number of accounts
       -- that may be created in one block.
       _cpAccountCreationLimit :: !CredentialsPerBlockLimit,
@@ -1124,12 +1134,12 @@ getChainParameters =
     ChainParameters
         <$> get
         <*> get
-        <*> withIsCooldownParametersVersionFor (chainParametersVersion @cpv) getCooldownParameters
+        <*> withIsCooldownParametersVersionFor (chainParametersVersion @cpv) get
         <*> get
         <*> get
         <*> get
         <*> get
-        <*> getPoolParameters
+        <*> withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
     put = putChainParameters
@@ -1148,20 +1158,20 @@ parseJSONForCPV0 =
         _cpExchangeRates <-
             makeExchangeRates
                 <$> v
-                    .: "euroPerEnergy"
+                .: "euroPerEnergy"
                 <*> v
-                    .: "microGTUPerEuro"
+                .: "microGTUPerEuro"
         _cpCooldownParameters <-
             CooldownParametersV0
                 <$> v
-                    .: "bakerCooldownEpochs"
+                .: "bakerCooldownEpochs"
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
         _cpRewardParameters <- v .: "rewardParameters"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
         _cpPoolParameters <-
             PoolParametersV0
                 <$> v
-                    .: "minimumThresholdForBaking"
+                .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
         return ChainParameters{..}
 
