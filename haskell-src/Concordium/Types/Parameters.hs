@@ -1,9 +1,11 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
@@ -11,7 +13,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 -- We suppress redundant constraint warnings since GHC does not detect when a constraint is used
 -- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
@@ -41,6 +42,16 @@ import Concordium.Utils
 
 $( singletons
     [d|
+        -- \|Consensus parameters
+        data ConsensusParametersVersion
+            = ConsensusParametersVersion0 -- \^Election difficulty
+            | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time
+
+        consensusParametersVersionFor :: ChainParametersVersion -> ConsensusParametersVersion
+        consensusParametersVersionFor ChainParametersV0 = ConsensusParametersVersion0
+        consensusParametersVersionFor ChainParametersV1 = ConsensusParametersVersion0
+        consensusParametersVersionFor ChainParametersV2 = ConsensusParametersVersion1
+
         data ParameterType
             = PTElectionDifficulty
             | PTTimeParameters
@@ -52,9 +63,9 @@ $( singletons
             | PTFinalizationProof
 
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
-        isSupported PTElectionDifficulty ChainParametersV0 = True
-        isSupported PTElectionDifficulty ChainParametersV1 = True
-        isSupported PTElectionDifficulty ChainParametersV2 = False
+        isSupported PTElectionDifficulty cpv = case consensusParametersVersionFor cpv of
+            ConsensusParametersVersion0 -> True
+            ConsensusParametersVersion1 -> False
         isSupported PTTimeParameters ChainParametersV0 = False
         isSupported PTTimeParameters ChainParametersV1 = True
         isSupported PTTimeParameters ChainParametersV2 = True
@@ -90,6 +101,10 @@ data OParam (pt :: ParameterType) (cpv :: ChainParametersVersion) a where
 -- |Unwrap the 'OParam' when the parameter is supported.
 unOParam :: (IsSupported pt cpv ~ 'True) => OParam pt cpv a -> a
 unOParam (SomeParam a) = a
+
+-- |Lens for accessing the contents of an 'OParam' when the parameter is supported.
+supportedOParam :: (IsSupported pt cpv ~ 'True) => Lens' (OParam pt cpv a) a
+supportedOParam f (SomeParam a) = SomeParam <$> f a
 
 instance Functor (OParam pt cpv) where
     fmap _ NoParam = NoParam
@@ -264,9 +279,10 @@ makeClassy ''GASRewards
 instance AE.ToJSON (GASRewards cpv) where
     toJSON GASRewards{..} =
         object
-            ( "baker" AE..= _gasBaker : finalizationProof
-                ++ [
-                     "accountCreation" AE..= _gasAccountCreation,
+            ( "baker"
+                AE..= _gasBaker
+                : finalizationProof
+                ++ [ "accountCreation" AE..= _gasAccountCreation,
                      "chainUpdate" AE..= _gasChainUpdate
                    ]
             )
@@ -283,6 +299,7 @@ instance IsChainParametersVersion cpv => AE.FromJSON (GASRewards cpv) where
 
 -- JSON serialization for the GASRewards structure with fields "baker", "finalizationProof",
 -- "accountCreation" and "chainUpdate".
+
 -- $(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
 
 instance IsChainParametersVersion cpv => Serialize (GASRewards cpv) where
@@ -422,11 +439,19 @@ $( singletons
         |]
  )
 
+type IsCooldownParametersVersion (cpv :: CooldownParametersVersion) = SingI cpv
+
+withIsCooldownParametersVersionFor ::
+    forall cpv a.
+    SChainParametersVersion cpv ->
+    (IsCooldownParametersVersion (CooldownParametersVersionFor cpv) => a) ->
+    a
+withIsCooldownParametersVersionFor scpv = withSingI (sCooldownParametersVersionFor scpv)
+
 -- |Version-indexed type of cooldown parameters.
 -- This is a GADT to provide instances of 'Eq' and 'Show'.
-data CooldownParameters (cpv :: ChainParametersVersion) where
+data CooldownParameters' (cpv :: CooldownParametersVersion) where
     CooldownParametersV0 ::
-        (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion0) =>
         { -- |Number of additional epochs that bakers must cool down when
           -- removing stake. The cool-down will effectively be 2 epochs
           -- longer than this value, since at any given time, the bakers
@@ -434,9 +459,8 @@ data CooldownParameters (cpv :: ChainParametersVersion) where
           -- been determined.
           _cpBakerExtraCooldownEpochs :: Epoch
         } ->
-        CooldownParameters cpv
+        CooldownParameters' 'CooldownParametersVersion0
     CooldownParametersV1 ::
-        (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1) =>
         { -- |Number of seconds that pool owners must cooldown
           -- when reducing their equity capital or closing the pool.
           _cpPoolOwnerCooldown :: !DurationSeconds,
@@ -444,9 +468,11 @@ data CooldownParameters (cpv :: ChainParametersVersion) where
           -- when reducing their delegated stake.
           _cpDelegatorCooldown :: !DurationSeconds
         } ->
-        CooldownParameters cpv
+        CooldownParameters' 'CooldownParametersVersion1
 
-instance ToJSON (CooldownParameters cpv) where
+type CooldownParameters (cpv :: ChainParametersVersion) = CooldownParameters' (CooldownParametersVersionFor cpv)
+
+instance ToJSON (CooldownParameters' cpv) where
     toJSON CooldownParametersV0{..} =
         object
             [ "bakerCooldownEpochs" AE..= _cpBakerExtraCooldownEpochs
@@ -457,64 +483,61 @@ instance ToJSON (CooldownParameters cpv) where
               "delegatorCooldown" AE..= _cpDelegatorCooldown
             ]
 
-parseCooldownParametersJSON :: forall cpv. IsChainParametersVersion cpv => Value -> Parser (CooldownParameters cpv)
-parseCooldownParametersJSON = case sCooldownParametersVersionFor (chainParametersVersion @cpv) of
+parseCooldownParametersJSON :: forall cpv. SingI cpv => Value -> Parser (CooldownParameters' cpv)
+parseCooldownParametersJSON = case sing @cpv of
     SCooldownParametersVersion0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
     SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
             <$> v
-                .: "poolOwnerCooldown"
+            .: "poolOwnerCooldown"
             <*> v
-                .: "delegatorCooldown"
+            .: "delegatorCooldown"
 
-instance IsChainParametersVersion cpv => FromJSON (CooldownParameters cpv) where
+instance SingI cpv => FromJSON (CooldownParameters' cpv) where
     parseJSON = parseCooldownParametersJSON
 
 -- |Lens for '_cpBakerExtraCooldownEpochs'
 {-# INLINE cpBakerExtraCooldownEpochs #-}
 cpBakerExtraCooldownEpochs ::
-    (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion0) =>
-    Lens' (CooldownParameters cpv) Epoch
+    Lens' (CooldownParameters' 'CooldownParametersVersion0) Epoch
 cpBakerExtraCooldownEpochs =
     lens _cpBakerExtraCooldownEpochs (\cp x -> cp{_cpBakerExtraCooldownEpochs = x})
 
 -- |Lens for '_cpPoolOwnerCooldown'
 {-# INLINE cpPoolOwnerCooldown #-}
 cpPoolOwnerCooldown ::
-    (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1) =>
-    Lens' (CooldownParameters cpv) DurationSeconds
+    Lens' (CooldownParameters' 'CooldownParametersVersion1) DurationSeconds
 cpPoolOwnerCooldown =
     lens _cpPoolOwnerCooldown (\cp x -> cp{_cpPoolOwnerCooldown = x})
 
 -- |Lens for '_cpDelegatorCooldown'
 {-# INLINE cpDelegatorCooldown #-}
 cpDelegatorCooldown ::
-    (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1) =>
-    Lens' (CooldownParameters cpv) DurationSeconds
+    Lens' (CooldownParameters' 'CooldownParametersVersion1) DurationSeconds
 cpDelegatorCooldown =
     lens _cpDelegatorCooldown (\cp x -> cp{_cpDelegatorCooldown = x})
 
-deriving instance Eq (CooldownParameters cpv)
-deriving instance Show (CooldownParameters cpv)
+deriving instance Eq (CooldownParameters' cpv)
+deriving instance Show (CooldownParameters' cpv)
 
-putCooldownParameters :: Putter (CooldownParameters cpv)
+putCooldownParameters :: Putter (CooldownParameters' cpv)
 putCooldownParameters CooldownParametersV0{..} = do
     put _cpBakerExtraCooldownEpochs
 putCooldownParameters CooldownParametersV1{..} = do
     put _cpPoolOwnerCooldown
     put _cpDelegatorCooldown
 
-instance HashableTo Hash.Hash (CooldownParameters cpv) where
+instance HashableTo Hash.Hash (CooldownParameters' cpv) where
     getHash = Hash.hash . runPut . putCooldownParameters
 
-instance Monad m => MHashableTo m Hash.Hash (CooldownParameters cpv)
+instance Monad m => MHashableTo m Hash.Hash (CooldownParameters' cpv)
 
-getCooldownParameters :: forall cpv. IsChainParametersVersion cpv => Get (CooldownParameters cpv)
-getCooldownParameters = case sCooldownParametersVersionFor (chainParametersVersion @cpv) of
+getCooldownParameters :: forall cpv. SingI cpv => Get (CooldownParameters' cpv)
+getCooldownParameters = case sing @cpv of
     SCooldownParametersVersion0 -> CooldownParametersV0 <$> get
     SCooldownParametersVersion1 -> CooldownParametersV1 <$> get <*> get
 
-instance IsChainParametersVersion cpv => Serialize (CooldownParameters cpv) where
+instance SingI cpv => Serialize (CooldownParameters' cpv) where
     put = putCooldownParameters
     get = getCooldownParameters
 
@@ -532,17 +555,10 @@ data TimeParameters (cpv :: ChainParametersVersion) where
         } ->
         TimeParameters cpv
 
--- |Lens for '_tpRewardPeriodLength'
-{-# INLINE tpRewardPeriodLength #-}
-tpRewardPeriodLength :: Lens' (TimeParameters cpv) RewardPeriodLength
-tpRewardPeriodLength =
-    lens _tpRewardPeriodLength (\tp x -> tp{_tpRewardPeriodLength = x})
+makeClassy ''TimeParameters
 
--- |Lens for '_tpMintPerPayday'
-{-# INLINE tpMintPerPayday #-}
-tpMintPerPayday :: Lens' (TimeParameters cpv) MintRate
-tpMintPerPayday =
-    lens _tpMintPerPayday (\tp x -> tp{_tpMintPerPayday = x})
+instance IsSupported 'PTTimeParameters cpv ~ 'True => HasTimeParameters (OParam 'PTTimeParameters cpv (TimeParameters cpv)) cpv where
+    timeParameters = supportedOParam
 
 deriving instance Eq (TimeParameters cpv)
 deriving instance Show (TimeParameters cpv)
@@ -900,19 +916,10 @@ instance HashableTo Hash.Hash TimeoutParameters where
 
 instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 
-$( singletons
-    [d|
-        -- \|Consensus parameters
-        data ConsensusParametersVersion
-            = ConsensusParametersVersion0 -- \^Election difficulty
-            | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time
-
-        consensusParametersVersionFor :: ChainParametersVersion -> ConsensusParametersVersion
-        consensusParametersVersionFor ChainParametersV0 = ConsensusParametersVersion0
-        consensusParametersVersionFor ChainParametersV1 = ConsensusParametersVersion0
-        consensusParametersVersionFor ChainParametersV2 = ConsensusParametersVersion1
-        |]
- )
+-- $( singletons
+--     [d|
+--         |]
+--  )
 
 data ConsensusParameters (cpv :: ChainParametersVersion) where
     ConsensusParametersV0 ::
@@ -1041,7 +1048,16 @@ putChainParameters ChainParameters{..} = do
     putPoolParameters _cpPoolParameters
 
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
-getChainParameters = ChainParameters <$> get <*> get <*> getCooldownParameters <*> get <*> get <*> get <*> get <*> getPoolParameters
+getChainParameters =
+    ChainParameters
+        <$> get
+        <*> get
+        <*> withIsCooldownParametersVersionFor (chainParametersVersion @cpv) getCooldownParameters
+        <*> get
+        <*> get
+        <*> get
+        <*> get
+        <*> getPoolParameters
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
     put = putChainParameters
@@ -1060,20 +1076,20 @@ parseJSONForCPV0 =
         _cpExchangeRates <-
             makeExchangeRates
                 <$> v
-                    .: "euroPerEnergy"
+                .: "euroPerEnergy"
                 <*> v
-                    .: "microGTUPerEuro"
+                .: "microGTUPerEuro"
         _cpCooldownParameters <-
             CooldownParametersV0
                 <$> v
-                    .: "bakerCooldownEpochs"
+                .: "bakerCooldownEpochs"
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
         _cpRewardParameters <- v .: "rewardParameters"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
         _cpPoolParameters <-
             PoolParametersV0
                 <$> v
-                    .: "minimumThresholdForBaking"
+                .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
         return ChainParameters{..}
 
@@ -1297,3 +1313,28 @@ instance FromJSON FinalizationParameters where
             fail "delayGrowFactor must be strictly greater than 1"
         finalizationAllowZeroDelay <- v .:? "allowZeroDelay" .!= False
         return FinalizationParameters{..}
+
+-- |A GADT that encapsulates relevant facts about the 'ChainParametersVersion' for a protocol
+-- version that supports delegation.
+data DelegationChainParameters (pv :: ProtocolVersion) where
+    DelegationChainParameters ::
+        ( IsSupported 'PTTimeParameters (ChainParametersVersionFor pv) ~ 'True,
+          PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1,
+          CooldownParametersVersionFor (ChainParametersVersionFor pv) ~ 'CooldownParametersVersion1
+        ) =>
+        DelegationChainParameters pv
+
+-- |Constrain the chain parameters given that the protocol version supports delegation.
+-- This should be used in a context where @SupportsDelegation pv@ is known and one or more of the
+-- following constraints are required:
+--
+-- * @IsSupported 'PTTimeParameters (ChainParametersVersionFor pv) ~ 'True@
+-- * @PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1@
+--
+-- > case delegationChainParameters @pv of
+-- >    DelegationChainParameters -> {\- here the constraints apply -\}
+delegationChainParameters :: forall pv. (IsProtocolVersion pv, PVSupportsDelegation pv) => DelegationChainParameters pv
+delegationChainParameters = case protocolVersion @pv of
+    SP4 -> DelegationChainParameters
+    SP5 -> DelegationChainParameters
+    SP6 -> DelegationChainParameters

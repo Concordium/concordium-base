@@ -409,8 +409,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
             SChainParametersV2 -> printInitialChainParametersV2 genesisChainParameters
 
 printCooldownParametersV1 ::
-    CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1 =>
-    CooldownParameters cpv ->
+    CooldownParameters' 'CooldownParametersVersion1 ->
     IO ()
 printCooldownParametersV1 cp = do
     putStrLn $ "  - pool owner cooldown epochs: " ++ show (cp ^. cpPoolOwnerCooldown)

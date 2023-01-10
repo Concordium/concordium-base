@@ -238,7 +238,7 @@ demoteChainParameterVersion = fromSing
 type AVSupportsDelegation (av :: AccountVersion) = SupportsDelegation av ~ 'DelegationSupported av
 
 -- |Constraint that a protocol version supports delegation.
--- type SupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
+type PVSupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
 
 -- |A GADT that covers the cases for whether an account version supports delegation or not.
 -- The case that it doesn't is limited to 'AccountV0', and in the other case, this provides an

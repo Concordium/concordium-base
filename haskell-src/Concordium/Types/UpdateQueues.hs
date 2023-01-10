@@ -201,7 +201,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
 -- ohsh (SomeParam uq) = hsh uq
 
 -- |Serialize the pending updates.
-putPendingUpdatesV0 :: IsChainParametersVersion cpv => Putter (PendingUpdates cpv)
+putPendingUpdatesV0 :: forall cpv. IsChainParametersVersion cpv => Putter (PendingUpdates cpv)
 putPendingUpdatesV0 PendingUpdates{..} = do
     putUpdateQueueV0 _pRootKeysUpdateQueue
     putUpdateQueueV0 _pLevel1KeysUpdateQueue
@@ -217,7 +217,7 @@ putPendingUpdatesV0 PendingUpdates{..} = do
     putUpdateQueueV0 _pPoolParametersQueue
     putUpdateQueueV0 _pAddAnonymityRevokerQueue
     putUpdateQueueV0 _pAddIdentityProviderQueue
-    mapM_ putUpdateQueueV0 _pCooldownParametersQueue
+    withIsCooldownParametersVersionFor (chainParametersVersion @cpv) $ mapM_ putUpdateQueueV0 _pCooldownParametersQueue
     mapM_ putUpdateQueueV0 _pTimeParametersQueue
     mapM_ putUpdateQueueV0 _pTimeoutParametersQueue
 
@@ -242,7 +242,8 @@ getPendingUpdates migration = do
     _pAddIdentityProviderQueue <- getUpdateQueueV0 @IPS.IpInfo
     oldCooldownParametersQueue <-
         whenSupported @'PTCooldownParametersAccessStructure @(ChainParametersVersionFor oldpv) $
-            getUpdateQueueV0 @(CooldownParameters (ChainParametersVersionFor oldpv))
+            withIsCooldownParametersVersionFor (chainParametersVersion @(ChainParametersVersionFor oldpv)) $
+                getUpdateQueueV0 @(CooldownParameters (ChainParametersVersionFor oldpv))
     oldTimeParametersQueue <-
         whenSupported @'PTTimeParameters @(ChainParametersVersionFor oldpv) $
             getUpdateQueueV0 @(TimeParameters (ChainParametersVersionFor oldpv))

@@ -841,7 +841,7 @@ data UpdatePayload
     | -- |Add an identity provider
       AddIdentityProviderUpdatePayload !IpInfo
     | -- |Cooldown parameters with chain parameter version 1
-      CooldownParametersCPV1UpdatePayload !(CooldownParameters 'ChainParametersV1)
+      CooldownParametersCPV1UpdatePayload !(CooldownParameters' 'CooldownParametersVersion1)
     | -- |Pool parameters with chain parameter version 1
       PoolParametersCPV1UpdatePayload !(PoolParameters 'ChainParametersV1)
     | -- |Time parameters with chain parameter version 1
