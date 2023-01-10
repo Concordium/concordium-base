@@ -42,6 +42,19 @@ import Concordium.Utils
 
 $( singletons
     [d|
+        data MintDistributionVersion
+            = MintDistributionVersion0
+            | MintDistributionVersion1
+
+        mintDistributionVersionFor :: ChainParametersVersion -> MintDistributionVersion
+        mintDistributionVersionFor ChainParametersV0 = MintDistributionVersion0
+        mintDistributionVersionFor ChainParametersV1 = MintDistributionVersion1
+        mintDistributionVersionFor ChainParametersV2 = MintDistributionVersion1
+
+        supportsMintPerSlot :: MintDistributionVersion -> Bool
+        supportsMintPerSlot MintDistributionVersion0 = True
+        supportsMintPerSlot MintDistributionVersion1 = False
+
         -- \|Consensus parameters
         data ConsensusParametersVersion
             = ConsensusParametersVersion0 -- \^Election difficulty
@@ -69,9 +82,7 @@ $( singletons
         isSupported PTTimeParameters ChainParametersV0 = False
         isSupported PTTimeParameters ChainParametersV1 = True
         isSupported PTTimeParameters ChainParametersV2 = True
-        isSupported PTMintPerSlot ChainParametersV0 = True
-        isSupported PTMintPerSlot ChainParametersV1 = False
-        isSupported PTMintPerSlot ChainParametersV2 = False
+        isSupported PTMintPerSlot cpv = supportsMintPerSlot (mintDistributionVersionFor cpv)
         isSupported PTTimeoutParameters ChainParametersV0 = False
         isSupported PTTimeoutParameters ChainParametersV1 = False
         isSupported PTTimeoutParameters ChainParametersV2 = True
@@ -91,6 +102,56 @@ $( singletons
  )
 
 type IsParameterType (pt :: ParameterType) = SingI pt
+
+data Conditionally (b :: Bool) a where
+    CFalse :: Conditionally 'False a
+    CTrue :: !a -> Conditionally 'True a
+
+instance Functor (Conditionally b) where
+    fmap _ CFalse = CFalse
+    fmap f (CTrue v) = CTrue (f v)
+
+instance Foldable (Conditionally b) where
+    foldr _ b CFalse = b
+    foldr f b (CTrue a) = f a b
+
+    foldl _ b CFalse = b
+    foldl f b (CTrue a) = f b a
+
+    foldMap _ CFalse = mempty
+    foldMap f (CTrue a) = f a
+
+instance Traversable (Conditionally b) where
+    traverse _ CFalse = pure CFalse
+    traverse f (CTrue a) = CTrue <$> f a
+
+instance (Eq a) => Eq (Conditionally b a) where
+    CFalse == CFalse = True
+    CTrue a == CTrue b = a == b
+
+instance (Ord a) => Ord (Conditionally b a) where
+    compare CFalse CFalse = EQ
+    compare (CTrue x) (CTrue y) = compare x y
+
+instance (Show a) => Show (Conditionally b a) where
+    show CFalse = "<CFalse>"
+    show (CTrue v) = show v
+
+instance (Serialize a, SingI b) => Serialize (Conditionally b a) where
+    put CFalse = return ()
+    put (CTrue a) = put a
+
+    get = case sing @b of
+        SFalse -> pure CFalse
+        STrue -> CTrue <$> get
+
+conditionallyA :: (Applicative f) => SBool b -> f a -> f (Conditionally b a)
+conditionallyA SFalse _ = pure CFalse
+conditionallyA STrue m = CTrue <$> m
+
+conditionally :: SBool b -> a -> Conditionally b a
+conditionally SFalse _ = CFalse
+conditionally STrue a = CTrue a
 
 -- |An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
 -- otherwise.
@@ -159,14 +220,22 @@ maybeWhenSupported _ f (SomeParam a) = f a
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 
+type IsMintDistributionVersion (mdv :: MintDistributionVersion) = SingI mdv
+
+withSupportsMintPerSlot :: forall mdv a. SMintDistributionVersion mdv -> (SingI (SupportsMintPerSlot mdv) => a) -> a
+withSupportsMintPerSlot smdv = withSingI (sSupportsMintPerSlot smdv)
+
+withIsMintDistributionVersion :: SChainParametersVersion t -> (SingI (MintDistributionVersionFor t) => r) -> r
+withIsMintDistributionVersion scpv = withSingI (sMintDistributionVersionFor scpv)
+
 -- |The minting rate and the distribution of newly-minted GTU
 -- among bakers, finalizers, and the foundation account.
 -- It must be the case that
 -- @_mdBakingReward + _mdFinalizationReward <= 1@.
 -- The remaining amount is the platform development charge.
-data MintDistribution cpv = MintDistribution
+data MintDistribution (mdv :: MintDistributionVersion) = MintDistribution
     { -- |Mint rate per slot
-      _mdMintPerSlot :: !(OParam 'PTMintPerSlot cpv MintRate),
+      _mdMintPerSlot :: !(Conditionally (SupportsMintPerSlot mdv) MintRate),
       -- |BakingRewMintFrac: the fraction allocated to baker rewards
       _mdBakingReward :: !AmountFraction,
       -- |FinRewMintFrac: the fraction allocated to finalization rewards
@@ -188,32 +257,35 @@ instance ToJSON (MintDistribution cpv) where
       where
         mintPerSlot = foldMap (\mintRate -> ["mintPerSlot" AE..= mintRate]) _mdMintPerSlot
 
-instance IsChainParametersVersion cpv => FromJSON (MintDistribution cpv) where
+instance IsMintDistributionVersion mdv => FromJSON (MintDistribution mdv) where
     parseJSON = withObject "MintDistribution" $ \v -> do
-        _mdMintPerSlot <- whenSupported (v .: "mintPerSlot")
+        _mdMintPerSlot <- conditionallyA (sSupportsMintPerSlot (sing @mdv)) (v .: "mintPerSlot")
         _mdBakingReward <- v .: "bakingReward"
         _mdFinalizationReward <- v .: "finalizationReward"
         unless (isJust (_mdBakingReward `addAmountFraction` _mdFinalizationReward)) $ fail "Amount fractions exceed 100%"
         return MintDistribution{..}
 
-instance IsChainParametersVersion cpv => Serialize (MintDistribution cpv) where
-    put MintDistribution{..} = put _mdMintPerSlot >> put _mdBakingReward >> put _mdFinalizationReward
+instance IsMintDistributionVersion mdv => Serialize (MintDistribution mdv) where
+    put MintDistribution{..} = do
+        withSupportsMintPerSlot (sing @mdv) (put _mdMintPerSlot)
+        put _mdBakingReward
+        put _mdFinalizationReward
     get = do
-        _mdMintPerSlot <- get
+        _mdMintPerSlot <- withSupportsMintPerSlot (sing @mdv) get
         _mdBakingReward <- get
         _mdFinalizationReward <- get
         unless (isJust (_mdBakingReward `addAmountFraction` _mdFinalizationReward)) $ fail "Amount fractions exceed 100%"
         return MintDistribution{..}
 
-instance IsChainParametersVersion cpv => HashableTo Hash.Hash (MintDistribution cpv) where
+instance IsMintDistributionVersion mdv => HashableTo Hash.Hash (MintDistribution mdv) where
     getHash = Hash.hash . encode
 
-instance Arbitrary (MintDistribution 'ChainParametersV1) where
+instance Arbitrary (MintDistribution 'MintDistributionVersion1) where
     arbitrary = do
         (x, y) <- arbitrary `suchThat` (\(x, y) -> isJust $ addAmountFraction x y)
-        return $ MintDistribution NoParam x y
+        return $ MintDistribution CFalse x y
 
-instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (MintDistribution cpv)
+instance (Monad m, IsMintDistributionVersion mdv) => MHashableTo m Hash.Hash (MintDistribution mdv)
 
 -- |The distribution of block transaction fees among the block
 -- baker, the GAS account, and the foundation account.  It
@@ -324,7 +396,7 @@ instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m Hash.Hash (GAS
 -- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
 data RewardParameters cpv = RewardParameters
     { -- |Distribution of newly-minted GTUs.
-      _rpMintDistribution :: !(MintDistribution cpv),
+      _rpMintDistribution :: !(MintDistribution (MintDistributionVersionFor cpv)),
       -- |Distribution of transaction fees.
       _rpTransactionFeeDistribution :: !TransactionFeeDistribution,
       -- |Rewards paid from the GAS account.
@@ -334,7 +406,7 @@ data RewardParameters cpv = RewardParameters
 
 makeClassy ''RewardParameters
 
-instance HasMintDistribution (RewardParameters cpv) cpv where
+instance (mdv ~ MintDistributionVersionFor cpv) => HasMintDistribution (RewardParameters cpv) mdv where
     mintDistribution = rpMintDistribution
 
 instance HasTransactionFeeDistribution (RewardParameters cpv) where
