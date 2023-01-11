@@ -39,6 +39,22 @@ pub struct TokenAmount(pub BigUint);
 impl TokenAmount {
     /// Check whether the amount is 0.
     pub fn is_zero(&self) -> bool { self.0.is_zero() }
+
+    /// Display using `_` as a separator between thousands for better
+    /// readability.
+    pub fn to_separated_string(&self) -> String {
+        let s = self.to_string();
+        let mut out = String::with_capacity(s.len());
+        let mut count = s.len();
+        for c in s.chars() {
+            out.push(c);
+            count -= 1;
+            if count > 0 && count % 3 == 0 {
+                out.push('_');
+            }
+        }
+        out
+    }
 }
 
 impl TryFrom<String> for TokenAmount {
@@ -607,9 +623,9 @@ impl Deserial for BalanceOfQueryResponse {
 /// A query for the operator of a given address for a given token.
 #[derive(Debug, Clone)]
 pub struct OperatorOfQuery {
-    /// The ID of the token for which to query the balance of.
+    /// The address of the owner of the tokens.
     pub owner:   Address,
-    /// The address for which to check for being an operator of the owner.
+    /// The potential operator of the `owner` address.
     pub address: Address,
 }
 
