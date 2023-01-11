@@ -422,8 +422,7 @@ printTimeParametersV1 tp = do
     putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpMintPerPayday)
 
 printConsensusParametersV1 ::
-    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
-    ConsensusParameters cpv ->
+    ConsensusParameters' 'ConsensusParametersVersion1 ->
     IO ()
 printConsensusParametersV1 ConsensusParametersV1{..} = do
     putStrLn "    + Timing parameters:"

@@ -1,7 +1,9 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -35,7 +37,7 @@ module Concordium.Types.ProtocolVersion where
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Serialize
-import Data.Singletons.TH
+import Data.Singletons.Base.TH
 
 import Data.Word
 
@@ -50,11 +52,13 @@ $( singletons
             | P4
             | P5
             | P6
+            deriving (Eq, Ord)
 
         data ChainParametersVersion
             = ChainParametersV0
             | ChainParametersV1
             | ChainParametersV2
+            deriving (Eq, Ord)
 
         chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
         chainParametersVersionFor P1 = ChainParametersV0
@@ -131,11 +135,8 @@ $( singletons
         |]
  )
 
-deriving instance Eq ProtocolVersion
-deriving instance Ord ProtocolVersion
 deriving instance Show ProtocolVersion
 
-deriving instance Eq ChainParametersVersion
 deriving instance Show ChainParametersVersion
 
 protocolVersionToWord64 :: ProtocolVersion -> Word64

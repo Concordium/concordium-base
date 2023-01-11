@@ -112,7 +112,6 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
                   ..
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
-          _cpConsensusParameters = coerceConsensusParameters _cpConsensusParameters,
           ..
         }
   where

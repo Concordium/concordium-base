@@ -117,9 +117,9 @@ $( singletons
         isSupported PTBlockEnergyLimit ChainParametersV0 = False
         isSupported PTBlockEnergyLimit ChainParametersV1 = False
         isSupported PTBlockEnergyLimit ChainParametersV2 = True
-        isSupported PTCooldownParametersAccessStructure ChainParametersV0 = False
-        isSupported PTCooldownParametersAccessStructure ChainParametersV1 = True
-        isSupported PTCooldownParametersAccessStructure ChainParametersV2 = True
+        isSupported PTCooldownParametersAccessStructure cpv = case cooldownParametersVersionFor cpv of
+            CooldownParametersVersion0 -> False
+            CooldownParametersVersion1 -> True
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
@@ -177,6 +177,9 @@ conditionallyA STrue m = CTrue <$> m
 conditionally :: SBool b -> a -> Conditionally b a
 conditionally SFalse _ = CFalse
 conditionally STrue a = CTrue a
+
+unconditionally :: Lens (Conditionally 'True a) (Conditionally 'True b) a b
+unconditionally f (CTrue a) = CTrue <$> f a
 
 -- |An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
 -- otherwise.
@@ -998,20 +1001,18 @@ instance HashableTo Hash.Hash TimeoutParameters where
 
 instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 
--- $( singletons
---     [d|
---         |]
---  )
+type IsConsensusParametersVersion (cpv :: ConsensusParametersVersion) = SingI cpv
 
-data ConsensusParameters (cpv :: ChainParametersVersion) where
+withIsConsensusParametersVersionFor :: SChainParametersVersion cpv -> (IsConsensusParametersVersion (ConsensusParametersVersionFor cpv) => a) -> a
+withIsConsensusParametersVersionFor scpv = withSingI (sConsensusParametersVersionFor scpv)
+
+data ConsensusParameters' (cpv :: ConsensusParametersVersion) where
     ConsensusParametersV0 ::
-        (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion0) =>
         { -- |Election difficulty parameter.
           _cpElectionDifficulty :: !ElectionDifficulty
         } ->
-        ConsensusParameters cpv
+        ConsensusParameters' 'ConsensusParametersVersion0
     ConsensusParametersV1 ::
-        (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
         { -- |Parameters controlling round timeouts.
           _cpTimeoutParameters :: !TimeoutParameters,
           -- |Minimum time interval between blocks.
@@ -1019,64 +1020,73 @@ data ConsensusParameters (cpv :: ChainParametersVersion) where
           -- |Maximum energy allowed per block.
           _cpBlockEnergyLimit :: !Energy
         } ->
-        ConsensusParameters cpv
+        ConsensusParameters' 'ConsensusParametersVersion1
+
+type ConsensusParameters (cpv :: ChainParametersVersion) =
+    ConsensusParameters' (ConsensusParametersVersionFor cpv)
 
 -- |Lens for '_cpElectionDifficulty'
 {-# INLINE cpElectionDifficulty #-}
 cpElectionDifficulty ::
-    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion0) =>
-    Lens' (ConsensusParameters cpv) ElectionDifficulty
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion0) ElectionDifficulty
 cpElectionDifficulty =
     lens _cpElectionDifficulty (\cp x -> cp{_cpElectionDifficulty = x})
 
 -- |Lens for '_cpTimeoutParameters'
 {-# INLINE cpTimeoutParameters #-}
 cpTimeoutParameters ::
-    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
-    Lens' (ConsensusParameters cpv) TimeoutParameters
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) TimeoutParameters
 cpTimeoutParameters =
     lens _cpTimeoutParameters (\cp x -> cp{_cpTimeoutParameters = x})
 
 -- |Lens for '_cpMinBlockTime'
 {-# INLINE cpMinBlockTime #-}
 cpMinBlockTime ::
-    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
-    Lens' (ConsensusParameters cpv) Duration
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Duration
 cpMinBlockTime =
     lens _cpMinBlockTime (\cp x -> cp{_cpMinBlockTime = x})
 
 -- |Lens for '_cpBlockEnergyLimit'
 {-# INLINE cpBlockEnergyLimit #-}
 cpBlockEnergyLimit ::
-    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
-    Lens' (ConsensusParameters cpv) Energy
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Energy
 cpBlockEnergyLimit =
     lens _cpBlockEnergyLimit (\cp x -> cp{_cpBlockEnergyLimit = x})
 
-coerceConsensusParameters ::
-    (ConsensusParametersVersionFor cpv1 ~ ConsensusParametersVersionFor cpv2) =>
-    ConsensusParameters cpv1 ->
-    ConsensusParameters cpv2
-coerceConsensusParameters ConsensusParametersV0{..} = ConsensusParametersV0{..}
-coerceConsensusParameters ConsensusParametersV1{..} = ConsensusParametersV1{..}
+deriving instance Eq (ConsensusParameters' cpv)
+deriving instance Show (ConsensusParameters' cpv)
 
-deriving instance Eq (ConsensusParameters cpv)
-
-deriving instance Show (ConsensusParameters cpv)
-
-instance IsChainParametersVersion cpv => Serialize (ConsensusParameters cpv) where
+instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv) where
     put ConsensusParametersV0{..} = put _cpElectionDifficulty
     put ConsensusParametersV1{..} = do
         put _cpTimeoutParameters
         put _cpMinBlockTime
         put _cpBlockEnergyLimit
-    get = case sConsensusParametersVersionFor (chainParametersVersion @cpv) of
+    get = case sing @cpv of
         SConsensusParametersVersion0 -> ConsensusParametersV0 <$> get
         SConsensusParametersVersion1 -> do
             _cpTimeoutParameters <- get
             _cpMinBlockTime <- get
             _cpBlockEnergyLimit <- get
             return ConsensusParametersV1{..}
+
+withCPVConstraints ::
+    SChainParametersVersion cpv ->
+    ( ( IsConsensusParametersVersion (ConsensusParametersVersionFor cpv),
+        IsCooldownParametersVersion (CooldownParametersVersionFor cpv),
+        IsGASRewardsVersion (GasRewardsVersionFor cpv),
+        IsMintDistributionVersion (MintDistributionVersionFor cpv),
+        IsPoolParametersVersion (PoolParametersVersionFor cpv)
+      ) =>
+      a
+    ) ->
+    a
+withCPVConstraints scpv a =
+    withIsConsensusParametersVersionFor scpv $
+        withIsCooldownParametersVersionFor scpv $
+            withIsGASRewardsVersionFor scpv $
+                withIsMintDistributionVersionFor scpv $
+                    withIsPoolParametersVersionFor scpv a
 
 -- |Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
 -- reflects changes to the chain parameters across different protocol versions.
@@ -1118,9 +1128,9 @@ instance HasExchangeRates (ChainParameters' cpv) where
 instance HasRewardParameters (ChainParameters' cpv) cpv where
     rewardParameters = cpRewardParameters
 
-putChainParameters :: IsChainParametersVersion cpv => Putter (ChainParameters' cpv)
+putChainParameters :: forall cpv. IsChainParametersVersion cpv => Putter (ChainParameters' cpv)
 putChainParameters ChainParameters{..} = do
-    put _cpConsensusParameters
+    withIsConsensusParametersVersionFor (chainParametersVersion @cpv) $ put _cpConsensusParameters
     put _cpExchangeRates
     putCooldownParameters _cpCooldownParameters
     put _cpTimeParameters
@@ -1132,7 +1142,7 @@ putChainParameters ChainParameters{..} = do
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
 getChainParameters =
     ChainParameters
-        <$> get
+        <$> withIsConsensusParametersVersionFor (chainParametersVersion @cpv) get
         <*> get
         <*> withIsCooldownParametersVersionFor (chainParametersVersion @cpv) get
         <*> get
