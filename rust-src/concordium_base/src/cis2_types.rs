@@ -55,6 +55,31 @@ impl TokenAmount {
         }
         out
     }
+
+    /// Display an amount using the given number of decimals.
+    pub fn to_decimal_string(&self, num_decimals: u8) -> String {
+        let s = self.to_string();
+        if num_decimals == 0 {
+            s
+        } else if self.is_zero() {
+            "0.0".into()
+        } else {
+            let num_decimals = usize::from(num_decimals);
+            if num_decimals < s.len() {
+                let front = &s[0..s.len() - num_decimals];
+                let back = &s[s.len() - num_decimals..];
+                let back = back.trim_end_matches('0');
+                if back.is_empty() {
+                    format!("{}.0", front)
+                } else {
+                    format!("{}.{}", front, back)
+                }
+            } else {
+                let back = format!("0.{:0>width$}", s, width = num_decimals);
+                back.trim_end_matches('0').into()
+            }
+        }
+    }
 }
 
 impl TryFrom<String> for TokenAmount {
@@ -1027,5 +1052,21 @@ mod test {
             let new_amount = serde_json::from_slice(&bytes).expect("Deserialization succeeds.");
             assert_eq!(amount, new_amount)
         }
+    }
+
+    #[test]
+    fn test_token_amount_string_decimal() {
+        let amount = TokenAmount(BigUint::from(123456u64));
+        assert_eq!(amount.to_decimal_string(1), "12345.6");
+        assert_eq!(amount.to_decimal_string(10), "0.0000123456");
+        assert_eq!(amount.to_decimal_string(0), "123456");
+        assert_eq!(amount.to_decimal_string(6), "0.123456");
+        let amount = TokenAmount(BigUint::from(0u64));
+        assert_eq!(amount.to_decimal_string(1), "0.0");
+        let amount = TokenAmount(BigUint::from(12000u64));
+        assert_eq!(amount.to_decimal_string(0), "12000");
+        assert_eq!(amount.to_decimal_string(1), "1200.0");
+        assert_eq!(amount.to_decimal_string(3), "12.0");
+        assert_eq!(amount.to_decimal_string(4), "1.2");
     }
 }
