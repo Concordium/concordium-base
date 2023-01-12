@@ -572,6 +572,8 @@ data PendingUpdateEffect
       PUELevel2KeysV0 !(U.Authorizations 'ChainParametersV0)
     | -- |Updates to the level 2 keys.
       PUELevel2KeysV1 !(U.Authorizations 'ChainParametersV1)
+    | -- |Updates to the level 2 keys.
+      PUELevel2KeysV2 !(U.Authorizations 'ChainParametersV2)
     | -- |Protocol updates.
       PUEProtocol !U.ProtocolUpdate
     | -- |Updates to the election difficulty parameter.
