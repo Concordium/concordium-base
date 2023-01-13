@@ -211,6 +211,12 @@ jobs:
       run: |
         stack build --test --bench --force-dirty --ghc-options=-split-sections --no-run-tests --no-run-benchmarks --ghc-options "-Werror"
 
+    - name: Install protoc
+      run: |
+        wget https://github.com/protocolbuffers/protobuf/releases/download/v3.15.3/protoc-3.15.3-linux-x86_64.zip
+        unzip protoc-3.15.3-linux-x86_64.zip
+        sudo mv ./bin/protoc /usr/bin/protoc
+
     # Run Rust and Haskell tests. Could run in parallel in separate jobs.
     - name: Test haskell
       run: |
