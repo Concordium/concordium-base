@@ -132,7 +132,7 @@ data PendingUpdates cpv = PendingUpdates
       -- |Updates to the level 1 keys.
       _pLevel1KeysUpdateQueue :: !(UpdateQueue (HigherLevelKeys Level1KeysKind)),
       -- |Updates to the level 2 keys.
-      _pLevel2KeysUpdateQueue :: !(UpdateQueue (Authorizations cpv)),
+      _pLevel2KeysUpdateQueue :: !(UpdateQueue (Authorizations (AuthorizationsVersionFor cpv))),
       -- |Protocol updates.
       _pProtocolQueue :: !(UpdateQueue ProtocolUpdate),
       -- |Updates to the election difficulty parameter (CPV0 and CPV1 only).
@@ -225,7 +225,8 @@ getPendingUpdates migration = withCPVConstraints (chainParametersVersion @(Chain
     _pRootKeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys RootKeysKind)
     _pLevel1KeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys Level1KeysKind)
     -- Any pending updates to the authorizations are migrated.
-    _pLevel2KeysUpdateQueue <- getUpdateQueueV0With (migrateAuthorizations migration <$> getAuthorizations)
+    _pLevel2KeysUpdateQueue <- withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
+        getUpdateQueueV0With (migrateAuthorizations migration <$> getAuthorizations)
     _pProtocolQueue <- getUpdateQueueV0 @ProtocolUpdate
     oldElectionDifficultyQueue <- whenSupported @'PTElectionDifficulty @(ChainParametersVersionFor oldpv) $ getUpdateQueueV0 @ElectionDifficulty
     _pEuroPerEnergyQueue <- getUpdateQueueV0 @ExchangeRate
@@ -478,7 +479,7 @@ emptyPendingUpdates =
 -- |Current state of updatable parameters and update queues.
 data Updates' (cpv :: ChainParametersVersion) = Updates
     { -- |Current update authorizations.
-      _currentKeyCollection :: !(Hashed (UpdateKeysCollection cpv)),
+      _currentKeyCollection :: !(Hashed (UpdateKeysCollection (AuthorizationsVersionFor cpv))),
       -- |Current protocol update.
       _currentProtocolUpdate :: !(Maybe ProtocolUpdate),
       -- |Current chain parameters.
@@ -518,11 +519,12 @@ putUpdatesV0 Updates{..} = do
 -- |Deserialize 'Updates', applying a migration as necessary.
 getUpdates ::
     forall oldpv pv.
-    (IsProtocolVersion oldpv, IsProtocolVersion pv) =>
+    (IsProtocolVersion oldpv) =>
     StateMigrationParameters oldpv pv ->
     Get (Updates' (ChainParametersVersionFor pv))
 getUpdates migration = do
-    _currentKeyCollection <- makeHashed . migrateUpdateKeysCollection migration <$> getUpdateKeysCollection
+    _currentKeyCollection <- withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
+        makeHashed . migrateUpdateKeysCollection migration <$> getUpdateKeysCollection
     _currentProtocolUpdate <-
         getWord8 >>= \case
             0 -> return Nothing
@@ -533,7 +535,7 @@ getUpdates migration = do
     return Updates{..}
 
 instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
-    toJSON Updates{..} =
+    toJSON Updates{..} = withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
         object $
             [ "keys" AE..= _unhashed _currentKeyCollection,
               "chainParameters" AE..= _currentParameters,
@@ -543,7 +545,8 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (Updates' cpv) where
     parseJSON = withObject "Updates" $ \o -> do
-        _currentKeyCollection <- makeHashed <$> o AE..: "keys"
+        _currentKeyCollection <- withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
+             makeHashed <$> o AE..: "keys"
         _currentProtocolUpdate <- o AE..:? "protocolUpdate"
         _currentParameters <- o AE..: "chainParameters"
         _pendingUpdates <- o AE..: "updateQueues"
@@ -553,7 +556,7 @@ instance forall cpv. IsChainParametersVersion cpv => FromJSON (Updates' cpv) whe
 -- and 'ChainParameters'.
 initialUpdates ::
     IsChainParametersVersion cpv =>
-    UpdateKeysCollection cpv ->
+    UpdateKeysCollection (AuthorizationsVersionFor cpv) ->
     ChainParameters' cpv ->
     Updates' cpv
 initialUpdates initialKeyCollection _currentParameters =

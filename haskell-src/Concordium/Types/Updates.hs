@@ -27,7 +27,12 @@
 -- Parameter updates update a chain parameter.
 -- Currently provided parameters are:
 --
---   - election difficulty
+--   - consensus parameters [these have a common access structure, but separate queues]
+--     - for P1-P5: election difficulty
+--     - for P6 onwards:
+--       - timeout parameters
+--       - minimum block time
+--       - block energy limit
 --   - Energy to Euro exchange rate
 --   - GTU to Euro exchange rate
 --   - address of the foundation account
@@ -74,6 +79,7 @@ import Data.Ix
 import qualified Data.Map as Map
 import Data.Serialize
 import qualified Data.Set as Set
+import Data.Singletons
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Vector as Vec
@@ -150,7 +156,7 @@ instance Serialize AccessStructure where
 -- |The set of keys authorized for chain updates, together with
 -- access structures determining which keys are authorized for
 -- which update types. This is the payload of an update to authorization.
-data Authorizations cpv = Authorizations
+data Authorizations (auv :: AuthorizationsVersion) = Authorizations
     { asKeys :: !(Vec.Vector UpdatePublicKey),
       -- |New emergency keys
       asEmergency :: !AccessStructure,
@@ -179,15 +185,15 @@ data Authorizations cpv = Authorizations
       -- |Parameter keys: IdentityProviderIdentity and IpInfo
       asAddIdentityProvider :: !AccessStructure,
       -- |Parameter keys: Cooldown periods for pool owners and delegators
-      asCooldownParameters :: !(OParam 'PTCooldownParametersAccessStructure cpv AccessStructure),
+      asCooldownParameters :: !(Conditionally (SupportsCooldownParametersAccessStructure auv) AccessStructure),
       -- |Parameter keys: Length of reward period / payday
-      asTimeParameters :: !(OParam 'PTTimeParameters cpv AccessStructure)
+      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure)
     }
 
-deriving instance Eq (Authorizations cpv)
-deriving instance Show (Authorizations cpv)
+deriving instance Eq (Authorizations auv)
+deriving instance Show (Authorizations auv)
 
-putAuthorizations :: IsChainParametersVersion cpv => Putter (Authorizations cpv)
+putAuthorizations :: Putter (Authorizations auv)
 putAuthorizations Authorizations{..} = do
     putWord16be (fromIntegral (Vec.length asKeys))
     mapM_ put asKeys
@@ -203,10 +209,10 @@ putAuthorizations Authorizations{..} = do
     put asPoolParameters
     put asAddAnonymityRevoker
     put asAddIdentityProvider
-    put asCooldownParameters
-    put asTimeParameters
+    mapM_ put asCooldownParameters
+    mapM_ put asTimeParameters
 
-getAuthorizations :: forall cpv. IsChainParametersVersion cpv => Get (Authorizations cpv)
+getAuthorizations :: forall auv. IsAuthorizationsVersion auv => Get (Authorizations auv)
 getAuthorizations = label "deserialization update authorizations" $ do
     keyCount <- getWord16be
     asKeys <- Vec.replicateM (fromIntegral keyCount) get
@@ -229,20 +235,20 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asPoolParameters <- getChecked
     asAddAnonymityRevoker <- getChecked
     asAddIdentityProvider <- getChecked
-    asCooldownParameters <- whenSupported getChecked
-    asTimeParameters <- whenSupported getChecked
+    asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) getChecked
+    asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) getChecked
     return Authorizations{..}
 
-instance IsChainParametersVersion cpv => Serialize (Authorizations cpv) where
+instance IsAuthorizationsVersion auv => Serialize (Authorizations auv) where
     put = putAuthorizations
     get = getAuthorizations
 
-instance IsChainParametersVersion cpv => HashableTo SHA256.Hash (Authorizations cpv) where
+instance HashableTo SHA256.Hash (Authorizations auv) where
     getHash a = SHA256.hash $ "Authorizations" <> runPut (putAuthorizations a)
 
-instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (Authorizations cpv)
+instance (Monad m) => MHashableTo m SHA256.Hash (Authorizations auv)
 
-parseAuthorizationsJSON :: forall cpv. IsChainParametersVersion cpv => AE.Value -> AE.Parser (Authorizations cpv)
+parseAuthorizationsJSON :: forall auv. IsAuthorizationsVersion auv => AE.Value -> AE.Parser (Authorizations auv)
 parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asKeys <- Vec.fromList <$> v .: "keys"
     let parseAS x =
@@ -259,14 +265,12 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
                                 | fromIntegral maxKeyIndex >= Vec.length asKeys -> fail "invalid key index"
                             _ -> return AccessStructure{..}
                     )
-        consensusParametersParser = case sConsensusParametersVersionFor (chainParametersVersion @cpv) of
-            SConsensusParametersVersion0 -> parseAS "electionDifficulty"
-            SConsensusParametersVersion1 -> parseAS "consensusParameters"
     asEmergency <- parseAS "emergency"
     asProtocol <- parseAS "protocol"
     asParamEuroPerEnergy <- parseAS "euroPerEnergy"
     asParamMicroGTUPerEuro <- parseAS "microGTUPerEuro"
-    asParamConsensusParameters <- consensusParametersParser
+    -- Note: the consensus parameters is encoded as "electionDifficulty" for backwards compatibility
+    asParamConsensusParameters <- parseAS "electionDifficulty"
     asParamFoundationAccount <- parseAS "foundationAccount"
     asParamMintDistribution <- parseAS "mintDistribution"
     asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
@@ -274,20 +278,22 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asPoolParameters <- parseAS "poolParameters"
     asAddAnonymityRevoker <- parseAS "addAnonymityRevoker"
     asAddIdentityProvider <- parseAS "addIdentityProvider"
-    asCooldownParameters <- whenSupported $ parseAS "cooldownParameters"
-    asTimeParameters <- whenSupported $ parseAS "timeParameters"
+    let auv = sing @auv
+    asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure auv) $ parseAS "cooldownParameters"
+    asTimeParameters <- conditionallyA (sSupportsTimeParameters auv) $ parseAS "timeParameters"
     return Authorizations{..}
 
-instance IsChainParametersVersion cpv => AE.FromJSON (Authorizations cpv) where
+instance IsAuthorizationsVersion auv => AE.FromJSON (Authorizations auv) where
     parseJSON = parseAuthorizationsJSON
 
-instance forall cpv. IsChainParametersVersion cpv => AE.ToJSON (Authorizations cpv) where
+instance IsAuthorizationsVersion auv => AE.ToJSON (Authorizations auv) where
     toJSON Authorizations{..} =
         AE.object
             ( [ "keys" AE..= Vec.toList asKeys,
                 "emergency" AE..= t asEmergency,
                 "protocol" AE..= t asProtocol,
-                consensusParameters,
+                -- Note: "electionDifficulty" is used for backwards compatibility
+                "electionDifficulty" AE..= t asParamConsensusParameters,
                 "euroPerEnergy" AE..= t asParamEuroPerEnergy,
                 "microGTUPerEuro" AE..= t asParamMicroGTUPerEuro,
                 "foundationAccount" AE..= t asParamFoundationAccount,
@@ -309,9 +315,6 @@ instance forall cpv. IsChainParametersVersion cpv => AE.ToJSON (Authorizations c
                 ]
         cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
         timeParameters' = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
-        consensusParameters = case sConsensusParametersVersionFor (chainParametersVersion @cpv) of
-            SConsensusParametersVersion0 -> "electionDifficulty" AE..= t asParamConsensusParameters
-            SConsensusParametersVersion1 -> "consensusParameters" AE..= t asParamConsensusParameters
 
 -----------------
 
@@ -381,15 +384,11 @@ data RootUpdate
         }
     | -- |Update the Level 2 keys in chain parameters version 0
       Level2KeysRootUpdate
-        { l2kruAuthorizations :: !(Authorizations 'ChainParametersV0)
+        { l2kruAuthorizations :: !(Authorizations 'AuthorizationsVersion0)
         }
-    | -- |Update the level 2 keys in chain parameters version 1
+    | -- |Update the level 2 keys in chain parameters version 1 and 2
       Level2KeysRootUpdateV1
-        { l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
-        }
-    | -- |Update the level 2 keys in chain parameters version 2
-      Level2KeysRootUpdateV2
-        { l2kruAuthorizationsV2 :: !(Authorizations 'ChainParametersV2)
+        { l2kruAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
     deriving (Eq, Show)
 
@@ -406,9 +405,6 @@ putRootUpdate Level2KeysRootUpdate{..} = do
 putRootUpdate Level2KeysRootUpdateV1{..} = do
     putWord8 3
     putAuthorizations l2kruAuthorizationsV1
-putRootUpdate Level2KeysRootUpdateV2{..} = do
-    putWord8 4
-    putAuthorizations l2kruAuthorizationsV2
 
 getRootUpdate :: SChainParametersVersion cpv -> Get RootUpdate
 getRootUpdate scpv = label "RootUpdate" $ do
@@ -418,7 +414,6 @@ getRootUpdate scpv = label "RootUpdate" $ do
         1 -> Level1KeysRootUpdate <$> get
         2 | isCPV ChainParametersV0 -> Level2KeysRootUpdate <$> getAuthorizations
         3 | isCPV ChainParametersV1 -> Level2KeysRootUpdateV1 <$> getAuthorizations
-        4 | isCPV ChainParametersV2 -> Level2KeysRootUpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
   where
     isCPV cpv = cpv == demoteChainParameterVersion scpv
@@ -431,7 +426,6 @@ instance AE.FromJSON RootUpdate where
             "level1KeysUpdate" -> Level1KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysRootUpdateV1 <$> o .: "updatePayload"
-            "level2KeysUpdateV2" -> Level2KeysRootUpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON RootUpdate where
@@ -455,11 +449,6 @@ instance AE.ToJSON RootUpdate where
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kruAuthorizationsV1
             ]
-    toJSON Level2KeysRootUpdateV2{..} =
-        AE.object
-            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
-              "updatePayload" AE..= l2kruAuthorizationsV2
-            ]
 
 --------------------
 
@@ -474,13 +463,10 @@ data Level1Update
         { l1kl1uKeys :: !(HigherLevelKeys Level1KeysKind)
         }
     | Level2KeysLevel1Update
-        { l2kl1uAuthorizations :: !(Authorizations 'ChainParametersV0)
+        { l2kl1uAuthorizations :: !(Authorizations 'AuthorizationsVersion0)
         }
     | Level2KeysLevel1UpdateV1
-        { l2kl1uAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
-        }
-    | Level2KeysLevel1UpdateV2
-        { l2kl1uAuthorizationsV2 :: !(Authorizations 'ChainParametersV2)
+        { l2kl1uAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
 
 deriving instance Eq Level1Update
@@ -496,9 +482,6 @@ putLevel1Update Level2KeysLevel1Update{..} = do
 putLevel1Update Level2KeysLevel1UpdateV1{..} = do
     putWord8 2
     putAuthorizations l2kl1uAuthorizationsV1
-putLevel1Update Level2KeysLevel1UpdateV2{..} = do
-    putWord8 3
-    putAuthorizations l2kl1uAuthorizationsV2
 
 getLevel1Update :: SChainParametersVersion scpv -> Get Level1Update
 getLevel1Update scpv = label "Level1Update" $ do
@@ -507,7 +490,6 @@ getLevel1Update scpv = label "Level1Update" $ do
         0 -> Level1KeysLevel1Update <$> get
         1 | isCPV ChainParametersV0 -> Level2KeysLevel1Update <$> getAuthorizations
         2 | isCPV ChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
-        3 | isCPV ChainParametersV2 -> Level2KeysLevel1UpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
   where
     isCPV cpv = cpv == demoteChainParameterVersion scpv
@@ -519,7 +501,6 @@ instance AE.FromJSON Level1Update where
             "level1KeysUpdate" -> Level1KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysLevel1UpdateV1 <$> o .: "updatePayload"
-            "level2KeysUpdateV2" -> Level2KeysLevel1UpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON Level1Update where
@@ -537,11 +518,6 @@ instance AE.ToJSON Level1Update where
         AE.object
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kl1uAuthorizationsV1
-            ]
-    toJSON Level2KeysLevel1UpdateV2{..} =
-        AE.object
-            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
-              "updatePayload" AE..= l2kl1uAuthorizationsV2
             ]
 
 ----------------------
@@ -617,23 +593,23 @@ instance AE.FromJSON ProtocolUpdate where
 
 -- |A data structure that holds a complete set of update keys. It will be stored
 -- in the BlockState.
-data UpdateKeysCollection cpv = UpdateKeysCollection
+data UpdateKeysCollection (auv :: AuthorizationsVersion) = UpdateKeysCollection
     { rootKeys :: !(HigherLevelKeys RootKeysKind),
       level1Keys :: !(HigherLevelKeys Level1KeysKind),
-      level2Keys :: !(Authorizations cpv)
+      level2Keys :: !(Authorizations auv)
     }
     deriving (Eq, Show)
 
-putUpdateKeysCollection :: IsChainParametersVersion cpv => Putter (UpdateKeysCollection cpv)
+putUpdateKeysCollection :: Putter (UpdateKeysCollection auv)
 putUpdateKeysCollection UpdateKeysCollection{..} = do
     put rootKeys
     put level1Keys
     putAuthorizations level2Keys
 
-getUpdateKeysCollection :: IsChainParametersVersion cpv => Get (UpdateKeysCollection cpv)
+getUpdateKeysCollection :: IsAuthorizationsVersion auv => Get (UpdateKeysCollection auv)
 getUpdateKeysCollection = UpdateKeysCollection <$> get <*> get <*> getAuthorizations
 
-instance IsChainParametersVersion cpv => Serialize (UpdateKeysCollection cpv) where
+instance IsAuthorizationsVersion auv => Serialize (UpdateKeysCollection auv) where
     put = putUpdateKeysCollection
     get = getUpdateKeysCollection
 
@@ -641,24 +617,24 @@ instance IsChainParametersVersion cpv => Serialize (UpdateKeysCollection cpv) wh
 -- Security considerations: It is crucial to use a cryptographic secure hash instance for `UpdateKeysCollection`.
 -- The caller must be able to use the resulting hash in security critical application code.
 -- Currently the computed hash is used to short circuit the signature verification check of transactions.
-instance IsChainParametersVersion cpv => HashableTo SHA256.Hash (UpdateKeysCollection cpv) where
+instance HashableTo SHA256.Hash (UpdateKeysCollection auv) where
     getHash = SHA256.hash . runPut . putUpdateKeysCollection
 
 -- |Check that the update keys collection matches the given SHA256 hash.
 -- Note. See above for more information.
-matchesUpdateKeysCollection :: IsChainParametersVersion cpv => UpdateKeysCollection cpv -> SHA256.Hash -> Bool
+matchesUpdateKeysCollection :: UpdateKeysCollection auv -> SHA256.Hash -> Bool
 matchesUpdateKeysCollection ukc h = getHash ukc == h
 
-instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (UpdateKeysCollection cpv)
+instance (Monad m) => MHashableTo m SHA256.Hash (UpdateKeysCollection auv)
 
-instance IsChainParametersVersion cpv => AE.FromJSON (UpdateKeysCollection cpv) where
+instance IsAuthorizationsVersion auv => AE.FromJSON (UpdateKeysCollection auv) where
     parseJSON = AE.withObject "UpdateKeysCollection" $ \v -> do
         rootKeys <- v .: "rootKeys"
         level1Keys <- v .: "level1Keys"
         level2Keys <- v .: "level2Keys"
         return UpdateKeysCollection{..}
 
-instance IsChainParametersVersion cpv => AE.ToJSON (UpdateKeysCollection cpv) where
+instance IsAuthorizationsVersion auv => AE.ToJSON (UpdateKeysCollection auv) where
     toJSON UpdateKeysCollection{..} =
         AE.object
             [ "rootKeys" AE..= rootKeys,
@@ -954,11 +930,9 @@ updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
 updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
-updateType (RootUpdatePayload Level2KeysRootUpdateV2{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
-updateType (Level1UpdatePayload Level2KeysLevel1UpdateV2{}) = UpdateLevel2Keys
 updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
@@ -991,10 +965,10 @@ extractKeysIndices p =
   where
     f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
     f' v = keysForOParam . v . level2Keys
-    g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
-    keysForOParam :: OParam pt cpv AccessStructure -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
-    keysForOParam (SomeParam AccessStructure{..}) = (accessPublicKeys, accessThreshold)
-    keysForOParam NoParam = (Set.empty, 1)
+    g v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
+    keysForOParam :: Conditionally c AccessStructure -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
+    keysForOParam (CTrue AccessStructure{..}) = (accessPublicKeys, accessThreshold)
+    keysForOParam CFalse = (Set.empty, 1)
 
 -- The latter case happens if the UpdateKeysCollection is used with chain parameter version 0 but the update payload is
 -- is a cooldown parameter update or a time parameter update, which only exists in chain parameter version 1.

@@ -2,6 +2,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Concordium.Genesis.Data.Base where
 
@@ -178,7 +179,7 @@ data GenesisState (pv :: ProtocolVersion) = GenesisState
       -- |The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
       -- |The initial update keys structure for chain updates.
-      genesisUpdateKeys :: !(UpdateKeysCollection (ChainParametersVersionFor pv)),
+      genesisUpdateKeys :: !(UpdateKeysCollection (AuthorizationsVersionForPV pv)),
       -- |The initial (updatable) chain parameters.
       genesisChainParameters :: !(ChainParameters pv),
       -- |The initial leadership election nonce.
@@ -202,7 +203,10 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
         genesisCryptographicParameters <- get
         genesisIdentityProviders <- get
         genesisAnonymityRevokers <- get
-        genesisUpdateKeys <- getUpdateKeysCollection
+        genesisUpdateKeys <-
+            withIsAuthorizationsVersionForPV
+                (protocolVersion @pv)
+                getUpdateKeysCollection
         genesisChainParameters <- getChainParameters
         genesisLeadershipElectionNonce <- get
         nGenesisAccounts <- getLength

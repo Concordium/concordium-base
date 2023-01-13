@@ -17,15 +17,15 @@ import Concordium.Types.Updates
 migrateAuthorizations ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    Authorizations (ChainParametersVersionFor oldpv) ->
-    Authorizations (ChainParametersVersionFor pv)
+    Authorizations (AuthorizationsVersionForPV oldpv) ->
+    Authorizations (AuthorizationsVersionForPV pv)
 migrateAuthorizations StateMigrationParametersTrivial auths = auths
 migrateAuthorizations StateMigrationParametersP1P2 auths = auths
 migrateAuthorizations StateMigrationParametersP2P3 auths = auths
 migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{..} =
     Authorizations
-        { asCooldownParameters = SomeParam updateCooldownParametersAccessStructure,
-          asTimeParameters = SomeParam updateTimeParametersAccessStructure,
+        { asCooldownParameters = CTrue updateCooldownParametersAccessStructure,
+          asTimeParameters = CTrue updateTimeParametersAccessStructure,
           ..
         }
   where
@@ -38,8 +38,8 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 migrateUpdateKeysCollection ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    UpdateKeysCollection (ChainParametersVersionFor oldpv) ->
-    UpdateKeysCollection (ChainParametersVersionFor pv)
+    UpdateKeysCollection (AuthorizationsVersionForPV oldpv) ->
+    UpdateKeysCollection (AuthorizationsVersionForPV pv)
 migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
     UpdateKeysCollection{level2Keys = migrateAuthorizations migration level2Keys, ..}
 

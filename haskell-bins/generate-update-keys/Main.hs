@@ -20,7 +20,6 @@ import System.FilePath
 
 import Concordium.Crypto.SignatureScheme
 import Concordium.Types.Parameters
-import Concordium.Types.ProtocolVersion
 import Concordium.Types.Updates
 
 data AuthDetails = AuthDetails
@@ -166,23 +165,23 @@ generateKeys guk = do
     let asKeys = Vec.empty -- Placeholder; replaced in doGenerateKeys
     case guk of
         GenerateUpdateKeysCPV0{} ->
-            doGenerateKeys @'ChainParametersV0
+            doGenerateKeys @'AuthorizationsVersion0
                 Authorizations
-                    { asCooldownParameters = NoParam,
-                      asTimeParameters = NoParam,
+                    { asCooldownParameters = CFalse,
+                      asTimeParameters = CFalse,
                       ..
                     }
         GenerateUpdateKeysCPV1{..} -> do
             asCooldownParameters <-
-                SomeParam
+                CTrue
                     <$> makeAS gukCooldownParameters "Add identity provider access structure"
             asTimeParameters <-
-                SomeParam
+                CTrue
                     <$> makeAS gukCooldownParameters "Add identity provider access structure"
-            doGenerateKeys @'ChainParametersV1 Authorizations{..}
+            doGenerateKeys @'AuthorizationsVersion1 Authorizations{..}
   where
     CommonUpdateKeys{..} = gukCommon guk
-    doGenerateKeys :: IsChainParametersVersion cpv => Authorizations cpv -> IO ()
+    doGenerateKeys :: IsAuthorizationsVersion auv => Authorizations auv -> IO ()
     doGenerateKeys level2KeysPre = do
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0 .. cukKeyCount - 1]]

@@ -28,7 +28,18 @@ import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
-import Concordium.Types.Parameters (CooldownParameters, GASRewards, GASRewardsVersion (..), MintDistribution, MintDistributionVersion (..), PoolParameters, TimeParameters, TransactionFeeDistribution)
+import Concordium.Types.Parameters (
+    AuthorizationsVersion (..),
+    CooldownParameters,
+    GASRewards,
+    GASRewardsVersion (..),
+    MintDistribution,
+    MintDistributionVersion (..),
+    PoolParameters,
+    TimeParameters,
+    TimeoutParameters,
+    TransactionFeeDistribution,
+ )
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
@@ -569,14 +580,12 @@ data PendingUpdateEffect
     | -- |Updates to the level 1 keys.
       PUELevel1Keys !(U.HigherLevelKeys U.Level1KeysKind)
     | -- |Updates to the level 2 keys.
-      PUELevel2KeysV0 !(U.Authorizations 'ChainParametersV0)
+      PUELevel2KeysV0 !(U.Authorizations 'AuthorizationsVersion0)
     | -- |Updates to the level 2 keys.
-      PUELevel2KeysV1 !(U.Authorizations 'ChainParametersV1)
-    | -- |Updates to the level 2 keys.
-      PUELevel2KeysV2 !(U.Authorizations 'ChainParametersV2)
+      PUELevel2KeysV1 !(U.Authorizations 'AuthorizationsVersion1)
     | -- |Protocol updates.
       PUEProtocol !U.ProtocolUpdate
-    | -- |Updates to the election difficulty parameter.
+    | -- |Updates to the election difficulty parameter for chain parameters versions 1-2.
       PUEElectionDifficulty !ElectionDifficulty
     | -- |Updates to the euro:energy exchange rate.
       PUEEuroPerEnergy !ExchangeRate
@@ -601,10 +610,16 @@ data PendingUpdateEffect
       PUEAddAnonymityRevoker !ARS.ArInfo
     | -- |Adds a new identity provider.
       PUEAddIdentityProvider !IPS.IpInfo
-    | -- |Updates to cooldown parameters for chain parameters version 1.
+    | -- |Updates to cooldown parameters for chain parameters version 1 and later.
       PUECooldownParameters !(CooldownParameters 'ChainParametersV1)
-    | -- |Updates to time parameters for chain parameters version 1.
+    | -- |Updates to time parameters for chain parameters version 1 and later.
       PUETimeParameters !TimeParameters
+    | -- |Updates to the consensus timeouts for chain parameters version 2.
+      PUETimeoutParameters !TimeoutParameters
+    | -- |Updates to the the minimum time between blocks for chain parameters version 2.
+      PUEMinBlockTime !Duration
+    | -- |Updates to the block energy limit for chain parameters version 2.
+      PUEBlockEnergyLimit !Energy
 
 -- | Next available sequence numbers for updating any of the chain parameters.
 data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers

@@ -233,7 +233,7 @@ data GenesisParameters pv = GenesisParameters
       -- |Maximum total energy that can be consumed by the transactions in a block
       gpMaxBlockEnergy :: Energy,
       -- |The collection of update keys for performing updates
-      gpUpdateKeys :: UpdateKeysCollection (ChainParametersVersionFor pv),
+      gpUpdateKeys :: UpdateKeysCollection (AuthorizationsVersionFor (ChainParametersVersionFor pv)),
       -- |The initial (updatable) chain parameters
       gpChainParameters :: GenesisChainParameters pv
     }
@@ -253,13 +253,14 @@ instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) wher
         let hasBaker GenesisAccount{gaBaker = Nothing} = False
             hasBaker _ = True
         unless (any hasBaker gpInitialAccounts) $ fail "Must have at least one baker at genesis"
-        let
-            validateBaker (bid, GenesisAccount{gaBaker = Just bkr}) =
+        let validateBaker (bid, GenesisAccount{gaBaker = Just bkr}) =
                 unless (gbBakerId bkr == bid) $ fail $ "Expected baker id " ++ show bid ++ " but was " ++ show (gbBakerId bkr)
             validateBaker _ = return ()
         mapM_ validateBaker (zip [0 ..] gpInitialAccounts)
         gpMaxBlockEnergy <- v .: "maxBlockEnergy"
-        gpUpdateKeys <- v .: "updateKeys"
+        gpUpdateKeys <-
+            withIsAuthorizationsVersionForPV (protocolVersion @pv) $
+                v .: "updateKeys"
         gpChainParameters <- v .: "chainParameters"
         let facct = gcpFoundationAccount gpChainParameters
         unless (any ((facct ==) . gaAddress) gpInitialAccounts) $

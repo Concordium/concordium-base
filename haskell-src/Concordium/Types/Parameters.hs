@@ -90,6 +90,26 @@ $( singletons
         consensusParametersVersionFor ChainParametersV1 = ConsensusParametersVersion0
         consensusParametersVersionFor ChainParametersV2 = ConsensusParametersVersion1
 
+        data AuthorizationsVersion
+            = AuthorizationsVersion0
+            | AuthorizationsVersion1
+
+        authorizationsVersionFor :: ChainParametersVersion -> AuthorizationsVersion
+        authorizationsVersionFor ChainParametersV0 = AuthorizationsVersion0
+        authorizationsVersionFor ChainParametersV1 = AuthorizationsVersion1
+        authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion1
+
+        authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
+        authorizationsVersionForPV pv = authorizationsVersionFor (chainParametersVersionFor pv)
+
+        supportsCooldownParametersAccessStructure :: AuthorizationsVersion -> Bool
+        supportsCooldownParametersAccessStructure AuthorizationsVersion0 = False
+        supportsCooldownParametersAccessStructure AuthorizationsVersion1 = True
+
+        supportsTimeParameters :: AuthorizationsVersion -> Bool
+        supportsTimeParameters AuthorizationsVersion0 = False
+        supportsTimeParameters AuthorizationsVersion1 = True
+
         data ParameterType
             = PTElectionDifficulty
             | PTTimeParameters
@@ -104,9 +124,7 @@ $( singletons
         isSupported PTElectionDifficulty cpv = case consensusParametersVersionFor cpv of
             ConsensusParametersVersion0 -> True
             ConsensusParametersVersion1 -> False
-        isSupported PTTimeParameters ChainParametersV0 = False
-        isSupported PTTimeParameters ChainParametersV1 = True
-        isSupported PTTimeParameters ChainParametersV2 = True
+        isSupported PTTimeParameters cpv = supportsTimeParameters (authorizationsVersionFor cpv)
         isSupported PTMintPerSlot cpv = supportsMintPerSlot (mintDistributionVersionFor cpv)
         isSupported PTTimeoutParameters ChainParametersV0 = False
         isSupported PTTimeoutParameters ChainParametersV1 = False
@@ -117,9 +135,7 @@ $( singletons
         isSupported PTBlockEnergyLimit ChainParametersV0 = False
         isSupported PTBlockEnergyLimit ChainParametersV1 = False
         isSupported PTBlockEnergyLimit ChainParametersV2 = True
-        isSupported PTCooldownParametersAccessStructure cpv = case cooldownParametersVersionFor cpv of
-            CooldownParametersVersion0 -> False
-            CooldownParametersVersion1 -> True
+        isSupported PTCooldownParametersAccessStructure cpv = supportsCooldownParametersAccessStructure (authorizationsVersionFor cpv)
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
@@ -127,6 +143,13 @@ $( singletons
  )
 
 type IsParameterType (pt :: ParameterType) = SingI pt
+type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
+
+withIsAuthorizationsVersionFor :: SChainParametersVersion cpv -> (IsAuthorizationsVersion (AuthorizationsVersionFor cpv) => a) -> a
+withIsAuthorizationsVersionFor scpv = withSingI (sAuthorizationsVersionFor scpv)
+
+withIsAuthorizationsVersionForPV :: SProtocolVersion pv -> (IsAuthorizationsVersion (AuthorizationsVersionForPV pv) => a) -> a
+withIsAuthorizationsVersionForPV spv = withSingI (sAuthorizationsVersionForPV spv)
 
 data Conditionally (b :: Bool) a where
     CFalse :: Conditionally 'False a
@@ -1072,7 +1095,8 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
 
 withCPVConstraints ::
     SChainParametersVersion cpv ->
-    ( ( IsConsensusParametersVersion (ConsensusParametersVersionFor cpv),
+    ( ( IsAuthorizationsVersion (AuthorizationsVersionFor cpv),
+        IsConsensusParametersVersion (ConsensusParametersVersionFor cpv),
         IsCooldownParametersVersion (CooldownParametersVersionFor cpv),
         IsGASRewardsVersion (GasRewardsVersionFor cpv),
         IsMintDistributionVersion (MintDistributionVersionFor cpv),
@@ -1082,11 +1106,12 @@ withCPVConstraints ::
     ) ->
     a
 withCPVConstraints scpv a =
-    withIsConsensusParametersVersionFor scpv $
-        withIsCooldownParametersVersionFor scpv $
-            withIsGASRewardsVersionFor scpv $
-                withIsMintDistributionVersionFor scpv $
-                    withIsPoolParametersVersionFor scpv a
+    withIsAuthorizationsVersionFor scpv $
+        withIsConsensusParametersVersionFor scpv $
+            withIsCooldownParametersVersionFor scpv $
+                withIsGASRewardsVersionFor scpv $
+                    withIsMintDistributionVersionFor scpv $
+                        withIsPoolParametersVersionFor scpv a
 
 -- |Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
 -- reflects changes to the chain parameters across different protocol versions.
