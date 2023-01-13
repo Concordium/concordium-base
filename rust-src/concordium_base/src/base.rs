@@ -10,7 +10,7 @@ use crypto_common::{
     Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
     Serial,
 };
-use derive_more::{Add, Display, From, FromStr, Into};
+use derive_more::{Add, Display, From, FromStr, Into, Sub};
 use id::types::VerifyKey;
 use rand::{CryptoRng, Rng};
 use random_oracle::RandomOracle;
@@ -465,7 +465,9 @@ pub struct AccountIndex {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add, Sub,
+)]
 pub struct Energy {
     pub energy: u64,
 }
