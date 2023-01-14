@@ -24,9 +24,7 @@ pub struct HashBytes<Purpose> {
 }
 
 impl<Purpose> PartialEq for HashBytes<Purpose> {
-    fn eq(&self, other: &Self) -> bool {
-        self.bytes == other.bytes
-    }
+    fn eq(&self, other: &Self) -> bool { self.bytes == other.bytes }
 }
 
 impl<Purpose> Eq for HashBytes<Purpose> {}
