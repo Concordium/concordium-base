@@ -11,7 +11,7 @@ use std::{
 };
 use thiserror::Error;
 
-#[derive(Eq, Ord, PartialOrd, Copy, SerdeSerialize)]
+#[derive(Ord, PartialOrd, Copy, SerdeSerialize)]
 #[serde(into = "String")]
 /// A general wrapper around Sha256 hash. This is used to add type safety to
 /// a hash that is used in different context. The underlying value is always the
@@ -28,6 +28,8 @@ impl<Purpose> PartialEq for HashBytes<Purpose> {
         self.bytes == other.bytes && self._phantom == other._phantom
     }
 }
+
+impl<Purpose> Eq for HashBytes<Purpose> {}
 
 impl<Purpose> hash::Hash for HashBytes<Purpose> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) { self.bytes.hash(state); }
