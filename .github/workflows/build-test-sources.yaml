@@ -200,6 +200,13 @@ jobs:
       if: steps.stack-programs.outputs.cache-hit != 'true' || steps.stack-global.outputs.cache-hit != 'true'
       run: |
         stack setup --install-ghc
+
+    - name: Install protoc
+      run: |
+        wget https://github.com/protocolbuffers/protobuf/releases/download/v3.15.3/protoc-3.15.3-linux-x86_64.zip
+        unzip protoc-3.15.3-linux-x86_64.zip
+        sudo mv ./bin/protoc /usr/bin/protoc
+
     - name: Build haskell dependencies (unless they were cached)
       if: steps.stack-programs.outputs.cache-hit != 'true' || steps.stack-global.outputs.cache-hit != 'true'
       run: |
