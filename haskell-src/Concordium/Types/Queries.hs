@@ -278,11 +278,11 @@ instance FromJSON BlockSummary where
         parse (SomeProtocolVersion (spv :: SProtocolVersion pv)) v =
             BlockSummary
                 <$> v
-                .: "transactionSummaries"
+                    .: "transactionSummaries"
                 <*> v
-                .: "specialEvents"
+                    .: "specialEvents"
                 <*> v
-                .: "finalizationData"
+                    .: "finalizationData"
                 <*> (v .: "updates" :: Parser (UQ.Updates pv))
                 <*> pure spv
 

@@ -15,6 +15,7 @@ import Test.QuickCheck as QC
 
 import Concordium.Crypto.DummyData (genSigSchemeKeyPair)
 import qualified Concordium.Crypto.SignatureScheme as Sig
+import Concordium.Types.Parameters
 import Concordium.Types.ProtocolVersion
 import Concordium.Types.Updates
 
@@ -61,7 +62,7 @@ type SignKeyGen =
 -- The second argument indicates whether the signature should be valid.
 testUpdateInstruction :: forall pv. IsProtocolVersion pv => SProtocolVersion pv -> SignKeyGen -> Bool -> Property
 testUpdateInstruction spv keyGen isValid =
-    forAll (genKeyCollection @(ChainParametersVersionFor pv) 3) $ \(kc, rootK, level1K, level2K) ->
+    forAll (withIsAuthorizationsVersionForPV (protocolVersion @pv) $ genKeyCollection @(AuthorizationsVersionForPV pv) 3) $ \(kc, rootK, level1K, level2K) ->
         forAll (genRawUpdateInstruction scpv) $ \rui -> do
             let p = ruiPayload rui
             keysToSign <- case p of
@@ -136,10 +137,13 @@ tests :: Spec
 tests = parallel $ do
     specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV0
     specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV1
+    specify "UpdatePayload JSON in CP2" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV2
     versionedTests SP1
     versionedTests SP2
     versionedTests SP3
     versionedTests SP4
+    versionedTests SP5
+    versionedTests SP6
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv

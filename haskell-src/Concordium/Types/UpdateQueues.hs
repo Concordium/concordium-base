@@ -171,25 +171,26 @@ data PendingUpdates cpv = PendingUpdates
 makeLenses ''PendingUpdates
 
 instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) where
-    getHash PendingUpdates{..} = withCPVConstraints (chainParametersVersion @cpv) $
-        H.hash $
-            hsh _pRootKeysUpdateQueue
-                <> hsh _pLevel1KeysUpdateQueue
-                <> hsh _pLevel2KeysUpdateQueue
-                <> hsh _pProtocolQueue
-                <> ohsh _pElectionDifficultyQueue
-                <> hsh _pEuroPerEnergyQueue
-                <> hsh _pMicroGTUPerEuroQueue
-                <> hsh _pFoundationAccountQueue
-                <> hsh _pMintDistributionQueue
-                <> hsh _pTransactionFeeDistributionQueue
-                <> hsh _pGASRewardsQueue
-                <> hsh _pPoolParametersQueue
-                <> hsh _pAddAnonymityRevokerQueue
-                <> hsh _pAddIdentityProviderQueue
-                <> ohsh _pCooldownParametersQueue
-                <> ohsh _pTimeParametersQueue
-                <> ohsh _pTimeoutParametersQueue
+    getHash PendingUpdates{..} =
+        withCPVConstraints (chainParametersVersion @cpv) $
+            H.hash $
+                hsh _pRootKeysUpdateQueue
+                    <> hsh _pLevel1KeysUpdateQueue
+                    <> hsh _pLevel2KeysUpdateQueue
+                    <> hsh _pProtocolQueue
+                    <> ohsh _pElectionDifficultyQueue
+                    <> hsh _pEuroPerEnergyQueue
+                    <> hsh _pMicroGTUPerEuroQueue
+                    <> hsh _pFoundationAccountQueue
+                    <> hsh _pMintDistributionQueue
+                    <> hsh _pTransactionFeeDistributionQueue
+                    <> hsh _pGASRewardsQueue
+                    <> hsh _pPoolParametersQueue
+                    <> hsh _pAddAnonymityRevokerQueue
+                    <> hsh _pAddIdentityProviderQueue
+                    <> ohsh _pCooldownParametersQueue
+                    <> ohsh _pTimeParametersQueue
+                    <> ohsh _pTimeoutParametersQueue
       where
         hsh :: HashableTo H.Hash a => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
@@ -225,8 +226,9 @@ getPendingUpdates migration = withCPVConstraints (chainParametersVersion @(Chain
     _pRootKeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys RootKeysKind)
     _pLevel1KeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys Level1KeysKind)
     -- Any pending updates to the authorizations are migrated.
-    _pLevel2KeysUpdateQueue <- withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
-        getUpdateQueueV0With (migrateAuthorizations migration <$> getAuthorizations)
+    _pLevel2KeysUpdateQueue <-
+        withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
+            getUpdateQueueV0With (migrateAuthorizations migration <$> getAuthorizations)
     _pProtocolQueue <- getUpdateQueueV0 @ProtocolUpdate
     oldElectionDifficultyQueue <- whenSupported @'PTElectionDifficulty @(ChainParametersVersionFor oldpv) $ getUpdateQueueV0 @ElectionDifficulty
     _pEuroPerEnergyQueue <- getUpdateQueueV0 @ExchangeRate
@@ -523,8 +525,9 @@ getUpdates ::
     StateMigrationParameters oldpv pv ->
     Get (Updates' (ChainParametersVersionFor pv))
 getUpdates migration = do
-    _currentKeyCollection <- withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
-        makeHashed . migrateUpdateKeysCollection migration <$> getUpdateKeysCollection
+    _currentKeyCollection <-
+        withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
+            makeHashed . migrateUpdateKeysCollection migration <$> getUpdateKeysCollection
     _currentProtocolUpdate <-
         getWord8 >>= \case
             0 -> return Nothing
@@ -535,18 +538,20 @@ getUpdates migration = do
     return Updates{..}
 
 instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
-    toJSON Updates{..} = withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
-        object $
-            [ "keys" AE..= _unhashed _currentKeyCollection,
-              "chainParameters" AE..= _currentParameters,
-              "updateQueues" AE..= _pendingUpdates
-            ]
-                <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
+    toJSON Updates{..} =
+        withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
+            object $
+                [ "keys" AE..= _unhashed _currentKeyCollection,
+                  "chainParameters" AE..= _currentParameters,
+                  "updateQueues" AE..= _pendingUpdates
+                ]
+                    <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (Updates' cpv) where
     parseJSON = withObject "Updates" $ \o -> do
-        _currentKeyCollection <- withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
-             makeHashed <$> o AE..: "keys"
+        _currentKeyCollection <-
+            withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
+                makeHashed <$> o AE..: "keys"
         _currentProtocolUpdate <- o AE..:? "protocolUpdate"
         _currentParameters <- o AE..: "chainParameters"
         _pendingUpdates <- o AE..: "updateQueues"

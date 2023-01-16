@@ -455,7 +455,7 @@ instance (Monad m, IsGASRewardsVersion grv) => MHashableTo m Hash.Hash (GASRewar
 
 -- |Parameters affecting rewards.
 -- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
-data RewardParameters cpv = RewardParameters
+data RewardParameters (cpv :: ChainParametersVersion) = RewardParameters
     { -- |Distribution of newly-minted GTUs.
       _rpMintDistribution :: !(MintDistribution (MintDistributionVersionFor cpv)),
       -- |Distribution of transaction fees.
@@ -611,9 +611,9 @@ parseCooldownParametersJSON = case sing @cpv of
     SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
             <$> v
-            .: "poolOwnerCooldown"
+                .: "poolOwnerCooldown"
             <*> v
-            .: "delegatorCooldown"
+                .: "delegatorCooldown"
 
 instance SingI cpv => FromJSON (CooldownParameters' cpv) where
     parseJSON = parseCooldownParametersJSON
@@ -1193,20 +1193,20 @@ parseJSONForCPV0 =
         _cpExchangeRates <-
             makeExchangeRates
                 <$> v
-                .: "euroPerEnergy"
+                    .: "euroPerEnergy"
                 <*> v
-                .: "microGTUPerEuro"
+                    .: "microGTUPerEuro"
         _cpCooldownParameters <-
             CooldownParametersV0
                 <$> v
-                .: "bakerCooldownEpochs"
+                    .: "bakerCooldownEpochs"
         _cpAccountCreationLimit <- v .: "accountCreationLimit"
         _cpRewardParameters <- v .: "rewardParameters"
         _cpFoundationAccount <- v .: "foundationAccountIndex"
         _cpPoolParameters <-
             PoolParametersV0
                 <$> v
-                .: "minimumThresholdForBaking"
+                    .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
         return ChainParameters{..}
 

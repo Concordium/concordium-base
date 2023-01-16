@@ -16,6 +16,7 @@ import qualified Data.Map.Strict as Map
 import Data.Ratio
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import Data.Singletons
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as Vec
@@ -388,8 +389,7 @@ genChainParametersV1 = do
     return ChainParameters{..}
 
 genConsensusParametersV1 ::
-    (ConsensusParametersVersionFor cpv ~ 'ConsensusParametersVersion1) =>
-    Gen (ConsensusParameters cpv)
+    Gen (ConsensusParameters' 'ConsensusParametersVersion1)
 genConsensusParametersV1 = do
     _cpTimeoutParameters <- genTimeoutParameters
     _cpMinBlockTime <- genDuration
@@ -444,10 +444,10 @@ genGenesisChainParametersV2 = do
     gcpPoolParameters <- genPoolParametersV1
     return GenesisChainParameters{..}
 
-genCooldownParametersV0 :: Gen (CooldownParameters 'ChainParametersV0)
+genCooldownParametersV0 :: Gen (CooldownParameters' 'CooldownParametersVersion0)
 genCooldownParametersV0 = CooldownParametersV0 <$> arbitrary
 
-genCooldownParametersV1 :: (CooldownParametersVersionFor cpv ~ 'CooldownParametersVersion1) => Gen (CooldownParameters cpv)
+genCooldownParametersV1 :: Gen (CooldownParameters' 'CooldownParametersVersion1)
 genCooldownParametersV1 =
     CooldownParametersV1 <$> (DurationSeconds <$> arbitrary) <*> (DurationSeconds <$> arbitrary)
 
@@ -457,10 +457,10 @@ genRewardPeriodLength = RewardPeriodLength <$> choose (1, maxBound) -- to make s
 genTimeParametersV1 :: Gen TimeParameters
 genTimeParametersV1 = TimeParametersV1 <$> genRewardPeriodLength <*> genMintRate
 
-genPoolParametersV0 :: Gen (PoolParameters 'ChainParametersV0)
+genPoolParametersV0 :: Gen (PoolParameters' 'PoolParametersVersion0)
 genPoolParametersV0 = PoolParametersV0 <$> arbitrary
 
-genPoolParametersV1 :: (PoolParametersVersionFor cpv ~ 'PoolParametersVersion1) => Gen (PoolParameters cpv)
+genPoolParametersV1 :: Gen (PoolParameters' 'PoolParametersVersion1)
 genPoolParametersV1 = do
     _ppPassiveCommissions <- genCommissionRates
     _ppCommissionBounds <- genCommissionRanges
@@ -469,8 +469,8 @@ genPoolParametersV1 = do
     _ppLeverageBound <- genLeverageFactor
     return PoolParametersV1{..}
 
-genRewardParameters :: IsChainParametersVersion cpv => Gen (RewardParameters cpv)
-genRewardParameters = do
+genRewardParameters :: forall cpv. IsChainParametersVersion cpv => Gen (RewardParameters cpv)
+genRewardParameters = withCPVConstraints (chainParametersVersion @cpv) $ do
     _rpMintDistribution <- genMintDistribution
     _rpTransactionFeeDistribution <- genTransactionFeeDistribution
     _rpGASRewards <- genGASRewards
@@ -812,7 +812,7 @@ genBlockItem =
 genElectionDifficulty :: Gen ElectionDifficulty
 genElectionDifficulty = makeElectionDifficulty <$> arbitrary `suchThat` (< 100000)
 
-genAuthorizations :: IsChainParametersVersion cpv => Gen (Authorizations cpv)
+genAuthorizations :: forall auv. IsAuthorizationsVersion auv => Gen (Authorizations auv)
 genAuthorizations = do
     size <- getSize
     nKeys <- choose (1, min 65535 (1 + size))
@@ -834,8 +834,8 @@ genAuthorizations = do
     asPoolParameters <- genAccessStructure
     asAddAnonymityRevoker <- genAccessStructure
     asAddIdentityProvider <- genAccessStructure
-    asCooldownParameters <- whenSupported genAccessStructure
-    asTimeParameters <- whenSupported genAccessStructure
+    asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
+    asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -874,9 +874,9 @@ genEnergyRate = max <*> negate <$> arbitrary
 genExchangeRates :: Gen ExchangeRates
 genExchangeRates = makeExchangeRates <$> genExchangeRate <*> genExchangeRate
 
-genMintDistribution :: IsChainParametersVersion cpv => Gen (MintDistribution cpv)
+genMintDistribution :: forall mdv. IsMintDistributionVersion mdv => Gen (MintDistribution mdv)
 genMintDistribution = do
-    _mdMintPerSlot <- whenSupported genMintRate
+    _mdMintPerSlot <- conditionallyA (sSupportsMintPerSlot (sing @mdv)) genMintRate
     bf <- choose (0, 100000)
     ff <- choose (0, 100000 - bf)
     let _mdBakingReward = makeAmountFraction bf
@@ -891,10 +891,12 @@ genTransactionFeeDistribution = do
         _tfdGASAccount = makeAmountFraction gf
     return TransactionFeeDistribution{..}
 
-genGASRewards :: Gen GASRewards
+genGASRewards :: forall grv. IsGASRewardsVersion grv => Gen (GASRewards grv)
 genGASRewards = do
     _gasBaker <- makeAmountFraction <$> choose (0, 100000)
-    _gasFinalizationProof <- makeAmountFraction <$> choose (0, 100000)
+    _gasFinalizationProof <-
+        conditionallyA (sSupportsGASFinalizationProof (sing @grv)) $
+            makeAmountFraction <$> choose (0, 100000)
     _gasAccountCreation <- makeAmountFraction <$> choose (0, 100000)
     _gasChainUpdate <- makeAmountFraction <$> choose (0, 100000)
     return GASRewards{..}
@@ -1001,16 +1003,15 @@ genLevel2RawUpdateInstruction scpv = do
 -- |Generate an 'Authorizations' structure and the list of key pairs.
 -- The threshold for each access structure is specified.
 genAuthorizationsAndKeys ::
-    forall cpv.
-    IsChainParametersVersion cpv =>
+    forall auv.
+    IsAuthorizationsVersion auv =>
     -- |Threshold for each access structure
     UpdateKeysThreshold ->
-    Gen (Authorizations cpv, [KeyPair])
+    Gen (Authorizations auv, [KeyPair])
 genAuthorizationsAndKeys thr = do
-    let nKeys = case chainParametersVersion @cpv of
-            SChainParametersV0 -> fromIntegral thr * 12
-            SChainParametersV1 -> fromIntegral thr * 14
-            SChainParametersV2 -> fromIntegral thr * 14
+    let nKeys = case sing @auv of
+            SAuthorizationsVersion0 -> fromIntegral thr * 12
+            SAuthorizationsVersion1 -> fromIntegral thr * 14
     kps <- vectorOf nKeys genSigSchemeKeyPair
     let asKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     let genAccessStructure = do
@@ -1029,8 +1030,8 @@ genAuthorizationsAndKeys thr = do
     asPoolParameters <- genAccessStructure
     asAddAnonymityRevoker <- genAccessStructure
     asAddIdentityProvider <- genAccessStructure
-    asCooldownParameters <- whenSupported genAccessStructure
-    asTimeParameters <- whenSupported genAccessStructure
+    asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
+    asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
     return (Authorizations{..}, kps)
 
 genLevel1Keys ::
@@ -1049,7 +1050,7 @@ genRootKeys thr = do
     let hlkKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     return (HigherLevelKeys{hlkThreshold = thr, ..}, kps)
 
-genKeyCollection :: IsChainParametersVersion cpv => UpdateKeysThreshold -> Gen (UpdateKeysCollection cpv, [KeyPair], [KeyPair], [KeyPair])
+genKeyCollection :: IsAuthorizationsVersion auv => UpdateKeysThreshold -> Gen (UpdateKeysCollection auv, [KeyPair], [KeyPair], [KeyPair])
 genKeyCollection thr = do
     (rootKeys, a) <- genRootKeys thr
     (level1Keys, b) <- genLevel1Keys thr
