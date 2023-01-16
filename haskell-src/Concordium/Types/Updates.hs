@@ -406,17 +406,15 @@ putRootUpdate Level2KeysRootUpdateV1{..} = do
     putWord8 3
     putAuthorizations l2kruAuthorizationsV1
 
-getRootUpdate :: SChainParametersVersion cpv -> Get RootUpdate
-getRootUpdate scpv = label "RootUpdate" $ do
+getRootUpdate :: SAuthorizationsVersion auv -> Get RootUpdate
+getRootUpdate sauv = label "RootUpdate" $ do
     variant <- getWord8
     case variant of
         0 -> RootKeysRootUpdate <$> get
         1 -> Level1KeysRootUpdate <$> get
-        2 | isCPV ChainParametersV0 -> Level2KeysRootUpdate <$> getAuthorizations
-        3 | isCPV ChainParametersV1 -> Level2KeysRootUpdateV1 <$> getAuthorizations
+        2 | SAuthorizationsVersion0 <- sauv -> Level2KeysRootUpdate <$> getAuthorizations
+        3 | SAuthorizationsVersion1 <- sauv -> Level2KeysRootUpdateV1 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
-  where
-    isCPV cpv = cpv == demoteChainParameterVersion scpv
 
 instance AE.FromJSON RootUpdate where
     parseJSON = AE.withObject "RootUpdate" $ \o -> do
@@ -483,16 +481,14 @@ putLevel1Update Level2KeysLevel1UpdateV1{..} = do
     putWord8 2
     putAuthorizations l2kl1uAuthorizationsV1
 
-getLevel1Update :: SChainParametersVersion scpv -> Get Level1Update
-getLevel1Update scpv = label "Level1Update" $ do
+getLevel1Update :: SAuthorizationsVersion auv -> Get Level1Update
+getLevel1Update sauv = label "Level1Update" $ do
     variant <- getWord8
     case variant of
         0 -> Level1KeysLevel1Update <$> get
-        1 | isCPV ChainParametersV0 -> Level2KeysLevel1Update <$> getAuthorizations
-        2 | isCPV ChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
+        1 | SAuthorizationsVersion0 <- sauv -> Level2KeysLevel1Update <$> getAuthorizations
+        2 | SAuthorizationsVersion1 <- sauv -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
-  where
-    isCPV cpv = cpv == demoteChainParameterVersion scpv
 
 instance AE.FromJSON Level1Update where
     parseJSON = AE.withObject "Level1Update" $ \o -> do
@@ -875,8 +871,8 @@ getUpdatePayload spv =
         9
             | PoolParametersVersion0 <- poolParametersVersionFor cpv ->
                 BakerStakeThresholdUpdatePayload <$> getPoolParameters SPoolParametersVersion0
-        10 -> RootUpdatePayload <$> getRootUpdate scpv
-        11 -> Level1UpdatePayload <$> getLevel1Update scpv
+        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionFor scpv)
+        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionFor scpv)
         12 -> AddAnonymityRevokerUpdatePayload <$> get
         13 -> AddIdentityProviderUpdatePayload <$> get
         14
@@ -993,7 +989,7 @@ checkEnoughKeys ::
     Bool
 checkEnoughKeys (knownIndices, thr) ks =
     let numOfAuthorizedKeysReceived = Set.size (ks `Set.intersection` knownIndices)
-    in  numOfAuthorizedKeysReceived >= fromIntegral thr
+     in numOfAuthorizedKeysReceived >= fromIntegral thr
             && numOfAuthorizedKeysReceived == Set.size ks
 
 --------------------
