@@ -10,10 +10,15 @@ use std::{
     io::Write,
 };
 
+/// Result of an output. Outputting a module can fail if the [writer](Write)
+/// intto which it is written fails.
 pub type OutResult<A> = anyhow::Result<A>;
 
-/// Output data in a format compatible with Parseable.
+/// Output data in a format compatible with
+/// [`Parseable`](super::parse::Parseable). This means that data is generally
+/// serialized in a Wasm compatible format where this is applicable.
 pub trait Output {
+    /// Output `self` into the provided writer.
     fn output(&self, out: &mut impl Write) -> OutResult<()>;
 }
 
@@ -177,6 +182,8 @@ impl<'a> Output for Skeleton<'a> {
 }
 
 /// Output a custom section into the given writer.
+/// If the writer already contains a valid Wasm module then a custom section can
+/// always be appended, and it will result in another valid Wasm module.
 pub fn write_custom_section(out: &mut impl Write, cs: &CustomSection) -> OutResult<()> {
     out.write_all(&[SectionId::Custom as u8])?;
     let name_len = cs.name.name.as_bytes().len();

@@ -71,12 +71,16 @@ impl Import {
 }
 
 #[derive(Debug, Default)]
+/// The import section. This lists imports in the module.
+///
 /// The Default instance for this type produces an empty section.
 pub struct ImportSection {
     pub imports: Vec<Import>,
 }
 
 #[derive(Debug, Default)]
+/// The function section. This contains types of declared functions.
+///
 /// The Default instance for this type produces an empty function section.
 pub struct FunctionSection {
     pub types: Vec<TypeIndex>,
@@ -87,6 +91,9 @@ impl FunctionSection {
 }
 
 #[derive(Debug, Default)]
+/// The table section. The table is a list of functions and is used to support
+/// indirect function calls.
+///
 /// The Default instance for this type produces an empty table section.
 pub struct TableSection {
     /// We only support at most one section for now, as in Wasm MVP, hence an
@@ -127,6 +134,8 @@ pub struct Export {
 }
 
 #[derive(Debug, Default)]
+/// The export section, which lists exported functions, globals, etc.
+///
 /// The Default instance of this type returns an empty section.
 pub struct ExportSection {
     pub exports: Vec<Export>,
@@ -149,6 +158,8 @@ pub struct Element {
 }
 
 #[derive(Debug, Default)]
+/// The element section, which is used to initialize the function table.
+///
 /// The Default instance of this produces an empty Element section.
 pub struct ElementSection {
     pub elements: Vec<Element>,
@@ -201,6 +212,8 @@ pub struct Global {
 }
 
 #[derive(Debug, Default)]
+/// The list of globals declared in the module.
+///
 /// The Default instance of this type returns an empty section.
 pub struct GlobalSection {
     pub globals: Vec<Global>,
@@ -239,6 +252,9 @@ pub struct Code {
 }
 
 #[derive(Debug, Default)]
+/// The code section, which contains the code of functions declared in the
+/// module.
+///
 /// The Default instance of this type returns an empty code section.
 pub struct CodeSection {
     pub impls: Vec<Code>,
@@ -254,12 +270,18 @@ pub struct Data {
 }
 
 #[derive(Debug, Default)]
+/// The data section, this is used to initialize linear memory upon start of
+/// execution.
+///
 /// The Default instance of this type returns an empty data section.
 pub struct DataSection {
     pub sections: Vec<Data>,
 }
 
 #[derive(Debug, Default)]
+/// The memory section, which contains declarations of linear memories. The Wasm
+/// version we support only supports at most one memory section.
+///
 /// The Default instance for this type produces an empty memory section.
 pub struct MemorySection {
     /// Since we only support the memory with index 0 we use an Option as
@@ -276,6 +298,8 @@ pub struct CustomSection<'a> {
 }
 
 #[derive(Debug, Default)]
+/// The type section, which contains type definitions.
+///
 /// The default instance for type produces an empty type section.
 pub struct TypeSection {
     /// A list of types. We use an Rc here so that we can avoid cloning the

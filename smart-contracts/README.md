@@ -26,7 +26,7 @@ This repository contains several packages to support smart contracts on and off-
 
 Currently it consists of the following parts
 - [rust-contracts](./rust-contracts) which is the collection of base libraries and example smart contracts written in Rust.
-- [wasm-transform](./wasm-transform), an interpreter and validator providing the functionality needed by the scheduler to execute smart contracts.
+- [concordium-wasm](./wasm-transform), an interpreter and validator providing the functionality needed by the scheduler to execute smart contracts.
 - [wasm-chain-integration](./wasm-chain-integration/) exposes the interface needed by the node
 
 ## Rust-contracts

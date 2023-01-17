@@ -2,7 +2,7 @@ use anyhow::{bail, ensure};
 use clap::AppSettings;
 use std::{collections::BTreeMap, fs, path::PathBuf};
 use structopt::StructOpt;
-use wasm_transform::{
+use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, CompiledFunction},
     machine::{ExecutionOutcome, Host, NoInterrupt, RunResult, RuntimeError, RuntimeStack, Value},
     parse::ParseError,
@@ -87,7 +87,7 @@ impl Host<ArtifactNamedImport> for MeteringHost {
 fn validate(source: &[u8]) -> anyhow::Result<Module> {
     struct AllowAll;
 
-    impl wasm_transform::validate::ValidateImportExport for AllowAll {
+    impl concordium_wasm::validate::ValidateImportExport for AllowAll {
         fn validate_import_function(
             &self,
             _duplicate: bool,
@@ -101,8 +101,8 @@ fn validate(source: &[u8]) -> anyhow::Result<Module> {
         fn validate_export_function(&self, _item_name: &Name, _ty: &FunctionType) -> bool { true }
     }
 
-    let skel = wasm_transform::parse::parse_skeleton(source)?;
-    wasm_transform::validate::validate_module(&AllowAll, &skel)
+    let skel = concordium_wasm::parse::parse_skeleton(source)?;
+    concordium_wasm::validate::validate_module(&AllowAll, &skel)
 }
 
 macro_rules! fail_test {

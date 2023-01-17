@@ -1,6 +1,6 @@
-//! This module defines the notion of the artifact.
-//! This is a processed and instantiated module that can have its exposed
-//! methods invoked.
+//! This module defines the notion of the [`Artifact`], which is a processed and
+//! instantiated module that can have its exposed methods invoked via the
+//! [`Artifact::run`] method.
 //!
 //! The module in this section is in a format where serialization and
 //! deserialization are straightforward and cheap.
@@ -21,16 +21,19 @@ use std::{
 
 #[derive(Copy, Clone)]
 /// Either a short or long integer.
+/// The reason this is a union is that after Wasm module validation we are
+/// guaranteed that the program is well typed. Since all instructions have
+/// clear, fixed types, we can determine from the instruction which value we
+/// expect on the stack. Using a union saves on the discriminant compared to
+/// using an enum, leading to 50% less space used on the stack, as well as
+/// removes the need to handle impossible cases.
 pub union StackValue {
     pub short: i32,
     pub long:  i64,
 }
 
 impl std::fmt::Debug for StackValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("StackValue")
-        // write!(f, "{}", unsafe { self.short })
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("StackValue") }
 }
 
 impl From<i32> for StackValue {
@@ -252,6 +255,7 @@ impl TryFromImport for ArtifactNamedImport {
     fn ty(&self) -> &FunctionType { &self.ty }
 }
 
+/// An iterator over local variables.
 pub struct LocalsIterator<'a> {
     /// Number of locals that are still going to be yielded from the iterator.
     remaining_items:      u32,
@@ -299,15 +303,27 @@ impl<'a> ExactSizeIterator for LocalsIterator<'a> {
 }
 
 /// A trait encapsulating the properties that are needed to run a function.
+/// This trait exists because we have two different kinds of code we run. A
+/// fully deserialized code, i.e., where instructions are essentially
+/// `Vec<InternalOpcode>` or we execute directly from `&[u8]` if the origin of
+/// the code is serialized structure, such as an [`Artifact`] retrieved from a
+/// database.
 pub trait RunnableCode {
+    /// The number of parameters of the function.
     fn num_params(&self) -> u32;
+    /// The type of the function, as an index into the list of types of the
+    /// module.
     fn type_idx(&self) -> TypeIndex;
+    /// The return type of the function.
     fn return_type(&self) -> BlockType;
-    /// Vector of types of locals. This includes function parameters at the
-    /// beginning.
+    /// The types of function parameters.
     fn params(&self) -> &[ValueType];
+    /// The number of locals declared by the function. This **does not** include
+    /// the function parameters, only declared locals.
     fn num_locals(&self) -> u32;
+    /// An iterator over the locals (not including function parameters).
     fn locals(&self) -> LocalsIterator<'_>;
+    /// A reference to the instructions to execute.
     fn code(&self) -> &[u8];
 }
 
@@ -357,17 +373,19 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     fn code(&self) -> &[u8] { self.code }
 }
 
-/// A parsed Wasm module. This no longer has custom sections since they are not
-/// needed for further processing.
+/// A processed Wasm module. This no longer has custom sections since they are
+/// not needed for further processing.
 /// The type parameter `ImportFunc` is instantiated with the representation of
 /// host functions. To efficiently and relatively safely execute the module we
 /// preprocess imported functions into an enum. However for testing we sometimes
 /// just use raw imports. This type parameter allows us flexibility.
+///
 /// The type parameter `RunnableCode` is used to allow flexibility in code
 /// representation. For testing uses it is convenient that the type is
 /// "owned", in the sense of it being a vector of instructions. For efficient
 /// execution, and to avoid deserialization, the code is represented as a byte
-/// array (i.e., as as slice of bytes `&[u8]`) when we execute it on the node.
+/// array (i.e., as as slice of bytes `&[u8]`) when we execute it after looking
+/// the code up from the database.
 #[derive(Debug, Clone)]
 pub struct Artifact<ImportFunc, CompiledCode> {
     /// Imports by (module name, item name).
@@ -386,6 +404,7 @@ pub struct Artifact<ImportFunc, CompiledCode> {
     /// and not one of the imported ones.
     /// Thus the index refers to the index in the code section.
     pub export:  BTreeMap<Name, FuncIndex>,
+    /// The list of functions in the module.
     pub code:    Vec<CompiledCode>,
 }
 
@@ -426,7 +445,7 @@ impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for Arc<OwnedArtifac
     fn from(a: BorrowedArtifact<'a, ImportFunc>) -> Self { Arc::new(a.into()) }
 }
 
-/// Internal opcode. This is mostly the same as OpCode, but with control
+/// Internal opcode. This is mostly the same as [`OpCode`], but with control
 /// instructions resolved to jumps in the instruction sequence, and function
 /// calls processed.
 #[repr(u8)]

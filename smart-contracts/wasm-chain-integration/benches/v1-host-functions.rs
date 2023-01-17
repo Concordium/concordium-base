@@ -8,6 +8,7 @@
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
+use concordium_wasm::{machine, parse, validate};
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use sha2::Digest;
 use std::time::Duration;
@@ -23,7 +24,6 @@ use wasm_chain_integration::{
     },
     InterpreterEnergy,
 };
-use wasm_transform::{machine, parse, validate};
 
 static CONTRACT_BYTES_HOST_FUNCTIONS: &[u8] = include_bytes!("./code/v1/host-functions.wasm");
 

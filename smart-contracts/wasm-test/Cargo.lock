@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "4.1.0"
+version = "5.1.1"
 dependencies = [
  "bs58",
  "chrono",
@@ -133,6 +133,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "concordium-wasm"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "concordium-contracts-common",
+ "derive_more",
+ "leb128",
+ "num_enum",
 ]
 
 [[package]]
@@ -578,20 +589,9 @@ dependencies = [
  "ansi_term 0.12.1",
  "anyhow",
  "clap",
+ "concordium-wasm",
  "structopt",
- "wasm-transform",
  "wast",
-]
-
-[[package]]
-name = "wasm-transform"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "concordium-contracts-common",
- "derive_more",
- "leb128",
- "num_enum",
 ]
 
 [[package]]

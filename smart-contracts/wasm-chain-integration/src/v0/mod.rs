@@ -5,14 +5,14 @@ mod types;
 use crate::{constants, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{anyhow, bail, ensure};
 use concordium_contracts_common::*;
-use machine::Value;
-use std::{collections::LinkedList, convert::TryInto, io::Write};
-pub use types::*;
-use wasm_transform::{
+use concordium_wasm::{
     artifact::{Artifact, RunnableCode},
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
 };
+use machine::Value;
+use std::{collections::LinkedList, convert::TryInto, io::Write};
+pub use types::*;
 
 impl Logs {
     pub fn new() -> Self {

@@ -20,6 +20,9 @@ use crate::{
     },
 };
 
+/// Store n bytes in linear memory.
+const fn store(n: usize) -> Energy { BOUNDS + 2 + n as Energy }
+
 macro_rules! flatten {
         ( $( $a:expr ),* ) => {
             {

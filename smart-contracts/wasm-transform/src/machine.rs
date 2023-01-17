@@ -1,4 +1,7 @@
 //! An implementation of the abstract machine that can run artifacts.
+//! This module defines types related to code execution. The functions to run
+//! code are defined as methods on the [`Artifact`] type, e.g.,
+//! [`Artifact::run`].
 
 use crate::{
     artifact::{StackValue, *},
@@ -12,16 +15,17 @@ use std::{convert::TryInto, io::Write};
 #[derive(Debug, Copy, Clone)]
 pub enum NoInterrupt {}
 
-/// The host that can process external functions.
+/// The host that can process calls to external, host, functions.
 pub trait Host<I> {
     type Interrupt;
     /// Charge the given amount of energy for the initial memory.
     /// The argument is the number of pages.
     fn tick_initial_memory(&mut self, num_pages: u32) -> RunResult<()>;
     /// Call the specified host function, giving it access to the current memory
-    /// and stack. The return value of `Ok(())` signifies that execution
+    /// and stack. The return value of `Ok(None)` signifies that execution
     /// succeeded and the machine should proceeed, the return value of
-    /// `Err(_)` signifies a trap.
+    /// `Ok(Some(i))` indicates that an interrupt was triggered by the host
+    /// function, and the return value of `Err(_)` signifies a trap.
     fn call(
         &mut self,
         f: &I,
@@ -34,7 +38,9 @@ pub trait Host<I> {
 /// This includes traps, illegal memory accesses, etc.
 pub type RunResult<A> = anyhow::Result<A>;
 
-/// Configuration that can be run.
+/// Configuration that can be run. This maintains the snapshot of the state of
+/// the machine, such as the current instruction pointer, current memory
+/// contents, the function stack, etc.
 #[derive(Debug)]
 pub struct RunConfig {
     /// Current value of the program counter.
@@ -76,19 +82,22 @@ impl RunConfig {
 }
 
 #[derive(Debug)]
+/// A successful outome of code execution.
 pub enum ExecutionOutcome<Interrupt> {
     /// Execution was successful and the function terminated normally.
     Success {
         /// Result of execution of the function. If the function has unit result
-        /// type then the result is `None`, otherwise it is the value.
+        /// type then the result is [`None`], otherwise it is the value.
         result: Option<Value>,
         /// Final memory of the machine.
         memory: Vec<u8>,
     },
     /// Execution was interrupted in the given state. It can be resumed. There
-    /// is no resulting value since execution did not complete.
+    /// is no resulting value since execution did not yet complete.
     Interrupted {
+        /// The interrupt reason provided by the host function.
         reason: Interrupt,
+        /// The current configuration that can be used to resume execution.
         config: RunConfig,
     },
 }
@@ -152,6 +161,7 @@ pub struct RuntimeStack {
 }
 
 #[derive(Debug)]
+/// A runtime error that we impose on top of the Wasm spec.
 pub enum RuntimeError {
     DirectlyCallImport,
 }
@@ -391,6 +401,18 @@ fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) {
 }
 
 impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
+    /// Attempt to run the entrypoint using the supplied arguments. The
+    /// arguments are
+    ///
+    /// - `host` - the structure that resolves calls to external, host,
+    ///   functions.
+    /// - `name` - the name of the entrypoint to invoke
+    /// - `args` - a list of arguments to the entrypoint. The argument list must
+    ///   match the declared type of the entrypoint. If this is not the case
+    ///   then execution will fail with an error.
+    ///
+    /// Note that this method at present cannot be used to directly call a host
+    /// function. Only an entrypoint defined in the Wasm module can be called.
     pub fn run<Q: std::fmt::Display + Ord + ?Sized, H: Host<I>>(
         &self,
         host: &mut H,
@@ -489,7 +511,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))
     }
 
-    /// Returns `true` if the given entrypoint name exists, `false` otherwise.
+    /// Returns if the given entrypoint name exists in the artifact.
     pub fn has_entrypoint<Q>(&self, name: &Q) -> bool
     where
         Q: std::fmt::Display + Ord + ?Sized,
@@ -497,6 +519,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         self.get_entrypoint_index(name).is_ok()
     }
 
+    /// Run a [configuration](RunConfig) using the provided `host` to resolve
+    /// calls to external functions.
+    ///
+    /// This executes code either until
+    /// - the execution terminates with a result
+    /// - there is an error
+    /// - the host triggers an interrupt as a result of an external call.
     pub fn run_config<H: Host<I>>(
         &self,
         host: &mut H,
