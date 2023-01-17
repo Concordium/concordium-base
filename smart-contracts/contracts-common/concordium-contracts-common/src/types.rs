@@ -834,6 +834,11 @@ impl Ord for Address {
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub struct ContractName<'a>(&'a str);
 
+impl<'a> fmt::Display for ContractName<'a> {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
+
 impl<'a> ContractName<'a> {
     /// Create a new ContractName and check the format. Expected format:
     /// "init_<contract_name>".
@@ -896,6 +901,11 @@ impl<'a> From<ContractName<'a>> for &'a str {
 )]
 pub struct OwnedContractName(String);
 
+impl fmt::Display for OwnedContractName {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
+
 impl OwnedContractName {
     /// Create a new OwnedContractName and check the format. Expected format:
     /// "init_<contract_name>".
@@ -957,6 +967,11 @@ impl convert::TryFrom<String> for OwnedContractName {
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 #[repr(transparent)]
 pub struct ReceiveName<'a>(&'a str);
+
+impl<'a> fmt::Display for ReceiveName<'a> {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
 
 impl<'a> ReceiveName<'a> {
     /// Create a new ReceiveName and check the format. Expected format:
@@ -1021,6 +1036,11 @@ impl<'a> ReceiveName<'a> {
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "derive-serde", serde(try_from = "String"))]
 pub struct OwnedReceiveName(String);
+
+impl fmt::Display for OwnedReceiveName {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
 
 impl convert::TryFrom<String> for OwnedReceiveName {
     type Error = NewReceiveNameError;
