@@ -1,5 +1,6 @@
 use super::hashes;
 use crate::constants::*;
+use concordium_contracts_common::ModuleReference;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
@@ -76,6 +77,14 @@ pub enum ModuleRefMarker {}
 /// Reference to a deployed Wasm module on the chain.
 /// This reference is used when creating new instances.
 pub type ModuleRef = hashes::HashBytes<ModuleRefMarker>;
+
+impl From<ModuleReference> for ModuleRef {
+    fn from(mr: ModuleReference) -> Self { Self::new(mr.into()) }
+}
+
+impl From<ModuleRef> for ModuleReference {
+    fn from(mr: ModuleRef) -> Self { ModuleReference::from(mr.bytes) }
+}
 
 #[derive(
     SerdeSerialize,

@@ -989,7 +989,7 @@ checkEnoughKeys ::
     Bool
 checkEnoughKeys (knownIndices, thr) ks =
     let numOfAuthorizedKeysReceived = Set.size (ks `Set.intersection` knownIndices)
-     in numOfAuthorizedKeysReceived >= fromIntegral thr
+    in  numOfAuthorizedKeysReceived >= fromIntegral thr
             && numOfAuthorizedKeysReceived == Set.size ks
 
 --------------------

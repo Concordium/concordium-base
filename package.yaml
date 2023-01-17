@@ -9,12 +9,16 @@ copyright:           "Concordium AG"
 extra-source-files:
 - README.md
 - LICENSE
+- ./concordium-grpc-api/v2/concordium/types.proto
+- ./concordium-grpc-api/v2/concordium/service.proto
+- ./concordium-grpc-api/v2/concordium/health.proto
 
 custom-setup:
   dependencies:
     - base  >= 4.7
     - Cabal >= 2.2
     - directory >= 1.3
+    - proto-lens-setup >= 0.4
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
@@ -76,6 +80,9 @@ dependencies:
 - transformers >= 0.5
 - unordered-containers >= 0.2
 - vector >= 0.12
+- proto-lens >= 0.7
+- proto-lens-protobuf-types >= 0.7
+- proto-lens-runtime >= 0.7
 
 library:
   source-dirs: haskell-src
@@ -103,6 +110,13 @@ library:
         - ws2_32
         - bcrypt
 
+  generated-exposed-modules:
+    Proto.V2.Concordium.Health
+    Proto.V2.Concordium.Health_Fields
+    Proto.V2.Concordium.Service
+    Proto.V2.Concordium.Service_Fields
+    Proto.V2.Concordium.Types
+    Proto.V2.Concordium.Types_Fields
 
 executables:
   generate-update-keys:

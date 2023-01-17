@@ -45,7 +45,7 @@ module Concordium.Crypto.EncryptedTransfers (
 
 import Data.Aeson
 import Data.ByteString.Short
-import Data.Foldable (foldl')
+import qualified Data.Foldable as F
 import Data.Serialize
 import Data.Word
 import Foreign (ForeignPtr, Storable, newForeignPtr, peek, withForeignPtr)
@@ -95,7 +95,7 @@ instance Monoid EncryptedAmount where
     -- foldr, which is bad in this case since `aggregateAmounts` is strict in the
     -- second argument.
     mconcat [] = mempty
-    mconcat (x : xs) = foldl' aggregateAmounts x xs
+    mconcat (x : xs) = F.foldl' aggregateAmounts x xs
 
 foreign import ccall unsafe "is_zero_encrypted_amount"
     is_zero_encrypted_amount ::

@@ -60,9 +60,15 @@ checkPayload spv e =
             Left err -> counterexample err False
             Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
 
+-- Modify the bitmap portion of a payload. Assumes that the input bytestring
+-- is at least 24 bits long.
 modifyPayloadBitmap :: (Word16 -> Word16) -> BS.ByteString -> BS.ByteString
 modifyPayloadBitmap f bs =
-    let Right ((header, bitmap), rest) = S.runGetState ((,) <$> S.getWord8 <*> S.getWord16be) bs 0
+    let res = S.runGetState ((,) <$> S.getWord8 <*> S.getWord16be) bs 0
+        ((header, bitmap), rest) = case res of
+            Right v -> v
+            -- This happens only when bs is 23 bits or less.
+            Left _ -> error "res should be Right"
     in  S.runPut (S.putWord8 header <> S.putWord16be (f bitmap)) `BS.append` rest
 
 -- | 'genPayloadWithInvalidBitmap' @sizeOfBitmap@ @payload@ will update the @payload@ by setting

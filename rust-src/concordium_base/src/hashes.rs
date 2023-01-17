@@ -4,23 +4,33 @@ use crate::constants::*;
 use crypto_common::{Deserial, SerdeDeserialize, SerdeSerialize, Serial};
 use std::{
     convert::{TryFrom, TryInto},
-    fmt,
+    fmt, hash,
     marker::PhantomData,
     ops::Deref,
     str::FromStr,
 };
 use thiserror::Error;
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, SerdeSerialize)]
+#[derive(Ord, PartialOrd, Copy, SerdeSerialize)]
 #[serde(into = "String")]
 /// A general wrapper around Sha256 hash. This is used to add type safety to
 /// a hash that is used in different context. The underlying value is always the
 /// same, but the phantom type variable makes it impossible to mistakenly misuse
 /// the hashes.
 pub struct HashBytes<Purpose> {
-    bytes:    [u8; SHA256 as usize],
+    pub(crate) bytes: [u8; SHA256 as usize],
     #[serde(skip)] // use default when deserializing
-    _phantom: PhantomData<Purpose>,
+    _phantom:         PhantomData<Purpose>,
+}
+
+impl<Purpose> PartialEq for HashBytes<Purpose> {
+    fn eq(&self, other: &Self) -> bool { self.bytes == other.bytes }
+}
+
+impl<Purpose> Eq for HashBytes<Purpose> {}
+
+impl<Purpose> hash::Hash for HashBytes<Purpose> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) { self.bytes.hash(state); }
 }
 
 impl<Purpose> Clone for HashBytes<Purpose> {

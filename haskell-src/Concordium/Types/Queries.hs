@@ -30,6 +30,8 @@ import Concordium.Types.Execution (TransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
     AuthorizationsVersion (..),
+    AuthorizationsVersionFor,
+    ChainParameters',
     CooldownParameters,
     GASRewards,
     GASRewardsVersion (..),
@@ -693,3 +695,34 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
     -- Get the next sequence number or 1, if not supported.
     mNextSequenceNumber :: UQ.OUpdateQueue pt cpv e -> U.UpdateSequenceNumber
     mNextSequenceNumber = foldr (const . UQ._uqNextSequenceNumber) 1
+
+-- | Information about a registered delegator in a block.
+data DelegatorInfo = DelegatorInfo
+    { -- | The delegator account address.
+      pdiAccount :: !AccountAddress,
+      -- | The amount of stake currently staked to the pool.
+      pdiStake :: !Amount,
+      -- | Pending change to the current stake of the delegator.
+      pdiPendingChanges :: !(StakePendingChange' Timestamp)
+    }
+
+-- | Information about a fixed delegator in the reward period for a block.
+data DelegatorRewardPeriodInfo = DelegatorRewardPeriodInfo
+    { -- | The delegator account address.
+      pdrpiAccount :: !AccountAddress,
+      -- | The amount of stake fixed to the pool in the current reward period.
+      pdrpiStake :: !Amount
+    }
+
+-- |Information about the finalization record included in a block.
+data BlockFinalizationSummary
+    = NoSummary
+    | Summary !FinalizationSummary
+
+-- |An existentially qualified pair of chain parameters and update keys currently in effect.
+data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion).
+      IsChainParametersVersion cpv =>
+    EChainParametersAndKeys
+    { ecpParams :: !(ChainParameters' cpv),
+      ecpKeys :: !(U.UpdateKeysCollection (AuthorizationsVersionFor cpv))
+    }

@@ -109,7 +109,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - ghc: 9.0.2 # used as cache key only; stack uses the one specified in stack.yaml
+        - ghc: 9.2.5 # used as cache key only; stack uses the one specified in stack.yaml
           rust: 1.62
 
     steps:
@@ -200,6 +200,13 @@ jobs:
       if: steps.stack-programs.outputs.cache-hit != 'true' || steps.stack-global.outputs.cache-hit != 'true'
       run: |
         stack setup --install-ghc
+
+    - name: Install protoc
+      run: |
+        wget https://github.com/protocolbuffers/protobuf/releases/download/v3.15.3/protoc-3.15.3-linux-x86_64.zip
+        unzip protoc-3.15.3-linux-x86_64.zip
+        sudo mv ./bin/protoc /usr/bin/protoc
+
     - name: Build haskell dependencies (unless they were cached)
       if: steps.stack-programs.outputs.cache-hit != 'true' || steps.stack-global.outputs.cache-hit != 'true'
       run: |

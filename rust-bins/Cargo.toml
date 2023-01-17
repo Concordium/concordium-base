@@ -34,7 +34,7 @@ aes = "0.8"
 base64 = "0.13"
 pbkdf2 = "0.11"
 rpassword = "6.0"
-bitvec = "0.22"
+bitvec = "1"
 crossterm = "0.22"
 anyhow = "1.0"
 

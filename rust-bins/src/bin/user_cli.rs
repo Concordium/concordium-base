@@ -1099,7 +1099,10 @@ fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<(
         println!(
             "Wrote the account creation transaction to {}. Submit it before {}.",
             args.out.display(),
-            chrono::Local.timestamp(expiry.seconds as i64, 0)
+            chrono::Local
+                .timestamp_opt(expiry.seconds as i64, 0)
+                .earliest()
+                .context("Unable to display local time.")?
         );
         println!(
             "This transaction will create an account with address {}.",

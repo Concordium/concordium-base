@@ -567,6 +567,13 @@ supportsMemo :: SProtocolVersion pv -> Bool
 supportsMemo SP1 = False
 supportsMemo _ = True
 
+-- |Whether the protocol version supports account aliases.
+-- (Supported in 'P3' onwards.)
+supportsAccountAliases :: SProtocolVersion pv -> Bool
+supportsAccountAliases SP1 = False
+supportsAccountAliases SP2 = False
+supportsAccountAliases _ = True
+
 -- |Whether the protocol version supports stake delegation functionality.
 -- (Delegation is supported in 'P4' onwards.)
 supportsDelegation :: SProtocolVersion pv -> Bool

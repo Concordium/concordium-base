@@ -24,7 +24,7 @@ import Lens.Micro.Platform
 class (Ixed m) => At' m where
     at' :: Index m -> Lens' m (Maybe (IxValue m))
 
-instance (Hashable k, Eq k) => At' (H.HashMap k v) where
+instance (Hashable k) => At' (H.HashMap k v) where
     at' k f = H.alterF f k
     {-# INLINE at' #-}
 
