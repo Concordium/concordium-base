@@ -87,9 +87,9 @@ pub struct Skeleton<'a> {
 /// Auxiliary type alias used by all the parsing functions.
 pub type ParseResult<A> = anyhow::Result<A>;
 
-/// A trait for parsing data. The lifetime is useful when we want to parse
-/// data without copying, which is useful to avoid copying all the unparsed
-/// sections.
+/// A trait for parsing data. The lifetime and context are useful when we want
+/// to parse data without copying, which is useful to avoid copying all the
+/// unparsed sections.
 pub trait Parseable<'a, Ctx>: Sized {
     /// Read a value from the cursor, or signal error.
     /// This function is responsible for advancing the cursor in-line with the

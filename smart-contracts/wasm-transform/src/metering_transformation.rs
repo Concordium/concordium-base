@@ -332,12 +332,6 @@ pub mod cost {
 
 use cost::Energy;
 
-// // TODO: Add stack accounting instructions.
-// fn account_stack_size(exp: &mut InstrSeq, size: i64) {
-//     exp.push(OpCode::I64Const(size));
-//     exp.push(OpCode::Call(FN_IDX_ACCOUNT_STACK_SIZE));
-// }
-
 ///Metadata needed for transformation.
 struct InstrSeqTransformer<'a, C> {
     /// Reference to the original module to get the right context.
