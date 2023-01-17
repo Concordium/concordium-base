@@ -7,6 +7,8 @@
   is marked as deprecated and will be removed in future versions.
 - Fix schema's `to_json` for contract addresses to that it outputs a value in
   the correct `{"index": ..., "subindex": ...}` format.
+- Add `Display` implementations for `ContractName`, `ReceiveName`, and their
+  owned variants.
 
 ## concordium-contracts-common 5.1.0 (2022-12-14)
 
