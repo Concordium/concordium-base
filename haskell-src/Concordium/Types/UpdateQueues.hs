@@ -191,6 +191,8 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                     <> ohsh _pCooldownParametersQueue
                     <> ohsh _pTimeParametersQueue
                     <> ohsh _pTimeoutParametersQueue
+                    <> ohsh _pMinBlockTimeQueue
+                    <> ohsh _pBlockEnergyLimitQueue
       where
         hsh :: HashableTo H.Hash a => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
@@ -218,6 +220,8 @@ putPendingUpdatesV0 PendingUpdates{..} = withCPVConstraints (chainParametersVers
     mapM_ putUpdateQueueV0 _pCooldownParametersQueue
     mapM_ putUpdateQueueV0 _pTimeParametersQueue
     mapM_ putUpdateQueueV0 _pTimeoutParametersQueue
+    mapM_ putUpdateQueueV0 _pMinBlockTimeQueue
+    mapM_ putUpdateQueueV0 _pBlockEnergyLimitQueue
 
 -- |Deserialize pending updates. The 'StateMigrationParameters' allow an old format to be
 -- deserialized as a new format by applying the migration.
