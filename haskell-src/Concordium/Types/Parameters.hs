@@ -18,52 +18,48 @@
 -- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
--- |
---Module      : Parameters
---Description : Parameters and assoicated versions.
+-- |__Overview__
+-- This module contains definitions for the configurable parameters
+-- used on chain i.e. the 'ChainParameters'.
+-- Chain parameters are versioned by 'ChainParametersVersion'. The 'ChainParametersVersion' are determined from
+-- the 'ProtocolVersion'.
 --
---__Overview__
---This module contains definitions for the configurable parameters
---used on chain i.e. the 'ChainParameters'.
---Chain parameters are versioned by 'ChainParametersVersion'. The 'ChainParametersVersion' are determined from
---the 'ProtocolVersion'.
+-- This module also defines the type 'ParameterType'. Common for the values of this type is that
+-- they may or may not be supported for a given 'ProtocolVersion'.
+-- Knowing whether a 'ParameterType' is supported in a given 'ChainParametersVersion' is used to deduce whether a chain update is supported for a given protocol version or not.
 --
---This module also defines the type 'ParameterType'. Common for the values of this type is that
---they may or may not be supported for a given 'ProtocolVersion'.
---Knowing whether a 'ParameterType' is supported in a given 'ChainParametersVersion' is used to deduce whether a chain update is supported for a given protocol version or not.
+-- __Usage patterns__
 --
---__Usage patterns__
+-- The singletons library we use derives singletons i.e. the values promoted to types such that we can constrain by the 'SingI' instances created.
+-- These instances are most often aliased e.g. @type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv@.
 --
---The singletons library we use derives singletons i.e. the values promoted to types such that we can constrain by the 'SingI' instances created.
---These instances are most often aliased e.g. @type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv@.
+-- Demoting is then done via @sing :: Sing a@. The base supplies helper functions for this and they follow the naming scheme:
+-- 'protocolVersion', 'chainParametersVersion', 'accountVersion', ...
 --
---Demoting is then done via @sing :: Sing a@. The base supplies helper functions for this and they follow the naming scheme:
---'protocolVersion', 'chainParametersVersion', 'accountVersion', ...
+-- This is particularily useful when one needs to case on e.g. the chain parameters version @cpv@ constrained by the @IsChainParametersVersion cpv@.
 --
---This is particularily useful when one needs to case on e.g. the chain parameters version @cpv@ constrained by the @IsChainParametersVersion cpv@.
+-- Example:
 --
---Example:
---
---@
---foo :: IsChainParametersVersion cpv => Int
---foo = case chainParametersVersion @cpv@ of
+-- @
+-- foo :: IsChainParametersVersion cpv => Int
+-- foo = case chainParametersVersion @cpv@ of
 --    SChainParametersV0 -> 0
 --    SChainParametersV1 -> 1
 --    SChainParametersV2 -> 2
---@
+-- @
 --
---As the nested structures within the 'ChainParameters' has their own versioning (inferred from the 'ChainParametersVersion'), then one needs to get the correct sub parameter _version_
---from the chain paramters version. Here we use 'withSingI' from the singletons library, however helper functions should exist for all relevant parameter types.
---Namings of these helper functions should follow the existing naming scheme: 'withIsConsensusParametersVersionFor', 'withIsAuthorizationsVersionFor', ..
+-- As the nested structures within the 'ChainParameters' has their own versioning (inferred from the 'ChainParametersVersion'), then one needs to get the correct sub parameter _version_
+-- from the chain paramters version. Here we use 'withSingI' from the singletons library, however helper functions should exist for all relevant parameter types.
+-- Namings of these helper functions should follow the existing naming scheme: 'withIsConsensusParametersVersionFor', 'withIsAuthorizationsVersionFor', ..
 --
---@
---bar :: IsChainParametersVersion cpv => a -> a
---bar = withIsConsensusParametersVersionFor (chainParametersVersion @cpv)
---@
+-- @
+-- bar :: IsChainParametersVersion cpv => a -> a
+-- bar = withIsConsensusParametersVersionFor (chainParametersVersion @cpv)
+-- @
 --
---Where @a@ is constrained by the consensus parameters version.
+-- Where @a@ is constrained by the consensus parameters version.
 --
---If one are handling more than one parameter then refer to 'withCPVConstraints' which constrains the action with all of the nested parameter versions.
+-- If one are handling more than one parameter then refer to 'withCPVConstraints' which constrains the action with all of the nested parameter versions.
 module Concordium.Types.Parameters where
 
 import Control.Monad
