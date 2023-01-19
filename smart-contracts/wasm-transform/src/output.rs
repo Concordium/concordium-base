@@ -11,7 +11,7 @@ use std::{
 };
 
 /// Result of an output. Outputting a module can fail if the [writer](Write)
-/// intto which it is written fails.
+/// into which it is written fails.
 pub type OutResult<A> = anyhow::Result<A>;
 
 /// Output data in a format compatible with

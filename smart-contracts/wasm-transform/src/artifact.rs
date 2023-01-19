@@ -32,6 +32,9 @@ pub union StackValue {
     pub long:  i64,
 }
 
+/// The debug implementation does not print the actual value. Instead it always
+/// displays `StackValue`. It exists so that structures containing stack values
+/// can have useful [`Debug`] implementations.
 impl std::fmt::Debug for StackValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("StackValue") }
 }
@@ -260,13 +263,21 @@ pub struct LocalsIterator<'a> {
     /// Number of locals that are still going to be yielded from the iterator.
     remaining_items:      u32,
     pub(crate) locals:    &'a [ArtifactLocal],
-    /// Current position in the locals list.
+    /// Current position in the locals list. Each local in the list can have a
+    /// multiplicity. This is the shorthand Wasm uses for declaring multiple
+    /// local variables of the same type.
     current_item:         usize,
-    /// Current multiplicity of the current_item.
+    /// Current multiplicity of the `current_item`.
+    /// When advancing the iterator we keep increasing this until we exhaust the
+    /// local.
     current_multiplicity: u16,
 }
 
 impl<'a> LocalsIterator<'a> {
+    /// Construct a new iterator given the total number of locals and a list of
+    /// locals with multiplicity. The total number of locals must be supplied so
+    /// that we don't have to go through the entire list of locals and sum up
+    /// their multiplicities.
     pub fn new(num_locals: u32, locals: &'a [ArtifactLocal]) -> Self {
         Self {
             remaining_items: num_locals,
@@ -306,7 +317,7 @@ impl<'a> ExactSizeIterator for LocalsIterator<'a> {
 /// This trait exists because we have two different kinds of code we run. A
 /// fully deserialized code, i.e., where instructions are essentially
 /// `Vec<InternalOpcode>` or we execute directly from `&[u8]` if the origin of
-/// the code is serialized structure, such as an [`Artifact`] retrieved from a
+/// the code is a serialized structure, such as an [`Artifact`] retrieved from a
 /// database.
 pub trait RunnableCode {
     /// The number of parameters of the function.
@@ -380,11 +391,11 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
 /// preprocess imported functions into an enum. However for testing we sometimes
 /// just use raw imports. This type parameter allows us flexibility.
 ///
-/// The type parameter `RunnableCode` is used to allow flexibility in code
+/// The type parameter `CompiledCode` is used to allow flexibility in code
 /// representation. For testing uses it is convenient that the type is
 /// "owned", in the sense of it being a vector of instructions. For efficient
 /// execution, and to avoid deserialization, the code is represented as a byte
-/// array (i.e., as as slice of bytes `&[u8]`) when we execute it after looking
+/// array (i.e., as a slice of bytes `&[u8]`) when we execute it after looking
 /// the code up from the database.
 #[derive(Debug, Clone)]
 pub struct Artifact<ImportFunc, CompiledCode> {
