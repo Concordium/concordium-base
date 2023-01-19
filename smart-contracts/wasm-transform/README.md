@@ -12,3 +12,8 @@ This is a low-level library that implements only the Wasm parts of execution.
 The companion library `concordium-smart-contract-engine` provides an integration
 of the Wasm together with state management, and provides higher-level functions
 for executing smart contract entrypoints.
+
+## Versioning
+
+This crate follows semantic versioning guidelines. Change in minimum supported
+rust version will be accompanied by a minor version increase.

@@ -16,6 +16,10 @@ use std::{convert::TryInto, io::Write};
 pub enum NoInterrupt {}
 
 /// The host that can process calls to external, host, functions.
+/// This is a Wasm concept. Wasm modules are self-contained and instructions can
+/// only modify the Wasm memory and stack and cannot access information about
+/// the external world, such as current time for example. Host functions fill
+/// that role.
 pub trait Host<I> {
     type Interrupt;
     /// Charge the given amount of energy for the initial memory.
@@ -25,7 +29,14 @@ pub trait Host<I> {
     /// and stack. The return value of `Ok(None)` signifies that execution
     /// succeeded and the machine should proceeed, the return value of
     /// `Ok(Some(i))` indicates that an interrupt was triggered by the host
-    /// function, and the return value of `Err(_)` signifies a trap.
+    /// function, and the return value of `Err(_)` signifies a trap, i.e., the
+    /// host function was called with illegal arguments.
+    ///
+    /// Interrupts are used by Concordium to execute inter-contract calls and
+    /// other similar operations. When a contract attempts to invoke another
+    /// contract an interrupt is triggered and an the invocation is handled,
+    /// along with any recursion. Execution of the original contract resumes
+    /// after handling the interrupt.
     fn call(
         &mut self,
         f: &I,
@@ -82,7 +93,7 @@ impl RunConfig {
 }
 
 #[derive(Debug)]
-/// A successful outome of code execution.
+/// A successful outcome of code execution.
 pub enum ExecutionOutcome<Interrupt> {
     /// Execution was successful and the function terminated normally.
     Success {
@@ -163,6 +174,7 @@ pub struct RuntimeStack {
 #[derive(Debug)]
 /// A runtime error that we impose on top of the Wasm spec.
 pub enum RuntimeError {
+    /// Calling an imported function directly is not supported.
     DirectlyCallImport,
 }
 
@@ -178,15 +190,19 @@ impl std::fmt::Display for RuntimeError {
 
 impl RuntimeStack {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Return the current size of the stack, i.e., number of elements in it.
     pub fn size(&self) -> usize { self.pos }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Remove and return an element from the stack **assuming the stack has at
+    /// least one element.**
     pub fn pop(&mut self) -> StackValue {
         self.pos -= 1;
         self.stack[self.pos]
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Push an element onto the stack.
     pub fn push(&mut self, x: StackValue) {
         if self.pos < self.stack.len() {
             self.stack[self.pos] = x;
@@ -197,39 +213,57 @@ impl RuntimeStack {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Get a mutable reference to the top of the stack **assuming the stack is
+    /// not empty.**
     pub fn peek_mut(&mut self) -> &mut StackValue { &mut self.stack[self.pos - 1] }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Return the top of the stack **assuming the stack is
+    /// not empty.**
     pub fn peek(&mut self) -> StackValue { self.stack[self.pos - 1] }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    pub fn set_pos(&mut self, pos: usize) { self.pos = pos; }
+    /// Set the position of the stack. This is for internal use only. It is used
+    /// when returning from a function or nested block.
+    pub(crate) fn set_pos(&mut self, pos: usize) { self.pos = pos; }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Push a value onto the stack, as long as it is convertible into a
+    /// [`StackValue`].
     pub fn push_value<F>(&mut self, f: F)
     where
         StackValue: From<F>, {
         self.push(StackValue::from(f))
     }
 
+    /// **Remove** and return the top of the stack, **assuming the stack is not
+    /// empty.**
+    ///
     /// # Safety
     /// This function is safe provided
     /// - the stack is not empty
     /// - top of the stack contains a 32-bit value.
     pub unsafe fn pop_u32(&mut self) -> u32 { self.pop().short as u32 }
 
+    /// Return the top of the stack, **assuming the stack is not empty.**
+    ///
     /// # Safety
     /// This function is safe provided
     /// - the stack is not empty
     /// - top of the stack contains a 32-bit value.
     pub unsafe fn peek_u32(&mut self) -> u32 { self.peek().short as u32 }
 
+    /// **Remove** and return the top of the stack, **assuming the stack is not
+    /// empty.**
+    ///
     /// # Safety
     /// This function is safe provided
     /// - the stack is not empty
     /// - top of the stack contains a 64-bit value.
     pub unsafe fn pop_u64(&mut self) -> u64 { self.pop().long as u64 }
 
+    /// Return the top of the stack, **assuming the stack is not empty.**
+    ///
     /// # Safety
     /// This function is safe provided
     /// - the stack is not empty

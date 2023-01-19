@@ -461,6 +461,7 @@ pub struct Expression {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// See [Wasm spec](https://webassembly.github.io/spec/core/syntax/instructions.html) for details of the meaning of the instructions.
 pub enum OpCode {
     // Control instructions
     End,
