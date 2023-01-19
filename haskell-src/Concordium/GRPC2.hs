@@ -869,9 +869,9 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdatePoolParameters, Updates.PoolParametersCPV1UpdatePayload pp) -> Right . Proto.make $ ProtoFields.poolParametersCpv1Update .= toProto pp
     (Updates.UpdateTimeParameters, Updates.TimeParametersCPV1UpdatePayload tp) -> Right . Proto.make $ ProtoFields.timeParametersCpv1Update .= toProto tp
     (Updates.UpdateMintDistribution, Updates.MintDistributionCPV1UpdatePayload md) -> Right . Proto.make $ ProtoFields.mintDistributionCpv1Update .= toProto md
-    (Updates.UpdateTimeoutParameters, Updates.TimeoutParametersUpdatePayload md) -> Right . Proto.make $ ProtoFields.timeoutParametersUpdate .= toProto md
-    (Updates.UpdateMinBlockTime, Updates.MinBlockTimeUpdatePayload md) -> Right . Proto.make $ ProtoFields.minBlockTimeUpdate .= toProto md
-    (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload md) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto md
+    (Updates.UpdateTimeoutParameters, Updates.TimeoutParametersUpdatePayload tp) -> Right . Proto.make $ ProtoFields.timeoutParametersUpdate .= toProto tp
+    (Updates.UpdateMinBlockTime, Updates.MinBlockTimeUpdatePayload mbt) -> Right . Proto.make $ ProtoFields.minBlockTimeUpdate .= toProto mbt
+    (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
     _ -> Left CEInvalidUpdateResult
 
 -- |The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).

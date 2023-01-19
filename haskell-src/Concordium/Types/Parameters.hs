@@ -60,7 +60,290 @@
 -- Where @a@ is constrained by the consensus parameters version.
 --
 -- If one are handling more than one parameter then refer to 'withCPVConstraints' which constrains the action with all of the nested parameter versions.
-module Concordium.Types.Parameters where
+module Concordium.Types.Parameters (
+    CryptographicParameters,
+
+    -- * Conditional parameters
+
+    -- |Parameter types that are conditionally supported at different 'ChainParametersVersion's.
+    ParameterType (..),
+    -- |Singleton type corresponding to 'ParameterType'.
+    SParameterType (..),
+    -- |Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
+    isSupported,
+    -- |Whether a particular parameter is supported at a particular 'ChainParametersVersion' (at
+    -- the type level).
+    IsSupported,
+    -- |Whether a particular parameter is supported at a particular 'ChainParametersVersion' (on
+    -- singletons).
+    sIsSupported,
+    IsParameterType,
+
+    -- * Conditional type
+    Conditionally (..),
+    conditionally,
+    conditionallyA,
+    unconditionally,
+
+    -- * Conditional parameter
+    OParam (..),
+    unOParam,
+    supportedOParam,
+    whenSupported,
+    pureWhenSupported,
+    maybeWhenSupported,
+
+    -- * Mint distribution
+
+    -- |Versioning for the 'MintDistribution' parameters.
+    --
+    --   * 'MintDistributionVersion0' ('ChainParametersV0'): supports mint per slot.
+    --   * 'MintDistributionVersion1' ('ChainParametersV1', 'ChainParametersV2'): does not support
+    --     mint per slot.
+    MintDistributionVersion (..),
+    -- |Singleton type associated with 'MintDistributionVersion'
+    SMintDistributionVersion (..),
+    -- |The mint distribution version for a chain parameters version.
+    mintDistributionVersionFor,
+    -- |The mint distribution version for a chain parameters version (types).
+    MintDistributionVersionFor,
+    -- |The mint distribution version for a chain parameters version (singletons).
+    sMintDistributionVersionFor,
+    IsMintDistributionVersion,
+    withIsMintDistributionVersionFor,
+    -- |Whether a 'MintDistributionVersion' supports the mint-per-slot parameter.
+    supportsMintPerSlot,
+    -- |Whether a 'MintDistributionVersion' supports the mint-per-slot parameter (type level).
+    SupportsMintPerSlot,
+    -- |Whether a 'MintDistributionVersion' supports the mint-per-slot parameter (singletons).
+    sSupportsMintPerSlot,
+    MintDistribution (..),
+    -- |Typeclass for structures that contain a 'MintDistribution'.
+    HasMintDistribution (..),
+
+    -- * Transaction fee distribution
+    TransactionFeeDistribution (..),
+    -- |Typeclass for structures that contain a 'TransactionFeeDistribution'.
+    HasTransactionFeeDistribution (..),
+
+    -- * GAS rewards
+
+    -- |Versioning for the 'GASRewards' parameters.
+    --
+    -- * 'GASRewardsVersion0' ('ChainParametersV0', 'ChainParametersV1'): supports GAS reward for
+    --   including finalization proofs.
+    -- * 'GASRewardsVersion1' ('ChainParametersV1'): does not support GAS reward for including
+    --   finalization proofs.
+    GASRewardsVersion (..),
+    -- |Singleton type associated with 'GASRewardsVersion'.
+    SGASRewardsVersion (..),
+    -- |The GAS rewards version for a chain parameters version.
+    gasRewardsVersionFor,
+    -- |The GAS rewards version for a chain parameters version (types).
+    GasRewardsVersionFor,
+    -- |The GAS rewards version for a chain parameters version (singletons).
+    sGasRewardsVersionFor,
+    IsGASRewardsVersion,
+    withIsGASRewardsVersionFor,
+    -- |Whether a 'GASRewardsVersion' supports GAS rewards for finalization proofs.
+    supportsGASFinalizationProof,
+    -- |Whether a 'GASRewardsVersion' supports GAS rewards for finalization proofs (type level).
+    SupportsGASFinalizationProof,
+    -- |Whether a 'GASRewardsVersion' supports GAS rewards for finalization proofs (singletons).
+    sSupportsGASFinalizationProof,
+    withSupportsGASFinalizationProof,
+    GASRewards (..),
+    -- |Typeclass for structures that contain a 'GASRewards'.
+    HasGASRewards (..),
+
+    -- * Reward parameters
+    RewardParameters (..),
+    -- |Typeclass for structures that contain a 'RewardParameters'.
+    HasRewardParameters (..),
+
+    -- * Exchange rates
+    ExchangeRates (..),
+    makeExchangeRates,
+    HasExchangeRates (..),
+
+    -- * Cooldown parameters
+
+    -- |Versioning for the 'CooldownParameters'' structure.
+    --
+    -- * 'CooldownParametersVersion0' ('ChainParametersV0'): baker cooldown specified in 'Epoch's.
+    -- * 'CooldownParametersVersion1' ('ChainParametersV1', 'ChainParametersV2'): baker and
+    --   delegator cooldowns specified in seconds.
+    CooldownParametersVersion (..),
+    -- |Singleton type associated with 'CooldownParametersVersion'.
+    SCooldownParametersVersion (..),
+    -- |The cooldown parameters version for a chain parameters version.
+    cooldownParametersVersionFor,
+    -- |The cooldown parameters version for a chain parameters version (types).
+    CooldownParametersVersionFor,
+    -- |The cooldown parameters version for a chain parameters version (singletons).
+    sCooldownParametersVersionFor,
+    IsCooldownParametersVersion,
+    withIsCooldownParametersVersionFor,
+    CooldownParameters' (..),
+    CooldownParameters,
+    cpBakerExtraCooldownEpochs,
+    cpPoolOwnerCooldown,
+    cpDelegatorCooldown,
+    putCooldownParameters,
+    getCooldownParameters,
+
+    -- * Time parameters
+    TimeParameters (..),
+    -- |Typeclass for structures that contain a 'TimeParameters'.
+    HasTimeParameters (..),
+    putTimeParameters,
+    getTimeParameters,
+
+    -- * Commission ranges
+    InclusiveRange (..),
+    isInRange,
+    closestInRange,
+    CommissionRanges (..),
+    -- |The range of allowed finalization commissions.
+    finalizationCommissionRange,
+    -- |The range of allowed baker commissions.
+    bakingCommissionRange,
+    -- |The range of allowed transaction commissions.
+    transactionCommissionRange,
+    maximumCommissionRates,
+
+    -- * Pool parameters
+    LeverageFactor (..),
+    applyLeverageFactor,
+    CapitalBound (..),
+    -- |Versioning for the 'PoolParameters'' structure.
+    --
+    -- * 'PoolParametersVersion0' ('ChainParametersV0'): just the minimum stake for registering a
+    --    baker
+    -- * 'PoolParametersVersion1' ('ChainParametersV1', 'ChainParametersV2'):
+    --
+    --     - passive commission rates
+    --     - bounds on pool commission rates
+    --     - minimum baker equity capital
+    --     - maximum fraction of total staked capital that a baker can have
+    --     - leverage bound for a baker
+    PoolParametersVersion (..),
+    SPoolParametersVersion (..),
+    poolParametersVersionFor,
+    PoolParametersVersionFor,
+    sPoolParametersVersionFor,
+    PoolParameters' (..),
+    PoolParameters,
+    ppBakerStakeThreshold,
+    ppPassiveCommissions,
+    ppCommissionBounds,
+    ppMinimumEquityCapital,
+    ppCapitalBound,
+    ppLeverageBound,
+    putPoolParameters,
+    getPoolParameters,
+
+    -- * Timeout parameters
+    TimeoutParameters (..),
+
+    -- * Consensus parameters
+    ConsensusParametersVersion (..),
+    SConsensusParametersVersion (..),
+    consensusParametersVersionFor,
+    ConsensusParametersVersionFor,
+    sConsensusParametersVersionFor,
+    IsConsensusParametersVersion,
+    withIsConsensusParametersVersionFor,
+    ConsensusParameters' (..),
+    ConsensusParameters,
+    cpElectionDifficulty,
+    cpTimeoutParameters,
+    cpMinBlockTime,
+    cpBlockEnergyLimit,
+
+    -- * Chain parameters
+    withCPVConstraints,
+    ChainParameters' (..),
+    -- |Consensus parameters.
+    cpConsensusParameters,
+    -- |Exchange rates.
+    cpExchangeRates,
+    -- |Cooldown parameters.
+    cpCooldownParameters,
+    -- |Time parameters.
+    cpTimeParameters,
+    -- |LimitAccountCreation: the maximum number of accounts
+    -- that may be created in one block.
+    cpAccountCreationLimit,
+    -- |Reward parameters.
+    cpRewardParameters,
+    -- |Foundation account index.
+    cpFoundationAccount,
+    -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
+    -- for becoming a baker.
+    cpPoolParameters,
+    EChainParameters (..),
+    ChainParameters,
+    putChainParameters,
+    getChainParameters,
+
+    -- * Finalization parameters
+    FinalizationParameters (..),
+    putFinalizationParametersGD3,
+    getFinalizationParametersGD3,
+
+    -- * Delegation helpers
+    DelegationChainParameters (..),
+    delegationChainParameters,
+
+    -- * Authorizations version
+
+    -- |Version of the authorizations structure.
+    --
+    -- * 'AuthorizationsVersion0' ('ChainParametersV0').
+    -- * 'AuthorizationsVersion1' ('ChainParametersV1', 'ChainParametersV2'): add access structures
+    --   for cooldown parameters and time parameters
+    AuthorizationsVersion (..),
+    -- |Singleton type associated with 'AuthorizationsVersion'.
+    SAuthorizationsVersion (..),
+    -- |The authorizations version associated with a chain parameters version.
+    authorizationsVersionFor,
+    -- |The authorizations version associated with a chain parameters version (types).
+    AuthorizationsVersionFor,
+    -- |The authorizations version associated with a chain parameters version (singletons).
+    sAuthorizationsVersionFor,
+    -- |The authorizations version associated with a protocol version.
+    authorizationsVersionForPV,
+    -- |The authorizations version associated with a protocol version (types).
+    AuthorizationsVersionForPV,
+    -- |The authorizations version associated with a protocol version (singletons).
+    sAuthorizationsVersionForPV,
+    IsAuthorizationsVersion,
+    withIsAuthorizationsVersionFor,
+    withIsAuthorizationsVersionForPV,
+    -- |Whether cooldown parameters are updatable for an 'AuthorizationsVersion'.
+    supportsCooldownParametersAccessStructure,
+    -- |Whether cooldown parameters are updatable for an 'AuthorizationsVersion' (types).
+    SupportsCooldownParametersAccessStructure,
+    -- |Whether cooldown parameters are updatable for an 'AuthorizationsVersion' (singletons).
+    sSupportsCooldownParametersAccessStructure,
+    -- |Whether time parameters are supported for an 'AuthorizationsVersion'.
+    supportsTimeParameters,
+    -- |Whether time parameters are supported for an 'AuthorizationsVersion' (types).
+    SupportsTimeParameters,
+    -- |Whether time parameters are supported for an 'AuthorizationsVersion' (singletons).
+    sSupportsTimeParameters,
+
+    -- * Defunctionalisation symbols
+    PTElectionDifficultySym0,
+    PTTimeParametersSym0,
+    PTMintPerSlotSym0,
+    PTTimeoutParametersSym0,
+    PTMinBlockTimeSym0,
+    PTBlockEnergyLimitSym0,
+    PTCooldownParametersAccessStructureSym0,
+    PTFinalizationProofSym0,
+) where
 
 import Control.Monad
 import qualified Data.Aeson as AE
@@ -79,6 +362,9 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Parameters
 import Concordium.Types
 import Concordium.Types.HashableTo
+
+-- |Chain cryptographic parameters.
+type CryptographicParameters = GlobalContext
 
 $( singletons
     [d|
@@ -184,12 +470,19 @@ $( singletons
         |]
  )
 
+-- |Constraint on a type level 'ParameterType' that can be used to get a corresponding
+-- 'SParameterType'. An alias for 'SingI'.
 type IsParameterType (pt :: ParameterType) = SingI pt
+
+-- |Constraint on a type level 'AuthorizationsVersion' that can be used to get a corresponding
+-- 'SAuthorizationsVersion'. An alias for 'SingI'.
 type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
 
+-- |Witness an 'IsAuthorizationsVersion' constraint using a 'SChainParametersVersion'.
 withIsAuthorizationsVersionFor :: SChainParametersVersion cpv -> (IsAuthorizationsVersion (AuthorizationsVersionFor cpv) => a) -> a
 withIsAuthorizationsVersionFor scpv = withSingI (sAuthorizationsVersionFor scpv)
 
+-- |Witness an 'IsAuthorizationsVersion' constraint using a 'SProtocolVersion'.
 withIsAuthorizationsVersionForPV :: SProtocolVersion pv -> (IsAuthorizationsVersion (AuthorizationsVersionForPV pv) => a) -> a
 withIsAuthorizationsVersionForPV spv = withSingI (sAuthorizationsVersionForPV spv)
 
@@ -236,14 +529,19 @@ instance (Serialize a, SingI b) => Serialize (Conditionally b a) where
         SFalse -> pure CFalse
         STrue -> CTrue <$> get
 
-conditionallyA :: (Applicative f) => SBool b -> f a -> f (Conditionally b a)
-conditionallyA SFalse _ = pure CFalse
-conditionallyA STrue m = CTrue <$> m
-
+-- |Wrap a value in a 'Conditionally' depending on the supplied 'SBool'.
 conditionally :: SBool b -> a -> Conditionally b a
 conditionally SFalse _ = CFalse
 conditionally STrue a = CTrue a
 
+-- |Perform an action conditionally on the supplied 'SBool'.
+-- This is typically used for monadic actions.
+-- The action is not performed in the 'SFalse' case.
+conditionallyA :: (Applicative f) => SBool b -> f a -> f (Conditionally b a)
+conditionallyA SFalse _ = pure CFalse
+conditionallyA STrue m = CTrue <$> m
+
+-- |A lens for accessing the contents of a 'Conditionally' when the guard is known to be 'True'.
 unconditionally :: Lens (Conditionally 'True a) (Conditionally 'True b) a b
 unconditionally f (CTrue a) = CTrue <$> f a
 
@@ -297,29 +595,37 @@ instance (Serialize a, SingI pt, IsChainParametersVersion cpv) => Serialize (OPa
 
     get = whenSupported get
 
+-- |Perform an action conditionally on whether the parameter is supported in the relevant chain
+-- parameters version (per 'sIsSupported'). The action is not performed if the parameter is not
+-- supported.
 whenSupported :: forall pt cpv f a. (Applicative f, SingI pt, IsChainParametersVersion cpv) => f a -> f (OParam pt cpv a)
 whenSupported m = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
     SFalse -> pure NoParam
     STrue -> SomeParam <$> m
 
+-- |Wrap a value in an 'OParam' depending on whether the parameter is supported.
 pureWhenSupported :: forall pt cpv a. (SingI pt, IsChainParametersVersion cpv) => a -> OParam pt cpv a
 pureWhenSupported v = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
     SFalse -> NoParam
     STrue -> SomeParam v
 
+-- |Analogue of 'maybe' for 'OParam'.
 maybeWhenSupported :: b -> (a -> b) -> OParam pt cpv a -> b
 maybeWhenSupported b _ NoParam = b
 maybeWhenSupported _ f (SomeParam a) = f a
 
--- |Chain cryptographic parameters.
-type CryptographicParameters = GlobalContext
+-- * Mint distribution
 
+-- |Constraint on a type level 'MintDistributionVersion' that can be used to get a corresponding
+-- 'SMintDistributionVersion'. An alias for 'SingI'.
 type IsMintDistributionVersion (mdv :: MintDistributionVersion) = SingI mdv
 
+-- |Witness a @SingI (SupportsMintPerSlot mdv)@ constraint using a 'SMintDistributionVersion mdv'.
 withSupportsMintPerSlot :: forall mdv a. SMintDistributionVersion mdv -> (SingI (SupportsMintPerSlot mdv) => a) -> a
 withSupportsMintPerSlot smdv = withSingI (sSupportsMintPerSlot smdv)
 
-withIsMintDistributionVersionFor :: SChainParametersVersion t -> (SingI (MintDistributionVersionFor t) => r) -> r
+-- |Witness an 'IsMintDistributionVersion' constraint for an 'SChainParametersVersion'.
+withIsMintDistributionVersionFor :: SChainParametersVersion t -> (IsMintDistributionVersion (MintDistributionVersionFor t) => r) -> r
 withIsMintDistributionVersionFor scpv = withSingI (sMintDistributionVersionFor scpv)
 
 -- |The minting rate and the distribution of newly-minted GTU
@@ -381,6 +687,8 @@ instance Arbitrary (MintDistribution 'MintDistributionVersion1) where
 
 instance (Monad m, IsMintDistributionVersion mdv) => MHashableTo m Hash.Hash (MintDistribution mdv)
 
+-- * Transaction fee distribution
+
 -- |The distribution of block transaction fees among the block
 -- baker, the GAS account, and the foundation account.  It
 -- must be the case that @_tfdBaker + _tfdGASAccount <= 1@.
@@ -423,12 +731,18 @@ instance HashableTo Hash.Hash TransactionFeeDistribution where
 
 instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
 
+-- * GAS rewards
+
+-- |Constraint on a type level 'GASRewardsVersion' that can be used to get a corresponding
+-- 'SGASRewardsVersion'. An alias for 'SingI'.
 type IsGASRewardsVersion (grv :: GASRewardsVersion) = SingI grv
 
+-- |Witness a @SingI (SupportsGASFinalizationProof grv)@ constraint using a 'SGASRewardsVersion grv'.
 withSupportsGASFinalizationProof :: forall grv a. SGASRewardsVersion grv -> (SingI (SupportsGASFinalizationProof grv) => a) -> a
 withSupportsGASFinalizationProof sgrv = withSingI (sSupportsGASFinalizationProof sgrv)
 
-withIsGASRewardsVersionFor :: SChainParametersVersion t -> (SingI (GasRewardsVersionFor t) => r) -> r
+-- |Witness an 'IsGASRewardsVersion' constraint for an 'SChainParametersVersion'.
+withIsGASRewardsVersionFor :: SChainParametersVersion t -> (IsGASRewardsVersion (GasRewardsVersionFor t) => r) -> r
 withIsGASRewardsVersionFor scpv = withSingI (sGasRewardsVersionFor scpv)
 
 -- |Parameters that determine the proportion of the GAS account that is paid to the baker (pool)
@@ -473,11 +787,6 @@ instance IsGASRewardsVersion grv => AE.FromJSON (GASRewards grv) where
         _gasChainUpdate <- v .: "chainUpdate"
         return GASRewards{..}
 
--- JSON serialization for the GASRewards structure with fields "baker", "finalizationProof",
--- "accountCreation" and "chainUpdate".
-
--- $(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . drop 4} ''GASRewards)
-
 instance IsGASRewardsVersion grv => Serialize (GASRewards grv) where
     put GASRewards{..} = do
         put _gasBaker
@@ -495,6 +804,8 @@ instance IsGASRewardsVersion grv => HashableTo Hash.Hash (GASRewards grv) where
     getHash = Hash.hash . encode
 
 instance (Monad m, IsGASRewardsVersion grv) => MHashableTo m Hash.Hash (GASRewards grv)
+
+-- * Reward parameters
 
 -- |Parameters affecting rewards.
 -- It must be that @rpBakingRewMintFrac + rpFinRewMintFrac < 1@
@@ -545,6 +856,9 @@ instance IsChainParametersVersion cpv => Serialize (RewardParameters cpv) where
         _rpGASRewards <- withIsGASRewardsVersionFor (sing @cpv) get
         return RewardParameters{..}
 
+-- * Exchange rates
+
+-- |Exchange rates that apply on the chain.
 data ExchangeRates = ExchangeRates
     { -- |Euro:Energy rate.
       _erEuroPerEnergy :: !ExchangeRate,
@@ -563,6 +877,7 @@ instance Serialize ExchangeRates where
         put _erMicroGTUPerEuro
     get = makeExchangeRates <$> get <*> get
 
+-- |Construct an 'ExchangeRates' from the Euro:Energy and uGTU:Euro rates.
 makeExchangeRates ::
     -- |Euro:Energy rate
     ExchangeRate ->
@@ -604,8 +919,13 @@ instance HasExchangeRates ExchangeRates where
     {-# INLINE energyRate #-}
     energyRate = to _erEnergyRate
 
+-- * Cooldown parameters
+
+-- |Constraint on a type level 'CooldownParametersVersion' that can be used to get a corresponding
+-- 'SCooldownParametersVersion'. An alias for 'SingI'.
 type IsCooldownParametersVersion (cpv :: CooldownParametersVersion) = SingI cpv
 
+-- |Witness an 'IsCooldownParametersVersion' constraint for an 'SChainParametersVersion'.
 withIsCooldownParametersVersionFor ::
     forall cpv a.
     SChainParametersVersion cpv ->
@@ -635,6 +955,7 @@ data CooldownParameters' (cpv :: CooldownParametersVersion) where
         } ->
         CooldownParameters' 'CooldownParametersVersion1
 
+-- |A convenience alias for 'CooldownParameters'' but parametrised by the 'ChainParametersVersion'.
 type CooldownParameters (cpv :: ChainParametersVersion) = CooldownParameters' (CooldownParametersVersionFor cpv)
 
 instance ToJSON (CooldownParameters' cpv) where
@@ -685,6 +1006,7 @@ cpDelegatorCooldown =
 deriving instance Eq (CooldownParameters' cpv)
 deriving instance Show (CooldownParameters' cpv)
 
+-- |Serialize 'CooldownParameters''.
 putCooldownParameters :: Putter (CooldownParameters' cpv)
 putCooldownParameters CooldownParametersV0{..} = do
     put _cpBakerExtraCooldownEpochs
@@ -697,6 +1019,7 @@ instance HashableTo Hash.Hash (CooldownParameters' cpv) where
 
 instance Monad m => MHashableTo m Hash.Hash (CooldownParameters' cpv)
 
+-- |Deserialize 'CooldownParameters'' for a given version.
 getCooldownParameters :: forall cpv. SCooldownParametersVersion cpv -> Get (CooldownParameters' cpv)
 getCooldownParameters = \case
     SCooldownParametersVersion0 -> CooldownParametersV0 <$> get
@@ -705,6 +1028,8 @@ getCooldownParameters = \case
 instance SingI cpv => Serialize (CooldownParameters' cpv) where
     put = putCooldownParameters
     get = getCooldownParameters (sing @cpv)
+
+-- * Time parameters
 
 -- |The time parameters are introduced as of 'ChainParametersV1', and consist of the reward period
 -- length and the mint rate per payday.  These are coupled as a change to either affects the
@@ -881,8 +1206,11 @@ instance FromJSON CapitalBound where
 deriving instance Eq PoolParametersVersion
 deriving instance Show PoolParametersVersion
 
+-- |Constraint on a type level 'PoolParametersVersion' that can be used to get a corresponding
+-- 'SPoolParametersVersion'. An alias for 'SingI'.
 type IsPoolParametersVersion (ppv :: PoolParametersVersion) = SingI ppv
 
+-- |Witness an 'IsPoolParametersVersion' constraint for an 'SChainParametersVersion'.
 withIsPoolParametersVersionFor :: SChainParametersVersion cpv -> (IsPoolParametersVersion (PoolParametersVersionFor cpv) => a) -> a
 withIsPoolParametersVersionFor scpv = withSingI (sPoolParametersVersionFor scpv)
 
@@ -910,6 +1238,7 @@ data PoolParameters' (ppv :: PoolParametersVersion) where
         } ->
         PoolParameters' 'PoolParametersVersion1
 
+-- |Convenience type for a 'PoolParameters'' parametrised by the 'ChainParametersVersion'.
 type PoolParameters (cpv :: ChainParametersVersion) = PoolParameters' (PoolParametersVersionFor cpv)
 
 instance ToJSON (PoolParameters' ppv) where
@@ -992,6 +1321,7 @@ ppLeverageBound ::
 ppLeverageBound =
     lens _ppLeverageBound (\pp x -> pp{_ppLeverageBound = x})
 
+-- |Serialize a 'PoolParameters''.
 putPoolParameters :: Putter (PoolParameters' ppv)
 putPoolParameters PoolParametersV0{..} = do
     put _ppBakerStakeThreshold
@@ -1007,6 +1337,7 @@ instance HashableTo Hash.Hash (PoolParameters' ppv) where
 
 instance Monad m => MHashableTo m Hash.Hash (PoolParameters' ppv)
 
+-- |Deserialize a 'PoolParameters'' at a given version.
 getPoolParameters :: forall ppv. SPoolParametersVersion ppv -> Get (PoolParameters' ppv)
 getPoolParameters = \case
     SPoolParametersVersion0 -> PoolParametersV0 <$> get
@@ -1018,6 +1349,8 @@ instance IsPoolParametersVersion ppv => Serialize (PoolParameters' ppv) where
 
 deriving instance Eq (PoolParameters' ppv)
 deriving instance Show (PoolParameters' ppv)
+
+-- * Timeout parameters
 
 -- |Parameters controlling consensus timeouts for the consensus protocol version 2.
 data TimeoutParameters = TimeoutParameters
@@ -1067,11 +1400,17 @@ instance HashableTo Hash.Hash TimeoutParameters where
 
 instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 
+-- * Consensus parameters
+
+-- |Constraint on a type level 'ConsensusParametersVersion' that can be used to get a corresponding
+-- 'SConsensusParametersVersion'. An alias for 'SingI'.
 type IsConsensusParametersVersion (cpv :: ConsensusParametersVersion) = SingI cpv
 
+-- |Witness an 'IsConsensusParametersVersion' constraint for an 'SChainParametersVersion'.
 withIsConsensusParametersVersionFor :: SChainParametersVersion cpv -> (IsConsensusParametersVersion (ConsensusParametersVersionFor cpv) => a) -> a
 withIsConsensusParametersVersionFor scpv = withSingI (sConsensusParametersVersionFor scpv)
 
+-- |Consensus-specific parameters.
 data ConsensusParameters' (cpv :: ConsensusParametersVersion) where
     ConsensusParametersV0 ::
         { -- |Election difficulty parameter.
@@ -1088,6 +1427,7 @@ data ConsensusParameters' (cpv :: ConsensusParametersVersion) where
         } ->
         ConsensusParameters' 'ConsensusParametersVersion1
 
+-- |Convenience type for a 'ConsensusParameters'' parametrised by the 'ChainParametersVersion'.
 type ConsensusParameters (cpv :: ChainParametersVersion) =
     ConsensusParameters' (ConsensusParametersVersionFor cpv)
 
@@ -1136,6 +1476,9 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
             _cpBlockEnergyLimit <- get
             return ConsensusParametersV1{..}
 
+-- * Chain parameters
+
+-- |Witness the constraints implied by an 'SChainParametersVersion'.
 withCPVConstraints ::
     SChainParametersVersion cpv ->
     ( ( IsAuthorizationsVersion (AuthorizationsVersionFor cpv),
@@ -1196,6 +1539,7 @@ instance HasExchangeRates (ChainParameters' cpv) where
 instance HasRewardParameters (ChainParameters' cpv) cpv where
     rewardParameters = cpRewardParameters
 
+-- |Serialize a 'ChainParameters''.
 putChainParameters :: forall cpv. IsChainParametersVersion cpv => Putter (ChainParameters' cpv)
 putChainParameters ChainParameters{..} = do
     withIsConsensusParametersVersionFor (chainParametersVersion @cpv) $ put _cpConsensusParameters
@@ -1207,6 +1551,7 @@ putChainParameters ChainParameters{..} = do
     put _cpFoundationAccount
     putPoolParameters _cpPoolParameters
 
+-- |Deserialize a 'ChainParameters''.
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
 getChainParameters =
     ChainParameters
