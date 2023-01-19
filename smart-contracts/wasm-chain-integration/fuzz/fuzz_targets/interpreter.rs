@@ -7,7 +7,7 @@ use libfuzzer_sys::fuzz_target;
 use wasm_chain_integration::fuzz::*;
 
 use wasm_chain_integration::*;
-use wasm_transform::{
+use concordium_wasm::{
     artifact::{Artifact, CompiledFunctionBytes},
     output::Output,
     parse::parse_skeleton,

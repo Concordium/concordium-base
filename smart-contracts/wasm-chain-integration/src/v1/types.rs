@@ -7,15 +7,15 @@ use anyhow::{bail, ensure, Context};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use concordium_contracts_common::OwnedEntrypointName;
-use derive_more::{From, Into};
-use serde::Deserialize as SerdeDeserialize;
-use wasm_transform::{
+use concordium_wasm::{
     artifact::TryFromImport,
     output::Output,
     parse::{Byte, GetParseable, Parseable},
     types::{FunctionType, Import, Name, ValueType},
     validate,
 };
+use derive_more::{From, Into};
+use serde::Deserialize as SerdeDeserialize;
 
 /// Maximum length, in bytes, of an export function name.
 pub const MAX_EXPORT_NAME_LEN: usize = 100;
@@ -357,7 +357,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
     fn parse(
         ctx: Ctx,
         cursor: &mut std::io::Cursor<&'a [u8]>,
-    ) -> wasm_transform::parse::ParseResult<Self> {
+    ) -> concordium_wasm::parse::ParseResult<Self> {
         match Byte::parse(ctx, cursor)? {
             0 => Ok(ImportFunc::ChargeEnergy),
             1 => Ok(ImportFunc::TrackCall),
@@ -403,7 +403,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
 }
 
 impl Output for ImportFunc {
-    fn output(&self, out: &mut impl std::io::Write) -> wasm_transform::output::OutResult<()> {
+    fn output(&self, out: &mut impl std::io::Write) -> concordium_wasm::output::OutResult<()> {
         let tag: u8 = match self {
             ImportFunc::ChargeEnergy => 0,
             ImportFunc::TrackCall => 1,
@@ -464,7 +464,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
     fn parse(
         ctx: Ctx,
         cursor: &mut std::io::Cursor<&'a [u8]>,
-    ) -> wasm_transform::parse::ParseResult<Self> {
+    ) -> concordium_wasm::parse::ParseResult<Self> {
         let tag = cursor.next(ctx)?;
         let ty = cursor.next(ctx)?;
         Ok(Self {
@@ -475,7 +475,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
 }
 
 impl Output for ProcessedImports {
-    fn output(&self, out: &mut impl std::io::Write) -> wasm_transform::output::OutResult<()> {
+    fn output(&self, out: &mut impl std::io::Write) -> concordium_wasm::output::OutResult<()> {
         self.tag.output(out)?;
         self.ty.output(out)
     }
@@ -584,7 +584,7 @@ impl TryFromImport for ProcessedImports {
     fn try_from_import(
         ctx: &[FunctionType],
         import: Import,
-    ) -> wasm_transform::artifact::CompileResult<Self> {
+    ) -> concordium_wasm::artifact::CompileResult<Self> {
         let m = &import.mod_name;
         let tag = if m.name == "concordium_metering" {
             match import.item_name.name.as_ref() {
@@ -648,7 +648,7 @@ impl TryFromImport for ProcessedImports {
             bail!("Unsupported import module {}.", m)
         };
         let ty = match import.description {
-            wasm_transform::types::ImportDescription::Func {
+            concordium_wasm::types::ImportDescription::Func {
                 type_idx,
             } => ctx
                 .get(type_idx as usize)

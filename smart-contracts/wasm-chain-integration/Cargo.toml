@@ -11,7 +11,7 @@ license-file = "../../LICENSE"
 enable-ffi = ["ffi_helpers"]
 default=["enable-ffi"]
 fuzz = ["arbitrary", "wasm-smith", "wasmprinter"]
-fuzz-coverage = ["wasm-transform/fuzz-coverage"]
+fuzz-coverage = ["concordium-wasm/fuzz-coverage"]
 display-state = ["ptree"]
 # enable construction of the state from streams.
 async = ["futures"]
@@ -39,9 +39,9 @@ wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "m
 wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", branch = "main", optional = true }
 rand = { version = "=0.8", features = ["small_rng"] }
 
-[dependencies.wasm-transform]
+[dependencies.concordium-wasm]
 path = "../wasm-transform"
-version = "0"
+version = "1"
 
 [dependencies.concordium-contracts-common]
 version = "5"

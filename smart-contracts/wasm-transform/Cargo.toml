@@ -1,17 +1,18 @@
 [package]
-name = "wasm-transform"
-version = "0.1.1"
+name = "concordium-wasm"
+version = "1.0.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
-license-file = "../LICENSE"
+license-file = "../../LICENSE"
+readme = "./README.md"
 
 [features]
 fuzz-coverage = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-leb128 = "0.2.4"
-anyhow = "1.0.33"
+leb128 = "0.2"
+anyhow = "1.0"
 num_enum = "0.5"
 derive_more = "0.99"
 

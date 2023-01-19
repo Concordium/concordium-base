@@ -5,7 +5,7 @@
  * To compile the invalid modules with wat2wasm, use the --no-check option.
  */
 
-use wasm_transform::{
+use concordium_wasm::{
     artifact::{Artifact, CompiledFunction},
     utils::instantiate,
 };

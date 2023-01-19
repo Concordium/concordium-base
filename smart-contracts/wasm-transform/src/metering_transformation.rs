@@ -8,23 +8,23 @@ use std::{convert::TryInto, rc::Rc};
 /// TODO set these indices to the imports of the respective accounting host
 /// functions. They should be given by the specification.
 /// The type of this function should be i64 -> ()
-pub const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
+pub(crate) const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
 /// Dynamically track calls to enable us to limit the number of active
 /// frames.
 /// The type of this function should be unit to unit.
-pub const FN_IDX_TRACK_CALL: FuncIndex = 1;
+pub(crate) const FN_IDX_TRACK_CALL: FuncIndex = 1;
 /// Track returns so that we can keep the count correctly.
 /// The type of this function should be () -> ().
-pub const FN_IDX_TRACK_RETURN: FuncIndex = 2;
+pub(crate) const FN_IDX_TRACK_RETURN: FuncIndex = 2;
 /// Charge for memory allocation. The type of this
 /// function should be i32 -> i32.
-pub const FN_IDX_MEMORY_ALLOC: FuncIndex = 3;
+pub(crate) const FN_IDX_MEMORY_ALLOC: FuncIndex = 3;
 
 /// The number of added functions. All functions that are in the source module
 /// will have the indices shifted by this amount.
 /// The table as well must be updated by increasing all the function indices by
 /// this constant.
-pub const NUM_ADDED_FUNCTIONS: FuncIndex = 4;
+pub(crate) const NUM_ADDED_FUNCTIONS: FuncIndex = 4;
 
 /// Result of a transformation. The transformation should generally not fail on
 /// a well-formed module, i.e., one that has been validated. But we might want
@@ -46,7 +46,7 @@ fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> TransformationResult<u
 }
 
 /// Definition of energy costs of instructions.
-pub mod cost {
+pub(crate) mod cost {
     pub type Energy = u64;
     use super::*;
 
@@ -117,9 +117,6 @@ pub mod cost {
     /// In practice the cost does not dependn on the number of bytes.
     pub const LOAD_WORD: Energy = 4;
 
-    /// Store n bytes in linear memory.
-    pub const fn store(n: usize) -> Energy { BOUNDS + 2 + n as Energy }
-
     /// Checking memory size is pretty cheap, it is just a vec.len() call.
     pub const MEMSIZE: Energy = write_stack(1) + 3;
     /// Constant part for the memory grow instruction. The variable part is
@@ -179,7 +176,7 @@ pub mod cost {
 
     /// Get the cost of the given instruction in the context of the stack of
     /// labels, and the module.
-    pub fn get_cost<C: HasTransformationContext>(
+    pub(crate) fn get_cost<C: HasTransformationContext>(
         instr: &OpCode,
         labels: &[BlockType],
         module: &C,
@@ -331,12 +328,6 @@ pub mod cost {
 }
 
 use cost::Energy;
-
-// // TODO: Add stack accounting instructions.
-// fn account_stack_size(exp: &mut InstrSeq, size: i64) {
-//     exp.push(OpCode::I64Const(size));
-//     exp.push(OpCode::Call(FN_IDX_ACCOUNT_STACK_SIZE));
-// }
 
 ///Metadata needed for transformation.
 struct InstrSeqTransformer<'a, C> {
@@ -600,7 +591,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
 /// A helper trait so that we can use the transformation on different datatypes.
 /// In particular we use it in tests which have their own notion of context to
 /// make it possible to specify modules in a compact way.
-pub trait HasTransformationContext {
+pub(crate) trait HasTransformationContext {
     /// Get the number of arguments and return values of a function type at the
     /// given index.
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)>;
@@ -635,8 +626,8 @@ impl HasTransformationContext for Module {
 }
 
 /// Inject cost accounting into the function, according to cost
-/// specification version XXX.
-pub fn inject_accounting<C: HasTransformationContext>(
+/// specification.
+pub(crate) fn inject_accounting<C: HasTransformationContext>(
     function: &Code,
     module: &C,
 ) -> TransformationResult<Code> {

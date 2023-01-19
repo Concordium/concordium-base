@@ -14,16 +14,16 @@ use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
     ModuleReference, OwnedEntrypointName, ReceiveName,
 };
+use concordium_wasm::{
+    artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
+    machine::{self, ExecutionOutcome, NoInterrupt},
+    utils,
+};
 use machine::Value;
 use sha3::Digest;
 use std::{borrow::Borrow, io::Write, sync::Arc};
 use trie::BackingStoreLoad;
 pub use types::*;
-use wasm_transform::{
-    artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
-    machine::{self, ExecutionOutcome, NoInterrupt},
-    utils,
-};
 
 /// Interrupt triggered by the smart contract to execute an instruction on the
 /// host, either an account transfer, a smart contract call or an upgrade

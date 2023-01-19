@@ -2,6 +2,12 @@ use anyhow::bail;
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, Parameter, Timestamp,
 };
+use concordium_wasm::{
+    artifact::{ArtifactNamedImport, TryFromImport},
+    machine::{Host, NoInterrupt, Value},
+    types::{FunctionType, ValueType},
+    *,
+};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 use wasm_chain_integration::{
@@ -12,12 +18,6 @@ use wasm_chain_integration::{
         ProcessedImports, ReceiveContext, ReceiveHost, State,
     },
     InterpreterEnergy,
-};
-use wasm_transform::{
-    artifact::{ArtifactNamedImport, TryFromImport},
-    machine::{Host, NoInterrupt, Value},
-    types::{FunctionType, ValueType},
-    *,
 };
 
 static CONTRACT_BYTES_SIMPLE_GAME: &[u8] = include_bytes!("./simple_game.wasm");

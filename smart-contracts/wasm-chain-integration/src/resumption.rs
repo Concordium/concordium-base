@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::ExecResult;
-use wasm_transform::{
+use concordium_wasm::{
     artifact::{Artifact, RunnableCode, TryFromImport},
     machine::{ExecutionOutcome, Host, RunConfig},
 };
