@@ -48,9 +48,9 @@ foreign import ccall unsafe "ip_info_create" ipInfoCreateFFI ::
     Ptr Word8 -> CSize ->
     IO (Ptr IpInfo)
 
-ipInfoCreate :: ArIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> Maybe (ForeignPtr IpInfo)
+ipInfoCreate :: IdentityProviderIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> Maybe IpInfo
 ipInfoCreate arId verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
-    let (ArIdentity idW) = arId
+    let (IP_ID idW) = arId
     (vkPtr, vkLen) <- toByteArrayInput verifyKey
     (cvkPtr, cvkLen) <- toByteArrayInput cdiVerifyKey
     (nPtr, nLen) <- toByteArrayInput (Text.encodeUtf8 name)
@@ -59,7 +59,7 @@ ipInfoCreate arId verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
     ptr <- ipInfoCreateFFI idW vkPtr vkLen cvkPtr cvkLen nPtr nLen urlPtr urlLen descPtr descLen
     if ptr == nullPtr
     then return Nothing
-    else Just <$> newForeignPtr freeIpInfo ptr)
+    else Just . IpInfo <$> newForeignPtr freeIpInfo ptr)
     where
         toByteArrayInput bs =
             unsafeUseAsCStringLen bs

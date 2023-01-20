@@ -10,7 +10,7 @@ use either::Either::{Left, Right};
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::CommitmentKey as PedersenKey;
-use rand::{rngs::StdRng, thread_rng, AsByteSliceMut, SeedableRng};
+use rand::thread_rng;
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
