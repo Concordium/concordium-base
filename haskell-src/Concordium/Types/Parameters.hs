@@ -234,6 +234,8 @@ module Concordium.Types.Parameters (
     sPoolParametersVersionFor,
     PoolParameters' (..),
     PoolParameters,
+    IsPoolParametersVersion,
+    withIsPoolParametersVersionFor,
     ppBakerStakeThreshold,
     ppPassiveCommissions,
     ppCommissionBounds,

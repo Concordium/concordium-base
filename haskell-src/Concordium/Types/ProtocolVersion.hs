@@ -161,6 +161,7 @@ module Concordium.Types.ProtocolVersion (
     supportsV1Contracts,
     supportsUpgradableContracts,
     supportsChainQueryContracts,
+    supportsAccountAliases,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -417,6 +418,13 @@ protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor sp
 supportsMemo :: SProtocolVersion pv -> Bool
 supportsMemo SP1 = False
 supportsMemo _ = True
+
+-- |Whether the protocol version supports account aliases.
+-- (Account aliases are supported in 'P3' onwards.)
+supportsAccountAliases :: SProtocolVersion pv -> Bool
+supportsAccountAliases SP1 = False
+supportsAccountAliases SP2 = False
+supportsAccountAliases _ = True
 
 -- |Whether the protocol version supports V1 smart contracts.
 -- (V1 contracts are supported in 'P4' onwards.)
