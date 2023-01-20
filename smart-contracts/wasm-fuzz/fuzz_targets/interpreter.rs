@@ -4,9 +4,9 @@
 /// validation, metering injection, Wasm code generation, and init/receive
 /// function execution.
 use libfuzzer_sys::fuzz_target;
-use wasm_chain_integration::fuzz::*;
+use wasm_chain_integration_fuzz::*;
 
-use wasm_chain_integration::*;
+use concordium_smart_contract_engine::*;
 use concordium_wasm::{
     artifact::{Artifact, CompiledFunctionBytes},
     output::Output,
@@ -20,7 +20,9 @@ use concordium_wasm::{
 /// to 10 mln here in order to allow the interpreter to potentially explore more
 /// execution paths. This should roughly correspond to a maximum execution time
 /// of 10 seconds.
-const ENERGY: u64 = 10_000_000;
+const ENERGY: InterpreterEnergy = InterpreterEnergy {
+    energy: 10_000_000,
+};
 /// A configuration object to set what information should be printed while
 /// fuzzing.
 const CONFIG: PrintConfig = PrintConfig {
@@ -65,43 +67,38 @@ fuzz_target!(|input: RandomizedInterpreterInput<InterpreterConfig>| {
     if CONFIG.print_module_before_interpreting {
         print_module(&bytes);
     }
-    let maybe_module = validate_module(&ConcordiumAllowedImports, &parse_skeleton(&bytes).unwrap());
+    let maybe_module =
+        validate_module(&v0::ConcordiumAllowedImports, &parse_skeleton(&bytes).unwrap());
     match maybe_module {
         Ok(mut module) => {
             module.inject_metering().unwrap();
-            let init_names: Vec<Name> = get_inits(&module).into_iter().cloned().collect();
-            let receive_names: Vec<Name> = get_receives(&module).into_iter().cloned().collect();
+            let init_names: Vec<Name> = utils::get_inits(&module).into_iter().cloned().collect();
+            let receive_names: Vec<Name> =
+                utils::get_receives(&module).into_iter().cloned().collect();
             let artifact = module.compile().expect("Compilation of validated module failed.");
             // Ensuring that artifact can be serialized and deserialized
             let mut out_buf = Vec::new();
             artifact.output(&mut out_buf).unwrap();
-            let _artifact: Artifact<ProcessedImports, CompiledFunctionBytes> =
+            let _artifact: Artifact<v0::ProcessedImports, CompiledFunctionBytes> =
                 parse_artifact(&out_buf).unwrap();
             for init_name in init_names {
-                process(
-                    invoke_init(
-                        &artifact,
-                        amount,
-                        init_ctx.clone(),
-                        &init_name.name,
-                        parameter.as_slice(),
-                        ENERGY,
-                    ),
-                    &bytes,
-                    CONFIG,
-                );
+                let inv = v0::InitInvocation {
+                    amount,
+                    init_name: &init_name.name,
+                    parameter: concordium_contracts_common::Parameter(parameter.as_slice()),
+                    energy: ENERGY,
+                };
+                process(v0::invoke_init(&artifact, init_ctx.clone(), inv, true), &bytes, CONFIG);
             }
             for receive_name in receive_names {
+                let inv = v0::ReceiveInvocation {
+                    amount,
+                    receive_name: &receive_name.name,
+                    parameter: concordium_contracts_common::Parameter(parameter.as_slice()),
+                    energy: ENERGY,
+                };
                 process(
-                    invoke_receive(
-                        &artifact,
-                        amount,
-                        receive_ctx.clone(),
-                        &state,
-                        &receive_name.name,
-                        parameter.as_slice(),
-                        ENERGY,
-                    ),
+                    v0::invoke_receive(&artifact, receive_ctx.clone(), inv, &state, 1024, true),
                     &bytes,
                     CONFIG,
                 );

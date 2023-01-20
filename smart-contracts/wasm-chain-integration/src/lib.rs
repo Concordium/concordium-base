@@ -1,6 +1,4 @@
 pub mod constants;
-#[cfg(feature = "fuzz")]
-pub mod fuzz;
 pub mod resumption;
 pub mod utils;
 pub mod v0;

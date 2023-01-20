@@ -234,6 +234,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "concordium-smart-contract-engine"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "arbitrary",
+ "byteorder",
+ "concordium-contracts-common",
+ "concordium-wasm",
+ "criterion",
+ "derive_more",
+ "ed25519-zebra",
+ "futures",
+ "libc",
+ "num_enum",
+ "ptree",
+ "quickcheck",
+ "rand",
+ "secp256k1",
+ "serde 1.0.145",
+ "sha2 0.10.6",
+ "sha3",
+ "slab",
+ "thiserror",
+ "tinyvec",
+]
+
+[[package]]
 name = "concordium-wasm"
 version = "1.0.0"
 dependencies = [
@@ -477,13 +504,6 @@ checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
 dependencies = [
  "log",
  "regex",
-]
-
-[[package]]
-name = "ffi_helpers"
-version = "0.1.0"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -1474,69 +1494,6 @@ name = "wasm-bindgen-shared"
 version = "0.2.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
-
-[[package]]
-name = "wasm-chain-integration"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "arbitrary",
- "byteorder",
- "concordium-contracts-common",
- "concordium-wasm",
- "criterion",
- "derive_more",
- "ed25519-zebra",
- "ffi_helpers",
- "futures",
- "libc",
- "num_enum",
- "ptree",
- "quickcheck",
- "rand",
- "secp256k1",
- "serde 1.0.145",
- "sha2 0.10.6",
- "sha3",
- "slab",
- "thiserror",
- "tinyvec",
- "wasm-smith",
- "wasmprinter",
-]
-
-[[package]]
-name = "wasm-encoder"
-version = "0.4.0"
-source = "git+https://github.com/Concordium/wasm-tools.git?branch=mra/fuzzing#4a6e3109be8cf06513f46acd6b04f602e01cfac1"
-dependencies = [
- "leb128",
-]
-
-[[package]]
-name = "wasm-smith"
-version = "0.3.1"
-source = "git+https://github.com/Concordium/wasm-tools.git?branch=mra/fuzzing#4a6e3109be8cf06513f46acd6b04f602e01cfac1"
-dependencies = [
- "arbitrary",
- "indexmap",
- "leb128",
- "wasm-encoder",
-]
-
-[[package]]
-name = "wasmparser"
-version = "0.73.0"
-source = "git+https://github.com/Concordium/wasm-tools.git?branch=main#8468e16172ea0d7e2a574ec3d3bdc4a5c2dbd6b8"
-
-[[package]]
-name = "wasmprinter"
-version = "0.2.20"
-source = "git+https://github.com/Concordium/wasm-tools.git?branch=main#8468e16172ea0d7e2a574ec3d3bdc4a5c2dbd6b8"
-dependencies = [
- "anyhow",
- "wasmparser",
-]
 
 [[package]]
 name = "web-sys"

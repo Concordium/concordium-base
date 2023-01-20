@@ -4,8 +4,6 @@ use super::{
 };
 use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
 use anyhow::{bail, ensure, Context};
-#[cfg(feature = "fuzz")]
-use arbitrary::Arbitrary;
 use concordium_contracts_common::OwnedEntrypointName;
 use concordium_wasm::{
     artifact::TryFromImport,
