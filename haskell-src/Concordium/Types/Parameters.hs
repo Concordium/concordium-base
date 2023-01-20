@@ -269,6 +269,7 @@ module Concordium.Types.Parameters (
     TimeoutParameters (..),
 
     -- * Consensus parameters
+
     -- |Versioning for the 'ConsensusParameters'' structure.
     --
     -- * 'ConsensusParametersVersion0' ('ChainParametersV0', 'ChainParametersV1'): election difficulty
