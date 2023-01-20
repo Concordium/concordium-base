@@ -10,8 +10,13 @@ use either::Either::{Left, Right};
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::CommitmentKey as PedersenKey;
-use rand::thread_rng;
-use std::{collections::BTreeMap, convert::TryInto, io::Cursor};
+use rand::{rngs::StdRng, thread_rng, AsByteSliceMut, SeedableRng};
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+    io::Cursor,
+    str::from_utf8,
+};
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -290,6 +295,153 @@ pub extern "C" fn ip_info_cdi_verify_key(
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
     ptr
+}
+
+#[no_mangle]
+/// Instantiate an ArInfo instance from byte arrays.
+unsafe extern "C" fn ar_info_create(
+    identity: u32,
+    public_key_ptr: *mut u8,
+    public_key_len: size_t,
+    name_ptr: *const u8,
+    name_len: size_t,
+    url_ptr: *const u8,
+    url_len: size_t,
+    desc_ptr: *const u8,
+    desc_len: size_t,
+) -> *mut ArInfo<G1> {
+    // Description.
+    let name;
+    if let Ok(_name) = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize)) {
+        name = _name.to_string();
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let url;
+    if let Ok(_url) = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize)) {
+        url = _url.to_string();
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let description;
+    if let Ok(_description) = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize)) {
+        description = _description.to_string();
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let ar_description = Description {
+        name,
+        url,
+        description,
+    };
+
+    // Identity.
+    let ar_identity;
+    if let Ok(_ar_identity) = ArIdentity::try_from(identity) {
+        ar_identity = _ar_identity;
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    // Public key.
+    let buf = &mut slice_from_c_bytes!(public_key_ptr, public_key_len as usize);
+
+    let ar_public_key;
+    if let Ok(_ar_public_key) = from_bytes::<elgamal::PublicKey<G1>, &[u8]>(buf) {
+        ar_public_key = _ar_public_key;
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let ar_info: ArInfo<G1> = ArInfo {
+        ar_identity,
+        ar_description,
+        ar_public_key,
+    };
+
+    Box::into_raw(Box::new(ar_info))
+}
+
+#[no_mangle]
+/// Instantiate an IpInfo instance from byte arrays.
+unsafe extern "C" fn ip_info_create(
+    identity: u32,
+    verify_key_ptr: *mut u8,
+    verify_key_len: size_t,
+    cdi_verify_key_ptr: *mut u8,
+    cdi_verify_key_len: size_t,
+    name_ptr: *const u8,
+    name_len: size_t,
+    url_ptr: *const u8,
+    url_len: size_t,
+    desc_ptr: *const u8,
+    desc_len: size_t,
+) -> *mut IpInfo<Bls12> {
+    // Description.
+    let name;
+    if let Ok(_name) = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize)) {
+        name = _name.to_string();
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let url;
+    if let Ok(_url) = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize)) {
+        url = _url.to_string();
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let description;
+    if let Ok(_description) = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize)) {
+        description = _description.to_string();
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let ip_description = Description {
+        name,
+        url,
+        description,
+    };
+
+    // Identity.
+    let ip_identity;
+    if let Ok(_ip_identity) = IpIdentity::try_from(identity) {
+        ip_identity = _ip_identity;
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    // PS public key.
+    let ps_buf = &mut slice_from_c_bytes!(verify_key_ptr, verify_key_len as usize);
+    let ip_verify_key;
+    if let Ok(_ip_verify_key) = from_bytes::<ps_sig::PublicKey<Bls12>, &[u8]>(ps_buf) {
+        ip_verify_key = _ip_verify_key;
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    // Ed25519 public key
+    let ed_buf = &mut slice_from_c_bytes!(cdi_verify_key_ptr, cdi_verify_key_len as usize);
+    let ip_cdi_verify_key;
+    if let Ok(_ip_cdi_verify_key) = from_bytes::<ed25519_dalek::PublicKey, &[u8]>(ed_buf) {
+        ip_cdi_verify_key = _ip_cdi_verify_key;
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let ip_info: IpInfo<Bls12> = IpInfo {
+        ip_identity,
+        ip_description,
+        ip_verify_key,
+        ip_cdi_verify_key,
+    };
+
+    Box::into_raw(Box::new(ip_info))
 }
 
 #[cfg(test)]

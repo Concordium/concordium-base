@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Concordium.ID.AnonymityRevoker (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arName, arUrl, arDescription, arPublicKey)
+module Concordium.ID.AnonymityRevoker (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arInfoCreate, arName, arUrl, arDescription, arPublicKey)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -25,6 +25,7 @@ import Concordium.Types.HashableTo (HashableTo, MHashableTo, getHash)
 
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Encoding as AE
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 
 newtype ArInfo = ArInfo (ForeignPtr ArInfo)
 
@@ -38,6 +39,31 @@ foreign import ccall unsafe "ar_info_name" arNameFFI :: Ptr ArInfo -> Ptr CSize 
 foreign import ccall unsafe "ar_info_url" arUrlFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_create"
+    arInfoCreateFFI ::
+        Word32 ->
+        Ptr Word8 -> CSize ->
+        Ptr Word8 -> CSize ->
+        Ptr Word8 -> CSize ->
+        Ptr Word8 -> CSize ->
+        IO (Ptr ArInfo)
+
+arInfoCreate :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe (ForeignPtr ArInfo)
+arInfoCreate arId pubKey name url desc = unsafePerformIO ( do
+    let (ArIdentity idW) = arId
+    (pkPtr, pkLen) <- toByteArrayInput pubKey
+    (nPtr, nLen) <- toByteArrayInput (Text.encodeUtf8 name)
+    (urlPtr, urlLen) <- toByteArrayInput (Text.encodeUtf8 url)
+    (descPtr, descLen) <- toByteArrayInput (Text.encodeUtf8 desc)
+    ptr <- arInfoCreateFFI idW pkPtr pkLen nPtr nLen urlPtr urlLen descPtr descLen
+    if ptr == nullPtr
+    then return Nothing
+    else Just <$> newForeignPtr freeArInfo ptr)
+    where
+        toByteArrayInput bs =
+            unsafeUseAsCStringLen bs
+                $ \(p, l) -> return (castPtr p :: Ptr Word8, fromIntegral l :: CSize)
+    
 
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp

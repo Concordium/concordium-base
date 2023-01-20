@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Concordium.ID.IdentityProvider (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity, ipName, ipUrl, ipDescription, ipVerifyKey, ipCdiVerifyKey)
+module Concordium.ID.IdentityProvider (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity, ipInfoCreate, ipName, ipUrl, ipDescription, ipVerifyKey, ipCdiVerifyKey)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -24,6 +24,7 @@ import System.IO.Unsafe
 
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Encoding as AE
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 
 newtype IpInfo = IpInfo (ForeignPtr IpInfo)
 
@@ -38,6 +39,31 @@ foreign import ccall unsafe "ip_info_url" ipUrlFFI :: Ptr IpInfo -> Ptr CSize ->
 foreign import ccall unsafe "ip_info_description" ipDescriptionFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_verify_key" ipVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ip_info_create" ipInfoCreateFFI ::
+    Word32 ->
+    Ptr Word8 -> CSize ->
+    Ptr Word8 -> CSize ->
+    Ptr Word8 -> CSize ->
+    Ptr Word8 -> CSize ->
+    Ptr Word8 -> CSize ->
+    IO (Ptr IpInfo)
+
+ipInfoCreate :: ArIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> Maybe (ForeignPtr IpInfo)
+ipInfoCreate arId verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
+    let (ArIdentity idW) = arId
+    (vkPtr, vkLen) <- toByteArrayInput verifyKey
+    (cvkPtr, cvkLen) <- toByteArrayInput cdiVerifyKey
+    (nPtr, nLen) <- toByteArrayInput (Text.encodeUtf8 name)
+    (urlPtr, urlLen) <- toByteArrayInput (Text.encodeUtf8 url)
+    (descPtr, descLen) <- toByteArrayInput (Text.encodeUtf8 desc)
+    ptr <- ipInfoCreateFFI idW vkPtr vkLen cvkPtr cvkLen nPtr nLen urlPtr urlLen descPtr descLen
+    if ptr == nullPtr
+    then return Nothing
+    else Just <$> newForeignPtr freeIpInfo ptr)
+    where
+        toByteArrayInput bs =
+            unsafeUseAsCStringLen bs
+                $ \(p, l) -> return (castPtr p :: Ptr Word8, fromIntegral l :: CSize)
 
 withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b
 withIpInfo (IpInfo fp) = withForeignPtr fp
