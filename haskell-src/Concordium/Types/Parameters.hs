@@ -19,47 +19,63 @@
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |__Overview__
--- This module contains definitions for the configurable parameters
--- used on chain i.e. the 'ChainParameters'.
--- Chain parameters are versioned by 'ChainParametersVersion'. The 'ChainParametersVersion' are determined from
--- the 'ProtocolVersion'.
+-- This module contains definitions for the configurable parameters used on chain, i.e. the
+-- 'ChainParameters'. Chain parameters are versioned by 'ChainParametersVersion'. The
+-- 'ChainParametersVersion' are determined from the 'ProtocolVersion' by
+-- 'ChainParametersVersionFor'.
 --
--- This module also defines the type 'ParameterType'. Common for the values of this type is that
--- they may or may not be supported for a given 'ProtocolVersion'.
--- Knowing whether a 'ParameterType' is supported in a given 'ChainParametersVersion' is used to deduce whether a chain update is supported for a given protocol version or not.
+-- This module also defines the type 'ParameterType', that is used at the kind level for determining
+-- which parameters are supported at each 'ChainParametersVersion' by 'IsSupported'. A number of
+-- parameters a conditionally included on this basis (using 'OParam').
+--
+-- While the top level 'ChainParameters' structure is parametrised by the 'ChainParametersVersion',
+-- substructures are parametrised by their own versions. For such versions (e.g.
+-- 'PoolParametersVersion') we define mappings from 'ChainParametersVersion'
+-- ('poolParametersVersionFor', 'PoolParmetersVersionFor', 'sPoolParametersVersionFor').
+-- Parametrising these structures by separate versions is generally useful to preserve the
+-- independence of their versioning (i.e. they don't change every 'ChainParametersVersion').
+-- Consequently, the case analysis needed for these structures is limited to the cases that make
+-- distinctions.
 --
 -- __Usage patterns__
 --
--- The singletons library we use derives singletons i.e. the values promoted to types such that we can constrain by the 'SingI' instances created.
--- These instances are most often aliased e.g. @type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv@.
+-- For version-dependent functions, it is typical to case on the singleton type when the return
+-- type is parametrised by the version. For example:
 --
--- Demoting is then done via @sing :: Sing a@. The base supplies helper functions for this and they follow the naming scheme:
--- 'protocolVersion', 'chainParametersVersion', 'accountVersion', ...
+-- > getPoolParameters :: forall ppv. SPoolParametersVersion ppv -> Get (PoolParameters' ppv)
+-- > getPoolParameters = \case
+-- >     SPoolParametersVersion0 -> PoolParametersV0 <$> get
+-- >     SPoolParametersVersion1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
 --
--- This is particularily useful when one needs to case on e.g. the chain parameters version @cpv@ constrained by the @IsChainParametersVersion cpv@.
+-- If the function takes a GADT parameter (e.g. 'PoolParameters''), then casing on the constructors
+-- of the GADT is typically sufficient, without involving the singleton type.
 --
--- Example:
+-- For type classes (and some functions), we instead use a constraint such as @'SingI' ppv@, which
+-- is typically aliased as, e.g. @'IsPoolParametersVersion' ppv@. The @'SingI' a@ class has a member
+-- @'sing' :: 'Sing' a@, where the 'Sing' type family gives the singleton type associated with its
+-- parameter, e.g. @Sing PoolPoolParametersVersion = SPoolParametersVersion@.  This, therefore,
+-- allows us to pass the singleton as (effectively) an implicit parameter.
 --
--- @
--- foo :: IsChainParametersVersion cpv => Int
--- foo = case chainParametersVersion @cpv@ of
---    SChainParametersV0 -> 0
---    SChainParametersV1 -> 1
---    SChainParametersV2 -> 2
--- @
+-- When we have @sppv :: SPoolParametersVersion pvv@, but require a constraint
+-- @IsPoolParametersVersion ppv@, we can use @'withSingI' sppv@ to satisfy the constraint.
+-- This is effectively the opposite of @'sing' \@pvv@.
 --
--- As the nested structures within the 'ChainParameters' has their own versioning (inferred from the 'ChainParametersVersion'), then one needs to get the correct sub parameter _version_
--- from the chain paramters version. Here we use 'withSingI' from the singletons library, however helper functions should exist for all relevant parameter types.
--- Namings of these helper functions should follow the existing naming scheme: 'withIsConsensusParametersVersionFor', 'withIsAuthorizationsVersionFor', ..
+-- When we have @scpv :: SChainParametersVersion cpv@, but require a
+-- @sppv :: SPoolParametersVersion (PoolParametersVersionFor cpv)@, we can use the function
+-- 'sPoolParametersVersionFor'.
 --
--- @
--- bar :: IsChainParametersVersion cpv => a -> a
--- bar = withIsConsensusParametersVersionFor (chainParametersVersion @cpv)
--- @
+-- For convenience, we combine these in one function:
 --
--- Where @a@ is constrained by the consensus parameters version.
+-- > withIsPoolParametersVersionFor :: SChainParametersVersion cpv -> (IsPoolParametersVersion (PoolParametersVersionFor cpv) => a) -> a
+-- > withIsPoolParametersVersionFor scpv = withSingI (sPoolParametersVersionFor scpv)
 --
--- If one are handling more than one parameter then refer to 'withCPVConstraints' which constrains the action with all of the nested parameter versions.
+-- Typically, this will be invoked as @withIsPoolParmetersVersionFor (chainParameters \@cpv)@.
+-- Where multiple constraints are required, 'withCPVConstraints' can be used.
+--
+-- Note that we typically do not use this pattern to get an
+-- @SChainParametersVersion (ChainParametersVersionFor pv)@ when we have an @IsProtocolVersion pv@
+-- constraint. This is because @IsChainParametersVersion (ChainParametersVersionFor pv)@ is a
+-- superclass constraint on @IsProtocolVersion pv@.
 module Concordium.Types.Parameters (
     CryptographicParameters,
 
@@ -228,9 +244,13 @@ module Concordium.Types.Parameters (
     --     - maximum fraction of total staked capital that a baker can have
     --     - leverage bound for a baker
     PoolParametersVersion (..),
+    -- |Singleton type associated with 'PoolParametersVersion'.
     SPoolParametersVersion (..),
+    -- |The pool parameters version associated with a chain parameters version.
     poolParametersVersionFor,
+    -- |The pool parameters version associated with a chain parameters version (types).
     PoolParametersVersionFor,
+    -- |The pool parameters version associated with a chain parameters version (singletons).
     sPoolParametersVersionFor,
     PoolParameters' (..),
     PoolParameters,
@@ -249,10 +269,22 @@ module Concordium.Types.Parameters (
     TimeoutParameters (..),
 
     -- * Consensus parameters
+    -- |Versioning for the 'ConsensusParameters'' structure.
+    --
+    -- * 'ConsensusParametersVersion0' ('ChainParametersV0', 'ChainParametersV1'): election difficulty
+    -- * 'ConsensusParametersVersion1' ('ChainParametersV2'):
+    --
+    --     - Timeout parameters
+    --     - Minimum block time
+    --     - Block energy limit
     ConsensusParametersVersion (..),
+    -- |Singleton type associated with 'ConsensusParametersVersion'.
     SConsensusParametersVersion (..),
+    -- |The consensus parameters version associated with a chain parameters version.
     consensusParametersVersionFor,
+    -- |The consensus parameters version associated with a chain parameters version (types).
     ConsensusParametersVersionFor,
+    -- |The consensus parameters version associated with a chain parameters version (singletons).
     sConsensusParametersVersionFor,
     IsConsensusParametersVersion,
     withIsConsensusParametersVersionFor,
