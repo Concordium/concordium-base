@@ -1389,6 +1389,19 @@ pub struct AttributeValue {
     pub(crate) inner: [u8; 32],
 }
 
+#[cfg(feature = "fuzz")]
+impl arbitrary::Arbitrary for AttributeValue {
+    fn arbitrary(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Self> {
+        let size = u.int_in_range(0..=31)?;
+        let mut inner: [u8; 32] = [0u8; 32];
+        inner[0] = size;
+        u.fill_buffer(&mut inner[1..=usize::from(size)])?;
+        Ok(AttributeValue {
+            inner,
+        })
+    }
+}
+
 impl AttributeValue {
     /// Create a new [`Self`] from a slice of bytes. The slice must have a
     /// length of *at most 31 bytes*.
@@ -1406,7 +1419,7 @@ impl AttributeValue {
 
     #[doc(hidden)]
     /// Create a new [`Self`] from a byte array. The first byte *must* tell
-    /// length of the attribute in the array.
+    /// the length of the attribute in the array.
     pub unsafe fn new_unchecked(inner: [u8; 32]) -> Self {
         Self {
             inner,
