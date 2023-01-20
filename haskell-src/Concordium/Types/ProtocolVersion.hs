@@ -162,6 +162,7 @@ module Concordium.Types.ProtocolVersion (
     supportsUpgradableContracts,
     supportsChainQueryContracts,
     supportsAccountAliases,
+    supportsDelegationPV,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -435,6 +436,14 @@ supportsV1Contracts SP3 = False
 supportsV1Contracts SP4 = True
 supportsV1Contracts SP5 = True
 supportsV1Contracts SP6 = True
+
+-- |Whether the protocol version supports delegation.
+-- (Delegation is supported in 'P4' onwards.)
+supportsDelegationPV :: SProtocolVersion pv -> Bool
+supportsDelegationPV SP1 = False
+supportsDelegationPV SP2 = False
+supportsDelegationPV SP3 = False
+supportsDelegationPV _ = True
 
 -- |Whether the protocol version supports upgradable smart contracts.
 -- (Supported in 'P5' and onwards)
