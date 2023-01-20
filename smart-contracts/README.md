@@ -5,7 +5,7 @@ This directory contains several packages to support smart contracts on and off-c
 Currently it consists of the following parts
 - [rust-contracts](./rust-contracts) which is the collection of base libraries and example smart contracts written in Rust.
 - [concordium-wasm](./wasm-transform), an interpreter and validator providing the functionality needed by the scheduler to execute smart contracts.
-- [wasm-chain-integration](./wasm-chain-integration/) exposes the interface needed by the node
+- [concordium-smart-contract-engine](./wasm-chain-integration/) exposes the interface needed by the node
 
 ## Rust-contracts
 
@@ -93,7 +93,7 @@ by Nick Fitzerald.
 
 So far the fuzzer discovered three [bugs](wasm-chain-integration/fuzz/fixed_artifacts/interpreter), which we fixed.
 
-## Software requirements
+ ## Software requirements
 - [cargo-fuzz](https://crates.io/crates/cargo-fuzz) 
 - for generating coverage information:
   * [cargo-cov](https://crates.io/crates/cargo-cov) (`cargo install cargo-cov`)
@@ -103,7 +103,7 @@ So far the fuzzer discovered three [bugs](wasm-chain-integration/fuzz/fixed_arti
   * [tqdm](https://pypi.org/project/tqdm/) (`pip3 install tqdm`)
 
 ## Running the fuzzer
-- `$ cd wasm-chain-integration` 
+- `$ cd wasm-fuzz`
 - `$ cargo +nightly fuzz run interpreter -- -max-len=1200000`
 
 This will fuzz the smart-contract interpreter on randomly generated but valid Wasm programs, until the fuzzer finds
@@ -115,7 +115,7 @@ After the fuzzer runs for some time it will be discovering new execution paths s
 When that happens, it can be useful to see how many times it executed each of the instructions in the interpreter
 source code. To generate source code that is annotated with the number of times that each line of code was executed, run
 
-- `cd wasm-chain-integration`
+- `cd wasm-fuzz`
 - `fuzz/scripts/generate-coverage.py fuzz/corpus/interpreter`
 
 # Contract schema
