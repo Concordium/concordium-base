@@ -1,4 +1,4 @@
-module Concordium.ID.Parameters (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
+module Concordium.ID.Parameters (GlobalContext, globalContextCreate, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -15,6 +15,9 @@ import Foreign.Ptr
 
 import qualified Data.Aeson as AE
 import System.IO.Unsafe
+import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 
 -- |Cryptographic parameters needed to verify on-chain proofs, e.g.,
 -- group parameters (generators), commitment keys, in the future also
@@ -27,6 +30,26 @@ foreign import ccall safe "global_context_to_bytes" globalContextToBytes :: Ptr 
 foreign import ccall safe "global_context_from_bytes" globalContextFromBytes :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 foreign import ccall safe "global_context_to_json" globalContextToJSONFFI :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall safe "global_context_from_json" globalContextFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
+foreign import ccall unsafe "global_context_create"
+    globalContextCreateFFI ::
+        Ptr Word8 -> CSize ->
+        Ptr Word8 -> CSize ->
+        Ptr Word8 -> CSize ->
+        IO (Ptr GlobalContext)
+
+globalContextCreate :: Text -> BS8.ByteString -> BS8.ByteString -> Maybe GlobalContext
+globalContextCreate genString bulletProofGens onChainComm = unsafePerformIO ( do
+    (gsPtr, gsLen) <- toByteArrayInput (Text.encodeUtf8 genString)
+    (bpgPtr, bpgLen) <- toByteArrayInput bulletProofGens
+    (occPtr, occLen) <- toByteArrayInput onChainComm
+    ptr <- globalContextCreateFFI gsPtr gsLen bpgPtr bpgLen occPtr occLen
+    if ptr == nullPtr
+    then return Nothing
+    else Just . GlobalContext <$> newForeignPtr freeGlobalContext ptr)
+    where
+        toByteArrayInput bs =
+            unsafeUseAsCStringLen bs
+                $ \(p, l) -> return (castPtr p :: Ptr Word8, fromIntegral l :: CSize)
 
 withGlobalContext :: GlobalContext -> (Ptr GlobalContext -> IO b) -> IO b
 withGlobalContext (GlobalContext fp) = withForeignPtr fp

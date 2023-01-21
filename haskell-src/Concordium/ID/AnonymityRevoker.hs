@@ -48,7 +48,7 @@ foreign import ccall unsafe "ar_info_create"
         Ptr Word8 -> CSize ->
         IO (Ptr ArInfo)
 
-arInfoCreate :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe (ForeignPtr ArInfo)
+arInfoCreate :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe ArInfo
 arInfoCreate arId pubKey name url desc = unsafePerformIO ( do
     let (ArIdentity idW) = arId
     (pkPtr, pkLen) <- toByteArrayInput pubKey
@@ -58,7 +58,7 @@ arInfoCreate arId pubKey name url desc = unsafePerformIO ( do
     ptr <- arInfoCreateFFI idW pkPtr pkLen nPtr nLen urlPtr urlLen descPtr descLen
     if ptr == nullPtr
     then return Nothing
-    else Just <$> newForeignPtr freeArInfo ptr)
+    else Just . ArInfo <$> newForeignPtr freeArInfo ptr)
     where
         toByteArrayInput bs =
             unsafeUseAsCStringLen bs

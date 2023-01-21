@@ -5,6 +5,7 @@ use crate::{
     constants::*,
     types::*,
 };
+use bulletproofs::utils::Generators;
 use crypto_common::{size_t, types::TransactionTime, *};
 use either::Either::{Left, Right};
 use ffi_helpers::*;
@@ -363,6 +364,56 @@ unsafe extern "C" fn ar_info_create(
     };
 
     Box::into_raw(Box::new(ar_info))
+}
+
+#[no_mangle]
+extern "C" fn global_context_create(
+    genesis_string_ptr: *const u8,
+    genesis_string_len: size_t,
+    bulletproof_generators_ptr: *const u8,
+    bulletproof_generators_len: size_t,
+    on_chain_commitment_ptr: *const u8,
+    on_chain_commitment_len: size_t,
+) -> *mut GlobalContext<G1> {
+    let genesis_string;
+    if let Ok(_genesis_string) = from_utf8(slice_from_c_bytes!(
+        genesis_string_ptr,
+        genesis_string_len as usize
+    )) {
+        genesis_string = _genesis_string.to_string();
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let bulletproof_generators_buf = &mut slice_from_c_bytes!(
+        bulletproof_generators_ptr,
+        bulletproof_generators_len as usize
+    );
+    let bulletproof_generators;
+    if let Ok(_bulletproof_generators) =
+        from_bytes::<Generators<G1>, &[u8]>(bulletproof_generators_buf)
+    {
+        bulletproof_generators = _bulletproof_generators
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let commitment_key_buf =
+        &mut slice_from_c_bytes!(on_chain_commitment_ptr, on_chain_commitment_len as usize);
+    let on_chain_commitment_key;
+    if let Ok(_on_chain_commitment_key) = from_bytes::<PedersenKey<G1>, &[u8]>(commitment_key_buf) {
+        on_chain_commitment_key = _on_chain_commitment_key
+    } else {
+        return std::ptr::null_mut();
+    }
+
+    let global_context = GlobalContext {
+        on_chain_commitment_key,
+        bulletproof_generators,
+        genesis_string,
+    };
+
+    Box::into_raw(Box::new(global_context))
 }
 
 #[no_mangle]
