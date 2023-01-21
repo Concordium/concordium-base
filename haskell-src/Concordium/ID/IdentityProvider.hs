@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Concordium.ID.IdentityProvider (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity, ipInfoCreate, ipName, ipUrl, ipDescription, ipVerifyKey, ipCdiVerifyKey)
+module Concordium.ID.IdentityProvider (IpInfo, createIpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity, ipName, ipUrl, ipDescription, ipVerifyKey, ipCdiVerifyKey)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -39,7 +39,7 @@ foreign import ccall unsafe "ip_info_url" ipUrlFFI :: Ptr IpInfo -> Ptr CSize ->
 foreign import ccall unsafe "ip_info_description" ipDescriptionFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_verify_key" ipVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ip_info_create" ipInfoCreateFFI ::
+foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
     Word32 ->
     Ptr Word8 -> CSize ->
     Ptr Word8 -> CSize ->
@@ -48,15 +48,15 @@ foreign import ccall unsafe "ip_info_create" ipInfoCreateFFI ::
     Ptr Word8 -> CSize ->
     IO (Ptr IpInfo)
 
-ipInfoCreate :: IdentityProviderIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> Maybe IpInfo
-ipInfoCreate arId verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
+createIpInfo :: IdentityProviderIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> Maybe IpInfo
+createIpInfo arId verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
     let (IP_ID idW) = arId
     (vkPtr, vkLen) <- toByteArrayInput verifyKey
     (cvkPtr, cvkLen) <- toByteArrayInput cdiVerifyKey
     (nPtr, nLen) <- toByteArrayInput (Text.encodeUtf8 name)
     (urlPtr, urlLen) <- toByteArrayInput (Text.encodeUtf8 url)
     (descPtr, descLen) <- toByteArrayInput (Text.encodeUtf8 desc)
-    ptr <- ipInfoCreateFFI idW vkPtr vkLen cvkPtr cvkLen nPtr nLen urlPtr urlLen descPtr descLen
+    ptr <- createIpInfoFFI idW vkPtr vkLen cvkPtr cvkLen nPtr nLen urlPtr urlLen descPtr descLen
     if ptr == nullPtr
     then return Nothing
     else Just . IpInfo <$> newForeignPtr freeIpInfo ptr)

@@ -1,4 +1,4 @@
-module Concordium.ID.Parameters (GlobalContext, globalContextCreate, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
+module Concordium.ID.Parameters (GlobalContext, createGlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -31,18 +31,18 @@ foreign import ccall safe "global_context_from_bytes" globalContextFromBytes :: 
 foreign import ccall safe "global_context_to_json" globalContextToJSONFFI :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall safe "global_context_from_json" globalContextFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 foreign import ccall unsafe "global_context_create"
-    globalContextCreateFFI ::
+    createGlobalContextFFI ::
         Ptr Word8 -> CSize ->
         Ptr Word8 -> CSize ->
         Ptr Word8 -> CSize ->
         IO (Ptr GlobalContext)
 
-globalContextCreate :: Text -> BS8.ByteString -> BS8.ByteString -> Maybe GlobalContext
-globalContextCreate genString bulletProofGens onChainComm = unsafePerformIO ( do
+createGlobalContext :: Text -> BS8.ByteString -> BS8.ByteString -> Maybe GlobalContext
+createGlobalContext genString bulletProofGens onChainComm = unsafePerformIO ( do
     (gsPtr, gsLen) <- toByteArrayInput (Text.encodeUtf8 genString)
     (bpgPtr, bpgLen) <- toByteArrayInput bulletProofGens
     (occPtr, occLen) <- toByteArrayInput onChainComm
-    ptr <- globalContextCreateFFI gsPtr gsLen bpgPtr bpgLen occPtr occLen
+    ptr <- createGlobalContextFFI gsPtr gsLen bpgPtr bpgLen occPtr occLen
     if ptr == nullPtr
     then return Nothing
     else Just . GlobalContext <$> newForeignPtr freeGlobalContext ptr)

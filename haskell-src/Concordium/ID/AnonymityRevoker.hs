@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Concordium.ID.AnonymityRevoker (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arInfoCreate, arName, arUrl, arDescription, arPublicKey)
+module Concordium.ID.AnonymityRevoker (ArInfo, createArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arName, arUrl, arDescription, arPublicKey)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -40,7 +40,7 @@ foreign import ccall unsafe "ar_info_url" arUrlFFI :: Ptr ArInfo -> Ptr CSize ->
 foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_create"
-    arInfoCreateFFI ::
+    createArInfoFFI ::
         Word32 ->
         Ptr Word8 -> CSize ->
         Ptr Word8 -> CSize ->
@@ -48,14 +48,14 @@ foreign import ccall unsafe "ar_info_create"
         Ptr Word8 -> CSize ->
         IO (Ptr ArInfo)
 
-arInfoCreate :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe ArInfo
-arInfoCreate arId pubKey name url desc = unsafePerformIO ( do
+createArInfo :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe ArInfo
+createArInfo arId pubKey name url desc = unsafePerformIO ( do
     let (ArIdentity idW) = arId
     (pkPtr, pkLen) <- toByteArrayInput pubKey
     (nPtr, nLen) <- toByteArrayInput (Text.encodeUtf8 name)
     (urlPtr, urlLen) <- toByteArrayInput (Text.encodeUtf8 url)
     (descPtr, descLen) <- toByteArrayInput (Text.encodeUtf8 desc)
-    ptr <- arInfoCreateFFI idW pkPtr pkLen nPtr nLen urlPtr urlLen descPtr descLen
+    ptr <- createArInfoFFI idW pkPtr pkLen nPtr nLen urlPtr urlLen descPtr descLen
     if ptr == nullPtr
     then return Nothing
     else Just . ArInfo <$> newForeignPtr freeArInfo ptr)
