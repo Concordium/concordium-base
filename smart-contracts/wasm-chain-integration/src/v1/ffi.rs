@@ -26,16 +26,7 @@ use concordium_wasm::{
     utils::parse_artifact,
 };
 
-macro_rules! slice_from_c_bytes {
-    ($cstr:expr, $length:expr) => {{
-        if $length != 0 {
-            debug_assert!(!$cstr.is_null(), "Null pointer.");
-            unsafe { std::slice::from_raw_parts($cstr, $length) }
-        } else {
-            &[]
-        }
-    }};
-}
+use crate::v0::ffi::slice_from_c_bytes;
 
 use libc::size_t;
 use sha2::Digest;

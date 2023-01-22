@@ -1,5 +1,5 @@
 #[cfg(feature = "enable-ffi")]
-mod ffi;
+pub(crate) mod ffi;
 mod types;
 
 use crate::{constants, ExecResult, InterpreterEnergy, OutOfEnergy};
