@@ -1,3 +1,24 @@
+//! This library provides functionality that builds on top of the Wasm engine
+//! and adds high-level functions for executing smart contracts on the
+//! Concordium chain.
+//!
+//! Concordium supports two versions of smart contracts, the legacy [`v0`]
+//! version and the [`v1`] version. The latter is essentially better in
+//! every way. They differ in two main ways
+//! - [`v0`] uses message passing for inter-contract communication, and has a
+//!   flat state. The state is limited to 16kB and the entire state is written
+//!   every time a contract update is done.
+//! - [`v1`] uses synchronous calls for inter-contract communication, and its
+//!   state is a trie-based structure, which supports efficient partial state
+//!   updates. The trie is implemented in the [`v1::trie`] module.
+//!
+//! Both [`v0`] and [`v1`] modules are structured similarly. The main
+//! entrypoints used by users of this library are [`v0::invoke_init`] (resp.
+//! [`v1::invoke_init`]) and [`v0::invoke_receive`] (resp.
+//! [`v1::invoke_receive`]) functions, and their variants.
+//!
+//! The respective modules provide more details on the data types involved, and
+//! any specifics.
 pub mod constants;
 pub mod resumption;
 pub mod utils;
@@ -8,6 +29,7 @@ mod validation_tests;
 use anyhow::{bail, Context};
 use derive_more::{Display, From, Into};
 
+/// Re-export the underlying Wasm execution engine used by Concordium.
 pub use concordium_wasm as wasm;
 
 /// A helper macro used to check that the declared type of a Wasm import matches
@@ -80,6 +102,8 @@ impl std::str::FromStr for InterpreterEnergy {
 }
 
 #[derive(Debug)]
+/// An error raised by the interpreter when no more interpreter energy remains
+/// for execution.
 pub struct OutOfEnergy;
 
 impl std::fmt::Display for OutOfEnergy {

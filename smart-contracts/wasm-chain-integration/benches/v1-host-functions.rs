@@ -8,11 +8,7 @@
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
-use concordium_wasm::{machine, parse, validate};
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
-use sha2::Digest;
-use std::time::Duration;
-use wasm_chain_integration::{
+use concordium_smart_contract_engine::{
     constants::MAX_ACTIVATION_FRAMES,
     v0,
     v1::{
@@ -24,6 +20,10 @@ use wasm_chain_integration::{
     },
     InterpreterEnergy,
 };
+use concordium_wasm::{machine, parse, validate};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use sha2::Digest;
+use std::time::Duration;
 
 static CONTRACT_BYTES_HOST_FUNCTIONS: &[u8] = include_bytes!("./code/v1/host-functions.wasm");
 
@@ -146,7 +146,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .expect_err("Execution should fail due to out of energy.");
                     // Should fail due to out of energy.
                     assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(),
                         "Execution did not fail due to out of energy: {}.",
                         r
                     );
@@ -311,7 +311,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                                         Err(r) => {
                                             // Should fail due to out of energy.
                                             assert!(
-                                                r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
+                                                r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(),
                                                 "Execution did not fail due to out of energy: {}.",
                                                 r
                                             );
@@ -394,7 +394,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .expect_err("Execution should fail due to out of energy.");
                     // Should fail due to out of energy.
                     assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(),
                         "Execution did not fail due to out of energy: {}.",
                         r
                     );

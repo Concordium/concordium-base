@@ -1,7 +1,7 @@
+use concordium_smart_contract_engine::v1::trie::{low_level::*, *};
 use criterion::*;
 use sha2::Digest;
 use std::collections::BTreeMap;
-use wasm_chain_integration::v1::trie::{low_level::*, *};
 
 /// Amount of data to generate.
 const N: usize = 100000;

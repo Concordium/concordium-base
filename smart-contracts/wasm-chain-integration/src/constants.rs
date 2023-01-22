@@ -1,3 +1,7 @@
+//! Various constants and functions used by both [`v0`](super::v0) and
+//! [`v1`](super::v1) execution engines. The constants and functions range from
+//! limits on sizes of objects, to costs of different operations.
+
 /// Maximum size of a V0 contract state in bytes.
 pub const MAX_CONTRACT_STATE: u32 = 16384; // 16kB
 
@@ -29,9 +33,6 @@ pub const BASE_SEND_ACTION_COST: u64 = BASE_ACTION_COST + 72000;
 /// Base cost of a simple_transfer action. There is more data (40 bytes) and it
 /// also requires allocations which are a significant cost.
 pub const BASE_SIMPLE_TRANSFER_ACTION_COST: u64 = BASE_ACTION_COST + 40000;
-
-// TODO: These should in principle be const fn, but rust in 1.45.2 u64::from
-// are not marked as const fn, so they are not.
 
 /// Cost of copying the given amount of bytes from the host (e.g., policy or
 /// contract state) to the Wasm memory. The 10 is to account for copying empty
