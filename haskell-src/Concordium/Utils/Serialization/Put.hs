@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- |This module defines the 'MonadPut' typeclass, which generalizes the 'PutM'
@@ -11,6 +12,7 @@ import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.ByteString.Builder
+import Data.Kind
 import Data.Serialize
 import System.IO
 
@@ -39,7 +41,7 @@ instance MonadPut PutM where
     {-# INLINE liftPut #-}
 
 -- |A monad transformer implementing 'MonadPut' that accumulates a 'Builder'.
-newtype PutT m a = PutT {runPutT :: m (PutM a)}
+newtype PutT (m :: Type -> Type) (a :: Type) = PutT {runPutT :: m (PutM a)}
 
 instance Functor m => Functor (PutT m) where
     fmap f (PutT a) = PutT (fmap (fmap f) a)
@@ -76,7 +78,7 @@ instance MonadReader r m => MonadReader r (PutT m) where
     {-# INLINE local #-}
 
 -- |Monad transformer for serializing to a file.
-newtype PutH m a = PutH {runPutH :: Handle -> m a}
+newtype PutH (m :: Type -> Type) (a :: Type) = PutH {runPutH :: Handle -> m a}
     deriving (Functor, Applicative, Monad, MonadIO) via (ReaderT Handle m)
     deriving (MonadTrans) via (ReaderT Handle)
 

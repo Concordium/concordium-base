@@ -3,15 +3,15 @@
 use crate::ExecResult;
 use anyhow::{anyhow, bail, ensure, Context};
 use concordium_contracts_common::{from_bytes, schema, Cursor, Deserial};
-use rand::{prelude::*, RngCore};
-use std::{collections::BTreeMap, default::Default};
-use wasm_transform::{
+use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
     parse::{parse_custom, parse_skeleton},
     types::{ExportDescription, Module, Name},
     utils, validate,
 };
+use rand::{prelude::*, RngCore};
+use std::{collections::BTreeMap, default::Default};
 
 #[derive(Debug, Clone, Copy)]
 pub enum WasmVersion {
@@ -103,7 +103,7 @@ impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
         duplicate: bool,
         _mod_name: &Name,
         _item_name: &Name,
-        _ty: &wasm_transform::types::FunctionType,
+        _ty: &concordium_wasm::types::FunctionType,
     ) -> bool {
         !duplicate
     }
@@ -112,7 +112,7 @@ impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
     fn validate_export_function(
         &self,
         _item_name: &Name,
-        _ty: &wasm_transform::types::FunctionType,
+        _ty: &concordium_wasm::types::FunctionType,
     ) -> bool {
         true
     }

@@ -387,11 +387,11 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
     };
 
     // convert word vector to bits
-    let mut bit_vec = BitVec::<Msb0, u8>::new();
+    let mut bit_vec = BitVec::<u8, Msb0>::new();
     for word in word_vec {
         match bip_word_map.get(word.as_str()) {
             Some(idx) => {
-                let word_bits = BitVec::<Msb0, u16>::from_element(*idx as u16);
+                let word_bits = BitVec::<u16, Msb0>::from_element(*idx as u16);
                 // There are 2048 words in the BIP39 list, which can be represented using 11
                 // bits. Thus, the first 5 bits of word_bits are 0. Remove those leading zeros
                 // and add the remaining ones to bit_bec.
@@ -414,7 +414,7 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
     let hash = Sha256::digest(&bit_vec.into_vec());
 
     // convert hash from byte vector to bit vector
-    let hash_bits = BitVec::<Msb0, u8>::from_slice(&hash).unwrap();
+    let hash_bits = BitVec::<u8, Msb0>::from_slice(&hash);
 
     // sentence is valid if checksum equals fist ent_len/32 bits of hash
     checksum == hash_bits[0..ent_len / 32]
@@ -445,16 +445,10 @@ pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String
     let hash = Sha256::digest(bytes);
 
     // convert hash from byte vector to bit vector
-    let hash_bits = succeed_or_die!(
-        BitVec::<Msb0, u8>::from_slice(&hash),
-        e => "Failed to convert hash to bit vector because {}"
-    );
+    let hash_bits = BitVec::<u8, Msb0>::from_slice(&hash);
 
     // convert input bytes from byte vector to bit vector
-    let mut random_bits = succeed_or_die!(
-        BitVec::<Msb0, u8>::from_slice(bytes),
-        e => "Failed to convert hash to bit vector because {}"
-    );
+    let mut random_bits = BitVec::<u8, Msb0>::from_slice(bytes);
 
     // append the first cs_len bits of hash_bits to the end of random_bits
     for i in 0..cs_len {

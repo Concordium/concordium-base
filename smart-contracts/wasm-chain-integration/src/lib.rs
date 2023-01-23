@@ -10,6 +10,8 @@ mod validation_tests;
 use anyhow::{bail, Context};
 use derive_more::{Display, From, Into};
 
+pub use concordium_wasm as wasm;
+
 /// A helper macro used to check that the declared type of a Wasm import matches
 /// the required one.
 ///

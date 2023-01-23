@@ -1,5 +1,6 @@
 use super::hashes;
 use crate::constants::*;
+use concordium_contracts_common::ModuleReference;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
@@ -77,6 +78,14 @@ pub enum ModuleRefMarker {}
 /// This reference is used when creating new instances.
 pub type ModuleRef = hashes::HashBytes<ModuleRefMarker>;
 
+impl From<ModuleReference> for ModuleRef {
+    fn from(mr: ModuleReference) -> Self { Self::new(mr.into()) }
+}
+
+impl From<ModuleRef> for ModuleReference {
+    fn from(mr: ModuleRef) -> Self { ModuleReference::from(mr.bytes) }
+}
+
 #[derive(
     SerdeSerialize,
     SerdeDeserialize,
@@ -146,6 +155,16 @@ pub struct Parameter {
     #[serde(with = "crate::internal::byte_array_hex")]
     #[size_length = 2]
     bytes: Vec<u8>,
+}
+
+/// Display the entire parameter in hex.
+impl std::fmt::Display for Parameter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for b in &self.bytes {
+            f.write_fmt(format_args!("{:02x}", b))?
+        }
+        Ok(())
+    }
 }
 
 impl Parameter {

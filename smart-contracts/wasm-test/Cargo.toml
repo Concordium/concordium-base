@@ -15,5 +15,5 @@ structopt = "0.3"
 anyhow = "1.0.33"
 ansi_term = "0.12"
 
-[dependencies.wasm-transform]
+[dependencies.concordium-wasm]
 path = "../wasm-transform"

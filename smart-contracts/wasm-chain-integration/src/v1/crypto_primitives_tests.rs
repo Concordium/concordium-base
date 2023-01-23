@@ -15,13 +15,13 @@ use crate::{
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
-use sha2::Digest;
-use wasm_transform::{
+use concordium_wasm::{
     artifact::{Artifact, CompiledFunctionBytes},
     machine,
     output::Output,
     parse, utils, validate,
 };
+use sha2::Digest;
 
 static CONTRACT_BYTES: &[u8] =
     include_bytes!("../../test-data/code/v1/crypto-primitives-tests.wasm");

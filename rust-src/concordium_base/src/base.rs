@@ -371,6 +371,10 @@ pub enum ProtocolVersion {
     /// improves the structure of internal node datastructures related to
     /// accounts.
     P5,
+    #[display(fmt = "P6")]
+    /// Protocol `P6` is a future protocol update that will introduce a new
+    /// consensus.
+    P6,
 }
 
 #[derive(Debug, Error, Display)]
@@ -391,6 +395,7 @@ impl TryFrom<u64> for ProtocolVersion {
             3 => Ok(ProtocolVersion::P3),
             4 => Ok(ProtocolVersion::P4),
             5 => Ok(ProtocolVersion::P5),
+            6 => Ok(ProtocolVersion::P6),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -404,6 +409,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P3 => 3,
             ProtocolVersion::P4 => 4,
             ProtocolVersion::P5 => 5,
+            ProtocolVersion::P6 => 6,
         }
     }
 }

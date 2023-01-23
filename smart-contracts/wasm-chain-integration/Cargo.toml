@@ -11,7 +11,7 @@ license-file = "../../LICENSE"
 enable-ffi = ["ffi_helpers"]
 default=["enable-ffi"]
 fuzz = ["arbitrary", "wasm-smith", "wasmprinter"]
-fuzz-coverage = ["wasm-transform/fuzz-coverage"]
+fuzz-coverage = ["concordium-wasm/fuzz-coverage"]
 display-state = ["ptree"]
 # enable construction of the state from streams.
 async = ["futures"]
@@ -25,7 +25,7 @@ num_enum = "0.5"
 derive_more = "0.99"
 sha2 = "0.10"
 sha3 = "0.10"
-secp256k1 = "0.22"
+secp256k1 = "0.22.2"
 ed25519-zebra = "3"
 thiserror = "1"
 byteorder = "1.4"
@@ -39,12 +39,12 @@ wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "m
 wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", branch = "main", optional = true }
 rand = { version = "=0.8", features = ["small_rng"] }
 
-[dependencies.wasm-transform]
+[dependencies.concordium-wasm]
 path = "../wasm-transform"
-version = "0"
+version = "1"
 
 [dependencies.concordium-contracts-common]
-version = "4.0"
+version = "5"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 

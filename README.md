@@ -96,6 +96,8 @@ do not regularly test with them. The easiest way to install it is via the
 [rustup](https://rustup.rs/) tool.
 - The [Haskell Stack](https://docs.haskellstack.org/en/stable/README/) tool for
 building the Haskell components.
+- [protoc](https://github.com/protocolbuffers/protobuf/releases) >= 3.15
+  installed and on PATH.
 
 Some Rust components may require additional dependencies, see
 [mobile_wallet/README.md](./mobile_wallet/README.md) and

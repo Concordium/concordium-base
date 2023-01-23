@@ -1,3 +1,4 @@
+import Data.ProtoLens.Setup
 import Distribution.PackageDescription
 import Distribution.Simple
 import Distribution.Simple.LocalBuildInfo
@@ -102,7 +103,9 @@ makeRust _ flags _ lbi = do
     build env verbosity
 
 main =
-    defaultMainWithHooks
-        simpleUserHooks
-            { postConf = makeRust
-            }
+    defaultMainWithHooks $
+        generatingProtos
+            "./concordium-grpc-api"
+            simpleUserHooks
+                { postConf = makeRust
+                }

@@ -207,7 +207,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "4.1.0"
+version = "5.1.1"
 dependencies = [
  "bs58",
  "chrono",
@@ -231,6 +231,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "concordium-wasm"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "concordium-contracts-common",
+ "derive_more",
+ "leb128",
+ "num_enum",
 ]
 
 [[package]]
@@ -1136,9 +1147,9 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "secp256k1"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
+checksum = "295642060261c80709ac034f52fca8e5a9fa2c7d341ded5cdb164b7c33768b2a"
 dependencies = [
  "secp256k1-sys",
 ]
@@ -1472,6 +1483,7 @@ dependencies = [
  "arbitrary",
  "byteorder",
  "concordium-contracts-common",
+ "concordium-wasm",
  "criterion",
  "derive_more",
  "ed25519-zebra",
@@ -1490,7 +1502,6 @@ dependencies = [
  "thiserror",
  "tinyvec",
  "wasm-smith",
- "wasm-transform",
  "wasmprinter",
 ]
 
@@ -1511,17 +1522,6 @@ dependencies = [
  "indexmap",
  "leb128",
  "wasm-encoder",
-]
-
-[[package]]
-name = "wasm-transform"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "concordium-contracts-common",
- "derive_more",
- "leb128",
- "num_enum",
 ]
 
 [[package]]

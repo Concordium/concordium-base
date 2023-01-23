@@ -9,9 +9,9 @@
 //! parsing stage.
 //!
 //! Parsing is organized into two stages. In the first stage bytes are parsed
-//! into a Skeleton, which is simply a list of sections, the sections themselves
-//! being unparsed. This structure is useful for some operations, such as
-//! pruning and embedding additional metadata into the module.
+//! into a [`Skeleton`], which is simply a list of sections, the sections
+//! themselves being unparsed. This structure is useful for some operations,
+//! such as pruning and embedding additional metadata into the module.
 //!
 //! In the second stage each section can be parsed into a proper structure.
 use crate::{constants::*, types::*};
@@ -21,8 +21,6 @@ use std::{
     io::{Cursor, Read, Seek, SeekFrom},
     rc::Rc,
 };
-
-/// # Core datatypes.
 
 /// Type alias used in the Wasm specification.
 pub type Byte = u8;
@@ -87,9 +85,12 @@ pub struct Skeleton<'a> {
 /// Auxiliary type alias used by all the parsing functions.
 pub type ParseResult<A> = anyhow::Result<A>;
 
-/// A trait for parsing data. The lifetime is useful when we want to parse
-/// data without copying, which is useful to avoid copying all the unparsed
-/// sections.
+/// A trait for parsing data. The lifetime and context are useful when we want
+/// to parse data without copying, which is useful to avoid copying all the
+/// unparsed sections.
+///
+/// The implementors of this trait will generally parse data according to the
+/// format specified by Wasm specification.
 pub trait Parseable<'a, Ctx>: Sized {
     /// Read a value from the cursor, or signal error.
     /// This function is responsible for advancing the cursor in-line with the
@@ -100,10 +101,10 @@ pub trait Parseable<'a, Ctx>: Sized {
 /// An empty context used when we can parse data without an additional context.
 pub(crate) const EMPTY_CTX: () = ();
 
-/// A helper trait for more convenient use. The difference from the above is
+/// A helper trait for more convenient use. The difference from [`Parseable`] is
 /// that typically the result type is determined by the context, which we take
 /// advantage of to reduce the need for typing annotations which would be needed
-/// by the Parseable trait.
+/// by the [`Parseable`] trait.
 ///
 /// The reason for that is that this trait defines a new method on the type,
 /// giving us access to all of the convenience features of Rust that come with
@@ -817,7 +818,7 @@ impl<'a> Parseable<'a, &GlobalSection> for DataSection {
     }
 }
 
-pub fn parse_sec_with_default<'a, Ctx, A: Parseable<'a, Ctx> + Default>(
+pub(crate) fn parse_sec_with_default<'a, Ctx, A: Parseable<'a, Ctx> + Default>(
     ctx: Ctx,
     sec: &Option<UnparsedSection<'a>>,
 ) -> ParseResult<A> {
@@ -828,6 +829,7 @@ pub fn parse_sec_with_default<'a, Ctx, A: Parseable<'a, Ctx> + Default>(
 }
 
 #[derive(Debug)]
+/// An error that can occur during parsing of Wasm code.
 pub enum ParseError {
     UnsupportedInstruction {
         opcode: Byte,
@@ -873,7 +875,7 @@ impl std::fmt::Display for ParseError {
 }
 
 /// Decode the next opcode directly from the cursor.
-pub fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
+pub(crate) fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
     match Byte::parse(EMPTY_CTX, cursor)? {
         END => Ok(OpCode::End),
         0x00 => Ok(OpCode::Unreachable),
@@ -1110,7 +1112,7 @@ pub fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
     }
 }
 
-pub struct OpCodeIterator<'a> {
+pub(crate) struct OpCodeIterator<'a> {
     state: Cursor<&'a [u8]>,
 }
 
@@ -1136,7 +1138,7 @@ impl<'a> Iterator for OpCodeIterator<'a> {
 
 #[derive(Debug)]
 /// The body of a function.
-pub struct CodeSkeleton<'a> {
+pub(crate) struct CodeSkeleton<'a> {
     /// Declaration of the locals.
     pub locals:     Vec<Local>,
     /// And uninterpreted instructions.
@@ -1144,8 +1146,10 @@ pub struct CodeSkeleton<'a> {
 }
 
 #[derive(Debug, Default)]
-/// The Default instance of this type returns an empty code section.
-pub struct CodeSkeletonSection<'a> {
+/// The code section.
+///
+/// The [`Default`] instance of this type returns an empty code section.
+pub(crate) struct CodeSkeletonSection<'a> {
     pub impls: Vec<CodeSkeleton<'a>>,
 }
 

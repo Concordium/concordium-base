@@ -39,6 +39,47 @@ pub struct TokenAmount(pub BigUint);
 impl TokenAmount {
     /// Check whether the amount is 0.
     pub fn is_zero(&self) -> bool { self.0.is_zero() }
+
+    /// Display using `_` as a separator between thousands for better
+    /// readability.
+    pub fn to_separated_string(&self) -> String {
+        let s = self.to_string();
+        let mut out = String::with_capacity(s.len());
+        let mut count = s.len();
+        for c in s.chars() {
+            out.push(c);
+            count -= 1;
+            if count > 0 && count % 3 == 0 {
+                out.push('_');
+            }
+        }
+        out
+    }
+
+    /// Display an amount using the given number of decimals.
+    pub fn to_decimal_string(&self, num_decimals: u8) -> String {
+        let s = self.to_string();
+        if num_decimals == 0 {
+            s
+        } else if self.is_zero() {
+            "0.0".into()
+        } else {
+            let num_decimals = usize::from(num_decimals);
+            if num_decimals < s.len() {
+                let front = &s[0..s.len() - num_decimals];
+                let back = &s[s.len() - num_decimals..];
+                let back = back.trim_end_matches('0');
+                if back.is_empty() {
+                    format!("{}.0", front)
+                } else {
+                    format!("{}.{}", front, back)
+                }
+            } else {
+                let back = format!("0.{:0>width$}", s, width = num_decimals);
+                back.trim_end_matches('0').into()
+            }
+        }
+    }
 }
 
 impl TryFrom<String> for TokenAmount {
@@ -607,9 +648,9 @@ impl Deserial for BalanceOfQueryResponse {
 /// A query for the operator of a given address for a given token.
 #[derive(Debug, Clone)]
 pub struct OperatorOfQuery {
-    /// The ID of the token for which to query the balance of.
+    /// The address of the owner of the tokens.
     pub owner:   Address,
-    /// The address for which to check for being an operator of the owner.
+    /// The potential operator of the `owner` address.
     pub address: Address,
 }
 
@@ -1011,5 +1052,21 @@ mod test {
             let new_amount = serde_json::from_slice(&bytes).expect("Deserialization succeeds.");
             assert_eq!(amount, new_amount)
         }
+    }
+
+    #[test]
+    fn test_token_amount_string_decimal() {
+        let amount = TokenAmount(BigUint::from(123456u64));
+        assert_eq!(amount.to_decimal_string(1), "12345.6");
+        assert_eq!(amount.to_decimal_string(10), "0.0000123456");
+        assert_eq!(amount.to_decimal_string(0), "123456");
+        assert_eq!(amount.to_decimal_string(6), "0.123456");
+        let amount = TokenAmount(BigUint::from(0u64));
+        assert_eq!(amount.to_decimal_string(1), "0.0");
+        let amount = TokenAmount(BigUint::from(12000u64));
+        assert_eq!(amount.to_decimal_string(0), "12000");
+        assert_eq!(amount.to_decimal_string(1), "1200.0");
+        assert_eq!(amount.to_decimal_string(3), "12.0");
+        assert_eq!(amount.to_decimal_string(4), "1.2");
     }
 }

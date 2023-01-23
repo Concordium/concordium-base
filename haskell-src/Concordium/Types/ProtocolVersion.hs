@@ -38,6 +38,7 @@ data ProtocolVersion
     | P3
     | P4
     | P5
+    | P6
     deriving (Eq, Show, Ord)
 
 -- |The singleton type associated with 'ProtocolVersion'.
@@ -49,6 +50,7 @@ data SProtocolVersion (pv :: ProtocolVersion) where
     SP3 :: SProtocolVersion 'P3
     SP4 :: SProtocolVersion 'P4
     SP5 :: SProtocolVersion 'P5
+    SP6 :: SProtocolVersion 'P6
 
 protocolVersionToWord64 :: ProtocolVersion -> Word64
 protocolVersionToWord64 P1 = 1
@@ -56,6 +58,7 @@ protocolVersionToWord64 P2 = 2
 protocolVersionToWord64 P3 = 3
 protocolVersionToWord64 P4 = 4
 protocolVersionToWord64 P5 = 5
+protocolVersionToWord64 P6 = 6
 
 protocolVersionFromWord64 :: MonadFail m => Word64 -> m ProtocolVersion
 protocolVersionFromWord64 1 = return P1
@@ -63,6 +66,7 @@ protocolVersionFromWord64 2 = return P2
 protocolVersionFromWord64 3 = return P3
 protocolVersionFromWord64 4 = return P4
 protocolVersionFromWord64 5 = return P5
+protocolVersionFromWord64 6 = return P6
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 instance Serialize ProtocolVersion where
@@ -109,6 +113,10 @@ instance IsProtocolVersion 'P5 where
     protocolVersion = SP5
     {-# INLINE protocolVersion #-}
 
+instance IsProtocolVersion 'P6 where
+    protocolVersion = SP6
+    {-# INLINE protocolVersion #-}
+
 -- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
 demoteProtocolVersion SP1 = P1
@@ -116,6 +124,7 @@ demoteProtocolVersion SP2 = P2
 demoteProtocolVersion SP3 = P3
 demoteProtocolVersion SP4 = P4
 demoteProtocolVersion SP5 = P5
+demoteProtocolVersion SP6 = P6
 
 -- |An existentially quantified protocol version.
 data SomeProtocolVersion where
@@ -129,6 +138,7 @@ promoteProtocolVersion P2 = SomeProtocolVersion SP2
 promoteProtocolVersion P3 = SomeProtocolVersion SP3
 promoteProtocolVersion P4 = SomeProtocolVersion SP4
 promoteProtocolVersion P5 = SomeProtocolVersion SP5
+promoteProtocolVersion P6 = SomeProtocolVersion SP6
 
 data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
     deriving (Eq, Show)
@@ -139,6 +149,7 @@ type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParameters
     ChainParametersVersionFor 'P3 = 'ChainParametersV0
     ChainParametersVersionFor 'P4 = 'ChainParametersV1
     ChainParametersVersionFor 'P5 = 'ChainParametersV1
+    ChainParametersVersionFor 'P6 = 'ChainParametersV1
 
 data SChainParametersVersion (cpv :: ChainParametersVersion) where
     SCPV0 :: SChainParametersVersion 'ChainParametersV0
@@ -165,6 +176,7 @@ chainParametersVersionFor spv = case spv of
     SP3 -> SCPV0
     SP4 -> SCPV1
     SP5 -> SCPV1
+    SP6 -> SCPV1
 
 demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
 demoteChainParameterVersion SCPV0 = ChainParametersV0
@@ -195,6 +207,7 @@ type family AccountVersionFor (pv :: ProtocolVersion) :: AccountVersion where
     AccountVersionFor 'P3 = 'AccountV0
     AccountVersionFor 'P4 = 'AccountV1
     AccountVersionFor 'P5 = 'AccountV2
+    AccountVersionFor 'P6 = 'AccountV2
 
 -- |Projection of 'SProtocolVersion' to 'SAccountVersion'.
 accountVersionFor :: SProtocolVersion pv -> SAccountVersion (AccountVersionFor pv)
@@ -203,6 +216,7 @@ accountVersionFor SP2 = SAccountV0
 accountVersionFor SP3 = SAccountV0
 accountVersionFor SP4 = SAccountV1
 accountVersionFor SP5 = SAccountV2
+accountVersionFor SP6 = SAccountV2
 
 class IsAccountVersion (av :: AccountVersion) where
     -- |The singleton associated with the account version
@@ -235,6 +249,7 @@ type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: Transaction
     TransactionOutcomesVersionFor 'P3 = 'TOV0
     TransactionOutcomesVersionFor 'P4 = 'TOV0
     TransactionOutcomesVersionFor 'P5 = 'TOV1
+    TransactionOutcomesVersionFor 'P6 = 'TOV1
 
 -- |Supporting type for bringing the 'TransactionOutcomesVersion' to the term level.
 data STransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
@@ -316,12 +331,20 @@ delegationChainParameters :: forall pv. (IsProtocolVersion pv, SupportsDelegatio
 delegationChainParameters = case protocolVersion @pv of
     SP4 -> DelegationChainParametersV1
     SP5 -> DelegationChainParametersV1
+    SP6 -> DelegationChainParametersV1
 
 -- |Whether the protocol version supports memo functionality.
 -- (Memos are supported in 'P2' onwards.)
 supportsMemo :: SProtocolVersion pv -> Bool
 supportsMemo SP1 = False
 supportsMemo _ = True
+
+-- |Whether the protocol version supports account aliases.
+-- (Supported in 'P3' onwards.)
+supportsAccountAliases :: SProtocolVersion pv -> Bool
+supportsAccountAliases SP1 = False
+supportsAccountAliases SP2 = False
+supportsAccountAliases _ = True
 
 -- |Whether the protocol version supports stake delegation functionality.
 -- (Delegation is supported in 'P4' onwards.)
@@ -331,6 +354,7 @@ supportsDelegation SP2 = False
 supportsDelegation SP3 = False
 supportsDelegation SP4 = True
 supportsDelegation SP5 = True
+supportsDelegation SP6 = True
 
 -- |Whether the protocol version supports V1 smart contracts.
 -- (V1 contracts are supported in 'P4' onwards.)
@@ -340,6 +364,7 @@ supportsV1Contracts SP2 = False
 supportsV1Contracts SP3 = False
 supportsV1Contracts SP4 = True
 supportsV1Contracts SP5 = True
+supportsV1Contracts SP6 = True
 
 -- |Whether the protocol version supports upgradable smart contracts.
 -- (Supported in 'P5' and onwards)
@@ -350,6 +375,7 @@ supportsUpgradableContracts spv = case spv of
     SP3 -> False
     SP4 -> False
     SP5 -> True
+    SP6 -> True
 
 -- |Whether the protocol version supports chain queries in smart contracts.
 -- (Supported in 'P5' and onwards)
@@ -360,3 +386,4 @@ supportsChainQueryContracts spv = case spv of
     SP3 -> False
     SP4 -> False
     SP5 -> True
+    SP6 -> True

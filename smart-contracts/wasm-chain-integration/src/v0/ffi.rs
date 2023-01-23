@@ -1,7 +1,7 @@
 use crate::v0::*;
+use concordium_wasm::{artifact::CompiledFunctionBytes, output::Output, utils::parse_artifact};
 use ffi_helpers::{slice_from_c_bytes, slice_from_c_bytes_worker};
 use libc::size_t;
-use wasm_transform::{artifact::CompiledFunctionBytes, output::Output, utils::parse_artifact};
 
 /// All functions in this module operate on serialized artifact bytes. For
 /// execution, these bytes are parsed into a `BorrowedArtifactV0`, which

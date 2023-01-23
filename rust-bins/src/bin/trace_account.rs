@@ -667,7 +667,7 @@ fn trace_single_account(
 }
 
 fn pretty_time(timestamp: f64) -> String {
-    let naive = NaiveDateTime::from_timestamp(timestamp.round() as i64, 0);
+    let naive = NaiveDateTime::from_timestamp_opt(timestamp.round() as i64, 0).unwrap(); // unwrap should be safe here since this is used for block slot times.
     let dt: DateTime<Utc> = DateTime::from_utc(naive, Utc);
     dt.format("UTC %Y-%m-%d %H:%M:%S").to_string()
 }
