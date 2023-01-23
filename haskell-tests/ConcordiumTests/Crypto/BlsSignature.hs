@@ -1,19 +1,18 @@
-{-# OPTIONS_GHC -Wno-deprecations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 
 module ConcordiumTests.Crypto.BlsSignature where
 
 import Concordium.Crypto.BlsSignature
 import Concordium.Crypto.DummyData
+import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
 import Data.Serialize
+import Data.Word
 import Test.Hspec
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
-import Data.Word
-import Control.Monad
-
 
 genSecretKey :: Gen SecretKey
 genSecretKey = secretBlsKeyGen
