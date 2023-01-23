@@ -7,12 +7,10 @@ module Concordium.Crypto.BlsSignature (
     derivePublicKey,
     sign,
     verify,
-    signPrependPK,
-    verifyPrependPK,
     aggregate,
     aggregateMany,
     verifyAggregate,
-    verifyAggregatePrependPK,
+    verifyAggregateHybrid,
     emptySignature,
     freeSecretKey,
     proveKnowledgeOfSK,
@@ -82,11 +80,9 @@ foreign import ccall unsafe "bls_proof_cmp" cmpProof :: Ptr Proof -> Ptr Proof -
 
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Signature)
 foreign import ccall safe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
-foreign import ccall unsafe "bls_sign_prepend_pk" signBlsPrependPK :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Signature)
-foreign import ccall safe "bls_verify_prepend_pk" verifyBlsPrependPK :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
 foreign import ccall safe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
-foreign import ccall safe "bls_verify_aggregate_prepend_pk" verifyBlsAggregatePrependPK :: Ptr (Ptr Word8) -> Ptr CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
+foreign import ccall safe "bls_verify_aggregate_hybrid" verifyBlsAggregatePrependPK :: Ptr (Ptr Word8) -> Ptr CSize -> Ptr (Ptr (Ptr PublicKey)) -> Ptr CSize -> CSize -> Ptr Signature -> IO Word8
 foreign import ccall safe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
 foreign import ccall safe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
 
@@ -274,21 +270,6 @@ verify m pk sig = unsafePerformIO $ do
         withPublicKey pk $ \pk' ->
             withSignature sig $! (fmap (== 1) . verifyBls (castPtr m') (fromIntegral mlen) pk')
 
-signPrependPK :: ByteString -> SecretKey -> Signature
-signPrependPK m sk = Signature <$> unsafePerformIO $ do
-    -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
-    sigptr <- BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
-        withSecretKey sk $ signBlsPrependPK (castPtr m') (fromIntegral mlen)
-    newForeignPtr freeSignature sigptr
-
--- |Verify a single signature, where the message is prepended with the public.
-verifyPrependPK :: ByteString -> PublicKey -> Signature -> Bool
-verifyPrependPK m pk sig = unsafePerformIO $ do
-    -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
-    BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
-        withPublicKey pk $ \pk' ->
-            withSignature sig $! (fmap (== 1) . verifyBlsPrependPK (castPtr m') (fromIntegral mlen) pk')
-
 -- |Aggregate two signatures together.
 aggregate :: Signature -> Signature -> Signature
 aggregate sig1 sig2 = Signature <$> unsafePerformIO $ do
@@ -310,20 +291,22 @@ verifyAggregate m pks sig = unsafePerformIO $ do
     withKeyArray ps [] f = withArrayLen ps f
     withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
 
--- |Verify a signature on the list of bytestrings under the list of public keys
--- The messages are prepended with the publics before verifying.
--- This is for messages that are not necessarilly all different.
-verifyAggregatePrependPK :: [ByteString] -> [PublicKey] -> Signature -> Bool
-verifyAggregatePrependPK ms pks sig = unsafePerformIO $ do
-    -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
+-- |Verify a signature on the list of bytestrings under the list of public keys.
+-- The public keys are grouped so that the i'th list of public keys corresponds to the
+-- secret keys that signed the i'th message.
+verifyAggregateHybrid :: [ByteString] -> [[PublicKey]] -> Signature -> Bool
+verifyAggregateHybrid ms pksets sig = unsafePerformIO $ do
     withMessageArray [] [] ms $ \m' mlen ->
         withSignature sig $ \sig' ->
-            withKeyArray [] pks $ \arrlen -> \headptr ->
-                (== 1) <$> verifyBlsAggregatePrependPK (m') (castPtr mlen) headptr (fromIntegral arrlen) sig'
+            withKeyArray2 [] [] pksets $ \headptr setLens ->
+                (== 1) <$> verifyBlsAggregatePrependPK (m') (castPtr mlen) headptr (castPtr setLens) (fromIntegral $ Prelude.length ms) sig'
   where
     withKeyArray ps [] f = withArrayLen ps f
     withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
+    withKeyArray2 ps lens [] f = withArray ps $ \ps' -> withArray lens (f ps')
+    withKeyArray2 ps lens (pkset : sets_) f = withKeyArray [] pkset $ \setLen pksetPtr -> withKeyArray2 (pksetPtr : ps) (setLen : lens) sets_ f
     withMessageArray ms' lens [] f = withArray ms' $ \m' -> withArray lens (f m')
+    -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
     withMessageArray ms' lens (m : ms_) f = BS.unsafeUseAsCStringLen m $ \(m', mlen) -> withMessageArray (castPtr m' : ms') (mlen : lens) ms_ f
 
 -- |Create a proof of knowledge of your secret key

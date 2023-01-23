@@ -100,18 +100,6 @@ pub extern "C" fn bls_verify(
     let sig = from_ptr!(sig_ptr);
     u8::from(pk.verify(m_bytes, *sig))
 }
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_sign_prepend_pk(
-    m_ptr: *const u8,
-    m_len: size_t,
-    sk_ptr: *mut SecretKey<Bls12>,
-) -> *mut Signature<Bls12> {
-    let m_len = m_len as usize;
-    let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
-    let sk = from_ptr!(sk_ptr);
-    Box::into_raw(Box::new(sk.sign_prepend_pk(m_bytes)))
-}
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -166,26 +154,24 @@ pub extern "C" fn bls_verify_aggregate(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_verify_aggregate_prepend_pk(
+pub extern "C" fn bls_verify_aggregate_hybrid(
     m_ptr: *const *const u8,
     m_len: *const size_t,
-    pks_ptr: *const *mut PublicKey<Bls12>,
-    pks_len: size_t, // also the number of messages
+    pks_ptr: *const *const *mut PublicKey<Bls12>,
+    pks_len: *const size_t,
+    len: size_t, // the number of messages = the number of sets of public keys
     sig_ptr: *mut Signature<Bls12>,
 ) -> u8 {
-    // let m_len = m_len as usize;
-    // let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
-
-    let m_lens_: &[size_t] = if pks_len == 0 {
+    let m_lens_: &[size_t] = if len == 0 {
         &[]
     } else {
-        unsafe { slice::from_raw_parts(m_len, pks_len) }
+        unsafe { slice::from_raw_parts(m_len, len) }
     };
 
-    let ms_: &[*const u8] = if pks_len == 0 {
+    let ms_: &[*const u8] = if len == 0 {
         &[]
     } else {
-        unsafe { slice::from_raw_parts(m_ptr, pks_len) }
+        unsafe { slice::from_raw_parts(m_ptr, len) }
     };
 
     let ms = ms_
@@ -193,18 +179,37 @@ pub extern "C" fn bls_verify_aggregate_prepend_pk(
         .zip(m_lens_.iter())
         .map(|(&ptr, &m_len)| slice_from_c_bytes!(ptr, m_len));
 
-    let pks_: &[*mut PublicKey<Bls12>] = if pks_len == 0 {
+    let pks_lens_: &[size_t] = if len == 0 {
         &[]
     } else {
-        unsafe { slice::from_raw_parts(pks_ptr, pks_len) }
+        unsafe { slice::from_raw_parts(pks_len, len) }
     };
-    // Collecting the public keys in a vector is currently necessary as
-    // verify_aggregate_sig_trusted_keys takes an array of public keys.
-    // It might be desirable to make it take references instead.
-    let pks = pks_.iter().map(|pk| *from_ptr!(*pk));
-    let m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = ms.into_iter().zip(pks.into_iter()).collect();
+
+    let pks_ptrs: &[*const *mut PublicKey<Bls12>] = if len == 0 {
+        &[]
+    } else {
+        unsafe { slice::from_raw_parts(pks_ptr, len) }
+    };
+
+    let pks = unsafe { pks_ptrs
+        .iter()
+        .zip(pks_lens_.iter())
+        .map(|(&ptr, &pk_len)| {
+            let pk_set: &[*mut PublicKey<Bls12>] = if pk_len == 0 {
+                &[]
+            } else {
+                slice::from_raw_parts(ptr, pk_len)
+            };
+            let res: Vec<PublicKey<Bls12>> = pk_set.iter().map(|pk| *from_ptr!(*pk)).collect();
+            res
+        })
+    };
+
+    // let pks = pks_.iter().map(|pk| *from_ptr!(*pk));
+    let m_pk_pairs: Vec<(&[u8], Vec<PublicKey<Bls12>>)> = ms.into_iter().zip(pks.into_iter()).collect();
+    let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs.iter().map(|(m, pk_vec)| (*m, pk_vec.as_slice())).collect();
     let sig = from_ptr!(sig_ptr);
-    u8::from(verify_aggregate_sig_prepend_pk(&m_pk_pairs, *sig))
+    u8::from(verify_aggregate_sig_hybrid(&m_pk_pairs, *sig))
 }
 
 // Only used for adding a dummy proof to the genesis block
@@ -295,7 +300,7 @@ mod test {
     }
 
     #[test]
-    fn test_verify_aggregate_prepend_pk_ffi() {
+    fn test_verify_aggregate_hybrid_ffi() {
         let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         for _ in 0..100 {
@@ -303,10 +308,16 @@ mod test {
             let m2 = rng.gen::<[u8; 16]>();
             let sk1 = SecretKey::<Bls12>::generate(&mut rng);
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
+            let sk3 = SecretKey::<Bls12>::generate(&mut rng);
+            let sk4 = SecretKey::<Bls12>::generate(&mut rng);
             let mut pk1 = PublicKey::<Bls12>::from_secret(&sk1);
             let mut pk2 = PublicKey::<Bls12>::from_secret(&sk2);
-            let mut sig = sk1.sign_prepend_pk(&m1);
-            sig = sig.aggregate(sk2.sign_prepend_pk(&m2));
+            let mut pk3 = PublicKey::<Bls12>::from_secret(&sk3);
+            let mut pk4 = PublicKey::<Bls12>::from_secret(&sk4);
+            let mut sig = sk1.sign(&m1);
+            sig = sig.aggregate(sk2.sign(&m1));
+            sig = sig.aggregate(sk3.sign(&m2));
+            sig = sig.aggregate(sk4.sign(&m2));
 
             let m1_ptr: *const u8 = &m1 as *const _;
             let m2_ptr: *const u8 = &m2 as *const _;
@@ -316,12 +327,18 @@ mod test {
             let m2_len: size_t = 16;
             let m_len: *const size_t = &[m1_len, m2_len] as *const _;
 
-            let pks_ptr: *const *mut PublicKey<Bls12> =
+            let pks_ptr1: *const *mut PublicKey<Bls12> =
                 &[&mut pk1 as *mut _, &mut pk2 as *mut _] as *const *mut _;
-            let pks_len: size_t = 2;
+            let pks_ptr2: *const *mut PublicKey<Bls12> =
+                &[&mut pk3 as *mut _, &mut pk4 as *mut _] as *const *mut _;
+            let pks_ptr: *const *const *mut PublicKey<Bls12> = &[pks_ptr1, pks_ptr2] as *const _;
+            let pks1_len: size_t = 2;
+            let pks2_len: size_t = 2;
+            let pks_len: *const size_t = &[pks1_len, pks2_len] as *const _;
+            let len: size_t = 2;
             let sig_ptr: *mut Signature<Bls12> = &mut sig;
             assert_eq!(
-                bls_verify_aggregate_prepend_pk(m_ptr, m_len, pks_ptr, pks_len, sig_ptr),
+                bls_verify_aggregate_hybrid(m_ptr, m_len, pks_ptr, pks_len, len, sig_ptr),
                 1
             );
         }

@@ -22,13 +22,13 @@ genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
 
-genKeyPairsAndMessages :: Gen [((SecretKey, PublicKey), [Word8])]
+genKeyPairsAndMessages :: Gen [([(SecretKey, PublicKey)], [Word8])]
 genKeyPairsAndMessages = do
-    n <- choose (10,200)
+    n <- choose (10,20)
     replicateM n $ do
-        kp <- genKeyPair
+        kps <- replicateM 10 genKeyPair
         m :: [Word8] <- resize 100 arbitrary
-        return (kp, m)
+        return (kps, m)
 
 forAllSK :: Testable prop => (SecretKey -> prop) -> Property
 forAllSK = forAll genSecretKey
@@ -36,7 +36,7 @@ forAllSK = forAll genSecretKey
 forAllKP :: Testable prop => ((SecretKey, PublicKey) -> prop) -> Property
 forAllKP = forAll genKeyPair
 
-forAllKPsAndMessages :: Testable prop => ([((SecretKey, PublicKey), [Word8])] -> prop) -> Property
+forAllKPsAndMessages :: Testable prop => ([([(SecretKey, PublicKey)], [Word8])] -> prop) -> Property
 forAllKPsAndMessages = forAll genKeyPairsAndMessages
 
 -- Checks that two different keys doesn't produce the same signature on the same
@@ -56,17 +56,13 @@ testSignAndVerify :: Property
 testSignAndVerify = forAllKP $ \(sk, pk) m ->
     verify (BS.pack m) pk (sign (BS.pack m) sk)
 
-testSignAndVerifyPrependPK :: Property
-testSignAndVerifyPrependPK = forAllKP $ \(sk, pk) m ->
-    verifyPrependPK (BS.pack m) pk (signPrependPK (BS.pack m) sk)
-
-testVerifyAggratedSigPrependPK :: Property
-testVerifyAggratedSigPrependPK = forAllKPsAndMessages $ \keyPairsAndMessages ->
-    let sigs = map (\((sk, _), m) -> signPrependPK (BS.pack m) sk) keyPairsAndMessages
-        sig = aggregateMany sigs
+testVerifyAggratedSigHybrid :: Property
+testVerifyAggratedSigHybrid = forAllKPsAndMessages $ \keyPairsAndMessages ->
+    let sigs = map (\(sks, m) -> (map (\(sk, _) -> sign (BS.pack m) sk) sks)) keyPairsAndMessages
+        sig = aggregateMany $ aggregateMany <$> sigs
         ms = map (BS.pack . snd) keyPairsAndMessages
-        pks = map (snd . fst) keyPairsAndMessages
-    in verifyAggregatePrependPK ms pks sig
+        pks = map (map snd . fst) keyPairsAndMessages
+    in verifyAggregateHybrid ms pks sig
 
 testSignAndVerifyCollision :: Property
 testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
@@ -138,8 +134,7 @@ tests = describe "Concordium.Crypto.BlsSignature" $ do
     it "bls_key_collision" $ withMaxSuccess 10000 $ testKeyCollision
     it "bls_signature_collision" $ withMaxSuccess 10000 $ testNoSignatureCollision
     it "bls_sign_and_verify" $ withMaxSuccess 10000 $ testSignAndVerify
-    it "bls_sign_and_verify_prepend_pk" $ withMaxSuccess 10000 $ testSignAndVerifyPrependPK
-    it "bls_verify_aggregated_sig_prepend_pk" $ withMaxSuccess 1000 $ testVerifyAggratedSigPrependPK
+    it "bls_verify_aggregated_sig_hybrid" $ withMaxSuccess 1000 $ testVerifyAggratedSigHybrid
     it "bls_sign_and_verify_collision" $ withMaxSuccess 10000 $ testSignAndVerifyCollision
     it "bls_serialize_sk" $ withMaxSuccess 10000 $ testSerializeSecretKey
     it "bls_serialize_pk" $ withMaxSuccess 10000 $ testSerializePublicKey

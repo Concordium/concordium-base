@@ -32,15 +32,6 @@ impl<P: Pairing> SecretKey<P> {
         Signature(signature)
     }
 
-    /// Sign a message using the SecretKey, where the message is prepended by
-    /// the public key This implements Sign from Section 3.2.1 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.1
-    pub fn sign_prepend_pk(&self, m: &[u8]) -> Signature<P> {
-        let pk = PublicKey::from_secret(self);
-        let mut pk_m = to_bytes(&pk);
-        pk_m.extend_from_slice(m); // PK || m
-        self.sign(&pk_m)
-    }
-
     /// Prove knowledge of the secret key with respect to the challenge given
     /// via the random oracle.
     pub fn prove<R: Rng>(&self, csprng: &mut R, ro: &mut RandomOracle) -> Proof<P> {
@@ -189,11 +180,11 @@ pub fn verify_aggregate_sig<P: Pairing>(
     P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
-/// Verifies an aggregate signature on pairs `(messages m_i, PK_i)` `for i=1..n`
-/// but where each message is prepended with the corresponding public key.
-/// This implements AggregateVerify from Section 3.2.3 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.3.
-pub fn verify_aggregate_sig_prepend_pk<P: Pairing>(
-    m_pk_pairs: &[(&[u8], PublicKey<P>)],
+/// Verifies an aggregate signature on pairs `(messages m_i, set_i)` `for i=1..n`
+/// but where `set_i` denotes the set of public keys corresponding to the secret keys that signed m_i. 
+/// This implements a combination of AggregateVerify from Section 3.1.1 and FastAggregateVerify from Section 3.3.4 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
+pub fn verify_aggregate_sig_hybrid<P: Pairing>(
+    m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
 ) -> bool {
     // verifying against the empty set of signers always fails
@@ -202,11 +193,17 @@ pub fn verify_aggregate_sig_prepend_pk<P: Pairing>(
     }
     let product = m_pk_pairs
         .par_iter()
-        .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
-            let mut pk_m = to_bytes(&pk);
-            pk_m.extend_from_slice(m); // PK || m
-            let g1_hash = P::G1::hash_to_group(&pk_m);
-            let paired = P::pair(&g1_hash, &pk.0);
+        .fold(<P::TargetField as Field>::one, |prod, (m, pks)| {
+            let sum_pk_i = if pks.len() < 150 {
+                pks.iter()
+                    .fold(P::G2::zero_point(), |s, x| s.plus_point(&x.0))
+            } else {
+                pks.par_iter()
+                    .fold(P::G2::zero_point, |s, x| s.plus_point(&x.0))
+                    .reduce(P::G2::zero_point, |s, x| s.plus_point(&x))
+            };
+            let g1_hash = P::G1::hash_to_group(m);
+            let paired = P::pair(&g1_hash, &sum_pk_i);
             let mut p = prod;
             p.mul_assign(&paired);
             p
@@ -277,7 +274,7 @@ mod test {
     use super::*;
     use pairing::bls12_381::Bls12;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
-    use std::convert::TryFrom;
+    use std::{convert::TryFrom, slice::from_ref};
 
     const SIGNERS: usize = 500;
     const TEST_ITERATIONS: usize = 10;
@@ -331,17 +328,6 @@ mod test {
         }};
     }
 
-    macro_rules! aggregate_sigs_prepend_pk {
-        ($messages:expr, $sks:expr) => {{
-            let mut sig = $sks[0].sign_prepend_pk(&$messages[0]);
-            for i in 1..$sks.len() {
-                let my_sig = $sks[i].sign_prepend_pk(&$messages[i]);
-                sig = sig.aggregate(my_sig);
-            }
-            sig
-        }};
-    }
-
     #[test]
     fn test_verify_aggregate_sig() {
         let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
@@ -351,35 +337,40 @@ mod test {
         for _ in 0..TEST_ITERATIONS {
             let ms = get_random_messages(SIGNERS, &mut rng);
             let sig = aggregate_sigs!(ms, sks);
-            let sig_prepend_pk = aggregate_sigs_prepend_pk!(ms, sks);
 
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
+            let mut m_pk_pairs2: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::new();
             for i in 0..SIGNERS {
                 m_pk_pairs.push((&ms[i], pks[i].clone()));
+                m_pk_pairs2.push((&ms[i], from_ref(&pks[i])));
             }
 
             // signature should verify
             assert!(verify_aggregate_sig(&m_pk_pairs, sig));
-            assert!(verify_aggregate_sig_prepend_pk(&m_pk_pairs, sig_prepend_pk));
+            assert!(verify_aggregate_sig_hybrid(&m_pk_pairs2, sig));
 
             let (m_, pk_) = m_pk_pairs.pop().unwrap();
+            let (_, pks_) = m_pk_pairs2.pop().unwrap();
             let new_pk = PublicKey::<Bls12>::from_secret(&SecretKey::<Bls12>::generate(&mut rng));
             m_pk_pairs.push((m_, new_pk));
+            m_pk_pairs2.push((m_, from_ref(&new_pk)));
 
             // altering a public key should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
-            assert!(!verify_aggregate_sig_prepend_pk(
-                &m_pk_pairs,
-                sig_prepend_pk
+            assert!(!verify_aggregate_sig_hybrid(
+                &m_pk_pairs2,
+                sig
             ));
 
             let new_m: [u8; 32] = rng.gen::<[u8; 32]>();
             m_pk_pairs.pop();
             m_pk_pairs.push((&new_m, pk_));
+            m_pk_pairs2.pop();
+            m_pk_pairs2.push((&new_m, &pks_));
 
             // altering a message should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
-            assert!(!verify_aggregate_sig_prepend_pk(&m_pk_pairs, sig));
+            assert!(!verify_aggregate_sig_hybrid(&m_pk_pairs2, sig));
         }
     }
 
