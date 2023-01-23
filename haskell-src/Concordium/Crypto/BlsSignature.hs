@@ -82,7 +82,7 @@ foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr Secr
 foreign import ccall safe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
 foreign import ccall safe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
-foreign import ccall safe "bls_verify_aggregate_hybrid" verifyBlsAggregatePrependPK :: Ptr (Ptr Word8) -> Ptr CSize -> Ptr (Ptr (Ptr PublicKey)) -> Ptr CSize -> CSize -> Ptr Signature -> IO Word8
+foreign import ccall safe "bls_verify_aggregate_hybrid" verifyBlsAggregateHybrid :: Ptr (Ptr Word8) -> Ptr CSize -> Ptr (Ptr (Ptr PublicKey)) -> Ptr CSize -> CSize -> Ptr Signature -> IO Word8
 foreign import ccall safe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
 foreign import ccall safe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
 
@@ -299,7 +299,7 @@ verifyAggregateHybrid ms pksets sig = unsafePerformIO $ do
     withMessageArray [] [] ms $ \m' mlen ->
         withSignature sig $ \sig' ->
             withKeyArray2 [] [] pksets $ \headptr setLens ->
-                (== 1) <$> verifyBlsAggregatePrependPK (m') (castPtr mlen) headptr (castPtr setLens) (fromIntegral $ Prelude.length ms) sig'
+                (== 1) <$> verifyBlsAggregateHybrid (m') (castPtr mlen) headptr (castPtr setLens) (fromIntegral $ Prelude.length ms) sig'
   where
     withKeyArray ps [] f = withArrayLen ps f
     withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
