@@ -20,10 +20,9 @@ genSecretKey = secretBlsKeyGen
 genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
-
 genKeyPairsAndMessages :: Gen [([(SecretKey, PublicKey)], [Word8])]
 genKeyPairsAndMessages = do
-    n <- choose (10,20)
+    n <- choose (10, 20)
     replicateM n $ do
         kps <- replicateM 10 genKeyPair
         m :: [Word8] <- resize 100 arbitrary
@@ -61,7 +60,7 @@ testVerifyAggratedSigHybrid = forAllKPsAndMessages $ \keyPairsAndMessages ->
         sig = aggregateMany $ aggregateMany <$> sigs
         ms = map (BS.pack . snd) keyPairsAndMessages
         pks = map (map snd . fst) keyPairsAndMessages
-    in verifyAggregateHybrid ms pks sig
+    in  verifyAggregateHybrid ms pks sig
 
 testSignAndVerifyCollision :: Property
 testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
