@@ -800,7 +800,7 @@ data UpdatePayload
       MintDistributionUpdatePayload !(MintDistribution 'MintDistributionVersion0)
     | -- |Update the distribution of transaction fees
       TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
-    | -- |Update the GAS rewards
+    | -- |Update the GAS rewards (chain parameters versions 0 and 1)
       GASRewardsUpdatePayload !(GASRewards 'GASRewardsVersion0)
     | -- |Update the minimum amount to register as a baker with chain parameter version 0
       BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
@@ -812,21 +812,21 @@ data UpdatePayload
       AddAnonymityRevokerUpdatePayload !ArInfo
     | -- |Add an identity provider
       AddIdentityProviderUpdatePayload !IpInfo
-    | -- |Cooldown parameters with chain parameter version 1
+    | -- |Cooldown parameters with chain parameter version 1 onwards
       CooldownParametersCPV1UpdatePayload !(CooldownParameters' 'CooldownParametersVersion1)
-    | -- |Pool parameters with chain parameter version 1
+    | -- |Pool parameters with chain parameter version 1 onwards
       PoolParametersCPV1UpdatePayload !(PoolParameters 'ChainParametersV1)
-    | -- |Time parameters with chain parameter version 1
+    | -- |Time parameters with chain parameter version 1 onwards
       TimeParametersCPV1UpdatePayload !TimeParameters
-    | -- |Update the distribution of newly minted GTU in chain parameters version 1
+    | -- |Update the distribution of newly minted GTU in chain parameters version 1 onwards
       MintDistributionCPV1UpdatePayload !(MintDistribution 'MintDistributionVersion1)
-    | -- |Update the timeout parameters
+    | -- |Update the timeout parameters (chain parameters version 2)
       TimeoutParametersUpdatePayload !TimeoutParameters
-    | -- |Update the minimum block time
+    | -- |Update the minimum block time (chain parameters version 2)
       MinBlockTimeUpdatePayload !Duration
-    | -- |Update block energy limit
+    | -- |Update block energy limit (chain parameters version 2)
       BlockEnergyLimitUpdatePayload !Energy
-    | -- |Update the GAS rewards
+    | -- |Update the GAS rewards (chain parameters version 2)
       GASRewardsCPV2UpdatePayload !(GASRewards 'GASRewardsVersion1)
     deriving (Eq, Show)
 
@@ -867,7 +867,7 @@ getUpdatePayload spv =
             | MintDistributionVersion0 <- mintDistributionVersionFor cpv ->
                 MintDistributionUpdatePayload <$> get
         7 -> TransactionFeeDistributionUpdatePayload <$> get
-        8 -> GASRewardsUpdatePayload <$> get
+        8 | GASRewardsVersion0 <- gasRewardsVersionFor cpv -> GASRewardsUpdatePayload <$> get
         9
             | PoolParametersVersion0 <- poolParametersVersionFor cpv ->
                 BakerStakeThresholdUpdatePayload <$> getPoolParameters SPoolParametersVersion0
@@ -882,17 +882,17 @@ getUpdatePayload spv =
             | PoolParametersVersion1 <- poolParametersVersionFor cpv ->
                 PoolParametersCPV1UpdatePayload <$> getPoolParameters SPoolParametersVersion1
         16
-            | isCPV ChainParametersV1 || isCPV ChainParametersV2 ->
+            | isSupported PTTimeParameters cpv ->
                 TimeParametersCPV1UpdatePayload <$> getTimeParameters
         17
             | MintDistributionVersion1 <- mintDistributionVersionFor cpv ->
                 MintDistributionCPV1UpdatePayload <$> get
-        18 | isCPV ChainParametersV2 -> TimeoutParametersUpdatePayload <$> get
-        19 | isCPV ChainParametersV2 -> MinBlockTimeUpdatePayload <$> get
-        20 | isCPV ChainParametersV2 -> BlockEnergyLimitUpdatePayload <$> get
+        18 | isSupported PTTimeoutParameters cpv -> TimeoutParametersUpdatePayload <$> get
+        19 | isSupported PTMinBlockTime cpv -> MinBlockTimeUpdatePayload <$> get
+        20 | isSupported PTBlockEnergyLimit cpv -> BlockEnergyLimitUpdatePayload <$> get
+        21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
-    isCPV = (== demoteChainParameterVersion scpv)
     scpv = sChainParametersVersionFor spv
     cpv = demoteChainParameterVersion scpv
 

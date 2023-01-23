@@ -401,88 +401,120 @@ import Concordium.Types.HashableTo
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 
+-- The Template Haskell below generates the quoted definitions, together with the singletons
+-- and liftings to singletons. The module header is used to give the haddock documentation.
 $( singletons
     [d|
+        -- \|Mint distribution version.
         data MintDistributionVersion
-            = MintDistributionVersion0
-            | MintDistributionVersion1
+            = MintDistributionVersion0 -- \^Supports mint-per-slot
+            | MintDistributionVersion1 -- \^Mint rate is removed from mint distribution
 
+        -- \|The mint distribution version for a chain parameters version.
         mintDistributionVersionFor :: ChainParametersVersion -> MintDistributionVersion
         mintDistributionVersionFor ChainParametersV0 = MintDistributionVersion0
         mintDistributionVersionFor ChainParametersV1 = MintDistributionVersion1
         mintDistributionVersionFor ChainParametersV2 = MintDistributionVersion1
 
+        -- \|Whether a 'MintDistributionVersion' supports the mint-per-slot parameter.
         supportsMintPerSlot :: MintDistributionVersion -> Bool
         supportsMintPerSlot MintDistributionVersion0 = True
         supportsMintPerSlot MintDistributionVersion1 = False
 
+        -- \|GAS rewards version.
         data GASRewardsVersion
-            = GASRewardsVersion0
-            | GASRewardsVersion1
+            = GASRewardsVersion0 -- \^Supports finalization GAS reward
+            | GASRewardsVersion1 -- \^Removes finalization GAS reward
 
+        -- \|The GAS rewards version for a chain parameters version.
         gasRewardsVersionFor :: ChainParametersVersion -> GASRewardsVersion
         gasRewardsVersionFor ChainParametersV0 = GASRewardsVersion0
         gasRewardsVersionFor ChainParametersV1 = GASRewardsVersion0
         gasRewardsVersionFor ChainParametersV2 = GASRewardsVersion1
 
+        -- \|Whether a 'GASRewardsVersion' supports GAS rewards for finalization proofs.
         supportsGASFinalizationProof :: GASRewardsVersion -> Bool
         supportsGASFinalizationProof GASRewardsVersion0 = True
         supportsGASFinalizationProof GASRewardsVersion1 = False
 
-        data CooldownParametersVersion = CooldownParametersVersion0 | CooldownParametersVersion1
+        -- \|Cooldown parameters version.
+        data CooldownParametersVersion
+            = CooldownParametersVersion0 -- \^Baker cooldown in epochs
+            | CooldownParametersVersion1 -- \^Baker and delegator cooldowns in seconds
 
+        -- \|The cooldown parameters version for a chain parameters version.
         cooldownParametersVersionFor :: ChainParametersVersion -> CooldownParametersVersion
         cooldownParametersVersionFor ChainParametersV0 = CooldownParametersVersion0
         cooldownParametersVersionFor ChainParametersV1 = CooldownParametersVersion1
         cooldownParametersVersionFor ChainParametersV2 = CooldownParametersVersion1
 
-        data PoolParametersVersion = PoolParametersVersion0 | PoolParametersVersion1
+        -- \|Pool parameters version.
+        data PoolParametersVersion
+            = PoolParametersVersion0 -- \^Minimum baker stake
+            | PoolParametersVersion1 -- \^Pool commission rates, limits and bounds.
 
+        -- \|The pool parameters version associated with a chain parameters version.
         poolParametersVersionFor :: ChainParametersVersion -> PoolParametersVersion
         poolParametersVersionFor ChainParametersV0 = PoolParametersVersion0
         poolParametersVersionFor ChainParametersV1 = PoolParametersVersion1
         poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
 
-        -- \|Consensus parameters
+        -- \|Consensus parameters version.
         data ConsensusParametersVersion
             = ConsensusParametersVersion0 -- \^Election difficulty
             | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time
 
+        -- \|The consensus parameters version associated with a chain parameters version.
         consensusParametersVersionFor :: ChainParametersVersion -> ConsensusParametersVersion
         consensusParametersVersionFor ChainParametersV0 = ConsensusParametersVersion0
         consensusParametersVersionFor ChainParametersV1 = ConsensusParametersVersion0
         consensusParametersVersionFor ChainParametersV2 = ConsensusParametersVersion1
 
+        -- \|Authorizations version.
         data AuthorizationsVersion
-            = AuthorizationsVersion0
-            | AuthorizationsVersion1
+            = AuthorizationsVersion0 -- \^Initial set of authorizations
+            | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
 
+        -- \|The authorizations version associated with a chain parameters version.
         authorizationsVersionFor :: ChainParametersVersion -> AuthorizationsVersion
         authorizationsVersionFor ChainParametersV0 = AuthorizationsVersion0
         authorizationsVersionFor ChainParametersV1 = AuthorizationsVersion1
         authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion1
 
+        -- \|The authorizations version associated with a protocol version.
         authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
         authorizationsVersionForPV pv = authorizationsVersionFor (chainParametersVersionFor pv)
 
+        -- \|Whether cooldown parameters are updatable for an 'AuthorizationsVersion'.
         supportsCooldownParametersAccessStructure :: AuthorizationsVersion -> Bool
         supportsCooldownParametersAccessStructure AuthorizationsVersion0 = False
         supportsCooldownParametersAccessStructure AuthorizationsVersion1 = True
 
+        -- \|Whether time parameters are supported for an 'AuthorizationsVersion'.
         supportsTimeParameters :: AuthorizationsVersion -> Bool
         supportsTimeParameters AuthorizationsVersion0 = False
         supportsTimeParameters AuthorizationsVersion1 = True
 
+        -- \|Parameter types that are conditionally supported at different 'ChainParametersVersion's.
         data ParameterType
-            = PTElectionDifficulty
-            | PTTimeParameters
-            | PTMintPerSlot
-            | PTTimeoutParameters
-            | PTMinBlockTime
-            | PTBlockEnergyLimit
-            | PTCooldownParametersAccessStructure
-            | PTFinalizationProof
+            = -- \|Election difficulty (consensus parameter)
+              PTElectionDifficulty
+            | -- \|Time parameters
+              PTTimeParameters
+            | -- \|Mint rate per slot as part of mint distribution parameters
+              PTMintPerSlot
+            | -- \|Timeout parameters for V2 consensus (consensus parameter)
+              PTTimeoutParameters
+            | -- \|Minimum block time for V2 consensus (consensus parameter)
+              PTMinBlockTime
+            | -- \|Block energy limit for V2 consensus (consensus parameter)
+              PTBlockEnergyLimit
+            | -- \|Updatable cooldown parameters
+              PTCooldownParametersAccessStructure
+            | -- \|Finalization proof GAS rewards (GAS rewards parameter)
+              PTFinalizationProof
 
+        -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
         isSupported PTElectionDifficulty cpv = case consensusParametersVersionFor cpv of
             ConsensusParametersVersion0 -> True
@@ -1004,7 +1036,11 @@ instance ToJSON (CooldownParameters' cpv) where
               "delegatorCooldown" AE..= _cpDelegatorCooldown
             ]
 
-parseCooldownParametersJSON :: forall cpv. SingI cpv => Value -> Parser (CooldownParameters' cpv)
+parseCooldownParametersJSON ::
+    forall cpv.
+    IsCooldownParametersVersion cpv =>
+    Value ->
+    Parser (CooldownParameters' cpv)
 parseCooldownParametersJSON = case sing @cpv of
     SCooldownParametersVersion0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
     SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
@@ -1014,7 +1050,7 @@ parseCooldownParametersJSON = case sing @cpv of
             <*> v
                 .: "delegatorCooldown"
 
-instance SingI cpv => FromJSON (CooldownParameters' cpv) where
+instance IsCooldownParametersVersion cpv => FromJSON (CooldownParameters' cpv) where
     parseJSON = parseCooldownParametersJSON
 
 -- |Lens for '_cpBakerExtraCooldownEpochs'
@@ -1060,7 +1096,7 @@ getCooldownParameters = \case
     SCooldownParametersVersion0 -> CooldownParametersV0 <$> get
     SCooldownParametersVersion1 -> CooldownParametersV1 <$> get <*> get
 
-instance SingI cpv => Serialize (CooldownParameters' cpv) where
+instance IsCooldownParametersVersion cpv => Serialize (CooldownParameters' cpv) where
     put = putCooldownParameters
     get = getCooldownParameters (sing @cpv)
 

@@ -967,13 +967,13 @@ genLevel2UpdatePayload scpv =
                   FoundationAccountUpdatePayload <$> genAccountAddress,
                   MintDistributionCPV1UpdatePayload <$> genMintDistribution,
                   TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
-                  GASRewardsUpdatePayload <$> genGASRewards,
                   CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
                   PoolParametersCPV1UpdatePayload <$> genPoolParametersV1,
                   TimeParametersCPV1UpdatePayload <$> genTimeParametersV1,
                   TimeoutParametersUpdatePayload <$> genTimeoutParameters,
                   MinBlockTimeUpdatePayload <$> genDuration,
-                  BlockEnergyLimitUpdatePayload . Energy <$> arbitrary
+                  BlockEnergyLimitUpdatePayload . Energy <$> arbitrary,
+                  GASRewardsCPV2UpdatePayload <$> genGASRewards
                 ]
 
 genUpdatePayload :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen UpdatePayload

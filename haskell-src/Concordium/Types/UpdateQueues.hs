@@ -271,16 +271,16 @@ getPendingUpdates migration = withCPVConstraints (chainParametersVersion @(Chain
             return PendingUpdates{..}
         StateMigrationParametersP1P2 -> do
             let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
-            _pCooldownParametersQueue <- whenSupported getUpdateQueueV0
-            _pTimeParametersQueue <- whenSupported getUpdateQueueV0
+            let _pCooldownParametersQueue = oldCooldownParametersQueue
+            let _pTimeParametersQueue = oldTimeParametersQueue
             let _pTimeoutParametersQueue = NoParam
             let _pMinBlockTimeQueue = oldMinBlockTimeQueue
             let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
             return PendingUpdates{..}
         StateMigrationParametersP2P3 -> do
             let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
-            _pCooldownParametersQueue <- whenSupported getUpdateQueueV0
-            _pTimeParametersQueue <- whenSupported getUpdateQueueV0
+            let _pCooldownParametersQueue = oldCooldownParametersQueue
+            let _pTimeParametersQueue = oldTimeParametersQueue
             let _pTimeoutParametersQueue = NoParam
             let _pMinBlockTimeQueue = oldMinBlockTimeQueue
             let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
@@ -295,8 +295,8 @@ getPendingUpdates migration = withCPVConstraints (chainParametersVersion @(Chain
             return PendingUpdates{..}
         StateMigrationParametersP4ToP5 -> do
             let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
-            _pCooldownParametersQueue <- whenSupported getUpdateQueueV0
-            _pTimeParametersQueue <- whenSupported getUpdateQueueV0
+            let _pCooldownParametersQueue = oldCooldownParametersQueue
+            let _pTimeParametersQueue = oldTimeParametersQueue
             let _pTimeoutParametersQueue = NoParam
             let _pMinBlockTimeQueue = oldMinBlockTimeQueue
             let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
