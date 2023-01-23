@@ -206,7 +206,6 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
             })
     };
 
-    // let pks = pks_.iter().map(|pk| *from_ptr!(*pk));
     let m_pk_pairs: Vec<(&[u8], Vec<PublicKey<Bls12>>)> =
         ms.into_iter().zip(pks.into_iter()).collect();
     let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs
