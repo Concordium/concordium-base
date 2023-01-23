@@ -191,23 +191,28 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
         unsafe { slice::from_raw_parts(pks_ptr, len) }
     };
 
-    let pks = unsafe { pks_ptrs
-        .iter()
-        .zip(pks_lens_.iter())
-        .map(|(&ptr, &pk_len)| {
-            let pk_set: &[*mut PublicKey<Bls12>] = if pk_len == 0 {
-                &[]
-            } else {
-                slice::from_raw_parts(ptr, pk_len)
-            };
-            let res: Vec<PublicKey<Bls12>> = pk_set.iter().map(|pk| *from_ptr!(*pk)).collect();
-            res
-        })
+    let pks = unsafe {
+        pks_ptrs
+            .iter()
+            .zip(pks_lens_.iter())
+            .map(|(&ptr, &pk_len)| {
+                let pk_set: &[*mut PublicKey<Bls12>] = if pk_len == 0 {
+                    &[]
+                } else {
+                    slice::from_raw_parts(ptr, pk_len)
+                };
+                let res: Vec<PublicKey<Bls12>> = pk_set.iter().map(|pk| *from_ptr!(*pk)).collect();
+                res
+            })
     };
 
     // let pks = pks_.iter().map(|pk| *from_ptr!(*pk));
-    let m_pk_pairs: Vec<(&[u8], Vec<PublicKey<Bls12>>)> = ms.into_iter().zip(pks.into_iter()).collect();
-    let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs.iter().map(|(m, pk_vec)| (*m, pk_vec.as_slice())).collect();
+    let m_pk_pairs: Vec<(&[u8], Vec<PublicKey<Bls12>>)> =
+        ms.into_iter().zip(pks.into_iter()).collect();
+    let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs
+        .iter()
+        .map(|(m, pk_vec)| (*m, pk_vec.as_slice()))
+        .collect();
     let sig = from_ptr!(sig_ptr);
     u8::from(verify_aggregate_sig_hybrid(&m_pk_pairs, *sig))
 }

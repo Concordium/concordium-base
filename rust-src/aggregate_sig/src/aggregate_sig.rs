@@ -180,9 +180,9 @@ pub fn verify_aggregate_sig<P: Pairing>(
     P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
-/// Verifies an aggregate signature on pairs `(messages m_i, set_i)` `for i=1..n`
-/// but where `set_i` denotes the set of public keys corresponding to the secret keys that signed m_i. 
-/// This implements a combination of AggregateVerify from Section 3.1.1 and FastAggregateVerify from Section 3.3.4 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
+/// Verifies an aggregate signature on pairs `(messages m_i, set_i)` `for
+/// i=1..n` but where `set_i` denotes the set of public keys corresponding to
+/// the secret keys that signed m_i. This implements a combination of AggregateVerify from Section 3.1.1 and FastAggregateVerify from Section 3.3.4 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
 pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
@@ -357,10 +357,7 @@ mod test {
 
             // altering a public key should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
-            assert!(!verify_aggregate_sig_hybrid(
-                &m_pk_pairs2,
-                sig
-            ));
+            assert!(!verify_aggregate_sig_hybrid(&m_pk_pairs2, sig));
 
             let new_m: [u8; 32] = rng.gen::<[u8; 32]>();
             m_pk_pairs.pop();
