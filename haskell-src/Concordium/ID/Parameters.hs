@@ -32,11 +32,18 @@ foreign import ccall safe "global_context_to_json" globalContextToJSONFFI :: Ptr
 foreign import ccall safe "global_context_from_json" globalContextFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 foreign import ccall unsafe "global_context_create"
     createGlobalContextFFI ::
-        Ptr Word8 -> CSize ->
-        Ptr Word8 -> CSize ->
-        Ptr Word8 -> CSize ->
+        Ptr Word8 -> CSize -> -- Pointer to a byte array representing the genesis string and its length.
+                              -- The array must correspond to a utf8 encoded string.
+        Ptr Word8 -> CSize -> -- Pointer to a byte array and its length. The array must containa a binary
+                              -- representation of a `Generators<G1>` Rust instance.
+        Ptr Word8 -> CSize -> -- Pointer to a byte array and its length. The array must containa a binary
+                              -- representation of a `PedersenKey<G1>` Rust instance.
         IO (Ptr GlobalContext)
 
+-- Create an GlobalContext intance from bytestrings and texts.
+-- This function is a wrapper for `createGlobalContextFFI`, and is used for creating heap-allocated
+-- `GlobalContext` instances from raw and utf8-encoded bytestrings. See the `createGlobalContextFFI`
+-- import declaration for more information about the function inputs.
 createGlobalContext :: Text -> BS8.ByteString -> BS8.ByteString -> Maybe GlobalContext
 createGlobalContext genString bulletProofGens onChainComm = unsafePerformIO ( do
     (gsPtr, gsLen) <- toByteArrayInput (Text.encodeUtf8 genString)

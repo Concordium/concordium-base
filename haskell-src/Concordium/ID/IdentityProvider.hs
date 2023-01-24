@@ -40,30 +40,41 @@ foreign import ccall unsafe "ip_info_description" ipDescriptionFFI :: Ptr IpInfo
 foreign import ccall unsafe "ip_info_verify_key" ipVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
-    Word32 ->
-    Ptr Word8 -> CSize ->
-    Ptr Word8 -> CSize ->
-    Ptr Word8 -> CSize ->
-    Ptr Word8 -> CSize ->
-    Ptr Word8 -> CSize ->
-    IO (Ptr IpInfo)
+    IdentityProviderIdentity -> -- An IpIdentity returned by ipIdentityFFI.
+    Ptr Word8 -> CSize -> -- Pointer to a byte array returned by ipVerifyKeyFFI, and its length. The
+                          -- array must be the binary representation of a `ed25519_dalek::PublicKey`
+                          -- Rust instance.
+    Ptr Word8 -> CSize -> -- Pointer to a byte array returned by ipCdiVerifyKeyFFI and its length. The
+                          -- array must be the binary representation of a `ps_sig::PublicKey<Bls12>`
+                          -- Rust instance.
+    Ptr Word8 -> CSize -> -- Pointer to a byte array returned by ipNameFFI and its length. The array
+                          -- must correspond to a utf8 encoded string.
+    Ptr Word8 -> CSize -> -- Pointer to a byte array returned by ipUrlFFI and its length. The array
+                          -- must correspond to a utf8 encoded string.
+    Ptr Word8 -> CSize -> -- Pointer to a byte array returned by ipDescriptionFFI and its length. The
+                          -- array must correspond to a utf8 encoded string.
+    IO (Ptr IpInfo) -- Pointer to an `IpInfo Rust instance with its corresponding fields set to the above
+                    -- values.
 
-createIpInfo :: IdentityProviderIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> Maybe IpInfo
-createIpInfo arId verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
-    let (IP_ID idW) = arId
-    (vkPtr, vkLen) <- toByteArrayInput verifyKey
-    (cvkPtr, cvkLen) <- toByteArrayInput cdiVerifyKey
-    (nPtr, nLen) <- toByteArrayInput (Text.encodeUtf8 name)
-    (urlPtr, urlLen) <- toByteArrayInput (Text.encodeUtf8 url)
-    (descPtr, descLen) <- toByteArrayInput (Text.encodeUtf8 desc)
-    ptr <- createIpInfoFFI idW vkPtr vkLen cvkPtr cvkLen nPtr nLen urlPtr urlLen descPtr descLen
-    if ptr == nullPtr
-    then return Nothing
-    else Just . IpInfo <$> newForeignPtr freeIpInfo ptr)
-    where
-        toByteArrayInput bs =
-            unsafeUseAsCStringLen bs
-                $ \(p, l) -> return (castPtr p :: Ptr Word8, fromIntegral l :: CSize)
+-- Create an IpInfo intance from bytestrings and texts.
+-- This function is a wrapper for `createIpInfoFFI`, and is used for creating heap-allocated `IpInfo`
+-- instances from raw and utf8-encoded bytestrings. The inputs should conform to field values extracted
+-- from `IpInfo` instances using FFI functions, see the `createIpInfoFFI` import declaration for more
+-- information about the function inputs.
+createIpInfo:: IdentityProviderIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> IpInfo
+createIpInfo idIdentity verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
+    ptr <- unsafeUseAsCStringLen verifyKey $ \(vkPtr, vkLen) ->
+        unsafeUseAsCStringLen cdiVerifyKey $ \(cvkPtr, cvkLen) ->
+            unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
+                unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
+                    unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
+                        createIpInfoFFI idIdentity
+                            (castPtr vkPtr) (fromIntegral vkLen)
+                            (castPtr cvkPtr) (fromIntegral cvkLen)
+                            (castPtr nPtr) (fromIntegral nLen)
+                            (castPtr urlPtr) (fromIntegral urlLen)
+                            (castPtr descPtr) (fromIntegral descLen)                             
+    IpInfo <$> newForeignPtr freeIpInfo ptr )
 
 withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b
 withIpInfo (IpInfo fp) = withForeignPtr fp
