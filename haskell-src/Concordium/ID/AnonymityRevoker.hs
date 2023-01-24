@@ -56,8 +56,8 @@ foreign import ccall unsafe "ar_info_create"
 -- Create an arInfo intance from bytestrings and texts.
 -- This function is a wrapper for `createArInfoFFI`, and is used for creating heap-allocated `ArInfo`
 -- instances from raw and utf8-encoded bytestrings. The inputs should conform to field values extracted
--- from `IpInfo` instances using FFI functions, see the `createArInfoFFI` import declaration for important
--- information about the function inputs and preconditions.
+-- from `IpInfo` instances using FFI functions, see the `createArInfoFFI` import declaration
+-- for information about the function inputs and preconditions.
 createArInfo :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> ArInfo
 createArInfo arId pubKey name url desc = unsafePerformIO ( do
     let (ArIdentity idW) = arId

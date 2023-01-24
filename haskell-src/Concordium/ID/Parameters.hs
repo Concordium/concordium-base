@@ -42,8 +42,8 @@ foreign import ccall unsafe "global_context_create"
 
 -- Create an GlobalContext intance from bytestrings and texts.
 -- This function is a wrapper for `createGlobalContextFFI`, and is used for creating heap-allocated
--- `GlobalContext` instances from raw and utf8-encoded bytestrings. See the `createGlobalContextFFI`
--- import declaration for important information about the function inputs and preconditions.
+-- `GlobalContext` instances from bytestrings. See the `createGlobalContextFFI` import declaration
+-- for information about the function inputs and preconditions.
 createGlobalContext :: Text -> BS8.ByteString -> BS8.ByteString -> GlobalContext
 createGlobalContext genString bulletProofGens onChainComm = unsafePerformIO ( do
     ptr <- unsafeUseAsCStringLen (Text.encodeUtf8 genString) $ \(gsPtr, gsLen) ->
