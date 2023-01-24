@@ -34,9 +34,9 @@ foreign import ccall unsafe "global_context_create"
     createGlobalContextFFI ::
         Ptr Word8 -> CSize -> -- Pointer to a byte array representing the genesis string and its length.
                               -- The array must correspond to a utf8 encoded string.
-        Ptr Word8 -> CSize -> -- Pointer to a byte array and its length. The array must containa a binary
+        Ptr Word8 -> CSize -> -- Pointer to a byte array and its length. The array must be the binary
                               -- representation of a `Generators<G1>` Rust instance.
-        Ptr Word8 -> CSize -> -- Pointer to a byte array and its length. The array must containa a binary
+        Ptr Word8 -> CSize -> -- Pointer to a byte array and its length. The array must be the binary
                               -- representation of a `PedersenKey<G1>` Rust instance.
         IO (Ptr GlobalContext)
 
