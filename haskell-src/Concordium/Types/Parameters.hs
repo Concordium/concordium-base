@@ -688,6 +688,7 @@ maybeWhenSupported _ f (SomeParam a) = f a
 type IsMintDistributionVersion (mdv :: MintDistributionVersion) = SingI mdv
 
 -- |Witness a @SingI (SupportsMintPerSlot mdv)@ constraint using a 'SMintDistributionVersion mdv'.
+-- Concretely this provides the passed in action @a@ with the context 'SupportsMintPerSlot mdv'.
 withSupportsMintPerSlot :: forall mdv a. SMintDistributionVersion mdv -> (SingI (SupportsMintPerSlot mdv) => a) -> a
 withSupportsMintPerSlot smdv = withSingI (sSupportsMintPerSlot smdv)
 

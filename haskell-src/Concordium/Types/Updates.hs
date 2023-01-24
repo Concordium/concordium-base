@@ -715,8 +715,8 @@ instance Serialize UpdateType where
     put UpdateCooldownParameters = putWord8 15
     put UpdateTimeParameters = putWord8 16
     put UpdateTimeoutParameters = putWord8 17
-    put UpdateMinBlockTime = putWord8 19
-    put UpdateBlockEnergyLimit = putWord8 20
+    put UpdateMinBlockTime = putWord8 18
+    put UpdateBlockEnergyLimit = putWord8 19
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -736,8 +736,8 @@ instance Serialize UpdateType where
             15 -> return UpdateCooldownParameters
             16 -> return UpdateTimeParameters
             17 -> return UpdateTimeoutParameters
-            19 -> return UpdateMinBlockTime
-            20 -> return UpdateBlockEnergyLimit
+            18 -> return UpdateMinBlockTime
+            19 -> return UpdateBlockEnergyLimit
             n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.

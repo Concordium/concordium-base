@@ -43,6 +43,7 @@ data UpdateQueue e = UpdateQueue
 
 makeLenses ''UpdateQueue
 
+-- |An optional queue. The queue is present if @pt@ is present for a @cpv@.
 type OUpdateQueue (pt :: ParameterType) (cpv :: ChainParametersVersion) e = OParam pt cpv (UpdateQueue e)
 
 instance HashableTo H.Hash e => HashableTo H.Hash (UpdateQueue e) where
