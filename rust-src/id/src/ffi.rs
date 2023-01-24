@@ -298,8 +298,11 @@ pub extern "C" fn ip_info_cdi_verify_key(
     ptr
 }
 
+/// Create an ArInfo instance from byte array pointers.
+/// Assumes that public_key_ptr points to a PublicKey<G1>
+/// instance and that name_ptr, url_ptr and desc_ptr
+/// to valid utf8 strings, and panics otherwise.
 #[no_mangle]
-/// Instantiate an ArInfo instance from byte arrays.
 unsafe extern "C" fn ar_info_create(
     identity: u32,
     public_key_ptr: *mut u8,
@@ -310,102 +313,99 @@ unsafe extern "C" fn ar_info_create(
     url_len: size_t,
     desc_ptr: *const u8,
     desc_len: size_t,
+    output_len: *mut size_t,
 ) -> *mut ArInfo<G1> {
-    // Description.
-    let name;
-    if let Ok(_name) = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize)) {
-        name = _name.to_string();
-    } else {
-        return std::ptr::null_mut();
-    }
-
-    let url;
-    if let Ok(_url) = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize)) {
-        url = _url.to_string();
-    } else {
-        return std::ptr::null_mut();
-    }
-
-    let description;
-    if let Ok(_description) = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize)) {
-        description = _description.to_string();
-    } else {
-        return std::ptr::null_mut();
-    }
-
-    let ar_description = Description {
-        name,
-        url,
-        description,
-    };
-
     // Identity.
-    let ar_identity;
-    if let Ok(_ar_identity) = ArIdentity::try_from(identity) {
-        ar_identity = _ar_identity;
-    } else {
-        return std::ptr::null_mut();
-    }
+    let ar_identity = ArIdentity::try_from(identity)
+        .expect("Precondition failed: Unable to create ArIdentity instance from u32.");
 
     // Public key.
-    let buf = &mut slice_from_c_bytes!(public_key_ptr, public_key_len as usize);
+    let ar_public_key = {
+        let buf = &mut slice_from_c_bytes!(public_key_ptr, public_key_len as usize);
 
-    let ar_public_key;
-    if let Ok(_ar_public_key) = from_bytes::<elgamal::PublicKey<G1>, &[u8]>(buf) {
-        ar_public_key = _ar_public_key;
-    } else {
-        return std::ptr::null_mut();
-    }
+        from_bytes::<elgamal::PublicKey<G1>, &[u8]>(buf).expect(
+            "Precondition failed: Unable to create PublicKey<G1> instance from byte array at \
+             public_key_ptr.",
+        )
+    };
 
-    let ar_info: ArInfo<G1> = ArInfo {
+    // Description.
+    let ar_description = {
+        let name = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize))
+            .expect("Precondition failed: Unable to decode byte array at name_ptr as utf8.")
+            .to_string();
+
+        let url = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize))
+            .expect("Precondition failed: Unable to decode byte array at url_ptr as utf8.")
+            .to_string();
+
+        let description = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize))
+            .expect("Precondition failed: Unable to decode byte array at desc_ptr as utf8.")
+            .to_string();
+
+        Description {
+            name,
+            url,
+            description,
+        }
+    };
+
+    let ar_info = ArInfo {
         ar_identity,
         ar_description,
         ar_public_key,
     };
 
+    *output_len = to_bytes(&ar_info).len() as size_t;
     Box::into_raw(Box::new(ar_info))
 }
 
+/// Create a GlobalContext instance from byte array pointers.
+/// Assumes that genesis_string_ptr points to a valid
+/// utf8 string, bulletproof_generators_ptr to a
+/// Generators<G1> instance and on_chain_commitments to a
+/// PedersenKey<G1> instance, and panics otherwise.
 #[no_mangle]
-extern "C" fn global_context_create(
+unsafe extern "C" fn global_context_create(
     genesis_string_ptr: *const u8,
     genesis_string_len: size_t,
     bulletproof_generators_ptr: *const u8,
     bulletproof_generators_len: size_t,
     on_chain_commitment_ptr: *const u8,
     on_chain_commitment_len: size_t,
+    output_len: *mut size_t,
 ) -> *mut GlobalContext<G1> {
-    let genesis_string;
-    if let Ok(_genesis_string) = from_utf8(slice_from_c_bytes!(
+    // Genesis string.
+    let genesis_string = from_utf8(slice_from_c_bytes!(
         genesis_string_ptr,
         genesis_string_len as usize
-    )) {
-        genesis_string = _genesis_string.to_string();
-    } else {
-        return std::ptr::null_mut();
-    }
+    ))
+    .expect("Precondition failed: Unable to decode byte array at genesis_string_ptr as utf8.")
+    .to_string();
 
-    let bulletproof_generators_buf = &mut slice_from_c_bytes!(
-        bulletproof_generators_ptr,
-        bulletproof_generators_len as usize
-    );
-    let bulletproof_generators;
-    if let Ok(_bulletproof_generators) =
-        from_bytes::<Generators<G1>, &[u8]>(bulletproof_generators_buf)
-    {
-        bulletproof_generators = _bulletproof_generators
-    } else {
-        return std::ptr::null_mut();
-    }
+    // Bulletproof generators.
+    let bulletproof_generators = {
+        let bulletproof_generators_buf = &mut slice_from_c_bytes!(
+            bulletproof_generators_ptr,
+            bulletproof_generators_len as usize
+        );
 
-    let commitment_key_buf =
-        &mut slice_from_c_bytes!(on_chain_commitment_ptr, on_chain_commitment_len as usize);
-    let on_chain_commitment_key;
-    if let Ok(_on_chain_commitment_key) = from_bytes::<PedersenKey<G1>, &[u8]>(commitment_key_buf) {
-        on_chain_commitment_key = _on_chain_commitment_key
-    } else {
-        return std::ptr::null_mut();
-    }
+        from_bytes::<Generators<G1>, &[u8]>(bulletproof_generators_buf).expect(
+            "Precondition failed: Unable to create Generators<G1> instance from byte array at \
+             genesis_str_ptr.",
+        )
+    };
+
+    // On-chain commitment key.
+    let on_chain_commitment_key = {
+        let commitment_key_buf =
+            &mut slice_from_c_bytes!(on_chain_commitment_ptr, on_chain_commitment_len as usize);
+
+        from_bytes::<PedersenKey<G1>, &[u8]>(commitment_key_buf).expect(
+            "Precondition failed: Unable to create PedersenKey<G1> instance from byte array at \
+             on_chain_commitment_ptr.",
+        )
+    };
 
     let global_context = GlobalContext {
         on_chain_commitment_key,
@@ -413,11 +413,17 @@ extern "C" fn global_context_create(
         genesis_string,
     };
 
+    *output_len = to_bytes(&global_context).len() as size_t;
     Box::into_raw(Box::new(global_context))
 }
 
+/// Create an IpInfo instance from byte array pointers.
+/// Assumes that verify_key_ptr points to a
+/// ps_sig::PublicKey<Bls12> instance,
+/// cdi_verify_key_ptr to a ed25519_dalek::PublicKey
+/// instance and name_ptr, url_ptr and desc_ptr to
+/// valid utf8 strings, and panics otherwise.
 #[no_mangle]
-/// Instantiate an IpInfo instance from byte arrays.
 unsafe extern "C" fn ip_info_create(
     identity: u32,
     verify_key_ptr: *mut u8,
@@ -430,68 +436,61 @@ unsafe extern "C" fn ip_info_create(
     url_len: size_t,
     desc_ptr: *const u8,
     desc_len: size_t,
+    output_len: *mut size_t,
 ) -> *mut IpInfo<Bls12> {
-    // Description.
-    let name;
-    if let Ok(_name) = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize)) {
-        name = _name.to_string();
-    } else {
-        return std::ptr::null_mut();
-    }
+    // Identity.
+    let ip_identity = IpIdentity::try_from(identity)
+        .expect("Precondition failed: Unable to create Ipdentity instance from u32.");
 
-    let url;
-    if let Ok(_url) = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize)) {
-        url = _url.to_string();
-    } else {
-        return std::ptr::null_mut();
-    }
+    // Identity provider verify key.
+    let ip_verify_key = {
+        let ps_buf = &mut slice_from_c_bytes!(verify_key_ptr, verify_key_len as usize);
 
-    let description;
-    if let Ok(_description) = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize)) {
-        description = _description.to_string();
-    } else {
-        return std::ptr::null_mut();
-    }
-
-    let ip_description = Description {
-        name,
-        url,
-        description,
+        from_bytes::<ps_sig::PublicKey<Bls12>, &[u8]>(ps_buf).expect(
+            "Precondition failed: Unable to create PublicKey<Bls12> instance from byte array at \
+             verify_key_ptr.",
+        )
     };
 
-    // Identity.
-    let ip_identity;
-    if let Ok(_ip_identity) = IpIdentity::try_from(identity) {
-        ip_identity = _ip_identity;
-    } else {
-        return std::ptr::null_mut();
-    }
+    // Identity provider cdi verify key.
+    let ip_cdi_verify_key = {
+        let ed_buf = &mut slice_from_c_bytes!(cdi_verify_key_ptr, cdi_verify_key_len as usize);
 
-    // PS public key.
-    let ps_buf = &mut slice_from_c_bytes!(verify_key_ptr, verify_key_len as usize);
-    let ip_verify_key;
-    if let Ok(_ip_verify_key) = from_bytes::<ps_sig::PublicKey<Bls12>, &[u8]>(ps_buf) {
-        ip_verify_key = _ip_verify_key;
-    } else {
-        return std::ptr::null_mut();
-    }
+        from_bytes::<ed25519_dalek::PublicKey, &[u8]>(ed_buf).expect(
+            "Precondition failed: Unable to create PublicKey instance from byte array at \
+             cdi_verify_key_ptr.",
+        )
+    };
 
-    // Ed25519 public key
-    let ed_buf = &mut slice_from_c_bytes!(cdi_verify_key_ptr, cdi_verify_key_len as usize);
-    let ip_cdi_verify_key;
-    if let Ok(_ip_cdi_verify_key) = from_bytes::<ed25519_dalek::PublicKey, &[u8]>(ed_buf) {
-        ip_cdi_verify_key = _ip_cdi_verify_key;
-    } else {
-        return std::ptr::null_mut();
-    }
+    // Description.
+    let ip_description = {
+        let name = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize))
+            .expect("Precondition failed: Unable to decode byte array at name_ptr as utf8.")
+            .to_string();
 
-    let ip_info: IpInfo<Bls12> = IpInfo {
+        let url = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize))
+            .expect("Precondition failed: Unable to decode byte array at url_ptr as utf8.")
+            .to_string();
+
+        let description = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize))
+            .expect("Precondition failed: Unable to decode byte array at desc_ptr as utf8.")
+            .to_string();
+
+        Description {
+            name,
+            url,
+            description,
+        }
+    };
+
+    let ip_info = IpInfo {
         ip_identity,
         ip_description,
         ip_verify_key,
         ip_cdi_verify_key,
     };
 
+    *output_len = to_bytes(&ip_info).len() as size_t;
     Box::into_raw(Box::new(ip_info))
 }
 
