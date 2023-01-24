@@ -56,23 +56,21 @@ foreign import ccall unsafe "ar_info_create"
 -- Create an arInfo intance from bytestrings and texts.
 -- This function is a wrapper for `createArInfoFFI`, and is used for creating heap-allocated `ArInfo`
 -- instances from raw and utf8-encoded bytestrings. The inputs should conform to field values extracted
--- from `IpInfo` instances using FFI functions, see the `createArInfoFFI` import declaration for more
--- information about the function inputs
-createArInfo :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe ArInfo
+-- from `IpInfo` instances using FFI functions, see the `createArInfoFFI` import declaration for important
+-- information about the function inputs and preconditions.
+createArInfo :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> ArInfo
 createArInfo arId pubKey name url desc = unsafePerformIO ( do
     let (ArIdentity idW) = arId
-    (pkPtr, pkLen) <- toByteArrayInput pubKey
-    (nPtr, nLen) <- toByteArrayInput (Text.encodeUtf8 name)
-    (urlPtr, urlLen) <- toByteArrayInput (Text.encodeUtf8 url)
-    (descPtr, descLen) <- toByteArrayInput (Text.encodeUtf8 desc)
-    ptr <- createArInfoFFI idW pkPtr pkLen nPtr nLen urlPtr urlLen descPtr descLen
-    if ptr == nullPtr
-    then return Nothing
-    else Just . ArInfo <$> newForeignPtr freeArInfo ptr)
-    where
-        toByteArrayInput bs =
-            unsafeUseAsCStringLen bs
-                $ \(p, l) -> return (castPtr p :: Ptr Word8, fromIntegral l :: CSize)
+    ptr <- unsafeUseAsCStringLen pubKey $ \(pkPtr, pkLen) ->
+        unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
+            unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
+                unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
+                    createArInfoFFI idW
+                        (castPtr pkPtr) (fromIntegral pkLen)
+                        (castPtr nPtr) (fromIntegral nLen)
+                        (castPtr urlPtr) (fromIntegral urlLen)
+                        (castPtr descPtr) (fromIntegral descLen)
+    ArInfo <$> newForeignPtr freeArInfo ptr)
     
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp

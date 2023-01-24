@@ -43,20 +43,17 @@ foreign import ccall unsafe "global_context_create"
 -- Create an GlobalContext intance from bytestrings and texts.
 -- This function is a wrapper for `createGlobalContextFFI`, and is used for creating heap-allocated
 -- `GlobalContext` instances from raw and utf8-encoded bytestrings. See the `createGlobalContextFFI`
--- import declaration for more information about the function inputs.
-createGlobalContext :: Text -> BS8.ByteString -> BS8.ByteString -> Maybe GlobalContext
+-- import declaration for important information about the function inputs and preconditions.
+createGlobalContext :: Text -> BS8.ByteString -> BS8.ByteString -> GlobalContext
 createGlobalContext genString bulletProofGens onChainComm = unsafePerformIO ( do
-    (gsPtr, gsLen) <- toByteArrayInput (Text.encodeUtf8 genString)
-    (bpgPtr, bpgLen) <- toByteArrayInput bulletProofGens
-    (occPtr, occLen) <- toByteArrayInput onChainComm
-    ptr <- createGlobalContextFFI gsPtr gsLen bpgPtr bpgLen occPtr occLen
-    if ptr == nullPtr
-    then return Nothing
-    else Just . GlobalContext <$> newForeignPtr freeGlobalContext ptr)
-    where
-        toByteArrayInput bs =
-            unsafeUseAsCStringLen bs
-                $ \(p, l) -> return (castPtr p :: Ptr Word8, fromIntegral l :: CSize)
+    ptr <- unsafeUseAsCStringLen (Text.encodeUtf8 genString) $ \(gsPtr, gsLen) ->
+        unsafeUseAsCStringLen bulletProofGens $ \(bpgPtr, bpgLen) ->
+            unsafeUseAsCStringLen onChainComm $ \(occPtr, occLen) ->
+                createGlobalContextFFI
+                    (castPtr gsPtr) (fromIntegral gsLen)
+                    (castPtr bpgPtr) (fromIntegral bpgLen)
+                    (castPtr occPtr) (fromIntegral occLen)
+    GlobalContext <$> newForeignPtr freeGlobalContext ptr)
 
 withGlobalContext :: GlobalContext -> (Ptr GlobalContext -> IO b) -> IO b
 withGlobalContext (GlobalContext fp) = withForeignPtr fp

@@ -59,8 +59,8 @@ foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
 -- Create an IpInfo intance from bytestrings and texts.
 -- This function is a wrapper for `createIpInfoFFI`, and is used for creating heap-allocated `IpInfo`
 -- instances from raw and utf8-encoded bytestrings. The inputs should conform to field values extracted
--- from `IpInfo` instances using FFI functions, see the `createIpInfoFFI` import declaration for more
--- information about the function inputs.
+-- from `IpInfo` instances using FFI functions, see the `createIpInfoFFI` import declaration for important
+-- information about the function inputs and preconditions.
 createIpInfo:: IdentityProviderIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> IpInfo
 createIpInfo idIdentity verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
     ptr <- unsafeUseAsCStringLen verifyKey $ \(vkPtr, vkLen) ->
