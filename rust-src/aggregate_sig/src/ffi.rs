@@ -154,19 +154,17 @@ pub extern "C" fn bls_verify_aggregate(
 
 /// Verify a an aggregate signature by verifying the groupings which consists of
 /// a message and public keys.
-/// PRECONDITION: pks_i must correspond to messages_i, i.e. the associated
-/// secret key of pks_i must be the one that was used for signing messages_i.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_verify_aggregate_hybrid(
-    m_ptr: *const *const u8, // pointer to the messages.
+    m_ptr: *const *const u8, // array of pointers to messages.
     m_len: *const size_t,    // the number of messages.
-    pks_ptr: *const *const *mut PublicKey<Bls12>, /* pointer to a pointer to the public key
-                              * associated with the signature. */
+    pks_ptr: *const *const *mut PublicKey<Bls12>, /* array of pointers to arrays of pointers
+                              * to public keys */
     pks_len: *const size_t, // number of public keys.
     len: size_t,            /* the number of sets of public keys. Note. this is equal to the
                              * number of messages. */
-    sig_ptr: *mut Signature<Bls12>, // pointer to the signature.
+    sig_ptr: *const Signature<Bls12>, // pointer to the signature.
 ) -> u8 {
     let m_lens_: &[size_t] = if len == 0 {
         &[]
