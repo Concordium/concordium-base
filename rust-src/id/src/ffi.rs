@@ -313,7 +313,6 @@ unsafe extern "C" fn ar_info_create(
     url_len: size_t,
     desc_ptr: *const u8,
     desc_len: size_t,
-    output_len: *mut size_t,
 ) -> *mut ArInfo<G1> {
     // Identity.
     let ar_identity = ArIdentity::try_from(identity)
@@ -356,9 +355,6 @@ unsafe extern "C" fn ar_info_create(
         ar_public_key,
     };
 
-    let bytes = to_bytes(&ar_info);
-    *output_len = to_bytes(&ar_info).len() as size_t;
-    std::mem::forget(bytes);
     Box::into_raw(Box::new(ar_info))
 }
 
@@ -375,7 +371,6 @@ unsafe extern "C" fn global_context_create(
     bulletproof_generators_len: size_t,
     on_chain_commitment_ptr: *const u8,
     on_chain_commitment_len: size_t,
-    output_len: *mut size_t,
 ) -> *mut GlobalContext<G1> {
     // Genesis string.
     let genesis_string = from_utf8(slice_from_c_bytes!(
@@ -415,9 +410,6 @@ unsafe extern "C" fn global_context_create(
         genesis_string,
     };
 
-    let bytes = to_bytes(&global_context);
-    *output_len = to_bytes(&global_context).len() as size_t;
-    std::mem::forget(bytes);
     Box::into_raw(Box::new(global_context))
 }
 
@@ -440,7 +432,6 @@ unsafe extern "C" fn ip_info_create(
     url_len: size_t,
     desc_ptr: *const u8,
     desc_len: size_t,
-    output_len: *mut size_t,
 ) -> *mut IpInfo<Bls12> {
     // Identity.
     let ip_identity = IpIdentity::try_from(identity)
@@ -494,9 +485,6 @@ unsafe extern "C" fn ip_info_create(
         ip_cdi_verify_key,
     };
 
-    let bytes = to_bytes(&ip_info);
-    *output_len = to_bytes(&ip_info).len() as size_t;
-    std::mem::forget(bytes);
     Box::into_raw(Box::new(ip_info))
 }
 
