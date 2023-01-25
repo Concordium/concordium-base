@@ -92,23 +92,29 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
 
 fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
     let mut csprng = thread_rng();
-    let n = 200;
-    let (sks, pks) = get_sks_pks!(n, csprng);
-    let ms: Vec<_> = n_rand_ms_of_length!(n, 1000, csprng);
+    let num_signers = 50;
+    let num_messages = 1;
+    let (sks, pks) = get_sks_pks!(num_signers, csprng);
+    let ms: Vec<_> = n_rand_ms_of_length!(num_messages, 1000, csprng);
 
     let mut agg_sig = sks[0].sign(&ms[0]);
-    for i in 1..n {
-        let new_sig = sks[i].sign(&ms[i]);
+    for i in 1..num_signers {
+        let new_sig = sks[i].sign(&ms[0]);
         agg_sig = new_sig.aggregate(agg_sig);
     }
 
+    let mut m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::with_capacity(num_messages);
+    for i in 1..num_messages {
+        let m_pk = (ms[i].as_slice(), pks.as_slice());
+        m_pk_pairs.push(m_pk);
+    }
+
+    // TODO: clean this up before merging.
+    // Benchmarking sequential version vs parallel version.
     c.bench_function("verify_aggregate_sig_hybrid", move |b| {
-        let mut m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::with_capacity(n);
-        for i in 0..n {
-            let m_pk = (ms[i].as_slice(), from_ref(&pks[i]));
-            m_pk_pairs.push(m_pk);
-        }
         b.iter(|| verify_aggregate_sig_hybrid(&m_pk_pairs, agg_sig))
+        // b.iter(|| verify_aggregate_sig_hybrid_sequential(&m_pk_pairs,
+        // agg_sig))
     });
 }
 

@@ -217,6 +217,33 @@ pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
+pub fn verify_aggregate_sig_hybrid_sequential<P: Pairing>(
+    m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
+    signature: Signature<P>,
+) -> bool {
+    // verifying against the empty set of signers always fails
+    if m_pk_pairs.is_empty() {
+        return false;
+    }
+    let product = m_pk_pairs
+        .iter()
+        .fold(<P::TargetField as Field>::one(), |mut prod, (m, pks)| {
+            let sum_pk_i = if pks.len() < 150 {
+                pks.iter()
+                    .fold(P::G2::zero_point(), |s, x| s.plus_point(&x.0))
+            } else {
+                pks.par_iter()
+                    .fold(P::G2::zero_point, |s, x| s.plus_point(&x.0))
+                    .reduce(P::G2::zero_point, |s, x| s.plus_point(&x))
+            };
+            let g1_hash = P::G1::hash_to_group(m);
+            let paired = P::pair(&g1_hash, &sum_pk_i);
+            prod.mul_assign(&paired);
+            prod
+        });
+    P::pair(&signature.0, &P::G2::one_point()) == product
+}
+
 /// Verifies an aggregate signature on the same message m under keys PK_i for
 /// i=1..n by checking     pairing(sig, g_2) == pairing(g1_hash(m), sum_{i=0}^n
 /// (PK_i)) where g_2 is the generator of G2.
