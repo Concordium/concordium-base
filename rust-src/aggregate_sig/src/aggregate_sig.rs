@@ -217,6 +217,7 @@ pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
+/// A sequential version of 'verify_aggregate_sig_hybrid'.
 pub fn verify_aggregate_sig_hybrid_sequential<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
