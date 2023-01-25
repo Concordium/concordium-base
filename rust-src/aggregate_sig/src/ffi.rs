@@ -157,10 +157,10 @@ pub extern "C" fn bls_verify_aggregate(
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_verify_aggregate_hybrid(
-    m_ptr: *const *const u8, // array of pointers to messages.
-    m_len: *const size_t,    // the number of messages.
+    m_ptr: *const *const u8,        // array of pointers to messages.
+    message_lengths: *const size_t, // array of the lengths of the messages.
     pks_ptr: *const *const *mut PublicKey<Bls12>, /* array of pointers to arrays of pointers
-                              * to public keys */
+                                     * to public keys */
     pks_len: *const size_t, // number of public keys.
     len: size_t,            /* the number of sets of public keys. Note. this is equal to the
                              * number of messages. */
@@ -169,7 +169,7 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
     let m_lens_: &[size_t] = if len == 0 {
         &[]
     } else {
-        unsafe { slice::from_raw_parts(m_len, len) }
+        unsafe { slice::from_raw_parts(message_lengths, len) }
     };
 
     let ms_: &[*const u8] = if len == 0 {

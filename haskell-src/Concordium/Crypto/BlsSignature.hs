@@ -25,7 +25,7 @@ import Concordium.Crypto.FFIHelpers
 
 import Control.DeepSeq
 import qualified Data.Aeson as AE
-import Data.ByteString
+import Data.ByteString hiding (unzip)
 import Data.ByteString.Unsafe as BS
 import Data.Int
 import qualified Data.List as List
@@ -294,8 +294,9 @@ verifyAggregate m pks sig = unsafePerformIO $ do
 -- |Verify a signature on the list of bytestrings under the list of public keys.
 -- The public keys are grouped so that the i'th list of public keys corresponds to the
 -- secret keys that signed the i'th message.
-verifyAggregateHybrid :: [ByteString] -> [[PublicKey]] -> Signature -> Bool
-verifyAggregateHybrid ms pksets sig = unsafePerformIO $ do
+verifyAggregateHybrid :: [(ByteString, [PublicKey])] -> Signature -> Bool
+verifyAggregateHybrid msPks sig = unsafePerformIO $ do
+    let (ms,pksets) = unzip msPks
     withMessageArray [] [] ms $ \m' mlen ->
         withSignature sig $ \sig' ->
             withKeyArray2 [] [] pksets $ \headptr setLens ->
