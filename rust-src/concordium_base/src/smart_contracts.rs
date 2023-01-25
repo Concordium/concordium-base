@@ -157,6 +157,16 @@ pub struct Parameter {
     bytes: Vec<u8>,
 }
 
+/// Display the entire parameter in hex.
+impl std::fmt::Display for Parameter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for b in &self.bytes {
+            f.write_fmt(format_args!("{:02x}", b))?
+        }
+        Ok(())
+    }
+}
+
 impl Parameter {
     /// Construct a parameter without checking that it fits the size limit.
     /// The caller is assumed to ensure this via external means.
