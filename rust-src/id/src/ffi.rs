@@ -583,6 +583,73 @@ mod test {
             &ip_cdi_secret_key,
         );
 
+        // Test ip_info_create.
+        let ip_info_copy = {
+            // Copy the IpInfo instance.
+            let ip_info_ptr = Box::into_raw(Box::new(ip_info.clone()));
+
+            // Get the identity.
+            let ip_info_identity = ip_info_ip_identity(ip_info_ptr);
+
+            // Get the description fields.
+            let mut ip_info_desc_bs_len: size_t = 0;
+            let ip_info_desc: Description = {
+                let ip_info_desc_ptr = ip_info_description(ip_info_ptr, &mut ip_info_desc_bs_len);
+                let buf = &mut slice_from_c_bytes!(ip_info_desc_ptr, ip_info_desc_bs_len as usize);
+                from_bytes(buf).expect("Bad stuff happened.")
+                // FIXME: How to convert the description byte array pointer into
+                // a Description instance? The byte array is contructed using:
+                //
+                //           description.description.as_bytes().to_vec();
+                //
+                // where description has type Description. The following did not
+                // work for me:
+                //
+                //           from_bytes::<Description, _>(buf)
+                //
+                // and fails with 'ffi::test::test_pipeline' panicked at 'Bad
+                // stuff happened: failed to fill whole buffer'.
+            };
+
+            let ip_info_name_bs = ip_info_desc.name.as_bytes();
+            let ip_info_url_bs = ip_info_desc.url.as_bytes();
+            let ip_info_desc_bs = ip_info_desc.description.as_bytes();
+
+            // Keys.
+            let mut ip_info_verify_key_len: size_t = 0;
+            let ip_info_verify_key_ptr =
+                ip_info_verify_key(ip_info_ptr, &mut ip_info_verify_key_len);
+
+            // Identity provider cdi verify key.
+            let mut ip_info_cdi_verify_key_len: size_t = 0;
+            let ip_info_cdi_verify_key_ptr =
+                ip_info_cdi_verify_key(ip_info_ptr, &mut ip_info_cdi_verify_key_len);
+
+            unsafe {
+                ip_info_create(
+                    ip_info_identity,
+                    ip_info_verify_key_ptr,
+                    ip_info_verify_key_len,
+                    ip_info_cdi_verify_key_ptr,
+                    ip_info_cdi_verify_key_len,
+                    ip_info_name_bs.as_ptr(),
+                    ip_info_name_bs.len(),
+                    ip_info_url_bs.as_ptr(),
+                    ip_info_url_bs.len(),
+                    ip_info_desc_bs.as_ptr(),
+                    ip_info_desc_bs.len(),
+                )
+            }
+        };
+
+        // FIXME: How to check equality; can I simple derive PartialEq and Eq,
+        //        and it will compare the field values (recursively) using
+        //        their comparison functions?
+        unsafe { assert_eq!((*ip_info_copy).ip_cdi_verify_key, ip_info.ip_cdi_verify_key) };
+        unsafe { assert_eq!((*ip_info_copy).ip_description, ip_info.ip_description) };
+        unsafe { assert_eq!((*ip_info_copy).ip_identity, ip_info.ip_identity) };
+        unsafe { assert_eq!((*ip_info_copy).ip_verify_key, ip_info.ip_verify_key) };
+
         // First test, check that we have a valid signature.
         assert!(ver_ok.is_ok());
 
