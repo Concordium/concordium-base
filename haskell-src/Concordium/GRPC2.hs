@@ -8,8 +8,6 @@
 -- to the generate Proto types.
 module Concordium.GRPC2 (
     ToProto (..),
-    BakerKeysEvent,
-    BakerAddedEvent
 )
 where
 
