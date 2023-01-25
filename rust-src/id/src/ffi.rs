@@ -298,7 +298,7 @@ pub extern "C" fn ip_info_cdi_verify_key(
     ptr
 }
 
-/// Create an ArInfo instance from byte array pointers.
+/// Create an [`ArInfo`] instance from byte array pointers.
 /// Assumes that public_key_ptr points to a PublicKey<G1>
 /// instance and that name_ptr, url_ptr and desc_ptr
 /// to valid utf8 strings, and panics otherwise.
@@ -358,7 +358,7 @@ unsafe extern "C" fn ar_info_create(
     Box::into_raw(Box::new(ar_info))
 }
 
-/// Create a GlobalContext instance from byte array pointers.
+/// Create a [`GlobalContext`] instance from byte array pointers.
 /// Assumes that genesis_string_ptr points to a valid
 /// utf8 string, bulletproof_generators_ptr to a
 /// Generators<G1> instance and on_chain_commitments to a
@@ -413,7 +413,7 @@ unsafe extern "C" fn global_context_create(
     Box::into_raw(Box::new(global_context))
 }
 
-/// Create an IpInfo instance from byte array pointers.
+/// Create an [`IpInfo`] instance from byte array pointers.
 /// Assumes that verify_key_ptr points to a
 /// ps_sig::PublicKey<Bls12> instance,
 /// cdi_verify_key_ptr to a ed25519_dalek::PublicKey
