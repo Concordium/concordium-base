@@ -67,7 +67,7 @@ testVerifyAggratedSigHybrid = forAllKPsAndMessages $ \keyPairsAndMessages ->
         sig = aggregateMany $ aggregateMany <$> sigs
         ms = map (BS.pack . snd) keyPairsAndMessages
         pks = map (map snd . fst) keyPairsAndMessages
-    in  verifyAggregateHybrid ms pks sig
+    in  verifyAggregateHybrid (zip ms pks) sig
 
 testSignAndVerifyCollision :: Property
 testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
