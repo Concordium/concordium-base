@@ -296,7 +296,7 @@ verifyAggregate m pks sig = unsafePerformIO $ do
 -- secret keys that signed the i'th message.
 verifyAggregateHybrid :: [(ByteString, [PublicKey])] -> Signature -> Bool
 verifyAggregateHybrid msPks sig = unsafePerformIO $ do
-    let (ms,pksets) = unzip msPks
+    let (ms, pksets) = unzip msPks
     withMessageArray [] [] ms $ \m' mlen ->
         withSignature sig $ \sig' ->
             withKeyArray2 [] [] pksets $ \headptr setLens ->
