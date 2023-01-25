@@ -111,10 +111,12 @@ fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
 
     // TODO: clean this up before merging.
     // Benchmarking sequential version vs parallel version.
-    c.bench_function("verify_aggregate_sig_hybrid", move |b| {
+    c.bench_function("verify_aggregate_sig_hybrid", |b| {
         b.iter(|| verify_aggregate_sig_hybrid(&m_pk_pairs, agg_sig))
-        // b.iter(|| verify_aggregate_sig_hybrid_sequential(&m_pk_pairs,
-        // agg_sig))
+    });
+
+    c.bench_function("verify_aggregate_sig_hybrid_sequential", |b| {
+        b.iter(|| verify_aggregate_sig_hybrid_sequential(&m_pk_pairs, agg_sig))
     });
 }
 
