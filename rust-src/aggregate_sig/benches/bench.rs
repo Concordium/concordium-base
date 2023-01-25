@@ -3,7 +3,6 @@ use aggregate_sig::*;
 use criterion::*;
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use std::slice::from_ref;
 
 macro_rules! rand_m_of_length {
     ($length:expr, $rng:expr) => {{
@@ -103,21 +102,23 @@ fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
         agg_sig = new_sig.aggregate(agg_sig);
     }
 
+    // A singletons vec containing 1 message and 50 associated pks.
     let mut m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::with_capacity(num_messages);
-    for i in 1..num_messages {
+    for i in 0..num_messages {
         let m_pk = (ms[i].as_slice(), pks.as_slice());
         m_pk_pairs.push(m_pk);
     }
 
     // TODO: clean this up before merging.
     // Benchmarking sequential version vs parallel version.
-    c.bench_function("verify_aggregate_sig_hybrid", |b| {
+    let mut group = c.benchmark_group("verify_aggregate_sig_hybrid");
+    group.bench_function("parallel", |b| {
         b.iter(|| verify_aggregate_sig_hybrid(&m_pk_pairs, agg_sig))
     });
-
-    c.bench_function("verify_aggregate_sig_hybrid_sequential", |b| {
+    group.bench_function("sequential", |b| {
         b.iter(|| verify_aggregate_sig_hybrid_sequential(&m_pk_pairs, agg_sig))
     });
+    group.finish();
 }
 
 fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
@@ -168,10 +169,7 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
 criterion_group!(sign_and_verify, bench_sign_and_verify);
 criterion_group!(aggregate, bench_aggregate_sig);
 criterion_group!(verify_aggregate, bench_verify_aggregate_sig);
-criterion_group!(
-    verify_aggregate_prepend_pk,
-    bench_verify_aggregate_sig_hybrid
-);
+criterion_group!(verify_aggregate_hybrid, bench_verify_aggregate_sig_hybrid);
 criterion_group!(
     verify_aggregate_trusted_keys,
     bench_verify_aggregate_sig_trusted_keys
@@ -181,6 +179,6 @@ criterion_main!(
     // sign_and_verify,
     // aggregate,
     verify_aggregate,
-    verify_aggregate_prepend_pk,
+    verify_aggregate_hybrid,
     verify_aggregate_trusted_keys
 );
