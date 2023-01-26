@@ -142,6 +142,7 @@ module Concordium.Types.Parameters (
     sSupportsMintPerSlot,
     -- |Typeclass for structures that contain a 'MintDistribution'.
     HasMintDistribution (..),
+
     -- * Transaction fee distribution
     TransactionFeeDistribution (..),
     -- |Typeclass for structures that contain a 'TransactionFeeDistribution'.
