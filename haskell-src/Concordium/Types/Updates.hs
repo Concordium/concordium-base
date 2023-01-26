@@ -937,31 +937,32 @@ updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
 extractKeysIndices p =
     case p of
-        ProtocolUpdatePayload{} -> f asProtocol
-        ElectionDifficultyUpdatePayload{} -> f asParamConsensusParameters
-        EuroPerEnergyUpdatePayload{} -> f asParamEuroPerEnergy
-        MicroGTUPerEuroUpdatePayload{} -> f asParamMicroGTUPerEuro
-        FoundationAccountUpdatePayload{} -> f asParamFoundationAccount
-        MintDistributionUpdatePayload{} -> f asParamMintDistribution
-        MintDistributionCPV1UpdatePayload{} -> f asParamMintDistribution
-        TransactionFeeDistributionUpdatePayload{} -> f asParamTransactionFeeDistribution
-        GASRewardsUpdatePayload{} -> f asParamGASRewards
-        GASRewardsCPV2UpdatePayload{} -> f asParamGASRewards
-        BakerStakeThresholdUpdatePayload{} -> f asPoolParameters
-        RootUpdatePayload{} -> g rootKeys
-        Level1UpdatePayload{} -> g level1Keys
-        AddAnonymityRevokerUpdatePayload{} -> f asAddAnonymityRevoker
-        AddIdentityProviderUpdatePayload{} -> f asAddIdentityProvider
-        CooldownParametersCPV1UpdatePayload{} -> f' asCooldownParameters
-        PoolParametersCPV1UpdatePayload{} -> f asPoolParameters
-        TimeParametersCPV1UpdatePayload{} -> f' asTimeParameters
-        TimeoutParametersUpdatePayload{} -> f asParamConsensusParameters
-        MinBlockTimeUpdatePayload{} -> f asParamConsensusParameters
-        BlockEnergyLimitUpdatePayload{} -> f asParamConsensusParameters
+        ProtocolUpdatePayload{} -> getLevel2KeysAndThreshold asProtocol
+        ElectionDifficultyUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        EuroPerEnergyUpdatePayload{} -> getLevel2KeysAndThreshold asParamEuroPerEnergy
+        MicroGTUPerEuroUpdatePayload{} -> getLevel2KeysAndThreshold asParamMicroGTUPerEuro
+        FoundationAccountUpdatePayload{} -> getLevel2KeysAndThreshold asParamFoundationAccount
+        MintDistributionUpdatePayload{} -> getLevel2KeysAndThreshold asParamMintDistribution
+        MintDistributionCPV1UpdatePayload{} -> getLevel2KeysAndThreshold asParamMintDistribution
+        TransactionFeeDistributionUpdatePayload{} -> getLevel2KeysAndThreshold asParamTransactionFeeDistribution
+        GASRewardsUpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
+        GASRewardsCPV2UpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
+        BakerStakeThresholdUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
+        RootUpdatePayload{} -> getHiglerLevelKeysAndThreshold rootKeys
+        Level1UpdatePayload{} -> getHiglerLevelKeysAndThreshold level1Keys
+        AddAnonymityRevokerUpdatePayload{} -> getLevel2KeysAndThreshold asAddAnonymityRevoker
+        AddIdentityProviderUpdatePayload{} -> getLevel2KeysAndThreshold asAddIdentityProvider
+        CooldownParametersCPV1UpdatePayload{} -> getOptionalLevel2KeysAndThreshold asCooldownParameters
+        PoolParametersCPV1UpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
+        TimeParametersCPV1UpdatePayload{} -> getOptionalLevel2KeysAndThreshold asTimeParameters
+        TimeoutParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        MinBlockTimeUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
   where
-    f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
-    f' v = keysForOParam . v . level2Keys
-    g v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
+    getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
+    getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
+    getHiglerLevelKeysAndThreshold v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
+    -- If the 'AccessStructure' is not supported at the chain parameter version @cpv@, then there are no keys to return.
     keysForOParam :: Conditionally c AccessStructure -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
     keysForOParam (CTrue AccessStructure{..}) = (accessPublicKeys, accessThreshold)
     keysForOParam CFalse = (Set.empty, 1)
