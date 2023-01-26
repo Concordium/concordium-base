@@ -93,6 +93,7 @@ module Concordium.Types.Parameters (
     -- |Whether a particular parameter is supported at a particular 'ChainParametersVersion' (on
     -- singletons).
     sIsSupported,
+    -- |Type level constraint that is parameterized by a 'ParameterType'.
     IsParameterType,
 
     -- * Conditional type
@@ -117,6 +118,8 @@ module Concordium.Types.Parameters (
     --   * 'MintDistributionVersion1' ('ChainParametersV1', 'ChainParametersV2'): does not support
     --     mint per slot.
     MintDistributionVersion (..),
+    -- |A data parameterized by the 'MintDistributionVersion' that yields the actual minting distribution parameters.
+    MintDistribution (..),
     -- |Singleton type associated with 'MintDistributionVersion'
     SMintDistributionVersion (..),
     -- |The mint distribution version for a chain parameters version.
@@ -125,18 +128,20 @@ module Concordium.Types.Parameters (
     MintDistributionVersionFor,
     -- |The mint distribution version for a chain parameters version (singletons).
     sMintDistributionVersionFor,
+    -- |Constraint for mint distribution versions.
     IsMintDistributionVersion,
+    -- |Helper function for providing the supplied action @a@ with the context 'IsMintDistributionVersion'.
     withIsMintDistributionVersionFor,
+    -- |A constraint for indicating that the 'MintDistributionVersion' @mdv@ supports minting per slot.
+    MintPerSlotSupported,
     -- |Whether a 'MintDistributionVersion' supports the mint-per-slot parameter.
     supportsMintPerSlot,
     -- |Whether a 'MintDistributionVersion' supports the mint-per-slot parameter (type level).
     SupportsMintPerSlot,
     -- |Whether a 'MintDistributionVersion' supports the mint-per-slot parameter (singletons).
     sSupportsMintPerSlot,
-    MintDistribution (..),
     -- |Typeclass for structures that contain a 'MintDistribution'.
     HasMintDistribution (..),
-
     -- * Transaction fee distribution
     TransactionFeeDistribution (..),
     -- |Typeclass for structures that contain a 'TransactionFeeDistribution'.
@@ -546,10 +551,14 @@ type IsParameterType (pt :: ParameterType) = SingI pt
 type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
 
 -- |Witness an 'IsAuthorizationsVersion' constraint using a 'SChainParametersVersion'.
+-- Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionFor cpv)' via the
+-- supplied 'ChainParametersVersion'.
 withIsAuthorizationsVersionFor :: SChainParametersVersion cpv -> (IsAuthorizationsVersion (AuthorizationsVersionFor cpv) => a) -> a
 withIsAuthorizationsVersionFor scpv = withSingI (sAuthorizationsVersionFor scpv)
 
 -- |Witness an 'IsAuthorizationsVersion' constraint using a 'SProtocolVersion'.
+-- Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionForPV pv)' via the
+-- supplied 'ProtocolVersion'.
 withIsAuthorizationsVersionForPV :: SProtocolVersion pv -> (IsAuthorizationsVersion (AuthorizationsVersionForPV pv) => a) -> a
 withIsAuthorizationsVersionForPV spv = withSingI (sAuthorizationsVersionForPV spv)
 
@@ -687,13 +696,20 @@ maybeWhenSupported _ f (SomeParam a) = f a
 -- 'SMintDistributionVersion'. An alias for 'SingI'.
 type IsMintDistributionVersion (mdv :: MintDistributionVersion) = SingI mdv
 
+-- |Constraint on a type level 'MintDistributionVersion' that can be used to get a corresponding
+-- 'SupportsMintPerSlot mdv'.
+type MintPerSlotSupported (mdv :: MintDistributionVersion) = SingI (SupportsMintPerSlot mdv)
+
 -- |Witness a @SingI (SupportsMintPerSlot mdv)@ constraint using a 'SMintDistributionVersion mdv'.
 -- Concretely this provides the passed in action @a@ with the context 'SupportsMintPerSlot mdv'.
-withSupportsMintPerSlot :: forall mdv a. SMintDistributionVersion mdv -> (SingI (SupportsMintPerSlot mdv) => a) -> a
+-- This is useful with one has a 'MintDistributionVersion' at hand and @a@ is constrained by
+-- 'SupportsMintPerSlot mdv'.
+withSupportsMintPerSlot :: SMintDistributionVersion mdv -> (MintPerSlotSupported mdv => a) -> a
 withSupportsMintPerSlot smdv = withSingI (sSupportsMintPerSlot smdv)
 
 -- |Witness an 'IsMintDistributionVersion' constraint for an 'SChainParametersVersion'.
-withIsMintDistributionVersionFor :: SChainParametersVersion t -> (IsMintDistributionVersion (MintDistributionVersionFor t) => r) -> r
+-- Concretely this provides the passed in action @a@ with the context 'IsMintDistributionVersion (MintDistributionVersionFor cpv)'.
+withIsMintDistributionVersionFor :: SChainParametersVersion cpv -> (IsMintDistributionVersion (MintDistributionVersionFor cpv) => a) -> a
 withIsMintDistributionVersionFor scpv = withSingI (sMintDistributionVersionFor scpv)
 
 -- |The minting rate and the distribution of newly-minted GTU
@@ -806,11 +822,13 @@ instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
 type IsGASRewardsVersion (grv :: GASRewardsVersion) = SingI grv
 
 -- |Witness a @SingI (SupportsGASFinalizationProof grv)@ constraint using a 'SGASRewardsVersion grv'.
-withSupportsGASFinalizationProof :: forall grv a. SGASRewardsVersion grv -> (SingI (SupportsGASFinalizationProof grv) => a) -> a
+-- Concretely this provides the passed in action @a@ with the context 'SupportsGASFinalizationProof grv'.
+withSupportsGASFinalizationProof :: SGASRewardsVersion grv -> (SingI (SupportsGASFinalizationProof grv) => a) -> a
 withSupportsGASFinalizationProof sgrv = withSingI (sSupportsGASFinalizationProof sgrv)
 
 -- |Witness an 'IsGASRewardsVersion' constraint for an 'SChainParametersVersion'.
-withIsGASRewardsVersionFor :: SChainParametersVersion t -> (IsGASRewardsVersion (GasRewardsVersionFor t) => r) -> r
+-- Concretely this provides the passed in action @a@ with the context 'GasRewardsVersionFor (GasRewardsVersionFor cpv)'.
+withIsGASRewardsVersionFor :: SChainParametersVersion cpv -> (IsGASRewardsVersion (GasRewardsVersionFor cpv) => a) -> a
 withIsGASRewardsVersionFor scpv = withSingI (sGasRewardsVersionFor scpv)
 
 -- |Parameters that determine the proportion of the GAS account that is paid to the baker (pool)
@@ -994,8 +1012,8 @@ instance HasExchangeRates ExchangeRates where
 type IsCooldownParametersVersion (cpv :: CooldownParametersVersion) = SingI cpv
 
 -- |Witness an 'IsCooldownParametersVersion' constraint for an 'SChainParametersVersion'.
+-- Concretely this provides the passed in action @a@ with the context 'IsCooldownParametersVersion (CooldownParametersVersionFor cpv)'.
 withIsCooldownParametersVersionFor ::
-    forall cpv a.
     SChainParametersVersion cpv ->
     (IsCooldownParametersVersion (CooldownParametersVersionFor cpv) => a) ->
     a
@@ -1283,6 +1301,7 @@ deriving instance Show PoolParametersVersion
 type IsPoolParametersVersion (ppv :: PoolParametersVersion) = SingI ppv
 
 -- |Witness an 'IsPoolParametersVersion' constraint for an 'SChainParametersVersion'.
+-- Concretely this provides the passed in action @a@ with the context 'SupportsMintPerSlot (IsPoolParametersVersion (PoolParametersVersionFor cpv)'.
 withIsPoolParametersVersionFor :: SChainParametersVersion cpv -> (IsPoolParametersVersion (PoolParametersVersionFor cpv) => a) -> a
 withIsPoolParametersVersionFor scpv = withSingI (sPoolParametersVersionFor scpv)
 
@@ -1479,6 +1498,7 @@ instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 type IsConsensusParametersVersion (cpv :: ConsensusParametersVersion) = SingI cpv
 
 -- |Witness an 'IsConsensusParametersVersion' constraint for an 'SChainParametersVersion'.
+-- Concretely this provides the passed in action @a@ with the context '(IsConsensusParametersVersion (ConsensusParametersVersionFor cpv)'.
 withIsConsensusParametersVersionFor :: SChainParametersVersion cpv -> (IsConsensusParametersVersion (ConsensusParametersVersionFor cpv) => a) -> a
 withIsConsensusParametersVersionFor scpv = withSingI (sConsensusParametersVersionFor scpv)
 
@@ -1551,6 +1571,10 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
 -- * Chain parameters
 
 -- |Witness the constraints implied by an 'SChainParametersVersion'.
+-- A function for obtaining an aggregated context of constraints implied by the chain parameters version.
+-- This is useful when having the chain parameters at hand and an action @a@ requires the below constraints:
+-- @IsAuthorizationsVersion@, @IsConsensusParametersVersion@, @IsCooldownParametersVersion@, @IsGASRewardsVersion@,
+-- @IsMintDistributionVersion@ and @IsPoolParametersVersion@.
 withCPVConstraints ::
     SChainParametersVersion cpv ->
     ( ( IsAuthorizationsVersion (AuthorizationsVersionFor cpv),
