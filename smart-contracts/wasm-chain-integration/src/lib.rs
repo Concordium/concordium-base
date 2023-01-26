@@ -18,7 +18,7 @@
 //! [`v1::invoke_receive`]) functions, and their variants.
 //!
 //! The respective modules provide more details on the data types involved, and
-//! any specifics.
+//! any specifics of the different versions.
 pub mod constants;
 pub mod resumption;
 pub mod utils;

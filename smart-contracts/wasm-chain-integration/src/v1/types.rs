@@ -453,6 +453,9 @@ impl Output for ImportFunc {
 }
 
 #[derive(Debug)]
+/// Imports allowed for `v1` contracts processed into a format that is faster to
+/// use during execution. Instead of keeping names of imports they are processed
+/// into an enum with integer tags.
 pub struct ProcessedImports {
     pub(crate) tag: ImportFunc,
     ty:             FunctionType,

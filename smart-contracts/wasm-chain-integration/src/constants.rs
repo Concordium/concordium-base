@@ -82,7 +82,8 @@ pub fn log_event_cost(x: u32) -> u64 {
     LOG_EVENT_BASE_COST + 1000 * u64::from(x)
 }
 
-/// Cost of a "send" action. `x` is the size of the parameter in bytes.
+/// Cost of a `send` action of a v0 contract. `x` is the size of the parameter
+/// in bytes.
 #[inline(always)]
 pub fn action_send_cost(x: u32) -> u64 {
     // the 1000 factor corresponds to 1NRG per byte.

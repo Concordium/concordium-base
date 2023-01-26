@@ -1,3 +1,9 @@
+//! Implementation of execution of V1 contracts.
+//!
+//! This contains only the execution of the Wasm parts and does not include the
+//! handling of invoked operations (e.g., calling another contract, sending
+//! transfers). That is handled by a separate scheduler component.
+
 #[cfg(test)]
 mod crypto_primitives_tests;
 #[cfg(test)]
@@ -567,7 +573,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_delete_prefix` host function. See
     /// [InstanceState::delete_prefix] for detailed documentation.
-    pub fn state_delete_prefix<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_delete_prefix<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -1707,7 +1713,7 @@ pub struct ReceiveInvocation<'a> {
     pub energy:       InterpreterEnergy,
 }
 
-/// Invokes an receive-function from a given artifact
+/// Invokes a receive-function from a given artifact
 pub fn invoke_receive<
     BackingStore: BackingStoreLoad,
     R1: RunnableCode,
@@ -1831,7 +1837,7 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
     Ok(n)
 }
 
-/// Invokes an receive-function from a given artifact *bytes*
+/// Invokes a receive-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_artifact<
     'a,
@@ -1860,7 +1866,7 @@ pub fn invoke_receive_from_artifact<
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes.
+/// Invokes a receive-function from Wasm module bytes.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<
     BackingStore: BackingStoreLoad,
@@ -1893,7 +1899,7 @@ pub fn invoke_receive_from_source<
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes, injects the module with
+/// Invokes a receive-function from Wasm module bytes, injects the module with
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<

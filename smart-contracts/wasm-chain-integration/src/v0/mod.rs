@@ -1,3 +1,5 @@
+//! Implementation of execution of V0 contracts.
+
 #[cfg(feature = "enable-ffi")]
 pub(crate) mod ffi;
 mod types;
@@ -15,6 +17,7 @@ use std::{collections::LinkedList, convert::TryInto, io::Write};
 pub use types::*;
 
 impl Logs {
+    /// Create an empty set of logs.
     pub fn new() -> Self {
         Self {
             logs: LinkedList::new(),
@@ -36,9 +39,13 @@ impl Logs {
         }
     }
 
+    /// Iterate over the logs in order, i.e., the log produced first is returned
+    /// first.
     pub fn iterate(&self) -> impl Iterator<Item = &Vec<u8>> { self.logs.iter() }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
+    #[cfg(feature = "enable-ffi")]
+    /// Serialize for the purposes of FFI transfer.
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         let len = self.logs.len();
         let mut out = Vec::with_capacity(4 * len + 4);
         out.extend_from_slice(&(len as u32).to_be_bytes());
@@ -50,28 +57,34 @@ impl Logs {
     }
 }
 
-#[derive(Clone, Default)]
-/// The Default instance of this type constructs an empty list of outcomes.
-pub struct Outcome {
+#[derive(Debug, Clone, Default)]
+/// The outcomes of a `v0` contract execution. This conceptually encodes an
+/// action tree using `and` and `or` combinators for inner nodes, and contract
+/// invocations and account transfers as leaves. The Default instance of this
+/// type constructs an empty list of outcomes, corresponding to an empty actions
+/// tree.
+pub(crate) struct Outcome {
     pub cur_state: Vec<Action>,
 }
 
 impl Outcome {
     pub fn new() -> Outcome { Self::default() }
 
-    pub fn accept(&mut self) -> u32 {
+    /// Add a new `accept` action to the list.
+    pub(crate) fn accept(&mut self) -> u32 {
         let response = self.cur_state.len();
         self.cur_state.push(Action::Accept);
         response as u32
     }
 
-    pub fn simple_transfer(&mut self, bytes: &[u8], amount: u64) -> ExecResult<u32> {
+    /// Add a new transfer action to the list.
+    pub(crate) fn simple_transfer(&mut self, bytes: &[u8], micro_ccd: u64) -> ExecResult<u32> {
         let response = self.cur_state.len();
         let addr: [u8; 32] = bytes.try_into()?;
         let to_addr = AccountAddress(addr);
         let data = std::rc::Rc::new(SimpleTransferAction {
             to_addr,
-            amount,
+            amount: Amount::from_ccd(micro_ccd),
         });
         self.cur_state.push(Action::SimpleTransfer {
             data,
@@ -79,24 +92,25 @@ impl Outcome {
         Ok(response as u32)
     }
 
-    pub fn send(
+    /// Add an action to send a message to a smart contract.
+    pub(crate) fn send(
         &mut self,
         addr_index: u64,
         addr_subindex: u64,
         receive_name_bytes: &[u8],
-        amount: u64,
+        micro_ccd: u64,
         parameter_bytes: &[u8],
         max_parameter_size: usize,
     ) -> ExecResult<u32> {
         let response = self.cur_state.len();
 
         let name_str = std::str::from_utf8(receive_name_bytes)?;
-        ensure!(ReceiveName::is_valid_receive_name(name_str).is_ok(), "Not a valid receive name.");
-        let name = receive_name_bytes.to_vec();
+        let rn = ReceiveName::new(name_str)?;
+        let name = rn.to_owned();
 
         ensure!(parameter_bytes.len() <= max_parameter_size, "Parameter exceeds max size.");
 
-        let parameter = parameter_bytes.to_vec();
+        let parameter = OwnedParameter(parameter_bytes.to_vec());
 
         let to_addr = ContractAddress {
             index:    addr_index,
@@ -105,7 +119,7 @@ impl Outcome {
         let data = std::rc::Rc::new(SendAction {
             to_addr,
             name,
-            amount,
+            amount: Amount::from_micro_ccd(micro_ccd),
             parameter,
         });
         self.cur_state.push(Action::Send {
@@ -114,7 +128,9 @@ impl Outcome {
         Ok(response as u32)
     }
 
-    pub fn combine_and(&mut self, l: u32, r: u32) -> ExecResult<u32> {
+    /// Combine the given two actions using the `and` combinator. The `l` is the
+    /// left action, `r` is the right one.
+    pub(crate) fn combine_and(&mut self, l: u32, r: u32) -> ExecResult<u32> {
         let response = self.cur_state.len() as u32;
         ensure!(l < response && r < response, "Combining unknown actions.");
         self.cur_state.push(Action::And {
@@ -124,7 +140,9 @@ impl Outcome {
         Ok(response)
     }
 
-    pub fn combine_or(&mut self, l: u32, r: u32) -> ExecResult<u32> {
+    /// Combine the given two actions using the `or` combinator. The `l` is the
+    /// left action, `r` is the right one.
+    pub(crate) fn combine_or(&mut self, l: u32, r: u32) -> ExecResult<u32> {
         let response = self.cur_state.len() as u32;
         ensure!(l < response && r < response, "Combining unknown actions.");
         self.cur_state.push(Action::Or {
@@ -138,9 +156,7 @@ impl Outcome {
 impl State {
     pub fn is_empty(&self) -> bool { self.state.is_empty() }
 
-    // FIXME: This should not be copying so much data around, but for POC it is
-    // fine. We should probably do some sort of copy-on-write here in the near term,
-    // and in the long term we need to keep track of which parts were written.
+    /// Create a new copy of the state.
     pub fn new(st: Option<&[u8]>) -> Self {
         match st {
             None => Self {
@@ -154,7 +170,7 @@ impl State {
 
     pub fn len(&self) -> u32 { self.state.len() as u32 }
 
-    pub fn write_state(&mut self, offset: u32, bytes: &[u8]) -> ExecResult<u32> {
+    pub(crate) fn write_state(&mut self, offset: u32, bytes: &[u8]) -> ExecResult<u32> {
         let length = bytes.len();
         ensure!(offset <= self.len(), "Cannot write past the offset.");
         let offset = offset as usize;
@@ -169,7 +185,7 @@ impl State {
         Ok(written as u32)
     }
 
-    pub fn load_state(&self, offset: u32, mut bytes: &mut [u8]) -> ExecResult<u32> {
+    pub(crate) fn load_state(&self, offset: u32, mut bytes: &mut [u8]) -> ExecResult<u32> {
         let offset = offset as usize;
         ensure!(offset <= self.state.len());
         // Write on slices overwrites the buffer and returns how many bytes were
@@ -178,7 +194,7 @@ impl State {
         Ok(amt as u32)
     }
 
-    pub fn resize_state(&mut self, new_size: u32) -> u32 {
+    pub(crate) fn resize_state(&mut self, new_size: u32) -> u32 {
         if new_size > constants::MAX_CONTRACT_STATE {
             0
         } else {
@@ -188,48 +204,53 @@ impl State {
     }
 }
 
-pub struct InitHost<ParamType, Ctx> {
+/// A Wasm host that is used for executing `init` functions that create new
+/// contract instances.
+pub(crate) struct InitHost<ParamType, Ctx> {
     /// Remaining energy for execution.
-    pub energy: InterpreterEnergy,
+    pub(crate) energy: InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames: u32,
+    pub(crate) activation_frames: u32,
     /// Logs produced during execution.
-    pub logs: Logs,
+    pub(crate) logs: Logs,
     /// The contract's state.
-    pub state: State,
+    pub(crate) state: State,
     /// The parameter to the init method.
-    pub param: ParamType,
+    pub(crate) param: ParamType,
     /// The init context for this invocation.
-    pub init_ctx: Ctx,
+    pub(crate) init_ctx: Ctx,
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in P5.
-    pub limit_logs_and_return_values: bool,
+    pub(crate) limit_logs_and_return_values: bool,
 }
 
-pub struct ReceiveHost<ParamType, Ctx> {
+/// A Wasm host that is used for executing entrypoints of existing smart
+/// contract instances. This is analogous to the [`InitHost`].
+#[derive(Debug)]
+pub(crate) struct ReceiveHost<ParamType, Ctx> {
     /// Remaining energy for execution.
-    pub energy: InterpreterEnergy,
+    pub(crate) energy: InterpreterEnergy,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
-    pub activation_frames: u32,
+    pub(crate) activation_frames: u32,
     /// Logs produced during execution.
-    pub logs: Logs,
+    pub(crate) logs: Logs,
     /// The contract's state.
-    pub state: State,
+    pub(crate) state: State,
     /// The parameter to the receive method.
-    pub param: ParamType,
+    pub(crate) param: ParamType,
     /// Outcomes of the execution, i.e., the actions tree.
-    pub outcomes: Outcome,
+    pub(crate) outcomes: Outcome,
     /// The receive context for this call.
-    pub receive_ctx: Ctx,
+    pub(crate) receive_ctx: Ctx,
     /// The maximum parameter size.
     /// In P1-P4 it was 1024.
     /// In P5+ it is 65535.
-    pub max_parameter_size: usize,
+    pub(crate) max_parameter_size: usize,
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in P5.
-    pub limit_logs_and_return_values: bool,
+    pub(crate) limit_logs_and_return_values: bool,
 }
 
 /// Types which can act as init contexts.
@@ -336,7 +357,11 @@ impl<X: AsRef<[u8]>> HasReceiveContext for ReceiveContext<X> {
     fn sender_policies(&self) -> ExecResult<&[u8]> { Ok(self.sender_policies.as_ref()) }
 }
 
+/// A trait implemented by types that give access to information about the chain
+/// available to smart contracts.
 pub trait HasChainMetadata {
+    /// The objective (i.e., the entire network agrees on it) time of the block
+    /// in whose context the smart contract is being executed.
     fn slot_time(&self) -> ExecResult<SlotTime>;
 }
 
@@ -350,7 +375,7 @@ impl HasChainMetadata for ChainMetadata {
 pub(crate) mod host {
     use super::*;
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_parameter_size(
+    pub(crate) fn get_parameter_size(
         stack: &mut machine::RuntimeStack,
         param_len: u32,
     ) -> machine::RunResult<()> {
@@ -361,7 +386,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_parameter_section(
+    pub(crate) fn get_parameter_section(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -382,7 +407,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_policy_section(
+    pub(crate) fn get_policy_section(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -404,7 +429,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn log_event(
+    pub(crate) fn log_event(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -428,7 +453,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn load_state(
+    pub(crate) fn load_state(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -447,7 +472,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn write_state(
+    pub(crate) fn write_state(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -466,7 +491,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn resize_state(
+    pub(crate) fn resize_state(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut State,
@@ -486,7 +511,7 @@ pub(crate) mod host {
     }
 
     #[inline(always)]
-    pub fn state_size(
+    pub(crate) fn state_size(
         stack: &mut machine::RuntimeStack,
         state: &mut State,
     ) -> machine::RunResult<()> {
@@ -497,7 +522,7 @@ pub(crate) mod host {
     }
 
     #[inline(always)]
-    pub fn get_slot_time(
+    pub(crate) fn get_slot_time(
         stack: &mut machine::RuntimeStack,
         metadata: &impl HasChainMetadata,
     ) -> machine::RunResult<()> {
@@ -507,7 +532,7 @@ pub(crate) mod host {
         Ok(())
     }
 
-    pub fn get_init_origin(
+    pub(crate) fn get_init_origin(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         init_origin: ExecResult<&AccountAddress>,
@@ -519,7 +544,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn accept(
+    pub(crate) fn accept(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         outcomes: &mut Outcome,
@@ -530,7 +555,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn simple_transfer(
+    pub(crate) fn simple_transfer(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -546,7 +571,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn send(
+    pub(crate) fn send(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -581,7 +606,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn combine_and(
+    pub(crate) fn combine_and(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         outcomes: &mut Outcome,
@@ -595,7 +620,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn combine_or(
+    pub(crate) fn combine_or(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         outcomes: &mut Outcome,
@@ -609,7 +634,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_receive_invoker(
+    pub(crate) fn get_receive_invoker(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         invoker: ExecResult<&AccountAddress>,
@@ -621,7 +646,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_receive_self_address(
+    pub(crate) fn get_receive_self_address(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         self_address: ExecResult<&ContractAddress>,
@@ -635,7 +660,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_receive_self_balance(
+    pub(crate) fn get_receive_self_balance(
         stack: &mut machine::RuntimeStack,
         self_balance: ExecResult<Amount>,
     ) -> machine::RunResult<()> {
@@ -644,7 +669,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_receive_sender(
+    pub(crate) fn get_receive_sender(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         sender: ExecResult<&Address>,
@@ -658,7 +683,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn get_receive_owner(
+    pub(crate) fn get_receive_owner(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         owner: ExecResult<&AccountAddress>,
@@ -670,7 +695,7 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    pub fn track_call(activation_frames: &mut u32) -> machine::RunResult<()> {
+    pub(crate) fn track_call(activation_frames: &mut u32) -> machine::RunResult<()> {
         if let Some(fr) = activation_frames.checked_sub(1) {
             *activation_frames = fr;
             Ok(())
@@ -680,10 +705,10 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    pub fn track_return(activation_frames: &mut u32) { *activation_frames += 1; }
+    pub(crate) fn track_return(activation_frames: &mut u32) { *activation_frames += 1; }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    pub fn charge_memory_alloc(
+    pub(crate) fn charge_memory_alloc(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
@@ -917,14 +942,14 @@ pub fn invoke_init<C: RunnableCode, Ctx: HasInitContext>(
     if let Some(Value::I32(n)) = res {
         if n == 0 {
             Ok(InitResult::Success {
-                logs: host.logs,
-                state: host.state,
-                remaining_energy,
+                logs:             host.logs,
+                state:            host.state,
+                remaining_energy: remaining_energy.into(),
             })
         } else {
             Ok(InitResult::Reject {
-                reason: reason_from_wasm_error_code(n)?,
-                remaining_energy,
+                reason:           reason_from_wasm_error_code(n)?,
+                remaining_energy: remaining_energy.into(),
             })
         }
     } else {
@@ -1021,7 +1046,7 @@ pub struct ReceiveInvocation<'a> {
     pub energy:       InterpreterEnergy,
 }
 
-/// Invokes an receive-function from a given artifact
+/// Invokes a receive-function from a given artifact
 pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
     artifact: &Artifact<ProcessedImports, C>,
     receive_ctx: Ctx,
@@ -1073,14 +1098,14 @@ pub fn invoke_receive<C: RunnableCode, Ctx: HasReceiveContext>(
                 logs: host.logs,
                 state: host.state,
                 actions,
-                remaining_energy,
+                remaining_energy: remaining_energy.into(),
             })
         } else if n >= 0 {
             bail!("Invalid return.")
         } else {
             Ok(ReceiveResult::Reject {
-                reason: reason_from_wasm_error_code(n)?,
-                remaining_energy,
+                reason:           reason_from_wasm_error_code(n)?,
+                remaining_energy: remaining_energy.into(),
             })
         }
     } else {
@@ -1102,7 +1127,7 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
     Ok(n)
 }
 
-/// Invokes an receive-function from a given artifact *bytes*
+/// Invokes a receive-function from a given artifact *bytes*
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
     artifact_bytes: &[u8],
@@ -1123,7 +1148,7 @@ pub fn invoke_receive_from_artifact<Ctx: HasReceiveContext>(
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes
+/// Invokes a receive-function from Wasm module bytes
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     source_bytes: &[u8],
@@ -1144,7 +1169,7 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes, injects the module with
+/// Invokes a receive-function from Wasm module bytes, injects the module with
 /// metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
