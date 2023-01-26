@@ -14,7 +14,7 @@ where
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Coerce
-import Data.Foldable
+import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
 import qualified Data.ProtoLens as Proto
 import qualified Data.ProtoLens.Combinators as Proto
