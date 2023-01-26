@@ -37,6 +37,7 @@ import Concordium.Types.Parameters (
     GASRewardsVersion (..),
     MintDistribution,
     MintDistributionVersion (..),
+    OParam (..),
     PoolParameters,
     TimeParameters,
     TimeoutParameters,
@@ -279,12 +280,9 @@ instance FromJSON BlockSummary where
         parse :: SomeProtocolVersion -> Object -> Parser BlockSummary
         parse (SomeProtocolVersion (spv :: SProtocolVersion pv)) v =
             BlockSummary
-                <$> v
-                    .: "transactionSummaries"
-                <*> v
-                    .: "specialEvents"
-                <*> v
-                    .: "finalizationData"
+                <$> v .: "transactionSummaries"
+                <*> v .: "specialEvents"
+                <*> v .: "finalizationData"
                 <*> (v .: "updates" :: Parser (UQ.Updates pv))
                 <*> pure spv
 
@@ -659,7 +657,7 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       _nusnTimeParameters :: !U.UpdateSequenceNumber,
       -- |Updates to the consensus version 2 timeout parameters.
       _nusnTimeoutParameters :: !U.UpdateSequenceNumber,
-      -- |Updates to the consensus version 2 min. block time.
+      -- |Updates to the consensus version 2 minimum time between blocks.
       _nusnMinBlockTime :: !U.UpdateSequenceNumber,
       -- |Updates to the consensus version 2 block energy limit.
       _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber
@@ -694,7 +692,8 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
   where
     -- Get the next sequence number or 1, if not supported.
     mNextSequenceNumber :: UQ.OUpdateQueue pt cpv e -> U.UpdateSequenceNumber
-    mNextSequenceNumber = foldr (const . UQ._uqNextSequenceNumber) 1
+    mNextSequenceNumber NoParam = 1
+    mNextSequenceNumber (SomeParam q) = UQ._uqNextSequenceNumber q
 
 -- | Information about a registered delegator in a block.
 data DelegatorInfo = DelegatorInfo

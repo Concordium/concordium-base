@@ -74,8 +74,6 @@ migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 
 -- |Apply a state migration to a 'GASRewards' structure.
---
--- [P4 to P5]: the finalization proof reward is removed.
 migrateGASRewards ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -86,8 +84,6 @@ migrateGASRewards StateMigrationParametersP1P2 gr = gr
 migrateGASRewards StateMigrationParametersP2P3 gr = gr
 migrateGASRewards StateMigrationParametersP3ToP4{} gr = gr
 migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
-
--- FIXME: Add P5 -> P6
 
 -- |Apply a state migration to a 'ChainParameters' structure.
 --

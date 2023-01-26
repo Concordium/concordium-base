@@ -479,11 +479,25 @@ genRewardParameters = withCPVConstraints (chainParametersVersion @cpv) $ do
 genDuration :: Gen Duration
 genDuration = Duration <$> arbitrary
 
+-- | x > 1
+genTimeoutIncrease :: Gen (Ratio Word64)
+genTimeoutIncrease = do
+    den <- choose (1, maxBound - 1)
+    num <- choose (den + 1, maxBound)
+    return $ num % den
+
+-- | x > 0 || x < 1
+genTimeoutDecrease :: Gen (Ratio Word64)
+genTimeoutDecrease = do
+    num <- choose (1, maxBound)
+    den <- choose (num + 1, maxBound)
+    return $ num % den
+
 genTimeoutParameters :: Gen TimeoutParameters
 genTimeoutParameters = do
     tpTimeoutBase <- genDuration
-    tpTimeoutIncrease <- arbitrary `suchThat` (> 1)
-    tpTimeoutDecrease <- arbitrary `suchThat` (\x -> x > 0 && x < 1)
+    tpTimeoutIncrease <- genTimeoutIncrease
+    tpTimeoutDecrease <- genTimeoutDecrease
     return TimeoutParameters{..}
 
 transactionTypes :: [TransactionType]
