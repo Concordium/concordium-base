@@ -14,6 +14,7 @@ where
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Coerce
+import Data.Foldable
 import qualified Data.Map.Strict as Map
 import qualified Data.ProtoLens as Proto
 import qualified Data.ProtoLens.Combinators as Proto
@@ -339,6 +340,7 @@ instance ToProto AccountEncryptedAmount where
                 mkEncryptedBalance
                 ProtoFields.aggregatedAmount .= toProto aggAmount
                 ProtoFields.numAggregated .= numAgg
+                ProtoFields.incomingAmounts .= (toProto <$> toList (_incomingEncryptedAmounts encBal))
       where
         mkEncryptedBalance = do
             ProtoFields.selfAmount .= toProto (_selfAmount encBal)
