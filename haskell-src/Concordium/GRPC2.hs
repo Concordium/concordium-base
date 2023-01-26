@@ -779,7 +779,7 @@ instance ToProto Parameters.TransactionFeeDistribution where
         ProtoFields.gasAccount .= toProto _tfdGASAccount
 
 instance ToProto (Parameters.GASRewards 'Parameters.GASRewardsVersion0) where
-    type Output (Parameters.GASRewards 'Parameters.GASRewardsVersion0) = Proto.GasRewardsCpv0
+    type Output (Parameters.GASRewards 'Parameters.GASRewardsVersion0) = Proto.GasRewards
     toProto Parameters.GASRewards{..} = Proto.make $ do
         ProtoFields.baker .= toProto _gasBaker
         ProtoFields.finalizationProof .= toProto (_gasFinalizationProof ^. Parameters.unconditionally)
@@ -852,7 +852,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateMintDistribution, Updates.MintDistributionUpdatePayload md) -> Right . Proto.make $ ProtoFields.mintDistributionUpdate .= toProto md
     (Updates.UpdateTransactionFeeDistribution, Updates.TransactionFeeDistributionUpdatePayload tfd) ->
         Right . Proto.make $ ProtoFields.transactionFeeDistributionUpdate .= toProto tfd
-    (Updates.UpdateGASRewards, Updates.GASRewardsUpdatePayload gr) -> Right . Proto.make $ ProtoFields.gasRewardsCpv0Update .= toProto gr
+    (Updates.UpdateGASRewards, Updates.GASRewardsUpdatePayload gr) -> Right . Proto.make $ ProtoFields.gasRewardsUpdate .= toProto gr
     (Updates.UpdateGASRewards, Updates.GASRewardsCPV2UpdatePayload gr) -> Right . Proto.make $ ProtoFields.gasRewardsCpv2Update .= toProto gr
     (Updates.UpdatePoolParameters, Updates.BakerStakeThresholdUpdatePayload pp) ->
         Right . Proto.make $ ProtoFields.bakerStakeThresholdUpdate .= toProto pp
@@ -1907,7 +1907,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUEMintDistributionV0 mintDistributionCpv0 -> ProtoFields.mintDistributionCpv0 .= toProto mintDistributionCpv0
             QueryTypes.PUEMintDistributionV1 mintDistributionCpv1 -> ProtoFields.mintDistributionCpv1 .= toProto mintDistributionCpv1
             QueryTypes.PUETransactionFeeDistribution transactionFeeDistribution -> ProtoFields.transactionFeeDistribution .= toProto transactionFeeDistribution
-            QueryTypes.PUEGASRewardsV0 gasRewards -> ProtoFields.gasRewardsCpv0 .= toProto gasRewards
+            QueryTypes.PUEGASRewardsV0 gasRewards -> ProtoFields.gasRewards .= toProto gasRewards
             QueryTypes.PUEPoolParametersV0 poolParametersCpv0 -> ProtoFields.poolParametersCpv0 .= toProto poolParametersCpv0
             QueryTypes.PUEPoolParametersV1 poolParametersCpv1 -> ProtoFields.poolParametersCpv1 .= toProto poolParametersCpv1
             QueryTypes.PUEAddAnonymityRevoker addAnonymityRevoker -> ProtoFields.addAnonymityRevoker .= toProto addAnonymityRevoker
