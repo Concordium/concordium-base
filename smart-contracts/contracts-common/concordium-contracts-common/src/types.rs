@@ -1313,7 +1313,10 @@ impl ExchangeRate {
 )]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 #[derive(Debug, Clone)]
+/// Information about the chain available to smart contracts.
 pub struct ChainMetadata {
+    /// The objective (i.e., the entire network agrees on it) time of the block
+    /// in whose context the smart contract is being executed.
     pub slot_time: SlotTime,
 }
 
