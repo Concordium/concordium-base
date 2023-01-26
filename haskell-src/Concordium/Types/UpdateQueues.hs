@@ -179,7 +179,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                     <> hsh _pLevel1KeysUpdateQueue
                     <> hsh _pLevel2KeysUpdateQueue
                     <> hsh _pProtocolQueue
-                    <> ohsh _pElectionDifficultyQueue
+                    <> optionalHash _pElectionDifficultyQueue
                     <> hsh _pEuroPerEnergyQueue
                     <> hsh _pMicroGTUPerEuroQueue
                     <> hsh _pFoundationAccountQueue
@@ -189,119 +189,17 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                     <> hsh _pPoolParametersQueue
                     <> hsh _pAddAnonymityRevokerQueue
                     <> hsh _pAddIdentityProviderQueue
-                    <> ohsh _pCooldownParametersQueue
-                    <> ohsh _pTimeParametersQueue
-                    <> ohsh _pTimeoutParametersQueue
-                    <> ohsh _pMinBlockTimeQueue
-                    <> ohsh _pBlockEnergyLimitQueue
+                    <> optionalHash _pCooldownParametersQueue
+                    <> optionalHash _pTimeParametersQueue
+                    <> optionalHash _pTimeoutParametersQueue
+                    <> optionalHash _pMinBlockTimeQueue
+                    <> optionalHash _pBlockEnergyLimitQueue
       where
         hsh :: HashableTo H.Hash a => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
         -- For SomeParam, produce the hash. For NoParam, produce the empty string.
-        ohsh :: HashableTo H.Hash e => OUpdateQueue pt cpv e -> BS.ByteString
-        ohsh = foldMap hsh
-
--- |Serialize the pending updates.
-putPendingUpdatesV0 :: forall cpv. IsChainParametersVersion cpv => Putter (PendingUpdates cpv)
-putPendingUpdatesV0 PendingUpdates{..} = withCPVConstraints (chainParametersVersion @cpv) $ do
-    putUpdateQueueV0 _pRootKeysUpdateQueue
-    putUpdateQueueV0 _pLevel1KeysUpdateQueue
-    putUpdateQueueV0With putAuthorizations _pLevel2KeysUpdateQueue
-    putUpdateQueueV0 _pProtocolQueue
-    mapM_ putUpdateQueueV0 _pElectionDifficultyQueue
-    putUpdateQueueV0 _pEuroPerEnergyQueue
-    putUpdateQueueV0 _pMicroGTUPerEuroQueue
-    putUpdateQueueV0 _pFoundationAccountQueue
-    putUpdateQueueV0 _pMintDistributionQueue
-    putUpdateQueueV0 _pTransactionFeeDistributionQueue
-    putUpdateQueueV0 _pGASRewardsQueue
-    putUpdateQueueV0 _pPoolParametersQueue
-    putUpdateQueueV0 _pAddAnonymityRevokerQueue
-    putUpdateQueueV0 _pAddIdentityProviderQueue
-    mapM_ putUpdateQueueV0 _pCooldownParametersQueue
-    mapM_ putUpdateQueueV0 _pTimeParametersQueue
-    mapM_ putUpdateQueueV0 _pTimeoutParametersQueue
-    mapM_ putUpdateQueueV0 _pMinBlockTimeQueue
-    mapM_ putUpdateQueueV0 _pBlockEnergyLimitQueue
-
--- |Deserialize pending updates. The 'StateMigrationParameters' allow an old format to be
--- deserialized as a new format by applying the migration.
-getPendingUpdates :: forall oldpv pv. (IsProtocolVersion oldpv) => StateMigrationParameters oldpv pv -> Get (PendingUpdates (ChainParametersVersionFor pv))
-getPendingUpdates migration = withCPVConstraints (chainParametersVersion @(ChainParametersVersionFor oldpv)) $ do
-    _pRootKeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys RootKeysKind)
-    _pLevel1KeysUpdateQueue <- getUpdateQueueV0 @(HigherLevelKeys Level1KeysKind)
-    -- Any pending updates to the authorizations are migrated.
-    _pLevel2KeysUpdateQueue <-
-        withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
-            getUpdateQueueV0With (migrateAuthorizations migration <$> getAuthorizations)
-    _pProtocolQueue <- getUpdateQueueV0 @ProtocolUpdate
-    oldElectionDifficultyQueue <- whenSupported @'PTElectionDifficulty @(ChainParametersVersionFor oldpv) $ getUpdateQueueV0 @ElectionDifficulty
-    _pEuroPerEnergyQueue <- getUpdateQueueV0 @ExchangeRate
-    _pMicroGTUPerEuroQueue <- getUpdateQueueV0 @ExchangeRate
-    _pFoundationAccountQueue <- getUpdateQueueV0 @AccountIndex
-    _pMintDistributionQueue <- getUpdateQueueV0With (migrateMintDistribution migration <$> get)
-    _pTransactionFeeDistributionQueue <- getUpdateQueueV0 @TransactionFeeDistribution
-    _pGASRewardsQueue <- getUpdateQueueV0With (migrateGASRewards migration <$> get)
-    _pPoolParametersQueue <- getUpdateQueueV0With (migratePoolParameters migration <$> get)
-    _pAddAnonymityRevokerQueue <- getUpdateQueueV0 @ARS.ArInfo
-    _pAddIdentityProviderQueue <- getUpdateQueueV0 @IPS.IpInfo
-    oldCooldownParametersQueue <-
-        whenSupported @'PTCooldownParametersAccessStructure @(ChainParametersVersionFor oldpv) $
-            getUpdateQueueV0 @(CooldownParameters (ChainParametersVersionFor oldpv))
-    oldTimeParametersQueue <-
-        whenSupported @'PTTimeParameters @(ChainParametersVersionFor oldpv) $
-            getUpdateQueueV0 @TimeParameters
-    oldTimeoutParametersQueue <-
-        whenSupported @'PTTimeoutParameters @(ChainParametersVersionFor oldpv) $
-            getUpdateQueueV0 @TimeoutParameters
-    oldMinBlockTimeQueue <-
-        whenSupported @'PTMinBlockTime @(ChainParametersVersionFor oldpv) $
-            getUpdateQueueV0 @Duration
-    oldBlockEnergyLimitQueue <-
-        whenSupported @'PTBlockEnergyLimit @(ChainParametersVersionFor oldpv) $
-            getUpdateQueueV0 @Energy
-    -- Cooldown and time parameters are only part of CPV1 and onwards.
-    case migration of
-        StateMigrationParametersTrivial -> do
-            let _pElectionDifficultyQueue = oldElectionDifficultyQueue
-            let _pCooldownParametersQueue = oldCooldownParametersQueue
-            let _pTimeParametersQueue = oldTimeParametersQueue
-            let _pTimeoutParametersQueue = oldTimeoutParametersQueue
-            let _pMinBlockTimeQueue = oldMinBlockTimeQueue
-            let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
-            return PendingUpdates{..}
-        StateMigrationParametersP1P2 -> do
-            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
-            let _pCooldownParametersQueue = oldCooldownParametersQueue
-            let _pTimeParametersQueue = oldTimeParametersQueue
-            let _pTimeoutParametersQueue = NoParam
-            let _pMinBlockTimeQueue = oldMinBlockTimeQueue
-            let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
-            return PendingUpdates{..}
-        StateMigrationParametersP2P3 -> do
-            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
-            let _pCooldownParametersQueue = oldCooldownParametersQueue
-            let _pTimeParametersQueue = oldTimeParametersQueue
-            let _pTimeoutParametersQueue = NoParam
-            let _pMinBlockTimeQueue = oldMinBlockTimeQueue
-            let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
-            return PendingUpdates{..}
-        StateMigrationParametersP3ToP4 _ -> do
-            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
-            let _pCooldownParametersQueue = SomeParam emptyUpdateQueue
-            let _pTimeParametersQueue = SomeParam emptyUpdateQueue
-            let _pTimeoutParametersQueue = NoParam
-            let _pMinBlockTimeQueue = NoParam
-            let _pBlockEnergyLimitQueue = NoParam
-            return PendingUpdates{..}
-        StateMigrationParametersP4ToP5 -> do
-            let _pElectionDifficultyQueue = SomeParam (unOParam oldElectionDifficultyQueue)
-            let _pCooldownParametersQueue = oldCooldownParametersQueue
-            let _pTimeParametersQueue = oldTimeParametersQueue
-            let _pTimeoutParametersQueue = NoParam
-            let _pMinBlockTimeQueue = oldMinBlockTimeQueue
-            let _pBlockEnergyLimitQueue = oldBlockEnergyLimitQueue
-            return PendingUpdates{..}
+        optionalHash :: HashableTo H.Hash e => OUpdateQueue pt cpv e -> BS.ByteString
+        optionalHash = foldMap hsh
 
 pendingUpdatesV0ToJSON :: PendingUpdates 'ChainParametersV0 -> Value
 pendingUpdatesV0ToJSON PendingUpdates{..} =
