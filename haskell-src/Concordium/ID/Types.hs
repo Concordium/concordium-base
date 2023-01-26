@@ -949,6 +949,12 @@ data AccountCredential' credTy
     | NormalAC (CredentialDeploymentValues' credTy) CredentialDeploymentCommitments
     deriving (Eq, Show, Functor)
 
+credIdFromRaw :: RawCredentialRegistrationID -> Maybe CredentialRegistrationID
+credIdFromRaw (RawCredentialRegistrationID fbs) =
+    case S.decode (FBS.toByteString fbs) of
+        Left _ -> Nothing
+        Right c -> c
+
 unsafeCredIdFromRaw :: RawCredentialRegistrationID -> CredentialRegistrationID
 unsafeCredIdFromRaw (RawCredentialRegistrationID fbs) =
     case decode (FBS.toByteString fbs) of
