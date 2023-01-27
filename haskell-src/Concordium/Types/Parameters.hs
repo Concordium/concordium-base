@@ -18,6 +18,9 @@
 -- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
+-- Note. TH generated definitions are documented in the header of this module while the others are
+-- documented where they are defined.
+
 -- |__Overview__
 -- This module contains definitions for the configurable parameters used on chain, i.e. the
 -- 'ChainParameters'. Chain parameters are versioned by 'ChainParametersVersion'. The
@@ -596,7 +599,7 @@ instance (Ord a) => Ord (Conditionally b a) where
 
 instance (Show a) => Show (Conditionally b a) where
     show CFalse = "<CFalse>"
-    show (CTrue v) = show v
+    show (CTrue v) = "<CTrue> " ++ show v
 
 instance (Serialize a, SingI b) => Serialize (Conditionally b a) where
     put CFalse = return ()
@@ -1523,6 +1526,7 @@ type ConsensusParameters (cpv :: ChainParametersVersion) =
     ConsensusParameters' (ConsensusParametersVersionFor cpv)
 
 -- |Lens for '_cpElectionDifficulty'
+-- This provides access to the election difficulty parameter of 'ConsensusParametersV0'
 {-# INLINE cpElectionDifficulty #-}
 cpElectionDifficulty ::
     Lens' (ConsensusParameters' 'ConsensusParametersVersion0) ElectionDifficulty
@@ -1530,6 +1534,7 @@ cpElectionDifficulty =
     lens _cpElectionDifficulty (\cp x -> cp{_cpElectionDifficulty = x})
 
 -- |Lens for '_cpTimeoutParameters'
+-- This provides access to the timeout parameters of 'ConsensusParametersV1'
 {-# INLINE cpTimeoutParameters #-}
 cpTimeoutParameters ::
     Lens' (ConsensusParameters' 'ConsensusParametersVersion1) TimeoutParameters
@@ -1537,6 +1542,7 @@ cpTimeoutParameters =
     lens _cpTimeoutParameters (\cp x -> cp{_cpTimeoutParameters = x})
 
 -- |Lens for '_cpMinBlockTime'
+-- This provides access to the minimum time between blocks of 'ConsensusParametersV1'
 {-# INLINE cpMinBlockTime #-}
 cpMinBlockTime ::
     Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Duration
@@ -1544,6 +1550,7 @@ cpMinBlockTime =
     lens _cpMinBlockTime (\cp x -> cp{_cpMinBlockTime = x})
 
 -- |Lens for '_cpBlockEnergyLimit'
+-- This provides access to the block energy limit of 'ConsensusParametersV1'
 {-# INLINE cpBlockEnergyLimit #-}
 cpBlockEnergyLimit ::
     Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Energy
