@@ -21,12 +21,10 @@ import Data.Serialize
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as H
-import Concordium.Genesis.Data
 import Concordium.Types
 import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.HashableTo
 import qualified Concordium.Types.IdentityProviders as IPS
-import Concordium.Types.Migration
 import Concordium.Types.Parameters
 import Concordium.Types.Updates
 import Concordium.Utils.Serialization
@@ -410,35 +408,6 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (Updates' cpv) where
       where
         hsh :: HashableTo H.Hash a => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
-
--- |Serialize 'Updates' in V0 format.
-putUpdatesV0 :: IsChainParametersVersion cpv => Putter (Updates' cpv)
-putUpdatesV0 Updates{..} = do
-    putUpdateKeysCollection (_currentKeyCollection ^. unhashed)
-    case _currentProtocolUpdate of
-        Nothing -> putWord8 0
-        Just cpu -> putWord8 1 >> put cpu
-    putChainParameters _currentParameters
-    putPendingUpdatesV0 _pendingUpdates
-
--- |Deserialize 'Updates', applying a migration as necessary.
-getUpdates ::
-    forall oldpv pv.
-    (IsProtocolVersion oldpv) =>
-    StateMigrationParameters oldpv pv ->
-    Get (Updates' (ChainParametersVersionFor pv))
-getUpdates migration = do
-    _currentKeyCollection <-
-        withIsAuthorizationsVersionForPV (protocolVersion @oldpv) $
-            makeHashed . migrateUpdateKeysCollection migration <$> getUpdateKeysCollection
-    _currentProtocolUpdate <-
-        getWord8 >>= \case
-            0 -> return Nothing
-            1 -> Just <$> get
-            _ -> fail "Invalid Updates"
-    _currentParameters <- migrateChainParameters migration <$> getChainParameters @(ChainParametersVersionFor oldpv)
-    _pendingUpdates <- getPendingUpdates migration
-    return Updates{..}
 
 instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
     toJSON Updates{..} =
