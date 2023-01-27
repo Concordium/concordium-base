@@ -422,7 +422,6 @@ unsafe extern "C" fn global_context_create(
 /// Generators<G1> instance and on_chain_commitments to a
 /// PedersenKey<G1> instance, and returns a null-pointer
 /// otherwise.
-#[allow(clippy::too_many_arguments)]
 fn global_context_create_helper(
     genesis_string_ptr: *const u8,
     genesis_string_len: size_t,
