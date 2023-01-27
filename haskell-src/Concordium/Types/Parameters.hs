@@ -544,11 +544,11 @@ $( singletons
  )
 
 -- |Constraint on a type level 'ParameterType' that can be used to get a corresponding
--- 'SParameterType'. An alias for 'SingI'.
+-- 'SParameterType'.
 type IsParameterType (pt :: ParameterType) = SingI pt
 
 -- |Constraint on a type level 'AuthorizationsVersion' that can be used to get a corresponding
--- 'SAuthorizationsVersion'. An alias for 'SingI'.
+-- 'SAuthorizationsVersion'.
 type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
 
 -- |Witness an 'IsAuthorizationsVersion' constraint using a 'SChainParametersVersion'.
@@ -694,7 +694,7 @@ maybeWhenSupported _ f (SomeParam a) = f a
 -- * Mint distribution
 
 -- |Constraint on a type level 'MintDistributionVersion' that can be used to get a corresponding
--- 'SMintDistributionVersion'. An alias for 'SingI'.
+-- 'SMintDistributionVersion'.
 type IsMintDistributionVersion (mdv :: MintDistributionVersion) = SingI mdv
 
 -- |Constraint on a type level 'MintDistributionVersion' that can be used to get a corresponding
@@ -819,7 +819,7 @@ instance Monad m => MHashableTo m Hash.Hash TransactionFeeDistribution
 -- * GAS rewards
 
 -- |Constraint on a type level 'GASRewardsVersion' that can be used to get a corresponding
--- 'SGASRewardsVersion'. An alias for 'SingI'.
+-- 'SGASRewardsVersion'.
 type IsGASRewardsVersion (grv :: GASRewardsVersion) = SingI grv
 
 -- |Witness a @SingI (SupportsGASFinalizationProof grv)@ constraint using a 'SGASRewardsVersion grv'.
@@ -1009,7 +1009,7 @@ instance HasExchangeRates ExchangeRates where
 -- * Cooldown parameters
 
 -- |Constraint on a type level 'CooldownParametersVersion' that can be used to get a corresponding
--- 'SCooldownParametersVersion'. An alias for 'SingI'.
+-- 'SCooldownParametersVersion'.
 type IsCooldownParametersVersion (cpv :: CooldownParametersVersion) = SingI cpv
 
 -- |Witness an 'IsCooldownParametersVersion' constraint for an 'SChainParametersVersion'.
@@ -1065,10 +1065,8 @@ parseCooldownParametersJSON = case sing @cpv of
     SCooldownParametersVersion0 -> withObject "CooldownParametersV0" $ \v -> CooldownParametersV0 <$> v .: "bakerCooldownEpochs"
     SCooldownParametersVersion1 -> withObject "CooldownParametersV1" $ \v ->
         CooldownParametersV1
-            <$> v
-                .: "poolOwnerCooldown"
-            <*> v
-                .: "delegatorCooldown"
+            <$> v .: "poolOwnerCooldown"
+            <*> v .: "delegatorCooldown"
 
 instance IsCooldownParametersVersion cpv => FromJSON (CooldownParameters' cpv) where
     parseJSON = parseCooldownParametersJSON
@@ -1298,7 +1296,7 @@ deriving instance Eq PoolParametersVersion
 deriving instance Show PoolParametersVersion
 
 -- |Constraint on a type level 'PoolParametersVersion' that can be used to get a corresponding
--- 'SPoolParametersVersion'. An alias for 'SingI'.
+-- 'SPoolParametersVersion'.
 type IsPoolParametersVersion (ppv :: PoolParametersVersion) = SingI ppv
 
 -- |Witness an 'IsPoolParametersVersion' constraint for an 'SChainParametersVersion'.
@@ -1495,7 +1493,7 @@ instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 -- * Consensus parameters
 
 -- |Constraint on a type level 'ConsensusParametersVersion' that can be used to get a corresponding
--- 'SConsensusParametersVersion'. An alias for 'SingI'.
+-- 'SConsensusParametersVersion'.
 type IsConsensusParametersVersion (cpv :: ConsensusParametersVersion) = SingI cpv
 
 -- |Witness an 'IsConsensusParametersVersion' constraint for an 'SChainParametersVersion'.
