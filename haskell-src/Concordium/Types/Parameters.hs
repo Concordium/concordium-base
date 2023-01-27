@@ -110,7 +110,7 @@ module Concordium.Types.Parameters (
     unOParam,
     supportedOParam,
     whenSupported,
-    pureWhenSupported,
+    whenSupportedA,
     maybeWhenSupported,
 
     -- * Mint distribution
@@ -627,6 +627,8 @@ unconditionally f (CTrue a) = CTrue <$> f a
 
 -- |An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
 -- otherwise.
+-- This needs to be defined as its own type instead of being the alias @type OParam pt cpv = Conditionally (IsSupported pt cpv)@,
+-- since 'IsSupported' is not injective then @pt@ and @cpv@ would become ambigious in the definition for 'unOParam'.
 data OParam (pt :: ParameterType) (cpv :: ChainParametersVersion) a where
     NoParam :: (IsSupported pt cpv ~ 'False) => OParam pt cpv a
     SomeParam :: (IsSupported pt cpv ~ 'True) => !a -> OParam pt cpv a
@@ -673,19 +675,19 @@ instance (Serialize a, SingI pt, IsChainParametersVersion cpv) => Serialize (OPa
     put NoParam = return ()
     put (SomeParam a) = put a
 
-    get = whenSupported get
+    get = whenSupportedA get
 
 -- |Perform an action conditionally on whether the parameter is supported in the relevant chain
 -- parameters version (per 'sIsSupported'). The action is not performed if the parameter is not
 -- supported.
-whenSupported :: forall pt cpv f a. (Applicative f, SingI pt, IsChainParametersVersion cpv) => f a -> f (OParam pt cpv a)
-whenSupported m = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
+whenSupportedA :: forall pt cpv f a. (Applicative f, SingI pt, IsChainParametersVersion cpv) => f a -> f (OParam pt cpv a)
+whenSupportedA m = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
     SFalse -> pure NoParam
     STrue -> SomeParam <$> m
 
 -- |Wrap a value in an 'OParam' depending on whether the parameter is supported.
-pureWhenSupported :: forall pt cpv a. (SingI pt, IsChainParametersVersion cpv) => a -> OParam pt cpv a
-pureWhenSupported v = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
+whenSupported :: forall pt cpv a. (SingI pt, IsChainParametersVersion cpv) => a -> OParam pt cpv a
+whenSupported v = case sIsSupported (sing @pt) (chainParametersVersion @cpv) of
     SFalse -> NoParam
     STrue -> SomeParam v
 

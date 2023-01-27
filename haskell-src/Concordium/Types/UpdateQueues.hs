@@ -363,7 +363,7 @@ emptyPendingUpdates =
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
-        (pureWhenSupported emptyUpdateQueue)
+        (whenSupported emptyUpdateQueue)
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
@@ -373,11 +373,11 @@ emptyPendingUpdates =
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
-        (pureWhenSupported emptyUpdateQueue)
-        (pureWhenSupported emptyUpdateQueue)
-        (pureWhenSupported emptyUpdateQueue)
-        (pureWhenSupported emptyUpdateQueue)
-        (pureWhenSupported emptyUpdateQueue)
+        (whenSupported emptyUpdateQueue)
+        (whenSupported emptyUpdateQueue)
+        (whenSupported emptyUpdateQueue)
+        (whenSupported emptyUpdateQueue)
+        (whenSupported emptyUpdateQueue)
 
 -- |Current state of updatable parameters and update queues.
 data Updates' (cpv :: ChainParametersVersion) = Updates
