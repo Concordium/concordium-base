@@ -1648,16 +1648,16 @@ putChainParameters ChainParameters{..} = do
 
 -- |Deserialize a 'ChainParameters''.
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
-getChainParameters =
-    ChainParameters
-        <$> withIsConsensusParametersVersionFor (chainParametersVersion @cpv) get
-        <*> get
-        <*> withIsCooldownParametersVersionFor (chainParametersVersion @cpv) get
-        <*> get
-        <*> get
-        <*> get
-        <*> get
-        <*> withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
+getChainParameters = do
+    _cpConsensusParameters <- withIsConsensusParametersVersionFor (chainParametersVersion @cpv) get
+    _cpExchangeRates <- get
+    _cpCooldownParameters <- withIsCooldownParametersVersionFor (chainParametersVersion @cpv) get
+    _cpTimeParameters <- get
+    _cpAccountCreationLimit <- get
+    _cpRewardParameters <- get
+    _cpFoundationAccount <- get
+    _cpPoolParameters <- withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
+    return ChainParameters{..}
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
     put = putChainParameters
