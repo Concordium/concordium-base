@@ -41,36 +41,44 @@ foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo
 foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_create"
     createArInfoFFI ::
-        Word32 -> -- An ArIdentity returned by arIdentityFFI.
-        Ptr Word8 -> CSize -> -- Pointer to a byte array returned by arPublicKeyFFI, and its length. The
-                              -- array must be the binary representation of a `elgamal::PublicKey<G1>`
-                              -- Rust instance.
-        Ptr Word8 -> CSize -> -- Pointer to a byte array returned by arNameFFI, and its length. The array
-                              -- must correspond to a utf8 encoded string.
-        Ptr Word8 -> CSize -> -- Pointer to a byte array returned by arUrlFFI and its length. The array
-                              -- must correspond to a utf8 encoded string.
-        Ptr Word8 -> CSize -> -- Pointer to a byte array returned by arDescriptionFFI and its length. The
-                              -- array must correspond to a utf8 encoded string.
-        IO (Ptr ArInfo) -- An ArInfo instance with its corresponding fields set to the above values.
+        ArIdentity -> -- The identity of the AR, for instance returned by `arIdentityFFI`.
+        Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of a
+                              -- `elgamal::PublicKey<G1>` Rust-instance and its length. For
+                              -- instance, one returned by `arPublicKeyFFI`.
+        Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
+                              -- utf8 encoded string, for instance one returned by `arNameFFI` and
+                              -- its length.
+        Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
+                              -- utf8 encoded string, for instance one returned by `arUrlFFI` and
+                              -- its length.
+        Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
+                              -- utf8 encoded string, for instance one returned by `arDescriptionFFI`
+                              -- and its length.
+        IO (Ptr ArInfo) -- A pointer to an @ArInfo@ Rust-instance with its corresponding fields set to
+                        -- the above values.
 
--- Create an arInfo intance from bytestrings and texts.
--- This function is a wrapper for `createArInfoFFI`, and is used for creating heap-allocated `ArInfo`
+-- Create an @ArInfo@ Rust-instance from bytestrings and texts.
+-- This function is a wrapper for `createArInfoFFI`, and is used for creating heap-allocated @ArInfo@
 -- instances from raw and utf8-encoded bytestrings. The inputs should conform to field values extracted
--- from `IpInfo` instances using FFI functions, see the `createArInfoFFI` import declaration
--- for information about the function inputs and preconditions.
-createArInfo :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> ArInfo
+-- from @IpInfo@ instances using FFI functions, see the `createArInfoFFI` import declaration
+-- for information about the function inputs and preconditions. Returns @Nothing@ on failure.
+createArInfo :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe ArInfo
 createArInfo arId pubKey name url desc = unsafePerformIO ( do
-    let (ArIdentity idW) = arId
+    -- Note that empty strings correspond to arbitrary pointers being passed
+    -- to the Rust side. This is handled on the Rust side by checking the
+    -- lengths, so this is safe.
     ptr <- unsafeUseAsCStringLen pubKey $ \(pkPtr, pkLen) ->
         unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
             unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
                 unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
-                    createArInfoFFI idW
+                    createArInfoFFI arId
                         (castPtr pkPtr) (fromIntegral pkLen)
                         (castPtr nPtr) (fromIntegral nLen)
                         (castPtr urlPtr) (fromIntegral urlLen)
                         (castPtr descPtr) (fromIntegral descLen)
-    ArInfo <$> newForeignPtr freeArInfo ptr)
+    if ptr == nullPtr
+    then return Nothing
+    else Just . ArInfo <$> newForeignPtr freeArInfo ptr)
     
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp
