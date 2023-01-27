@@ -852,6 +852,7 @@ data GASRewards (grv :: GASRewardsVersion) = GASRewards
     }
     deriving (Eq, Show)
 
+-- Define 'HasGasRewards' class with accessor lenses, and instance for 'GasRewards'.
 makeClassy ''GASRewards
 
 instance AE.ToJSON (GASRewards cpv) where
@@ -909,6 +910,7 @@ data RewardParameters (cpv :: ChainParametersVersion) = RewardParameters
     }
     deriving (Eq, Show)
 
+-- Define 'HasRewardParameters' class with accessor lenses, and instance for 'RewardParameters'.
 makeClassy ''RewardParameters
 
 instance (mdv ~ MintDistributionVersionFor cpv) => HasMintDistribution (RewardParameters cpv) mdv where
@@ -1138,6 +1140,7 @@ data TimeParameters where
         TimeParameters
     deriving (Eq, Show)
 
+-- Define 'HasTimeParameters' class with accessor lenses, and instance for 'TimeParameters'.
 makeClassy ''TimeParameters
 
 instance IsSupported 'PTTimeParameters cpv ~ 'True => HasTimeParameters (OParam 'PTTimeParameters cpv TimeParameters) where
@@ -1459,15 +1462,25 @@ data TimeoutParameters = TimeoutParameters
 instance Serialize TimeoutParameters where
     put TimeoutParameters{..} = do
         put tpTimeoutBase
-        put tpTimeoutIncrease
-        put tpTimeoutDecrease
+        put (numerator tpTimeoutIncrease)
+        put (denominator tpTimeoutIncrease)
+        put (numerator tpTimeoutDecrease)
+        put (denominator tpTimeoutDecrease)
     get = do
         tpTimeoutBase <- get
-        tpTimeoutIncrease <- get
+        -- Get the timeout increase ratio.
+        tiNum <- get
+        tiDen <- get
+        let tpTimeoutIncrease = tiNum % tiDen
         unless (tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
-        tpTimeoutDecrease <- get
+        unless (gcd tiNum tiDen == 1) $ fail "timeoutIncrease numerator and denominator are not coprime."
+        -- Get the timeout decrease ratio.
+        tdNum <- get
+        tdDen <- get
+        let tpTimeoutDecrease = tdNum % tdDen
         unless (tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
         unless (tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
+        unless (gcd tiNum tiDen == 1) $ fail "timeoutDecrease numerator and denominator are not coprime."
         return TimeoutParameters{..}
 
 instance ToJSON TimeoutParameters where
@@ -1483,9 +1496,15 @@ instance FromJSON TimeoutParameters where
         tpTimeoutBase <- o .: "timeoutBase"
         tpTimeoutIncrease <- o .: "timeoutIncrease"
         unless (tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
+        let tiNum = numerator tpTimeoutIncrease
+            tiDen = denominator tpTimeoutIncrease
+        unless (gcd tiNum tiDen == 1) $ fail "timeoutIncrease numerator and denominator are not coprime."
         tpTimeoutDecrease <- o .: "timeoutDecrease"
         unless (tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
         unless (tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
+        let tdNum = numerator tpTimeoutDecrease
+            tdDen = denominator tpTimeoutDecrease
+        unless (gcd tdNum tdDen == 1) $ fail "timeoutDecrease numerator and denominator are not coprime."
         return TimeoutParameters{..}
 
 instance HashableTo Hash.Hash TimeoutParameters where
