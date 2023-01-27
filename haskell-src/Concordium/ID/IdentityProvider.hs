@@ -42,19 +42,19 @@ foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr Ip
 foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
     IdentityProviderIdentity -> -- The identity of the IP, for instance returned by `ipIdentityFFI`.
     Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of a
-                          -- `ed25519_dalek::PublicKey` Rust-instance and its length. For
-                          -- instance, one returned by ipVerifyKeyFFI.
+                          -- `ed25519_dalek::PublicKey` Rust-instance, for instance one returned
+                          -- by ipVerifyKeyFFI, and its length.
     Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of a
-                          -- `ps_sig::PublicKey<Bls12>` Rust-instance and its length. For
-                          -- instance, one returned by ipCdiVerifyKeyFFI.
+                          -- `ps_sig::PublicKey<Bls12>` Rust-instance, for instance one returned
+                          -- by ipCdiVerifyKeyFFI, and its length.
     Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
-                          -- utf8 encoded string, for instance one returned by ipNameFFI and
+                          -- utf8 encoded string, for instance one returned by ipNameFFI, and
                           -- its length.
     Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
-                          -- utf8 encoded string, for instance one returned by ipUrlFFI and
+                          -- utf8 encoded string, for instance one returned by ipUrlFFI, and
                           -- its length.
     Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
-                          -- utf8 encoded string, for instance one returned by ipDescriptionFFI
+                          -- utf8 encoded string, for instance one returned by ipDescriptionFFI,
                           -- and its length.
     IO (Ptr IpInfo) -- Pointer to an `IpInfo Rust instance with its corresponding fields set to
                     -- the above values.

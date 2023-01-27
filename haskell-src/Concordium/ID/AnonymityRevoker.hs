@@ -41,18 +41,18 @@ foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo
 foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_create"
     createArInfoFFI ::
-        ArIdentity -> -- The identity of the AR, for instance returned by `arIdentityFFI`.
+        ArIdentity -> -- The identity of the AR, for instance one returned by `arIdentityFFI`.
         Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of a
-                              -- `elgamal::PublicKey<G1>` Rust-instance and its length. For
-                              -- instance, one returned by `arPublicKeyFFI`.
+                              -- `elgamal::PublicKey<G1>` Rust-instance, for instance, one returned
+                              -- by `arPublicKeyFFI`, and its length.
         Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
-                              -- utf8 encoded string, for instance one returned by `arNameFFI` and
+                              -- utf8 encoded string, for instance one returned by `arNameFFI`, and
                               -- its length.
         Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
-                              -- utf8 encoded string, for instance one returned by `arUrlFFI` and
+                              -- utf8 encoded string, for instance one returned by `arUrlFFI`, and
                               -- its length.
         Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of an
-                              -- utf8 encoded string, for instance one returned by `arDescriptionFFI`
+                              -- utf8 encoded string, for instance one returned by `arDescriptionFFI`,
                               -- and its length.
         IO (Ptr ArInfo) -- A pointer to an @ArInfo@ Rust-instance with its corresponding fields set to
                         -- the above values.
