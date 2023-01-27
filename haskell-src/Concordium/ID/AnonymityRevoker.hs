@@ -55,7 +55,7 @@ foreign import ccall unsafe "ar_info_create"
                               -- utf8 encoded string, for instance one returned by `arDescriptionFFI`,
                               -- and its length.
         IO (Ptr ArInfo) -- A pointer to an @ArInfo@ Rust-instance with its corresponding fields set to
-                        -- the above values.
+                        -- the above values. This is a null-pointer on failure.
 
 -- Create an @ArInfo@ Rust-instance from bytestrings and texts.
 -- This function is a wrapper for `createArInfoFFI`, and is used for creating heap-allocated @ArInfo@

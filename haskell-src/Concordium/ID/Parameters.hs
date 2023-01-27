@@ -40,7 +40,7 @@ foreign import ccall unsafe "global_context_create"
         Ptr Word8 -> CSize -> -- Pointer to a byte array which is the binary representation of a
                               -- `PedersenKey<G1>` Rust-instance and its length.
         IO (Ptr GlobalContext) -- A pointer to an @GlobalContext@ instance with its corresponding
-                               -- fields set to the above values.
+                               -- fields set to the above values. This is a null-pointer on failure.
 
 -- Create a @GlobalContext@ instance from bytestrings and texts.
 -- This function is a wrapper for `createGlobalContextFFI`, and is used for creating heap-allocated

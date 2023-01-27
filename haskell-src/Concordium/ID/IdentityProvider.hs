@@ -57,7 +57,7 @@ foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
                           -- utf8 encoded string, for instance one returned by ipDescriptionFFI,
                           -- and its length.
     IO (Ptr IpInfo) -- Pointer to an `IpInfo Rust instance with its corresponding fields set to
-                    -- the above values.
+                    -- the above values. This is a null-pointer on failure.
 
 -- Create an @IpInfo@ instance from bytestrings and texts.
 -- This function is a wrapper for `createIpInfoFFI`, and is used for creating heap-allocated @IpInfo@
@@ -79,7 +79,7 @@ createIpInfo idIdentity verifyKey cdiVerifyKey name url desc = unsafePerformIO (
                             (castPtr cvkPtr) (fromIntegral cvkLen)
                             (castPtr nPtr) (fromIntegral nLen)
                             (castPtr urlPtr) (fromIntegral urlLen)
-                            (castPtr descPtr) (fromIntegral descLen)                             
+                            (castPtr descPtr) (fromIntegral descLen)
     if ptr == nullPtr
     then return Nothing
     else Just . IpInfo <$> newForeignPtr freeIpInfo ptr )
