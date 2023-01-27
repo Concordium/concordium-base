@@ -159,7 +159,7 @@ pub extern "C" fn bls_verify_aggregate(
 pub extern "C" fn bls_verify_aggregate_hybrid(
     m_ptr: *const *const u8,        // array of pointers to messages.
     message_lengths: *const size_t, // array of the lengths of the messages.
-    pks_ptr: *const *const *mut PublicKey<Bls12>, /* array of pointers to arrays of pointers
+    pks_ptr: *const *const *const PublicKey<Bls12>, /* array of pointers to arrays of pointers
                                      * to public keys */
     pks_len: *const size_t, // number of public keys.
     len: size_t,            /* the number of sets of public keys. Note. this is equal to the
@@ -189,7 +189,7 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
         unsafe { slice::from_raw_parts(pks_len, len) }
     };
 
-    let pks_ptrs: &[*const *mut PublicKey<Bls12>] = if len == 0 {
+    let pks_ptrs: &[*const *const PublicKey<Bls12>] = if len == 0 {
         &[]
     } else {
         unsafe { slice::from_raw_parts(pks_ptr, len) }
@@ -200,7 +200,7 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
             .iter()
             .zip(pks_lens_.iter())
             .map(|(&ptr, &pk_len)| {
-                let pk_set: &[*mut PublicKey<Bls12>] = if pk_len == 0 {
+                let pk_set: &[*const PublicKey<Bls12>] = if pk_len == 0 {
                     &[]
                 } else {
                     slice::from_raw_parts(ptr, pk_len)
@@ -318,10 +318,10 @@ mod test {
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
             let sk3 = SecretKey::<Bls12>::generate(&mut rng);
             let sk4 = SecretKey::<Bls12>::generate(&mut rng);
-            let mut pk1 = PublicKey::<Bls12>::from_secret(&sk1);
-            let mut pk2 = PublicKey::<Bls12>::from_secret(&sk2);
-            let mut pk3 = PublicKey::<Bls12>::from_secret(&sk3);
-            let mut pk4 = PublicKey::<Bls12>::from_secret(&sk4);
+            let pk1 = PublicKey::<Bls12>::from_secret(&sk1);
+            let pk2 = PublicKey::<Bls12>::from_secret(&sk2);
+            let pk3 = PublicKey::<Bls12>::from_secret(&sk3);
+            let pk4 = PublicKey::<Bls12>::from_secret(&sk4);
             let mut sig = sk1.sign(&m1);
             sig = sig.aggregate(sk2.sign(&m1));
             sig = sig.aggregate(sk3.sign(&m2));
@@ -335,11 +335,11 @@ mod test {
             let m2_len: size_t = 16;
             let m_len: *const size_t = &[m1_len, m2_len] as *const _;
 
-            let pks_ptr1: *const *mut PublicKey<Bls12> =
-                &[&mut pk1 as *mut _, &mut pk2 as *mut _] as *const *mut _;
-            let pks_ptr2: *const *mut PublicKey<Bls12> =
-                &[&mut pk3 as *mut _, &mut pk4 as *mut _] as *const *mut _;
-            let pks_ptr: *const *const *mut PublicKey<Bls12> = &[pks_ptr1, pks_ptr2] as *const _;
+            let pks_ptr1: *const *const PublicKey<Bls12> =
+                &[&pk1 as *const _, &pk2 as *const _] as *const *const _;
+            let pks_ptr2: *const *const PublicKey<Bls12> =
+                &[&pk3 as *const _, &pk4 as *const _] as *const *const _;
+            let pks_ptr: *const *const *const PublicKey<Bls12> = &[pks_ptr1, pks_ptr2] as *const _;
             let pks1_len: size_t = 2;
             let pks2_len: size_t = 2;
             let pks_len: *const size_t = &[pks1_len, pks2_len] as *const _;

@@ -21,17 +21,17 @@ genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
 -- |Generates keypairs and messages.
--- The number of messages are at least the amount of key pairs.
--- The messages have a size of 100 bytes each.
+-- The messages have a size of up to 100 bytes each.
+-- Each message is associated with up to 10 key pairs.
 --
--- The keypairs and messages are constructed in such a way,
--- since we're simulating that the same message may be signed by different key pair,
--- hence this generator creates groupings of key pairs on messages.
+-- The keypairs and messages are constructed in this way,
+-- since we're simulating that the same message may be signed by multiple key pairs.
+-- Hence this generator creates groupings of key pairs on messages.
 genKeyPairsAndMessages :: Gen [([(SecretKey, PublicKey)], [Word8])]
 genKeyPairsAndMessages = do
     n <- choose (10, 20)
     replicateM n $ do
-        kps <- replicateM 10 genKeyPair
+        kps <- resize 10 $ listOf genKeyPair
         m :: [Word8] <- resize 100 arbitrary
         return (kps, m)
 
