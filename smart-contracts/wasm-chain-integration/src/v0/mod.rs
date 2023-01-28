@@ -84,7 +84,7 @@ impl Outcome {
         let to_addr = AccountAddress(addr);
         let data = std::rc::Rc::new(SimpleTransferAction {
             to_addr,
-            amount: Amount::from_ccd(micro_ccd),
+            amount: Amount::from_micro_ccd(micro_ccd),
         });
         self.cur_state.push(Action::SimpleTransfer {
             data,
