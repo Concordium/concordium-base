@@ -206,7 +206,9 @@ impl State {
 
 /// A Wasm host that is used for executing `init` functions that create new
 /// contract instances.
-pub(crate) struct InitHost<ParamType, Ctx> {
+#[doc(hidden)] // Needed in benchmarks, but generally should not be used by
+               // users of the library.
+pub struct InitHost<ParamType, Ctx> {
     /// Remaining energy for execution.
     pub(crate) energy: InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -225,10 +227,33 @@ pub(crate) struct InitHost<ParamType, Ctx> {
     pub(crate) limit_logs_and_return_values: bool,
 }
 
+impl<ParamType, Ctx> InitHost<ParamType, Ctx> {
+    /// Initialize a new [`InitHost`] ready to execute contract initialization
+    /// functions.
+    pub fn init(
+        energy: InterpreterEnergy,
+        param: ParamType,
+        init_ctx: Ctx,
+        limit_logs_and_return_values: bool,
+    ) -> Self {
+        Self {
+            energy,
+            activation_frames: constants::MAX_ACTIVATION_FRAMES,
+            logs: Logs::new(),
+            state: State::new(None),
+            param,
+            init_ctx,
+            limit_logs_and_return_values,
+        }
+    }
+}
+
 /// A Wasm host that is used for executing entrypoints of existing smart
 /// contract instances. This is analogous to the [`InitHost`].
 #[derive(Debug)]
-pub(crate) struct ReceiveHost<ParamType, Ctx> {
+#[doc(hidden)] // Needed in benchmarks, but generally should not be used by
+               // users of the library.
+pub struct ReceiveHost<ParamType, Ctx> {
     /// Remaining energy for execution.
     pub(crate) energy: InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -251,6 +276,30 @@ pub(crate) struct ReceiveHost<ParamType, Ctx> {
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in P5.
     pub(crate) limit_logs_and_return_values: bool,
+}
+
+impl<ParamType, Ctx> ReceiveHost<ParamType, Ctx> {
+    /// Initialize a new [`ReceiveHost`].
+    pub fn init(
+        energy: InterpreterEnergy,
+        state: State,
+        param: ParamType,
+        receive_ctx: Ctx,
+        max_parameter_size: usize,
+        limit_logs_and_return_values: bool,
+    ) -> Self {
+        ReceiveHost {
+            energy,
+            activation_frames: constants::MAX_ACTIVATION_FRAMES,
+            logs: Logs::new(),
+            state,
+            param,
+            outcomes: Default::default(),
+            receive_ctx,
+            max_parameter_size,
+            limit_logs_and_return_values,
+        }
+    }
 }
 
 /// Types which can act as init contexts.

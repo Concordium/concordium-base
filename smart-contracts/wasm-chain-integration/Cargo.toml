@@ -11,7 +11,8 @@ license-file = "../../LICENSE"
 enable-ffi = []
 default=[]
 fuzz-coverage = ["concordium-wasm/fuzz-coverage"]
-fuzz = ["arbitrary"]
+fuzz = ["arbitrary", "concordium-contracts-common/fuzz"]
+# Expose helpers for displaying the state of a V1 contract.
 display-state = ["ptree"]
 # enable construction of the state from streams.
 async = ["futures"]
@@ -66,3 +67,6 @@ harness = false
 
 [profile.release]
 codegen-units = 1
+
+[package.metadata.docs.rs]
+features = ["display-state", "async"]

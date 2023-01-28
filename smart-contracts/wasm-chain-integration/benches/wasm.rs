@@ -6,8 +6,8 @@ use concordium_smart_contract_engine::{
     constants::MAX_ACTIVATION_FRAMES,
     utils::TestHost,
     v0::{
-        ConcordiumAllowedImports, InitContext, InitHost, Logs, Outcome, PolicyBytes,
-        ProcessedImports, ReceiveContext, ReceiveHost, State,
+        ConcordiumAllowedImports, InitContext, InitHost, ProcessedImports, ReceiveContext,
+        ReceiveHost, State,
     },
     InterpreterEnergy,
 };
@@ -543,36 +543,29 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             sender_policies: &[],
         };
 
-        let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<PolicyBytes<'_>>> {
-            InitHost {
-                energy: InterpreterEnergy {
+        let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<_>> {
+            InitHost::init(
+                InterpreterEnergy {
                     energy: nrg * 1000,
                 },
-                activation_frames: MAX_ACTIVATION_FRAMES,
-                logs: Logs::new(),
-                state: State::new(None),
-                param: Parameter::from(&[] as &[u8]),
-                init_ctx: &init_ctx,
-                limit_logs_and_return_values: false,
-            }
+                Parameter::from(&[] as &[u8]),
+                &init_ctx,
+                false,
+            )
         };
 
-        let setup_receive_host =
-            |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<PolicyBytes<'_>>> {
-                ReceiveHost {
-                    energy: InterpreterEnergy {
-                        energy: nrg * 1000,
-                    },
-                    activation_frames: MAX_ACTIVATION_FRAMES,
-                    logs: Logs::new(),
-                    state,
-                    param,
-                    outcomes: Outcome::new(),
-                    receive_ctx: &receive_ctx,
-                    max_parameter_size: u16::MAX.into(),
-                    limit_logs_and_return_values: false,
-                }
-            };
+        let setup_receive_host = |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<_>> {
+            ReceiveHost::init(
+                InterpreterEnergy {
+                    energy: nrg * 1000,
+                },
+                state,
+                param,
+                &receive_ctx,
+                u16::MAX.into(),
+                false,
+            )
+        };
 
         let run_init = |name, args| {
             // since we move the rest of the variables we must first take a reference to

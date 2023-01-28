@@ -93,7 +93,8 @@ pub trait AllocCounter<V> {
     fn allocate(&mut self, data: &V) -> Result<(), Self::Err>;
 }
 
-/// A counter that does not count anything, and always returns `Ok(())`.
+/// A [counter](TraversalCounter) that does not count anything, and always
+/// returns `Ok(())`.
 pub struct EmptyCounter;
 #[derive(Debug, Copy, Clone, Error)]
 /// An error that cannot happen, i.e., this type is not inhabited and is used as
@@ -151,8 +152,8 @@ impl<V> Collector<V> for EmptyCollector {
     fn add_children(&mut self, _num_children: usize) {}
 }
 
-/// A collector that keeps track of how much additional data will be required to
-/// store the tree.
+/// A [`Collector`] that keeps track of how much additional data will be
+/// required to store the tree.
 #[derive(Default)]
 pub struct SizeCollector {
     num_bytes: u64,
@@ -186,7 +187,7 @@ impl<V: AsRef<[u8]>> Collector<V> for SizeCollector {
 }
 
 /// Trait implemented by types that can be used to store binary data, and return
-/// a handle for loading data.
+/// a handle for loading data. Dual to [`BackingStoreLoad`].
 pub trait BackingStoreStore {
     /// Store the provided value and return a reference that can be used
     /// to load it.
@@ -194,6 +195,7 @@ pub trait BackingStoreStore {
 }
 
 /// Trait implemented by types that can load data from given locations.
+/// Dual to [`BackingStoreStore`].
 pub trait BackingStoreLoad {
     type R: AsRef<[u8]>;
     /// Load the provided value from the given location. The implementatation of
@@ -212,7 +214,7 @@ impl BackingStoreStore for Vec<u8> {
 }
 #[derive(Debug)]
 /// A generic wrapper that implements [BackingStoreStore] for any inner
-/// type that implements [Seek] and [Write].
+/// type that implements [Seek] and [Write], such as `Cursor<Vec<u8>>`.
 pub struct Storer<X> {
     pub inner: X,
 }
@@ -501,6 +503,6 @@ pub struct TooManyIterators;
 
 #[derive(Debug, Error, Eq, PartialEq)]
 /// An error used to indicate that an operation could not be completed because
-/// the portion of the trie is locked
+/// the portion of the trie is locked.
 #[error("Trying to insert or delete in a locked part of the trie.")]
 pub struct AttemptToModifyLockedArea;

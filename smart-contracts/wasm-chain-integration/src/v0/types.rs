@@ -16,7 +16,7 @@ use std::collections::LinkedList;
 use crate::InterpreterEnergy;
 
 /// Maximum length, in bytes, of an export function name.
-pub const MAX_EXPORT_NAME_LEN: usize = 100;
+pub(crate) const MAX_EXPORT_NAME_LEN: usize = 100;
 
 pub(crate) type PolicyBytes<'a> = &'a [u8];
 
@@ -293,7 +293,7 @@ impl Action {
                 out.extend_from_slice(&data.to_addr.index.to_be_bytes());
                 out.extend_from_slice(&data.to_addr.subindex.to_be_bytes());
                 out.extend_from_slice(&(name_len as u16).to_be_bytes());
-                out.extend_from_slice(&name);
+                out.extend_from_slice(name);
                 out.extend_from_slice(&data.amount.micro_ccd.to_be_bytes());
                 out.extend_from_slice(&(param_len as u16).to_be_bytes());
                 out.extend_from_slice(&data.parameter.0);

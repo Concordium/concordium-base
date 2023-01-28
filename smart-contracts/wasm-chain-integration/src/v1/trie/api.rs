@@ -34,6 +34,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
+/// Value stored in the trie.
 pub type Value = Vec<u8>;
 
 /// The persistent contract state.
@@ -368,6 +369,10 @@ pub struct MutableStateInner {
     /// contract and released at the end.
     /// The reason for the Arc is that we need to be able to clone this so
     /// that we can share it inside the single transaction.
+    ///
+    /// The reason for using [`Arc`], as opposed to [`Rc`]() is that this needs
+    /// to be safe for concurrent access in the context in which it was
+    /// originally used.
     state: Arc<Mutex<MutableTrie>>,
 }
 
@@ -378,11 +383,13 @@ impl MutableStateInner {
     pub fn lock(&self) -> StateTrie { self.state.lock().expect("Another thread panicked.") }
 }
 
-/// A lock guard derived from [MutableStateInner]. Only one can exist at the
+/// A lock guard derived from [`MutableStateInner`]. Only one can exist at the
 /// time.
 pub type StateTrie<'a> = MutexGuard<'a, MutableTrie>;
 
-/// The mutable contract state.
+/// The mutable contract state. In contrast to [`PersistentState`] this state is
+/// designed for efficient modifications and rollbacks during transaction
+/// execution.
 #[derive(Debug, Clone)]
 pub struct MutableState {
     inner:      Option<MutableStateInner>,
@@ -472,8 +479,12 @@ impl MutableState {
         }
     }
 
-    /// Make the state persistent. This leaves the mutable state empty.
-    /// This function is idempotent.
+    /// Make the state persistent. This function modifies the mutable state
+    /// so that it is equivalent to a [`MutableState`] obtained by
+    /// [thawing](Self::thaw) the resulting [`PersistentState`].
+    ///
+    /// As a result freezing should only be used after the mutable state is no
+    /// longer needed.
     pub fn freeze<C: Collector<Value>>(
         &mut self,
         loader: &mut impl BackingStoreLoad,

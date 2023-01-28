@@ -19,6 +19,32 @@
 //!
 //! The respective modules provide more details on the data types involved, and
 //! any specifics of the different versions.
+//!
+//! ## Features
+//!
+//! This crate has the following features. None are enabled by default.
+//!
+//! ### `display-state`
+//! This feature exposes the function
+//! [`display_tree`](v1::trie::PersistentState::display_tree) for displaying the
+//! V1 contract state in a reasonably readable format. This is useful for deep
+//! inspection of smart contract state, and debugging.
+//!
+//! ### `async`
+//! Exposes construction of smart contract state from streams of key-value
+//! pairs, such as those received from the node's API. See
+//! - [`try_from_stream`](v1::trie::PersistentState::try_from_stream)
+//! - [`from_stream`](v1::trie::PersistentState::from_stream)
+//!
+//! ### `enable-ffi`
+//! This enables foreign function exports. This is an **internal** feature and
+//! there are no guarantees about the stability of foreign exports.
+//!
+//! ### `fuzz-coverage` and `fuzz`
+//! These features are also **internal** and exist to support fuzzing. They are
+//! used to derive Arbitrary instances and to disable inlining, the latter is
+//! necessary since the fuzzer used has bugs which prevent the coverage report
+//! being generated when functions are inlined.
 pub mod constants;
 pub mod resumption;
 pub mod utils;
