@@ -426,9 +426,9 @@ printConsensusParametersV1 ::
     IO ()
 printConsensusParametersV1 ConsensusParametersV1{..} = do
     putStrLn "    + Timing parameters:"
-    putStrLn $ "      * timeout base: " ++ show (tpTimeoutBase _cpTimeoutParameters) ++ " ms"
-    putStrLn $ "      * timeout increase factor: " ++ show (tpTimeoutIncrease _cpTimeoutParameters)
-    putStrLn $ "      * timeout decrease factor: " ++ show (tpTimeoutDecrease _cpTimeoutParameters)
+    putStrLn $ "      * timeout base: " ++ show (_cpTimeoutParameters ^. tpTimeoutBase) ++ " ms"
+    putStrLn $ "      * timeout increase factor: " ++ show (_cpTimeoutParameters ^. tpTimeoutIncrease)
+    putStrLn $ "      * timeout decrease factor: " ++ show (_cpTimeoutParameters ^. tpTimeoutDecrease)
     putStrLn $ "  + Minimum block time:" ++ show _cpMinBlockTime ++ " ms"
     putStrLn $ "  + Block energy limit" ++ show _cpBlockEnergyLimit
 

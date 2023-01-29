@@ -829,9 +829,9 @@ instance ToProto Parameters.TimeParameters where
 instance ToProto Parameters.TimeoutParameters where
     type Output Parameters.TimeoutParameters = Proto.TimeoutParameters
     toProto Parameters.TimeoutParameters{..} = Proto.make $ do
-        ProtoFields.timeoutBase .= toProto tpTimeoutBase
-        ProtoFields.timeoutIncrease .= toProto tpTimeoutIncrease
-        ProtoFields.timeoutDecrease .= toProto tpTimeoutDecrease
+        ProtoFields.timeoutBase .= toProto _tpTimeoutBase
+        ProtoFields.timeoutIncrease .= toProto _tpTimeoutIncrease
+        ProtoFields.timeoutDecrease .= toProto _tpTimeoutDecrease
 
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1

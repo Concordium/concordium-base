@@ -276,6 +276,7 @@ module Concordium.Types.Parameters (
 
     -- * Timeout parameters
     TimeoutParameters (..),
+    HasTimeoutParameters (..),
 
     -- * Consensus parameters
 
@@ -1517,59 +1518,62 @@ deriving instance Show (PoolParameters' ppv)
 -- |Parameters controlling consensus timeouts for the consensus protocol version 2.
 data TimeoutParameters = TimeoutParameters
     { -- |The base value for triggering a timeout.
-      tpTimeoutBase :: Duration,
+      _tpTimeoutBase :: Duration,
       -- |Factor for increasing the timeout. Must be greater than 1.
-      tpTimeoutIncrease :: Ratio Word64,
+      _tpTimeoutIncrease :: Ratio Word64,
       -- |Factor for decreasing the timeout. Must be between 0 and 1.
-      tpTimeoutDecrease :: Ratio Word64
+      _tpTimeoutDecrease :: Ratio Word64
     }
     deriving (Eq, Show)
 
+-- Define 'HasTimeoutParameters' class with accessor lenses, and instance for 'TimeoutParameters'.
+makeClassy ''TimeoutParameters
+
 instance Serialize TimeoutParameters where
     put TimeoutParameters{..} = do
-        put tpTimeoutBase
-        put (numerator tpTimeoutIncrease)
-        put (denominator tpTimeoutIncrease)
-        put (numerator tpTimeoutDecrease)
-        put (denominator tpTimeoutDecrease)
+        put _tpTimeoutBase
+        put (numerator _tpTimeoutIncrease)
+        put (denominator _tpTimeoutIncrease)
+        put (numerator _tpTimeoutDecrease)
+        put (denominator _tpTimeoutDecrease)
     get = do
-        tpTimeoutBase <- get
+        _tpTimeoutBase <- get
         -- Get the timeout increase ratio.
         tiNum <- get
         tiDen <- get
-        let tpTimeoutIncrease = tiNum % tiDen
-        unless (tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
+        let _tpTimeoutIncrease = tiNum % tiDen
+        unless (_tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
         unless (gcd tiNum tiDen == 1) $ fail "timeoutIncrease numerator and denominator are not coprime."
         -- Get the timeout decrease ratio.
         tdNum <- get
         tdDen <- get
-        let tpTimeoutDecrease = tdNum % tdDen
-        unless (tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
-        unless (tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
+        let _tpTimeoutDecrease = tdNum % tdDen
+        unless (_tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
+        unless (_tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
         unless (gcd tiNum tiDen == 1) $ fail "timeoutDecrease numerator and denominator are not coprime."
         return TimeoutParameters{..}
 
 instance ToJSON TimeoutParameters where
     toJSON TimeoutParameters{..} =
         object
-            [ "timeoutBase" AE..= tpTimeoutBase,
-              "timeoutIncrease" AE..= tpTimeoutIncrease,
-              "timeoutDecrease" AE..= tpTimeoutDecrease
+            [ "timeoutBase" AE..= _tpTimeoutBase,
+              "timeoutIncrease" AE..= _tpTimeoutIncrease,
+              "timeoutDecrease" AE..= _tpTimeoutDecrease
             ]
 
 instance FromJSON TimeoutParameters where
     parseJSON = withObject "TimeoutParameters" $ \o -> do
-        tpTimeoutBase <- o .: "timeoutBase"
-        tpTimeoutIncrease <- o .: "timeoutIncrease"
-        unless (tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
-        let tiNum = numerator tpTimeoutIncrease
-            tiDen = denominator tpTimeoutIncrease
+        _tpTimeoutBase <- o .: "timeoutBase"
+        _tpTimeoutIncrease <- o .: "timeoutIncrease"
+        unless (_tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
+        let tiNum = numerator _tpTimeoutIncrease
+            tiDen = denominator _tpTimeoutIncrease
         unless (gcd tiNum tiDen == 1) $ fail "timeoutIncrease numerator and denominator are not coprime."
-        tpTimeoutDecrease <- o .: "timeoutDecrease"
-        unless (tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
-        unless (tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
-        let tdNum = numerator tpTimeoutDecrease
-            tdDen = denominator tpTimeoutDecrease
+        _tpTimeoutDecrease <- o .: "timeoutDecrease"
+        unless (_tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
+        unless (_tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."
+        let tdNum = numerator _tpTimeoutDecrease
+            tdDen = denominator _tpTimeoutDecrease
         unless (gcd tdNum tdDen == 1) $ fail "timeoutDecrease numerator and denominator are not coprime."
         return TimeoutParameters{..}
 
@@ -1837,9 +1841,9 @@ parseJSONForCPV2 =
         _ppLeverageBound <- v .: "leverageBound"
         _tpRewardPeriodLength <- v .: "rewardPeriodLength"
         _tpMintPerPayday <- v .: "mintPerPayday"
-        tpTimeoutBase <- v .: "timeoutBase"
-        tpTimeoutIncrease <- v .: "timeoutIncrease"
-        tpTimeoutDecrease <- v .: "timeoutDecrease"
+        _tpTimeoutBase <- v .: "timeoutBase"
+        _tpTimeoutIncrease <- v .: "timeoutIncrease"
+        _tpTimeoutDecrease <- v .: "timeoutDecrease"
         let _cpTimeoutParameters = TimeoutParameters{..}
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
@@ -1913,9 +1917,9 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
                   "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam _cpTimeParameters),
                   "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters),
-                  "timeoutBase" AE..= tpTimeoutBase (_cpTimeoutParameters _cpConsensusParameters),
-                  "timeoutIncrease" AE..= tpTimeoutIncrease (_cpTimeoutParameters _cpConsensusParameters),
-                  "timeoutDecrease" AE..= tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
+                  "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters _cpConsensusParameters),
+                  "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters _cpConsensusParameters),
+                  "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
                   "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters
                 ]

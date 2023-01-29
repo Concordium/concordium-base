@@ -121,9 +121,9 @@ parseJSONForGCPV2 =
         _ppLeverageBound <- v .: "leverageBound"
         _tpRewardPeriodLength <- v .: "rewardPeriodLength"
         _tpMintPerPayday <- v .: "mintPerPayday"
-        tpTimeoutBase <- v .: "timeoutBase"
-        tpTimeoutIncrease <- v .: "timeoutIncrease"
-        tpTimeoutDecrease <- v .: "timeoutDecrease"
+        _tpTimeoutBase <- v .: "timeoutBase"
+        _tpTimeoutIncrease <- v .: "timeoutIncrease"
+        _tpTimeoutDecrease <- v .: "timeoutDecrease"
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
         let gcpCooldownParameters = CooldownParametersV1{..}
@@ -194,9 +194,9 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
               "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam gcpTimeParameters),
               "mintPerPayday" AE..= _tpMintPerPayday (unOParam gcpTimeParameters),
-              "timeoutBase" AE..= tpTimeoutBase (_cpTimeoutParameters gcpConsensusParameters),
-              "timeoutIncrease" AE..= tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
-              "timeoutDecrease" AE..= tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
               "minBlockTime" AE..= _cpMinBlockTime gcpConsensusParameters,
               "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters
             ]
