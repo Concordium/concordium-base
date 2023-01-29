@@ -342,8 +342,8 @@ type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv
 -- 'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). (An alias for 'SingI'.)
 type IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) = SingI tov
 
--- |Constraint on a type level 'TransactionOutcomesVersion' that can be used to get a corresponding
--- 'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). This wraps 'SingI', but also
+-- |Constraint on a type level 'ProtocolVersion' that can be used to get a corresponding
+-- 'SProtocolVersion' (see 'protocolVersion'). This wraps 'SingI', but also
 -- has constraints on the 'ChainParametersVersionFor', 'AccountVersionFor' and
 -- 'TransactionOutcomesVersionFor' the protocol version. (This facilitates cases where those
 -- constraints are needed.)
