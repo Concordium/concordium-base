@@ -466,7 +466,7 @@ type CryptographicParameters = GlobalContext
 -- The second part that the singletons library proivdes is a way of
 -- applying functions partially at the type level. It is here that the
 -- defunctionalization symbols generated comes into the picture e.g. 'PTElectionDifficultySym0'.
--- 
+--
 $( singletons
     [d|
         -- \|Mint distribution version.
