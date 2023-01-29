@@ -495,9 +495,9 @@ genTimeoutDecrease = do
 
 genTimeoutParameters :: Gen TimeoutParameters
 genTimeoutParameters = do
-    tpTimeoutBase <- genDuration
-    tpTimeoutIncrease <- genTimeoutIncrease
-    tpTimeoutDecrease <- genTimeoutDecrease
+    _tpTimeoutBase <- genDuration
+    _tpTimeoutIncrease <- genTimeoutIncrease
+    _tpTimeoutDecrease <- genTimeoutDecrease
     return TimeoutParameters{..}
 
 transactionTypes :: [TransactionType]
