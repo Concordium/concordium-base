@@ -432,7 +432,7 @@ type CryptographicParameters = GlobalContext
 -- supportsBar Bar = True
 -- supportsBar Baz = False
 -- Type level function
--- SuppportsBar :: SFoo -> 'Bool (note 'Bool is the lifted term Bool value to type level)
+-- SuppportsBar :: SFoo -> 'Bool (note 'Bool is the lifted term Bool value)
 -- SupportsBar SBar = 'True
 -- SupportsBaz SBar = 'False
 -- Term level function that takes a singleton instance of Foo.
@@ -441,15 +441,16 @@ type CryptographicParameters = GlobalContext
 -- sSupportsBar SBaz = False
 --
 -- Note. We normally also define a constraint like:
--- type IsBarSupported (pv :: ProtocolVersion) = SingI (SupportsBar pv)
+-- type IsBarSupported (foo :: Foo) = SingI (SupportsBar foo)
 -- as all features can be determined from the protocol version.
--- This is because the below splice also generates SingI instances for the type level functions
--- generated, however instead of using the 'SingI Supports...' constraints in code we instead
--- define our own specialized definitions (IsBarSupported) above.
--- Note. to use this at the term level one can use the 'sing' function from the singletons library.
+-- This is because the splice also generates SingI instances for the type level functions.
+-- However instead of using the 'SingI Supports...' constraints in code we instead
+-- define our own specialized definitions (as IsBarSupported) above.
+-- Note. to use this at the term level one can use the 'sing' function in order to
+-- obtain the singleton.
 -- Example:
--- myFunction :: IsBarSupported pv => Bool
--- myFunction :: sSupportsBar (sing @pv)
+-- myFunction :: IsBarSupported foo => Bool
+-- myFunction :: sSupportsBar (sing @foo)
 $( singletons
     [d|
         -- \|Mint distribution version.
