@@ -443,6 +443,9 @@ type CryptographicParameters = GlobalContext
 -- Note. We normally also define a constraint like:
 -- type IsBarSupported (pv :: ProtocolVersion) = SingI (SupportsBar pv)
 -- as all features can be determined from the protocol version.
+-- This is because the below splice also generates SingI instances for the type level functions
+-- generated, however instead of using the 'SingI Supports...' constraints in code we instead
+-- define our own specialized definitions (IsBarSupported) above.
 -- Note. to use this at the term level one can use the 'sing' function from the singletons library.
 -- Example:
 -- myFunction :: IsBarSupported pv => Bool
