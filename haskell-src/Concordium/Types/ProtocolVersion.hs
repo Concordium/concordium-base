@@ -180,6 +180,7 @@ import Data.Singletons.Base.TH
 
 import Data.Word
 
+-- See the splice documentation in 'Parameters.hs' for an explanation of what is generated.
 $( singletons
     [d|
         -- \|An enumeration of the supported versions of the consensus protocol.
