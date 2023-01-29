@@ -32,13 +32,13 @@ foreign import ccall safe "global_context_to_json" globalContextToJSONFFI :: Ptr
 foreign import ccall safe "global_context_from_json" globalContextFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 foreign import ccall unsafe "global_context_create"
     createGlobalContextFFI ::
-        -- Pointer to a byte array which is the binary representation of an
+        -- Pointer to a byte array which is the serialization of an
         -- utf8 encoded genesis string and its length.
         Ptr Word8 -> CSize ->
-        -- |Pointer to a byte array which is the binary representation of a
+        -- |Pointer to a byte array which is the serialization of a
         -- `Generators<G1>` Rust-instance and its length.
         Ptr Word8 -> CSize ->
-        -- |Pointer to a byte array which is the binary representation of a
+        -- |Pointer to a byte array which is the serialization of a
         -- `PedersenKey<G1>` Rust-instance and its length.
         Ptr Word8 -> CSize ->
         -- |Pointer to an @GlobalContext@ Rust instance with its corresponding fields set

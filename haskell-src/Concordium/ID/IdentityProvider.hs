@@ -42,19 +42,19 @@ foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr Ip
 foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
     -- |The identity of the identity provider.
     IdentityProviderIdentity ->
-    -- |Pointer to a byte array which is the binary representation of a
+    -- |Pointer to a byte array which is the serialization of a
     -- `ed25519_dalek::PublicKey` Rust-instance and its length.
     Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the binary representation of a
+    -- |Pointer to a byte array which is the serialization of a
     -- `ps_sig::PublicKey<Bls12>` Rust-instance and its length.
     Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the binary representation of an
+    -- |Pointer to a byte array which is the serialization of an
     -- utf8 encoded string and its length.
     Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the binary representation of an
+    -- |Pointer to a byte array which is the serialization of an
     -- utf8 encoded string and its length.
     Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the binary representation of an
+    -- |Pointer to a byte array which is the serialization of an
     -- utf8 encoded string and its length.
     Ptr Word8 -> CSize ->
     -- |Pointer to an @IpInfo@ Rust instance with its corresponding fields set

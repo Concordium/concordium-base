@@ -43,16 +43,16 @@ foreign import ccall unsafe "ar_info_create"
     createArInfoFFI ::
         -- |The identity of the anonymity revoker.
         ArIdentity ->
-        -- |Pointer to a byte array which is the binary representation of a
+        -- |Pointer to a byte array which is the serialization of a
         -- `elgamal::PublicKey<G1>` Rust-instance.
         Ptr Word8 -> CSize ->
-        -- |Pointer to a byte array which is the binary representation of an
+        -- |Pointer to a byte array which is the serialization of an
         -- utf8 encoded string and its length.
         Ptr Word8 -> CSize ->
-        -- |Pointer to a byte array which is the binary representation of an
+        -- |Pointer to a byte array which is the serialization of an
         -- utf8 encoded string and its length.
         Ptr Word8 -> CSize ->
-        -- |Pointer to a byte array which is the binary representation of an
+        -- |Pointer to a byte array which is the serialization of an
         -- utf8 encoded string and its length.
         Ptr Word8 -> CSize -> 
         -- |Pointer to an @ArInfo@ Rust instance with its corresponding fields set
