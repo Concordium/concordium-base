@@ -49,9 +49,9 @@ foreign import ccall unsafe "global_context_create"
 createGlobalContext ::
     -- |The genesis string.
     Text ->
-    -- |Generators for the bulletproofs.
+    -- |Serialized generators for the bulletproofs.
     BS8.ByteString ->
-    -- |The on-chain commitment key.
+    -- |Serialized on-chain commitment key.
     BS8.ByteString ->
     -- |If the bulletproof generators or the on-chain commitment key key could not be
     -- deserialized this returns @Nothing@. Otherwise a @GlobalContext@ is returned.
