@@ -41,8 +41,8 @@ foreign import ccall unsafe "global_context_create"
         -- Pointer to a byte array which is the binary representation of a
         -- `PedersenKey<G1>` Rust-instance and its length.
         Ptr Word8 -> CSize ->
-        -- A pointer to an @GlobalContext@ instance with its corresponding
-        -- fields set to the above values. This is a null-pointer on failure.
+        -- |Pointer to an @GlobalContext@ Rust instance with its corresponding fields set
+        -- to deserializations of the the above. This is a null-pointer on failure.
         IO (Ptr GlobalContext)
 
 -- Create a @GlobalContext@ instance from constituent parts.
@@ -54,7 +54,7 @@ createGlobalContext ::
     -- |The on-chain commitment key.
     BS8.ByteString ->
     -- |If the bulletproof generators or the on-chain commitment key key could not be
-    -- deserialized this returns @Nothing@. Otherwise an identity provider is returned.
+    -- deserialized this returns @Nothing@. Otherwise a @GlobalContext@ is returned.
     Maybe GlobalContext
 createGlobalContext genString bulletProofGens onChainComm = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed

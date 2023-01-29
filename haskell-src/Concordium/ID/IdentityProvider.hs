@@ -57,12 +57,11 @@ foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
     -- |Pointer to a byte array which is the binary representation of an
     -- utf8 encoded string and its length.
     Ptr Word8 -> CSize ->
-    -- |Pointer to an `IpInfo Rust instance with its corresponding fields set
-    -- to the above values. This is a null-pointer on failure.
+    -- |Pointer to an @IpInfo@ Rust instance with its corresponding fields set
+    -- to deserializations of the the above. This is a null-pointer on failure.
     IO (Ptr IpInfo)
 
 -- |Create an @IpInfo@ instance from constituent parts.
--- This function is a wrapper for `createIpInfoFFI`, and is used for creating heap-allocated @IpInfo@ instances.
 createIpInfo ::
     -- |The identity of the identity provider.
     IdentityProviderIdentity ->
@@ -70,14 +69,13 @@ createIpInfo ::
     BS.ByteString ->
     -- |Serialized Ed25519 public key.
     BS.ByteString ->
-    -- |Name of the identity provider-
+    -- |Name of the identity provider.
     Text ->
     -- |URL of the identity provider.
     Text ->
     -- |Description of the provider.
     Text ->
-    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise an identity provider
-    -- is returned.
+    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise a @IpInfo@ is returned.
     Maybe IpInfo
 createIpInfo idIdentity verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed

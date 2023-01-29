@@ -55,8 +55,8 @@ foreign import ccall unsafe "ar_info_create"
         -- Pointer to a byte array which is the binary representation of an
         -- utf8 encoded string and its length.
         Ptr Word8 -> CSize -> 
-        -- Pointer to an @ArInfo@ Rust-instance with its corresponding fields set
-        -- to the above values. This is a null-pointer on failure.
+        -- |Pointer to an @ArInfo@ Rust instance with its corresponding fields set
+        -- to deserializations of the the above. This is a null-pointer on failure.
         IO (Ptr ArInfo) 
 
 -- Create an @ArInfo@ Rust-instance from constituent parts.
@@ -71,8 +71,7 @@ createArInfo ::
     Text ->
     -- |Description of the provider.
     Text ->
-    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise an identity provider
-    -- is returned.
+    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise a @ArInfo@ is returned.
     Maybe ArInfo
 createArInfo arId pubKey name url desc = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed
