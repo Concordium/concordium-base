@@ -453,8 +453,8 @@ type CryptographicParameters = GlobalContext
 -- Example:
 -- myFunction :: IsBarSupported foo => Bool
 -- myFunction :: sSupportsBar (sing @foo)
--- This pattern (demoting from type level to term level) is called "reflection" and the opposite can also
--- be done and is called "reification" (promoting from term level to type level).
+-- This pattern (demoting from type level to term level) is called "reification" and the opposite can also
+-- be done and is called "reflection" (promoting from term level to type level).
 -- myFunction' :: Foo -> Bool
 -- myFunction' f = case toSing f of
 --     SomeSing SBar -> True
@@ -462,11 +462,20 @@ type CryptographicParameters = GlobalContext
 --
 -- The above documentation covers one of the two parts that the singletons
 -- library provides, i.e. creating lifted data kinds and the functions
--- required for reflection (promoting) and reification (demoting).
+-- required for reflection (demoting type- to term level) and reification (promoting term- to type level).
+-- This is supported via the 'SingKind' type class which the singletons library creates instances of via the splice.
+-- The 'SingKind' type class exposes @fromSing :: Sing (a :: k) -> Demote k@ i.e. reflection and
+-- @toSing :: Demote k -> SomeSing k@ (reification).
+--
 -- The second part that the singletons library proivdes is a way of
 -- applying functions partially at the type level. It is here that the
 -- defunctionalization symbols generated comes into the picture e.g. 'PTElectionDifficultySym0'.
---
+-- This is required when one wants to create a higher order function at the type level,
+-- i.e. a type level 'map' function (we would call such one Map, note the capital letter in the start).
+-- One can then pass in the generated defunctionalization symbols instead of the
+-- function that one are using for the mapping.
+-- This is because at the type level functions must be fully applied, but as that is not
+-- possible, then one can use the defunctionalization symbols which are the associated symbols for the function.
 $( singletons
     [d|
         -- \|Mint distribution version.
