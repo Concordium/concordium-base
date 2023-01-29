@@ -33,8 +33,7 @@ foreign import ccall safe "global_context_from_json" globalContextFromJSONFFI ::
 foreign import ccall unsafe "global_context_create"
     createGlobalContextFFI ::
         -- Pointer to a byte array which is the binary representation of an
-        -- utf8 encoded genesis string, for instance one returned by `arUrlFFI`,
-        -- and its length.
+        -- utf8 encoded genesis string and its length.
         Ptr Word8 -> CSize ->
         -- Pointer to a byte array which is the binary representation of a
         -- `Generators<G1>` Rust-instance and its length.
@@ -46,11 +45,17 @@ foreign import ccall unsafe "global_context_create"
         -- fields set to the above values. This is a null-pointer on failure.
         IO (Ptr GlobalContext)
 
--- Create a @GlobalContext@ instance from bytestrings and texts.
--- This function is a wrapper for `createGlobalContextFFI`, and is used for creating heap-allocated
--- @GlobalContext@ instances from bytestrings. See the `createGlobalContextFFI` import declaration
--- for information about the function inputs and preconditions. Returns @Nothing@ on failure.
-createGlobalContext :: Text -> BS8.ByteString -> BS8.ByteString -> Maybe GlobalContext
+-- Create a @GlobalContext@ instance from constituent parts.
+createGlobalContext ::
+    -- |The genesis string.
+    Text ->
+    -- |Generators for the bulletproofs.
+    BS8.ByteString ->
+    -- |The on-chain commitment key.
+    BS8.ByteString ->
+    -- |If the bulletproof generators or the on-chain commitment key key could not be
+    -- deserialized this returns @Nothing@. Otherwise an identity provider is returned.
+    Maybe GlobalContext
 createGlobalContext genString bulletProofGens onChainComm = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed
     -- to the Rust side. This is handled on the Rust side by checking the

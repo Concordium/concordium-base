@@ -300,10 +300,12 @@ pub extern "C" fn ip_info_cdi_verify_key(
 }
 
 /// Attempt to create an [`ArInfo`] instance from byte array pointers.
-/// Assumes that public_key_ptr points to a PublicKey<G1>
-/// instance and that name_ptr, url_ptr and desc_ptr
-/// to valid utf8 strings, and returns a null-pointer
-/// otherwise.
+/// Assumes that:
+///  - public_key_ptr points to a serialized PublicKey<G1> instance,
+///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
+/// and that each [`size_t`] parameter with the the _len suffix holds the
+/// length of its correspondingly named byte array. Returns a null-pointer
+/// if an input could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn ar_info_create(
     identity: u32,
@@ -327,15 +329,18 @@ unsafe extern "C" fn ar_info_create(
         desc_ptr,
         desc_len,
     ) {
-        return ptr;
+        ptr
+    } else {
+        std::ptr::null_mut()
     }
-    std::ptr::null_mut()
 }
 
 /// Attempt to create an [`ArInfo`] instance from byte array pointers.
-/// Assumes that public_key_ptr points to a PublicKey<G1>
-/// instance and that name_ptr, url_ptr and desc_ptr
-/// to valid utf8 strings.
+/// Assumes that:
+///  - public_key_ptr points to a serialized PublicKey<G1> instance,
+///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
+/// and that each [`size_t`] parameter with the the _len suffix holds the
+/// length of its correspondingly named byte array.
 #[allow(clippy::too_many_arguments)]
 fn ar_info_create_helper(
     identity: u32,
@@ -389,11 +394,13 @@ fn ar_info_create_helper(
 }
 
 /// Attempt to create a [`GlobalContext`] instance from byte array pointers.
-/// Assumes that genesis_string_ptr points to a valid
-/// utf8 string, bulletproof_generators_ptr to a
-/// Generators<G1> instance and on_chain_commitments to a
-/// PedersenKey<G1> instance, and returns a null-pointer
-/// otherwise.
+/// Assumes that:
+///  - genesis_string_ptr points to a serialized utf8 string,
+///  - bulletproof_generators_ptr to a serialized Generators<G1> instance,
+///  - on_chain_commitments to a serialized PedersenKey<G1> instance,
+/// and that each [`size_t`] parameter with the the _len suffix holds the
+/// length of its correspondingly named byte array. Returns a null-pointer
+/// if an input could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn global_context_create(
     genesis_string_ptr: *const u8,
@@ -411,17 +418,19 @@ unsafe extern "C" fn global_context_create(
         on_chain_commitment_ptr,
         on_chain_commitment_len,
     ) {
-        return ptr;
+        ptr
+    } else {
+        std::ptr::null_mut()
     }
-    std::ptr::null_mut()
 }
 
 /// Attempt to create a [`GlobalContext`] instance from byte array pointers.
-/// Assumes that genesis_string_ptr points to a valid
-/// utf8 string, bulletproof_generators_ptr to a
-/// Generators<G1> instance and on_chain_commitments to a
-/// PedersenKey<G1> instance, and returns a null-pointer
-/// otherwise.
+/// Assumes that:
+///  - genesis_string_ptr points to a serialized utf8 string,
+///  - bulletproof_generators_ptr to a serialized Generators<G1> instance,
+///  - on_chain_commitments to a serialized PedersenKey<G1> instance,
+/// and that each [`size_t`] parameter with the the _len suffix holds the
+/// length of its correspondingly named byte array.
 fn global_context_create_helper(
     genesis_string_ptr: *const u8,
     genesis_string_len: size_t,
@@ -466,12 +475,13 @@ fn global_context_create_helper(
 }
 
 /// Attempt to create an [`IpInfo`] instance from byte array pointers.
-/// Assumes that verify_key_ptr points to a
-/// ps_sig::PublicKey<Bls12> instance,
-/// cdi_verify_key_ptr to a ed25519_dalek::PublicKey
-/// instance and name_ptr, url_ptr and desc_ptr to
-/// valid utf8 strings, and returns a null-pointer
-/// otherwise.
+/// Assumes that:
+///  - verify_key_ptr points to a serialized ps_sig::PublicKey<Bls12> instance,
+///  - cdi_verify_key_ptr to a serialized ed25519_dalek::PublicKey instance,
+///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
+/// and that each [`size_t`] parameter with the the _len suffix holds the
+/// length of its correspondingly named byte array. Returns a null-pointer
+/// if an input could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn ip_info_create(
     identity: u32,
@@ -499,17 +509,19 @@ unsafe extern "C" fn ip_info_create(
         desc_ptr,
         desc_len,
     ) {
-        return ptr;
+        ptr
+    } else {
+        std::ptr::null_mut()
     }
-    std::ptr::null_mut()
 }
 
 /// Attempt to create an [`IpInfo`] instance from byte array pointers.
-/// Assumes that verify_key_ptr points to a
-/// ps_sig::PublicKey<Bls12> instance,
-/// cdi_verify_key_ptr to a ed25519_dalek::PublicKey
-/// instance and name_ptr, url_ptr and desc_ptr to
-/// valid utf8 strings.
+/// Assumes that:
+///  - verify_key_ptr points to a serialized ps_sig::PublicKey<Bls12> instance,
+///  - cdi_verify_key_ptr to a serialized ed25519_dalek::PublicKey instance,
+///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
+/// and that each [`size_t`] parameter with the the _len suffix holds the
+/// length of its correspondingly named byte array.
 #[allow(clippy::too_many_arguments)]
 fn ip_info_create_helper(
     identity: u32,

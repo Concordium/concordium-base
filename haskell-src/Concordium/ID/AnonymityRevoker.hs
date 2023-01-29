@@ -41,34 +41,32 @@ foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo
 foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_create"
     createArInfoFFI ::
-        -- |The identity of the AR, for instance one returned by `arIdentityFFI`.
+        -- |The identity of the anonymity revoker..
         ArIdentity ->
         -- |Pointer to a byte array which is the binary representation of a
-        -- `elgamal::PublicKey<G1>` Rust-instance, for instance, one returned
-        -- by `arPublicKeyFFI`, and its length.
+        -- `elgamal::PublicKey<G1>` Rust-instance.
         Ptr Word8 -> CSize ->
         -- |Pointer to a byte array which is the binary representation of an
-        -- utf8 encoded string, for instance one returned by `arNameFFI`, and
-        -- its length.
+        -- utf8 encoded string and its length.
         Ptr Word8 -> CSize ->
         -- Pointer to a byte array which is the binary representation of an
-        -- utf8 encoded string, for instance one returned by `arUrlFFI`, and
-        -- its length.
+        -- utf8 encoded string and its length.
         Ptr Word8 -> CSize ->
         -- Pointer to a byte array which is the binary representation of an
-        -- utf8 encoded string, for instance one returned by `arDescriptionFFI`,
-        -- and its length.
+        -- utf8 encoded string and its length.
         Ptr Word8 -> CSize -> 
         -- Pointer to an @ArInfo@ Rust-instance with its corresponding fields set
         -- to the above values. This is a null-pointer on failure.
         IO (Ptr ArInfo) 
 
--- Create an @ArInfo@ Rust-instance from bytestrings and texts.
--- This function is a wrapper for `createArInfoFFI`, and is used for creating heap-allocated @ArInfo@
--- instances from raw and utf8-encoded bytestrings. The inputs should conform to field values extracted
--- from @IpInfo@ instances using FFI functions, see the `createArInfoFFI` import declaration
--- for information about the function inputs and preconditions. Returns @Nothing@ on failure.
-createArInfo :: ArIdentity -> BS.ByteString -> Text -> Text -> Text -> Maybe ArInfo
+-- Create an @ArInfo@ Rust-instance from constituent parts.
+createArInfo ::
+    ArIdentity ->
+    BS.ByteString ->
+    Text ->
+    Text ->
+    Text ->
+    Maybe ArInfo
 createArInfo arId pubKey name url desc = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed
     -- to the Rust side. This is handled on the Rust side by checking the

@@ -40,38 +40,45 @@ foreign import ccall unsafe "ip_info_description" ipDescriptionFFI :: Ptr IpInfo
 foreign import ccall unsafe "ip_info_verify_key" ipVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
-    -- The identity of the IP, for instance returned by `ipIdentityFFI`.
+    -- |The identity of the identity provider.
     IdentityProviderIdentity ->
-    -- Pointer to a byte array which is the binary representation of a
-    -- `ed25519_dalek::PublicKey` Rust-instance, for instance one returned
-    -- by ipVerifyKeyFFI, and its length.
+    -- |Pointer to a byte array which is the binary representation of a
+    -- `ed25519_dalek::PublicKey` Rust-instance and its length.
     Ptr Word8 -> CSize ->
-    -- Pointer to a byte array which is the binary representation of a
-    -- `ps_sig::PublicKey<Bls12>` Rust-instance, for instance one returned
-    -- by ipCdiVerifyKeyFFI, and its length.
+    -- |Pointer to a byte array which is the binary representation of a
+    -- `ps_sig::PublicKey<Bls12>` Rust-instance and its length.
     Ptr Word8 -> CSize ->
-    -- Pointer to a byte array which is the binary representation of an
-    -- utf8 encoded string, for instance one returned by ipNameFFI, and
-    -- its length.
+    -- |Pointer to a byte array which is the binary representation of an
+    -- utf8 encoded string and its length.
     Ptr Word8 -> CSize ->
-    -- Pointer to a byte array which is the binary representation of an
-    -- utf8 encoded string, for instance one returned by ipUrlFFI, and
-    -- its length.
+    -- |Pointer to a byte array which is the binary representation of an
+    -- utf8 encoded string and its length.
     Ptr Word8 -> CSize ->
-    -- Pointer to a byte array which is the binary representation of an
-    -- utf8 encoded string, for instance one returned by ipDescriptionFFI,
-    -- and its length.
+    -- |Pointer to a byte array which is the binary representation of an
+    -- utf8 encoded string and its length.
     Ptr Word8 -> CSize ->
-    -- Pointer to an `IpInfo Rust instance with its corresponding fields set
+    -- |Pointer to an `IpInfo Rust instance with its corresponding fields set
     -- to the above values. This is a null-pointer on failure.
     IO (Ptr IpInfo)
 
--- Create an @IpInfo@ instance from bytestrings and texts.
--- This function is a wrapper for `createIpInfoFFI`, and is used for creating heap-allocated @IpInfo@
--- instances from raw and utf8-encoded bytestrings. The inputs should conform to field values extracted
--- from @IpInfo@ instances using FFI functions, see the `createIpInfoFFI` import declaration
--- for information about the function inputs and preconditions. Returns @Nothing@ on failure.
-createIpInfo:: IdentityProviderIdentity -> BS.ByteString -> BS.ByteString -> Text -> Text -> Text -> Maybe IpInfo
+-- |Create an @IpInfo@ instance from constituent parts.
+-- This function is a wrapper for `createIpInfoFFI`, and is used for creating heap-allocated @IpInfo@ instances.
+createIpInfo ::
+    -- |The identity of the identity provider.
+    IdentityProviderIdentity ->
+    -- |Serialized Pointcheval-Sanders public key.
+    BS.ByteString ->
+    -- |Serialized Ed25519 public key.
+    BS.ByteString ->
+    -- |Name of the identity provider-
+    Text ->
+    -- |URL of the identity provider.
+    Text ->
+    -- |Description of the provider.
+    Text ->
+    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise an identity provider
+    -- is returned.
+    Maybe IpInfo
 createIpInfo idIdentity verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed
     -- to the Rust side. This is handled on the Rust side by checking the
