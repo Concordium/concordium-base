@@ -59,7 +59,7 @@ foreign import ccall unsafe "ar_info_create"
         -- to deserializations of the the above. This is a null-pointer on failure.
         IO (Ptr ArInfo) 
 
--- Create an @ArInfo@ Rust-instance from constituent parts.
+-- |Create an @ArInfo@ Rust-instance from constituent parts.
 createArInfo ::
     -- |The identity of the anonymity revoker.
     ArIdentity ->

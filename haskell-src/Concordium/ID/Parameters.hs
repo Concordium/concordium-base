@@ -45,7 +45,7 @@ foreign import ccall unsafe "global_context_create"
         -- to deserializations of the the above. This is a null-pointer on failure.
         IO (Ptr GlobalContext)
 
--- Create a @GlobalContext@ instance from constituent parts.
+-- |Create a @GlobalContext@ instance from constituent parts.
 createGlobalContext ::
     -- |The genesis string.
     Text ->
