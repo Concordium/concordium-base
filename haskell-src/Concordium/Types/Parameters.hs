@@ -439,6 +439,8 @@ type CryptographicParameters = GlobalContext
 -- sSupportsBar :: SFoo -> Bool
 -- sSupportsBar SBar = True
 -- sSupportsBar SBaz = False
+-- Note that type level functions start with a capital letter while
+-- the term level functions starts with a lowercase letter.
 --
 -- Note. We normally also define a constraint like:
 -- type IsBarSupported (foo :: Foo) = SingI (SupportsBar foo)
@@ -451,6 +453,20 @@ type CryptographicParameters = GlobalContext
 -- Example:
 -- myFunction :: IsBarSupported foo => Bool
 -- myFunction :: sSupportsBar (sing @foo)
+-- This pattern (demoting from type level to term level) is called "reflection" and the opposite can also
+-- be done and is called "reification" (promoting from term level to type level).
+-- myFunction' :: Foo -> Bool
+-- myFunction' f = case toSing f of
+--     SomeSing SBar -> True
+--     SomeSing SBaz -> False
+--
+-- The above documentation covers one of the two parts that the singletons
+-- library provides, i.e. creating lifted data kinds and the functions
+-- required for reflection (promoting) and reification (demoting).
+-- The second part that the singletons library proivdes is a way of
+-- applying functions partially at the type level. It is here that the
+-- defunctionalization symbols generated comes into the picture e.g. 'PTElectionDifficultySym0'.
+-- 
 $( singletons
     [d|
         -- \|Mint distribution version.
