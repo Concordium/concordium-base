@@ -410,8 +410,43 @@ import Concordium.Types.HashableTo
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
 
--- The Template Haskell below generates the quoted definitions, together with the singletons
+-- The Template Haskell below generates the quoted definitions (terms represented at the type level see e.g. ''MintDistributionVersion0) together with the singletons
 -- and liftings to singletons. The module header is used to give the haddock documentation.
+--
+-- Example:
+-- '$( singletons [d |
+-- data Foo = Bar | Baz
+-- supportsBar :: Foo -> Bool
+-- supportsBar Bar = True
+-- supportsBar Baz = False
+-- @|])'
+-- The splice then generates the following:
+-- Basic type definition
+-- data Foo = Bar | Baz
+-- Singleton definition
+-- data SFoo (f :: Foo) where
+--     SBar :: SFoo 'Bar
+--     SBaz :: SFoo 'Baz
+-- Term level function
+-- supportsBar :: Foo -> Bool
+-- supportsBar Bar = True
+-- supportsBar Baz = False
+-- Type level function
+-- SuppportsBar :: SFoo -> 'Bool (note 'Bool is the lifted term Bool value to type level)
+-- SupportsBar SBar = 'True
+-- SupportsBaz SBar = 'False
+-- Term level function that takes a singleton instance of Foo.
+-- sSupportsBar :: SFoo -> Bool
+-- sSupportsBar SBar = True
+-- sSupportsBar SBaz = False
+--
+-- Note. We normally also define a constraint like:
+-- type IsBarSupported (pv :: ProtocolVersion) = SingI (SupportsBar pv)
+-- as all features can be determined from the protocol version.
+-- Note. to use this at the term level one can use the 'sing' function from the singletons library.
+-- Example:
+-- myFunction :: IsBarSupported pv => Bool
+-- myFunction :: sSupportsBar (sing @pv)
 $( singletons
     [d|
         -- \|Mint distribution version.
