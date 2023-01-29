@@ -41,7 +41,7 @@ foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo
 foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_create"
     createArInfoFFI ::
-        -- |The identity of the anonymity revoker..
+        -- |The identity of the anonymity revoker.
         ArIdentity ->
         -- |Pointer to a byte array which is the binary representation of a
         -- `elgamal::PublicKey<G1>` Rust-instance.
@@ -61,11 +61,18 @@ foreign import ccall unsafe "ar_info_create"
 
 -- Create an @ArInfo@ Rust-instance from constituent parts.
 createArInfo ::
+    -- |The identity of the anonymity revoker.
     ArIdentity ->
+    -- |Serialized ElGamal public key.
     BS.ByteString ->
+    -- |Name of the identity provider.
     Text ->
+    -- |URL of the identity provider.
     Text ->
+    -- |Description of the provider.
     Text ->
+    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise an identity provider
+    -- is returned.
     Maybe ArInfo
 createArInfo arId pubKey name url desc = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed
