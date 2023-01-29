@@ -49,10 +49,10 @@ foreign import ccall unsafe "ar_info_create"
         -- |Pointer to a byte array which is the binary representation of an
         -- utf8 encoded string and its length.
         Ptr Word8 -> CSize ->
-        -- Pointer to a byte array which is the binary representation of an
+        -- |Pointer to a byte array which is the binary representation of an
         -- utf8 encoded string and its length.
         Ptr Word8 -> CSize ->
-        -- Pointer to a byte array which is the binary representation of an
+        -- |Pointer to a byte array which is the binary representation of an
         -- utf8 encoded string and its length.
         Ptr Word8 -> CSize -> 
         -- |Pointer to an @ArInfo@ Rust instance with its corresponding fields set

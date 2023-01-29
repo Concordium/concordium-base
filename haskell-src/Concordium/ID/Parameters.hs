@@ -35,10 +35,10 @@ foreign import ccall unsafe "global_context_create"
         -- Pointer to a byte array which is the binary representation of an
         -- utf8 encoded genesis string and its length.
         Ptr Word8 -> CSize ->
-        -- Pointer to a byte array which is the binary representation of a
+        -- |Pointer to a byte array which is the binary representation of a
         -- `Generators<G1>` Rust-instance and its length.
         Ptr Word8 -> CSize ->
-        -- Pointer to a byte array which is the binary representation of a
+        -- |Pointer to a byte array which is the binary representation of a
         -- `PedersenKey<G1>` Rust-instance and its length.
         Ptr Word8 -> CSize ->
         -- |Pointer to an @GlobalContext@ Rust instance with its corresponding fields set
