@@ -15,8 +15,8 @@
 //! between foreign code and Rust is mainly byte-arrays. The main reason for
 //! this is that this is cheap and relatively easy to do.
 use super::trie::{
-    foreign::{LoadCallback, StoreCallback},
-    EmptyCollector, Loadable, MutableState, PersistentState, Reference, SizeCollector,
+    EmptyCollector, LoadCallback, Loadable, MutableState, PersistentState, Reference,
+    SizeCollector, StoreCallback,
 };
 use crate::v1::*;
 use concordium_contracts_common::OwnedReceiveName;

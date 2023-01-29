@@ -20,7 +20,6 @@ mod tests;
 mod api;
 pub use api::*;
 pub(crate) use low_level::Iterator;
-pub(crate) mod foreign;
 // We need the low-level module for testing and benchmarks, but we do not wish
 // to expose it.
 #[doc(hidden)]
@@ -29,3 +28,29 @@ mod types;
 pub use types::*;
 
 pub use low_level::{MutableTrie, Node};
+
+/// A [loader](BackingStoreLoad) implemented by an external function.
+/// This is the dual to [`StoreCallback`]
+pub type LoadCallback = extern "C" fn(Reference) -> *mut Vec<u8>;
+
+impl BackingStoreLoad for LoadCallback {
+    type R = Vec<u8>;
+
+    #[inline]
+    fn load_raw(&mut self, location: Reference) -> LoadResult<Self::R> {
+        Ok(*unsafe { Box::from_raw(self(location)) })
+    }
+}
+
+/// A [storer](BackingStoreStore) implemented by an external function.
+/// The function is passed a pointer to data to store, and the size of data. It
+/// should return the location where the data can be loaded via a
+/// [`LoadCallback`].
+pub type StoreCallback = extern "C" fn(data: *const u8, len: libc::size_t) -> Reference;
+
+impl BackingStoreStore for StoreCallback {
+    #[inline]
+    fn store_raw(&mut self, data: &[u8]) -> StoreResult<Reference> {
+        Ok(self(data.as_ptr(), data.len()))
+    }
+}
