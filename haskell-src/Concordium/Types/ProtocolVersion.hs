@@ -21,6 +21,8 @@
 
 -- The class 'IsProtocolVersion' identifies the singleton for each 'ProtocolVersion',
 -- and should have an instance for each constructor of 'ProtocolVersion'.
+-- In other words the constraint 'IsProtocolVersion' contextualizes the function
+-- with the protocol version.
 
 -- |This module contains the 'ProtocolVersion' datatype, which enumerates the
 -- (supported) versions of the protocol for the consensus layer and up.
