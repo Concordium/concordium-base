@@ -481,7 +481,7 @@ impl MutableState {
 
     /// Make the state persistent. This function modifies the mutable state
     /// so that it is equivalent to a [`MutableState`] obtained by
-    /// [thawing](Self::thaw) the resulting [`PersistentState`].
+    /// [thawing](PersistentState::thaw) the resulting [`PersistentState`].
     ///
     /// As a result freezing should only be used after the mutable state is no
     /// longer needed.
