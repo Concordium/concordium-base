@@ -138,8 +138,13 @@ pub extern "C" fn bls_verify_aggregate(
 }
 
 /// Verify a an aggregate signature by verifying the groupings which consists of
-/// a message and public keys.
-/// Precondition: The lengths of 'm_ptr' and 'message_lengths' must be the same.
+/// a message and public keys. For details, see `verify_aggregate_sig_hybrid`.
+///
+/// Preconditions:
+/// 
+/// - The arrays `m_ptr`, `message_lengths`, `pks_ptr` and `pks_len` must all be of length `len`.
+/// - `m_ptr[i]` must have length `message_lengths[i]` for `0 <= i < len`.
+/// - `pks_ptr[i]` must have length `pks_len[i]` for `0 <= i < len`.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_verify_aggregate_hybrid(
@@ -147,7 +152,7 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
     message_lengths: *const size_t, // array of the lengths of the messages.
     pks_ptr: *const *const *const PublicKey<Bls12>, /* array of pointers to arrays of pointers
                                      * to public keys */
-    pks_len: *const size_t, // number of public keys.
+    pks_len: *const size_t, // array of numbers of public keys for each message.
     len: size_t,            /* the number of sets of public keys. Note. this is equal to the
                              * number of messages. */
     sig_ptr: *const Signature<Bls12>, // pointer to the signature.
