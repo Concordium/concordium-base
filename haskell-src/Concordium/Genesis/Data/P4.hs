@@ -32,7 +32,7 @@ data ProtocolUpdateData = ProtocolUpdateData
       -- |New cooldown parameters.
       updateCooldownParameters :: !(CooldownParameters 'ChainParametersV1),
       -- |New time parameters.
-      updateTimeParameters :: !(TimeParameters 'ChainParametersV1),
+      updateTimeParameters :: !TimeParameters,
       -- |New pool parameters
       updatePoolParameters :: !(PoolParameters 'ChainParametersV1)
     }

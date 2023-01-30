@@ -71,6 +71,9 @@ dependencies:
 - QuickCheck >= 2.12
 - random >= 1.1
 - scientific >= 0.3.2
+- singletons
+- singletons-th
+- singletons-base
 - template-haskell >= 2.14
 - text >= 1.2
 - time >= 1.8

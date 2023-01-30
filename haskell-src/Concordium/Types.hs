@@ -167,7 +167,6 @@ module Concordium.Types (
 
     -- * Protocol version
     module Concordium.Types.ProtocolVersion,
-    module Concordium.Types.ProtocolVersion.JustForCPV1,
 
     -- * Account address identifications.
     AccountAddressEq (..),
@@ -194,7 +193,6 @@ import Concordium.ID.Types
 import Concordium.Types.Block
 import Concordium.Types.HashableTo
 import Concordium.Types.ProtocolVersion
-import Concordium.Types.ProtocolVersion.JustForCPV1
 import Concordium.Types.SmartContracts
 import qualified Data.FixedByteString as FBS
 
@@ -751,6 +749,11 @@ applyAmountDelta del amt =
 -- amounts in some way.
 newtype Energy = Energy {_energy :: Word64}
     deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON) via Word64
+
+instance HashableTo Hash.Hash Energy where
+    getHash = Hash.hash . S.encode
+
+instance (Monad m) => MHashableTo m Hash.Hash Energy
 
 instance S.Serialize Energy where
     get = Energy <$> G.getWord64be
