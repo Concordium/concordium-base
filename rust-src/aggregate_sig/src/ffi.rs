@@ -103,21 +103,6 @@ pub extern "C" fn bls_verify(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_verify_prepend_pk(
-    m_ptr: *const u8,
-    m_len: size_t,
-    pk_ptr: *mut PublicKey<Bls12>,
-    sig_ptr: *mut Signature<Bls12>,
-) -> u8 {
-    let m_len = m_len as usize;
-    let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
-    let pk = from_ptr!(pk_ptr);
-    let sig = from_ptr!(sig_ptr);
-    u8::from(pk.verify_prepend_pk(m_bytes, *sig))
-}
-
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_aggregate(
     sig1_ptr: *mut Signature<Bls12>,
     sig2_ptr: *mut Signature<Bls12>,
@@ -154,6 +139,7 @@ pub extern "C" fn bls_verify_aggregate(
 
 /// Verify a an aggregate signature by verifying the groupings which consists of
 /// a message and public keys.
+/// Precondition: The lengths of 'm_ptr' and 'message_lengths' must be the same.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_verify_aggregate_hybrid(

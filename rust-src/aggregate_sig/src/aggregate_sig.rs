@@ -85,15 +85,6 @@ impl<P: Pairing> PublicKey<P> {
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
 
-    /// Verifies a single message and signature pair, where the messages is
-    /// prepended by the public key
-    /// This implements Sign from Section 3.2.2 from https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.2.2
-    pub fn verify_prepend_pk(&self, m: &[u8], signature: Signature<P>) -> bool {
-        let mut pk_m = to_bytes(&self);
-        pk_m.extend_from_slice(m); // PK || m
-        self.verify(&pk_m, signature)
-    }
-
     /// Check proof of knowledge of the secret key with respect to the public
     /// key and the challenge which is given in terms of a random oracle.
     pub fn check_proof(&self, ro: &mut RandomOracle, proof: &Proof<P>) -> bool {
