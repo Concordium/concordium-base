@@ -220,14 +220,9 @@ pub fn verify_aggregate_sig_hybrid_sequential<P: Pairing>(
     let product = m_pk_pairs
         .iter()
         .fold(<P::TargetField as Field>::one(), |prod, (m, pks)| {
-            let sum_pk_i = if pks.len() < 150 {
-                pks.iter()
-                    .fold(P::G2::zero_point(), |s, x| s.plus_point(&x.0))
-            } else {
-                pks.par_iter()
-                    .fold(P::G2::zero_point, |s, x| s.plus_point(&x.0))
-                    .reduce(P::G2::zero_point, |s, x| s.plus_point(&x))
-            };
+            let sum_pk_i = pks
+                .iter()
+                .fold(P::G2::zero_point(), |s, x| s.plus_point(&x.0));
             let g1_hash = P::G1::hash_to_group(m);
             let paired = P::pair(&g1_hash, &sum_pk_i);
             let mut p = prod;

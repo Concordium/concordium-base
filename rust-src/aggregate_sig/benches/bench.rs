@@ -91,26 +91,26 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
 
 fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
     let mut csprng = thread_rng();
-    let num_signers = 50;
-    let num_messages = 1;
-    let (sks, pks) = get_sks_pks!(num_signers, csprng);
+    // number of signers for each message.
+    let num_signers = vec![50, 50, 50, 50];
+    // number of messages (groups).
+    let num_messages = num_signers.len();
     let ms: Vec<_> = n_rand_ms_of_length!(num_messages, 1000, csprng);
-
-    let mut agg_sig = sks[0].sign(&ms[0]);
-    for i in 1..num_signers {
-        let new_sig = sks[i].sign(&ms[0]);
-        agg_sig = new_sig.aggregate(agg_sig);
-    }
-
-    // A singletons vec containing 1 message and 50 associated pks.
+    // messages and pk pairs to verify
     let mut m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::with_capacity(num_messages);
+    // make sure enough keys are generated....
+    let (sks, pks) = get_sks_pks!(num_signers.iter().sum(), csprng);
+    let mut agg_sig = sks[0].sign(&ms[0]);
     for i in 0..num_messages {
+        for j in 1..num_signers[i] {
+            let new_sig = sks[j].sign(&ms[i]);
+            agg_sig = new_sig.aggregate(agg_sig);
+        }
         let m_pk = (ms[i].as_slice(), pks.as_slice());
         m_pk_pairs.push(m_pk);
     }
 
-    // TODO: clean this up before merging.
-    // Benchmarking sequential version vs parallel version.
+    // Benchmarking sequential version vs. parallel version.
     let mut group = c.benchmark_group("verify_aggregate_sig_hybrid");
     group.bench_function("parallel", |b| {
         b.iter(|| verify_aggregate_sig_hybrid(&m_pk_pairs, agg_sig))
