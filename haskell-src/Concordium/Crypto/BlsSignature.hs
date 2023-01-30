@@ -314,6 +314,13 @@ verifyAggregate m pks sig = unsafePerformIO $ do
 --
 -- * The public keys MUST have been (proved to be) derived from secret keys. (Otherwise, the
 --   guarantee of the signature system does not necessarily hold.)
+--
+-- It is recommended that messages with no keys should not be included, although this is not
+-- a strict requirement, as the result will be the same if they are removed (unless there
+-- are no messages remaining).
+--
+-- From a security perspective, it may be problematic if a public key occurs more than once, so
+-- this should be avoided unless you know what you are doing.
 verifyAggregateHybrid :: [(ByteString, [PublicKey])] -> Signature -> Bool
 verifyAggregateHybrid msPks sig = unsafePerformIO $ do
     let (ms, pksets) = unzip msPks

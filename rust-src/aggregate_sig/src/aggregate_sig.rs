@@ -173,7 +173,28 @@ pub fn verify_aggregate_sig<P: Pairing>(
 
 /// Verifies an aggregate signature on pairs `(messages m_i, set_i)` `for
 /// i=1..n` but where `set_i` denotes the set of public keys corresponding to
-/// the secret keys that signed m_i. This implements a combination of AggregateVerify from Section 3.1.1 and FastAggregateVerify from Section 3.3.4 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
+/// the secret keys that signed m_i. This implements a combination of AggregateVerify
+/// from Section 3.1.1 and FastAggregateVerify from Section 3.3.4 of
+/// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
+/// 
+/// In particular, this function behaves as follows:
+/// 
+/// 1. If the list of messages is empty, return `false`.
+/// 
+/// 2. Otherwise, return:
+/// 
+/// ```
+/// pairing(sig, g_2) == ∏ᵢ pairing(H(mᵢ), ∑ⱼ pkᵢⱼ)
+/// ```
+/// 
+/// Each message should be associated with at least one key. However, the result of having a
+/// message with no keys will be the same as if the message was not included (except when there
+/// are no messages).
+/// 
+/// For security, the holder of a key must be required to prove knowledge of the secret key.
+/// 
+/// While it is possible for a key to occur more than once (either signing the same or different
+/// messages), this could have an effect on the security guarantees, and so is not recommended.
 pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
