@@ -142,7 +142,8 @@ pub extern "C" fn bls_verify_aggregate(
 ///
 /// Preconditions:
 ///
-/// - The arrays `m_ptr`, `message_lengths`, `pks_ptr` and `pks_len` must all be of length `len`.
+/// - The arrays `m_ptr`, `message_lengths`, `pks_ptr` and `pks_len` must all be
+///   of length `len`.
 /// - `m_ptr[i]` must have length `message_lengths[i]` for `0 <= i < len`.
 /// - `pks_ptr[i]` must have length `pks_len[i]` for `0 <= i < len`.
 #[no_mangle]
