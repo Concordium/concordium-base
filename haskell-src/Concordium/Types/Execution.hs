@@ -698,7 +698,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 return ConfigureDelegation{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
-    supportDelegation = supportsDelegation spv
+    supportDelegation = protocolSupportsDelegation spv
     configureBakerBitMask = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
 
@@ -1421,7 +1421,7 @@ getEvent spv =
   where
     supportMemo = supportsMemo spv
     supportV1Contracts = supportsV1Contracts spv
-    supportDelegation = supportsDelegation spv
+    supportDelegation = protocolSupportsDelegation spv
 
 instance AE.ToJSON Event where
     toJSON = \case

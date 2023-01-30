@@ -27,7 +27,12 @@
 -- Parameter updates update a chain parameter.
 -- Currently provided parameters are:
 --
---   - election difficulty
+--   - consensus parameters [these have a common access structure, but separate queues]
+--     - for P1-P5: election difficulty
+--     - for P6 onwards:
+--       - timeout parameters
+--       - minimum block time
+--       - block energy limit
 --   - Energy to Euro exchange rate
 --   - GTU to Euro exchange rate
 --   - address of the foundation account
@@ -74,6 +79,7 @@ import Data.Ix
 import qualified Data.Map as Map
 import Data.Serialize
 import qualified Data.Set as Set
+import Data.Singletons
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Vector as Vec
@@ -147,20 +153,19 @@ instance Serialize AccessStructure where
         when (accessThreshold > fromIntegral keyCount || accessThreshold < 1) $ fail "Invalid threshold"
         return AccessStructure{..}
 
--- |Type for an access structure that was added in 'ChainParametersV0'.
-type AccessStructureForCPV1 cpv = JustForCPV1 cpv AccessStructure
-
 -- |The set of keys authorized for chain updates, together with
 -- access structures determining which keys are authorized for
 -- which update types. This is the payload of an update to authorization.
-data Authorizations cpv = Authorizations
+data Authorizations (auv :: AuthorizationsVersion) = Authorizations
     { asKeys :: !(Vec.Vector UpdatePublicKey),
       -- |New emergency keys
       asEmergency :: !AccessStructure,
       -- |New protocol update keys
       asProtocol :: !AccessStructure,
-      -- |Parameter keys: election difficulty
-      asParamElectionDifficulty :: !AccessStructure,
+      -- |Parameter keys: Consensus parameters
+      -- Either 'ConsensusParametersV0' or 'ConsensusParametersV1' depending
+      -- on the chain parameter version.
+      asParamConsensusParameters :: !AccessStructure,
       -- |Parameter keys: Euro:NRG
       asParamEuroPerEnergy :: !AccessStructure,
       -- |Parameter keys: microGTU:Euro
@@ -180,21 +185,21 @@ data Authorizations cpv = Authorizations
       -- |Parameter keys: IdentityProviderIdentity and IpInfo
       asAddIdentityProvider :: !AccessStructure,
       -- |Parameter keys: Cooldown periods for pool owners and delegators
-      asCooldownParameters :: !(AccessStructureForCPV1 cpv),
+      asCooldownParameters :: !(Conditionally (SupportsCooldownParametersAccessStructure auv) AccessStructure),
       -- |Parameter keys: Length of reward period / payday
-      asTimeParameters :: !(AccessStructureForCPV1 cpv)
+      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure)
     }
 
-deriving instance Eq (Authorizations cpv)
-deriving instance Show (Authorizations cpv)
+deriving instance Eq (Authorizations auv)
+deriving instance Show (Authorizations auv)
 
-putAuthorizations :: IsChainParametersVersion cpv => Putter (Authorizations cpv)
+putAuthorizations :: Putter (Authorizations auv)
 putAuthorizations Authorizations{..} = do
     putWord16be (fromIntegral (Vec.length asKeys))
     mapM_ put asKeys
     put asEmergency
     put asProtocol
-    put asParamElectionDifficulty
+    put asParamConsensusParameters
     put asParamEuroPerEnergy
     put asParamMicroGTUPerEuro
     put asParamFoundationAccount
@@ -204,10 +209,10 @@ putAuthorizations Authorizations{..} = do
     put asPoolParameters
     put asAddAnonymityRevoker
     put asAddIdentityProvider
-    put asCooldownParameters
-    put asTimeParameters
+    mapM_ put asCooldownParameters
+    mapM_ put asTimeParameters
 
-getAuthorizations :: forall cpv. IsChainParametersVersion cpv => Get (Authorizations cpv)
+getAuthorizations :: forall auv. IsAuthorizationsVersion auv => Get (Authorizations auv)
 getAuthorizations = label "deserialization update authorizations" $ do
     keyCount <- getWord16be
     asKeys <- Vec.replicateM (fromIntegral keyCount) get
@@ -220,7 +225,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
                 Nothing -> return r
     asEmergency <- getChecked
     asProtocol <- getChecked
-    asParamElectionDifficulty <- getChecked
+    asParamConsensusParameters <- getChecked
     asParamEuroPerEnergy <- getChecked
     asParamMicroGTUPerEuro <- getChecked
     asParamFoundationAccount <- getChecked
@@ -230,29 +235,25 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asPoolParameters <- getChecked
     asAddAnonymityRevoker <- getChecked
     asAddIdentityProvider <- getChecked
-    (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
-        SCPV0 -> return (NothingForCPV1, NothingForCPV1)
-        SCPV1 -> do
-            cp <- getChecked
-            tp <- getChecked
-            return (JustForCPV1 cp, JustForCPV1 tp)
+    asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) getChecked
+    asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) getChecked
     return Authorizations{..}
 
-instance IsChainParametersVersion cpv => Serialize (Authorizations cpv) where
+instance IsAuthorizationsVersion auv => Serialize (Authorizations auv) where
     put = putAuthorizations
     get = getAuthorizations
 
-instance IsChainParametersVersion cpv => HashableTo SHA256.Hash (Authorizations cpv) where
+instance HashableTo SHA256.Hash (Authorizations auv) where
     getHash a = SHA256.hash $ "Authorizations" <> runPut (putAuthorizations a)
 
-instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (Authorizations cpv)
+instance (Monad m) => MHashableTo m SHA256.Hash (Authorizations auv)
 
-parseAuthorizationsJSON :: forall cpv. IsChainParametersVersion cpv => AE.Value -> AE.Parser (Authorizations cpv)
+parseAuthorizationsJSON :: forall auv. IsAuthorizationsVersion auv => AE.Value -> AE.Parser (Authorizations auv)
 parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asKeys <- Vec.fromList <$> v .: "keys"
-    let
-        parseAS x =
-            v .: x
+    let parseAS x =
+            v
+                .: x
                 >>= AE.withObject
                     (AE.toString x)
                     ( \o -> do
@@ -266,9 +267,10 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
                     )
     asEmergency <- parseAS "emergency"
     asProtocol <- parseAS "protocol"
-    asParamElectionDifficulty <- parseAS "electionDifficulty"
     asParamEuroPerEnergy <- parseAS "euroPerEnergy"
     asParamMicroGTUPerEuro <- parseAS "microGTUPerEuro"
+    -- Note: the consensus parameters is encoded as "electionDifficulty" for backwards compatibility
+    asParamConsensusParameters <- parseAS "electionDifficulty"
     asParamFoundationAccount <- parseAS "foundationAccount"
     asParamMintDistribution <- parseAS "mintDistribution"
     asParamTransactionFeeDistribution <- parseAS "transactionFeeDistribution"
@@ -276,24 +278,22 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asPoolParameters <- parseAS "poolParameters"
     asAddAnonymityRevoker <- parseAS "addAnonymityRevoker"
     asAddIdentityProvider <- parseAS "addIdentityProvider"
-    (asCooldownParameters, asTimeParameters) <- case chainParametersVersion @cpv of
-        SCPV0 -> return (NothingForCPV1, NothingForCPV1)
-        SCPV1 -> do
-            cp <- parseAS "cooldownParameters"
-            tp <- parseAS "timeParameters"
-            return (JustForCPV1 cp, JustForCPV1 tp)
+    let auv = sing @auv
+    asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure auv) $ parseAS "cooldownParameters"
+    asTimeParameters <- conditionallyA (sSupportsTimeParameters auv) $ parseAS "timeParameters"
     return Authorizations{..}
 
-instance IsChainParametersVersion cpv => AE.FromJSON (Authorizations cpv) where
+instance IsAuthorizationsVersion auv => AE.FromJSON (Authorizations auv) where
     parseJSON = parseAuthorizationsJSON
 
-instance AE.ToJSON (Authorizations cpv) where
+instance IsAuthorizationsVersion auv => AE.ToJSON (Authorizations auv) where
     toJSON Authorizations{..} =
         AE.object
             ( [ "keys" AE..= Vec.toList asKeys,
                 "emergency" AE..= t asEmergency,
                 "protocol" AE..= t asProtocol,
-                "electionDifficulty" AE..= t asParamElectionDifficulty,
+                -- Note: "electionDifficulty" is used for backwards compatibility
+                "electionDifficulty" AE..= t asParamConsensusParameters,
                 "euroPerEnergy" AE..= t asParamEuroPerEnergy,
                 "microGTUPerEuro" AE..= t asParamMicroGTUPerEuro,
                 "foundationAccount" AE..= t asParamFoundationAccount,
@@ -305,7 +305,7 @@ instance AE.ToJSON (Authorizations cpv) where
                 "addIdentityProvider" AE..= t asAddIdentityProvider
               ]
                 ++ cooldownParameters
-                ++ timeParameters
+                ++ timeParameters'
             )
       where
         t AccessStructure{..} =
@@ -313,12 +313,8 @@ instance AE.ToJSON (Authorizations cpv) where
                 [ "authorizedKeys" AE..= accessPublicKeys,
                   "threshold" AE..= accessThreshold
                 ]
-        cooldownParameters = case asCooldownParameters of
-            NothingForCPV1 -> []
-            JustForCPV1 as -> ["cooldownParameters" AE..= t as]
-        timeParameters = case asTimeParameters of
-            NothingForCPV1 -> []
-            JustForCPV1 as -> ["timeParameters" AE..= t as]
+        cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
+        timeParameters' = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
 
 -----------------
 
@@ -388,11 +384,11 @@ data RootUpdate
         }
     | -- |Update the Level 2 keys in chain parameters version 0
       Level2KeysRootUpdate
-        { l2kruAuthorizations :: !(Authorizations 'ChainParametersV0)
+        { l2kruAuthorizations :: !(Authorizations 'AuthorizationsVersion0)
         }
-    | -- |Update the level 2 keys in chain parameters version 1
+    | -- |Update the level 2 keys in chain parameters version 1 and 2
       Level2KeysRootUpdateV1
-        { l2kruAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
+        { l2kruAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
     deriving (Eq, Show)
 
@@ -410,17 +406,15 @@ putRootUpdate Level2KeysRootUpdateV1{..} = do
     putWord8 3
     putAuthorizations l2kruAuthorizationsV1
 
-getRootUpdate :: SChainParametersVersion cpv -> Get RootUpdate
-getRootUpdate scpv = label "RootUpdate" $ do
+getRootUpdate :: SAuthorizationsVersion auv -> Get RootUpdate
+getRootUpdate sauv = label "RootUpdate" $ do
     variant <- getWord8
     case variant of
         0 -> RootKeysRootUpdate <$> get
         1 -> Level1KeysRootUpdate <$> get
-        2 | isCPV ChainParametersV0 -> Level2KeysRootUpdate <$> getAuthorizations
-        3 | isCPV ChainParametersV1 -> Level2KeysRootUpdateV1 <$> getAuthorizations
+        2 | SAuthorizationsVersion0 <- sauv -> Level2KeysRootUpdate <$> getAuthorizations
+        3 | SAuthorizationsVersion1 <- sauv -> Level2KeysRootUpdateV1 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
-  where
-    isCPV cpv = cpv == demoteChainParameterVersion scpv
 
 instance AE.FromJSON RootUpdate where
     parseJSON = AE.withObject "RootUpdate" $ \o -> do
@@ -467,10 +461,10 @@ data Level1Update
         { l1kl1uKeys :: !(HigherLevelKeys Level1KeysKind)
         }
     | Level2KeysLevel1Update
-        { l2kl1uAuthorizations :: !(Authorizations 'ChainParametersV0)
+        { l2kl1uAuthorizations :: !(Authorizations 'AuthorizationsVersion0)
         }
     | Level2KeysLevel1UpdateV1
-        { l2kl1uAuthorizationsV1 :: !(Authorizations 'ChainParametersV1)
+        { l2kl1uAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
 
 deriving instance Eq Level1Update
@@ -487,16 +481,14 @@ putLevel1Update Level2KeysLevel1UpdateV1{..} = do
     putWord8 2
     putAuthorizations l2kl1uAuthorizationsV1
 
-getLevel1Update :: SChainParametersVersion scpv -> Get Level1Update
-getLevel1Update scpv = label "Level1Update" $ do
+getLevel1Update :: SAuthorizationsVersion auv -> Get Level1Update
+getLevel1Update sauv = label "Level1Update" $ do
     variant <- getWord8
     case variant of
         0 -> Level1KeysLevel1Update <$> get
-        1 | isCPV ChainParametersV0 -> Level2KeysLevel1Update <$> getAuthorizations
-        2 | isCPV ChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
+        1 | SAuthorizationsVersion0 <- sauv -> Level2KeysLevel1Update <$> getAuthorizations
+        2 | SAuthorizationsVersion1 <- sauv -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
-  where
-    isCPV cpv = cpv == demoteChainParameterVersion scpv
 
 instance AE.FromJSON Level1Update where
     parseJSON = AE.withObject "Level1Update" $ \o -> do
@@ -597,23 +589,23 @@ instance AE.FromJSON ProtocolUpdate where
 
 -- |A data structure that holds a complete set of update keys. It will be stored
 -- in the BlockState.
-data UpdateKeysCollection cpv = UpdateKeysCollection
+data UpdateKeysCollection (auv :: AuthorizationsVersion) = UpdateKeysCollection
     { rootKeys :: !(HigherLevelKeys RootKeysKind),
       level1Keys :: !(HigherLevelKeys Level1KeysKind),
-      level2Keys :: !(Authorizations cpv)
+      level2Keys :: !(Authorizations auv)
     }
     deriving (Eq, Show)
 
-putUpdateKeysCollection :: IsChainParametersVersion cpv => Putter (UpdateKeysCollection cpv)
+putUpdateKeysCollection :: Putter (UpdateKeysCollection auv)
 putUpdateKeysCollection UpdateKeysCollection{..} = do
     put rootKeys
     put level1Keys
     putAuthorizations level2Keys
 
-getUpdateKeysCollection :: IsChainParametersVersion cpv => Get (UpdateKeysCollection cpv)
+getUpdateKeysCollection :: IsAuthorizationsVersion auv => Get (UpdateKeysCollection auv)
 getUpdateKeysCollection = UpdateKeysCollection <$> get <*> get <*> getAuthorizations
 
-instance IsChainParametersVersion cpv => Serialize (UpdateKeysCollection cpv) where
+instance IsAuthorizationsVersion auv => Serialize (UpdateKeysCollection auv) where
     put = putUpdateKeysCollection
     get = getUpdateKeysCollection
 
@@ -621,24 +613,24 @@ instance IsChainParametersVersion cpv => Serialize (UpdateKeysCollection cpv) wh
 -- Security considerations: It is crucial to use a cryptographic secure hash instance for `UpdateKeysCollection`.
 -- The caller must be able to use the resulting hash in security critical application code.
 -- Currently the computed hash is used to short circuit the signature verification check of transactions.
-instance IsChainParametersVersion cpv => HashableTo SHA256.Hash (UpdateKeysCollection cpv) where
+instance HashableTo SHA256.Hash (UpdateKeysCollection auv) where
     getHash = SHA256.hash . runPut . putUpdateKeysCollection
 
 -- |Check that the update keys collection matches the given SHA256 hash.
 -- Note. See above for more information.
-matchesUpdateKeysCollection :: IsChainParametersVersion cpv => UpdateKeysCollection cpv -> SHA256.Hash -> Bool
+matchesUpdateKeysCollection :: UpdateKeysCollection auv -> SHA256.Hash -> Bool
 matchesUpdateKeysCollection ukc h = getHash ukc == h
 
-instance (Monad m, IsChainParametersVersion cpv) => MHashableTo m SHA256.Hash (UpdateKeysCollection cpv)
+instance (Monad m) => MHashableTo m SHA256.Hash (UpdateKeysCollection auv)
 
-instance IsChainParametersVersion cpv => AE.FromJSON (UpdateKeysCollection cpv) where
+instance IsAuthorizationsVersion auv => AE.FromJSON (UpdateKeysCollection auv) where
     parseJSON = AE.withObject "UpdateKeysCollection" $ \v -> do
         rootKeys <- v .: "rootKeys"
         level1Keys <- v .: "level1Keys"
         level2Keys <- v .: "level2Keys"
         return UpdateKeysCollection{..}
 
-instance AE.ToJSON (UpdateKeysCollection cpv) where
+instance IsAuthorizationsVersion auv => AE.ToJSON (UpdateKeysCollection auv) where
     toJSON UpdateKeysCollection{..} =
         AE.object
             [ "rootKeys" AE..= rootKeys,
@@ -687,6 +679,12 @@ data UpdateType
       UpdateCooldownParameters
     | -- |Update for time parameters, but not used by chain parameter version 0
       UpdateTimeParameters
+    | -- |Update timeout parameters for consensus version 2
+      UpdateTimeoutParameters
+    | -- |Update minimum block time for consensus version 2
+      UpdateMinBlockTime
+    | -- |Update block energy limit for consensus version 2
+      UpdateBlockEnergyLimit
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -716,6 +714,9 @@ instance Serialize UpdateType where
     put UpdateAddIdentityProvider = putWord8 14
     put UpdateCooldownParameters = putWord8 15
     put UpdateTimeParameters = putWord8 16
+    put UpdateTimeoutParameters = putWord8 17
+    put UpdateMinBlockTime = putWord8 18
+    put UpdateBlockEnergyLimit = putWord8 19
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -734,6 +735,9 @@ instance Serialize UpdateType where
             14 -> return UpdateAddIdentityProvider
             15 -> return UpdateCooldownParameters
             16 -> return UpdateTimeParameters
+            17 -> return UpdateTimeoutParameters
+            18 -> return UpdateMinBlockTime
+            19 -> return UpdateBlockEnergyLimit
             n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
@@ -793,11 +797,11 @@ data UpdatePayload
     | -- |Update the address of the foundation account
       FoundationAccountUpdatePayload !AccountAddress
     | -- |Update the distribution of newly minted GTU in chain parameters version 0
-      MintDistributionUpdatePayload !(MintDistribution 'ChainParametersV0)
+      MintDistributionUpdatePayload !(MintDistribution 'MintDistributionVersion0)
     | -- |Update the distribution of transaction fees
       TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
-    | -- |Update the GAS rewards
-      GASRewardsUpdatePayload !GASRewards
+    | -- |Update the GAS rewards (chain parameters versions 0 and 1)
+      GASRewardsUpdatePayload !(GASRewards 'GASRewardsVersion0)
     | -- |Update the minimum amount to register as a baker with chain parameter version 0
       BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
     | -- |Root level update
@@ -808,14 +812,22 @@ data UpdatePayload
       AddAnonymityRevokerUpdatePayload !ArInfo
     | -- |Add an identity provider
       AddIdentityProviderUpdatePayload !IpInfo
-    | -- |Cooldown parameters with chain parameter version 1
-      CooldownParametersCPV1UpdatePayload !(CooldownParameters 'ChainParametersV1)
-    | -- |Pool parameters with chain parameter version 1
+    | -- |Cooldown parameters with chain parameter version 1 onwards
+      CooldownParametersCPV1UpdatePayload !(CooldownParameters' 'CooldownParametersVersion1)
+    | -- |Pool parameters with chain parameter version 1 onwards
       PoolParametersCPV1UpdatePayload !(PoolParameters 'ChainParametersV1)
-    | -- |Time parameters with chain parameter version 1
-      TimeParametersCPV1UpdatePayload !(TimeParameters 'ChainParametersV1)
-    | -- |Update the distribution of newly minted GTU in chain parameters version 1
-      MintDistributionCPV1UpdatePayload !(MintDistribution 'ChainParametersV1)
+    | -- |Time parameters with chain parameter version 1 onwards
+      TimeParametersCPV1UpdatePayload !TimeParameters
+    | -- |Update the distribution of newly minted GTU in chain parameters version 1 onwards
+      MintDistributionCPV1UpdatePayload !(MintDistribution 'MintDistributionVersion1)
+    | -- |Update the timeout parameters (chain parameters version 2)
+      TimeoutParametersUpdatePayload !TimeoutParameters
+    | -- |Update the minimum block time (chain parameters version 2)
+      MinBlockTimeUpdatePayload !Duration
+    | -- |Update block energy limit (chain parameters version 2)
+      BlockEnergyLimitUpdatePayload !Energy
+    | -- |Update the GAS rewards (chain parameters version 2)
+      GASRewardsCPV2UpdatePayload !(GASRewards 'GASRewardsVersion1)
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -836,31 +848,53 @@ putUpdatePayload (CooldownParametersCPV1UpdatePayload u) = putWord8 14 >> putCoo
 putUpdatePayload (PoolParametersCPV1UpdatePayload u) = putWord8 15 >> putPoolParameters u
 putUpdatePayload (TimeParametersCPV1UpdatePayload u) = putWord8 16 >> putTimeParameters u
 putUpdatePayload (MintDistributionCPV1UpdatePayload u) = putWord8 17 >> put u
+putUpdatePayload (TimeoutParametersUpdatePayload u) = putWord8 18 >> put u
+putUpdatePayload (MinBlockTimeUpdatePayload u) = putWord8 19 >> put u
+putUpdatePayload (BlockEnergyLimitUpdatePayload u) = putWord8 20 >> put u
+putUpdatePayload (GASRewardsCPV2UpdatePayload u) = putWord8 21 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
     getWord8 >>= \case
         1 -> ProtocolUpdatePayload <$> get
-        2 -> ElectionDifficultyUpdatePayload <$> get
+        2
+            | isSupported PTElectionDifficulty cpv ->
+                ElectionDifficultyUpdatePayload <$> get
         3 -> EuroPerEnergyUpdatePayload <$> get
         4 -> MicroGTUPerEuroUpdatePayload <$> get
         5 -> FoundationAccountUpdatePayload <$> get
-        6 | isCPV ChainParametersV0 -> MintDistributionUpdatePayload <$> get
+        6
+            | MintDistributionVersion0 <- mintDistributionVersionFor cpv ->
+                MintDistributionUpdatePayload <$> get
         7 -> TransactionFeeDistributionUpdatePayload <$> get
-        8 -> GASRewardsUpdatePayload <$> get
-        9 | isCPV ChainParametersV0 -> BakerStakeThresholdUpdatePayload <$> getPoolParameters
-        10 -> RootUpdatePayload <$> getRootUpdate scpv
-        11 -> Level1UpdatePayload <$> getLevel1Update scpv
+        8 | GASRewardsVersion0 <- gasRewardsVersionFor cpv -> GASRewardsUpdatePayload <$> get
+        9
+            | PoolParametersVersion0 <- poolParametersVersionFor cpv ->
+                BakerStakeThresholdUpdatePayload <$> getPoolParameters SPoolParametersVersion0
+        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionFor scpv)
+        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionFor scpv)
         12 -> AddAnonymityRevokerUpdatePayload <$> get
         13 -> AddIdentityProviderUpdatePayload <$> get
-        14 | isCPV ChainParametersV1 -> CooldownParametersCPV1UpdatePayload <$> getCooldownParameters
-        15 | isCPV ChainParametersV1 -> PoolParametersCPV1UpdatePayload <$> getPoolParameters
-        16 | isCPV ChainParametersV1 -> TimeParametersCPV1UpdatePayload <$> getTimeParameters
-        17 | isCPV ChainParametersV1 -> MintDistributionCPV1UpdatePayload <$> get
+        14
+            | CooldownParametersVersion1 <- cooldownParametersVersionFor cpv ->
+                CooldownParametersCPV1UpdatePayload <$> getCooldownParameters SCooldownParametersVersion1
+        15
+            | PoolParametersVersion1 <- poolParametersVersionFor cpv ->
+                PoolParametersCPV1UpdatePayload <$> getPoolParameters SPoolParametersVersion1
+        16
+            | isSupported PTTimeParameters cpv ->
+                TimeParametersCPV1UpdatePayload <$> getTimeParameters
+        17
+            | MintDistributionVersion1 <- mintDistributionVersionFor cpv ->
+                MintDistributionCPV1UpdatePayload <$> get
+        18 | isSupported PTTimeoutParameters cpv -> TimeoutParametersUpdatePayload <$> get
+        19 | isSupported PTMinBlockTime cpv -> MinBlockTimeUpdatePayload <$> get
+        20 | isSupported PTBlockEnergyLimit cpv -> BlockEnergyLimitUpdatePayload <$> get
+        21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
-    isCPV cpv = cpv == demoteChainParameterVersion scpv
-    scpv = chainParametersVersionFor spv
+    scpv = sChainParametersVersionFor spv
+    cpv = demoteChainParameterVersion scpv
 
 $( deriveJSON
     defaultOptions
@@ -880,6 +914,7 @@ updateType FoundationAccountUpdatePayload{} = UpdateFoundationAccount
 updateType MintDistributionUpdatePayload{} = UpdateMintDistribution
 updateType TransactionFeeDistributionUpdatePayload{} = UpdateTransactionFeeDistribution
 updateType GASRewardsUpdatePayload{} = UpdateGASRewards
+updateType GASRewardsCPV2UpdatePayload{} = UpdateGASRewards
 updateType BakerStakeThresholdUpdatePayload{} = UpdatePoolParameters
 updateType AddAnonymityRevokerUpdatePayload{} = UpdateAddAnonymityRevoker
 updateType AddIdentityProviderUpdatePayload{} = UpdateAddIdentityProvider
@@ -894,35 +929,43 @@ updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
+updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
+updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
+updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
 extractKeysIndices p =
     case p of
-        ProtocolUpdatePayload{} -> f asProtocol
-        ElectionDifficultyUpdatePayload{} -> f asParamElectionDifficulty
-        EuroPerEnergyUpdatePayload{} -> f asParamEuroPerEnergy
-        MicroGTUPerEuroUpdatePayload{} -> f asParamMicroGTUPerEuro
-        FoundationAccountUpdatePayload{} -> f asParamFoundationAccount
-        MintDistributionUpdatePayload{} -> f asParamMintDistribution
-        MintDistributionCPV1UpdatePayload{} -> f asParamMintDistribution
-        TransactionFeeDistributionUpdatePayload{} -> f asParamTransactionFeeDistribution
-        GASRewardsUpdatePayload{} -> f asParamGASRewards
-        BakerStakeThresholdUpdatePayload{} -> f asPoolParameters
-        RootUpdatePayload{} -> g rootKeys
-        Level1UpdatePayload{} -> g level1Keys
-        AddAnonymityRevokerUpdatePayload{} -> f asAddAnonymityRevoker
-        AddIdentityProviderUpdatePayload{} -> f asAddIdentityProvider
-        CooldownParametersCPV1UpdatePayload{} -> f' asCooldownParameters
-        PoolParametersCPV1UpdatePayload{} -> f asPoolParameters
-        TimeParametersCPV1UpdatePayload{} -> f' asTimeParameters
+        ProtocolUpdatePayload{} -> getLevel2KeysAndThreshold asProtocol
+        ElectionDifficultyUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        EuroPerEnergyUpdatePayload{} -> getLevel2KeysAndThreshold asParamEuroPerEnergy
+        MicroGTUPerEuroUpdatePayload{} -> getLevel2KeysAndThreshold asParamMicroGTUPerEuro
+        FoundationAccountUpdatePayload{} -> getLevel2KeysAndThreshold asParamFoundationAccount
+        MintDistributionUpdatePayload{} -> getLevel2KeysAndThreshold asParamMintDistribution
+        MintDistributionCPV1UpdatePayload{} -> getLevel2KeysAndThreshold asParamMintDistribution
+        TransactionFeeDistributionUpdatePayload{} -> getLevel2KeysAndThreshold asParamTransactionFeeDistribution
+        GASRewardsUpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
+        GASRewardsCPV2UpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
+        BakerStakeThresholdUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
+        RootUpdatePayload{} -> getHiglerLevelKeysAndThreshold rootKeys
+        Level1UpdatePayload{} -> getHiglerLevelKeysAndThreshold level1Keys
+        AddAnonymityRevokerUpdatePayload{} -> getLevel2KeysAndThreshold asAddAnonymityRevoker
+        AddIdentityProviderUpdatePayload{} -> getLevel2KeysAndThreshold asAddIdentityProvider
+        CooldownParametersCPV1UpdatePayload{} -> getOptionalLevel2KeysAndThreshold asCooldownParameters
+        PoolParametersCPV1UpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
+        TimeParametersCPV1UpdatePayload{} -> getOptionalLevel2KeysAndThreshold asTimeParameters
+        TimeoutParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        MinBlockTimeUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
   where
-    f v = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . v . level2Keys
-    f' v = keysForCPV1 . v . level2Keys
-    g v = (\HigherLevelKeys{..} -> (Set.fromList $ [0 .. (fromIntegral $ Vec.length hlkKeys) - 1], hlkThreshold)) . v
-    keysForCPV1 :: AccessStructureForCPV1 cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
-    keysForCPV1 (JustForCPV1 AccessStructure{..}) = (accessPublicKeys, accessThreshold)
-    keysForCPV1 NothingForCPV1 = (Set.empty, 1)
+    getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
+    getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
+    getHiglerLevelKeysAndThreshold v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
+    -- If the 'AccessStructure' is not supported at the chain parameter version @cpv@, then there are no keys to return.
+    keysForOParam :: Conditionally c AccessStructure -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
+    keysForOParam (CTrue AccessStructure{..}) = (accessPublicKeys, accessThreshold)
+    keysForOParam CFalse = (Set.empty, 1)
 
 -- The latter case happens if the UpdateKeysCollection is used with chain parameter version 0 but the update payload is
 -- is a cooldown parameter update or a time parameter update, which only exists in chain parameter version 1.

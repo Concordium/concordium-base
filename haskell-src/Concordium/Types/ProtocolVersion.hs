@@ -1,7 +1,16 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -9,6 +18,11 @@
 -- We suppress redundant constraint warnings since GHC does not detect when a constraint is used
 -- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+
+-- The class 'IsProtocolVersion' identifies the singleton for each 'ProtocolVersion',
+-- and should have an instance for each constructor of 'ProtocolVersion'.
+-- In other words the constraint 'IsProtocolVersion' contextualizes the function
+-- with the protocol version.
 
 -- |This module contains the 'ProtocolVersion' datatype, which enumerates the
 -- (supported) versions of the protocol for the consensus layer and up.
@@ -20,38 +34,254 @@
 -- i.e. @SProtocolVersion :: ProtocolVersion -> Type@. For each protocol version @pv@,
 -- there is a singleton constructor of type @SProtocolVersion pv@, which is named
 -- by prepending "S" to the protocol version constructor (e.g. @SP1 :: SProtocolVersion 'P1@).
---
--- The class 'IsProtocolVersion' identifies the singleton for each 'ProtocolVersion',
--- and should have an instance for each constructor of 'ProtocolVersion'.
-module Concordium.Types.ProtocolVersion where
+-- This is generated from the definition of 'ProtocolVersion' by the singletons library, along
+-- with a number of useful typeclass instances.
+module Concordium.Types.ProtocolVersion (
+    -- * Protocol version
+
+    -- |An enumeration of the supported versions of the consensus protocol.
+    -- Binary and JSON serializations are as 'Word64' corresponding to the protocol number.
+    ProtocolVersion (..),
+    -- |The singleton type associated with 'ProtocolVersion'.
+    -- There is a unique constructor of 'SProtocolVersion' for
+    -- each constructor of 'ProtocolVersion'.
+    SProtocolVersion (..),
+    IsProtocolVersion,
+    protocolVersion,
+    SomeProtocolVersion (..),
+    promoteProtocolVersion,
+    demoteProtocolVersion,
+
+    -- * Chain parameters version
+
+    -- |The version of the chain parameters.
+    --
+    -- * 'ChainParametersV0' is used in 'P1', 'P2' and 'P3'.
+    --
+    -- * 'ChainParametersV1' is used in 'P4' and 'P5'. This has the following changes:
+    --
+    --     - Mint-per-slot rate is removed from the mint distribution parameters.
+    --     - New time parameters are introduced that combine payday length and mint-per-payday rate.
+    --       These time parameters are updatable (introducing a new access structure).
+    --     - The cooldown parameters are changed to use real time instead of number of epochs.
+    --       The cooldown parameters are made updatable (introducing a new access structure).
+    --
+    -- * 'ChainParametersV2' is used in 'P6', which introduces the new consensus protocol.
+    --   This has the following changes:
+    --
+    --     - Election difficulty is removed as a parameter.
+    --     - New consensus parameters are introduced, consisting of three parameter groups that are
+    --       separately updatable (using the same access structure as for election difficulty).
+    --       These are:
+    --
+    --         * Timeout parameters: timeout base time, timeout increase factor, timeout decrease factor.
+    --         * Minimum block time.
+    --         * Block energy limit.
+    --
+    --     - The finalization proof reward is removed from the GAS rewards.
+    ChainParametersVersion (..),
+    -- |Singleton type corresponding to 'ChainParametersVersion'.
+    SChainParametersVersion (..),
+    IsChainParametersVersion,
+    chainParametersVersion,
+    demoteChainParameterVersion,
+    -- |The chain parameters version for a given protocol version.
+    chainParametersVersionFor,
+    -- |The chain parameters version for a given protocol version (at the type level).
+    ChainParametersVersionFor,
+    -- |The chain parameters version for a given protocol version (on singletons).
+    sChainParametersVersionFor,
+    -- |Defunctionalisation symbol for 'ChainParametersVersionFor'.
+    ChainParametersVersionForSym0,
+
+    -- * Account version
+
+    -- |A data kind used for parametrising account-related types.
+    -- This is used rather than 'ProtocolVersion' to coalesce cases where different protocol versions
+    -- share the same account format.
+    --
+    --   * 'AccountV0' is used in 'P1', 'P2' and 'P3'.
+    --
+    --   * 'AccountV1' is used in 'P4'. Adds stake delegation.
+    --
+    --   * 'AccountV2' is used in 'P5' and 'P6'. Modifies the hash calculation.
+    AccountVersion (..),
+    -- |Singleton type corresponding to 'AccountVersion'.
+    SAccountVersion (..),
+    IsAccountVersion,
+    accountVersion,
+    -- |The account version for a given protocol version.
+    accountVersionFor,
+    -- |The account version for a given protocol version (at the type level).
+    AccountVersionFor,
+    -- |The account version for a given protocol version (on singletons).
+    sAccountVersionFor,
+
+    -- * Transaction outcomes version
+
+    -- |Transaction outcomes versions.
+    -- The difference between the two versions are only related
+    -- to the hashing scheme.
+    --
+    --   * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+    --     All the contents of the transaction summaries are used for computing the hash.
+    --
+    --   * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+    --     exact reject reasons for failed transactions are omitted from the hash.
+    TransactionOutcomesVersion (..),
+    -- |Singleton type corresponding to 'TransactionOutcomesVersion'.
+    STransactionOutcomesVersion (..),
+    IsTransactionOutcomesVersion,
+    transactionOutcomesVersion,
+    -- |The transaction outcomes version for a given protocol version.
+    transactionOutcomesVersionFor,
+    -- |The transaction outcomes version for a given protocol version (at the type level).
+    TransactionOutcomesVersionFor,
+    -- |The transaction outcomes version for a given protocol version (on singletons).
+    sTransactionOutcomesVersionFor,
+
+    -- * Delegation support
+
+    -- |Whether or not delegation is supported at a particular account version.
+    DelegationSupport (..),
+    -- Singleton type corresponding to 'DelegationSupport'.
+    SDelegationSupport (..),
+    -- |Determine whether delegation is supported for a particular account version.
+    supportsDelegation,
+    -- |Determine whether delegation is supported for a particular account version (at the type level).
+    SupportsDelegation,
+    -- |Determine whether delegation is supported for a particular account version (on singletons).
+    sSupportsDelegation,
+    SAVDelegationSupport (..),
+    AVSupportsDelegation,
+    PVSupportsDelegation,
+    delegationSupport,
+    protocolSupportsDelegation,
+
+    -- * Feature guards
+    supportsMemo,
+    supportsV1Contracts,
+    supportsUpgradableContracts,
+    supportsChainQueryContracts,
+    supportsAccountAliases,
+    supportsDelegationPV,
+
+    -- * Defunctionalisation symbols
+    P1Sym0,
+    P2Sym0,
+    P3Sym0,
+    P4Sym0,
+    P5Sym0,
+    P6Sym0,
+) where
 
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Serialize
+import Data.Singletons.Base.TH
+
 import Data.Word
 
--- |An enumeration of the supported versions of the consensus protocol.
--- Binary and JSON serializations are as Word64 corresponding to the protocol number.
-data ProtocolVersion
-    = P1
-    | P2
-    | P3
-    | P4
-    | P5
-    | P6
-    deriving (Eq, Show, Ord)
+-- See the splice documentation in 'Parameters.hs' for an explanation of what is generated.
+$( singletons
+    [d|
+        -- \|An enumeration of the supported versions of the consensus protocol.
+        -- Binary and JSON serializations are as Word64 corresponding to the protocol number.
+        data ProtocolVersion
+            = P1
+            | P2
+            | P3
+            | P4
+            | P5
+            | P6
+            deriving (Eq, Ord)
 
--- |The singleton type associated with 'ProtocolVersion'.
--- There is a unique constructor of 'SProtocolVersion' for
--- each constructor of 'ProtocolVersion'.
-data SProtocolVersion (pv :: ProtocolVersion) where
-    SP1 :: SProtocolVersion 'P1
-    SP2 :: SProtocolVersion 'P2
-    SP3 :: SProtocolVersion 'P3
-    SP4 :: SProtocolVersion 'P4
-    SP5 :: SProtocolVersion 'P5
-    SP6 :: SProtocolVersion 'P6
+        data ChainParametersVersion
+            = ChainParametersV0
+            | ChainParametersV1
+            | ChainParametersV2
+            deriving (Eq, Ord)
 
+        chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
+        chainParametersVersionFor P1 = ChainParametersV0
+        chainParametersVersionFor P2 = ChainParametersV0
+        chainParametersVersionFor P3 = ChainParametersV0
+        chainParametersVersionFor P4 = ChainParametersV1
+        chainParametersVersionFor P5 = ChainParametersV1
+        chainParametersVersionFor P6 = ChainParametersV2
+
+        -- \* Account versions
+
+        -- \|A data kind used for parametrising account-related types.
+        -- This is used rather than 'ProtocolVersion' to coalesce cases where different protocol versions
+        -- share the same account format.
+        data AccountVersion
+            = -- \|Account version used in P1, P2, and P3.
+              AccountV0
+            | -- \|Account version used in P4. Adds stake delegation.
+              AccountV1
+            | -- \|Account version used in P5. Modifies hashing.
+              AccountV2
+
+        -- \|'AccountVersion' associated with a 'ProtocolVersion'.
+        accountVersionFor :: ProtocolVersion -> AccountVersion
+        accountVersionFor P1 = AccountV0
+        accountVersionFor P2 = AccountV0
+        accountVersionFor P3 = AccountV0
+        accountVersionFor P4 = AccountV1
+        accountVersionFor P5 = AccountV2
+        accountVersionFor P6 = AccountV2
+
+        -- \|Transaction outcomes versions.
+        -- The difference between the two versions are only related
+        -- to the hashing scheme.
+        -- \* 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+        -- All the contents of the transaction summaries are used for computing the hash.
+        -- \* 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+        -- exact reject reasons for failed transactions are omitted from the hash.
+        data TransactionOutcomesVersion
+            = TOV0
+            | TOV1
+
+        -- \|Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
+        transactionOutcomesVersionFor :: ProtocolVersion -> TransactionOutcomesVersion
+        transactionOutcomesVersionFor P1 = TOV0
+        transactionOutcomesVersionFor P2 = TOV0
+        transactionOutcomesVersionFor P3 = TOV0
+        transactionOutcomesVersionFor P4 = TOV0
+        transactionOutcomesVersionFor P5 = TOV1
+        transactionOutcomesVersionFor P6 = TOV1
+
+        -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
+        -- at an account version. This is intended to give more descriptive type errors in cases where the
+        -- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
+        -- @AVSupportsDelegation 'AccountV0@ will give a type error:
+        --
+        -- @
+        --   Couldn't match type: 'DelegationNotSupported 'AccountV0
+        --   with: 'DelegationSupported 'AccountV0
+        -- @
+        --
+        -- This is more meaningful than @Couldn't match type: 'False with: 'True@.
+        -- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
+        data DelegationSupport
+            = -- \|Delegation is supported at the account version
+              DelegationSupported AccountVersion
+            | -- \|Delegation is not supported at the account version
+              DelegationNotSupported AccountVersion
+
+        supportsDelegation :: AccountVersion -> DelegationSupport
+        supportsDelegation AccountV0 = DelegationNotSupported AccountV0
+        supportsDelegation AccountV1 = DelegationSupported AccountV1
+        supportsDelegation AccountV2 = DelegationSupported AccountV2
+        |]
+ )
+
+deriving instance Show ProtocolVersion
+
+deriving instance Show ChainParametersVersion
+
+-- |Convert a protocol version to the corresponding 'Word64'.
 protocolVersionToWord64 :: ProtocolVersion -> Word64
 protocolVersionToWord64 P1 = 1
 protocolVersionToWord64 P2 = 2
@@ -60,6 +290,7 @@ protocolVersionToWord64 P4 = 4
 protocolVersionToWord64 P5 = 5
 protocolVersionToWord64 P6 = 6
 
+-- |Parse a 'Word64' as a 'ProtocolVersion'.
 protocolVersionFromWord64 :: MonadFail m => Word64 -> m ProtocolVersion
 protocolVersionFromWord64 1 = return P1
 protocolVersionFromWord64 2 = return P2
@@ -81,51 +312,6 @@ instance FromJSON ProtocolVersion where
         x <- parseJSON v
         protocolVersionFromWord64 x
 
--- |Type class for relating type-level 'ProtocolVersion's with
--- term level 'SProtocolVersion's.
-class
-    ( IsChainParametersVersion (ChainParametersVersionFor pv),
-      IsAccountVersion (AccountVersionFor pv),
-      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
-    ) =>
-    IsProtocolVersion (pv :: ProtocolVersion)
-    where
-    -- |The singleton associated with the protocol version.
-    protocolVersion :: SProtocolVersion pv
-
-instance IsProtocolVersion 'P1 where
-    protocolVersion = SP1
-    {-# INLINE protocolVersion #-}
-
-instance IsProtocolVersion 'P2 where
-    protocolVersion = SP2
-    {-# INLINE protocolVersion #-}
-
-instance IsProtocolVersion 'P3 where
-    protocolVersion = SP3
-    {-# INLINE protocolVersion #-}
-
-instance IsProtocolVersion 'P4 where
-    protocolVersion = SP4
-    {-# INLINE protocolVersion #-}
-
-instance IsProtocolVersion 'P5 where
-    protocolVersion = SP5
-    {-# INLINE protocolVersion #-}
-
-instance IsProtocolVersion 'P6 where
-    protocolVersion = SP6
-    {-# INLINE protocolVersion #-}
-
--- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
-demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
-demoteProtocolVersion SP1 = P1
-demoteProtocolVersion SP2 = P2
-demoteProtocolVersion SP3 = P3
-demoteProtocolVersion SP4 = P4
-demoteProtocolVersion SP5 = P5
-demoteProtocolVersion SP6 = P6
-
 -- |An existentially quantified protocol version.
 data SomeProtocolVersion where
     SomeProtocolVersion :: (IsProtocolVersion pv) => SProtocolVersion pv -> SomeProtocolVersion
@@ -140,162 +326,74 @@ promoteProtocolVersion P4 = SomeProtocolVersion SP4
 promoteProtocolVersion P5 = SomeProtocolVersion SP5
 promoteProtocolVersion P6 = SomeProtocolVersion SP6
 
-data ChainParametersVersion = ChainParametersV0 | ChainParametersV1
-    deriving (Eq, Show)
+-- |Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
+demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
+demoteProtocolVersion = fromSing
 
-type family ChainParametersVersionFor (pv :: ProtocolVersion) :: ChainParametersVersion where
-    ChainParametersVersionFor 'P1 = 'ChainParametersV0
-    ChainParametersVersionFor 'P2 = 'ChainParametersV0
-    ChainParametersVersionFor 'P3 = 'ChainParametersV0
-    ChainParametersVersionFor 'P4 = 'ChainParametersV1
-    ChainParametersVersionFor 'P5 = 'ChainParametersV1
-    ChainParametersVersionFor 'P6 = 'ChainParametersV1
+-- |Constraint on a type level 'AccountVersion' that can be used to get a corresponding
+-- 'SAccountVersion' (see 'accountVersion'). (An alias for 'SingI'.)
+type IsAccountVersion (av :: AccountVersion) = SingI av
 
-data SChainParametersVersion (cpv :: ChainParametersVersion) where
-    SCPV0 :: SChainParametersVersion 'ChainParametersV0
-    SCPV1 :: SChainParametersVersion 'ChainParametersV1
+-- |Constraint on a type level 'ChainParametersVersion' that can be used to get a corresponding
+-- 'SChainParametersVersion' (see 'chainParametersVersion'). (An alias for 'SingI'.)
+type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv
 
--- |Type class for relating type-level 'ChainParametersVersion's with
--- term level 'SChainParameters's.
-class IsChainParametersVersion (cpv :: ChainParametersVersion) where
-    -- |The singleton associated with the protocol version.
-    chainParametersVersion :: SChainParametersVersion cpv
+-- |Constraint on a type level 'TransactionOutcomesVersion' that can be used to get a corresponding
+-- 'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). (An alias for 'SingI'.)
+type IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) = SingI tov
 
-instance IsChainParametersVersion 'ChainParametersV0 where
-    chainParametersVersion = SCPV0
-    {-# INLINE chainParametersVersion #-}
-
-instance IsChainParametersVersion 'ChainParametersV1 where
-    chainParametersVersion = SCPV1
-    {-# INLINE chainParametersVersion #-}
-
-chainParametersVersionFor :: SProtocolVersion pv -> SChainParametersVersion (ChainParametersVersionFor pv)
-chainParametersVersionFor spv = case spv of
-    SP1 -> SCPV0
-    SP2 -> SCPV0
-    SP3 -> SCPV0
-    SP4 -> SCPV1
-    SP5 -> SCPV1
-    SP6 -> SCPV1
-
-demoteChainParameterVersion :: SChainParametersVersion pv -> ChainParametersVersion
-demoteChainParameterVersion SCPV0 = ChainParametersV0
-demoteChainParameterVersion SCPV1 = ChainParametersV1
--- * Account versions
-
--- |A data kind used for parametrising account-related types.
--- This is used rather than 'ProtocolVersion' to coalesce cases where different protocol versions
--- share the same account format.
-data AccountVersion
-    = -- |Account version used in P1, P2, and P3.
-      AccountV0
-    | -- |Account version used in P4. Adds stake delegation.
-      AccountV1
-    | -- |Account version used in P5. Modifies hashing.
-      AccountV2
-
--- |A singleton type corresponding to 'SAccountVersion'.
-data SAccountVersion (av :: AccountVersion) where
-    SAccountV0 :: SAccountVersion 'AccountV0
-    SAccountV1 :: SAccountVersion 'AccountV1
-    SAccountV2 :: SAccountVersion 'AccountV2
-
--- |Projection of 'ProtocolVersion' to 'AccountVersion'.
-type family AccountVersionFor (pv :: ProtocolVersion) :: AccountVersion where
-    AccountVersionFor 'P1 = 'AccountV0
-    AccountVersionFor 'P2 = 'AccountV0
-    AccountVersionFor 'P3 = 'AccountV0
-    AccountVersionFor 'P4 = 'AccountV1
-    AccountVersionFor 'P5 = 'AccountV2
-    AccountVersionFor 'P6 = 'AccountV2
-
--- |Projection of 'SProtocolVersion' to 'SAccountVersion'.
-accountVersionFor :: SProtocolVersion pv -> SAccountVersion (AccountVersionFor pv)
-accountVersionFor SP1 = SAccountV0
-accountVersionFor SP2 = SAccountV0
-accountVersionFor SP3 = SAccountV0
-accountVersionFor SP4 = SAccountV1
-accountVersionFor SP5 = SAccountV2
-accountVersionFor SP6 = SAccountV2
-
-class IsAccountVersion (av :: AccountVersion) where
-    -- |The singleton associated with the account version
-    accountVersion :: SAccountVersion av
-
-instance IsAccountVersion 'AccountV0 where
-    accountVersion = SAccountV0
-
-instance IsAccountVersion 'AccountV1 where
-    accountVersion = SAccountV1
-
-instance IsAccountVersion 'AccountV2 where
-    accountVersion = SAccountV2
-
--- |Transaction outcomes versions.
--- The difference between the two versions are only related
--- to the hashing scheme.
--- * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
--- All the contents of the transaction summaries are used for computing the hash.
--- * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
--- exact reject reasons for failed transactions are omitted from the hash.
-data TransactionOutcomesVersion
-    = TOV0
-    | TOV1
-
--- |Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
-type family TransactionOutcomesVersionFor (pv :: ProtocolVersion) :: TransactionOutcomesVersion where
-    TransactionOutcomesVersionFor 'P1 = 'TOV0
-    TransactionOutcomesVersionFor 'P2 = 'TOV0
-    TransactionOutcomesVersionFor 'P3 = 'TOV0
-    TransactionOutcomesVersionFor 'P4 = 'TOV0
-    TransactionOutcomesVersionFor 'P5 = 'TOV1
-    TransactionOutcomesVersionFor 'P6 = 'TOV1
-
--- |Supporting type for bringing the 'TransactionOutcomesVersion' to the term level.
-data STransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
-    STOV0 :: STransactionOutcomesVersion 'TOV0
-    STOV1 :: STransactionOutcomesVersion 'TOV1
-
-class IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) where
-    -- |The singleton associated with the outcomes version.
-    transactionOutcomesVersion :: STransactionOutcomesVersion tov
-
-instance IsTransactionOutcomesVersion 'TOV0 where
-    transactionOutcomesVersion = STOV0
-
-instance IsTransactionOutcomesVersion 'TOV1 where
-    transactionOutcomesVersion = STOV1
-
--- |A type used at the kind level to denote that delegation is or is not expected to be supported
--- at an account version. This is intended to give more descriptive type errors in cases where the
--- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
--- @AVSupportsDelegation 'AccountV0@ will give a type error:
+-- |Constraint on a type level 'ProtocolVersion' that can be used to get a corresponding
+-- 'SProtocolVersion' (see 'protocolVersion'). This wraps 'SingI', but also
+-- has constraints on the 'ChainParametersVersionFor', 'AccountVersionFor' and
+-- 'TransactionOutcomesVersionFor' the protocol version. (This facilitates cases where those
+-- constraints are needed.)
 --
--- @
---   Couldn't match type: 'DelegationNotSupported 'AccountV0
---   with: 'DelegationSupported 'AccountV0
--- @
---
--- This is more meaningful than @Couldn't match type: 'False with: 'True@.
--- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
-data DelegationSupport
-    = -- |Delegation is supported at the account version
-      DelegationSupported AccountVersion
-    | -- |Delegation is not supported at the account version
-      DelegationNotSupported AccountVersion
+-- This is implemented as a typeclass (with a single instance) rather than a synonym because
+-- otherwise instances that require 'IsProtocolVersion' as a constraint would have "illegal nested
+-- constraints", requiring @UndecidableInstances@.
+class
+    ( SingI pv,
+      IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAccountVersion (AccountVersionFor pv),
+      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
+    ) =>
+    IsProtocolVersion (pv :: ProtocolVersion)
 
--- |Type-level predicate that determines if an account version supports delegation.
-type family AVSupportsDelegationB (av :: AccountVersion) :: DelegationSupport where
-    AVSupportsDelegationB 'AccountV0 = 'DelegationNotSupported 'AccountV0
-    AVSupportsDelegationB av = 'DelegationSupported av
+instance
+    ( SingI pv,
+      IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAccountVersion (AccountVersionFor pv),
+      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
+    ) =>
+    IsProtocolVersion (pv :: ProtocolVersion)
+
+-- |Produce the singleton 'SProtocolVersion' from an 'IsProtocolVersion' constraint.
+protocolVersion :: IsProtocolVersion pv => SProtocolVersion pv
+protocolVersion = sing
+
+-- |Produce the singleton 'SAccountVersion' from an 'IsAccountVersion' constraint.
+accountVersion :: IsAccountVersion av => SAccountVersion av
+accountVersion = sing
+
+-- |Produce the singleton 'SChainParametersVersion' from an 'IsChainParametersVersion' constraint.
+chainParametersVersion :: IsChainParametersVersion cpv => SChainParametersVersion cpv
+chainParametersVersion = sing
+
+-- |Produce the singleton 'STransactionOutcomesVersion' from an 'IsTransactionOutcomesVersion' constraint.
+transactionOutcomesVersion :: IsTransactionOutcomesVersion tov => STransactionOutcomesVersion tov
+transactionOutcomesVersion = sing
+
+-- |Demote a singleton 'SChainParametersVersion' to a 'ChainParametersVersion'.
+demoteChainParameterVersion :: SChainParametersVersion cpv -> ChainParametersVersion
+demoteChainParameterVersion = fromSing
 
 -- |Constraint that an account version supports delegation.
 --
 -- TODO: As of ghc 9.4, @Assert@ should be used to give better type errors.
-type AVSupportsDelegation (av :: AccountVersion) = AVSupportsDelegationB av ~ 'DelegationSupported av
+type AVSupportsDelegation (av :: AccountVersion) = SupportsDelegation av ~ 'DelegationSupported av
 
 -- |Constraint that a protocol version supports delegation.
-type SupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
+type PVSupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
 
 -- |A GADT that covers the cases for whether an account version supports delegation or not.
 -- The case that it doesn't is limited to 'AccountV0', and in the other case, this provides an
@@ -312,26 +410,12 @@ delegationSupport = case accountVersion @av of
     SAccountV1 -> SAVDelegationSupported
     SAccountV2 -> SAVDelegationSupported
 
--- |A GADT that witnesses the chain parameter version for a protocol version that supports delegation.
--- Currently, all protocol versions that support delegation (P4 and P5) have chain parameters
--- version 1.
-data DelegationChainParameters (pv :: ProtocolVersion) where
-    DelegationChainParametersV1 :: (ChainParametersVersionFor pv ~ 'ChainParametersV1) => DelegationChainParameters pv
-
--- |Constrain the chain parameters given that the protocol version supports delegation.
--- Currently, all protocol versions that support delegation (P4 and P5) have chain parameters
--- version 1.
---
--- This should be used in a context where @SupportsDelegation pv@ is known and a constraint of
--- @ChainParametersVersionFor pv ~ 'ChainParametersV1@ is required:
---
--- > case delegationChainParameters @pv of
--- >    DelegationChainParametersV1 -> {\- here: ChainParametersVersionFor pv ~ 'ChainParametersV1 -\}
-delegationChainParameters :: forall pv. (IsProtocolVersion pv, SupportsDelegation pv) => DelegationChainParameters pv
-delegationChainParameters = case protocolVersion @pv of
-    SP4 -> DelegationChainParametersV1
-    SP5 -> DelegationChainParametersV1
-    SP6 -> DelegationChainParametersV1
+-- |Whether the protocol supports delegation functionality.
+protocolSupportsDelegation :: SProtocolVersion pv -> Bool
+{-# INLINE protocolSupportsDelegation #-}
+protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor spv) of
+    SDelegationSupported{} -> True
+    _ -> False
 
 -- |Whether the protocol version supports memo functionality.
 -- (Memos are supported in 'P2' onwards.)
@@ -340,21 +424,11 @@ supportsMemo SP1 = False
 supportsMemo _ = True
 
 -- |Whether the protocol version supports account aliases.
--- (Supported in 'P3' onwards.)
+-- (Account aliases are supported in 'P3' onwards.)
 supportsAccountAliases :: SProtocolVersion pv -> Bool
 supportsAccountAliases SP1 = False
 supportsAccountAliases SP2 = False
 supportsAccountAliases _ = True
-
--- |Whether the protocol version supports stake delegation functionality.
--- (Delegation is supported in 'P4' onwards.)
-supportsDelegation :: SProtocolVersion pv -> Bool
-supportsDelegation SP1 = False
-supportsDelegation SP2 = False
-supportsDelegation SP3 = False
-supportsDelegation SP4 = True
-supportsDelegation SP5 = True
-supportsDelegation SP6 = True
 
 -- |Whether the protocol version supports V1 smart contracts.
 -- (V1 contracts are supported in 'P4' onwards.)
@@ -365,6 +439,14 @@ supportsV1Contracts SP3 = False
 supportsV1Contracts SP4 = True
 supportsV1Contracts SP5 = True
 supportsV1Contracts SP6 = True
+
+-- |Whether the protocol version supports delegation.
+-- (Delegation is supported in 'P4' onwards.)
+supportsDelegationPV :: SProtocolVersion pv -> Bool
+supportsDelegationPV SP1 = False
+supportsDelegationPV SP2 = False
+supportsDelegationPV SP3 = False
+supportsDelegationPV _ = True
 
 -- |Whether the protocol version supports upgradable smart contracts.
 -- (Supported in 'P5' and onwards)
