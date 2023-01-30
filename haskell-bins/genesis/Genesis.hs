@@ -20,6 +20,7 @@ import qualified Data.Map.Strict as OrdMap
 import Data.Maybe
 import Data.Ratio
 import qualified Data.Serialize as S
+import Data.Singletons
 import Data.Time.Format
 import qualified Data.Vector as Vec
 import Lens.Micro.Platform
@@ -296,7 +297,9 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     Vec.imapM_ (\i k -> putStrLn $ "    " ++ show i ++ ": " ++ show k) asKeys
     printAccessStructure "emergency" asEmergency
     printAccessStructure "protocol" asProtocol
-    printAccessStructure "election difficulty" asParamElectionDifficulty
+    if isSupported PTElectionDifficulty (fromSing (sChainParametersVersionFor spv))
+        then printAccessStructure "election difficulty" asParamConsensusParameters
+        else printAccessStructure "consensus parameters" asParamConsensusParameters
     printAccessStructure "euro per energy" asParamEuroPerEnergy
     printAccessStructure "microGTU per euro" asParamMicroGTUPerEuro
     printAccessStructure "foundation account" asParamFoundationAccount
@@ -315,7 +318,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printInitialChainParametersV0 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
-        putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+        putStrLn $ "  - election difficulty: " ++ show (_cpElectionDifficulty _cpConsensusParameters)
         putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_erEuroPerEnergy _cpExchangeRates)
         putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_erMicroGTUPerEuro _cpExchangeRates)
         putStrLn $ "  - baker extra cooldown epochs: " ++ show (_cpBakerExtraCooldownEpochs _cpCooldownParameters)
@@ -344,7 +347,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printInitialChainParametersV1 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
-        putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+        putStrLn $ "  - election difficulty: " ++ show (_cpElectionDifficulty _cpConsensusParameters)
         putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. euroPerEnergy)
         putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
         printCooldownParametersV1 _cpCooldownParameters
@@ -362,7 +365,36 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
         putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
         putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
         putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
-        printTimeParametersV1 _cpTimeParameters
+        mapM_ printTimeParametersV1 _cpTimeParameters
+
+        let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
+                Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
+                Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
+        putStrLn $ "  - foundation account: " ++ foundAcc
+
+    printInitialChainParametersV2 :: ChainParameters' 'ChainParametersV2 -> IO ()
+    printInitialChainParametersV2 ChainParameters{..} = do
+        putStrLn ""
+        putStrLn "Chain parameters: "
+        putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. euroPerEnergy)
+        putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
+        printCooldownParametersV1 _cpCooldownParameters
+        putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+        printPoolParametersV1 _cpPoolParameters
+        putStrLn "  - reward parameters:"
+        putStrLn "    + mint distribution:"
+        putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
+        putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
+        putStrLn "    + transaction fee distribution:"
+        putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
+        putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
+        putStrLn "    + GAS rewards:"
+        putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
+        putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+        putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
+        putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
+        mapM_ printTimeParametersV1 _cpTimeParameters
+        printConsensusParametersV1 _cpConsensusParameters
 
         let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
                 Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
@@ -371,22 +403,38 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
 
     printInitialChainParameters :: IO ()
     printInitialChainParameters = do
-        case chainParametersVersionFor spv of
-            SCPV0 -> printInitialChainParametersV0 genesisChainParameters
-            SCPV1 -> printInitialChainParametersV1 genesisChainParameters
+        case sChainParametersVersionFor spv of
+            SChainParametersV0 -> printInitialChainParametersV0 genesisChainParameters
+            SChainParametersV1 -> printInitialChainParametersV1 genesisChainParameters
+            SChainParametersV2 -> printInitialChainParametersV2 genesisChainParameters
 
-printCooldownParametersV1 :: CooldownParameters 'ChainParametersV1 -> IO ()
+printCooldownParametersV1 ::
+    CooldownParameters' 'CooldownParametersVersion1 ->
+    IO ()
 printCooldownParametersV1 cp = do
     putStrLn $ "  - pool owner cooldown epochs: " ++ show (cp ^. cpPoolOwnerCooldown)
     putStrLn $ "  - delegator cooldown epochs: " ++ show (cp ^. cpDelegatorCooldown)
 
-printTimeParametersV1 :: TimeParameters 'ChainParametersV1 -> IO ()
+printTimeParametersV1 :: TimeParameters -> IO ()
 printTimeParametersV1 tp = do
     putStrLn $ "  - time parameters:"
     putStrLn $ "    + reward period length (in epochs): " ++ show (tp ^. tpRewardPeriodLength)
     putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpMintPerPayday)
 
-printPoolParametersV1 :: PoolParameters 'ChainParametersV1 -> IO ()
+printConsensusParametersV1 ::
+    ConsensusParameters' 'ConsensusParametersVersion1 ->
+    IO ()
+printConsensusParametersV1 ConsensusParametersV1{..} = do
+    putStrLn "    + Timing parameters:"
+    putStrLn $ "      * timeout base: " ++ show (_cpTimeoutParameters ^. tpTimeoutBase) ++ " ms"
+    putStrLn $ "      * timeout increase factor: " ++ show (_cpTimeoutParameters ^. tpTimeoutIncrease)
+    putStrLn $ "      * timeout decrease factor: " ++ show (_cpTimeoutParameters ^. tpTimeoutDecrease)
+    putStrLn $ "  + Minimum block time:" ++ show _cpMinBlockTime ++ " ms"
+    putStrLn $ "  + Block energy limit" ++ show _cpBlockEnergyLimit
+
+printPoolParametersV1 ::
+    PoolParameters' 'PoolParametersVersion1 ->
+    IO ()
 printPoolParametersV1 pp = do
     putStrLn $ "  - Passive delegation parameters:"
     putStrLn $

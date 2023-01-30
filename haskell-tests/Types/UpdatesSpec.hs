@@ -1,3 +1,4 @@
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-deprecations #-}
@@ -14,6 +15,7 @@ import Test.QuickCheck as QC
 
 import Concordium.Crypto.DummyData (genSigSchemeKeyPair)
 import qualified Concordium.Crypto.SignatureScheme as Sig
+import Concordium.Types.Parameters
 import Concordium.Types.ProtocolVersion
 import Concordium.Types.Updates
 
@@ -34,7 +36,7 @@ checkUpdateInstructionSerialization spv = checkSerialization (getUpdateInstructi
 -- we get back the value we started with.
 testSerializeUpdatePayload :: IsProtocolVersion pv => SProtocolVersion pv -> Property
 testSerializeUpdatePayload spv =
-    forAll (resize 50 $ genUpdatePayload $ chainParametersVersionFor spv) $ checkUpdatePayloadSerialization $ spv
+    forAll (resize 50 $ genUpdatePayload $ sChainParametersVersionFor spv) $ checkUpdatePayloadSerialization $ spv
 
 -- |Test that if we JSON-encode and decode an 'UpdatePayload',
 -- we get back the value we started with.
@@ -60,7 +62,7 @@ type SignKeyGen =
 -- The second argument indicates whether the signature should be valid.
 testUpdateInstruction :: forall pv. IsProtocolVersion pv => SProtocolVersion pv -> SignKeyGen -> Bool -> Property
 testUpdateInstruction spv keyGen isValid =
-    forAll (genKeyCollection @(ChainParametersVersionFor pv) 3) $ \(kc, rootK, level1K, level2K) ->
+    forAll (withIsAuthorizationsVersionForPV (protocolVersion @pv) $ genKeyCollection @(AuthorizationsVersionForPV pv) 3) $ \(kc, rootK, level1K, level2K) ->
         forAll (genRawUpdateInstruction scpv) $ \rui -> do
             let p = ruiPayload rui
             keysToSign <- case p of
@@ -72,7 +74,7 @@ testUpdateInstruction spv keyGen isValid =
                 label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate kc ui)
                     .&&. label "Serialization check" (checkUpdateInstructionSerialization spv ui)
   where
-    scpv = chainParametersVersionFor spv
+    scpv = sChainParametersVersionFor spv
     f :: UpdatePayload -> UpdateKeysCollection cpv -> [Sig.KeyPair] -> Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
     f pld ukc availableKeys = do
         let (keyIndices, thr) = extractKeysIndices pld ukc
@@ -133,12 +135,15 @@ combineKeys kg1 kg2 keys authIxs threshold = do
 
 tests :: Spec
 tests = parallel $ do
-    specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV0
-    specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SCPV1
+    specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV0
+    specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV1
+    specify "UpdatePayload JSON in CP2" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV2
     versionedTests SP1
     versionedTests SP2
     versionedTests SP3
     versionedTests SP4
+    versionedTests SP5
+    versionedTests SP6
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv

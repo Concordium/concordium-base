@@ -17,15 +17,15 @@ import Concordium.Types.Updates
 migrateAuthorizations ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    Authorizations (ChainParametersVersionFor oldpv) ->
-    Authorizations (ChainParametersVersionFor pv)
+    Authorizations (AuthorizationsVersionForPV oldpv) ->
+    Authorizations (AuthorizationsVersionForPV pv)
 migrateAuthorizations StateMigrationParametersTrivial auths = auths
 migrateAuthorizations StateMigrationParametersP1P2 auths = auths
 migrateAuthorizations StateMigrationParametersP2P3 auths = auths
 migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{..} =
     Authorizations
-        { asCooldownParameters = JustForCPV1 updateCooldownParametersAccessStructure,
-          asTimeParameters = JustForCPV1 updateTimeParametersAccessStructure,
+        { asCooldownParameters = CTrue updateCooldownParametersAccessStructure,
+          asTimeParameters = CTrue updateTimeParametersAccessStructure,
           ..
         }
   where
@@ -38,8 +38,8 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 migrateUpdateKeysCollection ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    UpdateKeysCollection (ChainParametersVersionFor oldpv) ->
-    UpdateKeysCollection (ChainParametersVersionFor pv)
+    UpdateKeysCollection (AuthorizationsVersionForPV oldpv) ->
+    UpdateKeysCollection (AuthorizationsVersionForPV pv)
 migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
     UpdateKeysCollection{level2Keys = migrateAuthorizations migration level2Keys, ..}
 
@@ -49,13 +49,13 @@ migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
 migrateMintDistribution ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    MintDistribution (ChainParametersVersionFor oldpv) ->
-    MintDistribution (ChainParametersVersionFor pv)
+    MintDistribution (MintDistributionVersionFor (ChainParametersVersionFor oldpv)) ->
+    MintDistribution (MintDistributionVersionFor (ChainParametersVersionFor pv))
 migrateMintDistribution StateMigrationParametersTrivial mint = mint
 migrateMintDistribution StateMigrationParametersP1P2 mint = mint
 migrateMintDistribution StateMigrationParametersP2P3 mint = mint
 migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
-    MintDistribution{_mdMintPerSlot = MintPerSlotForCPV0None, ..}
+    MintDistribution{_mdMintPerSlot = CFalse, ..}
 migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 
 -- |Apply a state migration to a 'PoolParameters' structure.
@@ -73,6 +73,18 @@ migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
     P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 
+-- |Apply a state migration to a 'GASRewards' structure.
+migrateGASRewards ::
+    forall oldpv pv.
+    StateMigrationParameters oldpv pv ->
+    GASRewards (GasRewardsVersionFor (ChainParametersVersionFor oldpv)) ->
+    GASRewards (GasRewardsVersionFor (ChainParametersVersionFor pv))
+migrateGASRewards StateMigrationParametersTrivial gr = gr
+migrateGASRewards StateMigrationParametersP1P2 gr = gr
+migrateGASRewards StateMigrationParametersP2P3 gr = gr
+migrateGASRewards StateMigrationParametersP3ToP4{} gr = gr
+migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
+
 -- |Apply a state migration to a 'ChainParameters' structure.
 --
 -- [P3 to P4]: the new cooldown, time and pool parameters are given by the migration parameters;
@@ -88,10 +100,11 @@ migrateChainParameters StateMigrationParametersP2P3 cps = cps
 migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParameters{..} =
     ChainParameters
         { _cpCooldownParameters = updateCooldownParameters,
-          _cpTimeParameters = updateTimeParameters,
+          _cpTimeParameters = SomeParam updateTimeParameters,
           _cpRewardParameters =
             RewardParameters
                 { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
                   ..
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,

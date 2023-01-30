@@ -28,7 +28,21 @@ import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
 import Concordium.Types.Execution (TransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
-import Concordium.Types.Parameters (ChainParameters', CooldownParameters, GASRewards, MintDistribution, PoolParameters, TimeParameters, TransactionFeeDistribution)
+import Concordium.Types.Parameters (
+    AuthorizationsVersion (..),
+    AuthorizationsVersionFor,
+    ChainParameters',
+    CooldownParameters,
+    GASRewards,
+    GASRewardsVersion (..),
+    MintDistribution,
+    MintDistributionVersion (..),
+    OParam (..),
+    PoolParameters,
+    TimeParameters,
+    TimeoutParameters,
+    TransactionFeeDistribution,
+ )
 import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
@@ -566,12 +580,12 @@ data PendingUpdateEffect
     | -- |Updates to the level 1 keys.
       PUELevel1Keys !(U.HigherLevelKeys U.Level1KeysKind)
     | -- |Updates to the level 2 keys.
-      PUELevel2KeysV0 !(U.Authorizations 'ChainParametersV0)
+      PUELevel2KeysV0 !(U.Authorizations 'AuthorizationsVersion0)
     | -- |Updates to the level 2 keys.
-      PUELevel2KeysV1 !(U.Authorizations 'ChainParametersV1)
+      PUELevel2KeysV1 !(U.Authorizations 'AuthorizationsVersion1)
     | -- |Protocol updates.
       PUEProtocol !U.ProtocolUpdate
-    | -- |Updates to the election difficulty parameter.
+    | -- |Updates to the election difficulty parameter for chain parameters versions 1-2.
       PUEElectionDifficulty !ElectionDifficulty
     | -- |Updates to the euro:energy exchange rate.
       PUEEuroPerEnergy !ExchangeRate
@@ -580,13 +594,15 @@ data PendingUpdateEffect
     | -- |Updates to the foundation account.
       PUEFoundationAccount !AccountAddress
     | -- |Updates to the mint distribution.
-      PUEMintDistributionV0 !(MintDistribution 'ChainParametersV0)
+      PUEMintDistributionV0 !(MintDistribution 'MintDistributionVersion0)
     | -- |Updates to the mint distribution.
-      PUEMintDistributionV1 !(MintDistribution 'ChainParametersV1)
+      PUEMintDistributionV1 !(MintDistribution 'MintDistributionVersion1)
     | -- |Updates to the transaction fee distribution.
       PUETransactionFeeDistribution !TransactionFeeDistribution
-    | -- |Updates to the GAS rewards.
-      PUEGASRewards !GASRewards
+    | -- |Updates to the GAS rewards in CPV0 and CPV1.
+      PUEGASRewardsV0 !(GASRewards 'GASRewardsVersion0)
+    | -- |Updates to the GAS rewards in CPV2.
+      PUEGASRewardsV1 !(GASRewards 'GASRewardsVersion1)
     | -- |Updates pool parameters.
       PUEPoolParametersV0 !(PoolParameters 'ChainParametersV0)
     | PUEPoolParametersV1 !(PoolParameters 'ChainParametersV1)
@@ -594,10 +610,16 @@ data PendingUpdateEffect
       PUEAddAnonymityRevoker !ARS.ArInfo
     | -- |Adds a new identity provider.
       PUEAddIdentityProvider !IPS.IpInfo
-    | -- |Updates to cooldown parameters for chain parameters version 1.
+    | -- |Updates to cooldown parameters for chain parameters version 1 and later.
       PUECooldownParameters !(CooldownParameters 'ChainParametersV1)
-    | -- |Updates to time parameters for chain parameters version 1.
-      PUETimeParameters !(TimeParameters 'ChainParametersV1)
+    | -- |Updates to time parameters for chain parameters version 1 and later.
+      PUETimeParameters !TimeParameters
+    | -- |Updates to the consensus timeouts for chain parameters version 2.
+      PUETimeoutParameters !TimeoutParameters
+    | -- |Updates to the the minimum time between blocks for chain parameters version 2.
+      PUEMinBlockTime !Duration
+    | -- |Updates to the block energy limit for chain parameters version 2.
+      PUEBlockEnergyLimit !Energy
 
 -- | Next available sequence numbers for updating any of the chain parameters.
 data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
@@ -629,10 +651,16 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       _nusnAddAnonymityRevoker :: !U.UpdateSequenceNumber,
       -- |Adds a new identity provider.
       _nusnAddIdentityProvider :: !U.UpdateSequenceNumber,
-      -- |Updates to cooldown parameters for chain parameters version 1.
+      -- |Updates to cooldown parameters for chain parameters version 1 onwards.
       _nusnCooldownParameters :: !U.UpdateSequenceNumber,
-      -- |Updates to time parameters for chain parameters version 1.
-      _nusnTimeParameters :: !U.UpdateSequenceNumber
+      -- |Updates to time parameters for chain parameters version 1 onwards.
+      _nusnTimeParameters :: !U.UpdateSequenceNumber,
+      -- |Updates to the consensus version 2 timeout parameters.
+      _nusnTimeoutParameters :: !U.UpdateSequenceNumber,
+      -- |Updates to the consensus version 2 minimum time between blocks.
+      _nusnMinBlockTime :: !U.UpdateSequenceNumber,
+      -- |Updates to the consensus version 2 block energy limit.
+      _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
@@ -645,7 +673,7 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnLevel1Keys = UQ._uqNextSequenceNumber _pLevel1KeysUpdateQueue,
           _nusnLevel2Keys = UQ._uqNextSequenceNumber _pLevel2KeysUpdateQueue,
           _nusnProtocol = UQ._uqNextSequenceNumber _pProtocolQueue,
-          _nusnElectionDifficulty = UQ._uqNextSequenceNumber _pElectionDifficultyQueue,
+          _nusnElectionDifficulty = mNextSequenceNumber _pElectionDifficultyQueue,
           _nusnEuroPerEnergy = UQ._uqNextSequenceNumber _pEuroPerEnergyQueue,
           _nusnMicroCCDPerEuro = UQ._uqNextSequenceNumber _pMicroGTUPerEuroQueue,
           _nusnFoundationAccount = UQ._uqNextSequenceNumber _pFoundationAccountQueue,
@@ -655,9 +683,17 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnPoolParameters = UQ._uqNextSequenceNumber _pPoolParametersQueue,
           _nusnAddAnonymityRevoker = UQ._uqNextSequenceNumber _pAddAnonymityRevokerQueue,
           _nusnAddIdentityProvider = UQ._uqNextSequenceNumber _pAddIdentityProviderQueue,
-          _nusnCooldownParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber _pCooldownParametersQueue,
-          _nusnTimeParameters = maybeForCPV1 1 UQ._uqNextSequenceNumber _pTimeParametersQueue
+          _nusnCooldownParameters = mNextSequenceNumber _pCooldownParametersQueue,
+          _nusnTimeParameters = mNextSequenceNumber _pTimeParametersQueue,
+          _nusnTimeoutParameters = mNextSequenceNumber _pTimeoutParametersQueue,
+          _nusnMinBlockTime = mNextSequenceNumber _pMinBlockTimeQueue,
+          _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue
         }
+  where
+    -- Get the next sequence number or 1, if not supported.
+    mNextSequenceNumber :: UQ.OUpdateQueue pt cpv e -> U.UpdateSequenceNumber
+    mNextSequenceNumber NoParam = 1
+    mNextSequenceNumber (SomeParam q) = UQ._uqNextSequenceNumber q
 
 -- | Information about a registered delegator in a block.
 data DelegatorInfo = DelegatorInfo
@@ -687,5 +723,5 @@ data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion).
       IsChainParametersVersion cpv =>
     EChainParametersAndKeys
     { ecpParams :: !(ChainParameters' cpv),
-      ecpKeys :: !(U.UpdateKeysCollection cpv)
+      ecpKeys :: !(U.UpdateKeysCollection (AuthorizationsVersionFor cpv))
     }
