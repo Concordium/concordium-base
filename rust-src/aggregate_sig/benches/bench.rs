@@ -92,7 +92,7 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
 fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
     let mut csprng = thread_rng();
     // number of signers for each message.
-    let num_signers = vec![50, 50, 50, 50];
+    let num_signers = vec![50, 50, 50];
     // number of messages (groups).
     let num_messages = num_signers.len();
     let ms: Vec<_> = n_rand_ms_of_length!(num_messages, 1000, csprng);
