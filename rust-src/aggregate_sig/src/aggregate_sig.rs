@@ -177,11 +177,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
 /// AggregateVerify from Section 3.1.1 and FastAggregateVerify from Section
 /// 3.3.4 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
 ///
-/// In particular, this function behaves as follows:
-///
-/// 1. If the list of messages is empty, return `false`.
-///
-/// 2. Otherwise, return:
+/// In particular, this function returns:
 ///
 /// ```
 /// pairing(sig, g_2) == ∏ᵢ pairing(H(mᵢ), ∑ⱼ pkᵢⱼ)
@@ -189,7 +185,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
 ///
 /// Each message should be associated with at least one key. However, the result
 /// of having a message with no keys will be the same as if the message was not
-/// included (except when there are no messages).
+/// included.
 ///
 /// For security, the holder of a key must be required to prove knowledge of the
 /// secret key.
@@ -201,10 +197,6 @@ pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
 ) -> bool {
-    // verifying against the empty set of signers always fails
-    if m_pk_pairs.is_empty() {
-        return false;
-    }
     let product = m_pk_pairs
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pks)| {
@@ -236,10 +228,6 @@ pub fn verify_aggregate_sig_hybrid_sequential<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
 ) -> bool {
-    // verifying against the empty set of signers always fails
-    if m_pk_pairs.is_empty() {
-        return false;
-    }
     let product = m_pk_pairs
         .iter()
         .fold(<P::TargetField as Field>::one(), |prod, (m, pks)| {

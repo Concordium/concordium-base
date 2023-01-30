@@ -92,24 +92,28 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
 fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
     let mut csprng = thread_rng();
     // number of signers for each message.
-    let num_signers = vec![50, 50, 50];
-    // number of messages (groups).
-    let num_messages = num_signers.len();
-    let ms: Vec<_> = n_rand_ms_of_length!(num_messages, 1000, csprng);
+    let num_signers = vec![200, 200];
+    // accumulator for the signature.
+    let mut agg_sig = Signature::<Bls12>::empty();
     // messages and pk pairs to verify
-    let mut m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::with_capacity(num_messages);
-    // make sure enough keys are generated....
-    let (sks, pks) = get_sks_pks!(num_signers.iter().sum(), csprng);
-    let mut agg_sig = sks[0].sign(&ms[0]);
-    for i in 0..num_messages {
-        for j in 1..num_signers[i] {
-            let new_sig = sks[j].sign(&ms[i]);
-            agg_sig = new_sig.aggregate(agg_sig);
-        }
-        let m_pk = (ms[i].as_slice(), pks.as_slice());
-        m_pk_pairs.push(m_pk);
-    }
-
+    let m_pk_pairs_vec: Vec<(Vec<u8>, Vec<PublicKey<Bls12>>)> = num_signers
+        .iter()
+        .map(|&num| {
+            // generate message and keys
+            let msg = rand_m_of_length!(1000, csprng);
+            let (sks, pks) = get_sks_pks!(num, csprng);
+            // aggregate the signatures with each keypair
+            for sk in sks {
+                let new_sig = sk.sign(&msg);
+                agg_sig = new_sig.aggregate(agg_sig);
+            }
+            (msg, pks)
+        })
+        .collect();
+    let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs_vec
+        .iter()
+        .map(|(msg, pk)| (msg.as_slice(), pk.as_slice()))
+        .collect();
     // Benchmarking sequential version vs. parallel version.
     let mut group = c.benchmark_group("verify_aggregate_sig_hybrid");
     group.bench_function("parallel", |b| {

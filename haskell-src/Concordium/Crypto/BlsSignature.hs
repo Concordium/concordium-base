@@ -308,16 +308,11 @@ verifyAggregate m pks sig = unsafePerformIO $ do
 -- |Verify an aggregate signature on (potentially) multiple messages by multiple keys.
 -- Each message is grouped with the set of keys that signed it.
 --
--- The following preconditions apply:
---
--- * The list of messages MUST be non-empty. (If not, the signature will be rejected.)
---
--- * The public keys MUST have been (proved to be) derived from secret keys. (Otherwise, the
---   guarantee of the signature system does not necessarily hold.)
+-- The public keys MUST have been (proved to be) derived from secret keys. (Otherwise, the
+-- guarantee of the signature system does not necessarily hold.)
 --
 -- It is recommended that messages with no keys should not be included, although this is not
--- a strict requirement, as the result will be the same if they are removed (unless there
--- are no messages remaining).
+-- a strict requirement, as the result will be the same if they are removed.
 --
 -- From a security perspective, it may be problematic if a public key occurs more than once, so
 -- this should be avoided unless you know what you are doing.
