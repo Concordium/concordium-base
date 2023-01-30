@@ -300,12 +300,13 @@ pub extern "C" fn ip_info_cdi_verify_key(
 }
 
 /// Attempt to create an [`ArInfo`] instance from byte array pointers.
-/// Assumes that:
-///  - public_key_ptr points to a serialized PublicKey<G1> instance,
-///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
-/// and that each [`size_t`] parameter with the the _len suffix holds the
-/// length of its correspondingly named byte array. Returns a null-pointer
-/// if an input could not be deserialized.
+/// Returns a raw pointer to an [`ArInfo`] instance if
+///  - `public_key_ptr` points to a serialized `elgamal::PublicKey<G1>`
+///    instance,
+///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+/// each [`size_t`] parameter with the the `_len` suffix holds the length of
+/// its correspondingly named byte array. Returns a null-pointer if a parameter
+/// could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn ar_info_create(
     identity: u32,
@@ -336,11 +337,13 @@ unsafe extern "C" fn ar_info_create(
 }
 
 /// Attempt to create an [`ArInfo`] instance from byte array pointers.
-/// Assumes that:
-///  - public_key_ptr points to a serialized PublicKey<G1> instance,
-///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
-/// and that each [`size_t`] parameter with the the _len suffix holds the
-/// length of its correspondingly named byte array.
+/// Returns [`Ok`] if
+///  - `public_key_ptr` points to a serialized `elgamal::PublicKey<G1>`
+///    instance,
+///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+/// each [`size_t`] parameter with the the `_len` suffix holds the length of
+/// its correspondingly named byte array. Returns [`Err`] if a parameter could
+/// not be deserialized.
 #[allow(clippy::too_many_arguments)]
 fn ar_info_create_helper(
     identity: u32,
@@ -394,13 +397,13 @@ fn ar_info_create_helper(
 }
 
 /// Attempt to create a [`GlobalContext`] instance from byte array pointers.
-/// Assumes that:
-///  - genesis_string_ptr points to a serialized utf8 string,
-///  - bulletproof_generators_ptr to a serialized Generators<G1> instance,
-///  - on_chain_commitments to a serialized PedersenKey<G1> instance,
-/// and that each [`size_t`] parameter with the the _len suffix holds the
-/// length of its correspondingly named byte array. Returns a null-pointer
-/// if an input could not be deserialized.
+/// Returns a raw pointer to a [`GlobalContext`] instance if
+///  - `genesis_string_ptr` points to a serialized utf8 string,
+///  - `bulletproof_generators_ptr` to a serialized `Generators<G1>` instance,
+///  - `on_chain_commitments` to a serialized `CommitmentKey<G1>` instance, and
+/// each [`size_t`] parameter with the the `_len` suffix holds the length of its
+/// correspondingly named byte array. Returns a null-pointer if a parameter
+/// could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn global_context_create(
     genesis_string_ptr: *const u8,
@@ -425,12 +428,13 @@ unsafe extern "C" fn global_context_create(
 }
 
 /// Attempt to create a [`GlobalContext`] instance from byte array pointers.
-/// Assumes that:
-///  - genesis_string_ptr points to a serialized utf8 string,
-///  - bulletproof_generators_ptr to a serialized Generators<G1> instance,
-///  - on_chain_commitments to a serialized PedersenKey<G1> instance,
-/// and that each [`size_t`] parameter with the the _len suffix holds the
-/// length of its correspondingly named byte array.
+/// Returns [`Ok`] if
+///  - `genesis_string_ptr points` to a serialized utf8 string,
+///  - `bulletproof_generators_ptr` to a serialized `Generators<G1>` instance,
+///  - `on_chain_commitments` to a serialized `CommitmentKey<G1>` instance, and
+/// each [`size_t`] parameter with the the `_len` suffix holds the length
+/// of its correspondingly named byte array. Returns [`Err`] if a parameter
+/// could not be deserialized.
 fn global_context_create_helper(
     genesis_string_ptr: *const u8,
     genesis_string_len: size_t,
@@ -463,7 +467,8 @@ fn global_context_create_helper(
         let commitment_key_buf =
             &mut slice_from_c_bytes!(on_chain_commitment_ptr, on_chain_commitment_len as usize);
         from_bytes::<PedersenKey<G1>, &[u8]>(commitment_key_buf).context(
-            "Unable to create PedersenKey<G1> instance from byte array at on_chain_commitment_ptr.",
+            "Unable to create CommitmentKey<G1> instance from byte array at \
+             on_chain_commitment_ptr.",
         )?
     };
 
@@ -475,13 +480,14 @@ fn global_context_create_helper(
 }
 
 /// Attempt to create an [`IpInfo`] instance from byte array pointers.
-/// Assumes that:
-///  - verify_key_ptr points to a serialized ps_sig::PublicKey<Bls12> instance,
-///  - cdi_verify_key_ptr to a serialized ed25519_dalek::PublicKey instance,
-///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
-/// and that each [`size_t`] parameter with the the _len suffix holds the
-/// length of its correspondingly named byte array. Returns a null-pointer
-/// if an input could not be deserialized.
+/// Returns a raw pointer to an [`IpInfo`] instance if
+///  - `verify_key_ptr` points to a serialized `ps_sig::PublicKey<Bls12>`
+///    instance,
+///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
+///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+/// each [`size_t`] parameter with the the `_len` suffix holds the length of its
+/// correspondingly named byte array. Returns a null-pointer if a parameter
+/// could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn ip_info_create(
     identity: u32,
@@ -516,12 +522,14 @@ unsafe extern "C" fn ip_info_create(
 }
 
 /// Attempt to create an [`IpInfo`] instance from byte array pointers.
-/// Assumes that:
-///  - verify_key_ptr points to a serialized ps_sig::PublicKey<Bls12> instance,
-///  - cdi_verify_key_ptr to a serialized ed25519_dalek::PublicKey instance,
-///  - name_ptr, url_ptr and desc_ptr to serialized utf8 strings,
-/// and that each [`size_t`] parameter with the the _len suffix holds the
-/// length of its correspondingly named byte array.
+/// Returns [`Ok`] if
+///  - `verify_key_ptr` points to a serialized `ps_sig::PublicKey<Bls12>`
+///    instance,
+///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
+///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+/// each [`size_t`] parameter with the the `_len` suffix holds the length of its
+/// correspondingly named byte array. Returns [`Err`] if a parameter could not
+/// be deserialized.
 #[allow(clippy::too_many_arguments)]
 fn ip_info_create_helper(
     identity: u32,
