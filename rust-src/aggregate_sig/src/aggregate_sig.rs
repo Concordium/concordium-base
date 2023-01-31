@@ -187,6 +187,9 @@ pub fn verify_aggregate_sig<P: Pairing>(
 ///
 /// For security, the holder of a key must be required to prove knowledge of the
 /// secret key.
+/// Precondition:
+/// There must be at least one message, at least one key for each message and
+/// each key may only occur once.
 pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
