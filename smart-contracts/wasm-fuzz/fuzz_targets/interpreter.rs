@@ -1,10 +1,10 @@
 #![no_main]
 
+use concordium_smart_contract_engine_fuzz::*;
 /// Fuzz target for the Wasm smart-contract interpreter to test parsing,
 /// validation, metering injection, Wasm code generation, and init/receive
 /// function execution.
 use libfuzzer_sys::fuzz_target;
-use wasm_chain_integration_fuzz::*;
 
 use concordium_smart_contract_engine::*;
 use concordium_wasm::{

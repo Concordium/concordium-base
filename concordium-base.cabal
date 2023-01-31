@@ -83,7 +83,6 @@ library
       Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
-      Concordium.Types.ProtocolVersion.JustForCPV1
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
       Concordium.Types.SeedState
@@ -153,6 +152,9 @@ library
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -215,6 +217,9 @@ executable generate-update-keys
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -272,6 +277,9 @@ executable genesis
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -353,6 +361,9 @@ test-suite test
     , proto-lens-runtime >=0.7
     , random
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -410,6 +421,9 @@ benchmark bls-perf
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -465,6 +479,9 @@ benchmark ed25519-perf
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -520,6 +537,9 @@ benchmark ed25519dlog-perf
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -575,6 +595,9 @@ benchmark sha256-perf
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8
@@ -630,6 +653,9 @@ benchmark verify-credential-perf
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
+    , singletons
+    , singletons-base
+    , singletons-th
     , template-haskell >=2.14
     , text >=1.2
     , time >=1.8

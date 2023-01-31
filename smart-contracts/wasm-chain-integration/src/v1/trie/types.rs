@@ -78,7 +78,7 @@ pub(crate) const INLINE_STEM_LENGTH: usize = 0b0011_1111;
 
 /// A trait that supports keeping track of resources during tree traversal, to
 /// make sure that resource bounds are not exceeded.
-pub trait TraversalCounter {
+pub(crate) trait TraversalCounter {
     type Err: std::fmt::Debug;
     /// Count for traversing the given number of chunks of the key.
     /// See [MutableTrie::next](super::low_level::MutableTrie::next) for details
@@ -95,7 +95,7 @@ pub trait AllocCounter<V> {
 
 /// A [counter](TraversalCounter) that does not count anything, and always
 /// returns `Ok(())`.
-pub struct EmptyCounter;
+pub(crate) struct EmptyCounter;
 #[derive(Debug, Copy, Clone, Error)]
 /// An error that cannot happen, i.e., this type is not inhabited and is used as
 /// an error type of an operation that cannot fail.

@@ -2742,7 +2742,7 @@ impl MutableTrie {
     /// - either an error caused by the counter
     /// - an error caused by attempting to modify a locked part of the tree
     /// - otherwise return whether anything was deleted
-    pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
+    pub(crate) fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,
         key: &[u8],
