@@ -299,6 +299,8 @@ mod test {
         }
     }
 
+    // Verify that an aggregate signature created from two message groups each
+    // signed by two keys can be succesfully verified.
     #[test]
     fn test_verify_aggregate_hybrid_ffi() {
         let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
