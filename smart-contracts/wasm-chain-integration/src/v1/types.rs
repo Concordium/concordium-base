@@ -4,8 +4,6 @@ use super::{
 };
 use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
 use anyhow::{bail, ensure, Context};
-#[cfg(feature = "fuzz")]
-use arbitrary::Arbitrary;
 use concordium_contracts_common::OwnedEntrypointName;
 use concordium_wasm::{
     artifact::TryFromImport,
@@ -18,30 +16,44 @@ use derive_more::{From, Into};
 use serde::Deserialize as SerdeDeserialize;
 
 /// Maximum length, in bytes, of an export function name.
-pub const MAX_EXPORT_NAME_LEN: usize = 100;
+pub(crate) const MAX_EXPORT_NAME_LEN: usize = 100;
 
 pub type ReturnValue = Vec<u8>;
 
 #[derive(Debug)]
+/// Result of execution of the contract's init function.
 pub enum InitResult {
+    /// Execution succeeded and a new instance is to be created.
     Success {
+        /// Logs produced by the execution.
         logs:             v0::Logs,
+        /// The return value produced by execution.
         return_value:     ReturnValue,
-        remaining_energy: u64,
+        /// The remaining interpreter energy after execution.
+        remaining_energy: InterpreterEnergy,
         /// Initial state of the contract.
         state:            MutableState,
     },
+    /// Execution failed due to the initialization function's logic.
     Reject {
+        /// Error code returned by the init function.
         reason:           i32,
+        /// Return value produced. This would typically be an a serialization of
+        /// an error variant providing more details than the error code, but in
+        /// principle it is arbitrary.
         return_value:     ReturnValue,
-        remaining_energy: u64,
+        /// The remaining interpreter energy after execution.
+        remaining_energy: InterpreterEnergy,
     },
     /// Execution stopped due to a runtime error.
     Trap {
+        /// The error returned by the Wasm interpreter.
         error:            anyhow::Error, /* this error is here so that we can print it in
                                           * cargo-concordium */
-        remaining_energy: u64,
+        /// The remaining interpreter energy after execution.
+        remaining_energy: InterpreterEnergy,
     },
+    /// Execution exceeded its allocated energy bound and was terminated.
     OutOfEnergy,
 }
 
@@ -59,7 +71,7 @@ impl InitResult {
                 .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
-                out[1..].copy_from_slice(&remaining_energy.to_be_bytes());
+                out[1..].copy_from_slice(&remaining_energy.energy.to_be_bytes());
                 (out, None, None)
             }
             InitResult::Reject {
@@ -70,7 +82,7 @@ impl InitResult {
                 let mut out = Vec::with_capacity(13);
                 out.push(2);
                 out.extend_from_slice(&reason.to_be_bytes());
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 (out, None, Some(return_value))
             }
             InitResult::Success {
@@ -82,7 +94,7 @@ impl InitResult {
                 let mut out = Vec::with_capacity(5 + 8);
                 out.push(3);
                 out.extend_from_slice(&logs.to_bytes());
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 (out, Some(state), Some(return_value))
             }
         }
@@ -108,6 +120,7 @@ pub struct SavedHost<Ctx> {
     pub(crate) iterators:          Vec<Option<trie::Iterator>>,
 }
 
+/// Chain context accessible to receive methods of V1 contracts.
 #[derive(SerdeDeserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiveContext<Policies> {
@@ -283,7 +296,7 @@ impl<R> ReceiveResult<R> {
 #[derive(Clone, Copy, Debug)]
 /// An enumeration of functions that can be used both by init and receive
 /// methods.
-pub enum CommonFunc {
+pub(crate) enum CommonFunc {
     GetParameterSize,
     GetParameterSection,
     GetPolicySection,
@@ -314,14 +327,14 @@ pub enum CommonFunc {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 /// An enumeration of functions that can be used only by init methods.
-pub enum InitOnlyFunc {
+pub(crate) enum InitOnlyFunc {
     GetInitOrigin,
 }
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 /// An enumeration of functions that can be used only by receive methods.
-pub enum ReceiveOnlyFunc {
+pub(crate) enum ReceiveOnlyFunc {
     Invoke,
     GetReceiveInvoker,
     GetReceiveSelfAddress,
@@ -336,7 +349,7 @@ pub enum ReceiveOnlyFunc {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 /// Enumeration of allowed imports.
-pub enum ImportFunc {
+pub(crate) enum ImportFunc {
     /// Charge for execution cost.
     ChargeEnergy,
     /// Track calling a function, increasing the activation frame count.
@@ -455,6 +468,9 @@ impl Output for ImportFunc {
 }
 
 #[derive(Debug)]
+/// Imports allowed for `v1` contracts processed into a format that is faster to
+/// use during execution. Instead of keeping names of imports they are processed
+/// into an enum with integer tags.
 pub struct ProcessedImports {
     pub(crate) tag: ImportFunc,
     ty:             FunctionType,
@@ -886,7 +902,7 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     }
 
     /// Migrate the [`InstanceState`] to a new generation.
-    pub fn migrate(
+    pub(crate) fn migrate(
         state_updated: bool,
         current_generation: InstanceCounter,
         entry_mapping: Vec<trie::EntryId>,

@@ -2,6 +2,15 @@ use anyhow::bail;
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, Parameter, Timestamp,
 };
+use concordium_smart_contract_engine::{
+    constants::MAX_ACTIVATION_FRAMES,
+    utils::TestHost,
+    v0::{
+        ConcordiumAllowedImports, InitContext, InitHost, ProcessedImports, ReceiveContext,
+        ReceiveHost, State,
+    },
+    InterpreterEnergy,
+};
 use concordium_wasm::{
     artifact::{ArtifactNamedImport, TryFromImport},
     machine::{Host, NoInterrupt, Value},
@@ -10,15 +19,6 @@ use concordium_wasm::{
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::Duration;
-use wasm_chain_integration::{
-    constants::MAX_ACTIVATION_FRAMES,
-    utils::TestHost,
-    v0::{
-        ConcordiumAllowedImports, InitContext, InitHost, Logs, Outcome, PolicyBytes,
-        ProcessedImports, ReceiveContext, ReceiveHost, State,
-    },
-    InterpreterEnergy,
-};
 
 static CONTRACT_BYTES_SIMPLE_GAME: &[u8] = include_bytes!("./simple_game.wasm");
 static CONTRACT_BYTES_COUNTER: &[u8] = include_bytes!("./counter.wasm");
@@ -394,7 +394,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .run(&mut host, name, args)
                         .expect_err("Precondition violation, did not terminate with an error.");
                     assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(),
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(),
                         "Execution did not fail due to out of energy: {}",
                         r
                     )
@@ -543,36 +543,29 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             sender_policies: &[],
         };
 
-        let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<PolicyBytes<'_>>> {
-            InitHost {
-                energy: InterpreterEnergy {
+        let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<_>> {
+            InitHost::init(
+                InterpreterEnergy {
                     energy: nrg * 1000,
                 },
-                activation_frames: MAX_ACTIVATION_FRAMES,
-                logs: Logs::new(),
-                state: State::new(None),
-                param: Parameter::from(&[] as &[u8]),
-                init_ctx: &init_ctx,
-                limit_logs_and_return_values: false,
-            }
+                Parameter::from(&[] as &[u8]),
+                &init_ctx,
+                false,
+            )
         };
 
-        let setup_receive_host =
-            |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<PolicyBytes<'_>>> {
-                ReceiveHost {
-                    energy: InterpreterEnergy {
-                        energy: nrg * 1000,
-                    },
-                    activation_frames: MAX_ACTIVATION_FRAMES,
-                    logs: Logs::new(),
-                    state,
-                    param,
-                    outcomes: Outcome::new(),
-                    receive_ctx: &receive_ctx,
-                    max_parameter_size: u16::MAX.into(),
-                    limit_logs_and_return_values: false,
-                }
-            };
+        let setup_receive_host = |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<_>> {
+            ReceiveHost::init(
+                InterpreterEnergy {
+                    energy: nrg * 1000,
+                },
+                state,
+                param,
+                &receive_ctx,
+                u16::MAX.into(),
+                false,
+            )
+        };
 
         let run_init = |name, args| {
             // since we move the rest of the variables we must first take a reference to
@@ -585,7 +578,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     .run(&mut host, name, args)
                     .expect_err("Execution should fail due to out of energy.");
                 assert!(
-                    r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
+                    r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
                     "Execution did not fail due to out of energy: {}.",
                     r
                 );
@@ -605,7 +598,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         .run(&mut host, name, args)
                         .expect_err("Execution should fail due to out of energy.");
                     assert!(
-                        r.downcast_ref::<wasm_chain_integration::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
+                        r.downcast_ref::<concordium_smart_contract_engine::OutOfEnergy>().is_some(), /* Should fail due to out of energy. */
                         "Execution did not fail due to out of energy: {}.",
                         r
                     );

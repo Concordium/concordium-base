@@ -1,3 +1,30 @@
+//! Implementation of execution of V1 contracts.
+//!
+//! This contains only the execution of the Wasm parts and does not include the
+//! handling of invoked operations (e.g., calling another contract, sending
+//! transfers). That is handled by a separate scheduler component.
+//!
+//! The main entrypoints in this module are
+//! - [`invoke_init`] for invoking an init function to create a new instance
+//! - [`invoke_receive`] for invoking an entrypoint of an existing instance
+//! - [`resume_receive`] for resuming execution of an interrupted entrypoint
+//!
+//! These methods are intended to be used on [`Artifact`]'s obtained using
+//! [`instantiate_with_metering`](utils::instantiate_with_metering) using
+//! [`ConcordiumAllowedImports`] for handling imports.
+//!
+//! In addition to the above methods there are auxiliary helpers
+//! - [`invoke_init_from_artifact`] and [`invoke_receive_from_artifact`] which
+//!   first parse an [`Artifact`] and then run the corresponding `invoke_*`
+//!   function.
+//! - [`invoke_init_from_source`] and [`invoke_receive_from_source`] which first
+//!   parse and validate a Wasm module, then convert it to an [`Artifact`], and
+//!   then run it using the appropriate `invoke_*` function.
+//! - [`invoke_init_with_metering_from_source`] and
+//!   [`invoke_receive_with_metering_from_source`] which first parse and
+//!   validate the Wasm module, then inject cost metering instructions, and then
+//!   convert it to an [`Artifact`] and run it using the appropriate `invoke_*`
+//!   function.
 #[cfg(test)]
 mod crypto_primitives_tests;
 #[cfg(test)]
@@ -156,7 +183,7 @@ impl Interrupt {
 /// This keeps track of the current state and logs, gives access to the context,
 /// and makes sure that execution stays within resource bounds dictated by
 /// allocated energy.
-pub struct InitHost<'a, BackingStore, ParamType, Ctx> {
+pub(crate) struct InitHost<'a, BackingStore, ParamType, Ctx> {
     /// Remaining energy for execution.
     pub energy:                   InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -202,6 +229,8 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
 /// This keeps track of the current state and logs, gives access to the context,
 /// and makes sure that execution stays within resource bounds dictated by
 /// allocated energy.
+#[doc(hidden)] // Needed in benchmarks, but generally should not be used by
+               // users of the library.
 pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
     pub energy:    InterpreterEnergy,
     pub stateless: StateLessReceiveHost<ParamType, Ctx>,
@@ -213,6 +242,8 @@ pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
 /// This part is not changed during the handling of the interrupt, however
 /// before execution resumes, after returning from handling of the interrupt,
 /// the logs and parameters are set appropriately.
+#[doc(hidden)] // Needed in benchmarks, but generally should not be used by
+               // users of the library.
 pub struct StateLessReceiveHost<ParamType, Ctx> {
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
@@ -336,7 +367,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn write_return_value(
+    pub(crate) fn write_return_value(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -363,7 +394,7 @@ mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `invoke` host function.
-    pub fn invoke(
+    pub(crate) fn invoke(
         support_queries: bool,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
@@ -461,7 +492,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Get the parameter size. This differs from the v0 version in that it
     /// expects an argument on the stack to indicate which parameter to use.
-    pub fn get_parameter_size(
+    pub(crate) fn get_parameter_size(
         stack: &mut machine::RuntimeStack,
         parameters: &[impl AsRef<[u8]>],
     ) -> machine::RunResult<()> {
@@ -479,7 +510,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Get the parameter section. This differs from the v0 version in that it
     /// expects an argument on the stack to indicate which parameter to use.
-    pub fn get_parameter_section(
+    pub(crate) fn get_parameter_section(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -507,7 +538,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_lookup_entry` host function. See
     /// [InstanceState::lookup_entry] for detailed documentation.
-    pub fn state_lookup_entry<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_lookup_entry<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -527,7 +558,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_create_entry` host function. See
     /// [InstanceState::create_entry] for detailed documentation.
-    pub fn state_create_entry<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_create_entry<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -547,7 +578,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_delete_entry` host function. See
     /// [InstanceState::delete_entry] for detailed documentation.
-    pub fn state_delete_entry<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_delete_entry<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -567,7 +598,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_delete_prefix` host function. See
     /// [InstanceState::delete_prefix] for detailed documentation.
-    pub fn state_delete_prefix<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_delete_prefix<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -588,7 +619,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_iterator` host function. See
     /// [InstanceState::iterator] for detailed documentation.
-    pub fn state_iterator<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -608,7 +639,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_iterator_next` host function. See
     /// [InstanceState::iterator_next] for detailed documentation.
-    pub fn state_iterator_next<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_next<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -621,7 +652,7 @@ mod host {
 
     /// Handle the `state_iterator_delete` host function. See
     /// [InstanceState::iterator_delete] for detailed documentation.
-    pub fn state_iterator_delete<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_delete<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -635,7 +666,7 @@ mod host {
     /// Handle the `state_iterator_key_size` host function. See
     /// [InstanceState::iterator_key_size] for detailed documentation.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn state_iterator_key_size<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_key_size<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -651,7 +682,7 @@ mod host {
 
     /// Handle the `state_iterator_key_read` host function. See
     /// [InstanceState::iterator_key_read] for detailed documentation.
-    pub fn state_iterator_key_read<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_key_read<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -672,7 +703,7 @@ mod host {
 
     /// Handle the `state_entry_read` host function. See
     /// [InstanceState::entry_read] for detailed documentation.
-    pub fn state_entry_read<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_read<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -693,7 +724,7 @@ mod host {
 
     /// Handle the `state_entry_write` host function. See
     /// [InstanceState::entry_write] for detailed documentation.
-    pub fn state_entry_write<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_write<BackingStore: BackingStoreLoad>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -716,7 +747,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_entry_size` host function. See
     /// [InstanceState::entry_size] for detailed documentation.
-    pub fn state_entry_size<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_size<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -731,7 +762,7 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_entry_resize` host function. See
     /// [InstanceState::entry_resize] for detailed documentation.
-    pub fn state_entry_resize<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_resize<BackingStore: BackingStoreLoad>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -746,7 +777,7 @@ mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `get_receive_entrypoint_size` host function.
-    pub fn get_receive_entrypoint_size(
+    pub(crate) fn get_receive_entrypoint_size(
         stack: &mut machine::RuntimeStack,
         entrypoint: EntrypointName,
     ) -> machine::RunResult<()> {
@@ -757,7 +788,7 @@ mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `get_receive_entrypoint` host function.
-    pub fn get_receive_entrypoint(
+    pub(crate) fn get_receive_entrypoint(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         entrypoint: EntrypointName,
@@ -773,7 +804,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn verify_ed25519_signature(
+    pub(crate) fn verify_ed25519_signature(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -810,7 +841,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn verify_ecdsa_secp256k1_signature(
+    pub(crate) fn verify_ecdsa_secp256k1_signature(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -847,7 +878,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn hash_sha2_256(
+    pub(crate) fn hash_sha2_256(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -867,7 +898,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn hash_sha3_256(
+    pub(crate) fn hash_sha3_256(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -887,7 +918,7 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub fn hash_keccak_256(
+    pub(crate) fn hash_keccak_256(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -908,7 +939,7 @@ mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `upgrade` host function.
-    pub fn upgrade(
+    pub(crate) fn upgrade(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -1301,14 +1332,14 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
                     Ok(InitResult::Success {
                         logs,
                         return_value,
-                        remaining_energy,
+                        remaining_energy: remaining_energy.into(),
                         state: initial_state,
                     })
                 } else {
                     Ok(InitResult::Reject {
                         reason: reason_from_wasm_error_code(n)?,
                         return_value,
-                        remaining_energy,
+                        remaining_energy: remaining_energy.into(),
                     })
                 }
             } else {
@@ -1325,7 +1356,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
             } else {
                 Ok(InitResult::Trap {
                     error,
-                    remaining_energy,
+                    remaining_energy: remaining_energy.into(),
                 })
             }
         }
@@ -1355,8 +1386,12 @@ pub enum InvokeFailure {
     SendingV0Failed,
     /// Invoking a contract failed with a runtime error.
     RuntimeError,
+    /// The module to upgrade to does not exist.
     UpgradeInvalidModuleRef,
+    /// The upgrade attempted to upgrade to a module which does not have the
+    /// the required contract.
     UpgradeInvalidContractName,
+    /// Attempt to upgrade a V1 contract to a V0 contract.
     UpgradeInvalidVersion,
 }
 
@@ -1471,7 +1506,7 @@ pub struct InvokeFromArtifactCtx<'a> {
     pub energy:    InterpreterEnergy,
 }
 
-/// Invokes an init-function from a given artifact *bytes*
+/// Invokes an init-function from a given **serialized** artifact.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
     ctx: InvokeFromArtifactCtx,
@@ -1513,7 +1548,7 @@ pub struct InvokeFromSourceCtx<'a> {
     pub support_upgrade: bool,
 }
 
-/// Invokes an init-function from Wasm module bytes
+/// Invokes an init-function from a **serialized** Wasm module.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     ctx: InvokeFromSourceCtx,
@@ -1707,7 +1742,7 @@ pub struct ReceiveInvocation<'a> {
     pub energy:       InterpreterEnergy,
 }
 
-/// Invokes an receive-function from a given artifact
+/// Invokes a receive-function from a given [artifact](Artifact).
 pub fn invoke_receive<
     BackingStore: BackingStoreLoad,
     R1: RunnableCode,
@@ -1743,7 +1778,8 @@ pub fn invoke_receive<
 }
 
 /// Resume execution of the receive method after handling the interrupt.
-/// The arguments
+///
+/// The arguments are as follows
 ///
 /// - `interrupted_state` is the state of execution that is captured when we
 ///   started handling the interrupt
@@ -1752,9 +1788,10 @@ pub fn invoke_receive<
 /// - `state_trie` is the current state of the contract instance, **after**
 ///   handling the interrupt
 /// - `state_updated` indicates whether the state of the instance has changed
-///   during handling of the operation This can currently only happen if there
+///   during handling of the operation. This can currently only happen if there
 ///   is re-entrancy, i.e., if during handling of the interrupt the instance
-///   that invoked it is itself again invoked.
+///   that invoked it is itself again invoked. Note that this indicates only
+///   **state changes**. Amount changes are no reflected in this.
 /// - `backing_store` gives access to any on-disk storage for the instance
 ///   state.
 pub fn resume_receive<BackingStore: BackingStoreLoad>(
@@ -1831,7 +1868,7 @@ fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
     Ok(n)
 }
 
-/// Invokes an receive-function from a given artifact *bytes*
+/// Invokes a receive-function from a given **serialized** artifact.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_artifact<
     'a,
@@ -1860,7 +1897,7 @@ pub fn invoke_receive_from_artifact<
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes.
+/// Invokes a receive-function from a given **serialized** Wasm module.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_from_source<
     BackingStore: BackingStoreLoad,
@@ -1893,8 +1930,8 @@ pub fn invoke_receive_from_source<
     )
 }
 
-/// Invokes an receive-function from Wasm module bytes, injects the module with
-/// metering.
+/// Invokes a receive-function from a given **serialized** Wasm module. Before
+/// execution the Wasm module is injected with cost metering.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
 pub fn invoke_receive_with_metering_from_source<
     BackingStore: BackingStoreLoad,
