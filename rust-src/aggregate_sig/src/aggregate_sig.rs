@@ -179,9 +179,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
 ///
 /// In particular, this function returns:
 ///
-/// ```
 /// pairing(sig, g_2) == ∏ᵢ pairing(H(mᵢ), ∑ⱼ pkᵢⱼ)
-/// ```
 ///
 /// Each message should be associated with at least one key. However, the result
 /// of having a message with no keys will be the same as if the message was not
