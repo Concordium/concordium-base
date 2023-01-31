@@ -114,13 +114,9 @@ fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
         .iter()
         .map(|(msg, pk)| (msg.as_slice(), pk.as_slice()))
         .collect();
-    // Benchmarking sequential version vs. parallel version.
     let mut group = c.benchmark_group("verify_aggregate_sig_hybrid");
     group.bench_function("parallel", |b| {
         b.iter(|| verify_aggregate_sig_hybrid(&m_pk_pairs, agg_sig))
-    });
-    group.bench_function("sequential", |b| {
-        b.iter(|| verify_aggregate_sig_hybrid_sequential(&m_pk_pairs, agg_sig))
     });
     group.finish();
 }

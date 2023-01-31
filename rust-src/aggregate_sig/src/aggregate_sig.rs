@@ -189,10 +189,6 @@ pub fn verify_aggregate_sig<P: Pairing>(
 ///
 /// For security, the holder of a key must be required to prove knowledge of the
 /// secret key.
-///
-/// While it is possible for a key to occur more than once (either signing the
-/// same or different messages), this could have an effect on the security
-/// guarantees, and so is not recommended.
 pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
@@ -220,26 +216,6 @@ pub fn verify_aggregate_sig_hybrid<P: Pairing>(
             p
         });
 
-    P::pair(&signature.0, &P::G2::one_point()) == product
-}
-
-/// A sequential version of 'verify_aggregate_sig_hybrid'.
-pub fn verify_aggregate_sig_hybrid_sequential<P: Pairing>(
-    m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
-    signature: Signature<P>,
-) -> bool {
-    let product = m_pk_pairs
-        .iter()
-        .fold(<P::TargetField as Field>::one(), |prod, (m, pks)| {
-            let sum_pk_i = pks
-                .iter()
-                .fold(P::G2::zero_point(), |s, x| s.plus_point(&x.0));
-            let g1_hash = P::G1::hash_to_group(m);
-            let paired = P::pair(&g1_hash, &sum_pk_i);
-            let mut p = prod;
-            p.mul_assign(&paired);
-            p
-        });
     P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
