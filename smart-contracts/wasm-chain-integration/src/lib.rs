@@ -1,4 +1,4 @@
-//! This library provides functionality that builds on top of the Wasm engine
+//! This library provides functionality that builds on top of the [Wasm engine](https://docs.rs/concordium-wasm)
 //! and adds high-level functions for executing smart contracts on the
 //! Concordium chain.
 //!

@@ -7,7 +7,7 @@
 //!
 //! During transaction execution we first [`thaw`](PersistentState::thaw) into a
 //! [`MutableState`] on the first use of the state in the transaction. The
-//! [`MutableState`] is designed for efficient sharing and rollabacks in case of
+//! [`MutableState`] is designed for efficient sharing and rollbacks in case of
 //! execution failure. For each part of execution, e.g., when starting execution
 //! of an entrypoint, the [`MutableState`] is locked and the underlying
 //! [`MutableTrie`] is obtained, via [`get_inner`](MutableState::get_inner) and

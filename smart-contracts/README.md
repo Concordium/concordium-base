@@ -93,7 +93,7 @@ by Nick Fitzerald.
 
 So far the fuzzer discovered three [bugs](wasm-chain-integration/fuzz/fixed_artifacts/interpreter), which we fixed.
 
- ## Software requirements
+## Software requirements
 - [cargo-fuzz](https://crates.io/crates/cargo-fuzz) 
 - for generating coverage information:
   * [cargo-cov](https://crates.io/crates/cargo-cov) (`cargo install cargo-cov`)

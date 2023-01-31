@@ -1,5 +1,5 @@
 [package]
-name = "wasm-chain-integration-fuzz"
+name = "concordium-smart-contract-engine-fuzz"
 version = "0.0.1"
 authors = ["Automatically generated"]
 publish = false

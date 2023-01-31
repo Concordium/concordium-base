@@ -3,7 +3,28 @@
 //! This contains only the execution of the Wasm parts and does not include the
 //! handling of invoked operations (e.g., calling another contract, sending
 //! transfers). That is handled by a separate scheduler component.
-
+//!
+//! The main entrypoints in this module are
+//! - [`invoke_init`] for invoking an init function to create a new instance
+//! - [`invoke_receive`] for invoking an entrypoint of an existing instance
+//! - [`resume_receive`] for resuming execution of an interrupted entrypoint
+//!
+//! These methods are intended to be used on [`Artifact`]'s obtained using
+//! [`instantiate_with_metering`](utils::instantiate_with_metering) using
+//! [`ConcordiumAllowedImports`] for handling imports.
+//!
+//! In addition to the above methods there are auxiliary helpers
+//! - [`invoke_init_from_artifact`] and [`invoke_receive_from_artifact`] which
+//!   first parse an [`Artifact`] and then run the corresponding `invoke_*`
+//!   function.
+//! - [`invoke_init_from_source`] and [`invoke_receive_from_source`] which first
+//!   parse and validate a Wasm module, then convert it to an [`Artifact`], and
+//!   then run it using the appropriate `invoke_*` function.
+//! - [`invoke_init_with_metering_from_source`] and
+//!   [`invoke_receive_with_metering_from_source`] which first parse and
+//!   validate the Wasm module, then inject cost metering instructions, and then
+//!   convert it to an [`Artifact`] and run it using the appropriate `invoke_*`
+//!   function.
 #[cfg(test)]
 mod crypto_primitives_tests;
 #[cfg(test)]
@@ -1365,7 +1386,7 @@ pub enum InvokeFailure {
     SendingV0Failed,
     /// Invoking a contract failed with a runtime error.
     RuntimeError,
-    /// The module to upgrade
+    /// The module to upgrade to does not exist.
     UpgradeInvalidModuleRef,
     /// The upgrade attempted to upgrade to a module which does not have the
     /// the required contract.
@@ -1721,7 +1742,7 @@ pub struct ReceiveInvocation<'a> {
     pub energy:       InterpreterEnergy,
 }
 
-/// Invokes a receive-function from a given artifact
+/// Invokes a receive-function from a given [artifact](Artifact).
 pub fn invoke_receive<
     BackingStore: BackingStoreLoad,
     R1: RunnableCode,

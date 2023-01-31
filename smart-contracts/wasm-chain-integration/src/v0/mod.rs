@@ -1,4 +1,25 @@
 //! Implementation of execution of V0 contracts.
+//!
+//! The main entrypoints in this module are
+//! - [`invoke_init`] for invoking an init function to create a new instance
+//! - [`invoke_receive`] for invoking an entrypoint of an existing instance
+//!
+//! These methods are intended to be used on [`Artifact`]'s obtained using
+//! [`instantiate_with_metering`](utils::instantiate_with_metering) using
+//! [`ConcordiumAllowedImports`] for handling imports.
+//!
+//! In addition to the above methods there are auxiliary helpers
+//! - [`invoke_init_from_artifact`] and [`invoke_receive_from_artifact`] which
+//!   first parse an [`Artifact`] and then run the corresponding `invoke_*`
+//!   function.
+//! - [`invoke_init_from_source`] and [`invoke_receive_from_source`] which first
+//!   parse and validate a Wasm module, then convert it to an [`Artifact`], and
+//!   then run it using the appropriate `invoke_*` function.
+//! - [`invoke_init_with_metering_from_source`] and
+//!   [`invoke_receive_with_metering_from_source`] which first parse and
+//!   validate the Wasm module, then inject cost metering instructions, and then
+//!   convert it to an [`Artifact`] and run it using the appropriate `invoke_*`
+//!   function.
 
 #[cfg(feature = "enable-ffi")]
 pub(crate) mod ffi;
