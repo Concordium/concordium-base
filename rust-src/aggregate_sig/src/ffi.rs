@@ -275,7 +275,7 @@ mod test {
 
     #[test]
     fn test_verify_aggregate_ffi() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
 
         for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
@@ -303,7 +303,7 @@ mod test {
     // signed by two keys can be succesfully verified.
     #[test]
     fn test_verify_aggregate_hybrid_ffi() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
 
         for _ in 0..100 {
             let m1 = rng.gen::<[u8; 32]>();

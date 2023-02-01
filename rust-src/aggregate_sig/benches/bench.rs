@@ -89,35 +89,50 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
     });
 }
 
+// Benchmarking the time that it takes to verify an aggregated signature
+// over groups of messages.
+// In particular this is used by the consensus layer when verifying timeout- and
+// quorum certificates.
+// Note that the sum of 'num_signers' below correspond to the number
+// of members in the finalization committee who participated
+// in signing either a quorum- or timeout certificate.
+// Note. The benchmark measures groups of different sizes,
+// but always only with two groups. This is because it is very unlikely
+// that there ever will be more than two groups in reality.
+// In fact if messages are well propagated on the network, there will
+// most likely be one group only.
 fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
     let mut csprng = thread_rng();
     // number of signers for each message.
-    let num_signers = vec![200, 200];
-    // accumulator for the signature.
-    let mut agg_sig = Signature::<Bls12>::empty();
-    // messages and pk pairs to verify
-    let m_pk_pairs_vec: Vec<(Vec<u8>, Vec<PublicKey<Bls12>>)> = num_signers
-        .iter()
-        .map(|&num| {
-            // generate message and keys
-            let msg = rand_m_of_length!(1000, csprng);
-            let (sks, pks) = get_sks_pks!(num, csprng);
-            // aggregate the signatures with each keypair
-            for sk in sks {
-                let new_sig = sk.sign(&msg);
-                agg_sig = new_sig.aggregate(agg_sig);
-            }
-            (msg, pks)
-        })
-        .collect();
-    let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs_vec
-        .iter()
-        .map(|(msg, pk)| (msg.as_slice(), pk.as_slice()))
-        .collect();
     let mut group = c.benchmark_group("verify_aggregate_sig_hybrid");
-    group.bench_function("parallel", |b| {
-        b.iter(|| verify_aggregate_sig_hybrid(&m_pk_pairs, agg_sig))
-    });
+    let no_signers = vec![10, 20, 40, 100, 200, 400];
+    for n in no_signers {
+        let num_signers = vec![n, n];
+        // accumulator for the signature.
+        let mut agg_sig = Signature::<Bls12>::empty();
+        // messages and pk pairs to verify
+        let m_pk_pairs_vec: Vec<(Vec<u8>, Vec<PublicKey<Bls12>>)> = num_signers
+            .iter()
+            .map(|&num| {
+                // generate message and keys
+                let msg = rand_m_of_length!(1000, csprng);
+                let (sks, pks) = get_sks_pks!(num, csprng);
+                // aggregate the signatures with each keypair
+                for sk in sks {
+                    let new_sig = sk.sign(&msg);
+                    agg_sig = new_sig.aggregate(agg_sig);
+                }
+                (msg, pks)
+            })
+            .collect();
+        let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs_vec
+            .iter()
+            .map(|(msg, pk)| (msg.as_slice(), pk.as_slice()))
+            .collect();
+        group.bench_function(format!("parallel-{}", n), |b| {
+            b.iter(|| verify_aggregate_sig_hybrid(&m_pk_pairs, agg_sig))
+        });
+    }
     group.finish();
 }
 

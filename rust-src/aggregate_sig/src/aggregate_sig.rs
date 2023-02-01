@@ -181,7 +181,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
 ///
 /// pairing(sig, g_2) == ∏ᵢ pairing(H(mᵢ), ∑ⱼ pkᵢⱼ)
 ///
-/// Each message should be associated with at least one key. However, the result
+/// Each message must be associated with at least one key. However, the result
 /// of having a message with no keys will be the same as if the message was not
 /// included.
 ///
@@ -190,6 +190,8 @@ pub fn verify_aggregate_sig<P: Pairing>(
 /// Precondition:
 /// There must be at least one message, at least one key for each message and
 /// each key may only occur once.
+/// Note. This will accept a signature on the empty list. But this violates the
+/// precondition stated above.
 pub fn verify_aggregate_sig_hybrid<P: Pairing>(
     m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
     signature: Signature<P>,
@@ -277,7 +279,7 @@ mod test {
     use super::*;
     use pairing::bls12_381::Bls12;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
-    use std::{convert::TryFrom, slice::from_ref};
+    use std::convert::TryFrom;
 
     const SIGNERS: usize = 500;
     const TEST_ITERATIONS: usize = 10;
@@ -345,7 +347,7 @@ mod test {
             let mut m_pk_pairs2: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::new();
             for i in 0..SIGNERS {
                 m_pk_pairs.push((&ms[i], pks[i].clone()));
-                m_pk_pairs2.push((&ms[i], from_ref(&pks[i])));
+                m_pk_pairs2.push((&ms[i], std::slice::from_ref(&pks[i])));
             }
 
             // signature should verify
@@ -356,7 +358,7 @@ mod test {
             let (_, pks_) = m_pk_pairs2.pop().unwrap();
             let new_pk = PublicKey::<Bls12>::from_secret(&SecretKey::<Bls12>::generate(&mut rng));
             m_pk_pairs.push((m_, new_pk));
-            m_pk_pairs2.push((m_, from_ref(&new_pk)));
+            m_pk_pairs2.push((m_, std::slice::from_ref(&new_pk)));
 
             // altering a public key should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
