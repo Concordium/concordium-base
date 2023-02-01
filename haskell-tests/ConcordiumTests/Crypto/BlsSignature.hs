@@ -1,12 +1,15 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-deprecations #-}
 
 module ConcordiumTests.Crypto.BlsSignature where
 
 import Concordium.Crypto.BlsSignature
 import Concordium.Crypto.DummyData
+import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
 import Data.Serialize
+import Data.Word
 import Test.Hspec
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
@@ -17,11 +20,29 @@ genSecretKey = secretBlsKeyGen
 genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
+-- |Generates keypairs and messages.
+-- The messages have a size of up to 100 bytes each.
+-- Each message is associated with up to 10 key pairs.
+--
+-- The keypairs and messages are constructed in this way,
+-- since we're simulating that the same message may be signed by multiple key pairs.
+-- Hence this generator creates groupings of key pairs on messages.
+genKeyPairsAndMessages :: Gen [([(SecretKey, PublicKey)], [Word8])]
+genKeyPairsAndMessages = do
+    n <- choose (10, 20)
+    replicateM n $ do
+        kps <- resize 10 $ listOf genKeyPair
+        m :: [Word8] <- resize 100 arbitrary
+        return (kps, m)
+
 forAllSK :: Testable prop => (SecretKey -> prop) -> Property
 forAllSK = forAll genSecretKey
 
 forAllKP :: Testable prop => ((SecretKey, PublicKey) -> prop) -> Property
 forAllKP = forAll genKeyPair
+
+forAllKPsAndMessages :: Testable prop => ([([(SecretKey, PublicKey)], [Word8])] -> prop) -> Property
+forAllKPsAndMessages = forAll genKeyPairsAndMessages
 
 -- Checks that two different keys doesn't produce the same signature on the same
 -- message
@@ -39,6 +60,14 @@ testNoSignatureCollision = forAllSK $ \key m1 m2 ->
 testSignAndVerify :: Property
 testSignAndVerify = forAllKP $ \(sk, pk) m ->
     verify (BS.pack m) pk (sign (BS.pack m) sk)
+
+testVerifyAggratedSigHybrid :: Property
+testVerifyAggratedSigHybrid = forAllKPsAndMessages $ \keyPairsAndMessages ->
+    let sigs = map (\(sks, m) -> (map (\(sk, _) -> sign (BS.pack m) sk) sks)) keyPairsAndMessages
+        sig = aggregateMany $ aggregateMany <$> sigs
+        ms = map (BS.pack . snd) keyPairsAndMessages
+        pks = map (map snd . fst) keyPairsAndMessages
+    in  verifyAggregateHybrid (zip ms pks) sig
 
 testSignAndVerifyCollision :: Property
 testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
@@ -110,6 +139,7 @@ tests = describe "Concordium.Crypto.BlsSignature" $ do
     it "bls_key_collision" $ withMaxSuccess 10000 $ testKeyCollision
     it "bls_signature_collision" $ withMaxSuccess 10000 $ testNoSignatureCollision
     it "bls_sign_and_verify" $ withMaxSuccess 10000 $ testSignAndVerify
+    it "bls_verify_aggregated_sig_hybrid" $ withMaxSuccess 1000 $ testVerifyAggratedSigHybrid
     it "bls_sign_and_verify_collision" $ withMaxSuccess 10000 $ testSignAndVerifyCollision
     it "bls_serialize_sk" $ withMaxSuccess 10000 $ testSerializeSecretKey
     it "bls_serialize_pk" $ withMaxSuccess 10000 $ testSerializePublicKey
