@@ -12,7 +12,7 @@ use derive_more::{AsRef, Display, From, FromStr, Into};
 use num::ToPrimitive;
 use num_bigint::BigUint;
 use num_traits::Zero;
-use std::{convert::TryFrom, ops, str::FromStr};
+use std::{convert::TryFrom, fmt::Display, ops, str::FromStr};
 use thiserror::*;
 
 /// CIS-2 token amount with serialization as according to CIS-2.
@@ -80,6 +80,53 @@ impl TokenAmount {
             }
         }
     }
+}
+
+/// Full address of a token.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
+pub struct TokenAddress {
+    /// Address of the instance to which the token belongs.
+    contract: ContractAddress,
+    /// The id of the token inside the instance.
+    id:       TokenId,
+}
+
+impl TryFrom<&str> for TokenAddress {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let bytes = bs58::decode(value).with_check(Some(2)).into_vec()?;
+        if let Some((&2, mut source)) = bytes.split_first() {
+            let index = leb128::read::unsigned(&mut source)?;
+            let subindex = leb128::read::unsigned(&mut source)?;
+            let id = TokenId::new(source.to_vec())?;
+            Ok(Self {
+                contract: ContractAddress::new(index, subindex),
+                id,
+            })
+        } else {
+            // This is not necessary, since bs58 checks that the version is there and equal
+            // to 2. But it is satisfying to fail gracefully instead of
+            // panicking.
+            anyhow::bail!("Version 2 expected.")
+        }
+    }
+}
+
+impl Display for TokenAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut bytes = Vec::new();
+        leb128::write::unsigned(&mut bytes, self.contract.index).map_err(|_| std::fmt::Error)?;
+        leb128::write::unsigned(&mut bytes, self.contract.subindex).map_err(|_| std::fmt::Error)?;
+        bytes.extend_from_slice(self.id.as_ref());
+        f.write_str(&bs58::encode(bytes).with_check_version(2).into_string())
+    }
+}
+
+impl FromStr for TokenAddress {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
 
 impl TryFrom<String> for TokenAmount {
@@ -198,6 +245,7 @@ impl Deserial for TokenAmount {
     Clone,
     Into,
     AsRef,
+    Hash,
     crypto_common::SerdeSerialize,
     crypto_common::SerdeDeserialize,
 )]
@@ -994,7 +1042,7 @@ fn display_address(a: &Address) -> String {
 mod test {
     use super::*;
     use crate::smart_contracts::concordium_contracts_common::{from_bytes, to_bytes};
-    use rand::{rngs::SmallRng, RngCore, SeedableRng};
+    use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 
     #[test]
     fn test_serialize_zero_token_amount() {
@@ -1068,5 +1116,64 @@ mod test {
         assert_eq!(amount.to_decimal_string(1), "1200.0");
         assert_eq!(amount.to_decimal_string(3), "12.0");
         assert_eq!(amount.to_decimal_string(4), "1.2");
+    }
+
+    #[test]
+    fn test_token_address_string_conversion() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            for _ in 0..100 {
+                let index = rng.gen();
+                let subindex = rng.gen();
+                let len = rng.gen::<u8>().into();
+                let mut id = Vec::with_capacity(len);
+                for _ in 0..len {
+                    id.push(rng.gen());
+                }
+                let id = TokenId(id);
+                let addr = TokenAddress {
+                    contract: ContractAddress::new(index, subindex),
+                    id,
+                };
+                let converted = addr
+                    .to_string()
+                    .parse::<TokenAddress>()
+                    .expect("Parsing succeeds.");
+                assert_eq!(addr, converted, "Parsing is not an inverse of serializing.")
+            }
+        }
+    }
+
+    #[test]
+    fn test_token_address_string_examples() {
+        let addr = TokenAddress {
+            contract: ContractAddress::new(0, 0),
+            id:       "".parse().unwrap(),
+        };
+        assert_eq!(addr.to_string(), "5Pxr5EUtU",);
+
+        let addr = TokenAddress {
+            contract: ContractAddress::new(0, 0),
+            id:       "aa".parse().unwrap(),
+        };
+        assert_eq!(addr.to_string(), "LQMMu3bAg7",);
+
+        let addr = TokenAddress {
+            contract: ContractAddress::new(1, 0),
+            id:       "".parse().unwrap(),
+        };
+        assert_eq!(addr.to_string(), "5QTdu98KF",);
+
+        let addr = TokenAddress {
+            contract: ContractAddress::new(1, 0),
+            id:       "aa".parse().unwrap(),
+        };
+        assert_eq!(addr.to_string(), "LSYqgoQcb6",);
+
+        let addr = TokenAddress {
+            contract: ContractAddress::new(1, 0),
+            id:       "0a".parse().unwrap(),
+        };
+        assert_eq!(addr.to_string(), "LSYXivPSWP",);
     }
 }
