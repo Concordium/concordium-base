@@ -91,15 +91,27 @@ pub struct TokenAddress {
     id:       TokenId,
 }
 
+#[derive(Debug, Error)]
+pub enum ParseTokenAddressError {
+    #[error("Invalid base58 check encoding: {0}.")]
+    InvalidBase58Check(#[from] bs58::decode::Error),
+    #[error("The contract address could not be parsed.")]
+    InvalidContractAddress,
+    #[error("The token id could not be parsed.")]
+    InvalidTokenId,
+}
+
 impl TryFrom<&str> for TokenAddress {
-    type Error = anyhow::Error;
+    type Error = ParseTokenAddressError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let bytes = bs58::decode(value).with_check(Some(2)).into_vec()?;
         if let Some((&2, mut source)) = bytes.split_first() {
-            let index = leb128::read::unsigned(&mut source)?;
-            let subindex = leb128::read::unsigned(&mut source)?;
-            let id = TokenId::new(source.to_vec())?;
+            let index = leb128::read::unsigned(&mut source)
+                .map_err(|_| Self::Error::InvalidContractAddress)?;
+            let subindex = leb128::read::unsigned(&mut source)
+                .map_err(|_| Self::Error::InvalidContractAddress)?;
+            let id = TokenId::new(source.to_vec()).map_err(|_| Self::Error::InvalidTokenId)?;
             Ok(Self {
                 contract: ContractAddress::new(index, subindex),
                 id,
@@ -108,7 +120,18 @@ impl TryFrom<&str> for TokenAddress {
             // This is not necessary, since bs58 checks that the version is there and equal
             // to 2. But it is satisfying to fail gracefully instead of
             // panicking.
-            anyhow::bail!("Version 2 expected.")
+            if let Some(&ver) = bytes.first() {
+                Err(Self::Error::InvalidBase58Check(
+                    bs58::decode::Error::InvalidVersion {
+                        ver,
+                        expected_ver: 2,
+                    },
+                ))
+            } else {
+                Err(Self::Error::InvalidBase58Check(
+                    bs58::decode::Error::BufferTooSmall,
+                ))
+            }
         }
     }
 }
@@ -124,7 +147,7 @@ impl Display for TokenAddress {
 }
 
 impl FromStr for TokenAddress {
-    type Err = anyhow::Error;
+    type Err = ParseTokenAddressError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
