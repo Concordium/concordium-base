@@ -1261,12 +1261,12 @@ impl Generation {
 
 #[derive(Debug, Clone)]
 /// A mutable trie that exists during execution of a smart contract.
-/// Generally the [MutableTrie] is derived from a [Node], i.e., a persistent
+/// Generally the [`MutableTrie`] is derived from a [`Node`], i.e., a persistent
 /// trie. After that, during execution, some parts are modified. When that
 /// happens the relevant part of the trie are copied so that the original
 /// persistent trie remains unmodified.
-/// In contrast to the [Node], all modifications on values purely owned by the
-/// [MutableTrie] are in-place, i.e., this structure is not persistent.
+/// In contrast to the [`Node`], all modifications on values purely owned by the
+/// [`MutableTrie`] are in-place, i.e., this structure is not persistent.
 ///
 /// At the end of execution this trie is [frozen](MutableTrie::freeze) to obtain
 /// a new persistent trie.
@@ -1485,7 +1485,11 @@ impl Node {
     }
 
     #[cfg(feature = "display-state")]
-    pub fn display_tree(&self, builder: &mut TreeBuilder, loader: &mut impl BackingStoreLoad) {
+    pub(crate) fn display_tree(
+        &self,
+        builder: &mut TreeBuilder,
+        loader: &mut impl BackingStoreLoad,
+    ) {
         let value = if let Some(ref value) = self.value {
             let value_ref = value.borrow();
             let value = value_ref.get(loader);
@@ -1506,7 +1510,7 @@ impl Node {
 }
 
 impl Hashed<Node> {
-    pub fn store_update<S: BackingStoreStore>(
+    pub(crate) fn store_update<S: BackingStoreStore>(
         &mut self,
         backing_store: &mut S,
     ) -> Result<Vec<u8>, WriteError> {
@@ -1515,7 +1519,7 @@ impl Hashed<Node> {
         Ok(buf)
     }
 
-    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
+    pub(crate) fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -1524,7 +1528,7 @@ impl Hashed<Node> {
         self.data.store_update_buf(backing_store, buf)
     }
 
-    pub fn migrate<S: BackingStoreStore, L: BackingStoreLoad, W: std::io::Write>(
+    pub(crate) fn migrate<S: BackingStoreStore, L: BackingStoreLoad, W: std::io::Write>(
         &self,
         backing_store: &mut S,
         loader: &mut L,
@@ -1540,20 +1544,11 @@ impl Hashed<Node> {
 }
 
 impl Node {
-    pub fn store_update<S: BackingStoreStore>(
-        &mut self,
-        backing_store: &mut S,
-    ) -> Result<Vec<u8>, WriteError> {
-        let mut buf = Vec::new();
-        self.store_update_buf(backing_store, &mut buf)?;
-        Ok(buf)
-    }
-
     /// Store the node into the provided `buf`, and store and children
     /// (transitively) into the provided `backing_store`. Only the children that
     /// are not yet cached are stored. This modifies the node recursively so
     /// that children pointers are [CachedRef::Cached] or [CachedRef::Disk].
-    pub fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
+    pub(crate) fn store_update_buf<S: BackingStoreStore, W: std::io::Write>(
         &mut self,
         backing_store: &mut S,
         buf: &mut W,
@@ -1675,7 +1670,7 @@ impl Node {
     ///
     /// This is used during protocol updates to migrate state from one database
     /// to another.
-    pub fn migrate<S: BackingStoreStore, L: BackingStoreLoad, W: std::io::Write>(
+    pub(crate) fn migrate<S: BackingStoreStore, L: BackingStoreLoad, W: std::io::Write>(
         &self,
         backing_store: &mut S,
         loader: &mut L,
@@ -1901,7 +1896,8 @@ impl Entry {
 type Position = u8;
 
 #[derive(Debug)]
-pub struct Iterator {
+/// An iterator over a portion of the [`MutableTrie`].
+pub(crate) struct Iterator {
     /// The root of the iterator. This is stored to allow removal of the
     /// iterator.
     root:         Box<[u8]>,
@@ -2054,6 +2050,7 @@ impl Node {
 }
 
 impl MutableTrie {
+    /// Construct an empty [`MutableTrie`] with a single generation.
     pub fn empty() -> Self {
         Self {
             generations:     vec![Generation::new(None)],
@@ -2074,7 +2071,7 @@ impl MutableTrie {
     /// be affected.
     /// The effects of this method can be undone with
     /// [`pop_generation`](Self::pop_generation).
-    pub fn new_generation(&mut self) {
+    pub(crate) fn new_generation(&mut self) {
         let num_nodes = self.nodes.len();
         let num_values = self.values.len();
         let num_borrowed_nodes = self.borrowed_values.len();
@@ -2105,7 +2102,8 @@ impl MutableTrie {
     /// Pop a generation, removing all data that is only accessible from the
     /// most recent generation. Return [None] if no generations are left.
     /// Inverse to [`new_generation`](Self::new_generation).
-    pub fn pop_generation(&mut self) -> Option<()> {
+    #[cfg(test)]
+    pub(crate) fn pop_generation(&mut self) -> Option<()> {
         let generation = self.generations.pop()?;
         let checkpoint = generation.checkpoint;
         self.nodes.truncate(checkpoint.num_nodes);
@@ -2120,7 +2118,7 @@ impl MutableTrie {
     /// nothing. More recent generations are all dropped.
     /// Analogous to [`pop_generation`](Self::pop_generation) except it
     /// can be used to forget multiple generations more efficiently.
-    pub fn normalize(&mut self, root: u32) {
+    pub(crate) fn normalize(&mut self, root: u32) {
         let new_len = root as usize + 1;
         let generation = self.generations.get(new_len);
         if let Some(generation) = generation {
@@ -2137,7 +2135,7 @@ impl MutableTrie {
     /// mutable. The counter is invoked in case a copy of the entry must be made
     /// and gives the caller the ability to terminate if too much data must
     /// be copied.
-    pub fn get_mut<A: AllocCounter<Vec<u8>>>(
+    pub(crate) fn get_mut<A: AllocCounter<Vec<u8>>>(
         &mut self,
         entry: EntryId,
         loader: &mut impl BackingStoreLoad,
@@ -2200,7 +2198,7 @@ impl MutableTrie {
     /// The return value is an `Err` if the resource counter signals resource
     /// exhaustion. Otherwise it is `None` if there is no further value to
     /// be given out, and a pointer to an entry in case there is.
-    pub fn next<L: BackingStoreLoad, C: TraversalCounter>(
+    pub(crate) fn next<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,
         iterator: &mut Iterator,
@@ -2254,7 +2252,7 @@ impl MutableTrie {
 
     /// Deletes an iterator.
     /// If an iterator was deleted then return `true` otherwise `false`.
-    pub fn delete_iter(&mut self, iterator: &Iterator) -> bool {
+    pub(crate) fn delete_iter(&mut self, iterator: &Iterator) -> bool {
         let generations = &mut self.generations;
         if let Some(generation) = generations.last_mut() {
             generation.iterator_roots.delete(iterator.get_root())
@@ -2263,7 +2261,7 @@ impl MutableTrie {
         }
     }
 
-    pub fn iter(
+    pub(crate) fn iter(
         &mut self,
         loader: &mut impl BackingStoreLoad,
         key: &[u8],
@@ -2744,7 +2742,7 @@ impl MutableTrie {
     /// - either an error caused by the counter
     /// - an error caused by attempting to modify a locked part of the tree
     /// - otherwise return whether anything was deleted
-    pub fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
+    pub(crate) fn delete_prefix<L: BackingStoreLoad, C: TraversalCounter>(
         &mut self,
         loader: &mut L,
         key: &[u8],

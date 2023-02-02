@@ -1,16 +1,21 @@
-use std::sync::Arc;
-
+//! This module defines the notion of suspended Wasm computation
+//! used by V1 contracts to execute host operations such as transfers and
+//! contract calls.
 use crate::ExecResult;
 use concordium_wasm::{
     artifact::{Artifact, RunnableCode, TryFromImport},
     machine::{ExecutionOutcome, Host, RunConfig},
 };
+use std::sync::Arc;
 
 /// Interrupted state of the computation that may be resumed.
 #[derive(Debug)]
 pub struct InterruptedState<Imports, R, Host> {
+    /// The [`Host`] that was used for execution that was interrupted.
     pub(crate) host:     Host,
+    /// The artifact that is running.
     pub(crate) artifact: Arc<Artifact<Imports, R>>,
+    /// The runtime configuration at the time the interrupt was triggered.
     pub(crate) config:   RunConfig,
 }
 

@@ -26,6 +26,12 @@ checkJSONToFromIsIdentityV1 cp = do
         AE.Error err -> counterexample err False
         AE.Success jsonCp -> cp === jsonCp
 
+checkJSONToFromIsIdentityV2 :: GenesisChainParameters' 'ChainParametersV2 -> Property
+checkJSONToFromIsIdentityV2 cp = do
+    case AE.fromJSON (AE.toJSON cp) of
+        AE.Error err -> counterexample err False
+        AE.Success jsonCp -> cp === jsonCp
+
 testJSON :: ChainParametersVersion -> Int -> Int -> Spec
 testJSON cpv size num =
     modifyMaxSuccess (const num) $
@@ -35,6 +41,8 @@ testJSON cpv size num =
                     forAll (resize size genGenesisChainParametersV0) checkJSONToFromIsIdentityV0
                 ChainParametersV1 ->
                     forAll (resize size genGenesisChainParametersV1) checkJSONToFromIsIdentityV1
+                ChainParametersV2 ->
+                    forAll (resize size genGenesisChainParametersV2) checkJSONToFromIsIdentityV2
 
 tests :: Spec
 tests = do
@@ -43,3 +51,5 @@ tests = do
         testJSON ChainParametersV0 50 500
         testJSON ChainParametersV1 25 1000
         testJSON ChainParametersV1 50 500
+        testJSON ChainParametersV2 25 1000
+        testJSON ChainParametersV2 50 500

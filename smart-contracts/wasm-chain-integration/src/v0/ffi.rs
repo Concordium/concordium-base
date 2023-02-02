@@ -1,6 +1,5 @@
 use crate::v0::*;
 use concordium_wasm::{artifact::CompiledFunctionBytes, output::Output, utils::parse_artifact};
-use ffi_helpers::{slice_from_c_bytes, slice_from_c_bytes_worker};
 use libc::size_t;
 
 /// All functions in this module operate on serialized artifact bytes. For
@@ -9,6 +8,19 @@ use libc::size_t;
 /// are not interruptable/resumable, no references to or copies of the artifact
 /// are retained after execution.
 type BorrowedArtifactV0<'a> = Artifact<ProcessedImports, CompiledFunctionBytes<'a>>;
+
+macro_rules! slice_from_c_bytes {
+    ($cstr:expr, $length:expr) => {{
+        if $length != 0 {
+            debug_assert!(!$cstr.is_null(), "Null pointer.");
+            std::slice::from_raw_parts($cstr, $length)
+        } else {
+            &[]
+        }
+    }};
+}
+
+pub(crate) use slice_from_c_bytes;
 
 #[no_mangle]
 unsafe extern "C" fn call_init_v0(

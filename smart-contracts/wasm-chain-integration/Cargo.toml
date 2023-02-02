@@ -1,6 +1,6 @@
 [package]
-name = "wasm-chain-integration"
-version = "0.2.0"
+name = "concordium-smart-contract-engine"
+version = "1.0.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
@@ -8,10 +8,11 @@ license-file = "../../LICENSE"
 [features]
 # If this feature is enabled  the ffi exports are going to be produced
 # for use from Haskell.
-enable-ffi = ["ffi_helpers"]
-default=["enable-ffi"]
-fuzz = ["arbitrary", "wasm-smith", "wasmprinter"]
+enable-ffi = []
+default=[]
 fuzz-coverage = ["concordium-wasm/fuzz-coverage"]
+fuzz = ["arbitrary", "concordium-contracts-common/fuzz"]
+# Expose helpers for displaying the state of a V1 contract.
 display-state = ["ptree"]
 # enable construction of the state from streams.
 async = ["futures"]
@@ -33,10 +34,7 @@ tinyvec = {version = "1.5", features = ["alloc"]}
 slab = "0.4.5"
 ptree = { version = "0.4.0", optional = true }
 futures = {version = "0.3", optional = true }
-
-arbitrary = { version = "0.4.6", features = ["derive"], optional = true }
-wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing", optional = true }
-wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", branch = "main", optional = true }
+arbitrary = { version = "0.4", features = ["derive"], optional = true }
 rand = { version = "=0.8", features = ["small_rng"] }
 
 [dependencies.concordium-wasm]
@@ -47,10 +45,6 @@ version = "1"
 version = "5"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
-
-[dependencies.ffi_helpers]
-path = "../../rust-src/ffi_helpers"
-optional = true
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
@@ -73,3 +67,6 @@ harness = false
 
 [profile.release]
 codegen-units = 1
+
+[package.metadata.docs.rs]
+features = ["display-state", "async"]

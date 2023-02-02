@@ -2,20 +2,23 @@ use std::fmt::Debug;
 
 use arbitrary::{Arbitrary, Result, Unstructured};
 use concordium_contracts_common::{
-    AccountAddress, Address::Account, Amount, AttributeTag, ChainMetadata, ContractAddress, Policy,
-    Timestamp, ACCOUNT_ADDRESS_SIZE,
+    AccountAddress, Address::Account, Amount, ChainMetadata, ContractAddress, Timestamp,
+    ACCOUNT_ADDRESS_SIZE,
 };
 use wasm_smith::Config;
 pub use wasm_smith::{ConfiguredModule, InterpreterConfig};
 
-use crate::{ExecResult, InitContext, ReceiveContext};
+use concordium_smart_contract_engine::{
+    v0::{InitContext, ReceiveContext},
+    ExecResult,
+};
 
 #[derive(Arbitrary, Debug)]
 pub struct RandomizedInterpreterInput<C: Config> {
     pub amount:      u64,
     pub module:      ConfiguredModule<C>,
-    pub init_ctx:    InitContext,
-    pub receive_ctx: ReceiveContext,
+    pub init_ctx:    InitContext<Vec<u8>>,
+    pub receive_ctx: ReceiveContext<Vec<u8>>,
     pub state:       Vec<u8>,
     pub parameter:   Vec<u8>,
 }
@@ -24,8 +27,8 @@ pub struct RandomizedInterpreterInput<C: Config> {
 pub struct DeterministicInterpreterInput {
     pub amount:      u64,
     pub module:      ConfiguredModule<InterpreterConfig>,
-    pub init_ctx:    InitContext,
-    pub receive_ctx: ReceiveContext,
+    pub init_ctx:    InitContext<Vec<u8>>,
+    pub receive_ctx: ReceiveContext<Vec<u8>>,
     pub state:       Vec<u8>,
     pub parameter:   Vec<u8>,
 }
@@ -42,12 +45,7 @@ impl Arbitrary for DeterministicInterpreterInput {
                     slot_time: Timestamp::from_timestamp_millis(1000),
                 },
                 init_origin:     AccountAddress([5; ACCOUNT_ADDRESS_SIZE]),
-                sender_policies: vec![Policy {
-                    identity_provider: 500,
-                    created_at:        Timestamp::from_timestamp_millis(400),
-                    valid_to:          Timestamp::from_timestamp_millis(2000),
-                    items:             vec![(AttributeTag(5), String::from("policy").into_bytes())],
-                }],
+                sender_policies: vec![0u8, 0u8],
             },
             receive_ctx: ReceiveContext {
                 metadata:        ChainMetadata {
@@ -61,7 +59,7 @@ impl Arbitrary for DeterministicInterpreterInput {
                 self_balance:    Amount::from_ccd(1),
                 sender:          Account(AccountAddress([7; ACCOUNT_ADDRESS_SIZE])),
                 owner:           AccountAddress([6; ACCOUNT_ADDRESS_SIZE]),
-                sender_policies: Vec::new(),
+                sender_policies: vec![0u8, 0u8],
             },
             state:       String::from("Very interesting state that has a bunch of words")
                 .into_bytes(),

@@ -25,8 +25,8 @@ AddressSanitizer:DEADLYSIGNAL
 ==223473==ERROR: AddressSanitizer: SEGV on unknown address 0x7f3c70c2ed6c (pc 0x55ff2f36d38f bp 0x7ffc249a3bc0 sp 0x7ffc249a0840 T0)
 ==223473==The signal is caused by a READ memory access.
     #0 0x55ff2f36d38f in wasm_transform::machine::_$LT$impl$u20$wasm_transform..artifact..Artifact$LT$I$C$R$GT$$GT$::run::h49675a4d496e1df6 (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0x4a338f)
-    #1 0x55ff2f3c736a in wasm_chain_integration::invoke_init::hf58bffc0f822a296 (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0x4fd36a)
-    #2 0x55ff2f3cb62e in wasm_chain_integration::invoke_init_with_metering_from_source::he5b0301b9a30677e (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0x50162e)
+    #1 0x55ff2f3c736a in concordium_smart_contract_engine::invoke_init::hf58bffc0f822a296 (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0x4fd36a)
+    #2 0x55ff2f3cb62e in concordium_smart_contract_engine::invoke_init_with_metering_from_source::he5b0301b9a30677e (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0x50162e)
     #3 0x55ff2f4dd4d9 in rust_fuzzer_test_input (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0x6134d9)
     #4 0x55ff2fbbd920 in __rust_try (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0xcf3920)
     #5 0x55ff2fbbd57f in LLVMFuzzerTestOneInput (/home/mrapoport/concordium/smart-contracts/wasm-chain-integration/target/x86_64-unknown-linux-gnu/release/interpreter+0xcf357f)
