@@ -1139,10 +1139,7 @@ mod test {
                     .to_string()
                     .parse::<TokenAddress>()
                     .expect("Parsing succeeds.");
-                assert_eq!(
-                    addr, converted,
-                    "Serializing and parsing back the address is not idempotent."
-                )
+                assert_eq!(addr, converted, "Parsing is not an inverse of serializing.")
             }
         }
     }
