@@ -10,6 +10,14 @@ module Concordium.GRPC2 (
     ToProto (..),
     BakerAddedEvent,
     BakerKeysEvent,
+    BlockHashInput(..),
+    BlockHeightInput(..),
+    InvokeInstanceInput,
+    Peer,
+    IpAddress(..),
+    IpPort(..),
+    IpSocketAddress,
+    SendBlockItemInput(..),
 )
 where
 
@@ -1998,3 +2006,112 @@ instance ToProto BlockFinalizationSummary where
                         ProtoFields.finalizers .= map toProto (Vec.toList fsFinalizers)
                     )
             )
+
+instance ToProto AccountIdentifier where
+    type Output AccountIdentifier = Proto.AccountIdentifierInput
+    toProto = \case
+        CredRegID cred -> Proto.make $ ProtoFields.credId .= toProto cred
+        AccAddress addr -> Proto.make $ ProtoFields.address .= toProto addr
+        AccIndex accIdx -> Proto.make $ ProtoFields.accountIndex .= toProto accIdx
+
+data SendBlockItemInput
+    = AccountTransaction !Transactions.AccountTransaction
+    | AccountCreation !Transactions.AccountCreation
+    | UpdateInstruction !Updates.UpdateInstruction
+
+instance ToProto SendBlockItemInput where
+    type Output SendBlockItemInput = Proto.SendBlockItemRequest
+    toProto sbi = Proto.make $
+        case sbi of
+            AccountTransaction aTransaction ->
+                ProtoFields.accountTransaction .= toProto aTransaction
+            AccountCreation aCreation ->
+                ProtoFields.credentialDeployment .= toProto aCreation
+            UpdateInstruction uInstruction ->
+                ProtoFields.updateInstruction .= toProto uInstruction
+
+instance ToProto BlockHashInput where
+    type Output BlockHashInput = Proto.BlockHashInput
+    toProto = \case
+        Best -> Proto.make $ ProtoFields.best .= Proto.defMessage
+        LastFinal -> Proto.make $ ProtoFields.lastFinal .= Proto.defMessage
+        Given bh -> Proto.make $ ProtoFields.given .= toProto bh
+
+-- |A block identifier.
+-- A block is either identified via a hash, or as one of the special
+-- blocks at a given time (last final or best block). Queries which
+-- just need the recent state can use `LastFinal` or `Best` to get the
+-- result without first establishing what the last final or best block
+-- is.
+data BlockHashInput = Best | LastFinal | Given !BlockHash
+
+instance ToProto BlockHeightInput where
+    type Output BlockHeightInput = Proto.BlocksAtHeightRequest
+    toProto Relative{..} =
+        Proto.make $
+            ProtoFields.relative
+                .= Proto.make
+                    ( do
+                        ProtoFields.genesisIndex .= toProto rGenesisIndex
+                        ProtoFields.height .= toProto rBlockHeight
+                        ProtoFields.restrict .= rRestrict
+                    )
+    toProto Absolute{..} =
+        Proto.make $
+            ProtoFields.absolute .= Proto.make (ProtoFields.height .= toProto aBlockHeight)
+
+-- |Input for `getBlocksAtHeight`.
+data BlockHeightInput
+    = -- |The height of a block relative to a genesis index. This differs from the
+      -- absolute block height in that it counts height from the protocol update
+      -- corresponding to the provided genesis index.
+      Relative
+        { -- |Genesis index.
+          rGenesisIndex :: !GenesisIndex,
+          -- |Block height starting from the genesis block at the genesis index.
+          rBlockHeight :: !BlockHeight,
+          -- |Whether to return results only from the specified genesis index (`True`),
+          -- or allow results from more recent genesis indices as well (`False`).
+          rRestrict :: !Bool
+        }
+    | -- |The absolute height of a block. This is the number of ancestors of a block
+      -- since the genesis block. In particular, the chain genesis block has absolute
+      -- height 0.
+      Absolute
+        { aBlockHeight :: !AbsoluteBlockHeight
+        }
+
+-- |Input for `invokeInstance`.
+type InvokeInstanceInput = (BlockHashInput, InvokeContract.ContractContext)
+
+instance ToProto InvokeInstanceInput where
+    type Output InvokeInstanceInput = Proto.InvokeInstanceRequest
+    toProto (bhi, InvokeContract.ContractContext{..}) =
+        Proto.make $ do
+            ProtoFields.blockHash .= toProto bhi
+            ProtoFields.maybe'invoker .= fmap toProto ccInvoker
+            ProtoFields.instance' .= toProto ccContract
+            ProtoFields.amount .= toProto ccAmount
+            ProtoFields.entrypoint .= toProto ccMethod
+            ProtoFields.parameter .= toProto ccParameter
+            ProtoFields.energy .= toProto ccEnergy
+
+-- An IP address.
+newtype IpAddress = IpAddress {ipAddress :: Text}
+
+-- An IP port.
+newtype IpPort = IpPort {ipPort :: Word16}
+
+-- A peer are represented by its IP address.
+type Peer = IpAddress
+
+-- Compound type representing a pair of an IP address and a port.
+type IpSocketAddress = (IpAddress, IpPort)
+
+instance ToProto IpAddress where
+    type Output IpAddress = Proto.IpAddress
+    toProto ip = Proto.make $ ProtoFields.value .= ipAddress ip
+
+instance ToProto IpPort where
+    type Output IpPort = Proto.Port
+    toProto ip = Proto.make $ ProtoFields.value .= fromIntegral (ipPort ip)
