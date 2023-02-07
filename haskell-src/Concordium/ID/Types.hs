@@ -949,11 +949,11 @@ data AccountCredential' credTy
     | NormalAC (CredentialDeploymentValues' credTy) CredentialDeploymentCommitments
     deriving (Eq, Show, Functor)
 
-credIdFromRaw :: RawCredentialRegistrationID -> Maybe CredentialRegistrationID
+credIdFromRaw :: RawCredentialRegistrationID -> Either String CredentialRegistrationID
 credIdFromRaw (RawCredentialRegistrationID fbs) =
-    case S.decode (FBS.toByteString fbs) of
-        Left _ -> Nothing
-        Right c -> c
+    case decode (FBS.toByteString fbs) of
+        Left err -> Left $ "Precondition violation. Invalid registration ID. " <> err
+        Right v -> return v
 
 unsafeCredIdFromRaw :: RawCredentialRegistrationID -> CredentialRegistrationID
 unsafeCredIdFromRaw (RawCredentialRegistrationID fbs) =
