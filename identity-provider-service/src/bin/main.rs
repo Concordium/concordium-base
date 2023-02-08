@@ -451,7 +451,6 @@ impl DB {
             .lock()
             .expect("Cannot acquire a lock, which means something is very wrong.");
         Ok(self.root.join("identity").join(key).is_file()
-            || self.root.join("requests").join(key).is_file()
             || self.root.join("revocation").join(key).is_file())
     }
 
