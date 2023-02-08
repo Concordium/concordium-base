@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 5.2.0 (2023-08-02)
+
 - Add methods `serial_value` and `serial_value_into` on the `Type`.
   They are more ergonomic to use than `write_bytes_from_json_schema_type` which
   is marked as deprecated and will be removed in future versions.
