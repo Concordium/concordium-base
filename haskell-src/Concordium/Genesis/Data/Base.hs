@@ -125,6 +125,17 @@ instance BasicGenesisData GenesisConfiguration where
 putGenesisConfiguration :: Putter GenesisConfiguration
 putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> put _gcFirstGenesis <> put _gcCurrentHash
 
+-- |Deserialize a genesis configuration that was serialized with 'putGenesisConfiguration'.
+-- This is as opposed to using 'getGenesisConfiguration', which supports deserialization from
+-- genesis data, but requires the block hash.
+getGenesisConfigurationFlat :: Get GenesisConfiguration
+getGenesisConfigurationFlat = do
+    _gcTag <- get
+    _gcCore <- get
+    _gcFirstGenesis <- get
+    _gcCurrentHash <- get
+    return GenesisConfiguration{..}
+
 -- | Common data in the "regenesis" block, which is the first block of the chain after
 -- the protocol update takes effect.
 data RegenesisData = RegenesisData
