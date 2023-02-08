@@ -225,11 +225,18 @@ impl Amount {
         }
     }
 
-    /// Checked addition. Adds another amount and return None if overflow
-    /// occurred
+    /// Checked addition. Adds another amount and returns None if overflow
+    /// occurred.
     #[inline(always)]
     pub fn checked_add(self, other: Amount) -> Option<Amount> {
         self.micro_ccd.checked_add(other.micro_ccd).map(Amount::from_micro_ccd)
+    }
+
+    /// Checked subtraction. Subtracts another amount and returns None if
+    /// underflow occurred.
+    #[inline(always)]
+    pub fn checked_sub(self, other: Amount) -> Option<Amount> {
+        self.micro_ccd.checked_sub(other.micro_ccd).map(Amount::from_micro_ccd)
     }
 
     /// Add a number of CCD to an amount
