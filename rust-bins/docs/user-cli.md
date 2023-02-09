@@ -28,6 +28,17 @@ user_cli generate-request --cryptographic-parameters cryptographic-parameters.js
                           --id-use-data-out id-use-data.json \ # data that enables use of the identity object
                           --request-out request.json # request to send to the identity provider
 ```
+
+For Testnet woule be the following: 
+```console
+user_cli generate-request --cryptographic-parameters cryptographic-parameters-testnet.json \
+                          --ars ars-testnet.json \
+                          --ip-info ip-info-testnet.json \
+                          --initial-keys-out initial-keys.json \ # keys of the initial account together with its address.
+                          --id-use-data-out id-use-data.json \ # data that enables use of the identity object
+                          --request-out request.json # request to send to the identity provider
+```
+
 The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. 
 
 It outputs the following files
