@@ -2044,6 +2044,7 @@ instance ToProto BlockHashInput where
 -- result without first establishing what the last final or best block
 -- is.
 data BlockHashInput = Best | LastFinal | Given !BlockHash
+    deriving Read
 
 instance ToProto BlockHeightInput where
     type Output BlockHeightInput = Proto.BlocksAtHeightRequest
@@ -2098,9 +2099,11 @@ instance ToProto InvokeInstanceInput where
 
 -- An IP address.
 newtype IpAddress = IpAddress {ipAddress :: Text}
+    deriving Show
 
 -- An IP port.
 newtype IpPort = IpPort {ipPort :: Word16}
+    deriving Show
 
 -- A peer are represented by its IP address.
 type Peer = IpAddress
