@@ -45,7 +45,7 @@ data ContractContext = ContractContext
       -- |And what amount of energy to allow for execution. This should be small
       -- enough so that it can be converted to interpreter energy.
       ccEnergy :: !Energy
-    } deriving (Show)
+    }
 
 -- |This FromJSON instance defaults a number of values if they are not given
 -- - energy defaults to 'defaultInvokeEnergy'
