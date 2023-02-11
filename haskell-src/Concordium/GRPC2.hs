@@ -12,7 +12,6 @@ module Concordium.GRPC2 (
     BakerKeysEvent,
     BlockHashInput(..),
     BlockHeightInput(..),
-    InvokeInstanceInput,
     Peer,
     IpAddress(..),
     IpPort(..),
@@ -2082,11 +2081,8 @@ data BlockHeightInput
         { aBlockHeight :: !AbsoluteBlockHeight
         }
 
--- |Input for `invokeInstance`.
-type InvokeInstanceInput = (BlockHashInput, InvokeContract.ContractContext)
-
-instance ToProto InvokeInstanceInput where
-    type Output InvokeInstanceInput = Proto.InvokeInstanceRequest
+instance ToProto (BlockHashInput, InvokeContract.ContractContext) where
+    type Output (BlockHashInput, InvokeContract.ContractContext) = Proto.InvokeInstanceRequest
     toProto (bhi, InvokeContract.ContractContext{..}) =
         Proto.make $ do
             ProtoFields.blockHash .= toProto bhi
