@@ -835,6 +835,13 @@ instance ToProto Parameters.TimeoutParameters where
         ProtoFields.timeoutIncrease .= toProto _tpTimeoutIncrease
         ProtoFields.timeoutDecrease .= toProto _tpTimeoutDecrease
 
+instance ToProto Parameters.FinalizationCommitteeParameters where
+    type Output Parameters.FinalizationCommitteeParameters = Proto.FinalizationCommitteeParameters
+    toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
+        ProtoFields.minimumFinalizers .= toProto _fcpMinFinalizers
+        ProtoFields.maximumFinalizers .= toProto _fcpMaxFinalizers
+        ProtoFields.finalizerThreshold .= toProto _fcpThreshold
+
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
     toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
@@ -874,6 +881,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateTimeoutParameters, Updates.TimeoutParametersUpdatePayload tp) -> Right . Proto.make $ ProtoFields.timeoutParametersUpdate .= toProto tp
     (Updates.UpdateMinBlockTime, Updates.MinBlockTimeUpdatePayload mbt) -> Right . Proto.make $ ProtoFields.minBlockTimeUpdate .= toProto mbt
     (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
+    (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersPayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto tp
     _ -> Left CEInvalidUpdateResult
 
 -- |The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
