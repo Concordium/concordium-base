@@ -38,7 +38,9 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- |Foundation account address.
       gcpFoundationAccount :: !AccountAddress,
       -- |Minimum threshold required for registering as a baker.
-      gcpPoolParameters :: !(PoolParameters cpv)
+      gcpPoolParameters :: !(PoolParameters cpv),
+      -- |Finalization committee parameters
+      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommittee cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 
@@ -66,6 +68,7 @@ parseJSONForGCPV0 =
             gcpTimeParameters = NoParam
             gcpPoolParameters = PoolParametersV0{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
+            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
@@ -97,6 +100,7 @@ parseJSONForGCPV1 =
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -126,6 +130,9 @@ parseJSONForGCPV2 =
         _tpTimeoutDecrease <- v .: "timeoutDecrease"
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinBakers <- v .: "minBakers"
+        _fcpMaxBakers <- v .: "maxBakers"
+        _fcpThreshold <- v .: "bakingThreshold"
         let gcpCooldownParameters = CooldownParametersV1{..}
             gcpTimeParameters = SomeParam TimeParametersV1{..}
             gcpPoolParameters = PoolParametersV1{..}
@@ -134,6 +141,7 @@ parseJSONForGCPV2 =
             _ppCommissionBounds = CommissionRanges{..}
             _cpTimeoutParameters = TimeoutParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
+            gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
         return GenesisChainParameters{..}
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where

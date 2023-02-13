@@ -327,6 +327,8 @@ module Concordium.Types.Parameters (
     -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
     -- for becoming a baker.
     cpPoolParameters,
+    -- |Parameters for finalization committee selection.
+    cpFinalizationCommitteeParameters,
     EChainParameters (..),
     ChainParameters,
     putChainParameters,
@@ -340,6 +342,16 @@ module Concordium.Types.Parameters (
     -- * Delegation helpers
     DelegationChainParameters (..),
     delegationChainParameters,
+
+    -- * Finalization committee parameters
+    FinalizationCommitteeParameters (..),
+    -- The minimum number of bakers in the finalization committee.
+    fcpMinBakers,
+    -- The maximum number of bakers allowed to be in the finalization committee.
+    fcpMaxBakers,
+    -- The minimum (micro) CCD threshold required for joining the finalization committee.
+    -- (if there are more than 'fcpMinBakers' bakers on the chain).
+    fcpThreshold,
 
     -- * Authorizations version
 
@@ -388,6 +400,7 @@ module Concordium.Types.Parameters (
     PTBlockEnergyLimitSym0,
     PTCooldownParametersAccessStructureSym0,
     PTFinalizationProofSym0,
+    PTFinalizationCommitteeSym0,
 ) where
 
 import Control.Monad
@@ -587,6 +600,8 @@ $( singletons
               PTCooldownParametersAccessStructure
             | -- \|Finalization proof GAS rewards (GAS rewards parameter)
               PTFinalizationProof
+            | -- Finalization committee selection for V2 consensus
+              PTFinalizationCommittee
 
         -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
@@ -608,6 +623,9 @@ $( singletons
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
+        isSupported PTFinalizationCommittee ChainParametersV0 = False
+        isSupported PTFinalizationCommittee ChainParametersV1 = False
+        isSupported PTFinalizationCommittee ChainParametersV2 = True
         |]
  )
 
@@ -1663,6 +1681,38 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
             _cpBlockEnergyLimit <- get
             return ConsensusParametersV1{..}
 
+-- *Finalization committee parameters (for cpv3 and onwards).
+
+-- |Finalization committee parameters
+-- These parameters control who and how many bakers will be
+-- eligible for joinin the finalization committee.
+data FinalizationCommitteeParameters = FinalizationCommitteeParameters
+    { -- |Minimum number of bakers to include in the finalization committee.
+      _fcpMinBakers :: !Word64,
+      -- |Maximum number of bakers to include in the finalization committee.
+      -- If there are more than 'fcpMaxBakers' then the 'fcpMaxBakers' bakers with the
+      -- most stake will join the finalization committee.
+      _fcpMaxBakers :: !Word64,
+      -- |Minimum amount of (micro) CCD that a baker must have in order to
+      -- be eligible for being part of the finalization committee.
+      -- (If there are more than '_fcpMinBakers' on chain.)
+      _fcpThreshold :: !Amount
+    }
+    deriving (Eq, Show)
+
+makeLenses ''FinalizationCommitteeParameters
+
+instance Serialize FinalizationCommitteeParameters where
+    put FinalizationCommitteeParameters{..} = do
+        put _fcpMinBakers
+        put _fcpMaxBakers
+        put _fcpThreshold
+    get = do
+        _fcpMinBakers <- get
+        _fcpMaxBakers <- get
+        _fcpThreshold <- get
+        return FinalizationCommitteeParameters{..}
+
 -- * Chain parameters
 
 -- |Witness the constraints implied by an 'SChainParametersVersion'.
@@ -1710,7 +1760,9 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFoundationAccount :: !AccountIndex,
       -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
       -- for becoming a baker.
-      _cpPoolParameters :: !(PoolParameters cpv)
+      _cpPoolParameters :: !(PoolParameters cpv),
+      -- |Parameters for finalization committee selection.
+      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommittee cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 
@@ -1753,6 +1805,7 @@ getChainParameters = do
     _cpRewardParameters <- get
     _cpFoundationAccount <- get
     _cpPoolParameters <- withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
+    _cpFinalizationCommitteeParameters <- get
     return ChainParameters{..}
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
@@ -1787,6 +1840,7 @@ parseJSONForCPV0 =
                 <$> v
                     .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
+            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
@@ -1818,6 +1872,7 @@ parseJSONForCPV1 =
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV2 :: Value -> Parser (ChainParameters' 'ChainParametersV2)
@@ -1847,6 +1902,9 @@ parseJSONForCPV2 =
         let _cpTimeoutParameters = TimeoutParameters{..}
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinBakers <- v .: "minimumBakers"
+        _fcpMaxBakers <- v .: "maximumBakers"
+        _fcpThreshold <- v .: "bakingThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
@@ -1854,6 +1912,7 @@ parseJSONForCPV2 =
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
+            _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
         return ChainParameters{..}
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
@@ -1921,7 +1980,10 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters _cpConsensusParameters),
                   "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
                   "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
-                  "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters
+                  "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
+                  "minBakers" AE..= _fcpMinBakers (unOParam _cpFinalizationCommitteeParameters),
+                  "maxBakers" AE..= _fcpMaxBakers (unOParam _cpFinalizationCommitteeParameters),
+                  "bakingThreshold" AE..= _fcpThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
 
 -- |Parameters that affect finalization.
