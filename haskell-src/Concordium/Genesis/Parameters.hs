@@ -130,9 +130,9 @@ parseJSONForGCPV2 =
         _tpTimeoutDecrease <- v .: "timeoutDecrease"
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
-        _fcpMinBakers <- v .: "minBakers"
-        _fcpMaxBakers <- v .: "maxBakers"
-        _fcpThreshold <- v .: "bakingThreshold"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+        _fcpFinalizerThreshold <- v .: "finalizerThreshold"
         let gcpCooldownParameters = CooldownParametersV1{..}
             gcpTimeParameters = SomeParam TimeParametersV1{..}
             gcpPoolParameters = PoolParametersV1{..}

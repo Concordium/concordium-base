@@ -346,12 +346,12 @@ module Concordium.Types.Parameters (
     -- * Finalization committee parameters
     FinalizationCommitteeParameters (..),
     -- The minimum number of bakers in the finalization committee.
-    fcpMinBakers,
+    fcpMinFinalizers,
     -- The maximum number of bakers allowed to be in the finalization committee.
-    fcpMaxBakers,
+    fcpMaxFinalizers,
     -- The minimum (micro) CCD threshold required for joining the finalization committee.
     -- (if there are more than 'fcpMinBakers' bakers on the chain).
-    fcpThreshold,
+    fcpFinalizerThreshold,
 
     -- * Authorizations version
 
@@ -1688,14 +1688,12 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
 -- eligible for joinin the finalization committee.
 data FinalizationCommitteeParameters = FinalizationCommitteeParameters
     { -- |Minimum number of bakers to include in the finalization committee.
-      _fcpMinBakers :: !Word64,
+      _fcpMinFinalizers :: !Word64,
       -- |Maximum number of bakers to include in the finalization committee.
-      -- If there are more than 'fcpMaxBakers' then the top ('fcpMaxBakers') bakers
-      -- will join the finalization committee.
-      _fcpMaxBakers :: !Word64,
+      _fcpMaxFinalizers :: !Word64,
       -- |Minimum amount of (micro) CCD that a baker must have in order to
       -- be eligible for being part of the finalization committee.
-      _fcpThreshold :: !Amount
+      _fcpFinalizerThreshold :: !Amount
     }
     deriving (Eq, Show)
 
@@ -1703,13 +1701,13 @@ makeLenses ''FinalizationCommitteeParameters
 
 instance Serialize FinalizationCommitteeParameters where
     put FinalizationCommitteeParameters{..} = do
-        put _fcpMinBakers
-        put _fcpMaxBakers
-        put _fcpThreshold
+        put _fcpMinFinalizers
+        put _fcpMaxFinalizers
+        put _fcpFinalizerThreshold
     get = do
-        _fcpMinBakers <- get
-        _fcpMaxBakers <- get
-        _fcpThreshold <- get
+        _fcpMinFinalizers <- get
+        _fcpMaxFinalizers <- get
+        _fcpFinalizerThreshold <- get
         return FinalizationCommitteeParameters{..}
 
 -- * Chain parameters
@@ -1901,9 +1899,9 @@ parseJSONForCPV2 =
         let _cpTimeoutParameters = TimeoutParameters{..}
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
-        _fcpMinBakers <- v .: "minimumBakers"
-        _fcpMaxBakers <- v .: "maximumBakers"
-        _fcpThreshold <- v .: "bakingThreshold"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+        _fcpFinalizerThreshold <- v .: "finalizerThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
@@ -1980,9 +1978,9 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
                   "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
-                  "minimumBakers" AE..= _fcpMinBakers (unOParam _cpFinalizationCommitteeParameters),
-                  "maximumBakers" AE..= _fcpMaxBakers (unOParam _cpFinalizationCommitteeParameters),
-                  "bakingThreshold" AE..= _fcpThreshold (unOParam _cpFinalizationCommitteeParameters)
+                  "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "finalizerThreshold" AE..= _fcpFinalizerThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
 
 -- |Parameters that affect finalization.
