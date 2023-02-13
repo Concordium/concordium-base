@@ -1690,12 +1690,11 @@ data FinalizationCommitteeParameters = FinalizationCommitteeParameters
     { -- |Minimum number of bakers to include in the finalization committee.
       _fcpMinBakers :: !Word64,
       -- |Maximum number of bakers to include in the finalization committee.
-      -- If there are more than 'fcpMaxBakers' then the 'fcpMaxBakers' bakers with the
-      -- most stake will join the finalization committee.
+      -- If there are more than 'fcpMaxBakers' then the top ('fcpMaxBakers') bakers
+      -- will join the finalization committee.
       _fcpMaxBakers :: !Word64,
       -- |Minimum amount of (micro) CCD that a baker must have in order to
       -- be eligible for being part of the finalization committee.
-      -- (If there are more than '_fcpMinBakers' on chain.)
       _fcpThreshold :: !Amount
     }
     deriving (Eq, Show)
