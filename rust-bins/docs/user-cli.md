@@ -87,6 +87,13 @@ user_cli generate-request-v1 --cryptographic-parameters cryptographic-parameters
                           --ip-info ip-info.json \
                           --request-out request.json # request to send to the identity provider
 ```
+For Testnet would be the following.
+```console
+user_cli generate-request-v1 --cryptographic-parameters cryptographic-parameters-testnet.json \
+                          --ars ars-testnet.json \
+                          --ip-info ip-info-testnet.json \
+                          --request-out request.json # request to send to the identity provider
+```
 The above command will ask for some additional input. You have to choose anonymity revokers and revocation threshold. Use arrow keys to navigate through the lists and the space key to select and deselect list entries. Afterwards, the user is asked whether the identity shall be used for Mainnet or Testnet. Afterwards, 24 BIP-39 will be generated and shown to the user, who is asked to write down the words and type them in again.
 
 It outputs the following files
