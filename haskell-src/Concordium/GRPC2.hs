@@ -835,19 +835,19 @@ instance ToProto Parameters.TimeoutParameters where
         ProtoFields.timeoutIncrease .= toProto _tpTimeoutIncrease
         ProtoFields.timeoutDecrease .= toProto _tpTimeoutDecrease
 
-instance ToProto Parameters.FinalizationCommitteeParameters where
-    type Output Parameters.FinalizationCommitteeParameters = Proto.FinalizationCommitteeParameters
-    toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
-        ProtoFields.minimumFinalizers .= toProto _fcpMinFinalizers
-        ProtoFields.maximumFinalizers .= toProto _fcpMaxFinalizers
-        ProtoFields.finalizerThreshold .= toProto _fcpThreshold
-
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
     toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
         ProtoFields.timeoutParameters .= toProto _cpTimeoutParameters
         ProtoFields.minBlockTime .= toProto _cpMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
+
+instance ToProto Parameters.FinalizationCommitteeParameters where
+    type Output Parameters.FinalizationCommitteeParameters = Proto.FinalizationCommitteeParameters
+    toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
+        ProtoFields.minimumFinalizers .= coerce _fcpMinFinalizers
+        ProtoFields.maximumFinalizers .= coerce _fcpMaxFinalizers
+        ProtoFields.finalizerThreshold .= toProto _fcpFinalizerThreshold
 
 -- |Attempt to construct the protobuf updatepayload.
 --  See @toBlockItemStatus@ for more context.
@@ -881,7 +881,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateTimeoutParameters, Updates.TimeoutParametersUpdatePayload tp) -> Right . Proto.make $ ProtoFields.timeoutParametersUpdate .= toProto tp
     (Updates.UpdateMinBlockTime, Updates.MinBlockTimeUpdatePayload mbt) -> Right . Proto.make $ ProtoFields.minBlockTimeUpdate .= toProto mbt
     (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
-    (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersPayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto tp
+    (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     _ -> Left CEInvalidUpdateResult
 
 -- |The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
@@ -1521,6 +1521,7 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateTimeoutParameters = Proto.UPDATE_TIMEOUT_PARAMETERS
     toProto Updates.UpdateMinBlockTime = Proto.UPDATE_MIN_BLOCK_TIME
     toProto Updates.UpdateBlockEnergyLimit = Proto.UPDATE_BLOCK_ENERGY_LIMIT
+    toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType
@@ -1928,6 +1929,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUETimeoutParameters timeoutParameters -> ProtoFields.timeoutParameters .= toProto timeoutParameters
             QueryTypes.PUEMinBlockTime minBlockTime -> ProtoFields.minBlockTime .= toProto minBlockTime
             QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
+            QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
@@ -2027,6 +2029,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
 
 instance ToProto FinalizationIndex where

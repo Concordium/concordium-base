@@ -40,7 +40,7 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- |Minimum threshold required for registering as a baker.
       gcpPoolParameters :: !(PoolParameters cpv),
       -- |Finalization committee parameters
-      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommittee cpv FinalizationCommitteeParameters)
+      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 

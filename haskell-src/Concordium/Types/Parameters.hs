@@ -352,6 +352,12 @@ module Concordium.Types.Parameters (
     -- The minimum (micro) CCD threshold required for joining the finalization committee.
     -- (if there are more than 'fcpMinBakers' bakers on the chain).
     fcpFinalizerThreshold,
+    -- |Whether finalization committee parameters are updatable for an 'AuthorizationsVersion'.
+    supportsFinalizationCommitteeParameters,
+    -- |Whether finalization committee parameters are updatable for an 'AuthorizationsVersion' (types).
+    SupportsFinalizationCommitteeParameters,
+    -- |Whether finalization committee parameters are updatable for an 'AuthorizationsVersion' (singletons).
+    sSupportsFinalizationCommitteeParameters,
 
     -- * Authorizations version
 
@@ -400,7 +406,7 @@ module Concordium.Types.Parameters (
     PTBlockEnergyLimitSym0,
     PTCooldownParametersAccessStructureSym0,
     PTFinalizationProofSym0,
-    PTFinalizationCommitteeSym0,
+    PTFinalizationCommitteeParametersSym0,
 ) where
 
 import Control.Monad
@@ -561,12 +567,13 @@ $( singletons
         data AuthorizationsVersion
             = AuthorizationsVersion0 -- \^Initial set of authorizations
             | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
+            | AuthorizationsVersion2 -- Adds finalization committee parameters
 
         -- \|The authorizations version associated with a chain parameters version.
         authorizationsVersionFor :: ChainParametersVersion -> AuthorizationsVersion
         authorizationsVersionFor ChainParametersV0 = AuthorizationsVersion0
         authorizationsVersionFor ChainParametersV1 = AuthorizationsVersion1
-        authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion1
+        authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion2
 
         -- \|The authorizations version associated with a protocol version.
         authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
@@ -576,11 +583,20 @@ $( singletons
         supportsCooldownParametersAccessStructure :: AuthorizationsVersion -> Bool
         supportsCooldownParametersAccessStructure AuthorizationsVersion0 = False
         supportsCooldownParametersAccessStructure AuthorizationsVersion1 = True
+        supportsCooldownParametersAccessStructure AuthorizationsVersion2 = True
 
         -- \|Whether time parameters are supported for an 'AuthorizationsVersion'.
         supportsTimeParameters :: AuthorizationsVersion -> Bool
         supportsTimeParameters AuthorizationsVersion0 = False
         supportsTimeParameters AuthorizationsVersion1 = True
+        supportsTimeParameters AuthorizationsVersion2 = True
+
+        -- Whether finalization committee parameters are supported for an authorization version.
+        -- The finalization committee parameters were introduced as part of cpv2 (protocol 6).
+        supportsFinalizationCommitteeParameters :: AuthorizationsVersion -> Bool
+        supportsFinalizationCommitteeParameters AuthorizationsVersion0 = False
+        supportsFinalizationCommitteeParameters AuthorizationsVersion1 = False
+        supportsFinalizationCommitteeParameters AuthorizationsVersion2 = True
 
         -- \|Parameter types that are conditionally supported at different 'ChainParametersVersion's.
         data ParameterType
@@ -601,7 +617,7 @@ $( singletons
             | -- \|Finalization proof GAS rewards (GAS rewards parameter)
               PTFinalizationProof
             | -- Finalization committee selection for V2 consensus
-              PTFinalizationCommittee
+              PTFinalizationCommitteeParameters
 
         -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
@@ -623,9 +639,9 @@ $( singletons
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
-        isSupported PTFinalizationCommittee ChainParametersV0 = False
-        isSupported PTFinalizationCommittee ChainParametersV1 = False
-        isSupported PTFinalizationCommittee ChainParametersV2 = True
+        isSupported PTFinalizationCommitteeParameters ChainParametersV0 = False
+        isSupported PTFinalizationCommitteeParameters ChainParametersV1 = False
+        isSupported PTFinalizationCommitteeParameters ChainParametersV2 = True
         |]
  )
 
@@ -1681,7 +1697,7 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
             _cpBlockEnergyLimit <- get
             return ConsensusParametersV1{..}
 
--- *Finalization committee parameters (for cpv3 and onwards).
+-- * Finalization committee parameters (for cpv3 and onwards).
 
 -- |Finalization committee parameters
 -- These parameters control who and how many bakers will be
@@ -1706,8 +1722,34 @@ instance Serialize FinalizationCommitteeParameters where
         put _fcpFinalizerThreshold
     get = do
         _fcpMinFinalizers <- get
+        unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
         _fcpMaxFinalizers <- get
+        unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
         _fcpFinalizerThreshold <- get
+        unless (_fcpFinalizerThreshold > 0) $ fail "finalizer threshold must be positive."
+        return FinalizationCommitteeParameters{..}
+
+instance HashableTo Hash.Hash FinalizationCommitteeParameters where
+    getHash = Hash.hash . encode
+
+instance (Monad m) => MHashableTo m Hash.Hash FinalizationCommitteeParameters
+
+instance ToJSON FinalizationCommitteeParameters where
+    toJSON FinalizationCommitteeParameters{..} =
+        object
+            [ "maximumFinalizers" AE..= _fcpMinFinalizers,
+              "minimumFinalizers" AE..= _fcpMaxFinalizers,
+              "finalizerThreshold" AE..= _fcpFinalizerThreshold
+            ]
+
+instance FromJSON FinalizationCommitteeParameters where
+    parseJSON = withObject "FinalizationCommitteeParameters" $ \o -> do
+        _fcpMinFinalizers <- o .: "minimumFinalizers"
+        unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
+        _fcpMaxFinalizers <- o .: "maximumFinalizers"
+        unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
+        _fcpFinalizerThreshold <- o .: "finalizerThreshold"
+        unless (_fcpFinalizerThreshold > 0) $ fail "finalizer threshold must be positive."
         return FinalizationCommitteeParameters{..}
 
 -- * Chain parameters
@@ -1759,7 +1801,7 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       -- for becoming a baker.
       _cpPoolParameters :: !(PoolParameters cpv),
       -- |Parameters for finalization committee selection.
-      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommittee cpv FinalizationCommitteeParameters)
+      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 
