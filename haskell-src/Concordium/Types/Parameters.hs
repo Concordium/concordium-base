@@ -1981,8 +1981,8 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
                   "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
-                  "minBakers" AE..= _fcpMinBakers (unOParam _cpFinalizationCommitteeParameters),
-                  "maxBakers" AE..= _fcpMaxBakers (unOParam _cpFinalizationCommitteeParameters),
+                  "minimumBakers" AE..= _fcpMinBakers (unOParam _cpFinalizationCommitteeParameters),
+                  "maximumBakers" AE..= _fcpMaxBakers (unOParam _cpFinalizationCommitteeParameters),
                   "bakingThreshold" AE..= _fcpThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
 
