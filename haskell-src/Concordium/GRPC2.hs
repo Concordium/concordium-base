@@ -1015,11 +1015,17 @@ instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizatio
                     ProtoFields.v0 .= v0
                     ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                Parameters.SAuthorizationsVersion2 -> Proto.make $ do
+                    ProtoFields.v0 .= v0
+                    ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.finalizationCommitteeParameters .= toProto (Updates.asFinalizationCommitteeParameters auth ^. Parameters.unconditionally)
 
 -- |Defines a type family that is used in the ToProto instance for Updates.Authorizations.
 type family AuthorizationsFamily cpv where
     AuthorizationsFamily 'Parameters.AuthorizationsVersion0 = Proto.AuthorizationsV0
     AuthorizationsFamily 'Parameters.AuthorizationsVersion1 = Proto.AuthorizationsV1
+    AuthorizationsFamily 'Parameters.AuthorizationsVersion2 = Proto.AuthorizationsV2
 
 instance ToProto Updates.AccessStructure where
     type Output Updates.AccessStructure = Proto.AccessStructure
