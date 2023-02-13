@@ -29,7 +29,7 @@ user_cli generate-request --cryptographic-parameters cryptographic-parameters.js
                           --request-out request.json # request to send to the identity provider
 ```
 
-For Testnet woule be the following: 
+For Testnet would be the following: 
 ```console
 user_cli generate-request --cryptographic-parameters cryptographic-parameters-testnet.json \
                           --ars ars-testnet.json \
