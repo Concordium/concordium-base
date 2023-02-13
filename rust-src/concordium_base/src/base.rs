@@ -472,6 +472,15 @@ pub struct Energy {
     pub energy: u64,
 }
 
+impl Energy {
+    /// Checked `Energy` subtraction.
+    ///
+    /// Computes `self - rhs` and returns `None` if an underflow occurred.
+    pub fn checked_sub(self, rhs: Energy) -> Option<Energy> {
+        self.energy.checked_sub(rhs.energy).map(From::from)
+    }
+}
+
 /// Position of the transaction in a block.
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Serialize, Clone, Copy)]
