@@ -16,7 +16,6 @@ module Concordium.GRPC2 (
     IpAddress(..),
     IpPort(..),
     IpSocketAddress,
-    SendBlockItemInput(..),
 )
 where
 
@@ -2013,20 +2012,15 @@ instance ToProto AccountIdentifier where
         AccAddress addr -> Proto.make $ ProtoFields.address .= toProto addr
         AccIndex accIdx -> Proto.make $ ProtoFields.accountIndex .= toProto accIdx
 
-data SendBlockItemInput
-    = AccountTransaction !Transactions.AccountTransaction
-    | AccountCreation !Transactions.AccountCreation
-    | UpdateInstruction !Updates.UpdateInstruction
-
-instance ToProto SendBlockItemInput where
-    type Output SendBlockItemInput = Proto.SendBlockItemRequest
-    toProto sbi = Proto.make $
-        case sbi of
-            AccountTransaction aTransaction ->
+instance ToProto Transactions.BareBlockItem where
+    type Output Transactions.BareBlockItem = Proto.SendBlockItemRequest
+    toProto bbi = Proto.make $
+        case bbi of
+            Transactions.NormalTransaction aTransaction ->
                 ProtoFields.accountTransaction .= toProto aTransaction
-            AccountCreation aCreation ->
+            Transactions.CredentialDeployment aCreation ->
                 ProtoFields.credentialDeployment .= toProto aCreation
-            UpdateInstruction uInstruction ->
+            Transactions.ChainUpdate uInstruction ->
                 ProtoFields.updateInstruction .= toProto uInstruction
 
 instance ToProto BlockHashInput where
