@@ -50,7 +50,6 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Block (AbsoluteBlockHeight (..))
 import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
-import Concordium.Types.Parameters (ConsensusParameters' (_cpFinalizationCommitteeParameters))
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm

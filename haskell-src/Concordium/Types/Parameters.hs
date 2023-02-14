@@ -1721,7 +1721,7 @@ cpBlockEnergyLimit =
     lens _cpBlockEnergyLimit (\cp x -> cp{_cpBlockEnergyLimit = x})
 
 -- |Lens for '_cpFinalizationCommitteeParameters'
--- This provides access to the block energy limit of 'ConsensusParametersV1'
+-- This provides access finalization committee parameters for 'ConsensusParametersV1'
 {-# INLINE cpFinalizationCommitteeParameters #-}
 cpFinalizationCommitteeParameters ::
     Lens' (ConsensusParameters' 'ConsensusParametersVersion1) FinalizationCommitteeParameters
