@@ -187,9 +187,7 @@ data Authorizations (auv :: AuthorizationsVersion) = Authorizations
       -- |Parameter keys: Cooldown periods for pool owners and delegators
       asCooldownParameters :: !(Conditionally (SupportsCooldownParametersAccessStructure auv) AccessStructure),
       -- |Parameter keys: Length of reward period / payday
-      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure),
-      -- |Parameter keys: Finalization committee parameters
-      asFinalizationCommitteeParameters :: !(Conditionally (SupportsFinalizationCommitteeParameters auv) AccessStructure)
+      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure)
     }
 
 deriving instance Eq (Authorizations auv)
@@ -213,7 +211,6 @@ putAuthorizations Authorizations{..} = do
     put asAddIdentityProvider
     mapM_ put asCooldownParameters
     mapM_ put asTimeParameters
-    mapM_ put asFinalizationCommitteeParameters
 
 getAuthorizations :: forall auv. IsAuthorizationsVersion auv => Get (Authorizations auv)
 getAuthorizations = label "deserialization update authorizations" $ do
@@ -240,7 +237,6 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asAddIdentityProvider <- getChecked
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) getChecked
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) getChecked
-    asFinalizationCommitteeParameters <- conditionallyA (sSupportsFinalizationCommitteeParameters (sing @auv)) getChecked
     return Authorizations{..}
 
 instance IsAuthorizationsVersion auv => Serialize (Authorizations auv) where
@@ -285,7 +281,6 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     let auv = sing @auv
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure auv) $ parseAS "cooldownParameters"
     asTimeParameters <- conditionallyA (sSupportsTimeParameters auv) $ parseAS "timeParameters"
-    asFinalizationCommitteeParameters <- conditionallyA (sSupportsFinalizationCommitteeParameters auv) $ parseAS "finalizationCommitteeParameters"
     return Authorizations{..}
 
 instance IsAuthorizationsVersion auv => AE.FromJSON (Authorizations auv) where
@@ -311,7 +306,6 @@ instance IsAuthorizationsVersion auv => AE.ToJSON (Authorizations auv) where
               ]
                 ++ cooldownParameters
                 ++ timeParameters'
-                ++ finalizationCommitteeParameters
             )
       where
         t AccessStructure{..} =
@@ -321,7 +315,6 @@ instance IsAuthorizationsVersion auv => AE.ToJSON (Authorizations auv) where
                 ]
         cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
         timeParameters' = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
-        finalizationCommitteeParameters = foldMap (\as -> ["finalizationCommitteeParameters" AE..= t as]) asFinalizationCommitteeParameters
 
 -----------------
 
@@ -974,7 +967,7 @@ extractKeysIndices p =
         TimeoutParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         MinBlockTimeUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
-        FinalizationCommitteeParametersUpdatePayload{} -> getOptionalLevel2KeysAndThreshold asFinalizationCommitteeParameters
+        FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys

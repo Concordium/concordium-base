@@ -351,12 +351,6 @@ module Concordium.Types.Parameters (
     -- The minimum (micro) CCD threshold required for joining the finalization committee.
     -- (if there are more than 'fcpMinBakers' bakers on the chain).
     fcpFinalizerThreshold,
-    -- |Whether finalization committee parameters are updatable for an 'AuthorizationsVersion'.
-    supportsFinalizationCommitteeParameters,
-    -- |Whether finalization committee parameters are updatable for an 'AuthorizationsVersion' (types).
-    SupportsFinalizationCommitteeParameters,
-    -- |Whether finalization committee parameters are updatable for an 'AuthorizationsVersion' (singletons).
-    sSupportsFinalizationCommitteeParameters,
 
     -- * Authorizations version
 
@@ -554,7 +548,7 @@ $( singletons
         -- \|Consensus parameters version.
         data ConsensusParametersVersion
             = ConsensusParametersVersion0 -- \^Election difficulty
-            | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time
+            | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time, finalization committee parameters
 
         -- \|The consensus parameters version associated with a chain parameters version.
         consensusParametersVersionFor :: ChainParametersVersion -> ConsensusParametersVersion
@@ -586,12 +580,6 @@ $( singletons
         supportsTimeParameters :: AuthorizationsVersion -> Bool
         supportsTimeParameters AuthorizationsVersion0 = False
         supportsTimeParameters AuthorizationsVersion1 = True
-
-        -- Whether finalization committee parameters are supported for an authorization version.
-        -- The finalization committee parameters were introduced as part of cpv2 (protocol 6).
-        supportsFinalizationCommitteeParameters :: AuthorizationsVersion -> Bool
-        supportsFinalizationCommitteeParameters AuthorizationsVersion0 = False
-        supportsFinalizationCommitteeParameters AuthorizationsVersion1 = True
 
         -- \|Parameter types that are conditionally supported at different 'ChainParametersVersion's.
         data ParameterType
@@ -1759,7 +1747,6 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
             _cpFinalizationCommitteeParameters <- get
             return ConsensusParametersV1{..}
 
-            
 -- * Chain parameters
 
 -- |Witness the constraints implied by an 'SChainParametersVersion'.

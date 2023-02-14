@@ -50,6 +50,7 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Block (AbsoluteBlockHeight (..))
 import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
+import Concordium.Types.Parameters (ConsensusParameters' (_cpFinalizationCommitteeParameters))
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
@@ -835,19 +836,20 @@ instance ToProto Parameters.TimeoutParameters where
         ProtoFields.timeoutIncrease .= toProto _tpTimeoutIncrease
         ProtoFields.timeoutDecrease .= toProto _tpTimeoutDecrease
 
-instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
-    type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
-    toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
-        ProtoFields.timeoutParameters .= toProto _cpTimeoutParameters
-        ProtoFields.minBlockTime .= toProto _cpMinBlockTime
-        ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
-
 instance ToProto Parameters.FinalizationCommitteeParameters where
     type Output Parameters.FinalizationCommitteeParameters = Proto.FinalizationCommitteeParameters
     toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
         ProtoFields.minimumFinalizers .= _fcpMinFinalizers
         ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
         ProtoFields.finalizerThreshold .= toProto _fcpFinalizerThreshold
+
+instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
+    type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
+    toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
+        ProtoFields.timeoutParameters .= toProto _cpTimeoutParameters
+        ProtoFields.minBlockTime .= toProto _cpMinBlockTime
+        ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
+        ProtoFields.finalizationCommitteeParameters .= toProto _cpFinalizationCommitteeParameters
 
 -- |Attempt to construct the protobuf updatepayload.
 --  See @toBlockItemStatus@ for more context.
@@ -1015,19 +1017,11 @@ instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizatio
                     ProtoFields.v0 .= v0
                     ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
-                Parameters.SAuthorizationsVersion2 -> Proto.make $ do
-                    ProtoFields.v0 .= v0
-                    v1 <- Proto.make $ do
-                        ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
-                        ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
-                    ProtoFields.v1 .= v1
-                    ProtoFields.finalizationCommitteeParameters .= toProto (Updates.asFinalizationCommitteeParameters auth ^. Parameters.unconditionally)
 
 -- |Defines a type family that is used in the ToProto instance for Updates.Authorizations.
 type family AuthorizationsFamily cpv where
     AuthorizationsFamily 'Parameters.AuthorizationsVersion0 = Proto.AuthorizationsV0
     AuthorizationsFamily 'Parameters.AuthorizationsVersion1 = Proto.AuthorizationsV1
-    AuthorizationsFamily 'Parameters.AuthorizationsVersion2 = Proto.AuthorizationsV2
 
 instance ToProto Updates.AccessStructure where
     type Output Updates.AccessStructure = Proto.AccessStructure
@@ -2037,7 +2031,6 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
-                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
 
 instance ToProto FinalizationIndex where
