@@ -205,7 +205,7 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
               "minimumFinalizers" AE..= _fcpMinFinalizers (_cpFinalizationCommitteeParameters gcpConsensusParameters),
               "maximumFinalizers" AE..= _fcpMaxFinalizers (_cpFinalizationCommitteeParameters gcpConsensusParameters),
-              "finalizerThreshold" AE..= _fcpFinalizerThreshold (_cpFinalizationCommitteeParameters gcpConsensusParameters)
+              "stakeThreshold" AE..= _fcpStakeThreshold (_cpFinalizationCommitteeParameters gcpConsensusParameters)
             ]
 
 -- | 'GenesisParameters' provides a convenient abstraction for

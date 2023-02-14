@@ -349,8 +349,7 @@ module Concordium.Types.Parameters (
     -- The maximum number of bakers allowed to be in the finalization committee.
     fcpMaxFinalizers,
     -- The minimum (micro) CCD threshold required for joining the finalization committee.
-    -- (if there are more than 'fcpMinBakers' bakers on the chain).
-    fcpFinalizerThreshold,
+    fcpStakeThreshold,
 
     -- * Authorizations version
 
@@ -1611,7 +1610,7 @@ data FinalizationCommitteeParameters = FinalizationCommitteeParameters
       _fcpMaxFinalizers :: !Word64,
       -- |Minimum amount of (micro) CCD that a baker must have in order to
       -- be eligible for being part of the finalization committee.
-      _fcpFinalizerThreshold :: !Amount
+      _fcpStakeThreshold :: !Amount
     }
     deriving (Eq, Show)
 
@@ -1621,14 +1620,14 @@ instance Serialize FinalizationCommitteeParameters where
     put FinalizationCommitteeParameters{..} = do
         put _fcpMinFinalizers
         put _fcpMaxFinalizers
-        put _fcpFinalizerThreshold
+        put _fcpStakeThreshold
     get = do
         _fcpMinFinalizers <- get
         unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
         _fcpMaxFinalizers <- get
         unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
-        _fcpFinalizerThreshold <- get
-        unless (_fcpFinalizerThreshold > 0) $ fail "finalizer threshold must be positive."
+        _fcpStakeThreshold <- get
+        unless (_fcpStakeThreshold > 0) $ fail "stake threshold must be positive."
         return FinalizationCommitteeParameters{..}
 
 instance HashableTo Hash.Hash FinalizationCommitteeParameters where
@@ -1641,7 +1640,7 @@ instance ToJSON FinalizationCommitteeParameters where
         object
             [ "maximumFinalizers" AE..= _fcpMinFinalizers,
               "minimumFinalizers" AE..= _fcpMaxFinalizers,
-              "finalizerThreshold" AE..= _fcpFinalizerThreshold
+              "stakeThreshold" AE..= _fcpStakeThreshold
             ]
 
 instance FromJSON FinalizationCommitteeParameters where
@@ -1650,8 +1649,8 @@ instance FromJSON FinalizationCommitteeParameters where
         unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
         _fcpMaxFinalizers <- o .: "maximumFinalizers"
         unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
-        _fcpFinalizerThreshold <- o .: "finalizerThreshold"
-        unless (_fcpFinalizerThreshold > 0) $ fail "finalizer threshold must be positive."
+        _fcpStakeThreshold <- o .: "finalizerThreshold"
+        unless (_fcpStakeThreshold > 0) $ fail "stake threshold must be positive."
         return FinalizationCommitteeParameters{..}
 
 -- * Consensus parameters
@@ -1933,7 +1932,7 @@ parseJSONForCPV2 =
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
         _fcpMinFinalizers <- v .: "minimumFinalizers"
         _fcpMaxFinalizers <- v .: "maximumFinalizers"
-        _fcpFinalizerThreshold <- v .: "finalizerThreshold"
+        _fcpStakeThreshold <- v .: "stakeThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
@@ -2012,7 +2011,7 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
                   "minimumFinalizers" AE..= _fcpMinFinalizers (_cpFinalizationCommitteeParameters _cpConsensusParameters),
                   "maximumFinalizers" AE..= _fcpMaxFinalizers (_cpFinalizationCommitteeParameters _cpConsensusParameters),
-                  "finalizerThreshold" AE..= _fcpFinalizerThreshold (_cpFinalizationCommitteeParameters _cpConsensusParameters)
+                  "finalizerThreshold" AE..= _fcpStakeThreshold (_cpFinalizationCommitteeParameters _cpConsensusParameters)
                 ]
 
 -- |Parameters that affect finalization.

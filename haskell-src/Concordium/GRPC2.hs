@@ -840,7 +840,7 @@ instance ToProto Parameters.FinalizationCommitteeParameters where
     toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
         ProtoFields.minimumFinalizers .= _fcpMinFinalizers
         ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
-        ProtoFields.finalizerThreshold .= toProto _fcpFinalizerThreshold
+        ProtoFields.stakeThreshold .= toProto _fcpStakeThreshold
 
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
