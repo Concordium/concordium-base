@@ -19,6 +19,7 @@ module Concordium.GRPC2 (
 )
 where
 
+import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Coerce
@@ -2089,11 +2090,11 @@ instance ToProto (BlockHashInput, InvokeContract.ContractContext) where
 
 -- An IP address.
 newtype IpAddress = IpAddress {ipAddress :: Text}
-    deriving Show
+    deriving (Show, ToJSON)
 
 -- An IP port.
 newtype IpPort = IpPort {ipPort :: Word16}
-    deriving Show
+    deriving (Show, ToJSON)
 
 -- A peer are represented by its IP address.
 type Peer = IpAddress
