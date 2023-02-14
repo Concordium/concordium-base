@@ -1649,7 +1649,7 @@ instance FromJSON FinalizationCommitteeParameters where
         unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
         _fcpMaxFinalizers <- o .: "maximumFinalizers"
         unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
-        _fcpStakeThreshold <- o .: "finalizerThreshold"
+        _fcpStakeThreshold <- o .: "stakeThreshold"
         unless (_fcpStakeThreshold > 0) $ fail "stake threshold must be positive."
         return FinalizationCommitteeParameters{..}
 
@@ -1677,9 +1677,7 @@ data ConsensusParameters' (cpv :: ConsensusParametersVersion) where
           -- |Minimum time interval between blocks.
           _cpMinBlockTime :: !Duration,
           -- |Maximum energy allowed per block.
-          _cpBlockEnergyLimit :: !Energy,
-          -- |The finalization committee parameters
-          _cpFinalizationCommitteeParameters :: !FinalizationCommitteeParameters
+          _cpBlockEnergyLimit :: !Energy
         } ->
         ConsensusParameters' 'ConsensusParametersVersion1
 
@@ -1719,14 +1717,6 @@ cpBlockEnergyLimit ::
 cpBlockEnergyLimit =
     lens _cpBlockEnergyLimit (\cp x -> cp{_cpBlockEnergyLimit = x})
 
--- |Lens for '_cpFinalizationCommitteeParameters'
--- This provides access finalization committee parameters for 'ConsensusParametersV1'
-{-# INLINE cpFinalizationCommitteeParameters #-}
-cpFinalizationCommitteeParameters ::
-    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) FinalizationCommitteeParameters
-cpFinalizationCommitteeParameters =
-    lens _cpFinalizationCommitteeParameters (\cp x -> cp{_cpFinalizationCommitteeParameters = x})
-
 deriving instance Eq (ConsensusParameters' cpv)
 deriving instance Show (ConsensusParameters' cpv)
 
@@ -1736,14 +1726,12 @@ instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv
         put _cpTimeoutParameters
         put _cpMinBlockTime
         put _cpBlockEnergyLimit
-        put _cpFinalizationCommitteeParameters
     get = case sing @cpv of
         SConsensusParametersVersion0 -> ConsensusParametersV0 <$> get
         SConsensusParametersVersion1 -> do
             _cpTimeoutParameters <- get
             _cpMinBlockTime <- get
             _cpBlockEnergyLimit <- get
-            _cpFinalizationCommitteeParameters <- get
             return ConsensusParametersV1{..}
 
 -- * Chain parameters
@@ -1793,7 +1781,11 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFoundationAccount :: !AccountIndex,
       -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
       -- for becoming a baker.
-      _cpPoolParameters :: !(PoolParameters cpv)
+      _cpPoolParameters :: !(PoolParameters cpv),
+      -- |The finalization committee parameters.
+      -- These parameters are introduced as part of protocol 6 (cpv2).
+      -- The set of parameters shares the 'Authorization' with the '_cpPoolParameters'.
+      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 
@@ -1824,6 +1816,7 @@ putChainParameters ChainParameters{..} = do
     put _cpRewardParameters
     put _cpFoundationAccount
     putPoolParameters _cpPoolParameters
+    put _cpFinalizationCommitteeParameters
 
 -- |Deserialize a 'ChainParameters''.
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
@@ -1836,6 +1829,7 @@ getChainParameters = do
     _cpRewardParameters <- get
     _cpFoundationAccount <- get
     _cpPoolParameters <- withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
+    _cpFinalizationCommitteeParameters <- get
     return ChainParameters{..}
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
@@ -1870,6 +1864,7 @@ parseJSONForCPV0 =
                 <$> v
                     .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
+            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
@@ -1901,6 +1896,7 @@ parseJSONForCPV1 =
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV2 :: Value -> Parser (ChainParameters' 'ChainParametersV2)
@@ -1932,6 +1928,7 @@ parseJSONForCPV2 =
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
         _fcpMinFinalizers <- v .: "minimumFinalizers"
         _fcpMaxFinalizers <- v .: "maximumFinalizers"
+
         _fcpStakeThreshold <- v .: "stakeThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
@@ -1939,7 +1936,7 @@ parseJSONForCPV2 =
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            _cpFinalizationCommitteeParameters = FinalizationCommitteeParameters{..}
+            _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
         return ChainParameters{..}
 
@@ -2009,9 +2006,9 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
                   "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
-                  "minimumFinalizers" AE..= _fcpMinFinalizers (_cpFinalizationCommitteeParameters _cpConsensusParameters),
-                  "maximumFinalizers" AE..= _fcpMaxFinalizers (_cpFinalizationCommitteeParameters _cpConsensusParameters),
-                  "finalizerThreshold" AE..= _fcpStakeThreshold (_cpFinalizationCommitteeParameters _cpConsensusParameters)
+                  "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "stakeThreshold" AE..= _fcpStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
 
 -- |Parameters that affect finalization.

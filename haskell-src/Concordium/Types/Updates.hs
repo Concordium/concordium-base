@@ -967,7 +967,7 @@ extractKeysIndices p =
         TimeoutParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         MinBlockTimeUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
-        FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys

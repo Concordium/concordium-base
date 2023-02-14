@@ -848,7 +848,6 @@ instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParameter
         ProtoFields.timeoutParameters .= toProto _cpTimeoutParameters
         ProtoFields.minBlockTime .= toProto _cpMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
-        ProtoFields.finalizationCommitteeParameters .= toProto _cpFinalizationCommitteeParameters
 
 -- |Attempt to construct the protobuf updatepayload.
 --  See @toBlockItemStatus@ for more context.
@@ -2030,6 +2029,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
 
 instance ToProto FinalizationIndex where
