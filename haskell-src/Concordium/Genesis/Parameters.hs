@@ -38,9 +38,7 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- |Foundation account address.
       gcpFoundationAccount :: !AccountAddress,
       -- |Minimum threshold required for registering as a baker.
-      gcpPoolParameters :: !(PoolParameters cpv),
-      -- |Finalization committee parameters
-      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
+      gcpPoolParameters :: !(PoolParameters cpv)
     }
     deriving (Eq, Show)
 
@@ -68,7 +66,6 @@ parseJSONForGCPV0 =
             gcpTimeParameters = NoParam
             gcpPoolParameters = PoolParametersV0{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
-            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
@@ -100,7 +97,6 @@ parseJSONForGCPV1 =
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -140,8 +136,8 @@ parseJSONForGCPV2 =
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
             _cpTimeoutParameters = TimeoutParameters{..}
+            _cpFinalizationCommitteeParameters = FinalizationCommitteeParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
-            gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
         return GenesisChainParameters{..}
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
@@ -206,7 +202,10 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
               "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
               "minBlockTime" AE..= _cpMinBlockTime gcpConsensusParameters,
-              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters
+              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
+              "minimumFinalizers" AE..= _fcpMinFinalizers (_cpFinalizationCommitteeParameters gcpConsensusParameters),
+              "maximumFinalizers" AE..= _fcpMaxFinalizers (_cpFinalizationCommitteeParameters gcpConsensusParameters),
+              "finalizerThreshold" AE..= _fcpFinalizerThreshold (_cpFinalizationCommitteeParameters gcpConsensusParameters)
             ]
 
 -- | 'GenesisParameters' provides a convenient abstraction for

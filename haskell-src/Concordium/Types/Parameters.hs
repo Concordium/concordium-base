@@ -305,6 +305,7 @@ module Concordium.Types.Parameters (
     cpTimeoutParameters,
     cpMinBlockTime,
     cpBlockEnergyLimit,
+    cpFinalizationCommitteeParameters,
 
     -- * Chain parameters
     withCPVConstraints,
@@ -327,8 +328,6 @@ module Concordium.Types.Parameters (
     -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
     -- for becoming a baker.
     cpPoolParameters,
-    -- |Parameters for finalization committee selection.
-    cpFinalizationCommitteeParameters,
     EChainParameters (..),
     ChainParameters,
     putChainParameters,
@@ -567,13 +566,12 @@ $( singletons
         data AuthorizationsVersion
             = AuthorizationsVersion0 -- \^Initial set of authorizations
             | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
-            | AuthorizationsVersion2 -- Adds finalization committee parameters
 
         -- \|The authorizations version associated with a chain parameters version.
         authorizationsVersionFor :: ChainParametersVersion -> AuthorizationsVersion
         authorizationsVersionFor ChainParametersV0 = AuthorizationsVersion0
         authorizationsVersionFor ChainParametersV1 = AuthorizationsVersion1
-        authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion2
+        authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion1
 
         -- \|The authorizations version associated with a protocol version.
         authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
@@ -583,20 +581,17 @@ $( singletons
         supportsCooldownParametersAccessStructure :: AuthorizationsVersion -> Bool
         supportsCooldownParametersAccessStructure AuthorizationsVersion0 = False
         supportsCooldownParametersAccessStructure AuthorizationsVersion1 = True
-        supportsCooldownParametersAccessStructure AuthorizationsVersion2 = True
 
         -- \|Whether time parameters are supported for an 'AuthorizationsVersion'.
         supportsTimeParameters :: AuthorizationsVersion -> Bool
         supportsTimeParameters AuthorizationsVersion0 = False
         supportsTimeParameters AuthorizationsVersion1 = True
-        supportsTimeParameters AuthorizationsVersion2 = True
 
         -- Whether finalization committee parameters are supported for an authorization version.
         -- The finalization committee parameters were introduced as part of cpv2 (protocol 6).
         supportsFinalizationCommitteeParameters :: AuthorizationsVersion -> Bool
         supportsFinalizationCommitteeParameters AuthorizationsVersion0 = False
-        supportsFinalizationCommitteeParameters AuthorizationsVersion1 = False
-        supportsFinalizationCommitteeParameters AuthorizationsVersion2 = True
+        supportsFinalizationCommitteeParameters AuthorizationsVersion1 = True
 
         -- \|Parameter types that are conditionally supported at different 'ChainParametersVersion's.
         data ParameterType
@@ -1616,88 +1611,7 @@ instance HashableTo Hash.Hash TimeoutParameters where
 
 instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 
--- * Consensus parameters
-
--- |Constraint on a type level 'ConsensusParametersVersion' that can be used to get a corresponding
--- 'SConsensusParametersVersion'.
-type IsConsensusParametersVersion (cpv :: ConsensusParametersVersion) = SingI cpv
-
--- |Witness an 'IsConsensusParametersVersion' constraint for an 'SChainParametersVersion'.
--- Concretely this provides the passed in action @a@ with the context '(IsConsensusParametersVersion (ConsensusParametersVersionFor cpv)'.
-withIsConsensusParametersVersionFor :: SChainParametersVersion cpv -> (IsConsensusParametersVersion (ConsensusParametersVersionFor cpv) => a) -> a
-withIsConsensusParametersVersionFor scpv = withSingI (sConsensusParametersVersionFor scpv)
-
--- |Consensus-specific parameters.
-data ConsensusParameters' (cpv :: ConsensusParametersVersion) where
-    ConsensusParametersV0 ::
-        { -- |Election difficulty parameter.
-          _cpElectionDifficulty :: !ElectionDifficulty
-        } ->
-        ConsensusParameters' 'ConsensusParametersVersion0
-    ConsensusParametersV1 ::
-        { -- |Parameters controlling round timeouts.
-          _cpTimeoutParameters :: !TimeoutParameters,
-          -- |Minimum time interval between blocks.
-          _cpMinBlockTime :: !Duration,
-          -- |Maximum energy allowed per block.
-          _cpBlockEnergyLimit :: !Energy
-        } ->
-        ConsensusParameters' 'ConsensusParametersVersion1
-
--- |Convenience type for a 'ConsensusParameters'' parametrised by the 'ChainParametersVersion'.
-type ConsensusParameters (cpv :: ChainParametersVersion) =
-    ConsensusParameters' (ConsensusParametersVersionFor cpv)
-
--- |Lens for '_cpElectionDifficulty'
--- This provides access to the election difficulty parameter of 'ConsensusParametersV0'
-{-# INLINE cpElectionDifficulty #-}
-cpElectionDifficulty ::
-    Lens' (ConsensusParameters' 'ConsensusParametersVersion0) ElectionDifficulty
-cpElectionDifficulty =
-    lens _cpElectionDifficulty (\cp x -> cp{_cpElectionDifficulty = x})
-
--- |Lens for '_cpTimeoutParameters'
--- This provides access to the timeout parameters of 'ConsensusParametersV1'
-{-# INLINE cpTimeoutParameters #-}
-cpTimeoutParameters ::
-    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) TimeoutParameters
-cpTimeoutParameters =
-    lens _cpTimeoutParameters (\cp x -> cp{_cpTimeoutParameters = x})
-
--- |Lens for '_cpMinBlockTime'
--- This provides access to the minimum time between blocks of 'ConsensusParametersV1'
-{-# INLINE cpMinBlockTime #-}
-cpMinBlockTime ::
-    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Duration
-cpMinBlockTime =
-    lens _cpMinBlockTime (\cp x -> cp{_cpMinBlockTime = x})
-
--- |Lens for '_cpBlockEnergyLimit'
--- This provides access to the block energy limit of 'ConsensusParametersV1'
-{-# INLINE cpBlockEnergyLimit #-}
-cpBlockEnergyLimit ::
-    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Energy
-cpBlockEnergyLimit =
-    lens _cpBlockEnergyLimit (\cp x -> cp{_cpBlockEnergyLimit = x})
-
-deriving instance Eq (ConsensusParameters' cpv)
-deriving instance Show (ConsensusParameters' cpv)
-
-instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv) where
-    put ConsensusParametersV0{..} = put _cpElectionDifficulty
-    put ConsensusParametersV1{..} = do
-        put _cpTimeoutParameters
-        put _cpMinBlockTime
-        put _cpBlockEnergyLimit
-    get = case sing @cpv of
-        SConsensusParametersVersion0 -> ConsensusParametersV0 <$> get
-        SConsensusParametersVersion1 -> do
-            _cpTimeoutParameters <- get
-            _cpMinBlockTime <- get
-            _cpBlockEnergyLimit <- get
-            return ConsensusParametersV1{..}
-
--- * Finalization committee parameters (for cpv3 and onwards).
+-- * Finalization committee parameters for consensus v1.
 
 -- |Finalization committee parameters
 -- These parameters control who and how many bakers will be
@@ -1752,6 +1666,100 @@ instance FromJSON FinalizationCommitteeParameters where
         unless (_fcpFinalizerThreshold > 0) $ fail "finalizer threshold must be positive."
         return FinalizationCommitteeParameters{..}
 
+-- * Consensus parameters
+
+-- |Constraint on a type level 'ConsensusParametersVersion' that can be used to get a corresponding
+-- 'SConsensusParametersVersion'.
+type IsConsensusParametersVersion (cpv :: ConsensusParametersVersion) = SingI cpv
+
+-- |Witness an 'IsConsensusParametersVersion' constraint for an 'SChainParametersVersion'.
+-- Concretely this provides the passed in action @a@ with the context '(IsConsensusParametersVersion (ConsensusParametersVersionFor cpv)'.
+withIsConsensusParametersVersionFor :: SChainParametersVersion cpv -> (IsConsensusParametersVersion (ConsensusParametersVersionFor cpv) => a) -> a
+withIsConsensusParametersVersionFor scpv = withSingI (sConsensusParametersVersionFor scpv)
+
+-- |Consensus-specific parameters.
+data ConsensusParameters' (cpv :: ConsensusParametersVersion) where
+    ConsensusParametersV0 ::
+        { -- |Election difficulty parameter.
+          _cpElectionDifficulty :: !ElectionDifficulty
+        } ->
+        ConsensusParameters' 'ConsensusParametersVersion0
+    ConsensusParametersV1 ::
+        { -- |Parameters controlling round timeouts.
+          _cpTimeoutParameters :: !TimeoutParameters,
+          -- |Minimum time interval between blocks.
+          _cpMinBlockTime :: !Duration,
+          -- |Maximum energy allowed per block.
+          _cpBlockEnergyLimit :: !Energy,
+          -- |The finalization committee parameters
+          _cpFinalizationCommitteeParameters :: !FinalizationCommitteeParameters
+        } ->
+        ConsensusParameters' 'ConsensusParametersVersion1
+
+-- |Convenience type for a 'ConsensusParameters'' parametrised by the 'ChainParametersVersion'.
+type ConsensusParameters (cpv :: ChainParametersVersion) =
+    ConsensusParameters' (ConsensusParametersVersionFor cpv)
+
+-- |Lens for '_cpElectionDifficulty'
+-- This provides access to the election difficulty parameter of 'ConsensusParametersV0'
+{-# INLINE cpElectionDifficulty #-}
+cpElectionDifficulty ::
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion0) ElectionDifficulty
+cpElectionDifficulty =
+    lens _cpElectionDifficulty (\cp x -> cp{_cpElectionDifficulty = x})
+
+-- |Lens for '_cpTimeoutParameters'
+-- This provides access to the timeout parameters of 'ConsensusParametersV1'
+{-# INLINE cpTimeoutParameters #-}
+cpTimeoutParameters ::
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) TimeoutParameters
+cpTimeoutParameters =
+    lens _cpTimeoutParameters (\cp x -> cp{_cpTimeoutParameters = x})
+
+-- |Lens for '_cpMinBlockTime'
+-- This provides access to the minimum time between blocks of 'ConsensusParametersV1'
+{-# INLINE cpMinBlockTime #-}
+cpMinBlockTime ::
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Duration
+cpMinBlockTime =
+    lens _cpMinBlockTime (\cp x -> cp{_cpMinBlockTime = x})
+
+-- |Lens for '_cpBlockEnergyLimit'
+-- This provides access to the block energy limit of 'ConsensusParametersV1'
+{-# INLINE cpBlockEnergyLimit #-}
+cpBlockEnergyLimit ::
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) Energy
+cpBlockEnergyLimit =
+    lens _cpBlockEnergyLimit (\cp x -> cp{_cpBlockEnergyLimit = x})
+
+-- |Lens for '_cpFinalizationCommitteeParameters'
+-- This provides access to the block energy limit of 'ConsensusParametersV1'
+{-# INLINE cpFinalizationCommitteeParameters #-}
+cpFinalizationCommitteeParameters ::
+    Lens' (ConsensusParameters' 'ConsensusParametersVersion1) FinalizationCommitteeParameters
+cpFinalizationCommitteeParameters =
+    lens _cpFinalizationCommitteeParameters (\cp x -> cp{_cpFinalizationCommitteeParameters = x})
+
+deriving instance Eq (ConsensusParameters' cpv)
+deriving instance Show (ConsensusParameters' cpv)
+
+instance IsConsensusParametersVersion cpv => Serialize (ConsensusParameters' cpv) where
+    put ConsensusParametersV0{..} = put _cpElectionDifficulty
+    put ConsensusParametersV1{..} = do
+        put _cpTimeoutParameters
+        put _cpMinBlockTime
+        put _cpBlockEnergyLimit
+        put _cpFinalizationCommitteeParameters
+    get = case sing @cpv of
+        SConsensusParametersVersion0 -> ConsensusParametersV0 <$> get
+        SConsensusParametersVersion1 -> do
+            _cpTimeoutParameters <- get
+            _cpMinBlockTime <- get
+            _cpBlockEnergyLimit <- get
+            _cpFinalizationCommitteeParameters <- get
+            return ConsensusParametersV1{..}
+
+            
 -- * Chain parameters
 
 -- |Witness the constraints implied by an 'SChainParametersVersion'.
@@ -1799,9 +1807,7 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFoundationAccount :: !AccountIndex,
       -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
       -- for becoming a baker.
-      _cpPoolParameters :: !(PoolParameters cpv),
-      -- |Parameters for finalization committee selection.
-      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
+      _cpPoolParameters :: !(PoolParameters cpv)
     }
     deriving (Eq, Show)
 
@@ -1844,7 +1850,6 @@ getChainParameters = do
     _cpRewardParameters <- get
     _cpFoundationAccount <- get
     _cpPoolParameters <- withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
-    _cpFinalizationCommitteeParameters <- get
     return ChainParameters{..}
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
@@ -1879,7 +1884,6 @@ parseJSONForCPV0 =
                 <$> v
                     .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
-            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
@@ -1911,7 +1915,6 @@ parseJSONForCPV1 =
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
-            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV2 :: Value -> Parser (ChainParameters' 'ChainParametersV2)
@@ -1950,8 +1953,8 @@ parseJSONForCPV2 =
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            _cpFinalizationCommitteeParameters = FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
-            _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
         return ChainParameters{..}
 
 instance forall cpv. IsChainParametersVersion cpv => FromJSON (ChainParameters' cpv) where
@@ -2020,9 +2023,9 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
                   "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
-                  "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
-                  "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
-                  "finalizerThreshold" AE..= _fcpFinalizerThreshold (unOParam _cpFinalizationCommitteeParameters)
+                  "minimumFinalizers" AE..= _fcpMinFinalizers (_cpFinalizationCommitteeParameters _cpConsensusParameters),
+                  "maximumFinalizers" AE..= _fcpMaxFinalizers (_cpFinalizationCommitteeParameters _cpConsensusParameters),
+                  "finalizerThreshold" AE..= _fcpFinalizerThreshold (_cpFinalizationCommitteeParameters _cpConsensusParameters)
                 ]
 
 -- |Parameters that affect finalization.

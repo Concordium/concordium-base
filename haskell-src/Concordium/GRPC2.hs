@@ -845,8 +845,8 @@ instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParameter
 instance ToProto Parameters.FinalizationCommitteeParameters where
     type Output Parameters.FinalizationCommitteeParameters = Proto.FinalizationCommitteeParameters
     toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
-        ProtoFields.minimumFinalizers .= coerce _fcpMinFinalizers
-        ProtoFields.maximumFinalizers .= coerce _fcpMaxFinalizers
+        ProtoFields.minimumFinalizers .= _fcpMinFinalizers
+        ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
         ProtoFields.finalizerThreshold .= toProto _fcpFinalizerThreshold
 
 -- |Attempt to construct the protobuf updatepayload.
@@ -1017,8 +1017,10 @@ instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizatio
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
                 Parameters.SAuthorizationsVersion2 -> Proto.make $ do
                     ProtoFields.v0 .= v0
-                    ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
-                    ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                    v1 <- Proto.make $ do
+                        ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
+                        ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.v1 .= v1
                     ProtoFields.finalizationCommitteeParameters .= toProto (Updates.asFinalizationCommitteeParameters auth ^. Parameters.unconditionally)
 
 -- |Defines a type family that is used in the ToProto instance for Updates.Authorizations.
