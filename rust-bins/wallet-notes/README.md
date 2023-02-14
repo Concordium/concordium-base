@@ -697,13 +697,18 @@ must be a valid JSON object with fields
 
 - `"receiveName"` ... the name of the receive function that the parameter is for.
 
-- `"schema"` ... base64 encoded schema for the corresponding smart contract.
+- `"schema"` ... a JSON object with a type field and a value field. 
+  - if the type field is `"module"`, then the value field is a base64 encoded schema for the corresponding smart contract.
+  - if the type field is `"parameter"`, then the value field is a base64 encoded schema for the parameter itself.
+  - The function also supports a legacy format, where the `"schema"` field is a base64 encoded schema for the corresponding smart contract, directly.
 
 - `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
 
 The returned value is a JSON representation of the parameter.
 
-An example input to this request is in the file [parameter_to_json-input.json](files/parameter_to_json-input.json).
+An example input to this request, with schema type `"module"`, is in the file [parameter_to_json-module-input.json](files/parameter_to_json-module-input.json).
+An example input to this request, with schema type `"parameter"`, is in the file [parameter_to_json-parameter-input.json](files/parameter_to_json-parameter-input.json).
+An example input to this request, with the legacy format, is in the file [parameter_to_json-legacy-input.json](files/parameter_to_json-legacy-input.json).
 An example output to this request is in the file [parameter_to_json-output.json](files/parameter_to_json-output.json).
 
 ## create_account_transaction

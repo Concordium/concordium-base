@@ -7,7 +7,7 @@ use concordium_base::{
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
-    contracts_common::{self, schema::VersionedModuleSchema, AccountAddress, Address, Cursor},
+    contracts_common::{self, schema, AccountAddress, Address, Cursor},
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
     id::{
@@ -195,19 +195,31 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
+#[derive(common::SerdeSerialize, common::SerdeDeserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(tag = "type", content = "value")]
+enum SchemaInputType {
+    Module(String),
+    Parameter(String),
+}
+
 fn get_parameter_as_json(
     parameter: Parameter,
     receive_name: &OwnedReceiveName,
-    schema: &str,
+    schema: &SchemaInputType,
     schema_version: &Option<u8>,
 ) -> anyhow::Result<Value> {
-    let schema_bytes = base64::decode(schema)?;
-
     let contract_name = receive_name.as_receive_name().contract_name();
     let entrypoint_name = &receive_name.as_receive_name().entrypoint_name().to_string();
 
-    let module_schema = VersionedModuleSchema::new(&schema_bytes, schema_version)?;
-    let receive_schema = module_schema.get_receive_param_schema(contract_name, entrypoint_name)?;
+    let receive_schema: schema::Type = match schema {
+        SchemaInputType::Module(raw) => {
+            let module_schema =
+                schema::VersionedModuleSchema::new(&base64::decode(raw)?, schema_version)?;
+            module_schema.get_receive_param_schema(contract_name, entrypoint_name)?
+        }
+        SchemaInputType::Parameter(raw) => contracts_common::from_bytes(&base64::decode(raw)?)?,
+    };
 
     let mut parameter_cursor = Cursor::new(parameter.as_ref());
     match receive_schema.to_json(&mut parameter_cursor) {
@@ -224,7 +236,11 @@ fn parameter_to_json_aux(input: &str) -> anyhow::Result<String> {
     let serialized_parameter: String = try_get(&v, "parameter")?;
     let receive_name: OwnedReceiveName = try_get(&v, "receiveName")?;
     let parameter: Parameter = Parameter::new_unchecked(hex::decode(serialized_parameter)?);
-    let schema: String = try_get(&v, "schema")?;
+    let schema: SchemaInputType = match try_get(&v, "schema") {
+        Ok(v) => v,
+        // To support the legacy format we also attempt to parse the schema as a string directly:
+        Err(e) => SchemaInputType::Module(try_get(&v, "schema").map_err(|_| e)?),
+    };
     let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
     let parameter_as_json =
         get_parameter_as_json(parameter, &receive_name, &schema, &schema_version)?;
