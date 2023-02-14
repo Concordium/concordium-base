@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -229,6 +230,8 @@ import Text.Read (readMaybe)
 
 import Test.QuickCheck (Arbitrary, choose)
 import Test.QuickCheck.Arbitrary (Arbitrary (arbitrary))
+
+-- * Hashing
 
 -- |A value equipped with its hash.
 data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}

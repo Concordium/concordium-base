@@ -51,7 +51,7 @@ module Concordium.Types.ProtocolVersion (
     SomeProtocolVersion (..),
     promoteProtocolVersion,
     demoteProtocolVersion,
-    MonadProtocolVersion(..),
+    MonadProtocolVersion (..),
 
     -- * Chain parameters version
 
@@ -176,9 +176,9 @@ module Concordium.Types.ProtocolVersion (
     P6Sym0,
 ) where
 
-import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Reader (ReaderT)
+import Control.Monad.Trans.Maybe (MaybeT)
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Kind

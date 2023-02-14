@@ -128,7 +128,7 @@ putVersionedGenesisData gd = do
     putVersion 3
     putGenesisDataV3 gd
 
-parametersToGenesisData :: GenesisParameters 'P1 -> GenesisDataP1
+parametersToGenesisData :: GenesisParametersV2 'P1 -> GenesisDataP1
 parametersToGenesisData = uncurry GDP1Initial . Base.parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.
