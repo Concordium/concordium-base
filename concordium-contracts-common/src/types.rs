@@ -1200,11 +1200,18 @@ impl From<Vec<u8>> for OwnedParameter {
 }
 
 impl OwnedParameter {
+    /// Get [`Self`] as the borrowed variant [`Parameter`].
     pub fn as_parameter(&self) -> Parameter { Parameter(self.0.as_ref()) }
 
-    /// Construct an `OwnedParameter` by serializing the input using its
+    /// Construct an [`Self`]` by serializing the input using its
     /// `Serial` instance.
     pub fn new<D: Serial>(data: &D) -> Self { Self(to_bytes(data)) }
+
+    /// Construct an [`Self`] from a vector of bytes.
+    pub fn from_bytes(bytes: Vec<u8>) -> Self { Self(bytes) }
+
+    /// Construct an empty [`Self`].
+    pub fn empty() -> Self { Self(Vec::new()) }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
