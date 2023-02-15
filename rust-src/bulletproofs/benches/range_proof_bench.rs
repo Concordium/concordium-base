@@ -1,5 +1,9 @@
 //! Testing range proofs over curves used in the dalek library e.g., curve25519-dalek (https://doc.dalek.rs/curve25519_dalek/index.html=)
 
+extern crate curve25519_dalek;
+use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::ristretto::CompressedRistretto;
+
 use bulletproofs::utils::Generators;
  use curve_arithmetic::{Curve, Value};
 use pedersen_scheme::*;
