@@ -74,9 +74,6 @@ putVersionedGenesisData gd = do
     putVersion 8
     putGenesisDataV8 gd
 
-parametersToGenesisData :: GenesisParametersV3 'P6 -> GenesisDataP6
-parametersToGenesisData = uncurry GDP6Initial . BaseV1.parametersToState
-
 -- |Compute the block hash of the genesis block with the given genesis data.
 -- Every block hash is derived from a message that begins with the block slot,
 -- which is 0 for genesis blocks.

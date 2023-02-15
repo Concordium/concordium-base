@@ -4,6 +4,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
+-- |This module provides the 'Conditionally' type, which is parametrised by a type-level 'Bool',
+-- and wraps a value if the parameter is 'True' and unit if the parameter is 'False'.
+-- This can be seen as like 'Maybe', except the type can constrain whether the value is present
+-- or not. (Unlike 'Just', however, 'CTrue' is strict in its argument.)
 module Concordium.Types.Conditionally where
 
 import Data.Bool.Singletons
@@ -69,3 +73,7 @@ conditionallyA STrue m = CTrue <$> m
 -- |A lens for accessing the contents of a 'Conditionally' when the guard is known to be 'True'.
 unconditionally :: Lens (Conditionally 'True a) (Conditionally 'True b) a b
 unconditionally f (CTrue a) = CTrue <$> f a
+
+-- |Unwrap a conditionally when the guard is 'True'.
+uncond :: Conditionally 'True a -> a
+uncond (CTrue a) = a
