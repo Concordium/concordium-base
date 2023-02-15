@@ -1629,7 +1629,6 @@ instance Serialize FinalizationCommitteeParameters where
         _fcpMaxFinalizers <- get
         unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
         _fcpFinalizerRelativeStakeThreshold <- get
-        unless (_fcpFinalizerRelativeStakeThreshold > 0) $ fail "stake threshold must be positive."
         return FinalizationCommitteeParameters{..}
 
 instance HashableTo Hash.Hash FinalizationCommitteeParameters where
@@ -1642,7 +1641,7 @@ instance ToJSON FinalizationCommitteeParameters where
         object
             [ "maximumFinalizers" AE..= _fcpMinFinalizers,
               "minimumFinalizers" AE..= _fcpMaxFinalizers,
-              "stakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold
             ]
 
 instance FromJSON FinalizationCommitteeParameters where
@@ -1651,8 +1650,7 @@ instance FromJSON FinalizationCommitteeParameters where
         unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
         _fcpMaxFinalizers <- o .: "maximumFinalizers"
         unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
-        _fcpFinalizerRelativeStakeThreshold <- o .: "stakeThreshold"
-        unless (_fcpFinalizerRelativeStakeThreshold > 0) $ fail "stake threshold must be positive."
+        _fcpFinalizerRelativeStakeThreshold <- o .: "finalizerRelativeStakeThreshold"
         return FinalizationCommitteeParameters{..}
 
 -- * Consensus parameters
@@ -1931,7 +1929,7 @@ parseJSONForCPV2 =
         _fcpMinFinalizers <- v .: "minimumFinalizers"
         _fcpMaxFinalizers <- v .: "maximumFinalizers"
 
-        _fcpFinalizerRelativeStakeThreshold <- v .: "stakeThreshold"
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
@@ -2010,7 +2008,7 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
                   "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
                   "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
-                  "stakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
+                  "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
 
 -- |Parameters that affect finalization.

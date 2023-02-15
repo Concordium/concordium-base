@@ -394,7 +394,7 @@ genFinalizationCommitteeParameters :: Gen FinalizationCommitteeParameters
 genFinalizationCommitteeParameters = do
     _fcpMinFinalizers <- choose (20, 100)
     _fcpMaxFinalizers <- choose (200, 800)
-    _fcpStakeThreshold <- genAmount
+    _fcpFinalizerRelativeStakeThreshold <- arbitrary
     return FinalizationCommitteeParameters{..}
 
 genConsensusParametersV1 ::

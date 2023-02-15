@@ -132,7 +132,7 @@ parseJSONForGCPV2 =
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
         _fcpMinFinalizers <- v .: "minimumFinalizers"
         _fcpMaxFinalizers <- v .: "maximumFinalizers"
-        _fcpStakeThreshold <- v .: "stakeThreshold"
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let gcpCooldownParameters = CooldownParametersV1{..}
             gcpTimeParameters = SomeParam TimeParametersV1{..}
             gcpPoolParameters = PoolParametersV1{..}
@@ -209,7 +209,7 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
               "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam gcpFinalizationCommitteeParameters),
               "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam gcpFinalizationCommitteeParameters),
-              "stakeThreshold" AE..= _fcpStakeThreshold (unOParam gcpFinalizationCommitteeParameters)
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters)
             ]
 
 -- | 'GenesisParameters' provides a convenient abstraction for
