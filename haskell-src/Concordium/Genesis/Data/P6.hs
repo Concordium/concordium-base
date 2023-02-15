@@ -11,13 +11,14 @@ import Data.Word
 import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
+import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Genesis.Parameters
 import Concordium.Types
 
 -- |Initial genesis data for the P6 protocol version.
 data GenesisDataP6 = GDP6Initial
     { -- |The immutable genesis parameters.
-      genesisCore :: !Base.CoreGenesisParameters,
+      genesisCore :: !BaseV1.CoreGenesisParametersV1,
       -- |Serialized initial block state.
       -- NB: This block state contains some of the same values as 'genesisCore', and they should match.
       genesisInitialState :: !(Base.GenesisState 'P6)
@@ -30,32 +31,8 @@ data GenesisDataP6 = GDP6Initial
 -- The relationship between the new state and the state of the
 -- terminal block of the old chain should be defined by the
 -- chain update mechanism used.
-newtype RegenesisP6 = GDP6Regenesis {genesisRegenesis :: Base.RegenesisData}
+newtype RegenesisP6 = GDP6Regenesis {genesisRegenesis :: BaseV1.RegenesisDataV1}
     deriving (Eq, Show)
-
-instance Base.BasicGenesisData GenesisDataP6 where
-    gdGenesisTime = Base.genesisTime . genesisCore
-    {-# INLINE gdGenesisTime #-}
-    gdSlotDuration = Base.genesisSlotDuration . genesisCore
-    {-# INLINE gdSlotDuration #-}
-    gdMaxBlockEnergy = Base.genesisMaxBlockEnergy . genesisCore
-    {-# INLINE gdMaxBlockEnergy #-}
-    gdFinalizationParameters = Base.genesisFinalizationParameters . genesisCore
-    {-# INLINE gdFinalizationParameters #-}
-    gdEpochLength = Base.genesisEpochLength . genesisCore
-    {-# INLINE gdEpochLength #-}
-
-instance Base.BasicGenesisData RegenesisP6 where
-    gdGenesisTime = Base.genesisTime . Base.genesisCore . genesisRegenesis
-    {-# INLINE gdGenesisTime #-}
-    gdSlotDuration = Base.genesisSlotDuration . Base.genesisCore . genesisRegenesis
-    {-# INLINE gdSlotDuration #-}
-    gdMaxBlockEnergy = Base.genesisMaxBlockEnergy . Base.genesisCore . genesisRegenesis
-    {-# INLINE gdMaxBlockEnergy #-}
-    gdFinalizationParameters = Base.genesisFinalizationParameters . Base.genesisCore . genesisRegenesis
-    {-# INLINE gdFinalizationParameters #-}
-    gdEpochLength = Base.genesisEpochLength . Base.genesisCore . genesisRegenesis
-    {-# INLINE gdEpochLength #-}
 
 -- |Deserialize genesis data in the V8 format.
 getGenesisDataV8 :: Get GenesisDataP6
@@ -71,7 +48,7 @@ getRegenesisData :: Get RegenesisP6
 getRegenesisData =
     getWord8 >>= \case
         1 -> do
-            genesisRegenesis <- Base.getRegenesisData
+            genesisRegenesis <- get
             return GDP6Regenesis{..}
         _ -> fail "Unrecognized P6 regenesis data type."
 
@@ -81,46 +58,6 @@ putGenesisDataV8 GDP6Initial{..} = do
     putWord8 0
     put genesisCore
     put genesisInitialState
-
--- |Deserialize genesis configuration from the serialized genesis **or** regenesis data.
---
--- Note that this will not consume the entire genesis data, only the initial
--- prefix. In particular, in case of initial genesis data it will not read the
--- genesis state.
---
--- The argument is the hash of the genesis data from which the configuration is
--- to be read.
-getGenesisConfigurationV8 :: BlockHash -> Get Base.GenesisConfiguration
-getGenesisConfigurationV8 genHash = do
-    getWord8 >>= \case
-        0 -> do
-            _gcCore <- get
-            return
-                Base.GenesisConfiguration
-                    { _gcTag = 0,
-                      _gcCurrentHash = genHash,
-                      _gcFirstGenesis = genHash,
-                      ..
-                    }
-        1 -> do
-            _gcCore <- get
-            _gcFirstGenesis <- get
-            return
-                Base.GenesisConfiguration
-                    { _gcTag = 1,
-                      _gcCurrentHash = genHash,
-                      ..
-                    }
-        2 -> do
-            _gcCore <- get
-            _gcFirstGenesis <- get
-            return
-                Base.GenesisConfiguration
-                    { _gcTag = 2,
-                      _gcCurrentHash = genHash,
-                      ..
-                    }
-        _ -> fail "Unrecognised genesis data type"
 
 -- |Deserialize genesis data with a version tag. The expected version tag is 8
 -- and this must be distinct from version tags of other genesis data formats.
@@ -136,9 +73,6 @@ putVersionedGenesisData :: Putter GenesisDataP6
 putVersionedGenesisData gd = do
     putVersion 8
     putGenesisDataV8 gd
-
-parametersToGenesisData :: GenesisParameters 'P6 -> GenesisDataP6
-parametersToGenesisData = uncurry GDP6Initial . Base.parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.
 -- Every block hash is derived from a message that begins with the block slot,
@@ -160,7 +94,7 @@ genesisBlockHash GDP6Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
 -- protocol. This becomes the block hash of the genesis block of the new chain
 -- after the protocol update.
 regenesisBlockHash :: RegenesisP6 -> BlockHash
-regenesisBlockHash GDP6Regenesis{genesisRegenesis = Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
+regenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P6
     putWord8 1 -- regenesis variant
@@ -172,7 +106,7 @@ regenesisBlockHash GDP6Regenesis{genesisRegenesis = Base.RegenesisData{..}} = Bl
 
 -- |The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP6 -> BlockHash
-firstGenesisBlockHash GDP6Regenesis{genesisRegenesis = Base.RegenesisData{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP6 -> Word8

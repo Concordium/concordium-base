@@ -11,7 +11,6 @@ import Control.Monad
 import qualified Data.Aeson as AE
 import Data.Aeson.Types
 
-import Concordium.Common.Version
 import Concordium.Genesis.Account
 import Concordium.Types
 import Concordium.Types.AnonymityRevokers
@@ -201,7 +200,7 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters
             ]
 
--- | 'GenesisParameters' provides a convenient abstraction for
+-- | 'GenesisParametersV2' provides a convenient abstraction for
 -- constructing 'GenesisData'. The following invariants are
 -- required to hold:
 --
@@ -210,7 +209,9 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
 --   corresponding to its index in the list.
 -- * The foundation account specified in 'gpChainParameters' must
 --   correspond to an account in 'gpInitialAccounts'.
-data GenesisParameters pv = GenesisParameters
+--
+-- This version is used for consensus version 0.
+data GenesisParametersV2 pv = GenesisParametersV2
     { -- |Time at which genesis occurs.
       gpGenesisTime :: Timestamp,
       -- |Duration of each slot.
@@ -238,8 +239,8 @@ data GenesisParameters pv = GenesisParameters
       gpChainParameters :: GenesisChainParameters pv
     }
 
-instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) where
-    parseJSON = withObject "GenesisParameters" $ \v -> do
+instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParametersV2 pv) where
+    parseJSON = withObject "GenesisParametersV2" $ \v -> do
         gpGenesisTime <- v .: "genesisTime"
         gpSlotDuration <- v .: "slotDuration"
         gpLeadershipElectionNonce <- v .: "leadershipElectionNonce"
@@ -266,8 +267,4 @@ instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) wher
         unless (any ((facct ==) . gaAddress) gpInitialAccounts) $
             fail $
                 "Foundation account (" ++ show facct ++ ") is not in initialAccounts"
-        return GenesisParameters{..}
-
--- |Version number identifying the current version of the genesis parameter format.
-genesisParametersVersion :: Version
-genesisParametersVersion = 2
+        return GenesisParametersV2{..}
