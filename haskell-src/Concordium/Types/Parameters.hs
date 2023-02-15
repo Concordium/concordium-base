@@ -1611,8 +1611,8 @@ data FinalizationCommitteeParameters = FinalizationCommitteeParameters
       -- |Maximum number of bakers to include in the finalization committee.
       _fcpMaxFinalizers :: !Word32,
       -- |Determining the staking threshold required for being eligible the finalization committee.
-      -- The required amount is given by @total staked ccd / _fcpFinalizerRelativeStakeThreshold@
-      _fcpFinalizerRelativeStakeThreshold :: !Word32
+      -- The required amount is given by @total staked ccd * _fcpFinalizerRelativeStakeThreshold@
+      _fcpFinalizerRelativeStakeThreshold :: !PartsPerHundredThousands
     }
     deriving (Eq, Show)
 
