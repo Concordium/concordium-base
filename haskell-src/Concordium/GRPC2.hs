@@ -421,6 +421,10 @@ instance ToProto UrlText where
     type Output UrlText = Text
     toProto (UrlText s) = s
 
+instance ToProto PartsPerHundredThousands where
+    type Output PartsPerHundredThousands = Proto.AmountFraction
+    toProto (PartsPerHundredThousands ppht) = Proto.make (ProtoFields.partsPerHundredThousand .= fromIntegral ppht)
+
 instance ToProto AmountFraction where
     type Output AmountFraction = Proto.AmountFraction
     toProto (AmountFraction ppht) = Proto.make (ProtoFields.partsPerHundredThousand .= fromIntegral ppht)
@@ -840,7 +844,7 @@ instance ToProto Parameters.FinalizationCommitteeParameters where
     toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
         ProtoFields.minimumFinalizers .= _fcpMinFinalizers
         ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
-        ProtoFields.finalizerRelativeStakeThreshold .= _fcpFinalizerRelativeStakeThreshold
+        ProtoFields.finalizerRelativeStakeThreshold .= toProto _fcpFinalizerRelativeStakeThreshold
 
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
