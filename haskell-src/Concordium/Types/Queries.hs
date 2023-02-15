@@ -9,7 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
--- |Types for representing the results of consensus queries.
+-- |Types for representing the inputs to and results of consensus queries.
 module Concordium.Types.Queries where
 
 import Data.Aeson
@@ -18,6 +18,7 @@ import Data.Aeson.Types (Parser)
 import Data.Char (isLower)
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
+import Data.Text (Text)
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 import Data.Word
@@ -599,6 +600,14 @@ data PendingUpdateEffect
     | -- |Updates to time parameters for chain parameters version 1.
       PUETimeParameters !(TimeParameters 'ChainParametersV1)
 
+$( deriveJSON
+    defaultOptions
+        { constructorTagModifier = drop (length ("PUE" :: String)),
+          sumEncoding = TaggedObject{tagFieldName = "updateType", contentsFieldName = "contents"}
+        }
+    ''PendingUpdateEffect
+ )
+
 -- | Next available sequence numbers for updating any of the chain parameters.
 data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
     { -- |Updates to the root keys.
@@ -689,3 +698,199 @@ data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion).
     { ecpParams :: !(ChainParameters' cpv),
       ecpKeys :: !(U.UpdateKeysCollection cpv)
     }
+
+instance ToJSON EChainParametersAndKeys where
+    toJSON (EChainParametersAndKeys (params :: ChainParameters' cpv) keys) =
+      case chainParametersVersion @cpv of
+        SCPV0 -> object [
+            "version" .= String "0",
+            "parameters" .= toJSON params,
+            "updateKeys" .= toJSON keys
+          ]
+        SCPV1 -> object [
+            "version" .= String "1",
+            "parameters" .= toJSON params,
+            "updateKeys" .= toJSON keys
+          ]
+
+-- |The committee information of a node which is configured with
+-- baker keys but is somehow is _not_ part of the current baking
+-- committee.
+data PassiveCommitteeInfo
+    = -- |The node is started with baker keys however it is currently not in
+      -- the baking committee. The node is _not_ baking.
+      NotInCommittee
+    | -- |The account is registered as a baker but not in the current `Epoch`.
+      -- The node is _not_ baking.
+      AddedButNotActiveInCommittee
+    | -- |The node has configured invalid baker keys i.e., the configured
+      -- baker keys do not match the current keys on the baker account.
+      -- The node is _not_ baking.
+      AddedButWrongKeys
+  deriving (Show)
+
+-- |Status of the baker configured node.
+data BakerConsensusInfoStatus
+    = -- |The node is currently not baking.
+      PassiveBaker !PassiveCommitteeInfo
+    | -- |Node is configured with baker keys and active in the current baking committee
+      ActiveBakerCommitteeInfo
+    | -- | Node is configured with baker keys and active in the current finalizer
+      -- committee (and also baking committee).
+      ActiveFinalizerCommitteeInfo
+  deriving (Show)
+
+-- |Consensus info for a node configured with baker keys.
+data BakerConsensusInfo = BakerConsensusInfo
+    { bakerId :: !BakerId,
+      status :: !BakerConsensusInfoStatus
+    } deriving (Show)
+
+-- |Consensus related details of the peer.
+data NodeDetails
+    = -- |The node is a bootstrapper and not participating in consensus.
+      NodeBootstrapper
+    | -- |The node is not running consensus. This is the case only when the node
+      -- is not supporting the protocol on the chain. The node does not process
+      -- blocks.
+      NodeNotRunning
+    | -- | Consensus info for a node that is not configured with baker keys.
+      -- The node is only processing blocks and relaying blocks and transactions
+      -- and responding to catchup messages.
+      NodePassive
+    | -- | The node is configured with baker credentials and consensus is running.
+      NodeActive !BakerConsensusInfo
+  deriving (Show)
+
+-- |Network related information of the node.
+data NetworkInfo = NetworkInfo
+    { -- |The node id.
+      nodeId :: !Text,
+      -- |Total number of packets sent by the node.
+      peerTotalSent :: !Word64,
+      -- |Total number of packets received by the node.
+      peerTotalReceived :: !Word64,
+      -- |Average outbound throughput in bytes per second.
+      avgBpsIn :: !Word64,
+      -- |Average inbound throughput in bytes per second.
+      avgBpsOut :: !Word64
+    } deriving (Show)
+
+-- |Various information about the node.
+data NodeInfo = NodeInfo
+    { -- |The version of the node.
+      peerVersion :: !Text,
+      -- |The local time of the node.
+      localTime :: !Timestamp,
+      -- |Number of milliseconds that the node has been alive.
+      peerUptime :: !Duration,
+      -- |Information related to the p2p protocol.
+      networkInfo :: !NetworkInfo,
+      -- |Consensus related details of the node.
+      details :: !NodeDetails
+    } deriving (Show)
+
+-- |Information about a block which arrived at the node.
+data ArrivedBlockInfo = ArrivedBlockInfo {
+    -- |Hash of the block.
+    abiBlockHash :: !BlockHash,
+    -- |Absolute height of the block, where 0 is the height of the genesis block.
+    abiBlockHeight :: !AbsoluteBlockHeight
+} deriving (Show)
+
+-- |A pending update.
+data PendingUpdate = PendingUpdate {
+    -- |The effect of the update.
+    puEffect :: !PendingUpdateEffect,
+    -- |The effective time of the update.
+    puEffectiveTime :: TransactionTime
+}
+
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''PendingUpdate)
+
+-- |Catchup status of the peer.
+data PeerCatchupStatus
+    = -- |The peer is a bootstrapper and not participating in consensus.
+      Bootstrapper
+    | -- |The peer does not have any data unknown to us. If we receive a message
+      -- from the peer that refers to unknown data (e.g., an unknown block) the
+      -- peer is marked as pending.
+      UpToDate
+    | -- |The peer might have some data unknown to us. A peer can be in this state
+      -- either because it sent a message that refers to data unknown to us, or
+      -- before we have established a baseline with it. The latter happens during
+      -- node startup, as well as upon protocol updates until the initial catchup
+      -- handshake completes.
+      Pending
+    | -- |The node is currently catching up by requesting blocks from this peer.
+      -- There will be at most one peer with this status at a time. Once the peer
+      -- has responded to the request, its status will be changed to either `UpToDate`
+      -- or `Pending`.
+      CatchingUp
+  deriving (Show, Eq)
+
+-- |Network statistics for the peer.
+data NetworkStats = NetworkStats
+    { -- |The number of messages sent to the peer.
+      -- Packets are blocks, transactions, catchup messages, finalization records
+      -- and network messages such as pings and peer requests.
+      packetsSent :: !Word64,
+      -- |The number of messages received from the peer.
+      -- Packets are blocks, transactions, catchup messages, finalization records
+      -- and network messages such as pings and peer requests.
+      packetsReceived :: !Word64,
+      -- |The connection latency (i.e., ping time) in milliseconds.
+      latency :: !Word64
+    } deriving (Show)
+
+-- An IP address.
+newtype IpAddress = IpAddress {ipAddress :: Text}
+    deriving (Show, ToJSON)
+
+-- An IP port.
+newtype IpPort = IpPort {ipPort :: Word16}
+    deriving (Show, ToJSON)
+
+-- A peer are represented by its IP address.
+type Peer = IpAddress
+
+-- Compound type representing a pair of an IP address and a port.
+type IpSocketAddress = (IpAddress, IpPort)
+
+-- |Network related peer statistics.
+data PeerInfo = PeerInfo
+    { peerId :: !Text,
+      socketAddress :: !IpSocketAddress,
+      networkStats :: !NetworkStats,
+      consensusInfo :: !PeerCatchupStatus
+    } deriving (Show)
+
+-- |A block identifier.
+-- A block is either identified via a hash, or as one of the special
+-- blocks at a given time (last final or best block). Queries which
+-- just need the recent state can use `LastFinal` or `Best` to get the
+-- result without first establishing what the last final or best block
+-- is.
+data BlockHashInput = Best | LastFinal | Given !BlockHash
+    deriving Read
+
+-- |Input for `getBlocksAtHeight`.
+data BlockHeightInput
+    = -- |The height of a block relative to a genesis index. This differs from the
+      -- absolute block height in that it counts height from the protocol update
+      -- corresponding to the provided genesis index.
+      Relative
+        { -- |Genesis index.
+          rGenesisIndex :: !GenesisIndex,
+          -- |Block height starting from the genesis block at the genesis index.
+          rBlockHeight :: !BlockHeight,
+          -- |Whether to return results only from the specified genesis index (`True`),
+          -- or allow results from more recent genesis indices as well (`False`).
+          rRestrict :: !Bool
+        }
+    | -- |The absolute height of a block. This is the number of ancestors of a block
+      -- since the genesis block. In particular, the chain genesis block has absolute
+      -- height 0.
+      Absolute
+        { aBlockHeight :: !AbsoluteBlockHeight
+        }

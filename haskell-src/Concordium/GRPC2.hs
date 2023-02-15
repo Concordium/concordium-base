@@ -12,14 +12,9 @@ module Concordium.GRPC2 (
     BakerKeysEvent,
     BlockHashInput(..),
     BlockHeightInput(..),
-    Peer,
-    IpAddress(..),
-    IpPort(..),
-    IpSocketAddress,
 )
 where
 
-import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Coerce
@@ -2031,15 +2026,6 @@ instance ToProto BlockHashInput where
         LastFinal -> Proto.make $ ProtoFields.lastFinal .= Proto.defMessage
         Given bh -> Proto.make $ ProtoFields.given .= toProto bh
 
--- |A block identifier.
--- A block is either identified via a hash, or as one of the special
--- blocks at a given time (last final or best block). Queries which
--- just need the recent state can use `LastFinal` or `Best` to get the
--- result without first establishing what the last final or best block
--- is.
-data BlockHashInput = Best | LastFinal | Given !BlockHash
-    deriving Read
-
 instance ToProto BlockHeightInput where
     type Output BlockHeightInput = Proto.BlocksAtHeightRequest
     toProto Relative{..} =
@@ -2055,27 +2041,6 @@ instance ToProto BlockHeightInput where
         Proto.make $
             ProtoFields.absolute .= Proto.make (ProtoFields.height .= toProto aBlockHeight)
 
--- |Input for `getBlocksAtHeight`.
-data BlockHeightInput
-    = -- |The height of a block relative to a genesis index. This differs from the
-      -- absolute block height in that it counts height from the protocol update
-      -- corresponding to the provided genesis index.
-      Relative
-        { -- |Genesis index.
-          rGenesisIndex :: !GenesisIndex,
-          -- |Block height starting from the genesis block at the genesis index.
-          rBlockHeight :: !BlockHeight,
-          -- |Whether to return results only from the specified genesis index (`True`),
-          -- or allow results from more recent genesis indices as well (`False`).
-          rRestrict :: !Bool
-        }
-    | -- |The absolute height of a block. This is the number of ancestors of a block
-      -- since the genesis block. In particular, the chain genesis block has absolute
-      -- height 0.
-      Absolute
-        { aBlockHeight :: !AbsoluteBlockHeight
-        }
-
 instance ToProto (BlockHashInput, InvokeContract.ContractContext) where
     type Output (BlockHashInput, InvokeContract.ContractContext) = Proto.InvokeInstanceRequest
     toProto (bhi, InvokeContract.ContractContext{..}) =
@@ -2087,20 +2052,6 @@ instance ToProto (BlockHashInput, InvokeContract.ContractContext) where
             ProtoFields.entrypoint .= toProto ccMethod
             ProtoFields.parameter .= toProto ccParameter
             ProtoFields.energy .= toProto ccEnergy
-
--- An IP address.
-newtype IpAddress = IpAddress {ipAddress :: Text}
-    deriving (Show, ToJSON)
-
--- An IP port.
-newtype IpPort = IpPort {ipPort :: Word16}
-    deriving (Show, ToJSON)
-
--- A peer are represented by its IP address.
-type Peer = IpAddress
-
--- Compound type representing a pair of an IP address and a port.
-type IpSocketAddress = (IpAddress, IpPort)
 
 instance ToProto IpAddress where
     type Output IpAddress = Proto.IpAddress
