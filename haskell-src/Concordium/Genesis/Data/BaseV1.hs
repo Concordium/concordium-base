@@ -1,15 +1,8 @@
 -- |Common types for genesis data for consensus version 1.
 module Concordium.Genesis.Data.BaseV1 where
 
-import qualified Data.Map.Strict as Map
-import Data.Serialize
-import qualified Data.Vector as Vec
-
-import Concordium.Genesis.Data.Base (GenesisState (..), toChainParameters)
-import Concordium.Genesis.Parameters
 import Concordium.Types
-import Concordium.Types.AnonymityRevokers
-import Concordium.Types.IdentityProviders
+import Data.Serialize
 
 -- |Core parameters that are set at genesis.
 -- These parameters are not updatable (except via protocol update).

@@ -12,7 +12,6 @@ import Concordium.Common.Version
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
-import Concordium.Genesis.Parameters
 import Concordium.Types
 
 -- |Initial genesis data for the P6 protocol version.
