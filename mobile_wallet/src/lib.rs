@@ -236,10 +236,12 @@ fn parameter_to_json_aux(input: &str) -> anyhow::Result<String> {
     let serialized_parameter: String = try_get(&v, "parameter")?;
     let receive_name: OwnedReceiveName = try_get(&v, "receiveName")?;
     let parameter: Parameter = Parameter::new_unchecked(hex::decode(serialized_parameter)?);
-    let schema: SchemaInputType = match try_get(&v, "schema") {
-        Ok(v) => v,
+    let schema: SchemaInputType = match v.get("schema") {
+        Some(v @ Value::Object(_)) => from_value(v.clone())?,
         // To support the legacy format we also attempt to parse the schema as a string directly:
-        Err(e) => SchemaInputType::Module(try_get(&v, "schema").map_err(|_| e)?),
+        Some(Value::String(v)) => SchemaInputType::Module(v.clone()),
+        Some(_) => bail!(format!("Field schema has unexpected type.")),
+        _ => bail!(format!("Field schema not present, but should be.")),
     };
     let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
     let parameter_as_json =
