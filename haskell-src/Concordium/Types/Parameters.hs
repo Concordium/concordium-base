@@ -1604,8 +1604,9 @@ instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 -- * Finalization committee parameters for consensus v1.
 
 -- |Finalization committee parameters
--- These parameters control who and how many bakers will be
--- eligible for joinin the finalization committee.
+-- These parameters control which bakers are in the finalization committee.
+-- '_fcpMinFinalizers' MUST be at least 1.
+-- '_fcpMaxFinalizers' MUST be at least '_fcpMinFinalizers'.
 data FinalizationCommitteeParameters = FinalizationCommitteeParameters
     { -- |Minimum number of bakers to include in the finalization committee before
       -- the '_fcpFinalizerRelativeStakeThreshold' takes effect.
