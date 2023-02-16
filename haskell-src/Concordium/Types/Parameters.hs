@@ -344,7 +344,8 @@ module Concordium.Types.Parameters (
 
     -- * Finalization committee parameters
     FinalizationCommitteeParameters (..),
-    -- The minimum number of bakers in the finalization committee.
+    -- The number of bakers that are eligible for finalization committee before
+    -- the 'fcpFinalizerRelativeStakeThreshold' takes effect.
     fcpMinFinalizers,
     -- The maximum number of bakers allowed to be in the finalization committee.
     fcpMaxFinalizers,
@@ -1606,12 +1607,13 @@ instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 -- These parameters control who and how many bakers will be
 -- eligible for joinin the finalization committee.
 data FinalizationCommitteeParameters = FinalizationCommitteeParameters
-    { -- |Minimum number of bakers to include in the finalization committee.
+    { -- |Minimum number of bakers to include in the finalization committee before
+      -- the '_fcpFinalizerRelativeStakeThreshold' takes effect.
       _fcpMinFinalizers :: !Word32,
       -- |Maximum number of bakers to include in the finalization committee.
       _fcpMaxFinalizers :: !Word32,
       -- |Determining the staking threshold required for being eligible the finalization committee.
-      -- The required amount is given by @total staked ccd * _fcpFinalizerRelativeStakeThreshold@
+      -- The required amount is given by @total stake in pools * _fcpFinalizerRelativeStakeThreshold@
       -- Accepted values are [0,1].
       _fcpFinalizerRelativeStakeThreshold :: !PartsPerHundredThousands
     }
@@ -1628,7 +1630,7 @@ instance Serialize FinalizationCommitteeParameters where
         _fcpMinFinalizers <- get
         unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
         _fcpMaxFinalizers <- get
-        unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
+        unless (_fcpMaxFinalizers >= _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater or equal than minimumFinalizers."
         _fcpFinalizerRelativeStakeThreshold <- get
         return FinalizationCommitteeParameters{..}
 
@@ -1650,7 +1652,7 @@ instance FromJSON FinalizationCommitteeParameters where
         _fcpMinFinalizers <- o .: "minimumFinalizers"
         unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
         _fcpMaxFinalizers <- o .: "maximumFinalizers"
-        unless (_fcpMaxFinalizers > _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater than minimumFinalizers."
+        unless (_fcpMaxFinalizers >= _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater or equal than minimumFinalizers."
         _fcpFinalizerRelativeStakeThreshold <- o .: "finalizerRelativeStakeThreshold"
         return FinalizationCommitteeParameters{..}
 
