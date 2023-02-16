@@ -1954,6 +1954,10 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.addIdentityProvider .= toProto _nusnAddIdentityProvider
         ProtoFields.cooldownParameters .= toProto _nusnCooldownParameters
         ProtoFields.timeParameters .= toProto _nusnTimeParameters
+        ProtoFields.timeoutParameters .= toProto _nusnTimeoutParameters
+        ProtoFields.minBlockTime .= toProto _nusnMinBlockTime
+        ProtoFields.blockEnergyLimit .= toProto _nusnBlockEnergyLimit
+        ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch

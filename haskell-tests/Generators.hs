@@ -393,7 +393,7 @@ genChainParametersV1 = do
 genFinalizationCommitteeParameters :: Gen FinalizationCommitteeParameters
 genFinalizationCommitteeParameters = do
     _fcpMinFinalizers <- choose (20, 100)
-    _fcpMaxFinalizers <- choose (200, 800)
+    _fcpMaxFinalizers <- choose (100, 800)
     _fcpFinalizerRelativeStakeThreshold <- arbitrary
     return FinalizationCommitteeParameters{..}
 
