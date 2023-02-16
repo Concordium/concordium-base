@@ -42,6 +42,7 @@ import qualified Concordium.Genesis.Data.P4 as P4
 import qualified Concordium.Genesis.Data.P5 as P5
 import qualified Concordium.Genesis.Data.P6 as P6
 import Concordium.Types
+import Concordium.Types.Parameters
 
 -- |Data family for genesis data.
 -- This has been chosen to be a data family so that the genesis data
@@ -71,14 +72,13 @@ newtype instance Regenesis 'P4 = RGDP4 {unRGP4 :: P4.RegenesisP4}
 newtype instance Regenesis 'P5 = RGDP5 {unRGP5 :: P5.RegenesisP5}
 newtype instance Regenesis 'P6 = RGDP6 {unRGP6 :: P6.RegenesisP6}
 
-instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
+instance (IsProtocolVersion pv, IsConsensusV0 pv) => BasicGenesisData (GenesisData pv) where
     gdGenesisTime = case protocolVersion @pv of
         SP1 -> gdGenesisTime . unGDP1
         SP2 -> gdGenesisTime . unGDP2
         SP3 -> gdGenesisTime . unGDP3
         SP4 -> gdGenesisTime . unGDP4
         SP5 -> gdGenesisTime . unGDP5
-        SP6 -> gdGenesisTime . unGDP6
     {-# INLINE gdGenesisTime #-}
     gdSlotDuration = case protocolVersion @pv of
         SP1 -> gdSlotDuration . unGDP1
@@ -86,7 +86,6 @@ instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
         SP3 -> gdSlotDuration . unGDP3
         SP4 -> gdSlotDuration . unGDP4
         SP5 -> gdSlotDuration . unGDP5
-        SP6 -> gdSlotDuration . unGDP6
     {-# INLINE gdSlotDuration #-}
     gdMaxBlockEnergy = case protocolVersion @pv of
         SP1 -> gdMaxBlockEnergy . unGDP1
@@ -94,7 +93,6 @@ instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
         SP3 -> gdMaxBlockEnergy . unGDP3
         SP4 -> gdMaxBlockEnergy . unGDP4
         SP5 -> gdMaxBlockEnergy . unGDP5
-        SP6 -> gdMaxBlockEnergy . unGDP6
     {-# INLINE gdMaxBlockEnergy #-}
     gdFinalizationParameters = case protocolVersion @pv of
         SP1 -> gdFinalizationParameters . unGDP1
@@ -102,7 +100,6 @@ instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
         SP3 -> gdFinalizationParameters . unGDP3
         SP4 -> gdFinalizationParameters . unGDP4
         SP5 -> gdFinalizationParameters . unGDP5
-        SP6 -> gdFinalizationParameters . unGDP6
     {-# INLINE gdFinalizationParameters #-}
     gdEpochLength = case protocolVersion @pv of
         SP1 -> gdEpochLength . unGDP1
@@ -110,17 +107,15 @@ instance (IsProtocolVersion pv) => BasicGenesisData (GenesisData pv) where
         SP3 -> gdEpochLength . unGDP3
         SP4 -> gdEpochLength . unGDP4
         SP5 -> gdEpochLength . unGDP5
-        SP6 -> gdEpochLength . unGDP6
     {-# INLINE gdEpochLength #-}
 
-instance (IsProtocolVersion pv) => BasicGenesisData (Regenesis pv) where
+instance (IsProtocolVersion pv, IsConsensusV0 pv) => BasicGenesisData (Regenesis pv) where
     gdGenesisTime = case protocolVersion @pv of
         SP1 -> gdGenesisTime . unRGP1
         SP2 -> gdGenesisTime . unRGP2
         SP3 -> gdGenesisTime . unRGP3
         SP4 -> gdGenesisTime . unRGP4
         SP5 -> gdGenesisTime . unRGP5
-        SP6 -> gdGenesisTime . unRGP6
     {-# INLINE gdGenesisTime #-}
     gdSlotDuration = case protocolVersion @pv of
         SP1 -> gdSlotDuration . unRGP1
@@ -128,7 +123,6 @@ instance (IsProtocolVersion pv) => BasicGenesisData (Regenesis pv) where
         SP3 -> gdSlotDuration . unRGP3
         SP4 -> gdSlotDuration . unRGP4
         SP5 -> gdSlotDuration . unRGP5
-        SP6 -> gdSlotDuration . unRGP6
     {-# INLINE gdSlotDuration #-}
     gdMaxBlockEnergy = case protocolVersion @pv of
         SP1 -> gdMaxBlockEnergy . unRGP1
@@ -136,7 +130,6 @@ instance (IsProtocolVersion pv) => BasicGenesisData (Regenesis pv) where
         SP3 -> gdMaxBlockEnergy . unRGP3
         SP4 -> gdMaxBlockEnergy . unRGP4
         SP5 -> gdMaxBlockEnergy . unRGP5
-        SP6 -> gdMaxBlockEnergy . unRGP6
     {-# INLINE gdMaxBlockEnergy #-}
     gdFinalizationParameters = case protocolVersion @pv of
         SP1 -> gdFinalizationParameters . unRGP1
@@ -144,7 +137,6 @@ instance (IsProtocolVersion pv) => BasicGenesisData (Regenesis pv) where
         SP3 -> gdFinalizationParameters . unRGP3
         SP4 -> gdFinalizationParameters . unRGP4
         SP5 -> gdFinalizationParameters . unRGP5
-        SP6 -> gdFinalizationParameters . unRGP6
     {-# INLINE gdFinalizationParameters #-}
     gdEpochLength = case protocolVersion @pv of
         SP1 -> gdEpochLength . unRGP1
@@ -152,7 +144,6 @@ instance (IsProtocolVersion pv) => BasicGenesisData (Regenesis pv) where
         SP3 -> gdEpochLength . unRGP3
         SP4 -> gdEpochLength . unRGP4
         SP5 -> gdEpochLength . unRGP5
-        SP6 -> gdEpochLength . unRGP6
     {-# INLINE gdEpochLength #-}
 
 instance (IsProtocolVersion pv) => Eq (GenesisData pv) where
@@ -195,7 +186,7 @@ getGenesisConfiguration spv genHash = case spv of
     SP3 -> P3.getGenesisConfigurationV5 genHash
     SP4 -> P4.getGenesisConfigurationV6 genHash
     SP5 -> P5.getGenesisConfigurationV7 genHash
-    SP6 -> P6.getGenesisConfigurationV8 genHash
+    _ -> fail "Genesis configuration is only supported for consensus version 0"
 
 -- |Deserialize genesis data with a version tag.
 -- See `putVersionedGenesisData` for details of the version tag.
@@ -358,7 +349,7 @@ data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) wh
     StateMigrationParametersP4ToP5 :: StateMigrationParameters 'P4 'P5
 
 -- |Extract the genesis configuration from the genesis data.
-genesisConfiguration :: IsProtocolVersion pv => GenesisData pv -> GenesisConfiguration
+genesisConfiguration :: (IsProtocolVersion pv, IsConsensusV0 pv) => GenesisData pv -> GenesisConfiguration
 genesisConfiguration genData =
     GenesisConfiguration
         { _gcTag = genesisVariantTag genData,
@@ -368,7 +359,7 @@ genesisConfiguration genData =
         }
 
 -- |Extract the genesis configuration from the regenesis data.
-regenesisConfiguration :: IsProtocolVersion pv => Regenesis pv -> GenesisConfiguration
+regenesisConfiguration :: (IsProtocolVersion pv, IsConsensusV0 pv) => Regenesis pv -> GenesisConfiguration
 regenesisConfiguration regenData =
     GenesisConfiguration
         { _gcTag = regenesisVariantTag regenData,

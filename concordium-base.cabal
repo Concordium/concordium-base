@@ -54,6 +54,7 @@ library
       Concordium.Genesis.Account
       Concordium.Genesis.Data
       Concordium.Genesis.Data.Base
+      Concordium.Genesis.Data.BaseV1
       Concordium.Genesis.Data.P1
       Concordium.Genesis.Data.P2
       Concordium.Genesis.Data.P3
@@ -74,6 +75,7 @@ library
       Concordium.Types.Accounts.Releases
       Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
+      Concordium.Types.Conditionally
       Concordium.Types.DummyData
       Concordium.Types.Execution
       Concordium.Types.Execution.TH
