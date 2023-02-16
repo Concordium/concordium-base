@@ -344,12 +344,12 @@ module Concordium.Types.Parameters (
 
     -- * Finalization committee parameters
     FinalizationCommitteeParameters (..),
-    -- The number of bakers that are eligible for finalization committee before
+    -- |The number of bakers that are eligible for finalization committee before
     -- the 'fcpFinalizerRelativeStakeThreshold' takes effect.
     fcpMinFinalizers,
-    -- The maximum number of bakers allowed to be in the finalization committee.
+    -- |The maximum number of bakers allowed to be in the finalization committee.
     fcpMaxFinalizers,
-    -- Determining the staking threshold required for being eligible the finalization committee.
+    -- |Determining the staking threshold required for being eligible the finalization committee.
     -- The minimum amount required to join the finalization committee
     -- is given by @total staked ccd / fcpFinalizerRelativeStakeThreshold@
     fcpFinalizerRelativeStakeThreshold,
