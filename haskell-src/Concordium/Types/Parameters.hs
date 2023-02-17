@@ -619,15 +619,15 @@ $( singletons
             ConsensusParametersVersion1 -> False
         isSupported PTTimeParameters cpv = supportsTimeParameters (authorizationsVersionFor cpv)
         isSupported PTMintPerSlot cpv = supportsMintPerSlot (mintDistributionVersionFor cpv)
-        isSupported PTTimeoutParameters ChainParametersV0 = False
-        isSupported PTTimeoutParameters ChainParametersV1 = False
-        isSupported PTTimeoutParameters ChainParametersV2 = True
-        isSupported PTMinBlockTime ChainParametersV0 = False
-        isSupported PTMinBlockTime ChainParametersV1 = False
-        isSupported PTMinBlockTime ChainParametersV2 = True
-        isSupported PTBlockEnergyLimit ChainParametersV0 = False
-        isSupported PTBlockEnergyLimit ChainParametersV1 = False
-        isSupported PTBlockEnergyLimit ChainParametersV2 = True
+        isSupported PTTimeoutParameters cpv = case consensusParametersVersionFor cpv of
+            ConsensusParametersVersion0 -> False
+            ConsensusParametersVersion1 -> True
+        isSupported PTMinBlockTime cpv = case consensusParametersVersionFor cpv of
+            ConsensusParametersVersion0 -> False
+            ConsensusParametersVersion1 -> True
+        isSupported PTBlockEnergyLimit cpv = case consensusParametersVersionFor cpv of
+            ConsensusParametersVersion0 -> False
+            ConsensusParametersVersion1 -> True
         isSupported PTCooldownParametersAccessStructure cpv = supportsCooldownParametersAccessStructure (authorizationsVersionFor cpv)
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
