@@ -4,7 +4,7 @@ use ff::{Field, PrimeField};
 use rand::*;
 use std::{
     borrow::Borrow,
-    fmt::{Debug, Display},
+    fmt::{Debug},
 };
 use thiserror::Error;
 
@@ -19,7 +19,7 @@ pub enum CurveDecodingError {
 /// prime order size. More correctly this would be called a group, since it is
 /// generally a subset of an elliptic curve, but the name is in use now.
 pub trait Curve:
-    Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
+    Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
     /// The prime field of the group order size.
     type Scalar: PrimeField + Field + Serialize;
     /// The base field of the curve. In general larger than the Scalar field.
