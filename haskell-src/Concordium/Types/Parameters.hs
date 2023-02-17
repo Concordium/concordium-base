@@ -1569,7 +1569,13 @@ data FinalizationCommitteeParameters = FinalizationCommitteeParameters
     }
     deriving (Eq, Show)
 
-makeLenses ''FinalizationCommitteeParameters
+-- Define 'HasFinalizationCommitteeParameters' class with accessor lenses, and instance for 'FinalizationCommitteeParameters'.
+makeClassy ''FinalizationCommitteeParameters
+
+-- |An instance for 'HasFinalizationCommitteeParameters' that automatically unwraps the @OParam 'PTFinalizationCommitteeParameters cpv 'FinalizationCommitteeParameters@
+-- when @IsSupported 'PTFinalizationCommitteeParameters cpv ~ 'True@
+instance IsSupported 'PTFinalizationCommitteeParameters cpv ~ 'True => HasFinalizationCommitteeParameters (OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters) where
+    finalizationCommitteeParameters = supportedOParam
 
 instance Serialize FinalizationCommitteeParameters where
     put FinalizationCommitteeParameters{..} = do
