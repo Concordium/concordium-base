@@ -2,10 +2,7 @@ use byteorder::ReadBytesExt;
 use crypto_common::{Serial, Serialize};
 use ff::{Field, PrimeField};
 use rand::*;
-use std::{
-    borrow::Borrow,
-    fmt::{Debug},
-};
+use std::{borrow::Borrow, fmt::Debug};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
