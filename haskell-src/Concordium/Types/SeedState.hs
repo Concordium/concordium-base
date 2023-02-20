@@ -20,6 +20,10 @@ import Concordium.Crypto.SHA256 (Hash)
 import Concordium.Types
 import Concordium.Types.Conditionally
 
+-- This splice generates 'SSeedStateVersion' (a singletonised version of 'SeedStateVersion'), as
+-- well as the type families 'SeedStateVersionFor' and 'SupportsEpochLength', and the singletonised
+-- 'sSeedStateVersionFor' and 'sSupportsEpochLength', from 'seedStateVersionFor' and
+-- 'supportsEpochLength'.
 $( singletons
     [d|
         data SeedStateVersion
@@ -63,15 +67,17 @@ data SeedState (ssv :: SeedStateVersion) = SeedState
     }
     deriving (Eq, Show)
 
-putSeedState :: Putter (SeedState ssv)
-putSeedState SeedState{..} = do
+-- |Serialize a 'SeedState'.
+serializeSeedState :: Putter (SeedState ssv)
+serializeSeedState SeedState{..} = do
     mapM_ put epochLength
     put epoch
     put currentLeadershipElectionNonce
     put updatedNonce
 
-getSeedState :: SSeedStateVersion ssv -> Get (SeedState ssv)
-getSeedState ssv = do
+-- |Deserialize a 'SeedState', given the seed state version.
+deserializeSeedState :: SSeedStateVersion ssv -> Get (SeedState ssv)
+deserializeSeedState ssv = do
     epochLength <- conditionallyA (sSupportsEpochLength ssv) get
     epoch <- get
     currentLeadershipElectionNonce <- get
@@ -79,8 +85,8 @@ getSeedState ssv = do
     return SeedState{..}
 
 instance IsSeedStateVersion ssv => Serialize (SeedState ssv) where
-    put = putSeedState
-    get = getSeedState sing
+    put = serializeSeedState
+    get = deserializeSeedState sing
 
 -- |Instantiate a seed state: leadership election nonce should be random, epoch length should be long, but not too long...
 initialSeedStateV0 :: LeadershipElectionNonce -> EpochLength -> SeedState 'SeedStateVersion0
@@ -92,7 +98,7 @@ initialSeedStateV0 nonce theEpochLength =
           updatedNonce = nonce
         }
 
--- |Instantiate a seed state: leadership election nonce should be random.
+-- |Instantiate a seed state for consensus version 1.
 initialSeedStateV1 :: LeadershipElectionNonce -> SeedState 'SeedStateVersion1
 initialSeedStateV1 nonce =
     SeedState

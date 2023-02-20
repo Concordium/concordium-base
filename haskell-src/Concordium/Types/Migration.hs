@@ -108,6 +108,7 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
                   ..
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+          _cpFinalizationCommitteeParameters = NoParam,
           ..
         }
   where

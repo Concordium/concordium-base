@@ -33,6 +33,7 @@ import Concordium.Types.Parameters (
     AuthorizationsVersionFor,
     ChainParameters',
     CooldownParameters,
+    FinalizationCommitteeParameters,
     GASRewards,
     GASRewardsVersion (..),
     MintDistribution,
@@ -620,6 +621,8 @@ data PendingUpdateEffect
       PUEMinBlockTime !Duration
     | -- |Updates to the block energy limit for chain parameters version 2.
       PUEBlockEnergyLimit !Energy
+    | -- |Updates to the finalization committee parameters for chain parameters version 2.
+      PUEFinalizationCommitteeParameters !FinalizationCommitteeParameters
 
 -- | Next available sequence numbers for updating any of the chain parameters.
 data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
@@ -660,7 +663,9 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       -- |Updates to the consensus version 2 minimum time between blocks.
       _nusnMinBlockTime :: !U.UpdateSequenceNumber,
       -- |Updates to the consensus version 2 block energy limit.
-      _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber
+      _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber,
+      -- |Updates to the consensus version 2 finalization committee parameters
+      _nusnFinalizationCommitteeParameters :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
@@ -687,7 +692,8 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnTimeParameters = mNextSequenceNumber _pTimeParametersQueue,
           _nusnTimeoutParameters = mNextSequenceNumber _pTimeoutParametersQueue,
           _nusnMinBlockTime = mNextSequenceNumber _pMinBlockTimeQueue,
-          _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue
+          _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue,
+          _nusnFinalizationCommitteeParameters = mNextSequenceNumber _pFinalizationCommitteeParametersQueue
         }
   where
     -- Get the next sequence number or 1, if not supported.

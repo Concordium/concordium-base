@@ -685,6 +685,8 @@ data UpdateType
       UpdateMinBlockTime
     | -- |Update block energy limit for consensus version 2
       UpdateBlockEnergyLimit
+    | -- |Update the finalization committee parameters for consensus version 2
+      UpdateFinalizationCommitteeParameters
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -717,6 +719,7 @@ instance Serialize UpdateType where
     put UpdateTimeoutParameters = putWord8 17
     put UpdateMinBlockTime = putWord8 18
     put UpdateBlockEnergyLimit = putWord8 19
+    put UpdateFinalizationCommitteeParameters = putWord8 20
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -738,6 +741,7 @@ instance Serialize UpdateType where
             17 -> return UpdateTimeoutParameters
             18 -> return UpdateMinBlockTime
             19 -> return UpdateBlockEnergyLimit
+            20 -> return UpdateFinalizationCommitteeParameters
             n -> fail $ "invalid update type: " ++ show n
 
 -- |Sequence number for updates of a given type.
@@ -828,6 +832,8 @@ data UpdatePayload
       BlockEnergyLimitUpdatePayload !Energy
     | -- |Update the GAS rewards (chain parameters version 2)
       GASRewardsCPV2UpdatePayload !(GASRewards 'GASRewardsVersion1)
+    | -- |Update the finalization committee parameters (chain parameters version 2)
+      FinalizationCommitteeParametersUpdatePayload !FinalizationCommitteeParameters
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -852,6 +858,7 @@ putUpdatePayload (TimeoutParametersUpdatePayload u) = putWord8 18 >> put u
 putUpdatePayload (MinBlockTimeUpdatePayload u) = putWord8 19 >> put u
 putUpdatePayload (BlockEnergyLimitUpdatePayload u) = putWord8 20 >> put u
 putUpdatePayload (GASRewardsCPV2UpdatePayload u) = putWord8 21 >> put u
+putUpdatePayload (FinalizationCommitteeParametersUpdatePayload u) = putWord8 22 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
@@ -891,6 +898,7 @@ getUpdatePayload spv =
         19 | isSupported PTMinBlockTime cpv -> MinBlockTimeUpdatePayload <$> get
         20 | isSupported PTBlockEnergyLimit cpv -> BlockEnergyLimitUpdatePayload <$> get
         21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
+        22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv
@@ -932,6 +940,7 @@ updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
 updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
+updateType FinalizationCommitteeParametersUpdatePayload{} = UpdateFinalizationCommitteeParameters
 
 -- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -958,6 +967,7 @@ extractKeysIndices p =
         TimeoutParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         MinBlockTimeUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys

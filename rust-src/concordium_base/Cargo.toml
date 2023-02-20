@@ -28,6 +28,8 @@ num = "0.4"
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
 num-bigint = "0.4"
 num-traits = "0.2"
+bs58 = { version = "0.4", features = ["check"] }
+leb128 = "0.2"
 
 # Local dependencies
 random_oracle = { version = "*", path = "../random_oracle/" }
