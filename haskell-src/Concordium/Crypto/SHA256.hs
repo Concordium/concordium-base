@@ -149,6 +149,10 @@ hashToDouble (Hash h) =
 hashToInt :: Hash -> Int
 hashToInt (Hash h) = fromIntegral . FBS.readWord64be $ h
 
+-- |Convert a 'Hash' to an 'Integer' by treating it as a big-endian, unsigned integer value.
+hashToInteger :: Hash -> Integer
+hashToInteger (Hash h) = FBS.decodeIntegerUnsigned h
+
 -- |Convert a 'Hash' to a 'ByteString'.
 -- Gives the same result a serializing, but more efficient.
 hashToByteString :: Hash -> ByteString
