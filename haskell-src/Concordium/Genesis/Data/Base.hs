@@ -241,6 +241,7 @@ toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{.
         Just i -> fromIntegral i
     _cpPoolParameters = gcpPoolParameters
     _cpConsensusParameters = gcpConsensusParameters
+    _cpFinalizationCommitteeParameters = gcpFinalizationCommitteeParameters
 
 -- |Convert 'GenesisParametersV2' to genesis data.
 -- This is an auxiliary function since much of the behaviour is shared between protocol versions.

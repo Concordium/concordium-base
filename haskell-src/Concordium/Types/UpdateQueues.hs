@@ -163,7 +163,9 @@ data PendingUpdates cpv = PendingUpdates
       -- |Minimum block time for consensus version 2 (CPV2 onwards).
       _pMinBlockTimeQueue :: !(OUpdateQueue 'PTMinBlockTime cpv Duration),
       -- |Block energy limit (CPV2 onwards).
-      _pBlockEnergyLimitQueue :: !(OUpdateQueue 'PTBlockEnergyLimit cpv Energy)
+      _pBlockEnergyLimitQueue :: !(OUpdateQueue 'PTBlockEnergyLimit cpv Energy),
+      -- |Finalization committee parameters queue (CPV2 onwards).
+      _pFinalizationCommitteeParametersQueue :: !(OUpdateQueue 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Show, Eq)
 
@@ -192,6 +194,7 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                     <> optionalHash _pTimeoutParametersQueue
                     <> optionalHash _pMinBlockTimeQueue
                     <> optionalHash _pBlockEnergyLimitQueue
+                    <> optionalHash _pFinalizationCommitteeParametersQueue
       where
         hsh :: HashableTo H.Hash a => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
@@ -267,7 +270,8 @@ pendingUpdatesV2ToJSON
               "addIdentityProvider" AE..= _pAddIdentityProviderQueue,
               "cooldownParameters" AE..= cpq,
               "timeParameters" AE..= tpq,
-              "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue
+              "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue,
+              "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
             ]
 
 instance IsChainParametersVersion cpv => ToJSON (PendingUpdates cpv) where
@@ -297,6 +301,7 @@ parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     let _pTimeoutParametersQueue = NoParam
     let _pMinBlockTimeQueue = NoParam
     let _pBlockEnergyLimitQueue = NoParam
+    let _pFinalizationCommitteeParametersQueue = NoParam
     return PendingUpdates{..}
 
 parsePendingUpdatesV1 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV1)
@@ -322,6 +327,7 @@ parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     let _pTimeoutParametersQueue = NoParam
     let _pMinBlockTimeQueue = NoParam
     let _pBlockEnergyLimitQueue = NoParam
+    let _pFinalizationCommitteeParametersQueue = NoParam
     return PendingUpdates{..}
 
 parsePendingUpdatesV2 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV2)
@@ -347,6 +353,7 @@ parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     _pTimeoutParametersQueue <- SomeParam <$> o AE..: "timeoutParameters"
     _pMinBlockTimeQueue <- SomeParam <$> o AE..: "minBlockTime"
     _pBlockEnergyLimitQueue <- SomeParam <$> o AE..: "blockEnergyLimit"
+    _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
     return PendingUpdates{..}
 
 instance IsChainParametersVersion cpv => FromJSON (PendingUpdates cpv) where
@@ -373,6 +380,7 @@ emptyPendingUpdates =
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
+        (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)

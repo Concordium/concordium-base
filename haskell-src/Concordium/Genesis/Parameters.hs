@@ -37,7 +37,9 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- |Foundation account address.
       gcpFoundationAccount :: !AccountAddress,
       -- |Minimum threshold required for registering as a baker.
-      gcpPoolParameters :: !(PoolParameters cpv)
+      gcpPoolParameters :: !(PoolParameters cpv),
+      -- |The Finalization committee parameters
+      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 
@@ -65,6 +67,7 @@ parseJSONForGCPV0 =
             gcpTimeParameters = NoParam
             gcpPoolParameters = PoolParametersV0{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
+            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
@@ -96,6 +99,7 @@ parseJSONForGCPV1 =
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -125,6 +129,9 @@ parseJSONForGCPV2 =
         _tpTimeoutDecrease <- v .: "timeoutDecrease"
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let gcpCooldownParameters = CooldownParametersV1{..}
             gcpTimeParameters = SomeParam TimeParametersV1{..}
             gcpPoolParameters = PoolParametersV1{..}
@@ -132,6 +139,7 @@ parseJSONForGCPV2 =
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
             _cpTimeoutParameters = TimeoutParameters{..}
+            gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
         return GenesisChainParameters{..}
 
@@ -197,7 +205,10 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
               "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
               "minBlockTime" AE..= _cpMinBlockTime gcpConsensusParameters,
-              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters
+              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
+              "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters)
             ]
 
 -- | 'GenesisParametersV2' provides a convenient abstraction for
