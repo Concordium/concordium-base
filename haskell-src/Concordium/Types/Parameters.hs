@@ -558,7 +558,7 @@ $( singletons
         -- \|Consensus parameters version.
         data ConsensusParametersVersion
             = ConsensusParametersVersion0 -- \^Election difficulty
-            | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time, finalization committee parameters
+            | ConsensusParametersVersion1 -- \^Timeout parameters, block energy limit, min block time
 
         -- \|The consensus parameters version associated with a chain parameters version.
         consensusParametersVersionFor :: ChainParametersVersion -> ConsensusParametersVersion
