@@ -66,7 +66,7 @@ instance Serialize RegenesisDataV1 where
         genesisStateHash <- get
         return RegenesisDataV1{..}
 
--- |Convert 'GenesisParametersV2' to genesis data.
+-- |Convert 'GenesisParametersV3' to genesis data.
 -- This is an auxiliary function since much of the behaviour is shared between protocol versions.
 parametersToState :: GenesisParametersV3 pv -> (CoreGenesisParametersV1, GenesisState pv)
 parametersToState GenesisParametersV3{..} =
