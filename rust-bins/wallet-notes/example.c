@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
       } else if (ends_with(argv[1], "serialize_token_transfer_parameters-input.json")) {
           out = serialize_token_transfer_parameters(buffer, &flag);
           return printStr(out, flag);
-      } else if (ends_with(argv[1], "parameter_to_json-input.json")) {
+      } else if (ends_with(argv[1], "parameter_to_json-legacy-input.json") || ends_with(argv[1], "parameter_to_json-module-input.json") || ends_with(argv[1], "parameter_to_json-parameter-input.json")  ) {
           out = parameter_to_json(buffer, &flag);
           return printStr(out, flag);
       } else if (ends_with(argv[1], "create_account_transaction-input.json")) {
