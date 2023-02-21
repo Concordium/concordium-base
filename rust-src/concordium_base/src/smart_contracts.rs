@@ -1,11 +1,11 @@
 use super::hashes;
 use crate::constants::*;
-use concordium_contracts_common::ModuleReference;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
     self, ContractName, OwnedContractName, OwnedReceiveName, ReceiveName,
 };
+use concordium_contracts_common::{ModuleReference, OwnedParameter};
 use crypto_common::{
     derive,
     derive::{Serial, Serialize},
@@ -211,4 +211,14 @@ impl Deserial for Parameter {
         let bytes = crypto_common::deserial_bytes(source, x.into())?;
         Ok(Parameter { bytes })
     }
+}
+
+/// Conversion between essentially duplicated types.
+impl From<OwnedParameter> for Parameter {
+    fn from(value: OwnedParameter) -> Self { Self { bytes: value.0 } }
+}
+
+/// Conversion between essentially duplicated types.
+impl From<Parameter> for OwnedParameter {
+    fn from(value: Parameter) -> Self { Self(value.bytes) }
 }

@@ -143,6 +143,10 @@ impl<Purpose> From<[u8; 32]> for HashBytes<Purpose> {
     fn from(array: [u8; 32]) -> Self { Self::new(array) }
 }
 
+impl<Purpose> From<HashBytes<Purpose>> for [u8; 32] {
+    fn from(value: HashBytes<Purpose>) -> Self { value.bytes }
+}
+
 impl<Purpose> Deref for HashBytes<Purpose> {
     type Target = [u8];
 
