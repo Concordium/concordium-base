@@ -479,6 +479,15 @@ impl Energy {
     pub fn checked_sub(self, rhs: Energy) -> Option<Energy> {
         self.energy.checked_sub(rhs.energy).map(From::from)
     }
+
+    /// Saturating energy subtraction.
+    ///
+    /// Computes `self - rhs` bottoming out at `0` instead of underflowing.
+    pub fn saturating_sub(self, rhs: Energy) -> Energy {
+        Self {
+            energy: self.energy.saturating_sub(rhs.energy),
+        }
+    }
 }
 
 /// Position of the transaction in a block.
