@@ -640,6 +640,7 @@ data AccountIdentifier
       AccAddress !AccountAddress
     | -- |Given index as an identifier.
       AccIndex !AccountIndex
+    deriving (Show)
 
 -- |Decode a null-terminated string as either an account address (base-58), account index (AccountIndex) or a
 -- credential registration ID (base-16).
