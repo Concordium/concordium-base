@@ -872,7 +872,7 @@ data PeerInfo = PeerInfo
 -- result without first establishing what the last final or best block
 -- is.
 data BlockHashInput = Best | LastFinal | Given !BlockHash
-    deriving (Read, Show)
+    deriving (Read)
 
 -- |Input for `getBlocksAtHeight`.
 data BlockHeightInput
