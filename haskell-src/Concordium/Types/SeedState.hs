@@ -53,7 +53,7 @@ withIsSeedStateVersionFor spv = withSingI (sSeedStateVersionFor spv)
 -- |State for computing the leadership election nonce.
 --
 -- (Implementation note: the constructors have equational constraints so that they have the same
--- return time. This allows them them to have common field names (e.g. 'epoch'), which is not
+-- return type. This allows them to have common field names (e.g. 'epoch'), which is not
 -- allowed if the return types differ (e.g. @SeedState 'SeedStateVersion0@ and
 -- @SeedState 'SeedStateVersion1@).)
 data SeedState (ssv :: SeedStateVersion) where
