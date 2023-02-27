@@ -353,6 +353,8 @@ module Concordium.Types.Parameters (
     -- The minimum amount required to join the finalization committee
     -- is given by @total staked ccd / fcpFinalizerRelativeStakeThreshold@
     fcpFinalizerRelativeStakeThreshold,
+    -- |'FinalizationCommitteeParameters' wrapped in an 'OParam'
+    -- supporting ''PTFinalizationCommitteeParameters'.
     OFinalizationCommitteeParameters,
 
     -- * Authorizations version
