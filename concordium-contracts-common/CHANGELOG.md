@@ -4,6 +4,7 @@
 
 - Implement `quickcheck::Arbitrary` for `Timestamp`, `AccountAddress`, `ContractAddress`, `Address`,  `ChainMetadata`, `AttributeTag`, `AttributeValue` and `OwnedPolicy`.
 - Add `to_owned` method to `EntrypointName` and `ContractName` types.
+- Implement `Serial`/`Deserial` instances for tuples with 4, 5, and 6 elements.
 
 ## concordium-contracts-common 5.0.0 (2022-11-21)
 

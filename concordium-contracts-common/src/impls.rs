@@ -19,39 +19,6 @@ use std::{
 };
 // Implementations of Serialize
 
-impl<X: Serial, Y: Serial> Serial for (X, Y) {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.0.serial(out)?;
-        self.1.serial(out)
-    }
-}
-
-impl<X: Deserial, Y: Deserial> Deserial for (X, Y) {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let x = X::deserial(source)?;
-        let y = Y::deserial(source)?;
-        Ok((x, y))
-    }
-}
-
-impl<X: Deserial, Y: Deserial, Z: Deserial> Deserial for (X, Y, Z) {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let x = source.get()?;
-        let y = source.get()?;
-        let z = source.get()?;
-        Ok((x, y, z))
-    }
-}
-
-impl<X: Serial, Y: Serial, Z: Serial> Serial for (X, Y, Z) {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.0.serial(out)?;
-        self.1.serial(out)?;
-        self.2.serial(out)?;
-        Ok(())
-    }
-}
-
 impl Serial for () {
     #[inline(always)]
     fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err> { Ok(()) }
@@ -60,6 +27,109 @@ impl Serial for () {
 impl Deserial for () {
     #[inline(always)]
     fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> { Ok(()) }
+}
+
+impl<A: Serial, B: Serial> Serial for (A, B) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)
+    }
+}
+
+impl<A: Deserial, B: Deserial> Deserial for (A, B) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        Ok((a, b))
+    }
+}
+
+impl<X: Deserial, Y: Deserial, Z: Deserial> Deserial for (X, Y, Z) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        Ok((a, b, c))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial> Serial for (A, B, C) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        Ok(())
+    }
+}
+
+impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial> Deserial for (A, B, C, D) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        let d = source.get()?;
+        Ok((a, b, c, d))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial, D: Serial> Serial for (A, B, C, D) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        self.3.serial(out)?;
+        Ok(())
+    }
+}
+
+impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial, E: Deserial> Deserial for (A, B, C, D, E) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        let d = source.get()?;
+        let e = source.get()?;
+        Ok((a, b, c, d, e))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial, D: Serial, E: Serial> Serial for (A, B, C, D, E) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        self.3.serial(out)?;
+        self.4.serial(out)?;
+        Ok(())
+    }
+}
+
+impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial, E: Deserial, F: Deserial> Deserial
+    for (A, B, C, D, E, F)
+{
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        let d = source.get()?;
+        let e = source.get()?;
+        let f = source.get()?;
+        Ok((a, b, c, d, e, f))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial, D: Serial, E: Serial, F: Serial> Serial
+    for (A, B, C, D, E, F)
+{
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        self.3.serial(out)?;
+        self.4.serial(out)?;
+        self.5.serial(out)?;
+        Ok(())
+    }
 }
 
 impl Serial for u8 {
