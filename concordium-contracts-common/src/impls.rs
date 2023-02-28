@@ -83,6 +83,7 @@ impl<A: Serial, B: Serial, C: Serial, D: Serial> Serial for (A, B, C, D) {
 }
 
 impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial, E: Deserial> Deserial for (A, B, C, D, E) {
+    #[allow(clippy::many_single_char_names)]
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let a = source.get()?;
         let b = source.get()?;
@@ -107,6 +108,7 @@ impl<A: Serial, B: Serial, C: Serial, D: Serial, E: Serial> Serial for (A, B, C,
 impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial, E: Deserial, F: Deserial> Deserial
     for (A, B, C, D, E, F)
 {
+    #[allow(clippy::many_single_char_names)]
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let a = source.get()?;
         let b = source.get()?;
