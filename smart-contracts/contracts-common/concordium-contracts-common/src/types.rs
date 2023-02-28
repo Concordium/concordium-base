@@ -1,8 +1,8 @@
 use crate::{constants, to_bytes, Serial};
+#[cfg(not(feature = "std"))]
+use alloc::{borrow::ToOwned, string::String, string::ToString, vec::Vec};
 #[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
 use alloc::{boxed::Box, collections::BTreeMap};
-#[cfg(not(feature = "std"))]
-use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
@@ -19,6 +19,7 @@ pub use serde_impl::*;
 use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::{cmp, convert, fmt, hash, iter, ops, str};
+
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
 pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
