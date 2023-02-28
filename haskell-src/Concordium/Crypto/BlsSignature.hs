@@ -10,6 +10,7 @@ module Concordium.Crypto.BlsSignature (
     aggregate,
     aggregateMany,
     verifyAggregate,
+    verifyAggregateHybrid,
     emptySignature,
     freeSecretKey,
     proveKnowledgeOfSK,
@@ -24,7 +25,7 @@ import Concordium.Crypto.FFIHelpers
 
 import Control.DeepSeq
 import qualified Data.Aeson as AE
-import Data.ByteString
+import Data.ByteString hiding (unzip)
 import Data.ByteString.Unsafe as BS
 import Data.Int
 import qualified Data.List as List
@@ -81,6 +82,21 @@ foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr Secr
 foreign import ccall safe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
 foreign import ccall safe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
+foreign import ccall safe "bls_verify_aggregate_hybrid"
+    verifyBlsAggregateHybrid ::
+        -- |Array of pointers to messages
+        Ptr (Ptr Word8) ->
+        -- |Array of message lengths
+        Ptr CSize ->
+        -- |Array of arrays of pointers to public keys
+        Ptr (Ptr (Ptr PublicKey)) ->
+        -- |Array of numbers of public keys
+        Ptr CSize ->
+        -- |Length of the arrays
+        CSize ->
+        -- |Pointer to the signature to verify
+        Ptr Signature ->
+        IO Word8
 foreign import ccall safe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
 foreign import ccall safe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
 
@@ -288,6 +304,41 @@ verifyAggregate m pks sig = unsafePerformIO $ do
   where
     withKeyArray ps [] f = withArrayLen ps f
     withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
+
+-- |Verify an aggregate signature on (potentially) multiple messages by multiple keys.
+-- Each message is grouped with the set of keys that signed it.
+--
+-- The public keys MUST have been (proved to be) derived from secret keys. (Otherwise, the
+-- guarantee of the signature system does not necessarily hold.)
+--
+-- It is recommended that messages with no keys should not be included, although this is not
+-- a strict requirement, as the result will be the same if they are removed.
+--
+-- Precondition: There MUST be at least one key for each message group.
+verifyAggregateHybrid :: [(ByteString, [PublicKey])] -> Signature -> Bool
+verifyAggregateHybrid msPks sig = unsafePerformIO $ do
+    let (ms, pksets) = unzip msPks
+    withMessageArray [] [] ms $ \m' mlen ->
+        withSignature sig $ \sig' ->
+            withKeyArray2 [] [] pksets $ \headptr setLens ->
+                (== 1)
+                    <$> verifyBlsAggregateHybrid
+                        m'
+                        (castPtr mlen)
+                        headptr
+                        (castPtr setLens)
+                        (fromIntegral $ Prelude.length ms)
+                        sig'
+  where
+    withKeyArray ps [] f = withArrayLen ps f
+    withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
+    withKeyArray2 ps lens [] f = withArray ps $ \ps' -> withArray lens (f ps')
+    withKeyArray2 ps lens (pkset : sets_) f = withKeyArray [] pkset $
+        \setLen pksetPtr -> withKeyArray2 (pksetPtr : ps) (setLen : lens) sets_ f
+    withMessageArray ms' lens [] f = withArray ms' $ \m' -> withArray lens (f m')
+    -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
+    withMessageArray ms' lens (m : ms_) f = BS.unsafeUseAsCStringLen m $
+        \(m', mlen) -> withMessageArray (castPtr m' : ms') (mlen : lens) ms_ f
 
 -- |Create a proof of knowledge of your secret key
 proveKnowledgeOfSK :: ByteString -> SecretKey -> IO Proof

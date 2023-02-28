@@ -11,7 +11,6 @@ import Control.Monad
 import qualified Data.Aeson as AE
 import Data.Aeson.Types
 
-import Concordium.Common.Version
 import Concordium.Genesis.Account
 import Concordium.Types
 import Concordium.Types.AnonymityRevokers
@@ -38,7 +37,9 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- |Foundation account address.
       gcpFoundationAccount :: !AccountAddress,
       -- |Minimum threshold required for registering as a baker.
-      gcpPoolParameters :: !(PoolParameters cpv)
+      gcpPoolParameters :: !(PoolParameters cpv),
+      -- |The Finalization committee parameters
+      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 
@@ -66,6 +67,7 @@ parseJSONForGCPV0 =
             gcpTimeParameters = NoParam
             gcpPoolParameters = PoolParametersV0{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
+            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
@@ -97,6 +99,7 @@ parseJSONForGCPV1 =
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            gcpFinalizationCommitteeParameters = NoParam
         return GenesisChainParameters{..}
 
 -- |Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -126,6 +129,9 @@ parseJSONForGCPV2 =
         _tpTimeoutDecrease <- v .: "timeoutDecrease"
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let gcpCooldownParameters = CooldownParametersV1{..}
             gcpTimeParameters = SomeParam TimeParametersV1{..}
             gcpPoolParameters = PoolParametersV1{..}
@@ -133,6 +139,7 @@ parseJSONForGCPV2 =
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
             _cpTimeoutParameters = TimeoutParameters{..}
+            gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
         return GenesisChainParameters{..}
 
@@ -198,10 +205,13 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
               "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
               "minBlockTime" AE..= _cpMinBlockTime gcpConsensusParameters,
-              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters
+              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
+              "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters)
             ]
 
--- | 'GenesisParameters' provides a convenient abstraction for
+-- | 'GenesisParametersV2' provides a convenient abstraction for
 -- constructing 'GenesisData'. The following invariants are
 -- required to hold:
 --
@@ -210,7 +220,9 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
 --   corresponding to its index in the list.
 -- * The foundation account specified in 'gpChainParameters' must
 --   correspond to an account in 'gpInitialAccounts'.
-data GenesisParameters pv = GenesisParameters
+--
+-- This version is used for consensus version 0.
+data GenesisParametersV2 pv = GenesisParametersV2
     { -- |Time at which genesis occurs.
       gpGenesisTime :: Timestamp,
       -- |Duration of each slot.
@@ -238,8 +250,8 @@ data GenesisParameters pv = GenesisParameters
       gpChainParameters :: GenesisChainParameters pv
     }
 
-instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) where
-    parseJSON = withObject "GenesisParameters" $ \v -> do
+instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParametersV2 pv) where
+    parseJSON = withObject "GenesisParametersV2" $ \v -> do
         gpGenesisTime <- v .: "genesisTime"
         gpSlotDuration <- v .: "slotDuration"
         gpLeadershipElectionNonce <- v .: "leadershipElectionNonce"
@@ -266,8 +278,4 @@ instance forall pv. IsProtocolVersion pv => FromJSON (GenesisParameters pv) wher
         unless (any ((facct ==) . gaAddress) gpInitialAccounts) $
             fail $
                 "Foundation account (" ++ show facct ++ ") is not in initialAccounts"
-        return GenesisParameters{..}
-
--- |Version number identifying the current version of the genesis parameter format.
-genesisParametersVersion :: Version
-genesisParametersVersion = 2
+        return GenesisParametersV2{..}

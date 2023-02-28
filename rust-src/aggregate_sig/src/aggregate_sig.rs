@@ -171,6 +171,57 @@ pub fn verify_aggregate_sig<P: Pairing>(
     P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
+/// Verifies an aggregate signature on pairs `(messages m_i, set_i)` `for
+/// i=1..n` but where `set_i` denotes the set of public keys corresponding to
+/// the secret keys that signed m_i. This implements a combination of
+/// AggregateVerify from Section 3.1.1 and FastAggregateVerify from Section
+/// 3.3.4 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
+///
+/// In particular, this function returns:
+///
+/// pairing(sig, g_2) == ∏ᵢ pairing(H(mᵢ), ∑ⱼ pkᵢⱼ)
+///
+/// Each message must be associated with at least one key. However, the result
+/// of having a message with no keys will be the same as if the message was not
+/// included.
+///
+/// For security, the holder of a key must be required to prove knowledge of the
+/// secret key.
+/// Precondition:
+/// There must be at least one message, at least one key for each message and
+/// each key may only occur once.
+/// Note. This will accept a signature on the empty list. But this violates the
+/// precondition stated above.
+pub fn verify_aggregate_sig_hybrid<P: Pairing>(
+    m_pk_pairs: &[(&[u8], &[PublicKey<P>])],
+    signature: Signature<P>,
+) -> bool {
+    let product = m_pk_pairs
+        .par_iter()
+        .fold(<P::TargetField as Field>::one, |prod, (m, pks)| {
+            let sum_pk_i = if pks.len() < 150 {
+                pks.iter()
+                    .fold(P::G2::zero_point(), |s, x| s.plus_point(&x.0))
+            } else {
+                pks.par_iter()
+                    .fold(P::G2::zero_point, |s, x| s.plus_point(&x.0))
+                    .reduce(P::G2::zero_point, |s, x| s.plus_point(&x))
+            };
+            let g1_hash = P::G1::hash_to_group(m);
+            let paired = P::pair(&g1_hash, &sum_pk_i);
+            let mut p = prod;
+            p.mul_assign(&paired);
+            p
+        })
+        .reduce(<P::TargetField as Field>::one, |prod, x| {
+            let mut p = prod;
+            p.mul_assign(&x);
+            p
+        });
+
+    P::pair(&signature.0, &P::G2::one_point()) == product
+}
+
 /// Verifies an aggregate signature on the same message m under keys PK_i for
 /// i=1..n by checking     pairing(sig, g_2) == pairing(g1_hash(m), sum_{i=0}^n
 /// (PK_i)) where g_2 is the generator of G2.
@@ -293,26 +344,35 @@ mod test {
             let sig = aggregate_sigs!(ms, sks);
 
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
+            let mut m_pk_pairs2: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::new();
             for i in 0..SIGNERS {
                 m_pk_pairs.push((&ms[i], pks[i].clone()));
+                m_pk_pairs2.push((&ms[i], std::slice::from_ref(&pks[i])));
             }
 
             // signature should verify
             assert!(verify_aggregate_sig(&m_pk_pairs, sig));
+            assert!(verify_aggregate_sig_hybrid(&m_pk_pairs2, sig));
 
             let (m_, pk_) = m_pk_pairs.pop().unwrap();
+            let (_, pks_) = m_pk_pairs2.pop().unwrap();
             let new_pk = PublicKey::<Bls12>::from_secret(&SecretKey::<Bls12>::generate(&mut rng));
             m_pk_pairs.push((m_, new_pk));
+            m_pk_pairs2.push((m_, std::slice::from_ref(&new_pk)));
 
             // altering a public key should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
+            assert!(!verify_aggregate_sig_hybrid(&m_pk_pairs2, sig));
 
             let new_m: [u8; 32] = rng.gen::<[u8; 32]>();
             m_pk_pairs.pop();
             m_pk_pairs.push((&new_m, pk_));
+            m_pk_pairs2.pop();
+            m_pk_pairs2.push((&new_m, &pks_));
 
             // altering a message should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
+            assert!(!verify_aggregate_sig_hybrid(&m_pk_pairs2, sig));
         }
     }
 

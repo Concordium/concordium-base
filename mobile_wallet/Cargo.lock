@@ -341,6 +341,7 @@ version = "0.1.0"
 dependencies = [
  "aggregate_sig",
  "anyhow",
+ "bs58",
  "byteorder",
  "chrono",
  "concordium-contracts-common",
@@ -355,6 +356,7 @@ dependencies = [
  "hex",
  "id",
  "itertools",
+ "leb128",
  "libc",
  "num",
  "num-bigint 0.4.3",
@@ -1005,6 +1007,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "leb128"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
+
+[[package]]
 name = "libc"
 version = "0.2.139"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1045,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "mobile_wallet"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "base64",

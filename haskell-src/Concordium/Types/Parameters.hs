@@ -305,6 +305,7 @@ module Concordium.Types.Parameters (
     cpTimeoutParameters,
     cpMinBlockTime,
     cpBlockEnergyLimit,
+    cpFinalizationCommitteeParameters,
 
     -- * Chain parameters
     withCPVConstraints,
@@ -340,6 +341,18 @@ module Concordium.Types.Parameters (
     -- * Delegation helpers
     DelegationChainParameters (..),
     delegationChainParameters,
+
+    -- * Finalization committee parameters
+    FinalizationCommitteeParameters (..),
+    -- |The number of bakers that are eligible for finalization committee before
+    -- the 'fcpFinalizerRelativeStakeThreshold' takes effect.
+    fcpMinFinalizers,
+    -- |The maximum number of bakers allowed to be in the finalization committee.
+    fcpMaxFinalizers,
+    -- |Determining the staking threshold required for being eligible the finalization committee.
+    -- The minimum amount required to join the finalization committee
+    -- is given by @total staked ccd / fcpFinalizerRelativeStakeThreshold@
+    fcpFinalizerRelativeStakeThreshold,
 
     -- * Authorizations version
 
@@ -379,6 +392,12 @@ module Concordium.Types.Parameters (
     -- |Whether time parameters are supported for an 'AuthorizationsVersion' (singletons).
     sSupportsTimeParameters,
 
+    -- * Consensus version
+    IsConsensusV0,
+    IsConsensusV1,
+    ConsensusVersion (..),
+    consensusVersionFor,
+
     -- * Defunctionalisation symbols
     PTElectionDifficultySym0,
     PTTimeParametersSym0,
@@ -388,6 +407,7 @@ module Concordium.Types.Parameters (
     PTBlockEnergyLimitSym0,
     PTCooldownParametersAccessStructureSym0,
     PTFinalizationProofSym0,
+    PTFinalizationCommitteeParametersSym0,
 ) where
 
 import Control.Monad
@@ -406,7 +426,9 @@ import Test.QuickCheck.Gen
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Parameters
 import Concordium.Types
+import Concordium.Types.Conditionally
 import Concordium.Types.HashableTo
+import Concordium.Types.SeedState
 
 -- |Chain cryptographic parameters.
 type CryptographicParameters = GlobalContext
@@ -433,7 +455,7 @@ type CryptographicParameters = GlobalContext
 -- supportsBar Bar = True
 -- supportsBar Baz = False
 -- Type level function
--- SuppportsBar :: SFoo -> 'Bool (note 'Bool is the lifted term Bool value)
+-- SupportsBar :: SFoo -> 'Bool (note 'Bool is the lifted term Bool value)
 -- SupportsBar SBar = 'True
 -- SupportsBaz SBar = 'False
 -- Term level function that takes a singleton instance of Foo.
@@ -468,7 +490,7 @@ type CryptographicParameters = GlobalContext
 -- The 'SingKind' type class exposes @fromSing :: Sing (a :: k) -> Demote k@ i.e. reflection and
 -- @toSing :: Demote k -> SomeSing k@ (reification).
 --
--- The second part that the singletons library proivdes is a way of
+-- The second part that the singletons library provides is a way of
 -- applying functions partially at the type level. It is here that the
 -- defunctionalization symbols generated comes into the picture e.g. 'PTElectionDifficultySym0'.
 -- This is required when one wants to create a higher order function at the type level,
@@ -587,6 +609,8 @@ $( singletons
               PTCooldownParametersAccessStructure
             | -- \|Finalization proof GAS rewards (GAS rewards parameter)
               PTFinalizationProof
+            | -- Finalization committee selection for V2 consensus
+              PTFinalizationCommitteeParameters
 
         -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
@@ -595,19 +619,22 @@ $( singletons
             ConsensusParametersVersion1 -> False
         isSupported PTTimeParameters cpv = supportsTimeParameters (authorizationsVersionFor cpv)
         isSupported PTMintPerSlot cpv = supportsMintPerSlot (mintDistributionVersionFor cpv)
-        isSupported PTTimeoutParameters ChainParametersV0 = False
-        isSupported PTTimeoutParameters ChainParametersV1 = False
-        isSupported PTTimeoutParameters ChainParametersV2 = True
-        isSupported PTMinBlockTime ChainParametersV0 = False
-        isSupported PTMinBlockTime ChainParametersV1 = False
-        isSupported PTMinBlockTime ChainParametersV2 = True
-        isSupported PTBlockEnergyLimit ChainParametersV0 = False
-        isSupported PTBlockEnergyLimit ChainParametersV1 = False
-        isSupported PTBlockEnergyLimit ChainParametersV2 = True
+        isSupported PTTimeoutParameters cpv = case consensusParametersVersionFor cpv of
+            ConsensusParametersVersion0 -> False
+            ConsensusParametersVersion1 -> True
+        isSupported PTMinBlockTime cpv = case consensusParametersVersionFor cpv of
+            ConsensusParametersVersion0 -> False
+            ConsensusParametersVersion1 -> True
+        isSupported PTBlockEnergyLimit cpv = case consensusParametersVersionFor cpv of
+            ConsensusParametersVersion0 -> False
+            ConsensusParametersVersion1 -> True
         isSupported PTCooldownParametersAccessStructure cpv = supportsCooldownParametersAccessStructure (authorizationsVersionFor cpv)
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
+        isSupported PTFinalizationCommitteeParameters ChainParametersV0 = False
+        isSupported PTFinalizationCommitteeParameters ChainParametersV1 = False
+        isSupported PTFinalizationCommitteeParameters ChainParametersV2 = True
         |]
  )
 
@@ -630,65 +657,6 @@ withIsAuthorizationsVersionFor scpv = withSingI (sAuthorizationsVersionFor scpv)
 -- supplied 'ProtocolVersion'.
 withIsAuthorizationsVersionForPV :: SProtocolVersion pv -> (IsAuthorizationsVersion (AuthorizationsVersionForPV pv) => a) -> a
 withIsAuthorizationsVersionForPV spv = withSingI (sAuthorizationsVersionForPV spv)
-
--- |A @Conditionally b a@ is an @a@ if @b ~ 'True@, and @()@ otherwise.
-data Conditionally (b :: Bool) a where
-    CFalse :: Conditionally 'False a
-    CTrue :: !a -> Conditionally 'True a
-
-instance Functor (Conditionally b) where
-    fmap _ CFalse = CFalse
-    fmap f (CTrue v) = CTrue (f v)
-
-instance Foldable (Conditionally b) where
-    foldr _ b CFalse = b
-    foldr f b (CTrue a) = f a b
-
-    foldl _ b CFalse = b
-    foldl f b (CTrue a) = f b a
-
-    foldMap _ CFalse = mempty
-    foldMap f (CTrue a) = f a
-
-instance Traversable (Conditionally b) where
-    traverse _ CFalse = pure CFalse
-    traverse f (CTrue a) = CTrue <$> f a
-
-instance (Eq a) => Eq (Conditionally b a) where
-    CFalse == CFalse = True
-    CTrue a == CTrue b = a == b
-
-instance (Ord a) => Ord (Conditionally b a) where
-    compare CFalse CFalse = EQ
-    compare (CTrue x) (CTrue y) = compare x y
-
-instance (Show a) => Show (Conditionally b a) where
-    show CFalse = "<CFalse>"
-    show (CTrue v) = "<CTrue> " ++ show v
-
-instance (Serialize a, SingI b) => Serialize (Conditionally b a) where
-    put CFalse = return ()
-    put (CTrue a) = put a
-
-    get = case sing @b of
-        SFalse -> pure CFalse
-        STrue -> CTrue <$> get
-
--- |Wrap a value in a 'Conditionally' depending on the supplied 'SBool'.
-conditionally :: SBool b -> a -> Conditionally b a
-conditionally SFalse _ = CFalse
-conditionally STrue a = CTrue a
-
--- |Perform an action conditionally on the supplied 'SBool'.
--- This is typically used for monadic actions.
--- The action is not performed in the 'SFalse' case.
-conditionallyA :: (Applicative f) => SBool b -> f a -> f (Conditionally b a)
-conditionallyA SFalse _ = pure CFalse
-conditionallyA STrue m = CTrue <$> m
-
--- |A lens for accessing the contents of a 'Conditionally' when the guard is known to be 'True'.
-unconditionally :: Lens (Conditionally 'True a) (Conditionally 'True b) a b
-unconditionally f (CTrue a) = CTrue <$> f a
 
 -- |An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
 -- otherwise.
@@ -1582,6 +1550,68 @@ instance HashableTo Hash.Hash TimeoutParameters where
 
 instance (Monad m) => MHashableTo m Hash.Hash TimeoutParameters
 
+-- * Finalization committee parameters for consensus v1.
+
+-- |Finalization committee parameters
+-- These parameters control which bakers are in the finalization committee.
+-- '_fcpMinFinalizers' MUST be at least 1.
+-- '_fcpMaxFinalizers' MUST be at least '_fcpMinFinalizers'.
+data FinalizationCommitteeParameters = FinalizationCommitteeParameters
+    { -- |Minimum number of bakers to include in the finalization committee before
+      -- the '_fcpFinalizerRelativeStakeThreshold' takes effect.
+      _fcpMinFinalizers :: !Word32,
+      -- |Maximum number of bakers to include in the finalization committee.
+      _fcpMaxFinalizers :: !Word32,
+      -- |Determining the staking threshold required for being eligible the finalization committee.
+      -- The required amount is given by @total stake in pools * _fcpFinalizerRelativeStakeThreshold@
+      -- Accepted values are in the range [0,1].
+      _fcpFinalizerRelativeStakeThreshold :: !PartsPerHundredThousands
+    }
+    deriving (Eq, Show)
+
+-- Define 'HasFinalizationCommitteeParameters' class with accessor lenses, and instance for 'FinalizationCommitteeParameters'.
+makeClassy ''FinalizationCommitteeParameters
+
+-- |An instance for 'HasFinalizationCommitteeParameters' that automatically unwraps the @OParam 'PTFinalizationCommitteeParameters cpv 'FinalizationCommitteeParameters@
+-- when @IsSupported 'PTFinalizationCommitteeParameters cpv ~ 'True@
+instance IsSupported 'PTFinalizationCommitteeParameters cpv ~ 'True => HasFinalizationCommitteeParameters (OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters) where
+    finalizationCommitteeParameters = supportedOParam
+
+instance Serialize FinalizationCommitteeParameters where
+    put FinalizationCommitteeParameters{..} = do
+        put _fcpMinFinalizers
+        put _fcpMaxFinalizers
+        put _fcpFinalizerRelativeStakeThreshold
+    get = do
+        _fcpMinFinalizers <- get
+        unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
+        _fcpMaxFinalizers <- get
+        unless (_fcpMaxFinalizers >= _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater or equal than minimumFinalizers."
+        _fcpFinalizerRelativeStakeThreshold <- get
+        return FinalizationCommitteeParameters{..}
+
+instance HashableTo Hash.Hash FinalizationCommitteeParameters where
+    getHash = Hash.hash . encode
+
+instance (Monad m) => MHashableTo m Hash.Hash FinalizationCommitteeParameters
+
+instance ToJSON FinalizationCommitteeParameters where
+    toJSON FinalizationCommitteeParameters{..} =
+        object
+            [ "maximumFinalizers" AE..= _fcpMinFinalizers,
+              "minimumFinalizers" AE..= _fcpMaxFinalizers,
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold
+            ]
+
+instance FromJSON FinalizationCommitteeParameters where
+    parseJSON = withObject "FinalizationCommitteeParameters" $ \o -> do
+        _fcpMinFinalizers <- o .: "minimumFinalizers"
+        unless (_fcpMinFinalizers > 0) $ fail "the minimum number of finalizers must be positive."
+        _fcpMaxFinalizers <- o .: "maximumFinalizers"
+        unless (_fcpMaxFinalizers >= _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater or equal than minimumFinalizers."
+        _fcpFinalizerRelativeStakeThreshold <- o .: "finalizerRelativeStakeThreshold"
+        return FinalizationCommitteeParameters{..}
+
 -- * Consensus parameters
 
 -- |Constraint on a type level 'ConsensusParametersVersion' that can be used to get a corresponding
@@ -1710,7 +1740,11 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFoundationAccount :: !AccountIndex,
       -- |Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
       -- for becoming a baker.
-      _cpPoolParameters :: !(PoolParameters cpv)
+      _cpPoolParameters :: !(PoolParameters cpv),
+      -- |The finalization committee parameters.
+      -- These parameters are introduced as part of protocol 6 (cpv2).
+      -- The set of parameters shares the 'Authorization' with the '_cpPoolParameters'.
+      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Eq, Show)
 
@@ -1741,6 +1775,7 @@ putChainParameters ChainParameters{..} = do
     put _cpRewardParameters
     put _cpFoundationAccount
     putPoolParameters _cpPoolParameters
+    put _cpFinalizationCommitteeParameters
 
 -- |Deserialize a 'ChainParameters''.
 getChainParameters :: forall cpv. IsChainParametersVersion cpv => Get (ChainParameters' cpv)
@@ -1753,6 +1788,7 @@ getChainParameters = do
     _cpRewardParameters <- get
     _cpFoundationAccount <- get
     _cpPoolParameters <- withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
+    _cpFinalizationCommitteeParameters <- get
     return ChainParameters{..}
 
 instance IsChainParametersVersion cpv => Serialize (ChainParameters' cpv) where
@@ -1787,6 +1823,7 @@ parseJSONForCPV0 =
                 <$> v
                     .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
+            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
@@ -1818,6 +1855,7 @@ parseJSONForCPV1 =
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            _cpFinalizationCommitteeParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV2 :: Value -> Parser (ChainParameters' 'ChainParametersV2)
@@ -1847,12 +1885,17 @@ parseJSONForCPV2 =
         let _cpTimeoutParameters = TimeoutParameters{..}
         _cpMinBlockTime <- v .: "minBlockTime"
         _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
             _cpPoolParameters = PoolParametersV1{..}
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
+            _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
         return ChainParameters{..}
 
@@ -1921,7 +1964,10 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (ChainParameters' cp
                   "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters _cpConsensusParameters),
                   "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
                   "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
-                  "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters
+                  "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
+                  "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
                 ]
 
 -- |Parameters that affect finalization.
@@ -2034,3 +2080,31 @@ delegationChainParameters = case protocolVersion @pv of
     SP4 -> DelegationChainParameters
     SP5 -> DelegationChainParameters
     SP6 -> DelegationChainParameters
+
+-- * Consensus versions
+
+-- |Constraint that the protocol version @pv@ is associated with the version 0 consensus.
+type IsConsensusV0 (pv :: ProtocolVersion) =
+    ( ConsensusParametersVersionFor (ChainParametersVersionFor pv) ~ 'ConsensusParametersVersion0,
+      SeedStateVersionFor pv ~ 'SeedStateVersion0
+    )
+
+-- |Constraint that the protocol version @pv@ is associated with the version 1 consensus.
+type IsConsensusV1 (pv :: ProtocolVersion) =
+    ( ConsensusParametersVersionFor (ChainParametersVersionFor pv) ~ 'ConsensusParametersVersion1,
+      SeedStateVersionFor pv ~ 'SeedStateVersion1
+    )
+
+-- |The consensus version constraints for a particular protocol version.
+data ConsensusVersion (pv :: ProtocolVersion) where
+    ConsensusV0 :: IsConsensusV0 pv => ConsensusVersion pv
+    ConsensusV1 :: IsConsensusV1 pv => ConsensusVersion pv
+
+-- |Get the consensus version constraints for a protocol version.
+consensusVersionFor :: SProtocolVersion pv -> ConsensusVersion pv
+consensusVersionFor SP1 = ConsensusV0
+consensusVersionFor SP2 = ConsensusV0
+consensusVersionFor SP3 = ConsensusV0
+consensusVersionFor SP4 = ConsensusV0
+consensusVersionFor SP5 = ConsensusV0
+consensusVersionFor SP6 = ConsensusV1

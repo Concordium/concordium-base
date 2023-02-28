@@ -173,6 +173,9 @@ module Concordium.Types (
     accountAddressEmbed,
     accountAddressPrefixSize,
     createAlias,
+
+    -- * PartsPerHundredThousands
+    PartsPerHundredThousands (..),
 ) where
 
 import Data.Data (Data, Typeable)
