@@ -59,422 +59,449 @@ macro_rules! ensure {
     };
 }
 
+/// Uses the schema to parse JSON into bytes
+/// It is assumed the array of values for Map and Set are already ordered.
+fn write_bytes_from_json_schema_type<W: Write>(
+    schema: &Type,
+    json: &serde_json::Value,
+    out: &mut W,
+) -> Result<(), JsonError> {
+    use JsonError::*;
+
+    match schema {
+        Type::Unit => Ok(()),
+        Type::Bool => {
+            if let Value::Bool(b) = json {
+                serial!(b, out)
+            } else {
+                Err(WrongJsonType("JSON boolean required".to_string()))
+            }
+        }
+        Type::U8 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
+                let n: u8 = n.try_into()?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::U16 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
+                let n: u16 = n.try_into()?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::U32 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
+                let n: u32 = n.try_into()?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::U64 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::I8 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                let n: i8 = n.try_into()?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::I16 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                let n: i16 = n.try_into()?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::I32 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                let n: i32 = n.try_into()?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::I64 => {
+            if let Value::Number(n) = json {
+                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON number required".to_string()))
+            }
+        }
+        Type::Amount => {
+            if let Value::String(string) = json {
+                let amount: u64 = string.parse()?;
+                serial!(amount, out)
+            } else {
+                Err(WrongJsonType("JSON string required".to_string()))
+            }
+        }
+        Type::AccountAddress => {
+            if let Value::String(string) = json {
+                let account: AccountAddress =
+                    string.parse().or(Err(JsonError::FailedParsingAccountAddress))?;
+                serial!(account, out)
+            } else {
+                Err(WrongJsonType("JSON string required".to_string()))
+            }
+        }
+        Type::ContractAddress => {
+            if let Value::Object(fields) = json {
+                ensure!(
+                    fields.len() <= 2,
+                    FieldError("Only index and optionally subindex are allowed".to_string())
+                );
+
+                let index = fields
+                    .get("index")
+                    .and_then(|v| match v {
+                        Value::Number(n) => n.as_u64(),
+                        _ => None,
+                    })
+                    .ok_or_else(|| {
+                        FieldError("'index' is required in a Contract address".to_string())
+                    })?;
+                let subindex = fields
+                    .get("subindex")
+                    .and_then(|v| match v {
+                        Value::Number(n) => n.as_u64(),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                let contract = ContractAddress {
+                    index,
+                    subindex,
+                };
+                serial!(contract, out)
+            } else {
+                Err(WrongJsonType("JSON Object with 'index' field required".to_string()))
+            }
+        }
+        Type::Timestamp => {
+            if let Value::String(string) = json {
+                let timestamp: Timestamp = string.parse()?;
+                serial!(timestamp, out)
+            } else {
+                Err(WrongJsonType("JSON String required for timestamp".to_string()))
+            }
+        }
+        Type::Duration => {
+            if let Value::String(string) = json {
+                let duration: Duration = string.parse()?;
+                serial!(duration, out)
+            } else {
+                Err(WrongJsonType("JSON String required for duration".to_string()))
+            }
+        }
+        Type::Pair(left_type, right_type) => {
+            if let Value::Array(values) = json {
+                ensure!(
+                    values.len() == 2,
+                    PairError("Only pairs of two are supported".to_string())
+                );
+                write_bytes_from_json_schema_type(left_type, &values[0], out)?;
+                write_bytes_from_json_schema_type(right_type, &values[1], out)
+            } else {
+                Err(WrongJsonType("JSON Array required for a pair".to_string()))
+            }
+        }
+        Type::List(size_len, ty) => {
+            if let Value::Array(values) = json {
+                let len = values.len();
+                write_bytes_for_length_of_size(len, size_len, out)?;
+                for value in values {
+                    write_bytes_from_json_schema_type(ty, value, out)?;
+                }
+                Ok(())
+            } else {
+                Err(WrongJsonType("JSON Array required".to_string()))
+            }
+        }
+        Type::Set(size_len, ty) => {
+            if let Value::Array(values) = json {
+                let len = values.len();
+                write_bytes_for_length_of_size(len, size_len, out)?;
+                for value in values {
+                    write_bytes_from_json_schema_type(ty, value, out)?;
+                }
+                Ok(())
+            } else {
+                Err(WrongJsonType("JSON Array required".to_string()))
+            }
+        }
+        Type::Map(size_len, key_ty, val_ty) => {
+            if let Value::Array(entries) = json {
+                let len = entries.len();
+                write_bytes_for_length_of_size(len, size_len, out)?;
+                for entry in entries {
+                    if let Value::Array(pair) = entry {
+                        ensure!(pair.len() == 2, MapError("Expected key-value pair".to_string()));
+                        write_bytes_from_json_schema_type(key_ty, &pair[0], out)?;
+                        write_bytes_from_json_schema_type(val_ty, &pair[1], out)?;
+                    } else {
+                        return Err(WrongJsonType(
+                            "Expected key value pairs as JSON arrays".to_string(),
+                        ));
+                    }
+                }
+                Ok(())
+            } else {
+                Err(WrongJsonType("JSON Array required".to_string()))
+            }
+        }
+        Type::Array(len, ty) => {
+            if let Value::Array(values) = json {
+                ensure!(
+                    (values.len() as u32) == *len,
+                    ArrayError(format!(
+                        "Expected array with {} elements, but it had {} elements",
+                        len,
+                        values.len()
+                    ))
+                );
+                for value in values {
+                    write_bytes_from_json_schema_type(ty, value, out)?;
+                }
+                Ok(())
+            } else {
+                Err(WrongJsonType("JSON Array required".to_string()))
+            }
+        }
+        Type::Struct(fields_ty) => write_bytes_from_json_schema_fields(fields_ty, json, out),
+        Type::Enum(variants_ty) => {
+            if let Value::Object(map) = json {
+                ensure!(map.len() == 1, EnumError("Only one variant allowed".to_string()));
+                let (variant_name, fields_value) = map.iter().next().unwrap(); // Safe since we already checked the length
+                let schema_fields_opt = variants_ty
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (variant_name_schema, _))| variant_name_schema == variant_name);
+                if let Some((i, (_, variant_fields))) = schema_fields_opt {
+                    if variants_ty.len() <= 256 {
+                        out.write_u8(i as u8).or(Err(JsonError::FailedWriting))?;
+                    } else if variants_ty.len() <= 256 * 256 {
+                        out.write_u16(i as u16).or(Err(JsonError::FailedWriting))?;
+                    } else {
+                        return Err(EnumError(
+                            "Enums with more than 65536 variants are not supported.".to_string(),
+                        ));
+                    };
+                    write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
+                } else {
+                    // Non-existing variant
+                    Err(EnumError(format!("Unknown variant: {}", variant_name)))
+                }
+            } else {
+                Err(WrongJsonType("JSON Object with one field required for an Enum".to_string()))
+            }
+        }
+        Type::TaggedEnum(variants_ty) => {
+            if let Value::Object(fields) = json {
+                ensure!(fields.len() == 1, EnumError("Only one variant allowed.".to_string()));
+                let (variant_name, fields_value) = fields.iter().next().unwrap(); // Safe since we already checked the length
+                let schema_fields_opt = variants_ty
+                    .iter()
+                    .find(|(_, (variant_name_schema, _))| variant_name_schema == variant_name);
+                if let Some((&i, (_, variant_fields))) = schema_fields_opt {
+                    out.write_u8(i).or(Err(JsonError::FailedWriting))?;
+                    write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
+                } else {
+                    // Non-existing variant
+                    Err(EnumError(format!("Unknown variant: {}", variant_name)))
+                }
+            } else {
+                Err(WrongJsonType("JSON Object required for an EnumTag".to_string()))
+            }
+        }
+        Type::String(size_len) => {
+            if let Value::String(string) = json {
+                let len = string.len();
+                write_bytes_for_length_of_size(len, size_len, out)?;
+                serial_vector_no_length(string.as_bytes(), out).or(Err(JsonError::FailedWriting))
+            } else {
+                Err(WrongJsonType("JSON String required".to_string()))
+            }
+        }
+        Type::ContractName(size_len) => {
+            if let Value::Object(fields) = json {
+                let contract = fields.get("contract").ok_or_else(|| {
+                    FieldError("Missing field 'contract' of type JSON String.".to_string())
+                })?;
+                ensure!(
+                    fields.len() == 1,
+                    FieldError(format!(
+                        "Expected only one field but {} were provided.",
+                        fields.len()
+                    ))
+                );
+                if let Value::String(name) = contract {
+                    let contract_name = format!("init_{}", name);
+                    let len = contract_name.len();
+                    write_bytes_for_length_of_size(len, size_len, out)?;
+                    serial_vector_no_length(contract_name.as_bytes(), out)
+                        .or(Err(JsonError::FailedWriting))
+                } else {
+                    Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
+                }
+            } else {
+                Err(WrongJsonType("JSON Object required for contract name.".to_string()))
+            }
+        }
+        Type::ReceiveName(size_len) => {
+            if let Value::Object(fields) = json {
+                let contract = fields.get("contract").ok_or_else(|| {
+                    FieldError("Missing field 'contract' of type JSON String.".to_string())
+                })?;
+                let func = fields.get("func").ok_or_else(|| {
+                    WrongJsonType("Missing field 'func' of type JSON String.".to_string())
+                })?;
+                ensure!(
+                    fields.len() == 2,
+                    FieldError(format!(
+                        "Expected exactly two fields but {} were provided.",
+                        fields.len()
+                    ))
+                );
+                if let Value::String(contract) = contract {
+                    if let Value::String(func) = func {
+                        let receive_name = format!("{}.{}", contract, func);
+                        let len = receive_name.len();
+                        write_bytes_for_length_of_size(len, size_len, out)?;
+                        serial_vector_no_length(receive_name.as_bytes(), out)
+                            .or(Err(JsonError::FailedWriting))
+                    } else {
+                        Err(WrongJsonType("JSON String required for field 'func'.".to_string()))
+                    }
+                } else {
+                    Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
+                }
+            } else {
+                Err(WrongJsonType("JSON Object required for contract name.".to_string()))
+            }
+        }
+        Type::U128 => {
+            if let Value::String(string) = json {
+                let n: u128 = string
+                    .parse()
+                    .map_err(|_| ParseError("Could not parse as u128.".to_string()))?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON String required".to_string()))
+            }
+        }
+        Type::I128 => {
+            if let Value::String(string) = json {
+                let n: i128 = string
+                    .parse()
+                    .map_err(|_| ParseError("Could not parse as i128.".to_string()))?;
+                serial!(n, out)
+            } else {
+                Err(WrongJsonType("JSON String required".to_string()))
+            }
+        }
+        Type::ULeb128(constraint) => {
+            if let Value::String(string) = json {
+                let biguint = string
+                    .parse()
+                    .map_err(|_| ParseError("Could not parse integer.".to_string()))?;
+                serial_biguint(biguint, *constraint, out).or(Err(JsonError::FailedWriting))
+            } else {
+                Err(WrongJsonType("JSON String required".to_string()))
+            }
+        }
+        Type::ILeb128(constraint) => {
+            if let Value::String(string) = json {
+                let bigint = string
+                    .parse()
+                    .map_err(|_| ParseError("Could not parse integer.".to_string()))?;
+                serial_bigint(bigint, *constraint, out).or(Err(JsonError::FailedWriting))
+            } else {
+                Err(WrongJsonType("JSON String required".to_string()))
+            }
+        }
+        Type::ByteList(size_len) => {
+            if let Value::String(string) = json {
+                let bytes = hex::decode(string)?;
+                let len = bytes.len();
+                write_bytes_for_length_of_size(len, size_len, out)?;
+                for value in bytes {
+                    serial!(value, out)?
+                }
+                Ok(())
+            } else {
+                Err(WrongJsonType("JSON String required".to_string()))
+            }
+        }
+        Type::ByteArray(len) => {
+            if let Value::String(string) = json {
+                let bytes = hex::decode(string)?;
+                ensure!(
+                    *len == bytes.len() as u32,
+                    ByteArrayError("Mismatching number of bytes".to_string())
+                );
+                for value in bytes {
+                    serial!(value, out)?;
+                }
+                Ok(())
+            } else {
+                Err(WrongJsonType("JSON String required".to_string()))
+            }
+        }
+    }
+}
+
 impl Type {
+    /// Serialize the given JSON value into the binary format represented by the
+    /// schema. If the JSON value does not match the schema an error will be
+    /// returned.
+    pub fn serial_value(&self, json: &serde_json::Value) -> Result<Vec<u8>, JsonError> {
+        let mut out = Vec::new();
+        self.serial_value_into(json, &mut out)?;
+        Ok(out)
+    }
+
+    /// Serialize the given JSON value into the binary format represented by the
+    /// schema. The resulting byte array is written into the provided sink.
+    /// If the JSON value does not match the schema an error will be returned.
+    pub fn serial_value_into(
+        &self,
+        json: &serde_json::Value,
+        out: &mut impl Write,
+    ) -> Result<(), JsonError> {
+        write_bytes_from_json_schema_type(self, json, out)
+    }
+
     /// Uses the schema to parse JSON into bytes
     /// It is assumed the array of values for Map and Set are already ordered.
+    #[deprecated(
+        since = "5.2.0",
+        note = "Use the more ergonomic [`serial_value_into`](Self::serial_value_into) instead."
+    )]
     pub fn write_bytes_from_json_schema_type<W: Write>(
         schema: &Type,
         json: &serde_json::Value,
         out: &mut W,
     ) -> Result<(), JsonError> {
-        use JsonError::*;
-
-        match schema {
-            Type::Unit => Ok(()),
-            Type::Bool => {
-                if let Value::Bool(b) = json {
-                    serial!(b, out)
-                } else {
-                    Err(WrongJsonType("JSON boolean required".to_string()))
-                }
-            }
-            Type::U8 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
-                    let n: u8 = n.try_into()?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::U16 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
-                    let n: u16 = n.try_into()?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::U32 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
-                    let n: u32 = n.try_into()?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::U64 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::UnsignedIntRequired)?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::I8 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
-                    let n: i8 = n.try_into()?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::I16 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
-                    let n: i16 = n.try_into()?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::I32 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
-                    let n: i32 = n.try_into()?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::I64 => {
-                if let Value::Number(n) = json {
-                    let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON number required".to_string()))
-                }
-            }
-            Type::Amount => {
-                if let Value::String(string) = json {
-                    let amount: u64 = string.parse()?;
-                    serial!(amount, out)
-                } else {
-                    Err(WrongJsonType("JSON string required".to_string()))
-                }
-            }
-            Type::AccountAddress => {
-                if let Value::String(string) = json {
-                    let account: AccountAddress =
-                        string.parse().or(Err(JsonError::FailedParsingAccountAddress))?;
-                    serial!(account, out)
-                } else {
-                    Err(WrongJsonType("JSON string required".to_string()))
-                }
-            }
-            Type::ContractAddress => {
-                if let Value::Object(fields) = json {
-                    ensure!(
-                        fields.len() <= 2,
-                        FieldError("Only index and optionally subindex are allowed".to_string())
-                    );
-
-                    let index = fields
-                        .get("index")
-                        .and_then(|v| match v {
-                            Value::Number(n) => n.as_u64(),
-                            _ => None,
-                        })
-                        .ok_or_else(|| {
-                            FieldError("'index' is required in a Contract address".to_string())
-                        })?;
-                    let subindex = fields
-                        .get("subindex")
-                        .and_then(|v| match v {
-                            Value::Number(n) => n.as_u64(),
-                            _ => None,
-                        })
-                        .unwrap_or(0);
-                    let contract = ContractAddress {
-                        index,
-                        subindex,
-                    };
-                    serial!(contract, out)
-                } else {
-                    Err(WrongJsonType("JSON Object with 'index' field required".to_string()))
-                }
-            }
-            Type::Timestamp => {
-                if let Value::String(string) = json {
-                    let timestamp: Timestamp = string.parse()?;
-                    serial!(timestamp, out)
-                } else {
-                    Err(WrongJsonType("JSON String required for timestamp".to_string()))
-                }
-            }
-            Type::Duration => {
-                if let Value::String(string) = json {
-                    let duration: Duration = string.parse()?;
-                    serial!(duration, out)
-                } else {
-                    Err(WrongJsonType("JSON String required for duration".to_string()))
-                }
-            }
-            Type::Pair(left_type, right_type) => {
-                if let Value::Array(values) = json {
-                    ensure!(
-                        values.len() == 2,
-                        PairError("Only pairs of two are supported".to_string())
-                    );
-                    Type::write_bytes_from_json_schema_type(left_type, &values[0], out)?;
-                    Type::write_bytes_from_json_schema_type(right_type, &values[1], out)
-                } else {
-                    Err(WrongJsonType("JSON Array required for a pair".to_string()))
-                }
-            }
-            Type::List(size_len, ty) => {
-                if let Value::Array(values) = json {
-                    let len = values.len();
-                    write_bytes_for_length_of_size(len, size_len, out)?;
-                    for value in values {
-                        Type::write_bytes_from_json_schema_type(ty, value, out)?;
-                    }
-                    Ok(())
-                } else {
-                    Err(WrongJsonType("JSON Array required".to_string()))
-                }
-            }
-            Type::Set(size_len, ty) => {
-                if let Value::Array(values) = json {
-                    let len = values.len();
-                    write_bytes_for_length_of_size(len, size_len, out)?;
-                    for value in values {
-                        Type::write_bytes_from_json_schema_type(ty, value, out)?;
-                    }
-                    Ok(())
-                } else {
-                    Err(WrongJsonType("JSON Array required".to_string()))
-                }
-            }
-            Type::Map(size_len, key_ty, val_ty) => {
-                if let Value::Array(entries) = json {
-                    let len = entries.len();
-                    write_bytes_for_length_of_size(len, size_len, out)?;
-                    for entry in entries {
-                        if let Value::Array(pair) = entry {
-                            ensure!(
-                                pair.len() == 2,
-                                MapError("Expected key-value pair".to_string())
-                            );
-                            Type::write_bytes_from_json_schema_type(key_ty, &pair[0], out)?;
-                            Type::write_bytes_from_json_schema_type(val_ty, &pair[1], out)?;
-                        } else {
-                            return Err(WrongJsonType(
-                                "Expected key value pairs as JSON arrays".to_string(),
-                            ));
-                        }
-                    }
-                    Ok(())
-                } else {
-                    Err(WrongJsonType("JSON Array required".to_string()))
-                }
-            }
-            Type::Array(len, ty) => {
-                if let Value::Array(values) = json {
-                    ensure!(
-                        (values.len() as u32) == *len,
-                        ArrayError(format!(
-                            "Expected array with {} elements, but it had {} elements",
-                            len,
-                            values.len()
-                        ))
-                    );
-                    for value in values {
-                        Type::write_bytes_from_json_schema_type(ty, value, out)?;
-                    }
-                    Ok(())
-                } else {
-                    Err(WrongJsonType("JSON Array required".to_string()))
-                }
-            }
-            Type::Struct(fields_ty) => write_bytes_from_json_schema_fields(fields_ty, json, out),
-            Type::Enum(variants_ty) => {
-                if let Value::Object(map) = json {
-                    ensure!(map.len() == 1, EnumError("Only one variant allowed".to_string()));
-                    let (variant_name, fields_value) = map.iter().next().unwrap(); // Safe since we already checked the length
-                    let schema_fields_opt = variants_ty
-                        .iter()
-                        .enumerate()
-                        .find(|(_, (variant_name_schema, _))| variant_name_schema == variant_name);
-                    if let Some((i, (_, variant_fields))) = schema_fields_opt {
-                        if variants_ty.len() <= 256 {
-                            out.write_u8(i as u8).or(Err(JsonError::FailedWriting))?;
-                        } else if variants_ty.len() <= 256 * 256 {
-                            out.write_u16(i as u16).or(Err(JsonError::FailedWriting))?;
-                        } else {
-                            return Err(EnumError(
-                                "Enums with more than 65536 variants are not supported."
-                                    .to_string(),
-                            ));
-                        };
-                        write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
-                    } else {
-                        // Non-existing variant
-                        Err(EnumError(format!("Unknown variant: {}", variant_name)))
-                    }
-                } else {
-                    Err(WrongJsonType(
-                        "JSON Object with one field required for an Enum".to_string(),
-                    ))
-                }
-            }
-            Type::TaggedEnum(variants_ty) => {
-                if let Value::Object(fields) = json {
-                    ensure!(fields.len() == 1, EnumError("Only one variant allowed.".to_string()));
-                    let (variant_name, fields_value) = fields.iter().next().unwrap(); // Safe since we already checked the length
-                    let schema_fields_opt = variants_ty
-                        .iter()
-                        .find(|(_, (variant_name_schema, _))| variant_name_schema == variant_name);
-                    if let Some((&i, (_, variant_fields))) = schema_fields_opt {
-                        out.write_u8(i).or(Err(JsonError::FailedWriting))?;
-                        write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
-                    } else {
-                        // Non-existing variant
-                        Err(EnumError(format!("Unknown variant: {}", variant_name)))
-                    }
-                } else {
-                    Err(WrongJsonType("JSON Object required for an EnumTag".to_string()))
-                }
-            }
-            Type::String(size_len) => {
-                if let Value::String(string) = json {
-                    let len = string.len();
-                    write_bytes_for_length_of_size(len, size_len, out)?;
-                    serial_vector_no_length(string.as_bytes(), out)
-                        .or(Err(JsonError::FailedWriting))
-                } else {
-                    Err(WrongJsonType("JSON String required".to_string()))
-                }
-            }
-            Type::ContractName(size_len) => {
-                if let Value::Object(fields) = json {
-                    let contract = fields.get("contract").ok_or_else(|| {
-                        FieldError("Missing field 'contract' of type JSON String.".to_string())
-                    })?;
-                    ensure!(
-                        fields.len() == 1,
-                        FieldError(format!(
-                            "Expected only one field but {} were provided.",
-                            fields.len()
-                        ))
-                    );
-                    if let Value::String(name) = contract {
-                        let contract_name = format!("init_{}", name);
-                        let len = contract_name.len();
-                        write_bytes_for_length_of_size(len, size_len, out)?;
-                        serial_vector_no_length(contract_name.as_bytes(), out)
-                            .or(Err(JsonError::FailedWriting))
-                    } else {
-                        Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
-                    }
-                } else {
-                    Err(WrongJsonType("JSON Object required for contract name.".to_string()))
-                }
-            }
-            Type::ReceiveName(size_len) => {
-                if let Value::Object(fields) = json {
-                    let contract = fields.get("contract").ok_or_else(|| {
-                        FieldError("Missing field 'contract' of type JSON String.".to_string())
-                    })?;
-                    let func = fields.get("func").ok_or_else(|| {
-                        WrongJsonType("Missing field 'func' of type JSON String.".to_string())
-                    })?;
-                    ensure!(
-                        fields.len() == 2,
-                        FieldError(format!(
-                            "Expected exactly two fields but {} were provided.",
-                            fields.len()
-                        ))
-                    );
-                    if let Value::String(contract) = contract {
-                        if let Value::String(func) = func {
-                            let receive_name = format!("{}.{}", contract, func);
-                            let len = receive_name.len();
-                            write_bytes_for_length_of_size(len, size_len, out)?;
-                            serial_vector_no_length(receive_name.as_bytes(), out)
-                                .or(Err(JsonError::FailedWriting))
-                        } else {
-                            Err(WrongJsonType("JSON String required for field 'func'.".to_string()))
-                        }
-                    } else {
-                        Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
-                    }
-                } else {
-                    Err(WrongJsonType("JSON Object required for contract name.".to_string()))
-                }
-            }
-            Type::U128 => {
-                if let Value::String(string) = json {
-                    let n: u128 = string
-                        .parse()
-                        .map_err(|_| ParseError("Could not parse as u128.".to_string()))?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON String required".to_string()))
-                }
-            }
-            Type::I128 => {
-                if let Value::String(string) = json {
-                    let n: i128 = string
-                        .parse()
-                        .map_err(|_| ParseError("Could not parse as i128.".to_string()))?;
-                    serial!(n, out)
-                } else {
-                    Err(WrongJsonType("JSON String required".to_string()))
-                }
-            }
-            Type::ULeb128(constraint) => {
-                if let Value::String(string) = json {
-                    let biguint = string
-                        .parse()
-                        .map_err(|_| ParseError("Could not parse integer.".to_string()))?;
-                    serial_biguint(biguint, *constraint, out).or(Err(JsonError::FailedWriting))
-                } else {
-                    Err(WrongJsonType("JSON String required".to_string()))
-                }
-            }
-            Type::ILeb128(constraint) => {
-                if let Value::String(string) = json {
-                    let bigint = string
-                        .parse()
-                        .map_err(|_| ParseError("Could not parse integer.".to_string()))?;
-                    serial_bigint(bigint, *constraint, out).or(Err(JsonError::FailedWriting))
-                } else {
-                    Err(WrongJsonType("JSON String required".to_string()))
-                }
-            }
-            Type::ByteList(size_len) => {
-                if let Value::String(string) = json {
-                    let bytes = hex::decode(string)?;
-                    let len = bytes.len();
-                    write_bytes_for_length_of_size(len, size_len, out)?;
-                    for value in bytes {
-                        serial!(value, out)?
-                    }
-                    Ok(())
-                } else {
-                    Err(WrongJsonType("JSON String required".to_string()))
-                }
-            }
-            Type::ByteArray(len) => {
-                if let Value::String(string) = json {
-                    let bytes = hex::decode(string)?;
-                    ensure!(
-                        *len == bytes.len() as u32,
-                        ByteArrayError("Mismatching number of bytes".to_string())
-                    );
-                    for value in bytes {
-                        serial!(value, out)?;
-                    }
-                    Ok(())
-                } else {
-                    Err(WrongJsonType("JSON String required".to_string()))
-                }
-            }
-        }
+        write_bytes_from_json_schema_type(schema, json, out)
     }
 }
 
@@ -536,7 +563,7 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 for (field_name, field_ty) in fields {
                     let field_value_opt = map.get(field_name);
                     if let Some(field_value) = field_value_opt {
-                        Type::write_bytes_from_json_schema_type(field_ty, field_value, out)?;
+                        write_bytes_from_json_schema_type(field_ty, field_value, out)?;
                     } else {
                         return Err(FieldError(format!("Missing field: {}", field_name)));
                     }
@@ -553,7 +580,7 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                     FieldError(format!("Expected {} unnamed fields", fields.len()))
                 );
                 for (field_ty, value) in fields.iter().zip(values.iter()) {
-                    Type::write_bytes_from_json_schema_type(field_ty, value, out)?;
+                    write_bytes_from_json_schema_type(field_ty, value, out)?;
                 }
                 Ok(())
             } else {
@@ -1001,7 +1028,7 @@ impl Type {
             }
             Type::ContractAddress => {
                 let address = ContractAddress::deserial(source)?;
-                Ok(Value::String(address.to_string()))
+                Ok(serde_json::to_value(address).map_err(|_| ParseError {})?)
             }
             Type::Timestamp => {
                 let timestamp = Timestamp::deserial(source)?;
