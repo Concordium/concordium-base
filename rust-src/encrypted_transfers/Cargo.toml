@@ -45,12 +45,6 @@ version = "0"
 [dependencies.random_oracle]
 path = "../random_oracle"
 version = "0"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-rand = { version = "=0.7", features = [ "wasm-bindgen" ] }
-wasm-bindgen = "0.2.60"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rand = "=0.7"
 
 [dev-dependencies]
