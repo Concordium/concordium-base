@@ -877,6 +877,11 @@ impl Ord for Address {
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub struct ContractName<'a>(&'a str);
 
+impl<'a> fmt::Display for ContractName<'a> {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
+
 impl<'a> ContractName<'a> {
     /// Create a new ContractName and check the format. Expected format:
     /// "init_<contract_name>".
@@ -943,6 +948,11 @@ impl<'a> From<ContractName<'a>> for &'a str {
 )]
 pub struct OwnedContractName(String);
 
+impl fmt::Display for OwnedContractName {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
+
 impl OwnedContractName {
     /// Create a new OwnedContractName and check the format. Expected format:
     /// "init_<contract_name>".
@@ -1004,6 +1014,11 @@ impl convert::TryFrom<String> for OwnedContractName {
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 #[repr(transparent)]
 pub struct ReceiveName<'a>(&'a str);
+
+impl<'a> fmt::Display for ReceiveName<'a> {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
 
 impl<'a> ReceiveName<'a> {
     /// Create a new ReceiveName and check the format. Expected format:
@@ -1068,6 +1083,11 @@ impl<'a> ReceiveName<'a> {
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "derive-serde", serde(try_from = "String"))]
 pub struct OwnedReceiveName(String);
+
+impl fmt::Display for OwnedReceiveName {
+    #[inline(always)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
+}
 
 impl convert::TryFrom<String> for OwnedReceiveName {
     type Error = NewReceiveNameError;
@@ -1351,7 +1371,10 @@ impl ExchangeRate {
 )]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 #[derive(Debug, Clone)]
+/// Information about the chain available to smart contracts.
 pub struct ChainMetadata {
+    /// The objective (i.e., the entire network agrees on it) time of the block
+    /// in whose context the smart contract is being executed.
     pub slot_time: SlotTime,
 }
 
@@ -1427,6 +1450,19 @@ pub struct AttributeValue {
     pub(crate) inner: [u8; 32],
 }
 
+#[cfg(feature = "fuzz")]
+impl arbitrary::Arbitrary for AttributeValue {
+    fn arbitrary(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Self> {
+        let size = u.int_in_range(0..=31)?;
+        let mut inner: [u8; 32] = [0u8; 32];
+        inner[0] = size;
+        u.fill_buffer(&mut inner[1..=usize::from(size)])?;
+        Ok(AttributeValue {
+            inner,
+        })
+    }
+}
+
 impl AttributeValue {
     /// Create a new [`Self`] from a slice of bytes. The slice must have a
     /// length of *at most 31 bytes*.
@@ -1444,7 +1480,7 @@ impl AttributeValue {
 
     #[doc(hidden)]
     /// Create a new [`Self`] from a byte array. The first byte *must* tell
-    /// length of the attribute in the array.
+    /// the length of the attribute in the array.
     pub unsafe fn new_unchecked(inner: [u8; 32]) -> Self {
         Self {
             inner,
