@@ -19,6 +19,17 @@ env:
   TARGET: wasm32-unknown-unknown
 
 jobs:
+  "wat-wasm-consistency":
+    name: Ensure consistency between wat and wasm files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install WABT
+        run: sudo apt-get update && sudo apt-get -y install wabt
+      - name: Check consistency
+        run: ./.diff-wat-wasm.sh
+
   "lint_fmt":
     name: smart-contracts/${{ matrix.build-dir }} lint:fmt
     # Don't run on draft pull requests
