@@ -753,16 +753,22 @@ data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion).
 instance ToJSON EChainParametersAndKeys where
     toJSON (EChainParametersAndKeys (params :: ChainParameters' cpv) keys) =
       case chainParametersVersion @cpv of
-        SCPV0 -> object [
+        SChainParametersV0 -> object [
             "version" .= String "0",
             "parameters" .= toJSON params,
             "updateKeys" .= toJSON keys
           ]
-        SCPV1 -> object [
+        SChainParametersV1 -> object [
             "version" .= String "1",
             "parameters" .= toJSON params,
             "updateKeys" .= toJSON keys
           ]
+        SChainParametersV2 -> object [
+            "version" .= String "2",
+            "parameters" .= toJSON params,
+            "updateKeys" .= toJSON keys
+          ]
+
 
 -- |The committee information of a node which is configured with
 -- baker keys but is somehow is _not_ part of the current baking
