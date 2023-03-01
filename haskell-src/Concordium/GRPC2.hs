@@ -10,8 +10,8 @@ module Concordium.GRPC2 (
     ToProto (..),
     BakerAddedEvent,
     BakerKeysEvent,
-    BlockHashInput(..),
-    BlockHeightInput(..),
+    BlockHashInput (..),
+    BlockHeightInput (..),
 )
 where
 

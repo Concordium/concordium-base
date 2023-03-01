@@ -45,19 +45,23 @@ foreign import ccall unsafe "ar_info_create"
         ArIdentity ->
         -- |Pointer to a byte array which is the serialization of a
         -- @elgamal::PublicKey<G1>@ Rust-instance.
-        Ptr Word8 -> CSize ->
+        Ptr Word8 ->
+        CSize ->
         -- |Pointer to a byte array which is the serialization of an
         -- utf8 encoded string and its length.
-        Ptr Word8 -> CSize ->
+        Ptr Word8 ->
+        CSize ->
         -- |Pointer to a byte array which is the serialization of an
         -- utf8 encoded string and its length.
-        Ptr Word8 -> CSize ->
+        Ptr Word8 ->
+        CSize ->
         -- |Pointer to a byte array which is the serialization of an
         -- utf8 encoded string and its length.
-        Ptr Word8 -> CSize -> 
+        Ptr Word8 ->
+        CSize ->
         -- |Pointer to an @ArInfo@ Rust instance with its corresponding fields set
         -- to deserializations of the the above. This is a null-pointer on failure.
-        IO (Ptr ArInfo) 
+        IO (Ptr ArInfo)
 
 -- |Create an @ArInfo@ Rust-instance from constituent parts.
 createArInfo ::
@@ -73,23 +77,31 @@ createArInfo ::
     Text ->
     -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise an @ArInfo@ is returned.
     Maybe ArInfo
-createArInfo arId pubKey name url desc = unsafePerformIO ( do
-    -- Note that empty strings correspond to arbitrary pointers being passed
-    -- to the Rust side. This is handled on the Rust side by checking the
-    -- lengths, so this is safe.
-    ptr <- unsafeUseAsCStringLen pubKey $ \(pkPtr, pkLen) ->
-        unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
-            unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
-                unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
-                    createArInfoFFI arId
-                        (castPtr pkPtr) (fromIntegral pkLen)
-                        (castPtr nPtr) (fromIntegral nLen)
-                        (castPtr urlPtr) (fromIntegral urlLen)
-                        (castPtr descPtr) (fromIntegral descLen)
-    if ptr == nullPtr
-    then return Nothing
-    else Just . ArInfo <$> newForeignPtr freeArInfo ptr)
-    
+createArInfo arId pubKey name url desc =
+    unsafePerformIO
+        ( do
+            -- Note that empty strings correspond to arbitrary pointers being passed
+            -- to the Rust side. This is handled on the Rust side by checking the
+            -- lengths, so this is safe.
+            ptr <- unsafeUseAsCStringLen pubKey $ \(pkPtr, pkLen) ->
+                unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
+                    unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
+                        unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
+                            createArInfoFFI
+                                arId
+                                (castPtr pkPtr)
+                                (fromIntegral pkLen)
+                                (castPtr nPtr)
+                                (fromIntegral nLen)
+                                (castPtr urlPtr)
+                                (fromIntegral urlLen)
+                                (castPtr descPtr)
+                                (fromIntegral descLen)
+            if ptr == nullPtr
+                then return Nothing
+                else Just . ArInfo <$> newForeignPtr freeArInfo ptr
+        )
+
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp
 

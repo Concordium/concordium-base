@@ -752,23 +752,25 @@ data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion).
 
 instance ToJSON EChainParametersAndKeys where
     toJSON (EChainParametersAndKeys (params :: ChainParameters' cpv) keys) =
-      case chainParametersVersion @cpv of
-        SChainParametersV0 -> object [
-            "version" .= String "0",
-            "parameters" .= toJSON params,
-            "updateKeys" .= toJSON keys
-          ]
-        SChainParametersV1 -> object [
-            "version" .= String "1",
-            "parameters" .= toJSON params,
-            "updateKeys" .= toJSON keys
-          ]
-        SChainParametersV2 -> object [
-            "version" .= String "2",
-            "parameters" .= toJSON params,
-            "updateKeys" .= toJSON keys
-          ]
-
+        case chainParametersVersion @cpv of
+            SChainParametersV0 ->
+                object
+                    [ "version" .= String "0",
+                      "parameters" .= toJSON params,
+                      "updateKeys" .= toJSON keys
+                    ]
+            SChainParametersV1 ->
+                object
+                    [ "version" .= String "1",
+                      "parameters" .= toJSON params,
+                      "updateKeys" .= toJSON keys
+                    ]
+            SChainParametersV2 ->
+                object
+                    [ "version" .= String "2",
+                      "parameters" .= toJSON params,
+                      "updateKeys" .= toJSON keys
+                    ]
 
 -- |The committee information of a node which is configured with
 -- baker keys but is somehow is _not_ part of the current baking
@@ -784,7 +786,7 @@ data PassiveCommitteeInfo
       -- baker keys do not match the current keys on the baker account.
       -- The node is _not_ baking.
       AddedButWrongKeys
-  deriving (Show)
+    deriving (Show)
 
 -- |Status of the baker configured node.
 data BakerConsensusInfoStatus
@@ -795,13 +797,14 @@ data BakerConsensusInfoStatus
     | -- | Node is configured with baker keys and active in the current finalizer
       -- committee (and also baking committee).
       ActiveFinalizer
-  deriving (Show)
+    deriving (Show)
 
 -- |Consensus info for a node configured with baker keys.
 data BakerConsensusInfo = BakerConsensusInfo
     { bakerId :: !BakerId,
       status :: !BakerConsensusInfoStatus
-    } deriving (Show)
+    }
+    deriving (Show)
 
 -- |Consensus related details of the peer.
 data NodeDetails
@@ -817,7 +820,7 @@ data NodeDetails
       NodePassive
     | -- | The node is configured with baker credentials and consensus is running.
       NodeActive !BakerConsensusInfo
-  deriving (Show)
+    deriving (Show)
 
 -- |Network related information of the node.
 data NetworkInfo = NetworkInfo
@@ -831,7 +834,8 @@ data NetworkInfo = NetworkInfo
       avgBpsIn :: !Word64,
       -- |Average inbound throughput in bytes per second.
       avgBpsOut :: !Word64
-    } deriving (Show)
+    }
+    deriving (Show)
 
 -- |Various information about the node.
 data NodeInfo = NodeInfo
@@ -845,23 +849,25 @@ data NodeInfo = NodeInfo
       networkInfo :: !NetworkInfo,
       -- |Consensus related details of the node.
       details :: !NodeDetails
-    } deriving (Show)
+    }
+    deriving (Show)
 
 -- |Information about a block which arrived at the node.
-data ArrivedBlockInfo = ArrivedBlockInfo {
-    -- |Hash of the block.
-    abiBlockHash :: !BlockHash,
-    -- |Absolute height of the block, where 0 is the height of the genesis block.
-    abiBlockHeight :: !AbsoluteBlockHeight
-} deriving (Show)
+data ArrivedBlockInfo = ArrivedBlockInfo
+    { -- |Hash of the block.
+      abiBlockHash :: !BlockHash,
+      -- |Absolute height of the block, where 0 is the height of the genesis block.
+      abiBlockHeight :: !AbsoluteBlockHeight
+    }
+    deriving (Show)
 
 -- |A pending update.
-data PendingUpdate = PendingUpdate {
-    -- |The effect of the update.
-    puEffect :: !PendingUpdateEffect,
-    -- |The effective time of the update.
-    puEffectiveTime :: TransactionTime
-}
+data PendingUpdate = PendingUpdate
+    { -- |The effect of the update.
+      puEffect :: !PendingUpdateEffect,
+      -- |The effective time of the update.
+      puEffectiveTime :: TransactionTime
+    }
 
 -- |Derive JSON instance for @PendingUpdate@. A JSON object field label is named after its
 -- corresponding record field name by stripping the maximal lower-case prefix of the record
@@ -889,7 +895,7 @@ data PeerCatchupStatus
       -- has responded to the request, its status will be changed to either @UpToDate@
       -- or @Pending@.
       CatchingUp
-  deriving (Show, Eq)
+    deriving (Show, Eq)
 
 -- |Network statistics for the peer.
 data NetworkStats = NetworkStats
@@ -903,7 +909,8 @@ data NetworkStats = NetworkStats
       packetsReceived :: !Word64,
       -- |The connection latency (i.e., ping time) in milliseconds.
       latency :: !Word64
-    } deriving (Show)
+    }
+    deriving (Show)
 
 -- |An IP address.
 newtype IpAddress = IpAddress {ipAddress :: Text}
@@ -925,7 +932,8 @@ data PeerInfo = PeerInfo
       socketAddress :: !IpSocketAddress,
       networkStats :: !NetworkStats,
       consensusInfo :: !PeerCatchupStatus
-    } deriving (Show)
+    }
+    deriving (Show)
 
 -- |A block identifier.
 -- A block is either identified via a hash, or as one of the special

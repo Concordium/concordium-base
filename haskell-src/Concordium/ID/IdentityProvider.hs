@@ -39,27 +39,33 @@ foreign import ccall unsafe "ip_info_url" ipUrlFFI :: Ptr IpInfo -> Ptr CSize ->
 foreign import ccall unsafe "ip_info_description" ipDescriptionFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_verify_key" ipVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ip_info_create" createIpInfoFFI ::
-    -- |The identity of the identity provider.
-    IdentityProviderIdentity ->
-    -- |Pointer to a byte array which is the serialization of a
-    -- @ed25519_dalek::PublicKey@ Rust-instance and its length.
-    Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the serialization of a
-    -- @ps_sig::PublicKey<Bls12>@ Rust-instance and its length.
-    Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the serialization of an
-    -- utf8 encoded string and its length.
-    Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the serialization of an
-    -- utf8 encoded string and its length.
-    Ptr Word8 -> CSize ->
-    -- |Pointer to a byte array which is the serialization of an
-    -- utf8 encoded string and its length.
-    Ptr Word8 -> CSize ->
-    -- |Pointer to an @IpInfo@ Rust instance with its corresponding fields set
-    -- to deserializations of the the above. This is a null-pointer on failure.
-    IO (Ptr IpInfo)
+foreign import ccall unsafe "ip_info_create"
+    createIpInfoFFI ::
+        -- |The identity of the identity provider.
+        IdentityProviderIdentity ->
+        -- |Pointer to a byte array which is the serialization of a
+        -- @ed25519_dalek::PublicKey@ Rust-instance and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to a byte array which is the serialization of a
+        -- @ps_sig::PublicKey<Bls12>@ Rust-instance and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to a byte array which is the serialization of an
+        -- utf8 encoded string and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to a byte array which is the serialization of an
+        -- utf8 encoded string and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to a byte array which is the serialization of an
+        -- utf8 encoded string and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to an @IpInfo@ Rust instance with its corresponding fields set
+        -- to deserializations of the the above. This is a null-pointer on failure.
+        IO (Ptr IpInfo)
 
 -- |Create an @IpInfo@ instance from constituent parts.
 createIpInfo ::
@@ -77,24 +83,33 @@ createIpInfo ::
     Text ->
     -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise a @IpInfo@ is returned.
     Maybe IpInfo
-createIpInfo idIdentity verifyKey cdiVerifyKey name url desc = unsafePerformIO ( do
-    -- Note that empty strings correspond to arbitrary pointers being passed
-    -- to the Rust side. This is handled on the Rust side by checking the
-    -- lengths, so this is safe.
-    ptr <- unsafeUseAsCStringLen verifyKey $ \(vkPtr, vkLen) ->
-        unsafeUseAsCStringLen cdiVerifyKey $ \(cvkPtr, cvkLen) ->
-            unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
-                unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
-                    unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
-                        createIpInfoFFI idIdentity
-                            (castPtr vkPtr) (fromIntegral vkLen)
-                            (castPtr cvkPtr) (fromIntegral cvkLen)
-                            (castPtr nPtr) (fromIntegral nLen)
-                            (castPtr urlPtr) (fromIntegral urlLen)
-                            (castPtr descPtr) (fromIntegral descLen)
-    if ptr == nullPtr
-    then return Nothing
-    else Just . IpInfo <$> newForeignPtr freeIpInfo ptr )
+createIpInfo idIdentity verifyKey cdiVerifyKey name url desc =
+    unsafePerformIO
+        ( do
+            -- Note that empty strings correspond to arbitrary pointers being passed
+            -- to the Rust side. This is handled on the Rust side by checking the
+            -- lengths, so this is safe.
+            ptr <- unsafeUseAsCStringLen verifyKey $ \(vkPtr, vkLen) ->
+                unsafeUseAsCStringLen cdiVerifyKey $ \(cvkPtr, cvkLen) ->
+                    unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
+                        unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
+                            unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
+                                createIpInfoFFI
+                                    idIdentity
+                                    (castPtr vkPtr)
+                                    (fromIntegral vkLen)
+                                    (castPtr cvkPtr)
+                                    (fromIntegral cvkLen)
+                                    (castPtr nPtr)
+                                    (fromIntegral nLen)
+                                    (castPtr urlPtr)
+                                    (fromIntegral urlLen)
+                                    (castPtr descPtr)
+                                    (fromIntegral descLen)
+            if ptr == nullPtr
+                then return Nothing
+                else Just . IpInfo <$> newForeignPtr freeIpInfo ptr
+        )
 
 withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b
 withIpInfo (IpInfo fp) = withForeignPtr fp
