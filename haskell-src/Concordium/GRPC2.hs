@@ -18,6 +18,7 @@ where
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Coerce
+import Data.Foldable (toList)
 import qualified Data.Map.Strict as Map
 import qualified Data.ProtoLens as Proto
 import qualified Data.ProtoLens.Combinators as Proto
@@ -25,6 +26,7 @@ import qualified Data.ProtoLens.Field
 import qualified Data.Ratio as Ratio
 import qualified Data.Serialize as S
 import qualified Data.Set as Set
+import Data.Singletons
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
@@ -52,7 +54,6 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Block (AbsoluteBlockHeight (..))
 import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
-import Concordium.Types.Parameters
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
@@ -343,6 +344,7 @@ instance ToProto AccountEncryptedAmount where
                 mkEncryptedBalance
                 ProtoFields.aggregatedAmount .= toProto aggAmount
                 ProtoFields.numAggregated .= numAgg
+                ProtoFields.incomingAmounts .= (toProto <$> toList (_incomingEncryptedAmounts encBal))
       where
         mkEncryptedBalance = do
             ProtoFields.selfAmount .= toProto (_selfAmount encBal)
@@ -422,6 +424,10 @@ instance ToProto OpenStatus where
 instance ToProto UrlText where
     type Output UrlText = Text
     toProto (UrlText s) = s
+
+instance ToProto PartsPerHundredThousands where
+    type Output PartsPerHundredThousands = Proto.AmountFraction
+    toProto (PartsPerHundredThousands ppht) = Proto.make (ProtoFields.partsPerHundredThousand .= fromIntegral ppht)
 
 instance ToProto AmountFraction where
     type Output AmountFraction = Proto.AmountFraction
@@ -763,15 +769,15 @@ instance ToProto Updates.ProtocolUpdate where
         ProtoFields.specificationHash .= toProto puSpecificationHash
         ProtoFields.specificationAuxiliaryData .= puSpecificationAuxiliaryData
 
-instance ToProto (Parameters.MintDistribution 'ChainParametersV0) where
-    type Output (Parameters.MintDistribution 'ChainParametersV0) = Proto.MintDistributionCpv0
+instance ToProto (Parameters.MintDistribution 'Parameters.MintDistributionVersion0) where
+    type Output (Parameters.MintDistribution 'Parameters.MintDistributionVersion0) = Proto.MintDistributionCpv0
     toProto md = Proto.make $ do
-        ProtoFields.mintPerSlot .= toProto (md ^. Parameters.mdMintPerSlot . Parameters.mpsMintPerSlot)
+        ProtoFields.mintPerSlot .= toProto (md ^. Parameters.mdMintPerSlot . Parameters.unconditionally)
         ProtoFields.bakingReward .= toProto (Parameters._mdBakingReward md)
         ProtoFields.finalizationReward .= toProto (Parameters._mdFinalizationReward md)
 
-instance ToProto (Parameters.MintDistribution 'ChainParametersV1) where
-    type Output (Parameters.MintDistribution 'ChainParametersV1) = Proto.MintDistributionCpv1
+instance ToProto (Parameters.MintDistribution 'Parameters.MintDistributionVersion1) where
+    type Output (Parameters.MintDistribution 'Parameters.MintDistributionVersion1) = Proto.MintDistributionCpv1
     toProto md = Proto.make $ do
         ProtoFields.bakingReward .= toProto (Parameters._mdBakingReward md)
         ProtoFields.finalizationReward .= toProto (Parameters._mdFinalizationReward md)
@@ -782,20 +788,27 @@ instance ToProto Parameters.TransactionFeeDistribution where
         ProtoFields.baker .= toProto _tfdBaker
         ProtoFields.gasAccount .= toProto _tfdGASAccount
 
-instance ToProto Parameters.GASRewards where
-    type Output Parameters.GASRewards = Proto.GasRewards
+instance ToProto (Parameters.GASRewards 'Parameters.GASRewardsVersion0) where
+    type Output (Parameters.GASRewards 'Parameters.GASRewardsVersion0) = Proto.GasRewards
     toProto Parameters.GASRewards{..} = Proto.make $ do
         ProtoFields.baker .= toProto _gasBaker
-        ProtoFields.finalizationProof .= toProto _gasFinalizationProof
+        ProtoFields.finalizationProof .= toProto (_gasFinalizationProof ^. Parameters.unconditionally)
         ProtoFields.accountCreation .= toProto _gasAccountCreation
         ProtoFields.chainUpdate .= toProto _gasChainUpdate
 
-instance ToProto (Parameters.PoolParameters 'ChainParametersV0) where
-    type Output (Parameters.PoolParameters 'ChainParametersV0) = Proto.BakerStakeThreshold
+instance ToProto (Parameters.GASRewards 'Parameters.GASRewardsVersion1) where
+    type Output (Parameters.GASRewards 'Parameters.GASRewardsVersion1) = Proto.GasRewardsCpv2
+    toProto Parameters.GASRewards{..} = Proto.make $ do
+        ProtoFields.baker .= toProto _gasBaker
+        ProtoFields.accountCreation .= toProto _gasAccountCreation
+        ProtoFields.chainUpdate .= toProto _gasChainUpdate
+
+instance ToProto (Parameters.PoolParameters' 'Parameters.PoolParametersVersion0) where
+    type Output (Parameters.PoolParameters' 'Parameters.PoolParametersVersion0) = Proto.BakerStakeThreshold
     toProto pp = Proto.make $ ProtoFields.bakerStakeThreshold .= toProto (pp ^. Parameters.ppBakerStakeThreshold)
 
-instance ToProto (Parameters.PoolParameters 'ChainParametersV1) where
-    type Output (Parameters.PoolParameters 'ChainParametersV1) = Proto.PoolParametersCpv1
+instance ToProto (Parameters.PoolParameters' 'Parameters.PoolParametersVersion1) where
+    type Output (Parameters.PoolParameters' 'Parameters.PoolParametersVersion1) = Proto.PoolParametersCpv1
     toProto pp = Proto.make $ do
         ProtoFields.passiveFinalizationCommission .= toProto (pp ^. Parameters.ppPassiveCommissions . finalizationCommission)
         ProtoFields.passiveBakingCommission .= toProto (pp ^. Parameters.ppPassiveCommissions . bakingCommission)
@@ -811,17 +824,38 @@ instance ToProto (Parameters.PoolParameters 'ChainParametersV1) where
         ProtoFields.capitalBound .= toProto (pp ^. Parameters.ppCapitalBound)
         ProtoFields.leverageBound .= toProto (pp ^. Parameters.ppLeverageBound)
 
-instance ToProto (Parameters.CooldownParameters 'ChainParametersV1) where
-    type Output (Parameters.CooldownParameters 'ChainParametersV1) = Proto.CooldownParametersCpv1
+instance ToProto (Parameters.CooldownParameters' 'Parameters.CooldownParametersVersion1) where
+    type Output (Parameters.CooldownParameters' 'Parameters.CooldownParametersVersion1) = Proto.CooldownParametersCpv1
     toProto (Parameters.CooldownParametersV1{..}) = Proto.make $ do
         ProtoFields.poolOwnerCooldown .= toProto _cpPoolOwnerCooldown
         ProtoFields.delegatorCooldown .= toProto _cpDelegatorCooldown
 
-instance ToProto (Parameters.TimeParameters 'ChainParametersV1) where
-    type Output (Parameters.TimeParameters 'ChainParametersV1) = Proto.TimeParametersCpv1
+instance ToProto Parameters.TimeParameters where
+    type Output Parameters.TimeParameters = Proto.TimeParametersCpv1
     toProto Parameters.TimeParametersV1{..} = Proto.make $ do
         ProtoFields.rewardPeriodLength .= toProto _tpRewardPeriodLength
         ProtoFields.mintPerPayday .= toProto _tpMintPerPayday
+
+instance ToProto Parameters.TimeoutParameters where
+    type Output Parameters.TimeoutParameters = Proto.TimeoutParameters
+    toProto Parameters.TimeoutParameters{..} = Proto.make $ do
+        ProtoFields.timeoutBase .= toProto _tpTimeoutBase
+        ProtoFields.timeoutIncrease .= toProto _tpTimeoutIncrease
+        ProtoFields.timeoutDecrease .= toProto _tpTimeoutDecrease
+
+instance ToProto Parameters.FinalizationCommitteeParameters where
+    type Output Parameters.FinalizationCommitteeParameters = Proto.FinalizationCommitteeParameters
+    toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
+        ProtoFields.minimumFinalizers .= _fcpMinFinalizers
+        ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
+        ProtoFields.finalizerRelativeStakeThreshold .= toProto _fcpFinalizerRelativeStakeThreshold
+
+instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
+    type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
+    toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
+        ProtoFields.timeoutParameters .= toProto _cpTimeoutParameters
+        ProtoFields.minBlockTime .= toProto _cpMinBlockTime
+        ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
 
 -- |Attempt to construct the protobuf updatepayload.
 --  See @toBlockItemStatus@ for more context.
@@ -836,6 +870,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateTransactionFeeDistribution, Updates.TransactionFeeDistributionUpdatePayload tfd) ->
         Right . Proto.make $ ProtoFields.transactionFeeDistributionUpdate .= toProto tfd
     (Updates.UpdateGASRewards, Updates.GASRewardsUpdatePayload gr) -> Right . Proto.make $ ProtoFields.gasRewardsUpdate .= toProto gr
+    (Updates.UpdateGASRewards, Updates.GASRewardsCPV2UpdatePayload gr) -> Right . Proto.make $ ProtoFields.gasRewardsCpv2Update .= toProto gr
     (Updates.UpdatePoolParameters, Updates.BakerStakeThresholdUpdatePayload pp) ->
         Right . Proto.make $ ProtoFields.bakerStakeThresholdUpdate .= toProto pp
     (Updates.UpdateRootKeys, Updates.RootUpdatePayload ru@(Updates.RootKeysRootUpdate{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
@@ -851,6 +886,10 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdatePoolParameters, Updates.PoolParametersCPV1UpdatePayload pp) -> Right . Proto.make $ ProtoFields.poolParametersCpv1Update .= toProto pp
     (Updates.UpdateTimeParameters, Updates.TimeParametersCPV1UpdatePayload tp) -> Right . Proto.make $ ProtoFields.timeParametersCpv1Update .= toProto tp
     (Updates.UpdateMintDistribution, Updates.MintDistributionCPV1UpdatePayload md) -> Right . Proto.make $ ProtoFields.mintDistributionCpv1Update .= toProto md
+    (Updates.UpdateTimeoutParameters, Updates.TimeoutParametersUpdatePayload tp) -> Right . Proto.make $ ProtoFields.timeoutParametersUpdate .= toProto tp
+    (Updates.UpdateMinBlockTime, Updates.MinBlockTimeUpdatePayload mbt) -> Right . Proto.make $ ProtoFields.minBlockTimeUpdate .= toProto mbt
+    (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
+    (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     _ -> Left CEInvalidUpdateResult
 
 -- |The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
@@ -958,8 +997,8 @@ instance ToProto (Updates.HigherLevelKeys kind) where
         ProtoFields.keys .= map toProto (Vec.toList $ Updates.hlkKeys keys)
         ProtoFields.threshold .= toProto (Updates.hlkThreshold keys)
 
-instance IsChainParametersVersion cpv => ToProto (Updates.Authorizations cpv) where
-    type Output (Updates.Authorizations cpv) = AuthorizationsFamily cpv
+instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizations auv) where
+    type Output (Updates.Authorizations auv) = AuthorizationsFamily auv
     toProto auth =
         let
             v0 :: Proto.AuthorizationsV0
@@ -967,7 +1006,7 @@ instance IsChainParametersVersion cpv => ToProto (Updates.Authorizations cpv) wh
                 ProtoFields.keys .= map toProto (Vec.toList $ Updates.asKeys auth)
                 ProtoFields.emergency .= toProto (Updates.asEmergency auth)
                 ProtoFields.protocol .= toProto (Updates.asProtocol auth)
-                ProtoFields.parameterElectionDifficulty .= toProto (Updates.asParamElectionDifficulty auth)
+                ProtoFields.parameterConsensus .= toProto (Updates.asParamConsensusParameters auth)
                 ProtoFields.parameterEuroPerEnergy .= toProto (Updates.asParamEuroPerEnergy auth)
                 ProtoFields.parameterMicroCCDPerEuro .= toProto (Updates.asParamMicroGTUPerEuro auth)
                 ProtoFields.parameterFoundationAccount .= toProto (Updates.asParamFoundationAccount auth)
@@ -978,19 +1017,17 @@ instance IsChainParametersVersion cpv => ToProto (Updates.Authorizations cpv) wh
                 ProtoFields.addAnonymityRevoker .= toProto (Updates.asAddAnonymityRevoker auth)
                 ProtoFields.addIdentityProvider .= toProto (Updates.asAddIdentityProvider auth)
         in
-            case chainParametersVersion @cpv of
-                SCPV0 -> v0
-                SCPV1 -> Proto.make $ do
+            case sing @auv of
+                Parameters.SAuthorizationsVersion0 -> v0
+                Parameters.SAuthorizationsVersion1 -> Proto.make $ do
                     ProtoFields.v0 .= v0
-                    case Updates.asCooldownParameters auth of
-                        JustForCPV1 as -> ProtoFields.parameterCooldown .= toProto as
-                    case Updates.asTimeParameters auth of
-                        JustForCPV1 as -> ProtoFields.parameterTime .= toProto as
+                    ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
 
 -- |Defines a type family that is used in the ToProto instance for Updates.Authorizations.
 type family AuthorizationsFamily cpv where
-    AuthorizationsFamily 'ChainParametersV0 = Proto.AuthorizationsV0
-    AuthorizationsFamily 'ChainParametersV1 = Proto.AuthorizationsV1
+    AuthorizationsFamily 'Parameters.AuthorizationsVersion0 = Proto.AuthorizationsV0
+    AuthorizationsFamily 'Parameters.AuthorizationsVersion1 = Proto.AuthorizationsV1
 
 instance ToProto Updates.AccessStructure where
     type Output Updates.AccessStructure = Proto.AccessStructure
@@ -1489,6 +1526,10 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateLevel2Keys = Proto.UPDATE_LEVEL2_KEYS
     toProto Updates.UpdateCooldownParameters = Proto.UPDATE_COOLDOWN_PARAMETERS
     toProto Updates.UpdateTimeParameters = Proto.UPDATE_TIME_PARAMETERS
+    toProto Updates.UpdateTimeoutParameters = Proto.UPDATE_TIMEOUT_PARAMETERS
+    toProto Updates.UpdateMinBlockTime = Proto.UPDATE_MIN_BLOCK_TIME
+    toProto Updates.UpdateBlockEnergyLimit = Proto.UPDATE_BLOCK_ENERGY_LIMIT
+    toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType
@@ -1879,19 +1920,24 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUELevel2KeysV1 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
             QueryTypes.PUEProtocol protocolUpdate -> ProtoFields.protocol .= toProto protocolUpdate
             QueryTypes.PUEElectionDifficulty electionDifficulty -> ProtoFields.electionDifficulty .= toProto electionDifficulty
-            QueryTypes.PUEEuroPerEnergy epe -> ProtoFields.euroPerEnergy .= toProto epe
+            QueryTypes.PUEEuroPerEnergy euroPerEnergy -> ProtoFields.euroPerEnergy .= toProto euroPerEnergy
             QueryTypes.PUEMicroCCDPerEuro microCcdPerEuro -> ProtoFields.microCcdPerEuro .= toProto microCcdPerEuro
             QueryTypes.PUEFoundationAccount foundationAccount -> ProtoFields.foundationAccount .= toProto foundationAccount
             QueryTypes.PUEMintDistributionV0 mintDistributionCpv0 -> ProtoFields.mintDistributionCpv0 .= toProto mintDistributionCpv0
             QueryTypes.PUEMintDistributionV1 mintDistributionCpv1 -> ProtoFields.mintDistributionCpv1 .= toProto mintDistributionCpv1
-            QueryTypes.PUETransactionFeeDistribution tfd -> ProtoFields.transactionFeeDistribution .= toProto tfd
-            QueryTypes.PUEGASRewards gasRewards -> ProtoFields.gasRewards .= toProto gasRewards
+            QueryTypes.PUETransactionFeeDistribution transactionFeeDistribution -> ProtoFields.transactionFeeDistribution .= toProto transactionFeeDistribution
+            QueryTypes.PUEGASRewardsV0 gasRewards -> ProtoFields.gasRewards .= toProto gasRewards
             QueryTypes.PUEPoolParametersV0 poolParametersCpv0 -> ProtoFields.poolParametersCpv0 .= toProto poolParametersCpv0
             QueryTypes.PUEPoolParametersV1 poolParametersCpv1 -> ProtoFields.poolParametersCpv1 .= toProto poolParametersCpv1
             QueryTypes.PUEAddAnonymityRevoker addAnonymityRevoker -> ProtoFields.addAnonymityRevoker .= toProto addAnonymityRevoker
             QueryTypes.PUEAddIdentityProvider addIdentityProvider -> ProtoFields.addIdentityProvider .= toProto addIdentityProvider
             QueryTypes.PUECooldownParameters cooldownParameters -> ProtoFields.cooldownParameters .= toProto cooldownParameters
             QueryTypes.PUETimeParameters timeParameters -> ProtoFields.timeParameters .= toProto timeParameters
+            QueryTypes.PUEGASRewardsV1 gasRewards -> ProtoFields.gasRewardsCpv2 .= toProto gasRewards
+            QueryTypes.PUETimeoutParameters timeoutParameters -> ProtoFields.timeoutParameters .= toProto timeoutParameters
+            QueryTypes.PUEMinBlockTime minBlockTime -> ProtoFields.minBlockTime .= toProto minBlockTime
+            QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
+            QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
@@ -1912,6 +1958,10 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.addIdentityProvider .= toProto _nusnAddIdentityProvider
         ProtoFields.cooldownParameters .= toProto _nusnCooldownParameters
         ProtoFields.timeParameters .= toProto _nusnTimeParameters
+        ProtoFields.timeoutParameters .= toProto _nusnTimeoutParameters
+        ProtoFields.minBlockTime .= toProto _nusnMinBlockTime
+        ProtoFields.blockEnergyLimit .= toProto _nusnBlockEnergyLimit
+        ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
@@ -1926,7 +1976,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
 
     toProto (foundationAddr, EChainParametersAndKeys (params :: Parameters.ChainParameters' cpv) keys) =
         case chainParametersVersion @cpv of
-            SCPV0 ->
+            SChainParametersV0 ->
                 let Parameters.ChainParameters
                         { _cpCooldownParameters = Parameters.CooldownParametersV0 epochs,
                           _cpPoolParameters = Parameters.PoolParametersV0 minThreshold,
@@ -1936,7 +1986,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                         ProtoFields.v0
                             .= Proto.make
                                 ( do
-                                    ProtoFields.electionDifficulty .= toProto _cpElectionDifficulty
+                                    ProtoFields.electionDifficulty .= toProto (Parameters._cpElectionDifficulty _cpConsensusParameters)
                                     ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
                                     ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
                                     ProtoFields.bakerCooldownEpochs .= toProto epochs
@@ -1950,17 +2000,17 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                 )
-            SCPV1 ->
+            SChainParametersV1 ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v1
                             .= Proto.make
                                 ( do
-                                    ProtoFields.electionDifficulty .= toProto _cpElectionDifficulty
+                                    ProtoFields.electionDifficulty .= toProto (Parameters._cpElectionDifficulty _cpConsensusParameters)
                                     ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
                                     ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
                                     ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
-                                    ProtoFields.timeParameters .= toProto _cpTimeParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
                                     ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
                                     ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
                                     ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
@@ -1970,6 +2020,28 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                )
+            SChainParametersV2 ->
+                let Parameters.ChainParameters{..} = params
+                in  Proto.make $
+                        ProtoFields.v2
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
+                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
+                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
+                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
+                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
+                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
+                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
+                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
+                                    ProtoFields.foundationAccount .= toProto foundationAddr
+                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
+                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
+                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
 
 instance ToProto FinalizationIndex where

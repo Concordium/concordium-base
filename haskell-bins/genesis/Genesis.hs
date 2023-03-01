@@ -20,6 +20,7 @@ import qualified Data.Map.Strict as OrdMap
 import Data.Maybe
 import Data.Ratio
 import qualified Data.Serialize as S
+import Data.Singletons
 import Data.Time.Format
 import qualified Data.Vector as Vec
 import Lens.Micro.Platform
@@ -31,6 +32,7 @@ import Text.Printf
 import Concordium.Common.Version
 import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.Base as GDBase
+import qualified Concordium.Genesis.Data.BaseV1 as GDBaseV1
 import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
@@ -171,14 +173,18 @@ unwrapVersionedGenesisParameters ver v =
 expectedIpInfosVersion, expectedArInfosVersion, expectedGenesisParametersVersion, expectedCryptoParamsVersion :: Version
 expectedArInfosVersion = 0
 expectedIpInfosVersion = 0
-expectedGenesisParametersVersion = genesisParametersVersion
+expectedGenesisParametersVersion = 2 -- We only support generating genesis for protocol version 1-4
 expectedCryptoParamsVersion = 0
 
-parseParametersAndGetGenesisData :: IsProtocolVersion pv => Value -> (GenesisParameters pv -> PVGenesisData) -> IO PVGenesisData
+parseParametersAndGetGenesisData :: IsProtocolVersion pv => Value -> (GenesisParametersV2 pv -> PVGenesisData) -> IO PVGenesisData
 parseParametersAndGetGenesisData value f =
     case fromJSON value of
         Error err -> die $ "Could not decode genesis parameters: " ++ show err
         Success params -> return $ f params
+
+data VersionedCoreGenesisParameters
+    = CGPV0 GDBase.CoreGenesisParameters
+    | CGPV1 GDBaseV1.CoreGenesisParametersV1
 
 main :: IO ()
 main =
@@ -219,42 +225,51 @@ main =
                     Right (PVGenesisData (gdata :: GenesisData pv)) ->
                         case protocolVersion @pv of
                             SP1 -> case gdata of
-                                gd@(GDP1 P1.GDP1Initial{..}) -> printInitial SP1 (genesisBlockHash gd) genesisCore genesisInitialState
+                                gd@(GDP1 P1.GDP1Initial{..}) -> printInitial SP1 (genesisBlockHash gd) (CGPV0 genesisCore) genesisInitialState
                             SP2 -> case gdata of
-                                gd@(GDP2 P2.GDP2Initial{..}) -> printInitial SP2 (genesisBlockHash gd) genesisCore genesisInitialState
+                                gd@(GDP2 P2.GDP2Initial{..}) -> printInitial SP2 (genesisBlockHash gd) (CGPV0 genesisCore) genesisInitialState
                             SP3 -> case gdata of
-                                gd@(GDP3 P3.GDP3Initial{..}) -> printInitial SP3 (genesisBlockHash gd) genesisCore genesisInitialState
+                                gd@(GDP3 P3.GDP3Initial{..}) -> printInitial SP3 (genesisBlockHash gd) (CGPV0 genesisCore) genesisInitialState
                             SP4 -> case gdata of
-                                gd@(GDP4 P4.GDP4Initial{..}) -> printInitial SP4 (genesisBlockHash gd) genesisCore genesisInitialState
+                                gd@(GDP4 P4.GDP4Initial{..}) -> printInitial SP4 (genesisBlockHash gd) (CGPV0 genesisCore) genesisInitialState
                             SP5 -> case gdata of
-                                gd@(GDP5 P5.GDP5Initial{..}) -> printInitial SP5 (genesisBlockHash gd) genesisCore genesisInitialState
+                                gd@(GDP5 P5.GDP5Initial{..}) -> printInitial SP5 (genesisBlockHash gd) (CGPV0 genesisCore) genesisInitialState
                             SP6 -> case gdata of
-                                gd@(GDP6 P6.GDP6Initial{..}) -> printInitial SP6 (genesisBlockHash gd) genesisCore genesisInitialState
+                                gd@(GDP6 P6.GDP6Initial{..}) -> printInitial SP6 (genesisBlockHash gd) (CGPV1 genesisCore) genesisInitialState
 
-printInitial :: SProtocolVersion pv -> BlockHash -> CoreGenesisParameters -> GDBase.GenesisState pv -> IO ()
-printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
+printInitial :: SProtocolVersion pv -> BlockHash -> VersionedCoreGenesisParameters -> GDBase.GenesisState pv -> IO ()
+printInitial spv gh vcgp GDBase.GenesisState{..} = do
     putStrLn $ "Genesis data for genesis block with hash " ++ show gh
     putStrLn $ "Protocol version " ++ show (demoteProtocolVersion spv)
-    putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
-    putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
-    putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
-    putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
+    case vcgp of
+        CGPV0 CoreGenesisParameters{..} -> do
+            putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
+            putStrLn $ "Slot duration: " ++ show (durationToNominalDiffTime genesisSlotDuration)
+            putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
+            putStrLn $ "Epoch length in slots: " ++ show genesisEpochLength
+            putStrLn $ "Maximum block energy: " ++ show genesisMaxBlockEnergy
+        CGPV1 GDBaseV1.CoreGenesisParametersV1{..} -> do
+            putStrLn $ "Genesis time is set to: " ++ showTime genesisTime
+            putStrLn $ "Epoch duration duration: " ++ show (durationToNominalDiffTime genesisEpochDuration)
+            putStrLn $ "Leadership election nonce: " ++ show genesisLeadershipElectionNonce
 
     putStrLn ""
     putStrLn $ "Genesis total GTU: " ++ amountToString totalGTU
-    putStrLn $ "Maximum block energy: " ++ show genesisMaxBlockEnergy
 
-    putStrLn ""
-    putStrLn "Finalization parameters: "
-    let FinalizationParameters{..} = genesisFinalizationParameters
-    putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
-    putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
-    putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
-    putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
-    putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
-    putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
-    putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
-    putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
+    case vcgp of
+        CGPV0 CoreGenesisParameters{..} -> do
+            putStrLn ""
+            putStrLn "Finalization parameters: "
+            let FinalizationParameters{..} = genesisFinalizationParameters
+            putStrLn $ "  - minimum skip: " ++ show finalizationMinimumSkip
+            putStrLn $ "  - committee max size: " ++ show finalizationCommitteeMaxSize
+            putStrLn $ "  - waiting time: " ++ show (durationToNominalDiffTime finalizationWaitingTime)
+            putStrLn $ "  - skip shrink factor: " ++ showRatio finalizationSkipShrinkFactor
+            putStrLn $ "  - skip grow factor: " ++ showRatio finalizationSkipGrowFactor
+            putStrLn $ "  - delay shrink factor: " ++ showRatio finalizationDelayShrinkFactor
+            putStrLn $ "  - delay grow factor: " ++ showRatio finalizationDelayGrowFactor
+            putStrLn $ "  - allow zero delay: " ++ show finalizationAllowZeroDelay
+        _ -> return ()
 
     printInitialChainParameters
 
@@ -296,7 +311,9 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     Vec.imapM_ (\i k -> putStrLn $ "    " ++ show i ++ ": " ++ show k) asKeys
     printAccessStructure "emergency" asEmergency
     printAccessStructure "protocol" asProtocol
-    printAccessStructure "election difficulty" asParamElectionDifficulty
+    if isSupported PTElectionDifficulty (fromSing (sChainParametersVersionFor spv))
+        then printAccessStructure "election difficulty" asParamConsensusParameters
+        else printAccessStructure "consensus parameters" asParamConsensusParameters
     printAccessStructure "euro per energy" asParamEuroPerEnergy
     printAccessStructure "microGTU per euro" asParamMicroGTUPerEuro
     printAccessStructure "foundation account" asParamFoundationAccount
@@ -315,7 +332,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printInitialChainParametersV0 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
-        putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+        putStrLn $ "  - election difficulty: " ++ show (_cpElectionDifficulty _cpConsensusParameters)
         putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_erEuroPerEnergy _cpExchangeRates)
         putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_erMicroGTUPerEuro _cpExchangeRates)
         putStrLn $ "  - baker extra cooldown epochs: " ++ show (_cpBakerExtraCooldownEpochs _cpCooldownParameters)
@@ -344,7 +361,7 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
     printInitialChainParametersV1 ChainParameters{..} = do
         putStrLn ""
         putStrLn "Chain parameters: "
-        putStrLn $ "  - election difficulty: " ++ show _cpElectionDifficulty
+        putStrLn $ "  - election difficulty: " ++ show (_cpElectionDifficulty _cpConsensusParameters)
         putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. euroPerEnergy)
         putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
         printCooldownParametersV1 _cpCooldownParameters
@@ -362,7 +379,36 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
         putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
         putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
         putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
-        printTimeParametersV1 _cpTimeParameters
+        mapM_ printTimeParametersV1 _cpTimeParameters
+
+        let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
+                Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
+                Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
+        putStrLn $ "  - foundation account: " ++ foundAcc
+
+    printInitialChainParametersV2 :: ChainParameters' 'ChainParametersV2 -> IO ()
+    printInitialChainParametersV2 ChainParameters{..} = do
+        putStrLn ""
+        putStrLn "Chain parameters: "
+        putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. euroPerEnergy)
+        putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
+        printCooldownParametersV1 _cpCooldownParameters
+        putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+        printPoolParametersV1 _cpPoolParameters
+        putStrLn "  - reward parameters:"
+        putStrLn "    + mint distribution:"
+        putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
+        putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
+        putStrLn "    + transaction fee distribution:"
+        putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
+        putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
+        putStrLn "    + GAS rewards:"
+        putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
+        putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+        putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
+        putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
+        mapM_ printTimeParametersV1 _cpTimeParameters
+        printConsensusParametersV1 _cpConsensusParameters
 
         let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
                 Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
@@ -371,22 +417,38 @@ printInitial spv gh CoreGenesisParameters{..} GDBase.GenesisState{..} = do
 
     printInitialChainParameters :: IO ()
     printInitialChainParameters = do
-        case chainParametersVersionFor spv of
-            SCPV0 -> printInitialChainParametersV0 genesisChainParameters
-            SCPV1 -> printInitialChainParametersV1 genesisChainParameters
+        case sChainParametersVersionFor spv of
+            SChainParametersV0 -> printInitialChainParametersV0 genesisChainParameters
+            SChainParametersV1 -> printInitialChainParametersV1 genesisChainParameters
+            SChainParametersV2 -> printInitialChainParametersV2 genesisChainParameters
 
-printCooldownParametersV1 :: CooldownParameters 'ChainParametersV1 -> IO ()
+printCooldownParametersV1 ::
+    CooldownParameters' 'CooldownParametersVersion1 ->
+    IO ()
 printCooldownParametersV1 cp = do
     putStrLn $ "  - pool owner cooldown epochs: " ++ show (cp ^. cpPoolOwnerCooldown)
     putStrLn $ "  - delegator cooldown epochs: " ++ show (cp ^. cpDelegatorCooldown)
 
-printTimeParametersV1 :: TimeParameters 'ChainParametersV1 -> IO ()
+printTimeParametersV1 :: TimeParameters -> IO ()
 printTimeParametersV1 tp = do
     putStrLn $ "  - time parameters:"
     putStrLn $ "    + reward period length (in epochs): " ++ show (tp ^. tpRewardPeriodLength)
     putStrLn $ "    + mint amount per reward period: " ++ show (tp ^. tpMintPerPayday)
 
-printPoolParametersV1 :: PoolParameters 'ChainParametersV1 -> IO ()
+printConsensusParametersV1 ::
+    ConsensusParameters' 'ConsensusParametersVersion1 ->
+    IO ()
+printConsensusParametersV1 ConsensusParametersV1{..} = do
+    putStrLn "    + Timing parameters:"
+    putStrLn $ "      * timeout base: " ++ show (_cpTimeoutParameters ^. tpTimeoutBase) ++ " ms"
+    putStrLn $ "      * timeout increase factor: " ++ show (_cpTimeoutParameters ^. tpTimeoutIncrease)
+    putStrLn $ "      * timeout decrease factor: " ++ show (_cpTimeoutParameters ^. tpTimeoutDecrease)
+    putStrLn $ "  + Minimum block time:" ++ show _cpMinBlockTime ++ " ms"
+    putStrLn $ "  + Block energy limit" ++ show _cpBlockEnergyLimit
+
+printPoolParametersV1 ::
+    PoolParameters' 'PoolParametersVersion1 ->
+    IO ()
 printPoolParametersV1 pp = do
     putStrLn $ "  - Passive delegation parameters:"
     putStrLn $

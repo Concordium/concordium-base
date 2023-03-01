@@ -1395,7 +1395,9 @@ pub fn sign_transaction<S: TransactionSigner, P: PayloadLike>(
 /// Implementations of this trait are structures which can produce public keys
 /// with which transaction signatures can be verified.
 pub trait HasAccountAccessStructure {
+    /// The number of credentials that must sign a transaction.
     fn threshold(&self) -> AccountThreshold;
+    /// Access a credential at the provided index.
     fn credential_keys(&self, idx: CredentialIndex) -> Option<&CredentialPublicKeys>;
 }
 

@@ -18,9 +18,9 @@ use thiserror::Error;
 /// same, but the phantom type variable makes it impossible to mistakenly misuse
 /// the hashes.
 pub struct HashBytes<Purpose> {
-    pub(crate) bytes: [u8; SHA256 as usize],
+    pub bytes: [u8; SHA256 as usize],
     #[serde(skip)] // use default when deserializing
-    _phantom:         PhantomData<Purpose>,
+    _phantom:  PhantomData<Purpose>,
 }
 
 impl<Purpose> PartialEq for HashBytes<Purpose> {

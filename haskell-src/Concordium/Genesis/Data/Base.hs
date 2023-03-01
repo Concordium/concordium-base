@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Concordium.Genesis.Data.Base where
 
@@ -22,6 +24,7 @@ import Concordium.Utils.Serialization
 
 -- |A class that provides access to fields of genesis data that
 -- are expected to be stable across versions.
+-- This is only applicable to consensus version 0.
 class BasicGenesisData gd where
     -- |The genesis time.
     gdGenesisTime :: gd -> Timestamp
@@ -41,6 +44,7 @@ class BasicGenesisData gd where
 -- |Core parameters that are set at genesis.
 -- These parameters are not updatable (except via protocol update) and
 -- so are specified anew in any regenesis block.
+-- This is only applicable to consensus version 0.
 data CoreGenesisParameters = CoreGenesisParameters
     { -- |The nominal time of the genesis block.
       genesisTime :: !Timestamp,
@@ -56,6 +60,7 @@ data CoreGenesisParameters = CoreGenesisParameters
     deriving (Eq, Show)
 
 -- |Extract the core genesis parameters.
+-- This is only applicable to consensus version 0.
 coreGenesisParameters :: BasicGenesisData gd => gd -> CoreGenesisParameters
 coreGenesisParameters gd =
     CoreGenesisParameters
@@ -94,6 +99,8 @@ instance Serialize CoreGenesisParameters where
 --
 -- The intention is that this structured can always be deserialized from a
 -- serialized @GenesisData@ provided the hash of the genesis data is known.
+--
+-- This is only applicable to consensus version 0.
 data GenesisConfiguration = GenesisConfiguration
     { -- |The tag used when deserializing genesis data. This determines the variant
       -- of the genesis data that is to be deserialized. The allowed values depend
@@ -125,6 +132,7 @@ putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> 
 
 -- | Common data in the "regenesis" block, which is the first block of the chain after
 -- the protocol update takes effect.
+-- This version is only applicable to consensus version 0. (cf. BaseV1.RegenesisDataV1.)
 data RegenesisData = RegenesisData
     { -- |The immutable genesis parameters.
       -- (These need not be invariant across re-genesis.)
@@ -177,7 +185,7 @@ data GenesisState (pv :: ProtocolVersion) = GenesisState
       -- |The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
       -- |The initial update keys structure for chain updates.
-      genesisUpdateKeys :: !(UpdateKeysCollection (ChainParametersVersionFor pv)),
+      genesisUpdateKeys :: !(UpdateKeysCollection (AuthorizationsVersionForPV pv)),
       -- |The initial (updatable) chain parameters.
       genesisChainParameters :: !(ChainParameters pv),
       -- |The initial leadership election nonce.
@@ -201,7 +209,10 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
         genesisCryptographicParameters <- get
         genesisIdentityProviders <- get
         genesisAnonymityRevokers <- get
-        genesisUpdateKeys <- getUpdateKeysCollection
+        genesisUpdateKeys <-
+            withIsAuthorizationsVersionForPV
+                (protocolVersion @pv)
+                getUpdateKeysCollection
         genesisChainParameters <- getChainParameters
         genesisLeadershipElectionNonce <- get
         nGenesisAccounts <- getLength
@@ -220,7 +231,6 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
 toChainParameters :: Vec.Vector GenesisAccount -> GenesisChainParameters' cpv -> ChainParameters' cpv
 toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{..}
   where
-    _cpElectionDifficulty = gcpElectionDifficulty
     _cpExchangeRates = gcpExchangeRates
     _cpCooldownParameters = gcpCooldownParameters
     _cpTimeParameters = gcpTimeParameters
@@ -230,11 +240,13 @@ toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{.
         Nothing -> error "Foundation account is missing"
         Just i -> fromIntegral i
     _cpPoolParameters = gcpPoolParameters
+    _cpConsensusParameters = gcpConsensusParameters
+    _cpFinalizationCommitteeParameters = gcpFinalizationCommitteeParameters
 
--- |Convert 'GenesisParameters' to genesis data.
+-- |Convert 'GenesisParametersV2' to genesis data.
 -- This is an auxiliary function since much of the behaviour is shared between protocol versions.
-parametersToState :: GenesisParameters pv -> (CoreGenesisParameters, GenesisState pv)
-parametersToState GenesisParameters{..} =
+parametersToState :: GenesisParametersV2 pv -> (CoreGenesisParameters, GenesisState pv)
+parametersToState GenesisParametersV2{..} =
     (CoreGenesisParameters{..}, GenesisState{..})
   where
     genesisTime = gpGenesisTime

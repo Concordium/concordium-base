@@ -442,6 +442,18 @@ impl DB {
         Ok(from_str::<serde_json::Value>(&contents)?)
     }
 
+    /// Try to read the identity object under the given key, if it exists.
+    pub fn is_duplicate(&self, key: &str) -> anyhow::Result<bool> {
+        ensure_safe_key(key)?;
+
+        let _lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        Ok(self.root.join("identity").join(key).is_file()
+            || self.root.join("revocation").join(key).is_file())
+    }
+
     /// Store the pending entry. This is only used in case of server-restart to
     /// pupulate the pending table.
     pub fn write_pending(
@@ -778,15 +790,19 @@ async fn main() -> anyhow::Result<()> {
     let create_db = Arc::clone(&db_arc);
     let create_db_v1 = Arc::clone(&db_arc);
     let fail_db = Arc::clone(&db_arc);
+    let extract_db = Arc::clone(&db_arc);
 
     // Endpoint for starting the identity creation flow. It will validate the
     // request and forward the user to the identity verification service.
     let verify_request = warp::post()
         .and(warp::filters::body::content_length_limit(50 * 1024))
         .and(warp::path!("api" / "v0" / "identity"))
-        .and(extract_and_validate_request(server_config_validate))
+        .and(extract_and_validate_request(
+            extract_db.clone(),
+            server_config_validate,
+        ))
         .or(warp::get().and(warp::path!("api" / "v0" / "identity")).and(
-            extract_and_validate_request_query(server_config_validate_query),
+            extract_and_validate_request_query(extract_db.clone(), server_config_validate_query),
         ))
         .unify()
         .and_then(move |idi| {
@@ -799,6 +815,7 @@ async fn main() -> anyhow::Result<()> {
     let verify_request_v1 = warp::get()
         .and(warp::path!("api" / "v1" / "identity"))
         .and(extract_and_validate_request_query_v1(
+            extract_db.clone(),
             server_config_validate_query_v1,
         ))
         .and_then(move |idi| {
@@ -1059,6 +1076,8 @@ enum IdRequestRejection {
     Malformed,
     /// Missing validated request for the given id_cred_pub
     NoValidRequest,
+    /// Duplicate idCredPub.
+    DuplicateRequest,
 }
 
 #[derive(Debug)]
@@ -1130,6 +1149,10 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
     } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "No validated request was found for the given id_cred_pub.";
+        Ok(mk_reply(message, code))
+    } else if let Some(IdRequestRejection::DuplicateRequest) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Duplicate id_cred_pub.";
         Ok(mk_reply(message, code))
     } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
         let code = StatusCode::BAD_REQUEST;
@@ -1537,18 +1560,41 @@ fn validate_worker_v1(
 /// - Ok(ValidatedRequest) if the request is valid or
 /// - Err(msg) where `msg` is a string describing the error.
 fn extract_and_validate_request(
+    db: Arc<DB>,
     server_config: Arc<ServerConfig>,
 ) -> impl Filter<Extract = (IdentityObjectRequest,), Error = Rejection> + Clone {
     warp::body::json().and_then(move |input: IdentityObjectRequest| {
         let server_config = server_config.clone();
+        let db = db.clone();
         async move {
-            info!("Queried for creating an identity");
+            let id_cred_pub = &input.id_object_request.value.pub_info_for_ip.id_cred_pub;
 
-            match validate_worker(&server_config, input) {
-                Ok(r) => Ok(r),
+            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let base_16_encoded_id_cred_pub_hash =
+                base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+
+            info!("Queried for creating an identity");
+            match db.is_duplicate(&base_16_encoded_id_cred_pub_hash) {
+                Ok(duplicate) => {
+                    if duplicate {
+                        warn!(
+                            "Duplicate id_cred_pub: {}",
+                            base16_encode_string(&id_cred_pub)
+                        );
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                    } else {
+                        match validate_worker(&server_config, input) {
+                            Ok(r) => Ok(r),
+                            Err(e) => {
+                                warn!("Request is invalid {:#?}.", e);
+                                Err(warp::reject::custom(e))
+                            }
+                        }
+                    }
+                }
                 Err(e) => {
-                    warn!("Request is invalid {:#?}.", e);
-                    Err(warp::reject::custom(e))
+                    error!("Error accessing the database: {:#?}", e);
+                    Err(warp::reject::custom(IdRequestRejection::InternalError))
                 }
             }
         }
@@ -1564,10 +1610,12 @@ fn extract_and_validate_request(
 /// - Ok(IdentityObjectRequest) if the request is valid or
 /// - Err(e) where `e` is a [Rejection] describing the error.
 fn extract_and_validate_request_query(
+    db: Arc<DB>,
     server_config: Arc<ServerConfig>,
 ) -> impl Filter<Extract = (IdentityObjectRequest,), Error = Rejection> + Clone {
     warp::query().and_then(move |input: GetParameters| {
         let server_config = server_config.clone();
+        let db = db.clone();
         async move {
             info!("Queried for creating an identity");
 
@@ -1578,7 +1626,8 @@ fn extract_and_validate_request_query(
                     None => Err(String::from("`idObjectRequest` field does not exist")),
                 })
                 .and_then(|v| {
-                    serde_json::from_value::<Versioned<_>>(v).map_err(|e| format!("{:#?}", e))
+                    serde_json::from_value::<Versioned<PreIdentityObject<_, _>>>(v)
+                        .map_err(|e| format!("{:#?}", e))
                 }) {
                 Ok(v) => v,
                 Err(e) => {
@@ -1588,17 +1637,39 @@ fn extract_and_validate_request_query(
                     }
                 }
             };
-            match validate_worker(&server_config, IdentityObjectRequest {
-                id_object_request,
-                redirect_uri: input.redirect_uri,
-            }) {
-                Ok(v) => {
-                    info!("Request is valid.");
-                    Ok(v)
+
+            let id_cred_pub = &id_object_request.value.pub_info_for_ip.id_cred_pub;
+
+            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let base_16_encoded_id_cred_pub_hash =
+                base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+
+            match db.is_duplicate(&base_16_encoded_id_cred_pub_hash) {
+                Ok(duplicate) => {
+                    if duplicate {
+                        warn!(
+                            "Duplicate id_cred_pub: {}",
+                            base16_encode_string(&id_cred_pub)
+                        );
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                    } else {
+                        let input = IdentityObjectRequest {
+                            id_object_request,
+                            redirect_uri: input.redirect_uri,
+                        };
+
+                        match validate_worker(&server_config, input) {
+                            Ok(r) => Ok(r),
+                            Err(e) => {
+                                warn!("Request is invalid {:#?}.", e);
+                                Err(warp::reject::custom(e))
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
-                    warn!("Request is invalid {:#?}.", e);
-                    Err(warp::reject::custom(e))
+                    error!("Error accessing the database: {:#?}", e);
+                    Err(warp::reject::custom(IdRequestRejection::InternalError))
                 }
             }
         }
@@ -1614,10 +1685,12 @@ fn extract_and_validate_request_query(
 /// - Ok(IdentityObjectRequestV1) if the request is valid or
 /// - Err(e) where `e` is a [Rejection] describing the error.
 fn extract_and_validate_request_query_v1(
+    db: Arc<DB>,
     server_config: Arc<ServerConfig>,
 ) -> impl Filter<Extract = (IdentityObjectRequestV1,), Error = Rejection> + Clone {
     warp::query().and_then(move |input: GetParameters| {
         let server_config = server_config.clone();
+        let db = db.clone();
         async move {
             info!("Queried for creating an identity");
 
@@ -1628,7 +1701,8 @@ fn extract_and_validate_request_query_v1(
                     None => Err(String::from("`idObjectRequest` field does not exist")),
                 })
                 .and_then(|v| {
-                    serde_json::from_value::<Versioned<_>>(v).map_err(|e| format!("{:#?}", e))
+                    serde_json::from_value::<Versioned<PreIdentityObjectV1<_, _>>>(v)
+                        .map_err(|e| format!("{:#?}", e))
                 }) {
                 Ok(v) => v,
                 Err(e) => {
@@ -1638,17 +1712,38 @@ fn extract_and_validate_request_query_v1(
                     }
                 }
             };
-            match validate_worker_v1(&server_config, IdentityObjectRequestV1 {
-                id_object_request,
-                redirect_uri: input.redirect_uri,
-            }) {
-                Ok(v) => {
-                    info!("Request is valid.");
-                    Ok(v)
+            let id_cred_pub = &id_object_request.value.id_cred_pub;
+
+            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let base_16_encoded_id_cred_pub_hash =
+                base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
+
+            match db.is_duplicate(&base_16_encoded_id_cred_pub_hash) {
+                Ok(duplicate) => {
+                    if duplicate {
+                        warn!(
+                            "Duplicate id_cred_pub: {}",
+                            base16_encode_string(&id_cred_pub)
+                        );
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                    } else {
+                        let input = IdentityObjectRequestV1 {
+                            id_object_request,
+                            redirect_uri: input.redirect_uri,
+                        };
+
+                        match validate_worker_v1(&server_config, input) {
+                            Ok(r) => Ok(r),
+                            Err(e) => {
+                                warn!("Request is invalid {:#?}.", e);
+                                Err(warp::reject::custom(e))
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
-                    warn!("Request is invalid {:#?}.", e);
-                    Err(warp::reject::custom(e))
+                    error!("Error accessing the database: {:#?}", e);
+                    Err(warp::reject::custom(IdRequestRejection::InternalError))
                 }
             }
         }
@@ -1896,13 +1991,16 @@ mod tests {
         // Given
         let request = include_str!("../../data/valid_request.json");
         let server_config = Arc::new(get_server_config());
+        let root = std::path::Path::new("test-database").to_path_buf();
+        let backup_root = std::path::Path::new("test-database-deleted").to_path_buf();
+        let db = Arc::new(DB::new(root, backup_root).unwrap());
 
         tokio_test::block_on(async {
             let v = serde_json::from_str::<serde_json::Value>(request).unwrap();
             let matches = test::request()
                 .method("POST")
                 .json(&v)
-                .matches(&extract_and_validate_request(server_config.clone()))
+                .matches(&extract_and_validate_request(db, server_config.clone()))
                 .await;
             assert!(matches, "The filter does not match the example request.");
         });
@@ -1913,13 +2011,16 @@ mod tests {
         // Given
         let request = include_str!("../../data/fail_validation_request.json");
         let server_config = Arc::new(get_server_config());
+        let root = std::path::Path::new("test-database").to_path_buf();
+        let backup_root = std::path::Path::new("test-database-deleted").to_path_buf();
+        let db = Arc::new(DB::new(root, backup_root).unwrap());
 
         tokio_test::block_on(async {
             let v = serde_json::from_str::<serde_json::Value>(request).unwrap();
             let matches = test::request()
                 .method("POST")
                 .json(&v)
-                .filter(&extract_and_validate_request(server_config.clone()))
+                .filter(&extract_and_validate_request(db, server_config.clone()))
                 .await;
             if let Err(e) = matches {
                 if let Some(IdRequestRejection::InvalidProofs) = e.find() {

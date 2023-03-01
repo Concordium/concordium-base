@@ -1,0 +1,42 @@
+[package]
+name = "concordium-smart-contract-engine-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Disables inlines in order to generate fuzzer-coverage reports. Otherwise, we currently get linker errors.
+[features]
+fuzz-coverage = ["concordium-smart-contract-engine/fuzz-coverage"]
+
+[dependencies]
+libfuzzer-sys = "0.3"
+arbitrary = { version = "0.4.6", features = ["derive"] }
+wasm-smith = { git = "https://github.com/Concordium/wasm-tools.git", branch = "mra/fuzzing" }
+wasmprinter = { git = "https://github.com/Concordium/wasm-tools.git", branch = "main" }
+
+[dependencies.concordium-wasm]
+path = "../wasm-transform"
+version = "1"
+
+[dependencies.concordium-smart-contract-engine]
+path = "../wasm-chain-integration/"
+version = "1"
+features = ["fuzz"]
+
+[dependencies.concordium-contracts-common]
+version = "5"
+path = "../../concordium-contracts-common/concordium-contracts-common"
+features = ["derive-serde", "fuzz"]
+
+[lib]
+crate-type = ["rlib"]
+
+[[bin]]
+name = "interpreter"
+path = "fuzz_targets/interpreter.rs"
+test = false
+doc = false

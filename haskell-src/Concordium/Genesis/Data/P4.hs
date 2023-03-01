@@ -32,7 +32,7 @@ data ProtocolUpdateData = ProtocolUpdateData
       -- |New cooldown parameters.
       updateCooldownParameters :: !(CooldownParameters 'ChainParametersV1),
       -- |New time parameters.
-      updateTimeParameters :: !(TimeParameters 'ChainParametersV1),
+      updateTimeParameters :: !TimeParameters,
       -- |New pool parameters
       updatePoolParameters :: !(PoolParameters 'ChainParametersV1)
     }
@@ -233,7 +233,7 @@ putVersionedGenesisData gd = do
     putVersion 6
     putGenesisDataV6 gd
 
-parametersToGenesisData :: GenesisParameters 'P4 -> GenesisDataP4
+parametersToGenesisData :: GenesisParametersV2 'P4 -> GenesisDataP4
 parametersToGenesisData = uncurry GDP4Initial . Base.parametersToState
 
 -- |Compute the block hash of the genesis block with the given genesis data.

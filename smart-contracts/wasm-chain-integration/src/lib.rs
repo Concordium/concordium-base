@@ -1,6 +1,51 @@
+//! This library provides functionality that builds on top of the [Wasm engine](https://docs.rs/concordium-wasm)
+//! and adds high-level functions for executing smart contracts on the
+//! Concordium chain.
+//!
+//! Concordium supports two versions of smart contracts, the legacy [`v0`]
+//! version and the [`v1`] version. The latter is essentially better in
+//! every way. They differ in two main ways
+//! - [`v0`] uses message passing for inter-contract communication, and has a
+//!   flat state. The state is limited to 16kB and the entire state is written
+//!   every time a contract update is done.
+//! - [`v1`] uses synchronous calls for inter-contract communication, and its
+//!   state is a trie-based structure, which supports efficient partial state
+//!   updates. The trie is implemented in the [`v1::trie`] module.
+//!
+//! Both [`v0`] and [`v1`] modules are structured similarly. The main
+//! entrypoints used by users of this library are [`v0::invoke_init`] (resp.
+//! [`v1::invoke_init`]) and [`v0::invoke_receive`] (resp.
+//! [`v1::invoke_receive`]) functions, and their variants.
+//!
+//! The respective modules provide more details on the data types involved, and
+//! any specifics of the different versions.
+//!
+//! ## Features
+//!
+//! This crate has the following features. None are enabled by default.
+//!
+//! ### `display-state`
+//! This feature exposes the function
+//! [`display_tree`](v1::trie::PersistentState::display_tree) for displaying the
+//! V1 contract state in a reasonably readable format. This is useful for deep
+//! inspection of smart contract state, and debugging.
+//!
+//! ### `async`
+//! Exposes construction of smart contract state from streams of key-value
+//! pairs, such as those received from the node's API. See
+//! - [`try_from_stream`](v1::trie::PersistentState::try_from_stream)
+//! - [`from_stream`](v1::trie::PersistentState::from_stream)
+//!
+//! ### `enable-ffi`
+//! This enables foreign function exports. This is an **internal** feature and
+//! there are no guarantees about the stability of foreign exports.
+//!
+//! ### `fuzz-coverage` and `fuzz`
+//! These features are also **internal** and exist to support fuzzing. They are
+//! used to derive Arbitrary instances and to disable inlining, the latter is
+//! necessary since the fuzzer used has bugs which prevent the coverage report
+//! being generated when functions are inlined.
 pub mod constants;
-#[cfg(feature = "fuzz")]
-pub mod fuzz;
 pub mod resumption;
 pub mod utils;
 pub mod v0;
@@ -10,6 +55,7 @@ mod validation_tests;
 use anyhow::{bail, Context};
 use derive_more::{Display, From, Into};
 
+/// Re-export the underlying Wasm execution engine used by Concordium.
 pub use concordium_wasm as wasm;
 
 /// A helper macro used to check that the declared type of a Wasm import matches
@@ -82,6 +128,8 @@ impl std::str::FromStr for InterpreterEnergy {
 }
 
 #[derive(Debug)]
+/// An error raised by the interpreter when no more interpreter energy remains
+/// for execution.
 pub struct OutOfEnergy;
 
 impl std::fmt::Display for OutOfEnergy {

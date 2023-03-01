@@ -13,16 +13,16 @@ use derive_more::{AsRef, From, Into};
 use serde::Deserialize as SerdeDeserialize;
 use std::collections::LinkedList;
 
+use crate::InterpreterEnergy;
+
 /// Maximum length, in bytes, of an export function name.
-pub const MAX_EXPORT_NAME_LEN: usize = 100;
+pub(crate) const MAX_EXPORT_NAME_LEN: usize = 100;
 
-pub type PolicyBytes<'a> = &'a [u8];
+pub(crate) type PolicyBytes<'a> = &'a [u8];
 
-pub type OwnedPolicyBytes = Vec<u8>;
+pub(crate) type OwnedPolicyBytes = Vec<u8>;
 
 /// Chain context accessible to the init methods.
-///
-/// TODO: We could optimize this to be initialized lazily
 #[derive(SerdeDeserialize, Debug, Clone)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 #[serde(rename_all = "camelCase")]
@@ -45,8 +45,6 @@ impl<'a> From<InitContext<PolicyBytes<'a>>> for InitContext<OwnedPolicyBytes> {
 }
 
 /// Chain context accessible to the receive methods.
-///
-/// TODO: We could optimize this to be initialized lazily.
 #[derive(SerdeDeserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
@@ -144,7 +142,8 @@ pub(crate) fn deserial_init_context(source: &[u8]) -> ParseResult<InitContext<&[
     }
 }
 
-/// Smart contract state.
+/// V0 smart contract state. This is just a flat byte array and the contract can
+/// write to it arbitrarily via offsets from the start.
 #[derive(Clone, Debug, From, Into, AsRef)]
 pub struct State {
     pub state: Vec<u8>,
@@ -152,26 +151,38 @@ pub struct State {
 
 #[derive(Clone, Debug, Default)]
 /// Structure to support logging of events from smart contracts.
+/// This is a list of items emitted by the contract, in the order they were
+/// emitted.
 pub struct Logs {
     pub logs: LinkedList<Vec<u8>>,
 }
 
 #[derive(Debug)]
+/// Result of initialization of a `v0` contract.
 pub enum InitResult {
+    /// Initialization succeeded.
     Success {
+        /// The initial state of the instance.
         state:            State,
+        /// The logs produced by the `init` function.
         logs:             Logs,
-        remaining_energy: u64,
+        /// The remaining interpreter energy.
+        remaining_energy: InterpreterEnergy,
     },
+    /// The init function rejected the invocation due to its own logic.
     Reject {
+        /// The error code that the `init` function signalled.
         reason:           i32,
-        remaining_energy: u64,
+        /// Remaining energy left after execution.
+        remaining_energy: InterpreterEnergy,
     },
+    /// The invocation exceeded the given energy amount.
     OutOfEnergy,
 }
 
 impl InitResult {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    #[cfg(feature = "enable-ffi")]
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         match self {
             InitResult::OutOfEnergy => vec![0],
             InitResult::Reject {
@@ -181,7 +192,7 @@ impl InitResult {
                 let mut out = Vec::with_capacity(13);
                 out.push(1);
                 out.extend_from_slice(&reason.to_be_bytes());
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 out
             }
             InitResult::Success {
@@ -194,7 +205,7 @@ impl InitResult {
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state.state);
                 out.extend_from_slice(&logs.to_bytes());
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 out
             }
         }
@@ -204,20 +215,28 @@ impl InitResult {
 /// Data that accompanies the send action.
 #[derive(Debug)]
 pub struct SendAction {
+    /// Address of the receiving contract.
     pub to_addr:   ContractAddress,
-    pub name:      Vec<u8>,
-    pub amount:    u64,
-    pub parameter: Vec<u8>,
+    /// The name of the entrypoint to send a message to.
+    pub name:      OwnedReceiveName,
+    /// An amount to be transferred with the call.
+    pub amount:    Amount,
+    /// Parameter to send.
+    pub parameter: OwnedParameter,
 }
 
-/// Data that accompanies the simple transfer action.
+/// Data that accompanies the simple transfer action, i.e.,
+/// a transfer of CCD tokens from a contract instance to an account.
 #[derive(Debug)]
 pub struct SimpleTransferAction {
+    /// Receiver address.
     pub to_addr: AccountAddress, // 32 bytes
-    pub amount:  u64,            // 8 bytes
+    /// An amount to be transferred.
+    pub amount:  Amount, // 8 bytes
 }
 
 /// Actions produced by running a receive function.
+///
 /// NB: The first two variants are deliberately using an Rc as opposed to just
 /// inlining the SendAction/SimpleTransferAction. The reason for this is that
 /// the variants have quite a big size difference, and we do not wish to
@@ -228,20 +247,30 @@ pub struct SimpleTransferAction {
 /// of this type.
 #[derive(Clone, Debug)]
 pub enum Action {
+    /// Send a message to a smart contract instance.
     Send {
         data: std::rc::Rc<SendAction>,
     },
+    /// Send a transfer to an account.
     SimpleTransfer {
         data: std::rc::Rc<SimpleTransferAction>,
     },
+    /// Combine two actions. Both are executed, first `l` and then `r`.
+    /// If any of them fail the entire action fails.
+    /// The left and right actions are given as indices in a stack of actions.
     And {
         l: u32,
         r: u32,
     },
+    /// Combine two actions. The second one is executed only if the first one
+    /// fails. The result is either the successful result of the first action,
+    /// or if the first action fails, the result of the second action.
+    /// The left and right actions are given as indices in a stack of actions.
     Or {
         l: u32,
         r: u32,
     },
+    /// An empty action that has no effects.
     Accept,
 }
 
@@ -249,23 +278,25 @@ pub enum Action {
 /// little-endian only, and we need big-endian for interoperability with the
 /// rest of the system.
 impl Action {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    #[cfg(feature = "enable-ffi")]
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         use Action::*;
         match self {
             Send {
                 data,
             } => {
-                let name_len = data.name.len();
-                let param_len = data.parameter.len();
+                let name = data.name.as_receive_name().get_chain_name().as_bytes();
+                let name_len = name.len();
+                let param_len = data.parameter.0.len();
                 let mut out = Vec::with_capacity(1 + 8 + 8 + name_len + 4 + param_len + 4);
                 out.push(0);
                 out.extend_from_slice(&data.to_addr.index.to_be_bytes());
                 out.extend_from_slice(&data.to_addr.subindex.to_be_bytes());
                 out.extend_from_slice(&(name_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.name);
-                out.extend_from_slice(&data.amount.to_be_bytes());
+                out.extend_from_slice(name);
+                out.extend_from_slice(&data.amount.micro_ccd.to_be_bytes());
                 out.extend_from_slice(&(param_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.parameter);
+                out.extend_from_slice(&data.parameter.0);
                 out
             }
             SimpleTransfer {
@@ -274,7 +305,7 @@ impl Action {
                 let mut out = Vec::with_capacity(1 + 32 + 8);
                 out.push(1);
                 out.extend_from_slice(&data.to_addr.0);
-                out.extend_from_slice(&data.amount.to_be_bytes());
+                out.extend_from_slice(&data.amount.micro_ccd.to_be_bytes());
                 out
             }
             Or {
@@ -303,22 +334,33 @@ impl Action {
 }
 
 #[derive(Debug)]
+/// Result of executing an entrypoint of a `v1` contract instance.
 pub enum ReceiveResult {
+    /// Invocation succeeded.
     Success {
+        /// The final state of the instance.
         state:            State,
+        /// The logs produced by the execution.
         logs:             Logs,
+        /// The actions returned by the entrypoint.
         actions:          Vec<Action>,
-        remaining_energy: u64,
+        /// The remaining energy left over from execution.
+        remaining_energy: InterpreterEnergy,
     },
+    /// Invocation of the entrypoint failed.
     Reject {
+        /// The reason for failure returned by the entrypoint.
         reason:           i32,
-        remaining_energy: u64,
+        /// The remaining energy left over from execution.
+        remaining_energy: InterpreterEnergy,
     },
+    /// Invocation exceeded the given energy amount.
     OutOfEnergy,
 }
 
 impl ReceiveResult {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    #[cfg(feature = "enable-ffi")]
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
         use ReceiveResult::*;
         match self {
             OutOfEnergy => vec![0],
@@ -329,7 +371,7 @@ impl ReceiveResult {
                 let mut out = Vec::with_capacity(13);
                 out.push(1);
                 out.extend_from_slice(&reason.to_be_bytes());
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 out
             }
             Success {
@@ -347,7 +389,7 @@ impl ReceiveResult {
                 for a in actions.iter() {
                     out.extend_from_slice(&a.to_bytes());
                 }
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 out
             }
         }
@@ -356,7 +398,7 @@ impl ReceiveResult {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
-pub enum CommonFunc {
+pub(crate) enum CommonFunc {
     GetParameterSize,
     GetParameterSection,
     GetPolicySection,
@@ -370,13 +412,13 @@ pub enum CommonFunc {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
-pub enum InitOnlyFunc {
+pub(crate) enum InitOnlyFunc {
     GetInitOrigin,
 }
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
-pub enum ReceiveOnlyFunc {
+pub(crate) enum ReceiveOnlyFunc {
     Accept,
     SimpleTransfer,
     Send,
@@ -392,7 +434,7 @@ pub enum ReceiveOnlyFunc {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 /// Enumeration of allowed imports.
-pub enum ImportFunc {
+pub(crate) enum ImportFunc {
     /// Chage for execution cost.
     ChargeEnergy,
     /// Track calling a function, increasing the activation frame count.
@@ -483,6 +525,9 @@ impl Output for ImportFunc {
 }
 
 #[derive(Debug)]
+/// Imports allowed for `v0` contracts processed into a format that is faster to
+/// use during execution. Instead of keeping names of imports they are processed
+/// into an enum with integer tags.
 pub struct ProcessedImports {
     pub(crate) tag: ImportFunc,
     ty:             FunctionType,
@@ -509,6 +554,10 @@ impl Output for ProcessedImports {
     }
 }
 
+/// A structure that implements
+/// [`ValidateImportExport`](validate::ValidateImportExport) and thus specifies
+/// which host functions are allowed for `v0` contracts, and what their types
+/// should be.
 pub struct ConcordiumAllowedImports;
 
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
