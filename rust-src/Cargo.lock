@@ -854,6 +854,7 @@ dependencies = [
  "libc",
  "pairing",
  "pedersen_scheme",
+ "rand 0.7.3",
  "random_oracle",
  "serde",
 ]
