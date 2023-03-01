@@ -720,7 +720,7 @@ data PassiveCommitteeInfo
     = -- |The node is started with baker keys however it is currently not in
       -- the baking committee. The node is _not_ baking.
       NotInCommittee
-    | -- |The account is registered as a baker but not in the current `Epoch`.
+    | -- |The account is registered as a baker but not in the current @Epoch@.
       -- The node is _not_ baking.
       AddedButNotActiveInCommittee
     | -- |The node has configured invalid baker keys i.e., the configured
@@ -824,8 +824,8 @@ data PeerCatchupStatus
       Pending
     | -- |The node is currently catching up by requesting blocks from this peer.
       -- There will be at most one peer with this status at a time. Once the peer
-      -- has responded to the request, its status will be changed to either `UpToDate`
-      -- or `Pending`.
+      -- has responded to the request, its status will be changed to either @UpToDate@
+      -- or @Pending@.
       CatchingUp
   deriving (Show, Eq)
 
@@ -868,13 +868,13 @@ data PeerInfo = PeerInfo
 -- |A block identifier.
 -- A block is either identified via a hash, or as one of the special
 -- blocks at a given time (last final or best block). Queries which
--- just need the recent state can use `LastFinal` or `Best` to get the
+-- just need the recent state can use @LastFinal@ or @Best@ to get the
 -- result without first establishing what the last final or best block
 -- is.
 data BlockHashInput = Best | LastFinal | Given !BlockHash
     deriving (Read)
 
--- |Input for `getBlocksAtHeight`.
+-- |Input for @getBlocksAtHeight@.
 data BlockHeightInput
     = -- |The height of a block relative to a genesis index. This differs from the
       -- absolute block height in that it counts height from the protocol update
@@ -884,8 +884,8 @@ data BlockHeightInput
           rGenesisIndex :: !GenesisIndex,
           -- |Block height starting from the genesis block at the genesis index.
           rBlockHeight :: !BlockHeight,
-          -- |Whether to return results only from the specified genesis index (`True`),
-          -- or allow results from more recent genesis indices as well (`False`).
+          -- |Whether to return results only from the specified genesis index (@True@),
+          -- or allow results from more recent genesis indices as well (@False@).
           rRestrict :: !Bool
         }
     | -- |The absolute height of a block. This is the number of ancestors of a block

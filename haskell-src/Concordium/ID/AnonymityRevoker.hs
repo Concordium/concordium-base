@@ -44,7 +44,7 @@ foreign import ccall unsafe "ar_info_create"
         -- |The identity of the anonymity revoker.
         ArIdentity ->
         -- |Pointer to a byte array which is the serialization of a
-        -- `elgamal::PublicKey<G1>` Rust-instance.
+        -- @elgamal::PublicKey<G1>@ Rust-instance.
         Ptr Word8 -> CSize ->
         -- |Pointer to a byte array which is the serialization of an
         -- utf8 encoded string and its length.
@@ -71,7 +71,7 @@ createArInfo ::
     Text ->
     -- |Description of the provider.
     Text ->
-    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise a @ArInfo@ is returned.
+    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise an @ArInfo@ is returned.
     Maybe ArInfo
 createArInfo arId pubKey name url desc = unsafePerformIO ( do
     -- Note that empty strings correspond to arbitrary pointers being passed
@@ -165,7 +165,7 @@ arPublicKey (ArInfo ar) = toBytesHelper arPublicKeyFFI ar
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading
 -- configuration data, or similar one-off uses.
--- Use `arInfoToJSON` for direct serialization to bytestring.
+-- Use @arInfoToJSON@ for direct serialization to bytestring.
 
 instance AE.FromJSON ArInfo where
     parseJSON v@(AE.Object _) =

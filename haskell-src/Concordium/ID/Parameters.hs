@@ -36,10 +36,10 @@ foreign import ccall unsafe "global_context_create"
         -- utf8 encoded genesis string and its length.
         Ptr Word8 -> CSize ->
         -- |Pointer to a byte array which is the serialization of a
-        -- `Generators<G1>` Rust-instance and its length.
+        -- @Generators<G1>@ Rust-instance and its length.
         Ptr Word8 -> CSize ->
         -- |Pointer to a byte array which is the serialization of a
-        -- `CommitmentKey<G1>` Rust-instance and its length.
+        -- @CommitmentKey<G1>@ Rust-instance and its length.
         Ptr Word8 -> CSize ->
         -- |Pointer to an @GlobalContext@ Rust instance with its corresponding fields set
         -- to deserializations of the the above. This is a null-pointer on failure.
