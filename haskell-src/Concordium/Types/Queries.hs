@@ -600,6 +600,15 @@ data PendingUpdateEffect
     | -- |Updates to time parameters for chain parameters version 1.
       PUETimeParameters !(TimeParameters 'ChainParametersV1)
 
+-- |Derive a @ToJSON@ instance for @PendingUpdateEffect@. For instance,
+-- @print $ toJSON (PUETimeParameters a)@ will output something like:
+-- @
+-- {
+--    "updateType": "TimeParameters"
+--    "contents": { ... }
+-- }
+-- @
+-- where @{ ... }@ is a placeholder the JSON object representing @a@.
 $( deriveJSON
     defaultOptions
         { constructorTagModifier = drop (length ("PUE" :: String)),
@@ -734,10 +743,10 @@ data BakerConsensusInfoStatus
     = -- |The node is currently not baking.
       PassiveBaker !PassiveCommitteeInfo
     | -- |Node is configured with baker keys and active in the current baking committee
-      ActiveBakerCommitteeInfo
+      ActiveBaker
     | -- | Node is configured with baker keys and active in the current finalizer
       -- committee (and also baking committee).
-      ActiveFinalizerCommitteeInfo
+      ActiveFinalizer
   deriving (Show)
 
 -- |Consensus info for a node configured with baker keys.
@@ -806,6 +815,11 @@ data PendingUpdate = PendingUpdate {
     puEffectiveTime :: TransactionTime
 }
 
+-- |Derive JSON instance for @PendingUpdate@. A JSON object field label is named after its
+-- corresponding record field name by stripping the maximal lower-case prefix of the record
+-- field name and turning its first character into lower-case. For instance, the @puEffect@
+-- record field is turned into the label @effect@ in the corresponding JSON representation
+-- of the @PendingUpdate@.
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''PendingUpdate)
 
 -- |Catchup status of the peer.
@@ -843,18 +857,18 @@ data NetworkStats = NetworkStats
       latency :: !Word64
     } deriving (Show)
 
--- An IP address.
+-- |An IP address.
 newtype IpAddress = IpAddress {ipAddress :: Text}
     deriving (Show, ToJSON)
 
--- An IP port.
+-- |An IP port.
 newtype IpPort = IpPort {ipPort :: Word16}
     deriving (Show, ToJSON)
 
--- A peer are represented by its IP address.
+-- |A peer. It is represented by its IP address.
 type Peer = IpAddress
 
--- Compound type representing a pair of an IP address and a port.
+-- |A pair of an IP address and a port, representing a socket address.
 type IpSocketAddress = (IpAddress, IpPort)
 
 -- |Network related peer statistics.
