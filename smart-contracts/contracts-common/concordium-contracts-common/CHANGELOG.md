@@ -9,6 +9,12 @@
   the correct `{"index": ..., "subindex": ...}` format.
 - Add `Display` implementations for `ContractName`, `ReceiveName`, and their
   owned variants.
+- Add `Display` implementation for `OwnedParameter` and `Parameter`, which uses
+  hex encoding.
+- Replace `From` instance for `OwnedParameter`/`Parameter` with a `TryFrom`,
+  which ensures a valid length, and the unchecked method `new_unchecked`.
+  - Migrate from `From`/`Into`: Use `new_unchecked` instead (if known to be
+    valid length).
 
 ## concordium-contracts-common 5.1.0 (2022-12-14)
 
