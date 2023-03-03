@@ -755,19 +755,19 @@ instance ToJSON EChainParametersAndKeys where
         case chainParametersVersion @cpv of
             SChainParametersV0 ->
                 object
-                    [ "version" .= String "0",
+                    [ "version" .= toJSON ChainParametersV0,
                       "parameters" .= toJSON params,
                       "updateKeys" .= toJSON keys
                     ]
             SChainParametersV1 ->
                 object
-                    [ "version" .= String "1",
+                    [ "version" .= toJSON ChainParametersV1,
                       "parameters" .= toJSON params,
                       "updateKeys" .= toJSON keys
                     ]
             SChainParametersV2 ->
                 object
-                    [ "version" .= String "2",
+                    [ "version" .= toJSON ChainParametersV2,
                       "parameters" .= toJSON params,
                       "updateKeys" .= toJSON keys
                     ]

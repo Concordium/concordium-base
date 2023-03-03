@@ -303,7 +303,7 @@ pub extern "C" fn ip_info_cdi_verify_key(
 /// Returns a raw pointer to an [`ArInfo`] instance if
 ///  - `public_key_ptr` points to a serialized `elgamal::PublicKey<G1>`
 ///    instance,
-///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
 /// each [`size_t`] parameter with the the `_len` suffix holds the length of
 /// its correspondingly named byte array. Returns a null-pointer if a parameter
 /// could not be deserialized.
@@ -340,7 +340,7 @@ unsafe extern "C" fn ar_info_create(
 /// Returns [`Ok`] if
 ///  - `public_key_ptr` points to a serialized `elgamal::PublicKey<G1>`
 ///    instance,
-///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
 /// each [`size_t`] parameter with the the `_len` suffix holds the length of
 /// its correspondingly named byte array. Returns [`Err`] if a parameter could
 /// not be deserialized.
@@ -398,7 +398,7 @@ fn ar_info_create_helper(
 
 /// Attempt to create a [`GlobalContext`] instance from byte array pointers.
 /// Returns a raw pointer to a [`GlobalContext`] instance if
-///  - `genesis_string_ptr` points to a serialized utf8 string,
+///  - `genesis_string_ptr` points to a valid utf8 string,
 ///  - `bulletproof_generators_ptr` to a serialized `Generators<G1>` instance,
 ///  - `on_chain_commitments` to a serialized `CommitmentKey<G1>` instance, and
 /// each [`size_t`] parameter with the the `_len` suffix holds the length of its
@@ -429,7 +429,7 @@ unsafe extern "C" fn global_context_create(
 
 /// Attempt to create a [`GlobalContext`] instance from byte array pointers.
 /// Returns [`Ok`] if
-///  - `genesis_string_ptr points` to a serialized utf8 string,
+///  - `genesis_string_ptr points` to a valid utf8 string,
 ///  - `bulletproof_generators_ptr` to a serialized `Generators<G1>` instance,
 ///  - `on_chain_commitments` to a serialized `CommitmentKey<G1>` instance, and
 /// each [`size_t`] parameter with the the `_len` suffix holds the length
@@ -484,7 +484,7 @@ fn global_context_create_helper(
 ///  - `verify_key_ptr` points to a serialized `ps_sig::PublicKey<Bls12>`
 ///    instance,
 ///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
-///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
 /// each [`size_t`] parameter with the the `_len` suffix holds the length of its
 /// correspondingly named byte array. Returns a null-pointer if a parameter
 /// could not be deserialized.
@@ -526,7 +526,7 @@ unsafe extern "C" fn ip_info_create(
 ///  - `verify_key_ptr` points to a serialized `ps_sig::PublicKey<Bls12>`
 ///    instance,
 ///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
-///  - `name_ptr`, `url_ptr` and `desc_ptr` to serialized utf8 strings, and
+///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
 /// each [`size_t`] parameter with the the `_len` suffix holds the length of its
 /// correspondingly named byte array. Returns [`Err`] if a parameter could not
 /// be deserialized.
