@@ -26,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Install WABT and diff
-        run: sudo apt-get update && sudo apt-get -y install wabt diffutils
+        run: sudo apt-get update && sudo apt-get -y install wabt
       - name: Check consistency
         run: ./.diff-wat-wasm.sh
 
