@@ -16,6 +16,9 @@ pushd smart-contracts/testdata/contracts || exit
 declare FILES_TO_IGNORE
 while read -r line
 do
+   # Ignore lines starting comments (lines starting with #) and empty lines.
+   [[ "$line" =~ ^#.*$|^$ ]] && continue
+
    FILES_TO_IGNORE+=("$line")
 done < "./.diff-wat-wasm-ignore"
 
