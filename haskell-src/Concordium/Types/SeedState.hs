@@ -62,9 +62,9 @@ data SeedState (ssv :: SeedStateVersion) where
         { -- |Number of slots in an epoch. This is derived from genesis
           -- data and must not change.
           epochLength :: !EpochLength,
-          -- |Current epoch
+          -- |Current epoch.
           epoch :: !Epoch,
-          -- |Current leadership election nonce
+          -- |Current leadership election nonce.
           currentLeadershipElectionNonce :: !LeadershipElectionNonce,
           -- |The leadership election nonce updated with the block nonces
           -- of blocks in the first 2/3 of the current epoch.
@@ -73,9 +73,9 @@ data SeedState (ssv :: SeedStateVersion) where
         SeedState ssv
     SeedStateV1 ::
         (ssv ~ 'SeedStateVersion1) =>
-        { -- |Current epoch
+        { -- |Current epoch.
           epoch :: !Epoch,
-          -- |Current leadership election nonce
+          -- |Current leadership election nonce.
           currentLeadershipElectionNonce :: !LeadershipElectionNonce,
           -- |The leadership election nonce updated with the block nonces
           -- of blocks up to and including the trigger block.
