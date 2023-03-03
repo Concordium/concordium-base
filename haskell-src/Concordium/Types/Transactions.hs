@@ -876,7 +876,7 @@ instance HashableTo TransactionOutcomesHash TransactionOutcomes where
     getHash transactionoutcomes = TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
 
 -- |A simple wrapper around a `Hash`.
--- No matter the strategy for deriving the 'TrasactionOutcomeHash' we will
+-- No matter the strategy for deriving the 'TransactionOutcomesHash' we will
 -- always end up with a value of this type.
 newtype TransactionOutcomesHash = TransactionOutcomesHash {tohGet :: H.Hash}
     deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
