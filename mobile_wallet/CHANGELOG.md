@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.24.0
+- Changed parameter_to_json to support parameter schemas.
+
 ## 0.23.0
 - Changed parameter_to_json excepted encoding of schema field to be base64.
 
