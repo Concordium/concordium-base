@@ -501,7 +501,7 @@ pub struct InitContractPayload {
     /// Name of the contract in the module.
     pub init_name: smart_contracts::OwnedContractName,
     /// Message to invoke the initialization method with.
-    pub param:     smart_contracts::Parameter,
+    pub param:     smart_contracts::OwnedParameter,
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
@@ -516,7 +516,7 @@ pub struct UpdateContractPayload {
     /// Name of the method to invoke on the contract.
     pub receive_name: smart_contracts::OwnedReceiveName,
     /// Message to send to the contract instance.
-    pub message:      smart_contracts::Parameter,
+    pub message:      smart_contracts::OwnedParameter,
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, Default)]

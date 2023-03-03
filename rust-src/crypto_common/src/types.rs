@@ -7,7 +7,8 @@ use crate::{
 use byteorder::{BigEndian, ReadBytesExt};
 pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use concordium_contracts_common::{
-    ContractAddress, ContractName, OwnedContractName, OwnedReceiveName, ReceiveName,
+    ContractAddress, ContractName, OwnedContractName, OwnedParameter, OwnedReceiveName, Parameter,
+    ReceiveName,
 };
 use crypto_common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
@@ -157,6 +158,26 @@ impl Deserial for OwnedContractName {
         let len: u16 = source.get()?;
         let name = deserial_string(source, len.into())?;
         Ok(OwnedContractName::new(name)?)
+    }
+}
+
+impl Serial for Parameter<'_> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.0.len() as u16).serial(out);
+        crate::serial_vector_no_length(self.0, out)
+    }
+}
+
+impl Serial for OwnedParameter {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) { self.as_parameter().serial(out) }
+}
+
+impl Deserial for OwnedParameter {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u16 = source.get()?;
+        let bytes = crate::deserial_vector_no_length(source, len.into())?;
+        Ok(OwnedParameter(bytes))
     }
 }
 
