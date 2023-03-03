@@ -6,34 +6,38 @@
 
 # This script should be run from the directory that it resides in. The idea is
 # to report all the files that failed, hence no early exit from the script.
-#
-# The script will ignore wat files listed in `/smart-contracts/testdata/contracts/.diff-wat-wasm-ignore`.
 
 
 pushd smart-contracts/testdata/contracts || exit
 
-# Create an array with all the files to ignore.
-declare FILES_TO_IGNORE
-while read -r line
-do
-   # Ignore lines starting comments (lines starting with #) and empty lines.
-   [[ "$line" =~ ^#.*$|^$ ]] && continue
+# Files which should only be converted, not validated/checked.
+NO_CHECK_FILES=(
+    # Our interpreter accepts this file, but wat2wasm does not due to a change in the wasm spec.
+    # See https://github.com/Concordium/concordium-base/issues/331 for more info.
+    './global-offset-test.wat',
 
-   FILES_TO_IGNORE+=("$line")
-done < "./.diff-wat-wasm-ignore"
+    # This module is invalid because it tries to use a mutable global value as an offset in the data and elem section.
+    './mut-global-offset-test.wat',
+
+    # This module is invalid because it tries to initialize a global value with the reference of another global value.
+    './init-global-with-ref-test.wat'
+    )
 
 RET=0
 
 for wat in $(find . -name '*.wat'); do
-   # Skip the file if it is in the ignore list.
-   if [[ "${FILES_TO_IGNORE[*]}" =~ "$wat" ]]; then
-     echo "Ignoring file: '$wat'"
-     continue
-   fi
-   echo "Validating file: '$wat'"
-   # Otherwise, continue with the check.
    OUT=$(mktemp)
-   wat2wasm "$wat" -o "$OUT";
+
+   # Convert to wasm.
+   if [[ "${NO_CHECK_FILES[*]}" =~ "$wat" ]]; then
+     echo "Comparing: '$wat' (with --no-check)"
+     wat2wasm "$wat" -o "$OUT" --no-check;
+     continue
+   else
+     echo "Comparing: $wat"
+     wat2wasm "$wat" -o "$OUT";
+   fi
+
    if ! diff "$OUT" "${wat%.wat}.wasm"
    then
      RET=1
