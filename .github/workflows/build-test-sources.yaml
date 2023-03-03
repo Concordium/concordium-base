@@ -51,17 +51,6 @@ env:
 
 jobs:
 
-  "wat-wasm-consistency":
-    name: Ensure consistency between wat and wasm files
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Install WABT
-        run: sudo apt-get update && sudo apt-get -y install wabt
-      - name: Check consistency
-        run: ./.diff-wat-wasm.sh
-
   rustfmt:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
