@@ -84,6 +84,9 @@ data SeedState (ssv :: SeedStateVersion) where
         } ->
         SeedState 'SeedStateVersion1
 
+-- Note that we generate the below leneses manually, and combined with the usage of 'NoFieldSelectors'
+-- we get type safe selector functions for the 'SeedState's present in this module.
+
 -- |Number of slots in an epoch.
 epochLength :: SimpleGetter (SeedState 'SeedStateVersion0) EpochLength
 {-# INLINE epochLength #-}
