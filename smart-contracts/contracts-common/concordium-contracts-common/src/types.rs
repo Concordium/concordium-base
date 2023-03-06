@@ -1200,6 +1200,10 @@ impl<'a> convert::TryFrom<&'a [u8]> for Parameter<'a> {
     }
 }
 
+impl<'a> From<Parameter<'a>> for &'a [u8] {
+    fn from(p: Parameter<'a>) -> Self { p.0 }
+}
+
 /// Display the entire parameter in hex.
 impl fmt::Display for Parameter<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1248,6 +1252,10 @@ impl convert::TryFrom<Vec<u8>> for OwnedParameter {
             })
         }
     }
+}
+
+impl From<OwnedParameter> for Vec<u8> {
+    fn from(op: OwnedParameter) -> Self { op.0 }
 }
 
 /// Display the entire parameter in hex.

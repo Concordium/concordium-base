@@ -11,10 +11,14 @@
   owned variants.
 - Add `Display` implementation for `OwnedParameter` and `Parameter`, which uses
   hex encoding.
-- Replace `From` instance for `OwnedParameter`/`Parameter` with a `TryFrom`,
+- Replace `From<Vec<u8>>` instance for `OwnedParameter`/`Parameter` with a `TryFrom`,
   which ensures a valid length, and the unchecked method `new_unchecked`.
   - Migrate from `From`/`Into`: Use `new_unchecked` instead (if known to be
     valid length).
+- Make inner field in `OwnedParameter`/`Parameter` private, but add an `From`
+  implementation for getting the raw bytes.
+  - Migrate from `parameter.0`: use `Parameter.into()` instead (for both of the affected
+    types).
 
 ## concordium-contracts-common 5.1.0 (2022-12-14)
 
