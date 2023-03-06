@@ -1176,6 +1176,7 @@ impl OwnedEntrypointName {
 }
 
 /// Parameter to the init function or entrypoint.
+#[repr(transparent)]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct Parameter<'a>(pub(crate) &'a [u8]);
 
@@ -1214,7 +1215,16 @@ impl fmt::Display for Parameter<'_> {
     }
 }
 
+impl<'a> Parameter<'a> {
+    /// Construct a parameter from a slice of bytes without checking that it
+    /// fits the size limit. The caller is assumed to ensure this via
+    /// external means.
+    #[inline]
+    pub fn new_unchecked(bytes: &'a [u8]) -> Self { Self(bytes) }
+}
+
 /// Parameter to the init function or entrypoint. Owned version.
+#[repr(transparent)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 pub struct OwnedParameter(
