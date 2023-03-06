@@ -176,6 +176,7 @@ module Concordium.Types (
 
     -- * PartsPerHundredThousands
     PartsPerHundredThousands (..),
+    partsPerHundredThousandsToRational,
 ) where
 
 import Data.Data (Data, Typeable)
@@ -339,6 +340,7 @@ complementPartsPerHundredThousands (PartsPerHundredThousands a) = PartsPerHundre
 takeFractionFromPartsPerHundredThousands :: PartsPerHundredThousands -> Amount -> Amount
 takeFractionFromPartsPerHundredThousands f = fromInteger . (`div` 100000) . (toInteger (partsPerHundredThousand f) *) . toInteger
 
+-- |Convert a 'PartsPerHundredThousands' to a 'Rational' with no loss of precision.
 partsPerHundredThousandsToRational :: PartsPerHundredThousands -> Rational
 partsPerHundredThousandsToRational f = toInteger (partsPerHundredThousand f) % 100000
 

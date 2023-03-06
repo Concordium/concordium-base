@@ -2100,7 +2100,8 @@ type IsConsensusV0 (pv :: ProtocolVersion) =
 -- |Constraint that the protocol version @pv@ is associated with the version 1 consensus.
 type IsConsensusV1 (pv :: ProtocolVersion) =
     ( ConsensusParametersVersionFor (ChainParametersVersionFor pv) ~ 'ConsensusParametersVersion1,
-      SeedStateVersionFor pv ~ 'SeedStateVersion1
+      SeedStateVersionFor pv ~ 'SeedStateVersion1,
+      IsSupported 'PTFinalizationCommitteeParameters (ChainParametersVersionFor pv) ~ 'True
     )
 
 -- |The consensus version constraints for a particular protocol version.
