@@ -1,8 +1,9 @@
 -- |Common types for genesis data for consensus version 1.
 module Concordium.Genesis.Data.BaseV1 where
 
-import Concordium.Types
 import Data.Serialize
+
+import Concordium.Types
 
 -- |Core parameters that are set at genesis.
 -- These parameters are not updatable (except via protocol update).
