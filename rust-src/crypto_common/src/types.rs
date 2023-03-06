@@ -163,8 +163,8 @@ impl Deserial for OwnedContractName {
 
 impl Serial for Parameter<'_> {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        (self.0.len() as u16).serial(out);
-        crate::serial_vector_no_length(self.0, out)
+        (self.as_ref().len() as u16).serial(out);
+        crate::serial_vector_no_length(self.as_ref(), out)
     }
 }
 
@@ -177,7 +177,7 @@ impl Deserial for OwnedParameter {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u16 = source.get()?;
         let bytes = crate::deserial_vector_no_length(source, len.into())?;
-        Ok(OwnedParameter(bytes))
+        Ok(OwnedParameter::new_unchecked(bytes))
     }
 }
 

@@ -73,20 +73,8 @@ impl Deserial for WasmVersion {
     }
 }
 
-#[doc(hidden)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub enum ModuleRefMarker {}
-/// Reference to a deployed Wasm module on the chain.
-/// This reference is used when creating new instances.
-pub type ModuleRef = hashes::HashBytes<ModuleRefMarker>;
-
-impl From<ModuleReference> for ModuleRef {
-    fn from(mr: ModuleReference) -> Self { Self::new(mr.into()) }
-}
-
-impl From<ModuleRef> for ModuleReference {
-    fn from(mr: ModuleRef) -> Self { ModuleReference::from(mr.bytes) }
-}
+#[deprecated(note = "Replaced by `ModuleReference`. Use that one instead.")]
+pub type ModuleRef = ModuleReference;
 
 #[derive(
     SerdeSerialize,
