@@ -1,3 +1,4 @@
+pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
 #[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
 use alloc::{boxed::Box, collections::BTreeMap};
@@ -346,26 +347,6 @@ impl ops::MulAssign<u64> for Amount {
 impl ops::RemAssign<u64> for Amount {
     #[inline(always)]
     fn rem_assign(&mut self, other: u64) { *self = *self % other; }
-}
-
-/// A reference to a smart contract module deployed on the chain.
-#[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ModuleReference([u8; 32]);
-
-impl convert::AsRef<[u8; 32]> for ModuleReference {
-    #[inline(always)]
-    fn as_ref(&self) -> &[u8; 32] { &self.0 }
-}
-
-impl convert::From<[u8; 32]> for ModuleReference {
-    #[inline(always)]
-    fn from(bytes: [u8; 32]) -> Self { Self(bytes) }
-}
-
-impl convert::From<ModuleReference> for [u8; 32] {
-    #[inline(always)]
-    fn from(module: ModuleReference) -> Self { module.0 }
 }
 
 /// Timestamp represented as milliseconds since unix epoch.

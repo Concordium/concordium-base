@@ -11,6 +11,10 @@
   implementation for getting the raw bytes.
   - Migrate from `parameter.0`: use `Parameter.into()` instead (for both of the affected
     types).
+- For `ModuleReference`, replace `AsRef<[u8;32]>` with `AsRef<[u8]>` and make
+  inner bytes public.
+  - The change was necessary for internal reasons.
+  - Migrate from `module_reference.as_ref()`: use `module_reference.bytes` instead.
 
 ## concordium-contracts-common 5.2.0 (2023-02-08)
 
