@@ -928,9 +928,13 @@ type IpSocketAddress = (IpAddress, IpPort)
 
 -- |Network related peer statistics.
 data PeerInfo = PeerInfo
-    { peerId :: !Text,
+    { -- A string which the peer wishes to be identified by.
+      peerId :: !Text,
+      -- |The IP and port of the peer.
       socketAddress :: !IpSocketAddress,
+      -- |Network related statistics about the peer.
       networkStats :: !NetworkStats,
+      -- |Consensus related information about the peer.
       consensusInfo :: !PeerCatchupStatus
     }
     deriving (Show)
