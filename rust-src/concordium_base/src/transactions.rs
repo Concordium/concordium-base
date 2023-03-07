@@ -497,7 +497,7 @@ pub struct InitContractPayload {
     /// Deposit this amount of CCD.
     pub amount:    Amount,
     /// Reference to the module from which to initialize the instance.
-    pub mod_ref:   smart_contracts::ModuleRef,
+    pub mod_ref:   concordium_contracts_common::ModuleReference,
     /// Name of the contract in the module.
     pub init_name: smart_contracts::OwnedContractName,
     /// Message to invoke the initialization method with.

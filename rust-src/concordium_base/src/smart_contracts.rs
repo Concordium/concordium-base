@@ -1,4 +1,3 @@
-use super::hashes;
 use crate::constants::*;
 use concordium_contracts_common::ModuleReference;
 /// Re-export of common helper functionality for smart contract, such as types
@@ -136,9 +135,9 @@ impl WasmModule {
     /// Get the identifier of the module. This identifier is used to refer to
     /// the module on the chain, e.g., when initializing a new contract
     /// instance.
-    pub fn get_module_ref(&self) -> ModuleRef {
+    pub fn get_module_ref(&self) -> ModuleReference {
         let mut hasher = sha2::Sha256::new();
         self.serial(&mut hasher);
-        ModuleRef::from(<[u8; 32]>::from(hasher.finalize()))
+        ModuleReference::from(<[u8; 32]>::from(hasher.finalize()))
     }
 }
