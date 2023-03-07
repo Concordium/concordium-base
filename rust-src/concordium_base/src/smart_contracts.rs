@@ -15,7 +15,12 @@ use derive_more::*;
 use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
 
-#[deprecated(note = "Replaced by `OwnedParameter` for consistency. Use that one instead.")]
+/// **Deprecated:** Replaced by [`OwnedParameter`] for consistency. Use it
+/// instead.
+#[deprecated(
+    note = "Replaced by [`OwnedParameter`](./struct.OwnedParameter.html) for consistency. Use it \
+            instead."
+)]
 pub type Parameter = OwnedParameter;
 
 #[derive(
@@ -73,7 +78,12 @@ impl Deserial for WasmVersion {
     }
 }
 
-#[deprecated(note = "Replaced by `ModuleReference`. Use that one instead.")]
+/// **Deprecated:** Replaced by [`ModuleReference`] for consistency. Use it
+/// instead.
+#[deprecated(
+    note = "Replaced by [`ModuleReference`](../hashes/type.ModuleReference.html) for consistency. \
+            Use it instead."
+)]
 pub type ModuleRef = ModuleReference;
 
 #[derive(

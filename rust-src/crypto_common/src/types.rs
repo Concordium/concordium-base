@@ -163,8 +163,10 @@ impl Deserial for OwnedContractName {
 
 impl Serial for Parameter<'_> {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        (self.as_ref().len() as u16).serial(out);
-        crate::serial_vector_no_length(self.as_ref(), out)
+        let bytes = self.as_ref();
+        (bytes.len() as u16).serial(out);
+        out.write_all(bytes)
+            .expect("Writing to buffer should succeed.")
     }
 }
 
@@ -175,8 +177,11 @@ impl Serial for OwnedParameter {
 
 impl Deserial for OwnedParameter {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        // Since `MAX_PARAMETER_LEN == u16::MAX`, we don't need to check it explicitly.
+        // The constant exists in concordium_contracts_common::constants.
         let len: u16 = source.get()?;
-        let bytes = crate::deserial_vector_no_length(source, len.into())?;
+        let mut bytes = vec![0u8; len.into()]; // Safe to preallocate since len fits `u16`.
+        source.read_exact(&mut bytes)?;
         Ok(OwnedParameter::new_unchecked(bytes))
     }
 }
