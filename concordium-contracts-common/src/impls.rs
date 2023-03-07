@@ -202,7 +202,7 @@ impl Deserial for ExchangeRate {
 }
 
 impl Serial for ModuleReference {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(self) }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(self.as_ref()) }
 }
 
 impl Deserial for ModuleReference {
