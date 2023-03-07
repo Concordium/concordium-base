@@ -204,7 +204,7 @@ enum SchemaInputType {
 }
 
 fn get_parameter_as_json(
-    parameter: Parameter,
+    parameter: OwnedParameter,
     receive_name: &OwnedReceiveName,
     schema: &SchemaInputType,
     schema_version: &Option<u8>,
