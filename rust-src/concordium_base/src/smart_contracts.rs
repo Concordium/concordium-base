@@ -1,20 +1,26 @@
-use super::hashes;
 use crate::constants::*;
 use concordium_contracts_common::ModuleReference;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
-    self, ContractName, OwnedContractName, OwnedReceiveName, ReceiveName,
+    self, ContractName, ExceedsParameterSize, OwnedContractName, OwnedParameter, OwnedReceiveName,
+    ReceiveName,
 };
 use crypto_common::{
-    derive,
     derive::{Serial, Serialize},
     Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
 };
 use derive_more::*;
 use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
-use thiserror::Error;
+
+/// **Deprecated:** Replaced by [`OwnedParameter`] for consistency. Use it
+/// instead.
+#[deprecated(
+    note = "Replaced by [`OwnedParameter`](./struct.OwnedParameter.html) for consistency. Use it \
+            instead."
+)]
+pub type Parameter = OwnedParameter;
 
 #[derive(
     SerdeSerialize, SerdeDeserialize, Debug, Copy, Clone, Display, PartialEq, Eq, PartialOrd, Ord,
@@ -71,20 +77,13 @@ impl Deserial for WasmVersion {
     }
 }
 
-#[doc(hidden)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub enum ModuleRefMarker {}
-/// Reference to a deployed Wasm module on the chain.
-/// This reference is used when creating new instances.
-pub type ModuleRef = hashes::HashBytes<ModuleRefMarker>;
-
-impl From<ModuleReference> for ModuleRef {
-    fn from(mr: ModuleReference) -> Self { Self::new(mr.into()) }
-}
-
-impl From<ModuleRef> for ModuleReference {
-    fn from(mr: ModuleRef) -> Self { ModuleReference::from(mr.bytes) }
-}
+/// **Deprecated:** Replaced by [`ModuleReference`] for consistency. Use it
+/// instead.
+#[deprecated(
+    note = "Replaced by [`ModuleReference`](../hashes/type.ModuleReference.html) for consistency. \
+            Use it instead."
+)]
+pub type ModuleRef = ModuleReference;
 
 #[derive(
     SerdeSerialize,
@@ -136,79 +135,9 @@ impl WasmModule {
     /// Get the identifier of the module. This identifier is used to refer to
     /// the module on the chain, e.g., when initializing a new contract
     /// instance.
-    pub fn get_module_ref(&self) -> ModuleRef {
+    pub fn get_module_ref(&self) -> ModuleReference {
         let mut hasher = sha2::Sha256::new();
         self.serial(&mut hasher);
-        ModuleRef::from(<[u8; 32]>::from(hasher.finalize()))
-    }
-}
-
-// FIXME: This would ideally live in contracts_common, or rather we would reuse
-// that. But that already has its own definition of "Parameter" with a
-// `From<Vec<u8>>` implementation which makes more sense inside Wasm.
-// So for now this is here, but that is not ideal.
-#[derive(SerdeSerialize, SerdeDeserialize, derive::Serial, Debug, Clone, AsRef, Into, Default)]
-#[serde(transparent)]
-/// A smart contract parameter. The [Default] implementation produces an empty
-/// parameter.
-pub struct Parameter {
-    #[serde(with = "crate::internal::byte_array_hex")]
-    #[size_length = 2]
-    bytes: Vec<u8>,
-}
-
-/// Display the entire parameter in hex.
-impl std::fmt::Display for Parameter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for b in &self.bytes {
-            f.write_fmt(format_args!("{:02x}", b))?
-        }
-        Ok(())
-    }
-}
-
-impl Parameter {
-    /// Construct a parameter without checking that it fits the size limit.
-    /// The caller is assumed to ensure this via external means.
-    #[inline]
-    pub fn new_unchecked(bytes: Vec<u8>) -> Self { Self { bytes } }
-}
-
-#[derive(Debug, Error)]
-#[error("The byte array of size {actual} is too large to fit into parameter size limit {max}.")]
-pub struct ExceedsParameterSize {
-    pub actual: usize,
-    pub max:    usize,
-}
-
-/// Attempt to convert a byte array to a parameter. This will fail if the byte
-/// array is too large. If it is known upfront that the array is less than
-/// [`MAX_PARAMETER_LEN`] then it is better to use [`Parameter::new_unchecked`].
-impl TryFrom<Vec<u8>> for Parameter {
-    type Error = ExceedsParameterSize;
-
-    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        let actual = bytes.len();
-        if actual <= MAX_PARAMETER_LEN {
-            Ok(Self::new_unchecked(bytes))
-        } else {
-            Err(ExceedsParameterSize {
-                actual,
-                max: MAX_PARAMETER_LEN,
-            })
-        }
-    }
-}
-
-/// Manual implementation to ensure size limit.
-impl Deserial for Parameter {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let x: u16 = source.get()?;
-        anyhow::ensure!(
-            usize::from(x) <= MAX_PARAMETER_LEN,
-            "Parameter size exceeds maximum allowed size."
-        );
-        let bytes = crypto_common::deserial_bytes(source, x.into())?;
-        Ok(Parameter { bytes })
+        ModuleReference::from(<[u8; 32]>::from(hasher.finalize()))
     }
 }

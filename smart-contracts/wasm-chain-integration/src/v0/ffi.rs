@@ -59,7 +59,7 @@ unsafe extern "C" fn call_init_v0(
                     InitInvocation {
                         amount,
                         init_name: name,
-                        parameter: parameter.into(),
+                        parameter: Parameter::new_unchecked(parameter),
                         energy,
                     },
                     limit_logs_and_return_values,
@@ -126,7 +126,7 @@ unsafe extern "C" fn call_receive_v0(
                     ReceiveInvocation {
                         amount,
                         receive_name: name,
-                        parameter: parameter.into(),
+                        parameter: Parameter::new_unchecked(parameter),
                         energy,
                     },
                     state,

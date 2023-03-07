@@ -497,11 +497,11 @@ pub struct InitContractPayload {
     /// Deposit this amount of CCD.
     pub amount:    Amount,
     /// Reference to the module from which to initialize the instance.
-    pub mod_ref:   smart_contracts::ModuleRef,
+    pub mod_ref:   concordium_contracts_common::ModuleReference,
     /// Name of the contract in the module.
     pub init_name: smart_contracts::OwnedContractName,
     /// Message to invoke the initialization method with.
-    pub param:     smart_contracts::Parameter,
+    pub param:     smart_contracts::OwnedParameter,
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
@@ -516,7 +516,7 @@ pub struct UpdateContractPayload {
     /// Name of the method to invoke on the contract.
     pub receive_name: smart_contracts::OwnedReceiveName,
     /// Message to send to the contract instance.
-    pub message:      smart_contracts::Parameter,
+    pub message:      smart_contracts::OwnedParameter,
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, Default)]
