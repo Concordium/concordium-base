@@ -1,3 +1,4 @@
+pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
 #[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
 use alloc::{boxed::Box, collections::BTreeMap};
@@ -346,26 +347,6 @@ impl ops::MulAssign<u64> for Amount {
 impl ops::RemAssign<u64> for Amount {
     #[inline(always)]
     fn rem_assign(&mut self, other: u64) { *self = *self % other; }
-}
-
-/// A reference to a smart contract module deployed on the chain.
-#[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ModuleReference([u8; 32]);
-
-impl convert::AsRef<[u8; 32]> for ModuleReference {
-    #[inline(always)]
-    fn as_ref(&self) -> &[u8; 32] { &self.0 }
-}
-
-impl convert::From<[u8; 32]> for ModuleReference {
-    #[inline(always)]
-    fn from(bytes: [u8; 32]) -> Self { Self(bytes) }
-}
-
-impl convert::From<ModuleReference> for [u8; 32] {
-    #[inline(always)]
-    fn from(module: ModuleReference) -> Self { module.0 }
 }
 
 /// Timestamp represented as milliseconds since unix epoch.
@@ -1176,32 +1157,106 @@ impl OwnedEntrypointName {
 }
 
 /// Parameter to the init function or entrypoint.
+#[repr(transparent)]
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
-pub struct Parameter<'a>(pub &'a [u8]);
-
-impl<'a> From<&'a [u8]> for Parameter<'a> {
-    #[inline(always)]
-    fn from(param: &'a [u8]) -> Self { Self(param) }
-}
+pub struct Parameter<'a>(pub(crate) &'a [u8]);
 
 impl<'a> AsRef<[u8]> for Parameter<'a> {
     #[inline(always)]
     fn as_ref(&self) -> &[u8] { self.0 }
 }
 
+impl<'a> convert::TryFrom<&'a [u8]> for Parameter<'a> {
+    type Error = ExceedsParameterSize;
+
+    fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
+        let actual = bytes.len();
+        if actual <= constants::MAX_PARAMETER_LEN {
+            Ok(Self(bytes))
+        } else {
+            Err(ExceedsParameterSize {
+                actual,
+                max: constants::MAX_PARAMETER_LEN,
+            })
+        }
+    }
+}
+
+impl<'a> From<Parameter<'a>> for &'a [u8] {
+    fn from(p: Parameter<'a>) -> Self { p.0 }
+}
+
+/// Display the entire parameter in hex.
+impl fmt::Display for Parameter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0.iter() {
+            f.write_fmt(format_args!("{:02x}", b))?
+        }
+        Ok(())
+    }
+}
+
+impl<'a> Parameter<'a> {
+    /// Construct a parameter from a slice of bytes without checking that it
+    /// fits the size limit. The caller is assumed to ensure this via
+    /// external means.
+    #[inline]
+    pub fn new_unchecked(bytes: &'a [u8]) -> Self { Self(bytes) }
+}
+
 /// Parameter to the init function or entrypoint. Owned version.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct OwnedParameter(pub Vec<u8>);
+#[repr(transparent)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
+#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
+pub struct OwnedParameter(
+    #[cfg_attr(feature = "derive-serde", serde(with = "serde_impl::byte_array_hex"))]
+    pub(crate)  Vec<u8>,
+);
+
+#[derive(Debug)]
+#[cfg_attr(feature = "derive-serde", derive(thiserror::Error))]
+#[cfg_attr(
+    feature = "derive-serde",
+    error("The byte array of size {actual} is too large to fit into parameter size limit {max}.")
+)]
+pub struct ExceedsParameterSize {
+    pub actual: usize,
+    pub max:    usize,
+}
 
 impl AsRef<[u8]> for OwnedParameter {
     #[inline(always)]
     fn as_ref(&self) -> &[u8] { self.0.as_ref() }
 }
 
-/// Convert the vector into a parameter as is.
-impl From<Vec<u8>> for OwnedParameter {
-    #[inline(always)]
-    fn from(param: Vec<u8>) -> Self { Self(param) }
+impl convert::TryFrom<Vec<u8>> for OwnedParameter {
+    type Error = ExceedsParameterSize;
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        let actual = bytes.len();
+        if actual <= constants::MAX_PARAMETER_LEN {
+            Ok(Self(bytes))
+        } else {
+            Err(ExceedsParameterSize {
+                actual,
+                max: constants::MAX_PARAMETER_LEN,
+            })
+        }
+    }
+}
+
+impl From<OwnedParameter> for Vec<u8> {
+    fn from(op: OwnedParameter) -> Self { op.0 }
+}
+
+/// Display the entire parameter in hex.
+impl fmt::Display for OwnedParameter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in &self.0 {
+            f.write_fmt(format_args!("{:02x}", b))?
+        }
+        Ok(())
+    }
 }
 
 impl OwnedParameter {
@@ -1210,6 +1265,12 @@ impl OwnedParameter {
     /// Construct an `OwnedParameter` by serializing the input using its
     /// `Serial` instance.
     pub fn new<D: Serial>(data: &D) -> Self { Self(to_bytes(data)) }
+
+    /// Construct a parameter from a vector of bytes without checking that it
+    /// fits the size limit. The caller is assumed to ensure this via
+    /// external means.
+    #[inline]
+    pub fn new_unchecked(bytes: Vec<u8>) -> Self { Self(bytes) }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
@@ -2002,6 +2063,36 @@ mod serde_impl {
     impl<'de> SerdeDeserialize<'de> for AccountAddress {
         fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
             des.deserialize_str(Base58Visitor)
+        }
+    }
+
+    /// Helper for [de]serializing a byte array as an hex string.
+    pub(super) mod byte_array_hex {
+        use super::*;
+
+        /// Serialize (via Serde)
+        pub fn serialize<S: serde::Serializer>(dt: &[u8], ser: S) -> Result<S::Ok, S::Error> {
+            ser.serialize_str(hex::encode(dt).as_str())
+        }
+
+        /// Deserialize (via Serde)
+        pub fn deserialize<'de, D: serde::Deserializer<'de>>(des: D) -> Result<Vec<u8>, D::Error> {
+            struct HexVisitor;
+            impl<'de> serde::de::Visitor<'de> for HexVisitor {
+                type Value = Vec<u8>;
+
+                fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                    write!(formatter, "A hex string.")
+                }
+
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error, {
+                    let r = hex::decode(v).map_err(serde::de::Error::custom)?;
+                    Ok(r)
+                }
+            }
+            des.deserialize_str(HexVisitor)
         }
     }
 
