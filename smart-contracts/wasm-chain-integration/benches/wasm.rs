@@ -548,7 +548,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 InterpreterEnergy {
                     energy: nrg * 1000,
                 },
-                Parameter::from(&[] as &[u8]),
+                Parameter::new_unchecked(&[]),
                 &init_ctx,
                 false,
             )
@@ -593,7 +593,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let artifact = &artifact;
             move |b: &mut criterion::Bencher| {
                 b.iter(|| {
-                    let mut host = setup_receive_host(State::new(state), params.into());
+                    let mut host = setup_receive_host(State::new(state), Parameter::new_unchecked(params));
                     let r = artifact
                         .run(&mut host, name, args)
                         .expect_err("Execution should fail due to out of energy.");

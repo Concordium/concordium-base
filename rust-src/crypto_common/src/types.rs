@@ -7,7 +7,8 @@ use crate::{
 use byteorder::{BigEndian, ReadBytesExt};
 pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use concordium_contracts_common::{
-    ContractAddress, ContractName, OwnedContractName, OwnedReceiveName, ReceiveName,
+    ContractAddress, ContractName, OwnedContractName, OwnedParameter, OwnedReceiveName, Parameter,
+    ReceiveName,
 };
 use crypto_common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
@@ -157,6 +158,31 @@ impl Deserial for OwnedContractName {
         let len: u16 = source.get()?;
         let name = deserial_string(source, len.into())?;
         Ok(OwnedContractName::new(name)?)
+    }
+}
+
+impl Serial for Parameter<'_> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let bytes = self.as_ref();
+        (bytes.len() as u16).serial(out);
+        out.write_all(bytes)
+            .expect("Writing to buffer should succeed.")
+    }
+}
+
+impl Serial for OwnedParameter {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) { self.as_parameter().serial(out) }
+}
+
+impl Deserial for OwnedParameter {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        // Since `MAX_PARAMETER_LEN == u16::MAX`, we don't need to check it explicitly.
+        // The constant exists in concordium_contracts_common::constants.
+        let len: u16 = source.get()?;
+        let mut bytes = vec![0u8; len.into()]; // Safe to preallocate since len fits `u16`.
+        source.read_exact(&mut bytes)?;
+        Ok(OwnedParameter::new_unchecked(bytes))
     }
 }
 
