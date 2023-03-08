@@ -1205,7 +1205,7 @@ impl<'a> Parameter<'a> {
 
     /// Construct an empty parameter.
     #[inline]
-    pub fn empty() -> Self { Self::default() }
+    pub fn empty() -> Self { Self(&[]) }
 }
 
 /// Parameter to the init function or entrypoint. Owned version.
@@ -1290,7 +1290,7 @@ impl OwnedParameter {
 
     /// Construct an empty parameter.
     #[inline]
-    pub fn empty() -> Self { Self::default() }
+    pub fn empty() -> Self { Self(Vec::new()) }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
