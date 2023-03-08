@@ -548,7 +548,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 InterpreterEnergy {
                     energy: nrg * 1000,
                 },
-                Parameter::new_unchecked(&[]),
+                Parameter::empty(),
                 &init_ctx,
                 false,
             )
