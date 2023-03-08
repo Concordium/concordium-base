@@ -1158,7 +1158,7 @@ impl OwnedEntrypointName {
 
 /// Parameter to the init function or entrypoint.
 #[repr(transparent)]
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
 pub struct Parameter<'a>(pub(crate) &'a [u8]);
 
 impl<'a> AsRef<[u8]> for Parameter<'a> {
@@ -1202,6 +1202,10 @@ impl<'a> Parameter<'a> {
     /// external means.
     #[inline]
     pub fn new_unchecked(bytes: &'a [u8]) -> Self { Self(bytes) }
+
+    /// Construct an empty parameter.
+    #[inline]
+    pub fn empty() -> Self { Self(&[]) }
 }
 
 /// Parameter to the init function or entrypoint. Owned version.
@@ -1264,13 +1268,29 @@ impl OwnedParameter {
 
     /// Construct an `OwnedParameter` by serializing the input using its
     /// `Serial` instance.
-    pub fn new<D: Serial>(data: &D) -> Self { Self(to_bytes(data)) }
+    ///
+    /// Returns an error if the serialized parameter exceeds
+    /// [`MAX_PARAMETER_LEN`][constants::MAX_PARAMETER_LEN].
+    pub fn from_serial<D: Serial>(data: &D) -> Result<Self, ExceedsParameterSize> {
+        let bytes = to_bytes(data);
+        if bytes.len() > constants::MAX_PARAMETER_LEN {
+            return Err(ExceedsParameterSize {
+                actual: bytes.len(),
+                max:    constants::MAX_PARAMETER_LEN,
+            });
+        }
+        Ok(Self(bytes))
+    }
 
     /// Construct a parameter from a vector of bytes without checking that it
     /// fits the size limit. The caller is assumed to ensure this via
     /// external means.
     #[inline]
     pub fn new_unchecked(bytes: Vec<u8>) -> Self { Self(bytes) }
+
+    /// Construct an empty parameter.
+    #[inline]
+    pub fn empty() -> Self { Self(Vec::new()) }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
