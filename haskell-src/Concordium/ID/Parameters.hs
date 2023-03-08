@@ -1,4 +1,4 @@
-module Concordium.ID.Parameters (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
+module Concordium.ID.Parameters (GlobalContext, createGlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -14,6 +14,9 @@ import Foreign.ForeignPtr
 import Foreign.Ptr
 
 import qualified Data.Aeson as AE
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
+import Data.Text (Text)
+import qualified Data.Text.Encoding as Text
 import System.IO.Unsafe
 
 -- |Cryptographic parameters needed to verify on-chain proofs, e.g.,
@@ -27,6 +30,55 @@ foreign import ccall safe "global_context_to_bytes" globalContextToBytes :: Ptr 
 foreign import ccall safe "global_context_from_bytes" globalContextFromBytes :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 foreign import ccall safe "global_context_to_json" globalContextToJSONFFI :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall safe "global_context_from_json" globalContextFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
+foreign import ccall unsafe "global_context_create"
+    createGlobalContextFFI ::
+        -- Pointer to a byte array which is the serialization of an
+        -- utf8 encoded genesis string and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to a byte array which is the serialization of a
+        -- @Generators<G1>@ Rust-instance and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to a byte array which is the serialization of a
+        -- @CommitmentKey<G1>@ Rust-instance and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- |Pointer to an @GlobalContext@ Rust instance with its corresponding fields set
+        -- to deserializations of the the above. This is a null-pointer on failure.
+        IO (Ptr GlobalContext)
+
+-- |Create a @GlobalContext@ instance from constituent parts.
+createGlobalContext ::
+    -- |The genesis string.
+    Text ->
+    -- |Serialized generators for the bulletproofs.
+    BS8.ByteString ->
+    -- |Serialized on-chain commitment key.
+    BS8.ByteString ->
+    -- |If the bulletproof generators or the on-chain commitment key key could not be
+    -- deserialized this returns @Nothing@. Otherwise a @GlobalContext@ is returned.
+    Maybe GlobalContext
+createGlobalContext genString bulletProofGens onChainComm =
+    unsafePerformIO
+        ( do
+            -- Note that empty strings correspond to arbitrary pointers being passed
+            -- to the Rust side. This is handled on the Rust side by checking the
+            -- lengths, so this is safe.
+            ptr <- unsafeUseAsCStringLen (Text.encodeUtf8 genString) $ \(gsPtr, gsLen) ->
+                unsafeUseAsCStringLen bulletProofGens $ \(bpgPtr, bpgLen) ->
+                    unsafeUseAsCStringLen onChainComm $ \(occPtr, occLen) ->
+                        createGlobalContextFFI
+                            (castPtr gsPtr)
+                            (fromIntegral gsLen)
+                            (castPtr bpgPtr)
+                            (fromIntegral bpgLen)
+                            (castPtr occPtr)
+                            (fromIntegral occLen)
+            if ptr == nullPtr
+                then return Nothing
+                else Just . GlobalContext <$> newForeignPtr freeGlobalContext ptr
+        )
 
 withGlobalContext :: GlobalContext -> (Ptr GlobalContext -> IO b) -> IO b
 withGlobalContext (GlobalContext fp) = withForeignPtr fp
