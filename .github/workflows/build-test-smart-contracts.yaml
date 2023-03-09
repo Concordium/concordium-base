@@ -13,10 +13,8 @@ on:
   workflow_dispatch: # allows manual trigger
 
 env:
-  # from concordium/rustfmt:0.17
   RUST_FMT: nightly-2022-06-09-x86_64-unknown-linux-gnu
   RUST_CLIPPY: 1.62
-  TARGET: wasm32-unknown-unknown
 
 jobs:
 
@@ -80,7 +78,7 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_FMT }}
           override: true
-          target: ${{ env.TARGET }}
+          target: wasm32-unknown-unknown
           components: rustfmt
       - name: Format
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
@@ -107,7 +105,6 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
-          target: ${{ env.TARGET }}
           components: clippy
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
@@ -139,13 +136,12 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
-          target: ${{ env.TARGET }}
           components: clippy
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          cargo clippy --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
+          cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_example_contracts":
     name: smart-contracts/${{ matrix.example-contract }} lint:clippy
@@ -171,13 +167,13 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
-          target: ${{ env.TARGET }}
+          target: wasm32-unknown-unknown
           components: clippy
       - name: Clippy
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          cargo clippy --color=always --tests -- -Dclippy::all
+          cargo clippy --locked --color=always --tests -- -Dclippy::all
 
   "cargo_test":
     name: ${{ matrix.build-dir }} cargo:test
