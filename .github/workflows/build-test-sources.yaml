@@ -148,12 +148,12 @@ jobs:
     # Catching failure here avoids restoring of Haskell caches.
     - name: Check that all Rust targets build
       run: |
-        cargo check --manifest-path rust-src/Cargo.toml --workspace
-        cargo check --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
-        cargo check --manifest-path idiss/Cargo.toml --workspace
-        cargo check --manifest-path mobile_wallet/Cargo.toml --workspace
-        cargo check --manifest-path mobile_wallet/Cargo.toml --target aarch64-linux-android
-        cargo check --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
+        cargo check --locked --manifest-path rust-src/Cargo.toml --workspace
+        cargo check --locked --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
+        cargo check --locked --manifest-path idiss/Cargo.toml --workspace
+        cargo check --locked --manifest-path mobile_wallet/Cargo.toml --workspace
+        cargo check --locked --manifest-path mobile_wallet/Cargo.toml --target aarch64-linux-android
+        cargo check --locked --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
     # Rust code linting.
     # Could be run in parallel in a separate job
     # (the step is probably too fast for that to make sense though).
