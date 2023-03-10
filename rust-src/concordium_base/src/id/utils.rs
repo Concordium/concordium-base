@@ -1,13 +1,13 @@
 //! A collection of auxiliary functions that don't belong anywhere else.
 
-use crate::{secret_sharing::Threshold, types::*};
+use super::{secret_sharing::Threshold, types::*};
 use anyhow::bail;
 use crate::common::{
     to_bytes,
     types::{KeyIndex, TransactionTime},
     ParseResult,
 };
-use curve_arithmetic::{multiexp, Curve, Pairing, Value};
+use crate::curve_arithmetic::{multiexp, Curve, Pairing, Value};
 use ed25519_dalek::Verifier;
 use either::Either;
 use elgamal::*;

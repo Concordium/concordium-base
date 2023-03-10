@@ -1,10 +1,10 @@
 // -*- mode: rust; -*-
 
 //! Elgamal secret key types
-use crate::{cipher::*, message::*};
+use super::{cipher::*, message::*};
 use anyhow::{bail, Result};
 use crate::common::*;
-use curve_arithmetic::{Curve, Value};
+use crate::curve_arithmetic::{Curve, Value};
 use ff::Field;
 use rand::*;
 use std::collections::HashMap;

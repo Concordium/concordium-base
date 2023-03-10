@@ -1,6 +1,6 @@
 use anyhow::bail;
 use crate::common::*;
-use crate::common_derive::*;
+use crate::common::derive::*;
 use curve25519_dalek::{
     constants,
     edwards::{CompressedEdwardsY, EdwardsPoint},

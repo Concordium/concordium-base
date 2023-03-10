@@ -46,10 +46,10 @@
 //! specify the randomness to be used directly
 
 #![allow(non_snake_case)]
-use crate::types::CHUNK_SIZE;
+use super::super::types::CHUNK_SIZE;
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::common::derive::*;
+use crate::curve_arithmetic::{multiexp, Curve};
 use elgamal::ChunkSize;
 use ff::Field;
 use id::sigma_protocols::{

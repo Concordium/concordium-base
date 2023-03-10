@@ -1,7 +1,7 @@
 //! This module exposes functions for verifying various proofs of statements
 //! about a credential on accounts.
 
-use crate::{types::*, utils};
+use super::{types::*, utils};
 use bulletproofs::{
     range_proof::{verify_efficient, RangeProof, VerificationError},
     set_membership_proof::verify as verify_set_membership,
@@ -9,11 +9,11 @@ use bulletproofs::{
     utils::Generators,
 };
 
-use crate::{
+use super::{
     id_proof_types::*,
     sigma_protocols::{common::verify as sigma_verify, dlog::Dlog},
 };
-use curve_arithmetic::Curve;
+use crate::curve_arithmetic::Curve;
 use ff::Field;
 use pedersen_scheme::{
     Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,

@@ -1,7 +1,7 @@
 //! Shared functions used by the proofs in this crate
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::Curve;
+use crate::common::derive::*;
+use crate::curve_arithmetic::Curve;
 use ff::Field;
 #[cfg(test)]
 use rand::Rng;

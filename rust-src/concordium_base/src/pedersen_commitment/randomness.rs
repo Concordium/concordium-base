@@ -4,7 +4,7 @@
 //! The randomness used in commitment
 
 use crate::common::*;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 
 use ff::Field;
 

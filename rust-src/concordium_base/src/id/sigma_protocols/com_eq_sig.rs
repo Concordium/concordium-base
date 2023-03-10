@@ -4,9 +4,9 @@
 //! the blinded version of the signature, and commitments to the values that
 //! were signed.
 
-use crate::sigma_protocols::common::*;
+use super::common::*;
 use crate::common::*;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey};

@@ -3,10 +3,10 @@
 //! \sum_{i} u_i * s_i = u * s for some public constants u_i and u.
 //! The r's are randomness in commitments to s_i's and s'.
 
-use crate::sigma_protocols::common::*;
+use super::common::*;
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::common::derive::*;
+use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};

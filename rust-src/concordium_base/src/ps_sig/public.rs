@@ -4,12 +4,11 @@
 
 use rand::*;
 
-use crate::{known_message::*, signature::*};
+use super::{known_message::*, signature::*};
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::*;
-
-use crate::secret::*;
+use crate::common::derive::*;
+use crate::curve_arithmetic::*;
+use super::secret::*;
 
 /// PS public key. The documentation of the fields
 /// assumes the secret key is $(x, y_1, ..., y_n)$ (see specification).

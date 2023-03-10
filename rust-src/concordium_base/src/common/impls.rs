@@ -9,7 +9,7 @@ use pairing::bls12_381::{
 };
 use std::convert::TryFrom;
 
-use crate::serialize::*;
+use super::serialize::*;
 
 impl Deserial for Fr {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Fr> {

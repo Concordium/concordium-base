@@ -1,8 +1,8 @@
 //! PRF Key type
 
-use crate::errors::{InternalError::DivisionByZero, *};
+use super::errors::{InternalError::DivisionByZero, *};
 use crate::common::*;
-use curve_arithmetic::{Curve, Secret, Value};
+use crate::curve_arithmetic::{Curve, Secret, Value};
 use ff::Field;
 use rand::*;
 use std::rc::Rc;

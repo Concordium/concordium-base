@@ -35,10 +35,10 @@ pub mod random_oracle;
 pub mod curve_arithmetic;
 pub mod elgamal;
 
-mod pedersen_commitment;
-mod ps_sig;
+pub mod pedersen_commitment;
+pub mod ps_sig;
 
-mod dodis_yampolskiy_prf;
+pub mod dodis_yampolskiy_prf;
 
 #[cfg(feature = "ffi")]
 mod ffi_helpers;

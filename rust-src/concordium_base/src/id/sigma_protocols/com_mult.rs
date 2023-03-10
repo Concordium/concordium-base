@@ -2,9 +2,9 @@
 //! This protocol enables one to prove that the the product of two commited
 //! values is equal to the third commited value, without revealing the values
 //! themselves.
-use crate::sigma_protocols::common::*;
+use super::common::*;
 use crate::common::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};

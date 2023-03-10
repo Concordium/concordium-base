@@ -1,7 +1,7 @@
 //! This module exposes functions for proving statements about credentials on
 //! accounts.
 
-use crate::{
+use super::{
     id_proof_types::*,
     sigma_protocols::{
         common::prove as sigma_prove,
@@ -15,7 +15,7 @@ use bulletproofs::{
     set_non_membership_proof::prove as prove_set_non_membership,
     utils::Generators,
 };
-use curve_arithmetic::{Curve, Value};
+use crate::curve_arithmetic::{Curve, Value};
 use ed25519_dalek as ed25519;
 use ff::Field;
 use pedersen_scheme::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness};

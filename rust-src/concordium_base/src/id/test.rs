@@ -11,7 +11,7 @@ use crate::common::{
     types::{KeyIndex, KeyPair, TransactionTime},
     *,
 };
-use curve_arithmetic::Curve;
+use crate::curve_arithmetic::Curve;
 use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;

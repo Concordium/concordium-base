@@ -1,4 +1,4 @@
-pub use crate::impls::*;
+pub use super::impls::*;
 use anyhow::{bail, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use concordium_contracts_common::ExchangeRate;

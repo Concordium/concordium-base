@@ -1,4 +1,4 @@
-use crate::{bls12_381_g1hash::*, bls12_381_g2hash::*, curve_arithmetic::*};
+use super::{bls12_381_g1hash::*, bls12_381_g2hash::*, curve_arithmetic::*};
 use byteorder::ReadBytesExt;
 use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, EncodedPoint};

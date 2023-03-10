@@ -1,5 +1,5 @@
 use criterion::*;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use id::utils::commitment_to_share;
 use pairing::bls12_381::G1;
 use pedersen_scheme::Commitment;

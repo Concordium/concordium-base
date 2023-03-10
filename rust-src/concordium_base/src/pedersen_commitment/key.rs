@@ -1,11 +1,11 @@
 //! Commitment key type
 
-use crate::{commitment::*, randomness::*};
+use super::{commitment::*, randomness::*};
 
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 
 use crate::common::*;
-use crate::common_derive::*;
+use crate::common::derive::*;
 use rand::*;
 
 /// A commitment key is a pair of group elements that are used as a base to

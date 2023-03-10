@@ -8,5 +8,5 @@ mod public;
 mod secret;
 
 // Export everything public in ecvrf.rs
-pub use crate::ecvrf::*;
+pub use ecvrf::*;
 pub use constants::*;

@@ -1,8 +1,8 @@
 //! Implementation of set membership proof along the lines of bulletproofs
-use crate::{inner_product_proof::*, utils::*};
+use super::{inner_product_proof::*, utils::*};
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve};
+use crate::common::derive::*;
+use crate::curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve};
 use ff::Field;
 use pedersen_scheme::*;
 use rand::*;

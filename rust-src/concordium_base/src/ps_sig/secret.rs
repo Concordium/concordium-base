@@ -2,14 +2,14 @@
 
 //! A secret key
 
-use crate::{
+use super::{
     errors::{InternalError::SecretKeyLengthError, *},
     known_message::*,
     signature::*,
     unknown_message::*,
 };
 use crate::common::*;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 
 use ff::Field;
 

@@ -9,7 +9,7 @@ use curve25519_dalek::{
 };
 use sha2::{Digest, Sha512};
 
-use crate::{constants::*, errors::*, proof::*, secret::*};
+use super::{constants::*, errors::*, proof::*, secret::*};
 /// An ed25519-like public key. This has a bit stricter requirements than the
 /// signature scheme public keys, in particular points of small order are not
 /// allowed, and this is checked during serialization.

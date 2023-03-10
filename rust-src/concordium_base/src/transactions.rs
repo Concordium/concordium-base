@@ -17,7 +17,7 @@ use crate::common::{
     Serial,
 };
 use derive_more::*;
-use encrypted_transfers::types::{EncryptedAmountTransferData, SecToPubAmountTransferData};
+use crate::encrypted_transfers::types::{EncryptedAmountTransferData, SecToPubAmountTransferData};
 use id::types::{
     AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
     CredentialPublicKeys,

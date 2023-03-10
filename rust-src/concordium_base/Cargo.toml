@@ -24,6 +24,9 @@ derive_more = "0.99"
 thiserror = "1.0"
 rand = "0.7"
 num = "0.4"
+group = "0.2"
+curve25519-dalek = "3"
+zeroize = "1.1.0"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
 num-bigint = "0.4"

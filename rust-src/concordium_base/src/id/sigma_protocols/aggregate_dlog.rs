@@ -3,9 +3,9 @@
 //! logarithms $a_1 ... a_n$ public values $ y = \prod G_i^{a_i} $.
 //! This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
-use crate::sigma_protocols::common::*;
+use super::common::*;
 use crate::common::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;

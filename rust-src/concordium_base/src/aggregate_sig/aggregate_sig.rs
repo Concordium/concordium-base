@@ -1,6 +1,6 @@
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{Curve, Pairing, Value};
+use crate::common::{Serialize,SerdeBase16Serialize};
+use crate::curve_arithmetic::{Curve, Pairing, Value};
 use ff::Field;
 use id::sigma_protocols::{common::*, dlog::*};
 use rand::Rng;

@@ -4,7 +4,7 @@
 //! NB: This module is not used by the rest of the project and is only here for
 //! demonstration purposes.
 //! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
-use curve_arithmetic::Curve;
+use crate::curve_arithmetic::Curve;
 use id::sigma_protocols::{
     common::*,
     dlog::{Witness as DlogWitness, *},
@@ -67,7 +67,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use curve_arithmetic::Value;
+    use crate::curve_arithmetic::Value;
     use ff::PrimeField;
     use pairing::bls12_381::{Fr, G1};
     use rand::*;

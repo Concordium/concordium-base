@@ -1,5 +1,5 @@
 use crate::common::*;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use pedersen_scheme::Commitment;
 
 use rand::*;

@@ -1,6 +1,6 @@
 //! ed25519 secret key types.
 
-use crate::{constants::*, errors::*, public::*};
+use super::{constants::*, errors::*, public::*};
 use core::fmt::Debug;
 use crate::common::*;
 use curve25519_dalek::{constants, scalar::Scalar};
@@ -133,7 +133,7 @@ impl From<&SecretKey> for ExpandedSecretKey {
         }
     }
 }
-use crate::proof::*;
+use super::proof::*;
 
 impl ExpandedSecretKey {
     /// VRF proof with expanded secret key

@@ -1,4 +1,4 @@
-pub use crate::{errors::*, proof::*, public::*, secret::*};
+pub use super::{errors::*, proof::*, public::*, secret::*};
 use crate::common::*;
 use rand::{CryptoRng, Rng};
 

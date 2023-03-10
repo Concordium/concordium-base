@@ -3,4 +3,4 @@
 //! A value
 //! The object being commitmed to.
 
-pub use curve_arithmetic::Value;
+pub use crate::curve_arithmetic::Value;

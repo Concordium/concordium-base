@@ -4,7 +4,7 @@ extern crate criterion;
 
 use bulletproofs::{set_membership_proof, set_non_membership_proof, utils::Generators};
 use criterion::{BenchmarkId, Criterion};
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use pairing::bls12_381::G1;
 use pedersen_scheme::{CommitmentKey, Randomness};
 use rand::*;

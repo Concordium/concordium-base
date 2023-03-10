@@ -1,13 +1,13 @@
 //! Implementation of high-level protocols for encrypted transfers, combining
 //! all the building parts into a single wrapper per operation.
 #![allow(non_snake_case)]
-use crate::{proofs::enc_trans::*, types::*};
+use super::{enc_trans::*, super::types::*};
 use bulletproofs::range_proof::{
     prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
 use crate::common::types::Amount;
-use curve_arithmetic::{Curve, Value};
+use crate::curve_arithmetic::{Curve, Value};
 use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
 use id::{
     sigma_protocols::{com_eq::*, common::*, dlog::*},

@@ -5,7 +5,7 @@ extern crate criterion;
 
 use criterion::Criterion;
 use crate::common::types::Amount;
-use curve_arithmetic::Value;
+use crate::curve_arithmetic::Value;
 use elgamal::{PublicKey, SecretKey};
 use encrypted_transfers::proofs::*;
 use id::types::GlobalContext;

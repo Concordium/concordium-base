@@ -1,6 +1,6 @@
 //! An VRF Proof.
 
-use crate::{constants::*, errors::*};
+use super::{constants::*, errors::*};
 use core::fmt::Debug;
 use crate::common::*;
 use curve25519_dalek::{

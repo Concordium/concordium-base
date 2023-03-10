@@ -2,7 +2,7 @@
 use ed25519_dalek::*;
 use rand::*;
 
-use crate::dlog_ed25519::*;
+use super::dlog_ed25519::*;
 use crate::common::*;
 use ffi_helpers::*;
 use std::{convert::TryFrom, io::Cursor};

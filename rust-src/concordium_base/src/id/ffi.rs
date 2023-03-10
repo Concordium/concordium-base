@@ -1,6 +1,6 @@
 #![cfg(feature = "ffi")]
 
-use crate::{
+use super::{
     chain::{self, CdiVerificationError},
     constants::*,
     types::*,

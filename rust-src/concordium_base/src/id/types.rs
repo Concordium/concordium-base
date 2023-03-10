@@ -1,6 +1,6 @@
 //! Main types used in the identity layer, and their serialization
 //! implementations.
-use crate::{
+use super::{
     secret_sharing::Threshold,
     sigma_protocols::{
         com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
@@ -16,8 +16,8 @@ use crate::common::{
     types::{CredentialIndex, KeyIndex, KeyPair},
     *,
 };
-use crate::common_derive::*;
-use curve_arithmetic::*;
+use crate::common::derive::*;
+use crate::curve_arithmetic::*;
 use derive_more::*;
 use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
@@ -48,7 +48,7 @@ use thiserror::Error;
 
 /// NB: This includes digits of PI (starting with 314...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
-pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.dat");
+pub static PI_DIGITS: &[u8] = include_bytes!("../../data/pi-1000-digits.dat");
 
 /// This is currently the number required, since the only
 /// place these are used is for encrypted amounts.

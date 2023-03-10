@@ -1,8 +1,8 @@
 //! Logarithmic sized inner product proof used as base for the other proofs in
 //! this crate
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::common::derive::{Serialize, SerdeBase16Serialize};
+use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::RandomOracle;
 
@@ -459,7 +459,7 @@ pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve_arithmetic::Curve;
+    use crate::curve_arithmetic::Curve;
     use pairing::bls12_381::G1;
     use rand::thread_rng;
     type SomeCurve = G1;

@@ -1,5 +1,5 @@
 //! Functionality needed by the chain to verify credential deployments.
-use crate::{
+use super::{
     secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*},
     types::*,
@@ -8,7 +8,7 @@ use crate::{
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
 use crate::common::{to_bytes, types::TransactionTime};
-use curve_arithmetic::{Curve, Pairing};
+use crate::curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};

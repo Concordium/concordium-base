@@ -1,6 +1,6 @@
 //! Functionality needed by the account holder, either when interacting with the
 //! identity provider, or when interacting with the chain.
-use crate::{
+use super::{
     secret_sharing::*,
     sigma_protocols::{
         com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, common::*, dlog,
@@ -14,7 +14,7 @@ use bulletproofs::{
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal, RangeProof},
 };
 use crate::common::types::TransactionTime;
-use curve_arithmetic::{Curve, Pairing};
+use crate::curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf as prf;
 use elgamal::{multicombine, Cipher};
 use ff::Field;
@@ -1254,7 +1254,7 @@ mod tests {
 
     use crate::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*};
     use crate::common::types::{KeyIndex, KeyPair};
-    use curve_arithmetic::Curve;
+    use crate::curve_arithmetic::Curve;
     use either::Either::Left;
     use pedersen_scheme::CommitmentKey as PedersenKey;
 
@@ -1337,7 +1337,7 @@ mod tests {
 
     #[test]
     pub fn test_compute_sharing_data() {
-        use curve_arithmetic::secret_value::Value;
+        use crate::curve_arithmetic::secret_value::Value;
 
         let mut csprng = thread_rng();
 

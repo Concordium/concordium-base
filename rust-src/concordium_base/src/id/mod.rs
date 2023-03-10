@@ -14,23 +14,23 @@ pub mod types;
 pub mod utils;
 
 /// Re-export of Pedersen commitments functionality.
-pub use pedersen_scheme as pedersen_commitment;
+pub use crate::pedersen_commitment;
 
 /// Re-export of curve arithmetic.
-pub use curve_arithmetic;
+pub use crate::curve_arithmetic;
 
 /// Re-export of Elgamal encryption.
-pub use elgamal;
+pub use crate::elgamal;
 
 /// Re-export of bulletproofs.
-pub use bulletproofs::range_proof;
+pub use crate::bulletproofs::range_proof;
 
 /// Re-export the PRF key generation functionality.
-pub use dodis_yampolskiy_prf;
+pub use crate::dodis_yampolskiy_prf;
 
 /// Re-export the Pointcheval-Sanders signature scheme used by identity
 /// providers.
-pub use ps_sig;
+pub use crate::ps_sig;
 
 #[cfg(any(test, feature = "test-helpers"))]
 pub mod test;

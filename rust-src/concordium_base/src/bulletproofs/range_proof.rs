@@ -1,15 +1,15 @@
 //! Implementation of range proofs along the lines of bulletproofs
-use crate::{inner_product_proof::*, utils::*};
+use super::{inner_product_proof::*, utils::*};
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
+use crate::common::derive::*;
+use crate::curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
 use ff::{Field, PrimeField};
 use pedersen_scheme::*;
 use rand::*;
 use random_oracle::RandomOracle;
 use std::iter::once;
 
-pub use crate::utils::Generators;
+pub use super::utils::Generators;
 
 /// Bulletproof style range proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]

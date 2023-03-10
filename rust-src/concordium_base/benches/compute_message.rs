@@ -1,6 +1,6 @@
 use criterion::*;
 use crate::common::types::*;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use id::{
     constants::*,
     identity_provider::{compute_message, sign_identity_object, validate_request},

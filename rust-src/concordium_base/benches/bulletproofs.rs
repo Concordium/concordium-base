@@ -4,7 +4,7 @@
 extern crate criterion;
 
 use criterion::Criterion;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use ff::Field;
 use pairing::bls12_381::{Fr, G1};
 use pedersen_scheme::*;

@@ -7,7 +7,7 @@ use criterion::Criterion;
 
 use elgamal::*;
 
-use curve_arithmetic::Curve;
+use crate::curve_arithmetic::Curve;
 use ff::PrimeField;
 use pairing::bls12_381::{Fr, G1};
 use std::time::Duration;

@@ -1,6 +1,6 @@
 //! Functionality needed by the identity provider. This gathers together the
 //! primitives from the rest of the library into a convenient package.
-use crate::{
+use super::{
     secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
     types::*,
@@ -8,7 +8,7 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_efficient;
 use crate::common::{to_bytes, types::TransactionTime};
-use curve_arithmetic::{multiexp, Curve, Pairing};
+use crate::curve_arithmetic::{multiexp, Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey};

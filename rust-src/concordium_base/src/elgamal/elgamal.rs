@@ -1,5 +1,5 @@
-use crate::{cipher::*, public::*, secret::*};
-use curve_arithmetic::{Curve, Value};
+use super::{cipher::*, public::*, secret::*};
+use crate::curve_arithmetic::{Curve, Value};
 use ff::{Field, PrimeField};
 use rand::*;
 

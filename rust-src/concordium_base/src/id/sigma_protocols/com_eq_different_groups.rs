@@ -2,10 +2,10 @@
 //! protocol. This protocol enables one to prove that the value committed to in
 //! two commitments $C_1$ and $C_2$ in (potentially) two different groups (of
 //! the same order) is the same.
-use crate::sigma_protocols::common::*;
+use super::common::*;
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::common::derive::*;
+use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use rand::*;

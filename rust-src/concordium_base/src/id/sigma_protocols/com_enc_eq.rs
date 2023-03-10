@@ -2,10 +2,10 @@
 //! This protocol is used to prove that the encrypted value (encrypted via
 //! ElGamal) is the same as the value commited to via the Pedersen commitment.
 
-use crate::sigma_protocols::common::*;
+use super::common::*;
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::common::derive::*;
+use crate::curve_arithmetic::{multiexp, Curve};
 use elgamal::{
     Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
 };

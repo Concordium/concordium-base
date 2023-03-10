@@ -1,5 +1,5 @@
 use criterion::*;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use id::sigma_protocols::{aggregate_dlog::*, common::*};
 use pairing::bls12_381::G1;
 use rand::*;

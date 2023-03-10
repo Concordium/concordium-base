@@ -7,8 +7,8 @@
 //! When using the code needs to be thouroughly reviewed.
 
 use crate::common::*;
-use crate::common_derive::*;
-use curve_arithmetic::{multiexp, Curve};
+use crate::common::derive::*;
+use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
 use random_oracle::{Challenge, RandomOracle};
@@ -137,7 +137,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use curve_arithmetic::multiexp;
+    use crate::curve_arithmetic::multiexp;
     use ff::PrimeField;
     use pairing::bls12_381::{Fr, G1};
     use rand::*;

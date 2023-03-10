@@ -7,7 +7,7 @@ mod types;
 
 use self::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
 use crate::common::types::Amount;
-use curve_arithmetic::*;
+use crate::curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
 use rand::*;
