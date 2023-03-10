@@ -32,14 +32,10 @@ bs58 = { version = "0.4", features = ["check"] }
 leb128 = "0.2"
 
 # Local dependencies
-random_oracle = { version = "*", path = "../random_oracle/" }
-id = { version = "*", path = "../id", default-features=false }
-eddsa_ed25519 = { version = "*", path = "../eddsa_ed25519", default-features = false }
-crypto_common = { version = "*", path = "../crypto_common", features = ["encryption"] }
 concordium-contracts-common = { version = "*", path = "../../concordium-contracts-common/concordium-contracts-common", features = ["derive-serde", "sdk"] }
-encrypted_transfers = { version = "*", path = "../encrypted_transfers", default-features = false }
-aggregate_sig = {version = "0", path = "../aggregate_sig", default-features = false }
-ecvrf = { version = "*", path = "../ecvrf", default-features = false }
+
+[features]
+ffi = []
 
 [dev-dependencies]
 rand = {version = "0.7", features = ["small_rng"]}
@@ -47,3 +43,58 @@ rand = {version = "0.7", features = ["small_rng"]}
 [lib]
 name = "concordium_base"
 crate-type = ["rlib"]
+
+
+[dev-dependencies]
+criterion = "0.4"
+
+[[bench]]
+name = "hash_bench"
+harness = false
+
+[[bench]]
+name = "multiexp_bench"
+harness = false
+
+
+[[bench]]
+name = "elgamal_benchmarks"
+harness = false
+
+[[bench]]
+name = "encrypted_transfers_benchmarks"
+harness = false
+
+[[bench]]
+name = "aggregate_signatures"
+harness = false
+
+
+[[bench]]
+name = "bulletproofs"
+harness = false
+
+[[bench]]
+name = "set_proof_bench"
+harness = false
+
+[[bench]]
+name = "eddsa_benchmarks"
+harness = false
+
+[[bench]]
+name = "verify_cdi"
+harness = false
+	
+[[bench]]
+name = "aggr_dlog_commit_point"
+harness = false
+	
+[[bench]]
+name = "compute_message"
+harness = false
+required-features = ["test-helpers"]
+
+[[bench]]
+name = "commitment_to_share"
+harness = false
