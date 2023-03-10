@@ -1,6 +1,29 @@
 # Changelog
 
 ## Unreleased changes
+- Add `Display` implementation for `OwnedParameter` and `Parameter`, which uses
+  hex encoding.
+- Replace `From<Vec<u8>>` instance for `OwnedParameter`/`Parameter` with a `TryFrom`,
+  which ensures a valid length, and the unchecked method `new_unchecked`.
+  - Migrate from `From`/`Into`: Use `new_unchecked` instead (if known to be
+    valid length).
+- Make inner field in `OwnedParameter`/`Parameter` private, but add a `From`
+  implementation for getting the raw bytes.
+  - Migrate from `parameter.0`: use `parameter.into()` instead (for both of the affected
+    types).
+- For `ModuleReference`, replace `AsRef<[u8;32]>` with `AsRef<[u8]>` and make
+  inner `bytes` public.
+  - The change was necessary for internal reasons.
+  - Migrate from `module_reference.as_ref()`: use `&module_reference.bytes` instead.
+- Replace `OwnedParameter::new` with `OwnedParameter::from_serial`, which also
+  ensures a valid length.
+  - Migrate from `new(x)`: Use `from_serial(x).unwrap()` (if known to be valid length).
+- Add an `empty` method for both `OwnedParameter` and `Parameter`.
+- Implement `Default` for `Parameter`.
+- Move `AccountBalance` from concordium-std.
+- Add `to_owned` method to `EntrypointName` and `ContractName` types.
+- Implement `Serial`/`Deserial` instances for tuples with 4, 5, and 6 elements.
+- Add `checked_sub` to Amount type.
 
 ## concordium-contracts-common 5.2.0 (2023-02-08)
 
@@ -15,11 +38,6 @@
 ## concordium-contracts-common 5.1.0 (2022-12-14)
 
 - Implement `quickcheck::Arbitrary` for `Timestamp`, `AccountAddress`, `ContractAddress`, `Address`,  `ChainMetadata`, `AttributeTag`, `AttributeValue` and `OwnedPolicy`.
-- Move `AccountBalance` from concordium-std.
-- Add `to_owned` method to `EntrypointName` and `ContractName` types.
-- Implement `Serial`/`Deserial` instances for tuples with 4, 5, and 6 elements.
-- Add `checked_sub` to Amount type.
-- Add `from_bytes` and `empty` constructor methods to `OwnedParameter`.
 
 ## concordium-contracts-common 5.0.0 (2022-11-21)
 
