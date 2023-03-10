@@ -8,6 +8,10 @@
 -- to the generate Proto types.
 module Concordium.GRPC2 (
     ToProto (..),
+    BakerAddedEvent,
+    BakerKeysEvent,
+    BlockHashInput (..),
+    BlockHeightInput (..),
 )
 where
 
@@ -2068,3 +2072,63 @@ instance ToProto BlockFinalizationSummary where
                         ProtoFields.finalizers .= map toProto (Vec.toList fsFinalizers)
                     )
             )
+
+instance ToProto AccountIdentifier where
+    type Output AccountIdentifier = Proto.AccountIdentifierInput
+    toProto = \case
+        CredRegID cred -> Proto.make $ ProtoFields.credId .= toProto cred
+        AccAddress addr -> Proto.make $ ProtoFields.address .= toProto addr
+        AccIndex accIdx -> Proto.make $ ProtoFields.accountIndex .= toProto accIdx
+
+instance ToProto Transactions.BareBlockItem where
+    type Output Transactions.BareBlockItem = Proto.SendBlockItemRequest
+    toProto bbi = Proto.make $
+        case bbi of
+            Transactions.NormalTransaction aTransaction ->
+                ProtoFields.accountTransaction .= toProto aTransaction
+            Transactions.CredentialDeployment aCreation ->
+                ProtoFields.credentialDeployment .= toProto aCreation
+            Transactions.ChainUpdate uInstruction ->
+                ProtoFields.updateInstruction .= toProto uInstruction
+
+instance ToProto BlockHashInput where
+    type Output BlockHashInput = Proto.BlockHashInput
+    toProto = \case
+        Best -> Proto.make $ ProtoFields.best .= Proto.defMessage
+        LastFinal -> Proto.make $ ProtoFields.lastFinal .= Proto.defMessage
+        Given bh -> Proto.make $ ProtoFields.given .= toProto bh
+
+instance ToProto BlockHeightInput where
+    type Output BlockHeightInput = Proto.BlocksAtHeightRequest
+    toProto Relative{..} =
+        Proto.make $
+            ProtoFields.relative
+                .= Proto.make
+                    ( do
+                        ProtoFields.genesisIndex .= toProto rGenesisIndex
+                        ProtoFields.height .= toProto rBlockHeight
+                        ProtoFields.restrict .= rRestrict
+                    )
+    toProto Absolute{..} =
+        Proto.make $
+            ProtoFields.absolute .= Proto.make (ProtoFields.height .= toProto aBlockHeight)
+
+instance ToProto (BlockHashInput, InvokeContract.ContractContext) where
+    type Output (BlockHashInput, InvokeContract.ContractContext) = Proto.InvokeInstanceRequest
+    toProto (bhi, InvokeContract.ContractContext{..}) =
+        Proto.make $ do
+            ProtoFields.blockHash .= toProto bhi
+            ProtoFields.maybe'invoker .= fmap toProto ccInvoker
+            ProtoFields.instance' .= toProto ccContract
+            ProtoFields.amount .= toProto ccAmount
+            ProtoFields.entrypoint .= toProto ccMethod
+            ProtoFields.parameter .= toProto ccParameter
+            ProtoFields.energy .= toProto ccEnergy
+
+instance ToProto IpAddress where
+    type Output IpAddress = Proto.IpAddress
+    toProto ip = Proto.make $ ProtoFields.value .= ipAddress ip
+
+instance ToProto IpPort where
+    type Output IpPort = Proto.Port
+    toProto ip = Proto.make $ ProtoFields.value .= fromIntegral (ipPort ip)

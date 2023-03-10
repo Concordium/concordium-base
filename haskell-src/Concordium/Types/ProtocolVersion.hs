@@ -51,6 +51,7 @@ module Concordium.Types.ProtocolVersion (
     SomeProtocolVersion (..),
     promoteProtocolVersion,
     demoteProtocolVersion,
+    MonadProtocolVersion (..),
 
     -- * Chain parameters version
 
@@ -175,12 +176,17 @@ module Concordium.Types.ProtocolVersion (
     P6Sym0,
 ) where
 
+import Control.Monad.Except (ExceptT)
+import Control.Monad.Reader (ReaderT)
+import Control.Monad.Trans.Maybe (MaybeT)
 import Data.Aeson
 import Data.Aeson.Types
+import Data.Kind
 import Data.Serialize
 import Data.Singletons.Base.TH
-
 import Data.Word
+
+import Concordium.Utils.Serialization.Put (PutT)
 
 -- See the splice documentation in 'Parameters.hs' for an explanation of what is generated.
 $( singletons
@@ -277,6 +283,9 @@ $( singletons
         |]
  )
 
+instance ToJSON ChainParametersVersion where
+    toJSON = toJSON . chainParameterVersionToWord64
+
 deriving instance Show ProtocolVersion
 
 deriving instance Show ChainParametersVersion
@@ -299,6 +308,12 @@ protocolVersionFromWord64 4 = return P4
 protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 6 = return P6
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
+
+-- |Convert a @ChainParametersVersion@ to the corresponding 'Word64'.
+chainParameterVersionToWord64 :: ChainParametersVersion -> Word64
+chainParameterVersionToWord64 ChainParametersV0 = 0
+chainParameterVersionToWord64 ChainParametersV1 = 1
+chainParameterVersionToWord64 ChainParametersV2 = 2
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64
@@ -370,6 +385,22 @@ instance
 -- |Produce the singleton 'SProtocolVersion' from an 'IsProtocolVersion' constraint.
 protocolVersion :: IsProtocolVersion pv => SProtocolVersion pv
 protocolVersion = sing
+
+-- |Type class for monads that have an associated 'ProtocolVersion'.
+class (IsProtocolVersion (MPV m)) => MonadProtocolVersion (m :: Type -> Type) where
+    type MPV m :: ProtocolVersion
+
+instance MonadProtocolVersion m => MonadProtocolVersion (MaybeT m) where
+    type MPV (MaybeT m) = MPV m
+
+instance MonadProtocolVersion m => MonadProtocolVersion (ExceptT e m) where
+    type MPV (ExceptT e m) = MPV m
+
+instance MonadProtocolVersion m => MonadProtocolVersion (ReaderT r m) where
+    type MPV (ReaderT r m) = MPV m
+
+instance MonadProtocolVersion m => MonadProtocolVersion (PutT m) where
+    type MPV (PutT m) = MPV m
 
 -- |Produce the singleton 'SAccountVersion' from an 'IsAccountVersion' constraint.
 accountVersion :: IsAccountVersion av => SAccountVersion av

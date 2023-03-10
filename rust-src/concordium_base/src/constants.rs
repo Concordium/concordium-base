@@ -1,3 +1,6 @@
+// Re-export to avoid a breaking change.
+pub use concordium_contracts_common::constants::MAX_PARAMETER_LEN;
+
 /// Maximum size of a transaction payload.
 pub const MAX_PAYLOAD_SIZE: u32 = MAX_WASM_MODULE_SIZE + 1 + 4 + 4;
 
@@ -10,9 +13,6 @@ pub const MAX_REGISTERED_DATA_SIZE: usize = 256;
 
 /// Max allowed memo size.
 pub const MAX_MEMO_SIZE: usize = 256;
-
-/// Maximum allowed length of a smart contract parameter.
-pub const MAX_PARAMETER_LEN: usize = 65535;
 
 /// Maximum allowed size of the Wasm module to deploy on the chain.
 pub const MAX_WASM_MODULE_SIZE: u32 = 8 * 65536;

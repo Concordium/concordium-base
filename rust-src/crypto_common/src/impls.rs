@@ -1,6 +1,7 @@
 use anyhow::bail;
 use byteorder::ReadBytesExt;
 
+use concordium_contracts_common::{constants::SHA256, hashes::HashBytes};
 use ff::PrimeField;
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::bls12_381::{
@@ -276,5 +277,20 @@ impl<T: Serial> Serial for Option<T> {
                 out.put(x);
             }
         }
+    }
+}
+
+impl<Purpose> Serial for HashBytes<Purpose> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(&self.bytes)
+            .expect("Writing to buffer always succeeds.");
+    }
+}
+
+impl<Purpose> Deserial for HashBytes<Purpose> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let mut bytes = [0u8; SHA256 as usize];
+        source.read_exact(&mut bytes)?;
+        Ok(bytes.into())
     }
 }

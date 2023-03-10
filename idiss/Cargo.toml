@@ -59,9 +59,6 @@ version = "0"
 [build-dependencies]
 napi-build = "*"
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rand = "=0.7"
-
 [lib]
 name = "idiss"
 crate-type = ["cdylib", "rlib"]

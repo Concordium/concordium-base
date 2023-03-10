@@ -949,6 +949,18 @@ data AccountCredential' credTy
     | NormalAC (CredentialDeploymentValues' credTy) CredentialDeploymentCommitments
     deriving (Eq, Show, Functor)
 
+-- |Try to decode a @RawCredentialRegistrationID@. Returns a @Left@ wrapping an error
+-- message if the input could not be decoded and a @Right@ wrapping the the resulting
+-- @CredentialRegistrationID@ otherwise.
+credIdFromRaw :: RawCredentialRegistrationID -> Either String CredentialRegistrationID
+credIdFromRaw (RawCredentialRegistrationID fbs) =
+    case decode (FBS.toByteString fbs) of
+        Left err -> Left $ "Precondition violation. Invalid registration ID. " <> err
+        Right v -> return v
+
+-- |Try to decode a @RawCredentialRegistrationID@. Fails with an error message if the
+-- input could not be decoded and returns the resulting @CredentialRegistrationID@
+-- otherwise.
 unsafeCredIdFromRaw :: RawCredentialRegistrationID -> CredentialRegistrationID
 unsafeCredIdFromRaw (RawCredentialRegistrationID fbs) =
     case decode (FBS.toByteString fbs) of

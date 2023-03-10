@@ -353,6 +353,9 @@ module Concordium.Types.Parameters (
     -- The minimum amount required to join the finalization committee
     -- is given by @total staked ccd / fcpFinalizerRelativeStakeThreshold@
     fcpFinalizerRelativeStakeThreshold,
+    -- |'FinalizationCommitteeParameters' wrapped in an 'OParam'
+    -- supporting ''PTFinalizationCommitteeParameters'.
+    OFinalizationCommitteeParameters,
 
     -- * Authorizations version
 
@@ -1611,6 +1614,13 @@ instance FromJSON FinalizationCommitteeParameters where
         unless (_fcpMaxFinalizers >= _fcpMinFinalizers) $ fail "The maximum number of finalizers must be greater or equal than minimumFinalizers."
         _fcpFinalizerRelativeStakeThreshold <- o .: "finalizerRelativeStakeThreshold"
         return FinalizationCommitteeParameters{..}
+
+-- |'FinalizationCommitteeParameters', where supported by the protocol version.
+type OFinalizationCommitteeParameters (pv :: ProtocolVersion) =
+    OParam
+        'PTFinalizationCommitteeParameters
+        (ChainParametersVersionFor pv)
+        FinalizationCommitteeParameters
 
 -- * Consensus parameters
 
