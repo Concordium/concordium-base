@@ -10,8 +10,8 @@ use bulletproofs::{
     range_proof::RangeProof, set_membership_proof::SetMembershipProof,
     set_non_membership_proof::SetNonMembershipProof,
 };
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::Curve;
 use pairing::bls12_381::G1;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};

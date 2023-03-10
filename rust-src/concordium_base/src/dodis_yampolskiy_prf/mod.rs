@@ -5,6 +5,3 @@ mod errors;
 mod secret;
 
 pub use secret::*;
-
-#[macro_use]
-extern crate crypto_common_derive;

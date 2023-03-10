@@ -2,7 +2,7 @@ use crate::unknown_message::SigRetrievalRandomness;
 use curve_arithmetic::*;
 use rand::*;
 
-use crypto_common::*;
+use crate::common::*;
 
 /// Randomness used to blind a signature.
 #[derive(Debug, Eq, Serialize)]

@@ -11,12 +11,12 @@ use crate::{
 use anyhow::{anyhow, bail};
 use bulletproofs::{range_proof::RangeProof, utils::Generators};
 use byteorder::ReadBytesExt;
-pub use crypto_common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
-use crypto_common::{
+pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
+use crate::common::{
     types::{CredentialIndex, KeyIndex, KeyPair},
     *,
 };
-use crypto_common_derive::*;
+use crate::common_derive::*;
 use curve_arithmetic::*;
 use derive_more::*;
 use dodis_yampolskiy_prf as prf;

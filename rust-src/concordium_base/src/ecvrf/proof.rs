@@ -2,7 +2,7 @@
 
 use crate::{constants::*, errors::*};
 use core::fmt::Debug;
-use crypto_common::*;
+use crate::common::*;
 use curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,

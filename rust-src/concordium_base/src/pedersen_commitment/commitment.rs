@@ -2,8 +2,8 @@
 
 //! Commitment type
 
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::*;
 
 use std::ops::Deref;

@@ -6,7 +6,7 @@ use bulletproofs::range_proof::{
     prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
-use crypto_common::types::Amount;
+use crate::common::types::Amount;
 use curve_arithmetic::{Curve, Value};
 use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
 use id::{

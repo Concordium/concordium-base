@@ -2,8 +2,8 @@
 //! which enables one to prove knowledge of the discrete logarithm without
 //! revealing it.
 use crate::sigma_protocols::common::*;
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::{Curve, Value};
 use ff::Field;
 use random_oracle::{Challenge, RandomOracle};

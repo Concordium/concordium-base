@@ -7,7 +7,7 @@ mod serialize;
 pub mod types;
 mod version;
 
-pub use crate::{helpers::*, impls::*, serialize::*, version::*};
+pub use self::{helpers::*, impls::*, serialize::*, version::*};
 
 // Reexport for ease of use.
 pub use byteorder::{ReadBytesExt, WriteBytesExt};
@@ -40,6 +40,3 @@ pub use std::os::raw::c_char;
 /// Module that provides a simple API for symmetric encryption in the output
 /// formats used by Concordium.
 pub mod encryption;
-
-/// Reexport for ease of use.
-pub use crypto_common_derive as derive;

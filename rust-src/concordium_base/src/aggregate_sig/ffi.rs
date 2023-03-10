@@ -1,7 +1,7 @@
 #![cfg(feature = "ffi")]
 
 use crate::*;
-use crypto_common::*;
+use crate::common::*;
 use ffi_helpers::*;
 use id::sigma_protocols::dlog;
 use pairing::bls12_381::Bls12;

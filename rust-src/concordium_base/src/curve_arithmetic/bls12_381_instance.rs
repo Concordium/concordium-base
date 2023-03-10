@@ -1,5 +1,3 @@
-// Authors:
-
 use crate::{bls12_381_g1hash::*, bls12_381_g2hash::*, curve_arithmetic::*};
 use byteorder::ReadBytesExt;
 use ff::{Field, PrimeField};
@@ -395,7 +393,7 @@ impl Pairing for Bls12 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crypto_common::*;
+    use crate::common::*;
     use std::io::Cursor;
 
     // Check that scalar_from_bytes_helper works on small values.

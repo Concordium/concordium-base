@@ -2,7 +2,7 @@
 
 use crate::{constants::*, errors::*, public::*};
 use core::fmt::Debug;
-use crypto_common::*;
+use crate::common::*;
 use curve25519_dalek::{constants, scalar::Scalar};
 use rand::{CryptoRng, Rng};
 use sha2::{digest::Digest, Sha512};

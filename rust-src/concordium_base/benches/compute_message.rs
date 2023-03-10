@@ -1,5 +1,5 @@
 use criterion::*;
-use crypto_common::types::*;
+use crate::common::types::*;
 use curve_arithmetic::*;
 use id::{
     constants::*,

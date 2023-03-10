@@ -1,6 +1,6 @@
 //! Shared functions used by the proofs in this crate
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::Curve;
 use ff::Field;
 #[cfg(test)]

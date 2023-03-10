@@ -1,5 +1,5 @@
 use criterion::*;
-use crypto_common::{
+use crate::common::{
     types::{KeyIndex, KeyPair, TransactionTime},
     *,
 };

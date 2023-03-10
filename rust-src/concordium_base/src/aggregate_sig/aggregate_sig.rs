@@ -1,5 +1,5 @@
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::{Curve, Pairing, Value};
 use ff::Field;
 use id::sigma_protocols::{common::*, dlog::*};

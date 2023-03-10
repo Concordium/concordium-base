@@ -2,7 +2,7 @@
 
 use crate::{secret_sharing::Threshold, types::*};
 use anyhow::bail;
-use crypto_common::{
+use crate::common::{
     to_bytes,
     types::{KeyIndex, TransactionTime},
     ParseResult,
@@ -320,7 +320,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crypto_common::to_bytes;
+    use crate::common::to_bytes;
     use pairing::bls12_381::Fr;
     use rand::{thread_rng, Rng};
     use std::collections::BTreeMap;

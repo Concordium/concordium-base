@@ -8,7 +8,7 @@ use crate::{
     signature::*,
     unknown_message::*,
 };
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::*;
 
 use ff::Field;

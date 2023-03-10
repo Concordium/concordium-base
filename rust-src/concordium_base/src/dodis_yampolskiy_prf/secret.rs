@@ -1,7 +1,7 @@
 //! PRF Key type
 
 use crate::errors::{InternalError::DivisionByZero, *};
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::{Curve, Secret, Value};
 use ff::Field;
 use rand::*;

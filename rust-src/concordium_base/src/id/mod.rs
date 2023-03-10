@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate itertools;
-
 pub mod account_holder;
 pub mod anonymity_revoker;
 pub mod chain;
@@ -34,9 +31,6 @@ pub use dodis_yampolskiy_prf;
 /// Re-export the Pointcheval-Sanders signature scheme used by identity
 /// providers.
 pub use ps_sig;
-
-#[macro_use]
-extern crate crypto_common_derive;
 
 #[cfg(any(test, feature = "test-helpers"))]
 pub mod test;

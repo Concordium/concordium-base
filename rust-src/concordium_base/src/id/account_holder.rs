@@ -13,7 +13,7 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal, RangeProof},
 };
-use crypto_common::types::TransactionTime;
+use crate::common::types::TransactionTime;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf as prf;
 use elgamal::{multicombine, Cipher};
@@ -1253,7 +1253,7 @@ mod tests {
     use super::*;
 
     use crate::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*};
-    use crypto_common::types::{KeyIndex, KeyPair};
+    use crate::common::types::{KeyIndex, KeyPair};
     use curve_arithmetic::Curve;
     use either::Either::Left;
     use pedersen_scheme::CommitmentKey as PedersenKey;

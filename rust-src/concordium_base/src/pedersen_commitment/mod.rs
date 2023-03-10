@@ -5,7 +5,4 @@ mod key;
 mod randomness;
 mod value;
 
-pub use crate::{commitment::*, key::*, randomness::*, value::*};
-
-#[macro_use]
-extern crate crypto_common_derive;
+pub use self::{commitment::*, key::*, randomness::*, value::*};

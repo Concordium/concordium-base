@@ -2,8 +2,8 @@
 
 use rand::*;
 
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::Curve;
 
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]

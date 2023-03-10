@@ -1,8 +1,19 @@
 //! This module provides the random oracle replacement function needed in the
 //! sigma protocols, bulletproofs, and any other constructions. It is based on
 //! SHA3.
-use crypto_common::*;
-use crypto_common_derive::Serialize;
+//!
+//! # Using the random oracle replacement
+//! [`RandomOracle`] instances should be initialized with at domain-separation
+//! string and passed to protocols by mutable borrow. Protocols should update
+//! the state of the [`RandomOracle`], allowing them to be sequentially
+//! composed.
+//!
+//! The [`RandomOracle`] instance used to verify a proof needs to be initialised
+//! with the context used to produce the proof. Any verification of sub-proofs
+//! needs to be performed in the same order as when producing the proof.
+
+use crate::common::*;
+use crate::common_derive::Serialize;
 use curve_arithmetic::Curve;
 use sha3::{Digest, Sha3_256};
 use std::io::Write;

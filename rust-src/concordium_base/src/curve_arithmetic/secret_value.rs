@@ -3,7 +3,7 @@
 //! A thin wrapper around a scalar to indicate that it is a secret value.
 
 use crate::curve_arithmetic::*;
-use crypto_common::*;
+use crate::common::*;
 use ff::Field;
 use rand::*;
 use std::{

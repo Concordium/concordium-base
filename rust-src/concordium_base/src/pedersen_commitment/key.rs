@@ -4,8 +4,8 @@ use crate::{commitment::*, randomness::*};
 
 use curve_arithmetic::*;
 
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use rand::*;
 
 /// A commitment key is a pair of group elements that are used as a base to

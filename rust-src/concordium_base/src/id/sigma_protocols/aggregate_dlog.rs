@@ -4,7 +4,7 @@
 //! This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
 use crate::sigma_protocols::common::*;
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::{Challenge, RandomOracle};

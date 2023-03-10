@@ -1,16 +1,12 @@
 //! This library provides the API needed by the chain, the wallet, and the
 //! supporting tools to deal with encrypted amounts.
-#[macro_use]
-extern crate crypto_common_derive;
-#[macro_use]
-extern crate itertools;
 
 mod ffi;
 pub mod proofs;
-pub mod types;
+mod types;
 
-use crate::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
-use crypto_common::types::Amount;
+use self::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
+use crate::common::types::Amount;
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;

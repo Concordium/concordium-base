@@ -3,7 +3,7 @@ extern crate criterion;
 extern crate curve_arithmetic;
 
 use criterion::Criterion;
-use crypto_common::{Deserial, Serial};
+use crate::common::{Deserial, Serial};
 use curve_arithmetic::*;
 use pairing::bls12_381::{G1, G2};
 use rand::*;

@@ -2,7 +2,7 @@
 
 use rand::*;
 
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::*;
 
 /// A message to sign. The PS scheme allows signing both a known message, where

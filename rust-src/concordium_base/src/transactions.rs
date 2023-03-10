@@ -10,7 +10,7 @@ use crate::{
     constants::*,
     hashes, smart_contracts, updates,
 };
-use crypto_common::{
+use crate::common::{
     derive::{Serial, Serialize},
     types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
     Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,

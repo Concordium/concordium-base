@@ -3,7 +3,7 @@
 pub use concordium_contracts_common::{
     Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
 };
-use crypto_common::{
+use crate::common::{
     derive::{SerdeBase16Serialize, Serial, Serialize},
     deserial_string,
     types::Signature,

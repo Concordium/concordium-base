@@ -39,4 +39,6 @@ mod pedersen_commitment;
 mod ps_sig;
 
 mod dodis_yampolskiy_prf;
+
+#[cfg(feature = "ffi")]
 mod ffi_helpers;

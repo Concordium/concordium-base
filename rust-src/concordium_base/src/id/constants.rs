@@ -2,7 +2,7 @@
 //! used in various places.
 use crate::types::Attribute;
 use anyhow::bail;
-use crypto_common::{
+use crate::common::{
     Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
 };
 use curve_arithmetic::{Curve, Pairing};

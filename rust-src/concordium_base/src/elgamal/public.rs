@@ -5,8 +5,8 @@ use rand::*;
 
 use crate::{cipher::*, message::*, secret::*};
 
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::{multiexp, Curve, Value};
 
 /// Elgamal public key .

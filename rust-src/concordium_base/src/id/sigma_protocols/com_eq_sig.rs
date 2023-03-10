@@ -5,7 +5,7 @@
 //! were signed.
 
 use crate::sigma_protocols::common::*;
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::*;
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};

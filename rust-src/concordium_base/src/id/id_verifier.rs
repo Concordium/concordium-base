@@ -271,7 +271,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
 mod tests {
     use super::*;
     use crate::{constants::AttributeKind, id_prover::*};
-    use crypto_common::types::{KeyIndex, KeyPair};
+    use crate::common::types::{KeyIndex, KeyPair};
     use pairing::bls12_381::G1;
     use rand::*;
     use std::{

@@ -7,8 +7,8 @@
 //! must be the same type for both groups.
 
 use crate::sigma_protocols::common::*;
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};

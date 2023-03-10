@@ -7,7 +7,4 @@ mod message;
 mod public;
 mod secret;
 
-pub use crate::{cipher::*, elgamal::*, message::*, public::*, secret::*};
-
-#[macro_use]
-extern crate crypto_common_derive;
+pub use self::{cipher::*, elgamal::*, message::*, public::*, secret::*};

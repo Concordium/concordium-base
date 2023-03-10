@@ -1,4 +1,4 @@
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::*;
 use pedersen_scheme::Commitment;
 

@@ -4,7 +4,7 @@ use rand::*;
 extern crate criterion;
 
 use criterion::Criterion;
-use crypto_common::types::Amount;
+use crate::common::types::Amount;
 use curve_arithmetic::Value;
 use elgamal::{PublicKey, SecretKey};
 use encrypted_transfers::proofs::*;

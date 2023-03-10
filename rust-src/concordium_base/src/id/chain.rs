@@ -7,7 +7,7 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
-use crypto_common::{to_bytes, types::TransactionTime};
+use crate::common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
@@ -352,7 +352,7 @@ mod tests {
     use super::*;
 
     use crate::{account_holder::*, constants::*, identity_provider::*, test::*};
-    use crypto_common::types::{KeyIndex, KeyPair};
+    use crate::common::types::{KeyIndex, KeyPair};
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;

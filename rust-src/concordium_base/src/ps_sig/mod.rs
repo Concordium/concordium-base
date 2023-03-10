@@ -11,6 +11,3 @@ pub use public::*;
 pub use secret::*;
 pub use signature::*;
 pub use unknown_message::*;
-
-#[macro_use]
-extern crate crypto_common_derive;

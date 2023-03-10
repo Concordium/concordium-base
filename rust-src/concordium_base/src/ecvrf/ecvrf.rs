@@ -1,5 +1,5 @@
 pub use crate::{errors::*, proof::*, public::*, secret::*};
-use crypto_common::*;
+use crate::common::*;
 use rand::{CryptoRng, Rng};
 
 /// An ed25519 keypair.
@@ -36,7 +36,7 @@ impl Keypair {
 #[cfg(feature = "ffi")]
 mod expose_ffi {
     use super::*;
-    use crypto_common::size_t;
+    use crate::common::size_t;
     use ffi_helpers::*;
     use rand::thread_rng;
     use std::{cmp::Ordering, sync::Arc};

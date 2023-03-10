@@ -1,7 +1,7 @@
 //! Logarithmic sized inner product proof used as base for the other proofs in
 //! this crate
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::RandomOracle;

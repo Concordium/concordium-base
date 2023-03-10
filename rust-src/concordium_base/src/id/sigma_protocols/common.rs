@@ -1,4 +1,4 @@
-use crypto_common::*;
+use crate::common::*;
 use random_oracle::*;
 
 /// The common data known to the prover and verifier, i.e., public values and

@@ -32,21 +32,22 @@ bs58 = { version = "0.4", features = ["check"] }
 leb128 = "0.2"
 
 # Local dependencies
-concordium-contracts-common = { version = "*", path = "../../concordium-contracts-common/concordium-contracts-common", features = ["derive-serde", "sdk"] }
+[dependencies.concordium-contracts-common]
+version = "*"
+path = "../../concordium-contracts-common/concordium-contracts-common"
+features = ["derive-serde", "sdk"]
 
 [features]
+default = ["ffi"]  # TODO: Remove after development.
 ffi = []
-
-[dev-dependencies]
-rand = {version = "0.7", features = ["small_rng"]}
 
 [lib]
 name = "concordium_base"
 crate-type = ["rlib"]
 
-
 [dev-dependencies]
 criterion = "0.4"
+rand = {version = "0.7", features = ["small_rng"]}
 
 [[bench]]
 name = "hash_bench"

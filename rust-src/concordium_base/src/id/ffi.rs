@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::Context;
 use bulletproofs::utils::Generators;
-use crypto_common::{size_t, types::TransactionTime, *};
+use crate::common::{size_t, types::TransactionTime, *};
 use either::Either::{Left, Right};
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
@@ -597,7 +597,7 @@ mod test {
         secret_sharing::Threshold,
         test::*,
     };
-    use crypto_common::types::{KeyIndex, KeyPair};
+    use crate::common::types::{KeyIndex, KeyPair};
     use dodis_yampolskiy_prf as prf;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 

@@ -3,7 +3,7 @@
 //! scheduler, and the mobile wallet.
 
 use crate::*;
-use crypto_common::*;
+use crate::common::*;
 use ffi_helpers::*;
 use prelude::StdRng;
 use std::io::Cursor;

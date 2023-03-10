@@ -3,7 +3,7 @@
 //! Randomness
 //! The randomness used in commitment
 
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::*;
 
 use ff::Field;

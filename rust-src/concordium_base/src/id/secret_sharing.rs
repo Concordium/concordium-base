@@ -1,6 +1,6 @@
 //! Implementation of Shamir secret sharing.
 use anyhow::bail;
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::*;
 use ff::Field;
 use pedersen_scheme::Value as PedersenValue;

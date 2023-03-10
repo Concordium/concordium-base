@@ -7,7 +7,7 @@ use crate::{
     utils,
 };
 use bulletproofs::range_proof::verify_efficient;
-use crypto_common::{to_bytes, types::TransactionTime};
+use crate::common::{to_bytes, types::TransactionTime};
 use curve_arithmetic::{multiexp, Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
@@ -673,7 +673,7 @@ pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
 mod tests {
     use super::*;
     use crate::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*};
-    use crypto_common::types::{KeyIndex, KeyPair};
+    use crate::common::types::{KeyIndex, KeyPair};
     use ff::Field;
     use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;

@@ -47,8 +47,8 @@
 
 #![allow(non_snake_case)]
 use crate::types::CHUNK_SIZE;
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use elgamal::ChunkSize;
 use ff::Field;

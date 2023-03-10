@@ -6,7 +6,7 @@ pub use concordium_contracts_common::{
     self, ContractName, ExceedsParameterSize, OwnedContractName, OwnedParameter, OwnedReceiveName,
     ReceiveName,
 };
-use crypto_common::{
+use crate::common::{
     derive::{Serial, Serialize},
     Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
 };

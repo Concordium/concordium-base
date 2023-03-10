@@ -3,7 +3,7 @@
 //! Elgamal secret key types
 use crate::{cipher::*, message::*};
 use anyhow::{bail, Result};
-use crypto_common::*;
+use crate::common::*;
 use curve_arithmetic::{Curve, Value};
 use ff::Field;
 use rand::*;

@@ -1,7 +1,7 @@
 //! This module provides common types and constants for encrypted transfers.
 use crate::proofs;
 use bulletproofs::range_proof::*;
-use crypto_common::{types::Amount, *};
+use crate::common::{types::Amount, *};
 use curve_arithmetic::*;
 use elgamal::*;
 use id::sigma_protocols::common::*;

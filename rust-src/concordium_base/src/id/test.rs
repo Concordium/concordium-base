@@ -7,7 +7,7 @@ use crate::{
     secret_sharing::Threshold,
     types::*,
 };
-use crypto_common::{
+use crate::common::{
     types::{KeyIndex, KeyPair, TransactionTime},
     *,
 };

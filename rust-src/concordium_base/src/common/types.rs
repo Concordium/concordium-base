@@ -10,7 +10,7 @@ use concordium_contracts_common::{
     ContractAddress, ContractName, OwnedContractName, OwnedParameter, OwnedReceiveName, Parameter,
     ReceiveName,
 };
-use crypto_common_derive::Serialize;
+use crate::common_derive::Serialize;
 use derive_more::{Display, From, FromStr, Into};
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
 /// Index of an account key that is to be used.

@@ -6,8 +6,8 @@
 //! This module is currently not used, and is only here as a reference.
 //! When using the code needs to be thouroughly reviewed.
 
-use crypto_common::*;
-use crypto_common_derive::*;
+use crate::common::*;
+use crate::common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
