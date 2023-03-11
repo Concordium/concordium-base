@@ -1,10 +1,11 @@
-extern crate proc_macro;
-extern crate syn;
 #[macro_use]
 extern crate quote;
+use proc_macro::TokenStream;
 use syn::spanned::Spanned;
 
-use proc_macro::TokenStream;
+fn get_root() -> proc_macro2::TokenStream {
+    quote!( concordium_base )
+}
 
 #[proc_macro_derive(SerdeBase16Serialize)]
 pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
@@ -28,18 +29,19 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     let ident = format_ident!("GenericSerializerType", span = span);
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
+    let root = get_root();
     let gen = quote! {
         #[automatically_derived]
-        impl #serial_impl_generics crate::common::SerdeSerialize for #name #ty_generics #where_clauses {
-            fn serialize<#ident: crate::common::SerdeSerializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
-                crate::common::base16_encode(self, #ident_serializer)
+        impl #serial_impl_generics #root::common::SerdeSerialize for #name #ty_generics #where_clauses {
+            fn serialize<#ident: #root::common::SerdeSerializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
+                #root::common::base16_encode(self, #ident_serializer)
             }
         }
 
         #[automatically_derived]
-        impl #deserial_impl_generics crate::common::SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
-            fn deserialize<#ident: crate::common::SerdeDeserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
-                crate::common::base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
+        impl #deserial_impl_generics #root::common::SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
+            fn deserialize<#ident: #root::common::SerdeDeserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
+                #root::common::base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
         }
     };
@@ -64,21 +66,21 @@ pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenS
         .params
         .push(syn::GenericParam::Lifetime(lifetime.clone()));
     let (deserial_impl_generics, _, _) = deserial_generics.split_for_impl();
-
+    let root = get_root();
     let ident = format_ident!("GenericSerializerType", span = span);
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
     let gen = quote! {
         #[automatically_derived]
-        impl #serial_impl_generics crate::common::SerdeSerialize for #name #ty_generics #where_clauses {
-            fn serialize<#ident: crate::common::SerdeSerializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
+        impl #serial_impl_generics #root::common::SerdeSerialize for #name #ty_generics #where_clauses {
+            fn serialize<#ident: #root::common::SerdeSerializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
                 base16_ignore_length_encode(self, #ident_serializer)
             }
         }
 
         #[automatically_derived]
-        impl #deserial_impl_generics crate::common::SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
-            fn deserialize<#ident: crate::common::SerdeDeserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
+        impl #deserial_impl_generics #root::common::SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
+            fn deserialize<#ident: #root::common::SerdeDeserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
                 base16_ignore_length_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
         }
@@ -127,6 +129,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     let ident = format_ident!("GenericReaderType", span = span);
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
+    let root = get_root();
 
     if let syn::Data::Struct(ref data) = ast.data {
         let mut tokens = proc_macro2::TokenStream::new();
@@ -138,7 +141,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crate::common::deserial_vector_no_length(#source, usize::try_from(len)?)?
+                        #root::common::deserial_vector_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
@@ -146,7 +149,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crate::common::deserial_map_no_length(#source, usize::try_from(len)?)?
+                        #root::common::deserial_map_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
@@ -154,7 +157,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crate::common::deserial_set_no_length(#source, usize::try_from(len)?)?
+                        #root::common::deserial_set_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
@@ -162,13 +165,13 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crate::common::deserial_string(#source, usize::try_from(len)?)?
+                        #root::common::deserial_string(#source, usize::try_from(len)?)?
                     };
                 });
             } else {
                 let ty = &f.ty;
                 tokens.extend(quote! {
-                    let #ident = <#ty as crate::common::Deserial>::deserial(#source)?;
+                    let #ident = <#ty as #root::common::Deserial>::deserial(#source)?;
                 });
             }
             names.extend(quote!(#ident,))
@@ -181,9 +184,9 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics crate::common::Deserial for #name #ty_generics #where_clauses {
+                    impl #impl_generics #root::common::Deserial for #name #ty_generics #where_clauses {
                         #[allow(non_snake_case)]
-                        fn deserial<#ident: crate::common::ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
+                        fn deserial<#ident: #root::common::ReadBytesExt>(#source: &mut #ident) -> #root::common::ParseResult<Self> {
                             use std::convert::TryFrom;
                             #tokens
                             Ok(#name{#names})
@@ -198,8 +201,8 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics crate::common::Deserial for #name #ty_generics #where_clauses {
-                        fn deserial<#ident: crate::common::ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
+                    impl #impl_generics #root::common::Deserial for #name #ty_generics #where_clauses {
+                        fn deserial<#ident: #root::common::ReadBytesExt>(#source: &mut #ident) -> #root::common::ParseResult<Self> {
                             use std::convert::TryFrom;
                             #tokens
                             Ok(#name(#names))
@@ -233,6 +236,8 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
+    let root = get_root();
+
     let out = format_ident!("out");
     if let syn::Data::Struct(ref data) = ast.data {
         let gen = match data.fields {
@@ -245,28 +250,28 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crate::common::serial_vector_no_length(&self.#ident, #out);
+                            #root::common::serial_vector_no_length(&self.#ident, #out);
                         });
                     } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crate::common::serial_map_no_length(&self.#ident, #out);
+                            #root::common::serial_map_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crate::common::serial_set_no_length(&self.#ident, #out);
+                            #root::common::serial_set_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crate::common::serial_string(self.#ident.as_str(), #out);
+                            #root::common::serial_string(self.#ident.as_str(), #out);
                         })
                     } else {
                         body.extend(quote! {
@@ -276,8 +281,8 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics crate::common::Serial for #name #ty_generics #where_clauses {
-                        fn serial<#ident: crate::common::Buffer>(&self, #out: &mut #ident) {
+                    impl #impl_generics #root::common::Serial for #name #ty_generics #where_clauses {
+                        fn serial<#ident: #root::common::Buffer>(&self, #out: &mut #ident) {
                             #body
                         }
                     }
@@ -332,7 +337,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 quote! {
                     #[automatically_derived]
                     impl #impl_generics Serial for #name #ty_generics #where_clauses {
-                        fn serial<#ident: crate::common::Buffer>(&self, #out: &mut #ident) {
+                        fn serial<#ident: #root::common::Buffer>(&self, #out: &mut #ident) {
                             let #name( #names ) = self;
                             #body
                         }

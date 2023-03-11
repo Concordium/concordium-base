@@ -4,12 +4,12 @@ use crossterm::{
     execute,
     terminal::{Clear, ClearType},
 };
-use crypto_common::*;
-use curve_arithmetic::Curve;
+use concordium_base::{common::*, ps_sig};
+use concordium_base::curve_arithmetic::Curve;
 use dialoguer::{Confirm, Input};
-use elgamal::{PublicKey, SecretKey};
+use concordium_base::elgamal::{PublicKey, SecretKey};
 use hmac::{Hmac, Mac};
-use id::types::*;
+use concordium_base::id::types::*;
 use keygen_bls::{keygen_bls, keygen_bls_deprecated};
 use pairing::bls12_381::{Bls12, Fr, G1, G2};
 use sha2::Sha512;
@@ -285,7 +285,7 @@ pub fn read_words_from_file(
 
 fn handle_generate_update_keys(kgup: KeygenGovernance) -> Result<(), String> {
     let mut csprng = rand::thread_rng();
-    let keypair = crypto_common::types::KeyPair::generate(&mut csprng);
+    let keypair = concordium_base::common::types::KeyPair::generate(&mut csprng);
     let public_bytes = keypair.public.to_bytes();
     let sig = keypair.sign(&public_bytes);
     let level_str = match kgup.level {

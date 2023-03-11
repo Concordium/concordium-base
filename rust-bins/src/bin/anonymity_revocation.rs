@@ -1,11 +1,10 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::*;
-use crypto_common_derive::*;
-use curve_arithmetic::{Curve, Value};
-use dodis_yampolskiy_prf as prf;
-use elgamal::{decrypt_from_chunks_given_generator, Message};
-use id::{anonymity_revoker::*, constants::ArCurve, types::*};
+use concordium_base::{common::*, elgamal};
+use concordium_base::curve_arithmetic::{Curve, Value};
+use concordium_base::dodis_yampolskiy_prf as prf;
+use concordium_base::elgamal::{decrypt_from_chunks_given_generator, Message};
+use concordium_base::id::{anonymity_revoker::*, constants::ArCurve, types::*};
 use serde_json::json;
 use std::{
     convert::TryFrom,
@@ -190,7 +189,7 @@ macro_rules! succeed_or_die {
 }
 
 fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
-    let prf_wrapper: PrfWrapper<ExampleCurve> = {
+    let prf_wrapper: PrfWrapper<ArCurve> = {
         let file_name = rid.prf_key;
         match read_json_from_file(file_name) {
             Ok(v) => v,
@@ -199,7 +198,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
             }
         }
     };
-    let global_context: Versioned<GlobalContext<ExampleCurve>> = {
+    let global_context: Versioned<GlobalContext<ArCurve>> = {
         let file_name = rid.global_context;
         match read_json_from_file(file_name) {
             Ok(v) => v,
@@ -212,7 +211,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
         return Err("The version of the GlobalContext should be 0".to_owned());
     }
     let global_context = global_context.value;
-    let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = succeed_or_die!(read_json_from_file(rid.ar_record), e => "Could not read ArRecord due to {}");
+    let ar_record: Versioned<AnonymityRevocationRecord<ArCurve>> = succeed_or_die!(read_json_from_file(rid.ar_record), e => "Could not read ArRecord due to {}");
 
     if ar_record.version != VERSION_0 {
         return Err("The version of the ArRecord should be 0.".to_owned());
@@ -262,7 +261,7 @@ fn decrypt_ar_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
             // try to decrypt
             let parsed = succeed_or_die!(serde_json::from_slice(&data), e => "Could not parse encrypted file {}");
             let pass = succeed_or_die!(rpassword::prompt_password("Enter password to decrypt AR credentials: "), e => "Could not read password {}.");
-            let decrypted = succeed_or_die!(crypto_common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt AR credentials. Most likely the password you provided is incorrect {}.");
+            let decrypted = succeed_or_die!(concordium_base::common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt AR credentials. Most likely the password you provided is incorrect {}.");
             serde_json::from_slice(&decrypted).map_err(|_| {
                 "Could not decrypt AR credentials. Most likely the password you provided is \
                  incorrect."
@@ -274,7 +273,7 @@ fn decrypt_ar_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
 
 /// Decrypt encIdCredPubShare
 fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
-    let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(dcr.credential), e => "Could not read credential from provided file because {}");
+    let credential: Versioned<AccountCredentialValues<ArCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(dcr.credential), e => "Could not read credential from provided file because {}");
 
     if credential.version != VERSION_0 {
         return Err("The version of the credential should be 0".to_owned());
@@ -287,7 +286,7 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
     };
 
     let ar_data = credential.ar_data;
-    let ar: ArData<ExampleCurve> = succeed_or_die!(decrypt_ar_data(&dcr.ar_private), e => "Could not read anonymity revoker secret keys due to {}");
+    let ar: ArData<ArCurve> = succeed_or_die!(decrypt_ar_data(&dcr.ar_private), e => "Could not read anonymity revoker secret keys due to {}");
 
     let single_ar_data = succeed_or_die!(
         ar_data.get(&ar.public_ar_info.ar_identity),
@@ -311,21 +310,21 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
 
 /// Decrypt encPrfKeyShare
 fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
-    let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = succeed_or_die!(read_json_from_file(dcr.ar_record), e => "Could not read ArRecord due to {}");
+    let ar_record: Versioned<AnonymityRevocationRecord<ArCurve>> = succeed_or_die!(read_json_from_file(dcr.ar_record), e => "Could not read ArRecord due to {}");
 
     if ar_record.version != VERSION_0 {
         return Err("The version of the ArRecord should be 0.".to_owned());
     }
     let ar_record = ar_record.value;
 
-    let global_context: Versioned<GlobalContext<ExampleCurve>> = succeed_or_die!(read_json_from_file(dcr.global_context), e => "Could not read global context due to {}");
+    let global_context: Versioned<GlobalContext<ArCurve>> = succeed_or_die!(read_json_from_file(dcr.global_context), e => "Could not read global context due to {}");
     if global_context.version != VERSION_0 {
         return Err("The version of the GlobalContext should be 0.".to_owned());
     }
     let global_context = global_context.value;
 
     let ar_data = ar_record.ar_data;
-    let ar: ArData<ExampleCurve> = succeed_or_die!(decrypt_ar_data(&dcr.ar_private), e => "Could not read AR secret keys due to {}");
+    let ar: ArData<ArCurve> = succeed_or_die!(decrypt_ar_data(&dcr.ar_private), e => "Could not read AR secret keys due to {}");
 
     let single_ar_data = succeed_or_die!(
         ar_data.get(&ar.public_ar_info.ar_identity),
@@ -352,7 +351,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
 }
 
 fn handle_combine_id(cmb: Combine) -> Result<(), String> {
-    let credential: Versioned<AccountCredentialValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential from provided file because {}");
+    let credential: Versioned<AccountCredentialValues<ArCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential from provided file because {}");
 
     if credential.version != VERSION_0 {
         return Err("The version of the credential should be 0".to_owned());
@@ -377,9 +376,9 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
         ));
     }
 
-    let mut ar_decrypted_data_vec: Vec<ChainArDecryptedData<ExampleCurve>> =
+    let mut ar_decrypted_data_vec: Vec<ChainArDecryptedData<ArCurve>> =
         Vec::with_capacity(shares_values.len());
-    let mut shares: Vec<(ArIdentity, Message<ExampleCurve>)> =
+    let mut shares: Vec<(ArIdentity, Message<ArCurve>)> =
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
@@ -423,7 +422,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 }
 
 fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
-    let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = succeed_or_die!(read_json_from_file(cmb.ar_record), e => "Could not read ArRecord due to {}");
+    let ar_record: Versioned<AnonymityRevocationRecord<ArCurve>> = succeed_or_die!(read_json_from_file(cmb.ar_record), e => "Could not read ArRecord due to {}");
 
     if ar_record.version != VERSION_0 {
         return Err("The version of the ArRecord should be 0.".to_owned());
@@ -443,9 +442,9 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
         ));
     }
 
-    let mut ar_decrypted_data_vec: Vec<IpArDecryptedData<ExampleCurve>> =
+    let mut ar_decrypted_data_vec: Vec<IpArDecryptedData<ArCurve>> =
         Vec::with_capacity(shares_values.len());
-    let mut shares: Vec<(ArIdentity, Value<ExampleCurve>)> =
+    let mut shares: Vec<(ArIdentity, Value<ArCurve>)> =
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {

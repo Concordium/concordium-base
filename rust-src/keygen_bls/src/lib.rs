@@ -1,6 +1,6 @@
 //! Generate a private key in a deterministic way from a secret seed and key
 //! description.
-use curve_arithmetic::Curve;
+use concordium_base::curve_arithmetic::Curve;
 use ff::{Field, PrimeField};
 use hkdf::Hkdf;
 use pairing::bls12_381::{Fr, FrRepr, G1};

@@ -2,9 +2,9 @@ use anyhow::Context;
 use chrono::TimeZone;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{types::TransactionTime, *};
+use concordium_base::common::{types::TransactionTime, *};
 use dialoguer::Input;
-use id::{
+use concordium_base::id::{
     constants::{ArCurve, AttributeKind, IpPairing},
     identity_provider::*,
     types::*,

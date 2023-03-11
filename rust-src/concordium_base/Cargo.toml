@@ -56,7 +56,7 @@ version = "*"
 path = "../concordium_base_derive"
 
 [features]
-default = ["ffi"]  # TODO: Remove after development.
+default = ["encryption", "ffi"]  # TODO: Remove after development.
 ffi = []
 internal-test-helpers = []
 encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]

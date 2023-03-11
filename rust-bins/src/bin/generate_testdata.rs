@@ -1,13 +1,13 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{
+use concordium_base::{common::{
     types::{KeyIndex, KeyPair, TransactionTime},
     *,
-};
-use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf as prf;
+}, ps_sig};
+use concordium_base::curve_arithmetic::{Curve, Pairing};
+use concordium_base::dodis_yampolskiy_prf as prf;
 use either::{Left, Right};
-use id::{
+use concordium_base::id::{
     account_holder::*,
     constants::{ArCurve, IpPairing, *},
     identity_provider::*,
