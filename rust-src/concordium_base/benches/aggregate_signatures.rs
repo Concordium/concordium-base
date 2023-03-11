@@ -1,5 +1,4 @@
-use aggregate_sig::*;
-
+use concordium_base::aggregate_sig::*;
 use criterion::*;
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, Rng};

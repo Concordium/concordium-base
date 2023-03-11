@@ -166,7 +166,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         csprng: &mut R,
         f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
-        use elgamal::SecretKey;
+        use crate::elgamal::SecretKey;
         let sk = SecretKey::generate_all(csprng);
         let public_key = ElGamalPublicKey::from(&sk);
         let comm_key = CommitmentKey::generate(csprng);

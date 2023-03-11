@@ -1,5 +1,5 @@
 use criterion::*;
-use crate::curve_arithmetic::*;
+use concordium_base::curve_arithmetic::*;
 use concordium_base::id::utils::commitment_to_share;
 use pairing::bls12_381::G1;
 use concordium_base::pedersen_commitment::Commitment;

@@ -1,21 +1,23 @@
-use criterion::*;
-use crate::common::{
-    types::{KeyIndex, KeyPair, TransactionTime},
-    *,
+use concordium_base::{
+    common::{
+        types::{KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    dodis_yampolskiy_prf as prf,
+    elgamal::{PublicKey, SecretKey},
+    id::{
+        account_holder::*,
+        anonymity_revoker::*,
+        chain::*,
+        constants::{ArCurve, BaseField, *},
+        identity_provider::*,
+        secret_sharing::Threshold,
+        types::*,
+    },
 };
-use dodis_yampolskiy_prf as prf;
+use criterion::*;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
-use elgamal::{PublicKey, SecretKey};
-use concordium_base::id::{
-    account_holder::*,
-    anonymity_revoker::*,
-    chain::*,
-    constants::{ArCurve, BaseField, *},
-    identity_provider::*,
-    secret_sharing::Threshold,
-    types::*,
-};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom, io::Cursor};
@@ -31,8 +33,8 @@ const EXPIRY: TransactionTime = TransactionTime {
 fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
 
-    let ip_secret_key = crate::ps_sig::SecretKey::<Bls12>::generate(20, &mut csprng);
-    let ip_public_key = crate::ps_sig::PublicKey::from(&ip_secret_key);
+    let ip_secret_key = concordium_base::ps_sig::SecretKey::<Bls12>::generate(20, &mut csprng);
+    let ip_public_key = concordium_base::ps_sig::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(&mut csprng);
 
     let ah_info = CredentialHolderInfo::<ArCurve> {
@@ -98,7 +100,7 @@ fn bench_parts(c: &mut Criterion) {
         cred_holder_info: ah_info,
         prf_key,
     };
-    let randomness = crate::ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+    let randomness = concordium_base::ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let alist = ExampleAttributeList {

@@ -210,13 +210,13 @@ mod tests {
                 let mut wrong_cmm = com_mult;
                 for i in 0..3 {
                     let tmp = wrong_cmm.cmms[i];
-                    let v = pedersen_scheme::Value::<G1>::generate(csprng);
+                    let v = crate::pedersen_commitment::Value::<G1>::generate(csprng);
                     wrong_cmm.cmms[i] = wrong_cmm.cmm_key.commit(&v, csprng).0;
                     assert!(!verify(&mut ro.split(), &wrong_cmm, &proof));
                     wrong_cmm.cmms[i] = tmp;
                 }
 
-                wrong_cmm.cmm_key = pedersen_scheme::CommitmentKey::generate(csprng);
+                wrong_cmm.cmm_key = crate::pedersen_commitment::CommitmentKey::generate(csprng);
 
                 assert!(!verify(&mut ro.split(), &wrong_cmm, &proof))
             })

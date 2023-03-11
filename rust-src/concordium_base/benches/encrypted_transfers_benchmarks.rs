@@ -3,14 +3,16 @@ use rand::*;
 #[macro_use]
 extern crate criterion;
 
+use concordium_base::random_oracle::*;
+use concordium_base::{
+    common::types::Amount,
+    curve_arithmetic::Value,
+    elgamal::{PublicKey, SecretKey},
+    encrypted_transfers::proofs::*,
+    id::types::GlobalContext,
+};
 use criterion::Criterion;
-use crate::common::types::Amount;
-use crate::curve_arithmetic::Value;
-use elgamal::{PublicKey, SecretKey};
-use encrypted_transfers::proofs::*;
-use concordium_base::id::types::GlobalContext;
 use pairing::bls12_381::G1;
-use crate::random_oracle::*;
 use std::time::Duration;
 
 pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {

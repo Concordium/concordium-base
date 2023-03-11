@@ -32,5 +32,6 @@ pub use crate::dodis_yampolskiy_prf;
 /// providers.
 pub use crate::ps_sig;
 
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "internal-test-helpers"))]
+#[doc(hidden)]
 pub mod test;

@@ -5,9 +5,9 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-use elgamal::*;
+use concordium_base::elgamal::*;
 
-use crate::curve_arithmetic::Curve;
+use concordium_base::curve_arithmetic::Curve;
 use ff::PrimeField;
 use pairing::bls12_381::{Fr, G1};
 use std::time::Duration;

@@ -297,7 +297,7 @@ mod test {
             shares.shuffle(&mut csprng);
             shares.truncate(threshold as usize);
             let rand_elm = shares.choose_mut(&mut csprng).unwrap();
-            rand_elm.1 = curve_arithmetic::secret_value::Value::generate(&mut csprng);
+            rand_elm.1 = crate::curve_arithmetic::Value::generate(&mut csprng);
 
             let revealed_data: Fr = reveal::<_, G1>(&shares);
             assert_ne!(revealed_data, secret);

@@ -347,6 +347,16 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             encexp2: commit_encexp2,
         })
     }
+
+
+    #[cfg(test)]
+    fn with_valid_data<R: rand::Rng>(
+        _data_size: usize,
+        _csprng: &mut R,
+        _f: impl FnOnce(Self, Self::SecretData, &mut R),
+    ) {
+        unimplemented!("Tested in a different way.")
+    }
 }
 
 #[cfg(test)]
@@ -360,7 +370,7 @@ mod tests {
     impl<C: Curve> EncTrans<C> {
         fn with_valid_data<R: Rng>(
             rng: &mut R,
-            f: impl FnOnce(Self, <Self as SigmaProtocol>::SecretData, &mut R) -> (),
+            f: impl FnOnce(Self, <Self as SigmaProtocol>::SecretData, &mut R),
         ) {
             let sk = SecretKey::generate_all(rng);
             let pk = PublicKey::from(&sk);

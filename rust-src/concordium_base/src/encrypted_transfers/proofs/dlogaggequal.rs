@@ -132,6 +132,15 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         }
         Some((dlog_point, agg_points))
     }
+
+    #[cfg(test)]
+    fn with_valid_data<R: rand::Rng>(
+        _data_size: usize,
+        _csprng: &mut R,
+        _f: impl FnOnce(Self, Self::SecretData, &mut R),
+    ) {
+        unimplemented!("Tested in a different way.")
+    }
 }
 
 #[cfg(test)]

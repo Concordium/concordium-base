@@ -210,7 +210,6 @@ pub fn decrypt_from_chunks_given_table<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elgamal::message::*;
     use ff::Field;
     use pairing::bls12_381::{G1, G2};
     use rand::{rngs::ThreadRng, Rng};

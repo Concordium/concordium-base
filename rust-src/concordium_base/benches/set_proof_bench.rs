@@ -2,13 +2,13 @@
 #[macro_use]
 extern crate criterion;
 
-use bulletproofs::{set_membership_proof, set_non_membership_proof, utils::Generators};
+use concordium_base::bulletproofs::{set_membership_proof, set_non_membership_proof, utils::Generators};
 use criterion::{BenchmarkId, Criterion};
-use crate::curve_arithmetic::*;
+use concordium_base::curve_arithmetic::*;
 use pairing::bls12_381::G1;
 use concordium_base::pedersen_commitment::{CommitmentKey, Randomness};
 use rand::*;
-use crate::random_oracle::RandomOracle;
+use concordium_base::random_oracle::RandomOracle;
 use std::time::Duration;
 
 #[allow(non_snake_case)]

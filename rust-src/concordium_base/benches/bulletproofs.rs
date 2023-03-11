@@ -3,17 +3,17 @@
 #[macro_use]
 extern crate criterion;
 
+use concordium_base::random_oracle::RandomOracle;
+use concordium_base::{
+    bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators},
+    curve_arithmetic::*,
+    pedersen_commitment::*,
+};
 use criterion::Criterion;
-use crate::curve_arithmetic::*;
 use ff::Field;
 use pairing::bls12_381::{Fr, G1};
-use concordium_base::pedersen_commitment::*;
 use rand::*;
-use crate::random_oracle::RandomOracle;
-
 use std::time::Duration;
-
-use bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators};
 
 type SomeCurve = G1;
 type SomeField = Fr;

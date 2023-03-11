@@ -937,7 +937,7 @@ mod tests {
         // let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
-        let val = curve_arithmetic::Value::<ArCurve>::generate(&mut csprng);
+        let val = crate::curve_arithmetic::Value::<ArCurve>::generate(&mut csprng);
         let (cmm_prf, _) = context
             .global_context
             .on_chain_commitment_key

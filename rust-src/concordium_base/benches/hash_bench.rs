@@ -1,9 +1,8 @@
 #[macro_use]
 extern crate criterion;
-extern crate curve_arithmetic;
 
 use criterion::Criterion;
-use crate::curve_arithmetic::*;
+use concordium_base::curve_arithmetic::*;
 use pairing::bls12_381::G1;
 use rand::*;
 
@@ -17,7 +16,7 @@ macro_rules! rand_m_of_length {
     }};
 }
 
-pub fn bench_hash_to_curve(c: &mut Criterion) {
+fn bench_hash_to_curve(c: &mut Criterion) {
     let mut csprng = thread_rng();
     let msg = rand_m_of_length!(1000, csprng);
     c.bench_function("hash_to_g1", move |b| b.iter(|| G1::hash_to_group(&msg)));

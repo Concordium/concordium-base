@@ -1,10 +1,9 @@
 #[macro_use]
 extern crate criterion;
-extern crate curve_arithmetic;
 
 use criterion::Criterion;
-use crate::common::{Deserial, Serial};
-use crate::curve_arithmetic::*;
+use concordium_base::common::{Deserial, Serial};
+use concordium_base::curve_arithmetic::*;
 use pairing::bls12_381::{G1, G2};
 use rand::*;
 

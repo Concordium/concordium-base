@@ -51,6 +51,7 @@ path = "../concordium_base_derive"
 [features]
 default = ["ffi"]  # TODO: Remove after development.
 ffi = []
+internal-test-helpers = []
 
 [lib]
 name = "concordium_base"
@@ -105,7 +106,7 @@ harness = false
 [[bench]]
 name = "compute_message"
 harness = false
-required-features = ["test-helpers"]
+required-features = ["internal-test-helpers"]
 
 [[bench]]
 name = "commitment_to_share"

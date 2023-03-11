@@ -2,7 +2,7 @@
 extern crate criterion;
 
 use criterion::Criterion;
-use crate::curve_arithmetic::*;
+use concordium_base::curve_arithmetic::*;
 use pairing::bls12_381::G1;
 use rand::*;
 
