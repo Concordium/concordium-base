@@ -4,8 +4,10 @@ use core::fmt::Debug;
 use rand::*;
 
 use super::{cipher::*, message::*, secret::*};
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve, Value};
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve, Value},
+};
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize)]

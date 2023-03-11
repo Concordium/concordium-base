@@ -1,5 +1,4 @@
-use crate::common::*;
-use crate::random_oracle::*;
+use crate::{common::*, random_oracle::*};
 use itertools::izip;
 
 /// The common data known to the prover and verifier, i.e., public values and

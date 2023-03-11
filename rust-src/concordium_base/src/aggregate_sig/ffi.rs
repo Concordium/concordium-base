@@ -1,12 +1,9 @@
 #![cfg(feature = "ffi")]
 
 use super::*;
-use crate::common::*;
-use crate::ffi_helpers::*;
-use crate::id::sigma_protocols::dlog;
+use crate::{common::*, ffi_helpers::*, id::sigma_protocols::dlog, random_oracle::RandomOracle};
 use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
-use crate::random_oracle::RandomOracle;
 use std::{cmp::Ordering, slice};
 
 #[no_mangle]
@@ -187,20 +184,18 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
         unsafe { slice::from_raw_parts(pks_ptr, len) }
     };
 
-    let pks = 
-        pks_ptrs
-            .iter()
-            .zip(pks_lens_.iter())
-            .map(|(&ptr, &pk_len)| {
-                let pk_set: &[*const PublicKey<Bls12>] = if pk_len == 0 {
-                    &[]
-                } else {
-                    unsafe {slice::from_raw_parts(ptr, pk_len)}
-                };
-                let res: Vec<PublicKey<Bls12>> = pk_set.iter().map(|pk| *from_ptr!(*pk)).collect();
-                res
-            })
-    ;
+    let pks = pks_ptrs
+        .iter()
+        .zip(pks_lens_.iter())
+        .map(|(&ptr, &pk_len)| {
+            let pk_set: &[*const PublicKey<Bls12>] = if pk_len == 0 {
+                &[]
+            } else {
+                unsafe { slice::from_raw_parts(ptr, pk_len) }
+            };
+            let res: Vec<PublicKey<Bls12>> = pk_set.iter().map(|pk| *from_ptr!(*pk)).collect();
+            res
+        });
 
     let m_pk_pairs: Vec<(&[u8], Vec<PublicKey<Bls12>>)> =
         ms.into_iter().zip(pks.into_iter()).collect();

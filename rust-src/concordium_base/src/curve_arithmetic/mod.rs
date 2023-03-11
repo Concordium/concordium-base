@@ -7,8 +7,8 @@ mod bls12_381_instance;
 pub mod secret_value;
 pub use secret_value::{Secret, Value};
 
-use byteorder::ReadBytesExt;
 use crate::common::{Serial, Serialize};
+use byteorder::ReadBytesExt;
 use ff::{Field, PrimeField};
 use rand::*;
 use std::{borrow::Borrow, fmt::Debug};

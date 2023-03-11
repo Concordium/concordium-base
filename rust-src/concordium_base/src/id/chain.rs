@@ -5,14 +5,16 @@ use super::{
     types::*,
     utils,
 };
-use crate::bulletproofs::range_proof::verify_less_than_or_equal;
+use crate::{
+    bulletproofs::range_proof::verify_less_than_or_equal,
+    common::{to_bytes, types::TransactionTime},
+    curve_arithmetic::{Curve, Pairing},
+    pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
+    random_oracle::RandomOracle,
+};
 use core::fmt::{self, Display};
-use crate::common::{to_bytes, types::TransactionTime};
-use crate::curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
-use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
-use crate::random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -351,8 +353,10 @@ fn pok_sig_verifier<
 mod tests {
     use super::*;
 
-    use crate::id::{account_holder::*, constants::*, identity_provider::*, test::*};
-    use crate::common::types::{KeyIndex, KeyPair};
+    use crate::{
+        common::types::{KeyIndex, KeyPair},
+        id::{account_holder::*, constants::*, identity_provider::*, test::*},
+    };
     use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;

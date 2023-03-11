@@ -6,14 +6,16 @@ use super::{
     types::*,
     utils,
 };
-use crate::bulletproofs::range_proof::verify_efficient;
-use crate::common::{to_bytes, types::TransactionTime};
-use crate::curve_arithmetic::{multiexp, Curve, Pairing};
-use crate::elgamal::multicombine;
+use crate::{
+    bulletproofs::range_proof::verify_efficient,
+    common::{to_bytes, types::TransactionTime},
+    curve_arithmetic::{multiexp, Curve, Pairing},
+    elgamal::multicombine,
+    pedersen_commitment::{Commitment, CommitmentKey},
+    random_oracle::RandomOracle,
+};
 use ff::Field;
-use crate::pedersen_commitment::{Commitment, CommitmentKey};
 use rand::*;
-use crate::random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -638,8 +640,9 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         gs.push(k);
         exps.push(att);
     }
-    let msg =
-        crate::ps_sig::UnknownMessage(multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)));
+    let msg = crate::ps_sig::UnknownMessage(
+        multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)),
+    );
     Ok(msg)
 }
 
@@ -672,10 +675,12 @@ pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*};
-    use crate::common::types::{KeyIndex, KeyPair};
+    use crate::{
+        common::types::{KeyIndex, KeyPair},
+        id::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*},
+        pedersen_commitment::{CommitmentKey, Value as PedersenValue},
+    };
     use ff::Field;
-    use crate::pedersen_commitment::{CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;
 
     const EXPIRY: TransactionTime = TransactionTime {

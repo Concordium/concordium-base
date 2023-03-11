@@ -1,14 +1,16 @@
-use crate::constants::*;
+use crate::{
+    common::{
+        Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
+        Serialize,
+    },
+    constants::*,
+};
 use concordium_contracts_common::ModuleReference;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
     self, ContractName, ExceedsParameterSize, OwnedContractName, OwnedParameter, OwnedReceiveName,
     ReceiveName,
-};
-use crate::common::{
-    Serialize,
-    Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
 };
 use derive_more::*;
 use sha2::Digest;

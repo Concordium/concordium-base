@@ -7,12 +7,10 @@ pub mod proofs;
 pub mod types;
 
 use self::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
-use crate::common::types::Amount;
-use crate::curve_arithmetic::*;
-use crate::elgamal::*;
-use crate::id::types::*;
+use crate::{
+    common::types::Amount, curve_arithmetic::*, elgamal::*, id::types::*, random_oracle::*,
+};
 use rand::*;
-use crate::random_oracle::*;
 
 /// Encrypt a single amount using the given public key, returning the encrypted
 /// amount as well as the randomness used in the encryption of chunks.

@@ -1,11 +1,14 @@
 //! Collection of constants that fix choices, be it values or types, that are
 //! used in various places.
 use super::types::Attribute;
-use anyhow::bail;
-use crate::common::{
-    Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
+use crate::{
+    common::{
+        Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
+        Serial,
+    },
+    curve_arithmetic::{Curve, Pairing},
 };
-use crate::curve_arithmetic::{Curve, Pairing};
+use anyhow::bail;
 use pairing::bls12_381::G1;
 use serde::{
     de::{self, Visitor},

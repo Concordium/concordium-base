@@ -1,23 +1,25 @@
 //! Implementation of high-level protocols for encrypted transfers, combining
 //! all the building parts into a single wrapper per operation.
 #![allow(non_snake_case)]
-use super::{enc_trans::*, super::types::*};
-use crate::bulletproofs::range_proof::{
-    prove_given_scalars as bulletprove, verify_efficient,
-    VerificationError as BulletproofVerificationError,
+use super::{super::types::*, enc_trans::*};
+use crate::{
+    bulletproofs::range_proof::{
+        prove_given_scalars as bulletprove, verify_efficient,
+        VerificationError as BulletproofVerificationError,
+    },
+    common::types::Amount,
+    curve_arithmetic::{Curve, Value},
+    elgamal::{Cipher, PublicKey, Randomness, SecretKey},
+    id::{
+        sigma_protocols::{com_eq::*, common::*, dlog::*},
+        types::GlobalContext,
+    },
+    pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness},
+    random_oracle::*,
 };
-use crate::common::types::Amount;
-use crate::curve_arithmetic::{Curve, Value};
-use crate::elgamal::{Cipher, PublicKey, Randomness, SecretKey};
-use crate::id::{
-    sigma_protocols::{com_eq::*, common::*, dlog::*},
-    types::GlobalContext,
-};
-use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
-use rand::*;
-use crate::random_oracle::*;
-use std::rc::Rc;
 use itertools::izip;
+use rand::*;
+use std::rc::Rc;
 
 /// This function is an implementation of the genEncExpInfo documented in the
 /// bluepaper without bulletproof part.

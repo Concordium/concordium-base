@@ -2,7 +2,6 @@ use concordium_base::{
     common::types::*,
     curve_arithmetic::*,
     id,
-    ps_sig,
     id::{
         constants::*,
         identity_provider::{compute_message, sign_identity_object, validate_request},
@@ -11,6 +10,7 @@ use concordium_base::{
         types::*,
     },
     pedersen_commitment::Commitment,
+    ps_sig,
 };
 use criterion::*;
 use pairing::bls12_381::{G1, *};

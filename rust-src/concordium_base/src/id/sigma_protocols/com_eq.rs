@@ -7,11 +7,13 @@
 //! must be the same type for both groups.
 
 use super::common::*;
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve};
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve},
+    pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
+    random_oracle::RandomOracle,
+};
 use ff::Field;
-use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
-use crate::random_oracle::RandomOracle;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct Witness<T: Curve> {
@@ -75,7 +77,10 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         Some((CommittedPoints { u, v }, (alpha, cR)))
     }
 
-    fn get_challenge(&self, challenge: &crate::random_oracle::Challenge) -> Self::ProtocolChallenge {
+    fn get_challenge(
+        &self,
+        challenge: &crate::random_oracle::Challenge,
+    ) -> Self::ProtocolChallenge {
         C::scalar_from_bytes(&challenge)
     }
 

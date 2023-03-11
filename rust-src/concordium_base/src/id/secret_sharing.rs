@@ -1,9 +1,7 @@
 //! Implementation of Shamir secret sharing.
+use crate::{common::*, curve_arithmetic::*, pedersen_commitment::Value as PedersenValue};
 use anyhow::bail;
-use crate::common::*;
-use crate::curve_arithmetic::*;
 use ff::Field;
-use crate::pedersen_commitment::Value as PedersenValue;
 use rand::*;
 use serde_json::{json, Value};
 use std::convert::TryFrom;

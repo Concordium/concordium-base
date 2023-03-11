@@ -3,13 +3,13 @@ use rand::*;
 #[macro_use]
 extern crate criterion;
 
-use concordium_base::random_oracle::*;
 use concordium_base::{
     common::types::Amount,
     curve_arithmetic::Value,
     elgamal::{PublicKey, SecretKey},
     encrypted_transfers::proofs::*,
     id::types::GlobalContext,
+    random_oracle::*,
 };
 use criterion::Criterion;
 use pairing::bls12_381::G1;

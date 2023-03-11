@@ -1,7 +1,7 @@
 //! ed25519 public keys.
 
-use core::fmt::Debug;
 use crate::common::*;
+use core::fmt::Debug;
 use curve25519_dalek::{
     constants,
     edwards::{CompressedEdwardsY, EdwardsPoint},

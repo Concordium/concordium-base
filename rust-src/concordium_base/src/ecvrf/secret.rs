@@ -1,8 +1,8 @@
 //! ed25519 secret key types.
 
 use super::{constants::*, errors::*, public::*};
-use core::fmt::Debug;
 use crate::common::*;
+use core::fmt::Debug;
 use curve25519_dalek::{constants, scalar::Scalar};
 use rand::{CryptoRng, Rng};
 use sha2::{digest::Digest, Sha512};

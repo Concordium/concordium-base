@@ -4,12 +4,15 @@ use std::{
     marker::PhantomData,
 };
 
-use crate::{base::*, hashes, transactions::PayloadSize};
-use crate::common::{
-    self,
-    deserial_bytes, deserial_map_no_length, deserial_set_no_length, deserial_string,
-    deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
-    SerdeDeserialize, SerdeSerialize, Serial,
+use crate::{
+    base::*,
+    common::{
+        self, deserial_bytes, deserial_map_no_length, deserial_set_no_length, deserial_string,
+        deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
+        SerdeDeserialize, SerdeSerialize, Serial,
+    },
+    hashes,
+    transactions::PayloadSize,
 };
 use derive_more::*;
 

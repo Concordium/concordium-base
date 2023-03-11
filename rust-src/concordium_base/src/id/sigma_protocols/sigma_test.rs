@@ -1,6 +1,8 @@
-use crate::id::sigma_protocols::{com_enc_eq, com_eq_sig, common::*, dlog};
+use crate::{
+    id::sigma_protocols::{com_enc_eq, com_eq_sig, common::*, dlog},
+    random_oracle::RandomOracle,
+};
 use pairing::bls12_381::{Bls12, G1, G2};
-use crate::random_oracle::RandomOracle;
 
 #[test]
 pub fn test_and() {

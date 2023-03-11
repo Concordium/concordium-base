@@ -1,18 +1,20 @@
 //! A collection of auxiliary functions that don't belong anywhere else.
 
 use super::{secret_sharing::Threshold, types::*};
-use anyhow::bail;
-use crate::common::{
-    to_bytes,
-    types::{KeyIndex, TransactionTime},
-    ParseResult,
+use crate::{
+    common::{
+        to_bytes,
+        types::{KeyIndex, TransactionTime},
+        ParseResult,
+    },
+    curve_arithmetic::{multiexp, Curve, Pairing, Value},
+    elgamal::*,
+    pedersen_commitment::Commitment,
 };
-use crate::curve_arithmetic::{multiexp, Curve, Pairing, Value};
+use anyhow::bail;
 use ed25519_dalek::Verifier;
 use either::Either;
-use crate::elgamal::*;
 use ff::{Field, PrimeField};
-use crate::pedersen_commitment::Commitment;
 use rand::*;
 use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, BTreeSet};

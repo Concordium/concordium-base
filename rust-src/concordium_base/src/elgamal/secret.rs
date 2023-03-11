@@ -2,9 +2,11 @@
 
 //! Elgamal secret key types
 use super::{cipher::*, message::*};
+use crate::{
+    common::*,
+    curve_arithmetic::{Curve, Value},
+};
 use anyhow::{bail, Result};
-use crate::common::*;
-use crate::curve_arithmetic::{Curve, Value};
 use ff::Field;
 use rand::*;
 use std::collections::HashMap;

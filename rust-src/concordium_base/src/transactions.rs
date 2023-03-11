@@ -7,23 +7,23 @@ use crate::{
         BakerElectionVerifyKey, BakerKeyPairs, BakerSignatureVerifyKey, ContractAddress,
         CredentialRegistrationID, DelegationTarget, Energy, Nonce, OpenStatus, UrlText,
     },
+    common::{
+        types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
+        Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
+        Serial, Serialize,
+    },
     constants::*,
-    hashes, smart_contracts, updates,
-};
-use crate::common::{
-    Serialize,
-    types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
-    Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
-    Serial,
+    encrypted_transfers::types::{EncryptedAmountTransferData, SecToPubAmountTransferData},
+    hashes,
+    id::types::{
+        AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
+        CredentialPublicKeys,
+    },
+    random_oracle::RandomOracle,
+    smart_contracts, updates,
 };
 use derive_more::*;
-use crate::encrypted_transfers::types::{EncryptedAmountTransferData, SecToPubAmountTransferData};
-use crate::id::types::{
-    AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
-    CredentialPublicKeys,
-};
 use rand::{CryptoRng, Rng};
-use crate::random_oracle::RandomOracle;
 use sha2::Digest;
 use std::{collections::BTreeMap, marker::PhantomData};
 use thiserror::Error;
@@ -2993,8 +2993,10 @@ pub mod send {
 
 #[cfg(test)]
 mod tests {
-    use crate::hashes::TransactionSignHash;
-    use crate::id::types::{SignatureThreshold, VerifyKey};
+    use crate::{
+        hashes::TransactionSignHash,
+        id::types::{SignatureThreshold, VerifyKey},
+    };
     use rand::Rng;
     use std::convert::TryFrom;
 

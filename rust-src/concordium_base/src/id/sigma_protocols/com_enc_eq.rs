@@ -3,15 +3,17 @@
 //! ElGamal) is the same as the value commited to via the Pedersen commitment.
 
 use super::common::*;
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve};
-use crate::elgamal::{
-    Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve},
+    elgamal::{
+        Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
+    },
+    pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value},
+    random_oracle::RandomOracle,
 };
 use ff::Field;
-use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value};
 use rand::*;
-use crate::random_oracle::RandomOracle;
 
 #[derive(Debug)]
 pub struct ComEncEqSecret<T: Curve> {
@@ -65,7 +67,10 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn get_challenge(&self, challenge: &crate::random_oracle::Challenge) -> Self::ProtocolChallenge {
+    fn get_challenge(
+        &self,
+        challenge: &crate::random_oracle::Challenge,
+    ) -> Self::ProtocolChallenge {
         C::scalar_from_bytes(challenge)
     }
 

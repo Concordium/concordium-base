@@ -6,13 +6,15 @@
 //! This module is currently not used, and is only here as a reference.
 //! When using the code needs to be thouroughly reviewed.
 
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve};
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve},
+    id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*},
+    random_oracle::{Challenge, RandomOracle},
+};
 use ff::Field;
-use crate::id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
-use crate::random_oracle::{Challenge, RandomOracle};
-use std::rc::Rc;
 use itertools::izip;
+use std::rc::Rc;
 
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog:            Dlog<C>,

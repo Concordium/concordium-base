@@ -47,19 +47,21 @@
 
 #![allow(non_snake_case)]
 use super::super::types::CHUNK_SIZE;
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve};
-use crate::elgamal::ChunkSize;
-use ff::Field;
-use crate::id::sigma_protocols::{
-    com_eq::{ComEq, ComEqSecret, CommittedPoints, Witness as ComEqWitness},
+use crate::{
     common::*,
-    dlog::*,
+    curve_arithmetic::{multiexp, Curve},
+    elgamal::ChunkSize,
+    id::sigma_protocols::{
+        com_eq::{ComEq, ComEqSecret, CommittedPoints, Witness as ComEqWitness},
+        common::*,
+        dlog::*,
+    },
+    pedersen_commitment::{Randomness as PedersenRandomness, Value},
+    random_oracle::{Challenge, RandomOracle},
 };
-use crate::pedersen_commitment::{Randomness as PedersenRandomness, Value};
-use crate::random_oracle::{Challenge, RandomOracle};
-use std::rc::Rc;
+use ff::Field;
 use itertools::izip;
+use std::rc::Rc;
 
 /// An auxiliary structure that contains data related to the proof of correct
 /// decryption. This is stated as an independent protocol in the blue papers,
@@ -348,7 +350,6 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         })
     }
 
-
     #[cfg(test)]
     fn with_valid_data<R: rand::Rng>(
         _data_size: usize,
@@ -362,9 +363,11 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elgamal::{PublicKey, Randomness, SecretKey};
+    use crate::{
+        elgamal::{PublicKey, Randomness, SecretKey},
+        pedersen_commitment::{Commitment, CommitmentKey},
+    };
     use pairing::bls12_381::G1;
-    use crate::pedersen_commitment::{Commitment, CommitmentKey};
     use rand::Rng;
 
     impl<C: Curve> EncTrans<C> {

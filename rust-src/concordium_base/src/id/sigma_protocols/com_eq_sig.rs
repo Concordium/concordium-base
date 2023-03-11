@@ -5,14 +5,16 @@
 //! were signed.
 
 use super::common::*;
-use crate::common::*;
-use crate::curve_arithmetic::*;
+use crate::{
+    common::*,
+    curve_arithmetic::*,
+    pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
+    ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey},
+    random_oracle::RandomOracle,
+};
 use ff::Field;
-use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
-use crate::ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey};
-use rand::*;
-use crate::random_oracle::RandomOracle;
 use itertools::izip;
+use rand::*;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Witness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
@@ -67,7 +69,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     }
 
     #[inline]
-    fn get_challenge(&self, challenge: &crate::random_oracle::Challenge) -> Self::ProtocolChallenge {
+    fn get_challenge(
+        &self,
+        challenge: &crate::random_oracle::Challenge,
+    ) -> Self::ProtocolChallenge {
         C::scalar_from_bytes(challenge)
     }
 
@@ -289,8 +294,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::{Bls12, G1};
     use crate::ps_sig::{SecretKey as PsSigSecretKey, Signature};
+    use pairing::bls12_381::{Bls12, G1};
 
     #[test]
     #[allow(non_snake_case)]

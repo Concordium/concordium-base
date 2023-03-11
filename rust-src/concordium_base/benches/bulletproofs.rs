@@ -3,11 +3,11 @@
 #[macro_use]
 extern crate criterion;
 
-use concordium_base::random_oracle::RandomOracle;
 use concordium_base::{
     bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators},
     curve_arithmetic::*,
     pedersen_commitment::*,
+    random_oracle::RandomOracle,
 };
 use criterion::Criterion;
 use ff::Field;

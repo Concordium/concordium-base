@@ -4,11 +4,13 @@
 //! The r's are randomness in commitments to s_i's and s'.
 
 use super::common::*;
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve};
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve},
+    pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
+    random_oracle::{Challenge, RandomOracle},
+};
 use ff::Field;
-use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
-use crate::random_oracle::{Challenge, RandomOracle};
 use itertools::izip;
 
 pub struct ComLinSecret<C: Curve> {

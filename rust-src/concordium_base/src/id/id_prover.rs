@@ -9,17 +9,19 @@ use super::{
     },
     types::*,
 };
-use crate::bulletproofs::{
-    range_proof::{prove_given_scalars, RangeProof},
-    set_membership_proof::prove as prove_set_membership,
-    set_non_membership_proof::prove as prove_set_non_membership,
-    utils::Generators,
+use crate::{
+    bulletproofs::{
+        range_proof::{prove_given_scalars, RangeProof},
+        set_membership_proof::prove as prove_set_membership,
+        set_non_membership_proof::prove as prove_set_non_membership,
+        utils::Generators,
+    },
+    curve_arithmetic::{Curve, Value},
+    pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness},
+    random_oracle::RandomOracle,
 };
-use crate::curve_arithmetic::{Curve, Value};
 use ed25519_dalek as ed25519;
 use ff::Field;
-use crate::pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness};
-use crate::random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 
 /// Function for producing a proof of a statement.

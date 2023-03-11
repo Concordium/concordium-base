@@ -4,13 +4,13 @@ use super::{
     deserial_string, serial_string, Buffer, Deserial, Get, ParseResult, SerdeDeserialize,
     SerdeSerialize, Serial,
 };
+use crate::common::Serialize;
 use byteorder::{BigEndian, ReadBytesExt};
 pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use concordium_contracts_common::{
     ContractAddress, ContractName, OwnedContractName, OwnedParameter, OwnedReceiveName, Parameter,
     ReceiveName,
 };
-use crate::common::Serialize;
 use derive_more::{Display, From, FromStr, Into};
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
 /// Index of an account key that is to be used.

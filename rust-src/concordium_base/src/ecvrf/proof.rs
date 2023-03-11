@@ -1,8 +1,8 @@
 //! An VRF Proof.
 
 use super::{constants::*, errors::*};
-use core::fmt::Debug;
 use crate::common::*;
+use core::fmt::Debug;
 use curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,

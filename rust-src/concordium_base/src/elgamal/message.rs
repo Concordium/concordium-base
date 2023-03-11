@@ -2,8 +2,7 @@
 
 use rand::*;
 
-use crate::common::*;
-use crate::curve_arithmetic::Curve;
+use crate::{common::*, curve_arithmetic::Curve};
 
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 #[repr(transparent)]

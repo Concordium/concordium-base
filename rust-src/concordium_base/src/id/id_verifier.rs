@@ -13,12 +13,14 @@ use super::{
     id_proof_types::*,
     sigma_protocols::{common::verify as sigma_verify, dlog::Dlog},
 };
-use crate::curve_arithmetic::Curve;
-use ff::Field;
-use crate::pedersen_commitment::{
-    Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
+use crate::{
+    curve_arithmetic::Curve,
+    pedersen_commitment::{
+        Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
+    },
+    random_oracle::RandomOracle,
 };
-use crate::random_oracle::RandomOracle;
+use ff::Field;
 use sha2::{Digest, Sha256};
 
 /// Function for opening an attribute inside a commitment. The arguments are
@@ -270,8 +272,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::{constants::AttributeKind, id_prover::*};
-    use crate::common::types::{KeyIndex, KeyPair};
+    use crate::{
+        common::types::{KeyIndex, KeyPair},
+        id::{constants::AttributeKind, id_prover::*},
+    };
     use pairing::bls12_381::G1;
     use rand::*;
     use std::{

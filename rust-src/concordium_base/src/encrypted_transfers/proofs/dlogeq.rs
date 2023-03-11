@@ -4,12 +4,14 @@
 //! NB: This module is not used by the rest of the project and is only here for
 //! demonstration purposes.
 //! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
-use crate::curve_arithmetic::Curve;
-use crate::id::sigma_protocols::{
-    common::*,
-    dlog::{Witness as DlogWitness, *},
+use crate::{
+    curve_arithmetic::Curve,
+    id::sigma_protocols::{
+        common::*,
+        dlog::{Witness as DlogWitness, *},
+    },
+    random_oracle::{Challenge, RandomOracle},
 };
-use crate::random_oracle::{Challenge, RandomOracle};
 
 struct DlogEqual<C: Curve> {
     dlog1: Dlog<C>,

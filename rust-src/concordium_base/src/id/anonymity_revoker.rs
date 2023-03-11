@@ -1,7 +1,6 @@
 //! Functionality needed by the anonymity revoker.
 use super::{secret_sharing::*, types::*};
-use crate::curve_arithmetic::*;
-use crate::elgamal::Message;
+use crate::{curve_arithmetic::*, elgamal::Message};
 
 /// Reveal the `idCredPub` based on the given shares.
 /// It is important to remember that this always succeeds in computing

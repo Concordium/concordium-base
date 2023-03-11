@@ -8,28 +8,30 @@ use super::{
         dlog,
     },
 };
-use anyhow::{anyhow, bail};
-use crate::bulletproofs::{range_proof::RangeProof, utils::Generators};
-use byteorder::ReadBytesExt;
 pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
-use crate::common::{
-    types::{CredentialIndex, KeyIndex, KeyPair},
-    *,
+use crate::{
+    bulletproofs::{range_proof::RangeProof, utils::Generators},
+    common::{
+        types::{CredentialIndex, KeyIndex, KeyPair},
+        *,
+    },
+    curve_arithmetic::*,
+    dodis_yampolskiy_prf as prf,
+    elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey},
+    pedersen_commitment::{
+        Commitment as PedersenCommitment, CommitmentKey as PedersenKey,
+        Randomness as PedersenRandomness, Value as PedersenValue,
+    },
+    random_oracle::Challenge,
 };
-use crate::curve_arithmetic::*;
+use anyhow::{anyhow, bail};
+use byteorder::ReadBytesExt;
 use derive_more::*;
-use crate::dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
 use either::Either;
-use crate::elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
-use crate::pedersen_commitment::{
-    Commitment as PedersenCommitment, CommitmentKey as PedersenKey,
-    Randomness as PedersenRandomness, Value as PedersenValue,
-};
-use crate::random_oracle::Challenge;
 use serde::{
     de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
     Serialize as SerdeSerialize, Serializer,

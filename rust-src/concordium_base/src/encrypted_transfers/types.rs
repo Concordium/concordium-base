@@ -1,10 +1,12 @@
 //! This module provides common types and constants for encrypted transfers.
 use super::proofs;
-use crate::bulletproofs::range_proof::*;
-use crate::common::{types::Amount, *};
-use crate::curve_arithmetic::*;
-use crate::elgamal::*;
-use crate::id::sigma_protocols::common::*;
+use crate::{
+    bulletproofs::range_proof::*,
+    common::{types::Amount, *},
+    curve_arithmetic::*,
+    elgamal::*,
+    id::sigma_protocols::common::*,
+};
 
 #[derive(Clone, Copy, Serialize, SerdeSerialize, SerdeDeserialize, Debug, Default)]
 #[serde(transparent)]

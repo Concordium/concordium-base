@@ -8,8 +8,7 @@ use super::{
     signature::*,
     unknown_message::*,
 };
-use crate::common::*;
-use crate::curve_arithmetic::*;
+use crate::{common::*, curve_arithmetic::*};
 
 use ff::Field;
 

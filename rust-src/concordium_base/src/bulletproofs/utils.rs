@@ -1,6 +1,5 @@
 //! Shared functions used by the proofs in this crate
-use crate::common::*;
-use crate::curve_arithmetic::Curve;
+use crate::{common::*, curve_arithmetic::Curve};
 use ff::Field;
 #[cfg(test)]
 use rand::Rng;

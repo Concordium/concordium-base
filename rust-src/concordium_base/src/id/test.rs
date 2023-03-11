@@ -1,21 +1,23 @@
-use crate::id::{
-    account_holder::*,
-    anonymity_revoker::*,
-    chain::*,
-    constants::{ArCurve, BaseField, IpPairing, *},
-    identity_provider::*,
-    secret_sharing::Threshold,
-    types::*,
+use crate::{
+    common::{
+        types::{KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    curve_arithmetic::Curve,
+    dodis_yampolskiy_prf as prf,
+    elgamal::{PublicKey, SecretKey},
+    id::{
+        account_holder::*,
+        anonymity_revoker::*,
+        chain::*,
+        constants::{ArCurve, BaseField, IpPairing, *},
+        identity_provider::*,
+        secret_sharing::Threshold,
+        types::*,
+    },
 };
-use crate::common::{
-    types::{KeyIndex, KeyPair, TransactionTime},
-    *,
-};
-use crate::curve_arithmetic::Curve;
-use crate::dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
-use crate::elgamal::{PublicKey, SecretKey};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
 

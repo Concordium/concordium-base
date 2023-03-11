@@ -2,10 +2,12 @@
 //! which enables one to prove knowledge of the discrete logarithm without
 //! revealing it.
 use super::common::*;
-use crate::common::*;
-use crate::curve_arithmetic::{Curve, Value};
+use crate::{
+    common::*,
+    curve_arithmetic::{Curve, Value},
+    random_oracle::{Challenge, RandomOracle},
+};
 use ff::Field;
-use crate::random_oracle::{Challenge, RandomOracle};
 
 pub struct Dlog<C: Curve> {
     /// Evaluated point.

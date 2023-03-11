@@ -12,8 +12,7 @@
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
 
-use crate::common::*;
-use crate::curve_arithmetic::Curve;
+use crate::{common::*, curve_arithmetic::Curve};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 

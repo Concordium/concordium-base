@@ -3,11 +3,13 @@
 //! values is equal to the third commited value, without revealing the values
 //! themselves.
 use super::common::*;
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve};
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve},
+    pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
+    random_oracle::{Challenge, RandomOracle},
+};
 use ff::Field;
-use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
-use crate::random_oracle::{Challenge, RandomOracle};
 use itertools::izip;
 
 pub struct ComMultSecret<T: Curve> {

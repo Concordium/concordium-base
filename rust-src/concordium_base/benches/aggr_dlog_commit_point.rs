@@ -1,6 +1,8 @@
+use concordium_base::{
+    curve_arithmetic::*,
+    id::sigma_protocols::{aggregate_dlog::*, common::*},
+};
 use criterion::*;
-use concordium_base::curve_arithmetic::*;
-use concordium_base::id::sigma_protocols::{aggregate_dlog::*, common::*};
 use pairing::bls12_381::G1;
 use rand::*;
 

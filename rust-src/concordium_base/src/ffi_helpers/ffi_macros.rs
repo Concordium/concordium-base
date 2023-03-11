@@ -180,7 +180,8 @@ macro_rules! from_ptr {
     ($ptr:expr) => {{
         debug_assert!(!$ptr.is_null());
         // this is sometimes nested under an unsafe blocks.
-        // It is possible to work around the warning, but it is not worth the code changes.
+        // It is possible to work around the warning, but it is not worth the code
+        // changes.
         #[allow(unused_unsafe)]
         unsafe {
             &*$ptr
@@ -194,9 +195,12 @@ macro_rules! slice_from_c_bytes_worker {
         if $length != 0 {
             debug_assert!(!$cstr.is_null(), $null_ptr_error);
             // This is sometimes nested under an unsafe blocks.
-            // It is possible to work around the warning, but it is not worth the code changes.
+            // It is possible to work around the warning, but it is not worth the code
+            // changes.
             #[allow(unused_unsafe)]
-            unsafe { $reader($cstr, $length) }
+            unsafe {
+                $reader($cstr, $length)
+            }
         } else {
             &[]
         }

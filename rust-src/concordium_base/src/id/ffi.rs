@@ -5,13 +5,15 @@ use super::{
     constants::*,
     types::*,
 };
+use crate::{
+    bulletproofs::utils::Generators,
+    common::{size_t, types::TransactionTime, *},
+    ffi_helpers::*,
+    pedersen_commitment::CommitmentKey as PedersenKey,
+};
 use anyhow::Context;
-use crate::bulletproofs::utils::Generators;
-use crate::common::{size_t, types::TransactionTime, *};
 use either::Either::{Left, Right};
-use crate::ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
-use crate::pedersen_commitment::CommitmentKey as PedersenKey;
 use rand::thread_rng;
 use std::{
     collections::BTreeMap,
@@ -590,15 +592,17 @@ fn ip_info_create_helper(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::id::{
-        account_holder::*,
-        constants::{ArCurve, BaseField},
-        identity_provider::*,
-        secret_sharing::Threshold,
-        test::*,
+    use crate::{
+        common::types::{KeyIndex, KeyPair},
+        dodis_yampolskiy_prf as prf,
+        id::{
+            account_holder::*,
+            constants::{ArCurve, BaseField},
+            identity_provider::*,
+            secret_sharing::Threshold,
+            test::*,
+        },
     };
-    use crate::common::types::{KeyIndex, KeyPair};
-    use crate::dodis_yampolskiy_prf as prf;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<BaseField, AttributeKind>;

@@ -27,13 +27,13 @@ pub mod aggregate_sig;
 pub mod bulletproofs;
 pub use concordium_contracts_common as contracts_common;
 pub mod common;
+pub mod curve_arithmetic;
 pub mod ecvrf;
 pub mod eddsa_ed25519;
+pub mod elgamal;
 pub mod encrypted_transfers;
 pub mod id;
 pub mod random_oracle;
-pub mod curve_arithmetic;
-pub mod elgamal;
 
 pub mod pedersen_commitment;
 pub mod ps_sig;

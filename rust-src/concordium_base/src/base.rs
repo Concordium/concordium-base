@@ -1,19 +1,18 @@
 //! Basis type definitions that are used throughout the crate.
 
+use crate::{
+    common::{
+        deserial_string, types::Signature, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt,
+        SerdeBase16Serialize, SerdeDeserialize, SerdeSerialize, Serial, Serialize,
+    },
+    id::types::VerifyKey,
+    random_oracle::RandomOracle,
+};
 pub use concordium_contracts_common::{
     Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
 };
-use crate::common::{
-    SerdeBase16Serialize, Serialize,
-    deserial_string,
-    types::Signature,
-    Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
-    Serial,
-};
 use derive_more::{Add, Display, From, FromStr, Into};
-use crate::id::types::VerifyKey;
 use rand::{CryptoRng, Rng};
-use crate::random_oracle::RandomOracle;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,

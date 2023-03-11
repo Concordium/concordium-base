@@ -2,13 +2,14 @@
 #[cfg(feature = "ffi")]
 mod ffi;
 
-use crate::common::*;
-use crate::common::{Serialize,SerdeBase16Serialize};
-use crate::curve_arithmetic::{Curve, Pairing, Value};
+use crate::{
+    common::{SerdeBase16Serialize, Serialize, *},
+    curve_arithmetic::{Curve, Pairing, Value},
+    id::sigma_protocols::{common::*, dlog::*},
+    random_oracle::RandomOracle,
+};
 use ff::Field;
-use crate::id::sigma_protocols::{common::*, dlog::*};
 use rand::Rng;
-use crate::random_oracle::RandomOracle;
 use rayon::iter::*;
 use sha2::{digest::Output, Digest, Sha512};
 
@@ -555,4 +556,3 @@ mod test {
         }
     }
 }
-

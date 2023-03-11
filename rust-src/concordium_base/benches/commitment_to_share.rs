@@ -1,8 +1,8 @@
+use concordium_base::{
+    curve_arithmetic::*, id::utils::commitment_to_share, pedersen_commitment::Commitment,
+};
 use criterion::*;
-use concordium_base::curve_arithmetic::*;
-use concordium_base::id::utils::commitment_to_share;
 use pairing::bls12_381::G1;
-use concordium_base::pedersen_commitment::Commitment;
 use rand::*;
 
 fn bench_commitment_to_share(c: &mut Criterion) {

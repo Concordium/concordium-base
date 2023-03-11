@@ -100,7 +100,8 @@ fn bench_parts(c: &mut Criterion) {
         cred_holder_info: ah_info,
         prf_key,
     };
-    let randomness = concordium_base::ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+    let randomness =
+        concordium_base::ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let alist = ExampleAttributeList {

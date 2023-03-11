@@ -1,7 +1,6 @@
 //! Elgamal cipher  types
 
-use crate::common::*;
-use crate::curve_arithmetic::*;
+use crate::{common::*, curve_arithmetic::*};
 
 use rand::*;
 use std::ops::Deref;

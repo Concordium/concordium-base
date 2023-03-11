@@ -904,8 +904,8 @@ fn sgn0(a: Fq) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byteorder::{BigEndian, ReadBytesExt};
     use crate::common::to_bytes;
+    use byteorder::{BigEndian, ReadBytesExt};
     use ff::SqrtField;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
 

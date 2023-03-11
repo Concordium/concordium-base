@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate criterion;
 
-use criterion::Criterion;
 use concordium_base::curve_arithmetic::*;
+use criterion::Criterion;
 use pairing::bls12_381::G1;
 use rand::*;
 

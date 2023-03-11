@@ -3,8 +3,7 @@ use ed25519_dalek::*;
 use rand::*;
 
 use super::dlog_ed25519::*;
-use crate::common::*;
-use crate::ffi_helpers::*;
+use crate::{common::*, ffi_helpers::*};
 use std::{convert::TryFrom, io::Cursor};
 
 use crate::random_oracle::RandomOracle;

@@ -4,12 +4,14 @@
 //! This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
 use super::common::*;
-use crate::common::*;
-use crate::curve_arithmetic::{multiexp, Curve};
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve},
+    random_oracle::{Challenge, RandomOracle},
+};
 use ff::Field;
-use crate::random_oracle::{Challenge, RandomOracle};
-use std::rc::Rc;
 use itertools::izip;
+use std::rc::Rc;
 
 pub struct AggregateDlog<C: Curve> {
     /// Evaluated point.
