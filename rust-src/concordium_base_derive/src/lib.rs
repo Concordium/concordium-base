@@ -30,15 +30,15 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     let ident_deserializer = format_ident!("deserializer", span = span);
     let gen = quote! {
         #[automatically_derived]
-        impl #serial_impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
-            fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
+        impl #serial_impl_generics crate::common::SerdeSerialize for #name #ty_generics #where_clauses {
+            fn serialize<#ident: crate::common::SerdeSerializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
                 crate::common::base16_encode(self, #ident_serializer)
             }
         }
 
         #[automatically_derived]
-        impl #deserial_impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
-            fn deserialize<#ident: serde::Deserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
+        impl #deserial_impl_generics crate::common::SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
+            fn deserialize<#ident: crate::common::SerdeDeserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
                 crate::common::base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
         }
@@ -70,15 +70,15 @@ pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenS
     let ident_deserializer = format_ident!("deserializer", span = span);
     let gen = quote! {
         #[automatically_derived]
-        impl #serial_impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
-            fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
+        impl #serial_impl_generics crate::common::SerdeSerialize for #name #ty_generics #where_clauses {
+            fn serialize<#ident: crate::common::SerdeSerializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
                 base16_ignore_length_encode(self, #ident_serializer)
             }
         }
 
         #[automatically_derived]
-        impl #deserial_impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
-            fn deserialize<#ident: serde::Deserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
+        impl #deserial_impl_generics crate::common::SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
+            fn deserialize<#ident: crate::common::SerdeDeserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
                 base16_ignore_length_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
         }
@@ -168,7 +168,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
             } else {
                 let ty = &f.ty;
                 tokens.extend(quote! {
-                    let #ident = <#ty as Deserial>::deserial(#source)?;
+                    let #ident = <#ty as crate::common::Deserial>::deserial(#source)?;
                 });
             }
             names.extend(quote!(#ident,))
@@ -181,9 +181,9 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics Deserial for #name #ty_generics #where_clauses {
+                    impl #impl_generics crate::common::Deserial for #name #ty_generics #where_clauses {
                         #[allow(non_snake_case)]
-                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
+                        fn deserial<#ident: crate::common::ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
                             use std::convert::TryFrom;
                             #tokens
                             Ok(#name{#names})
@@ -198,8 +198,8 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics Deserial for #name #ty_generics #where_clauses {
-                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
+                    impl #impl_generics crate::common::Deserial for #name #ty_generics #where_clauses {
+                        fn deserial<#ident: crate::common::ReadBytesExt>(#source: &mut #ident) -> ParseResult<Self> {
                             use std::convert::TryFrom;
                             #tokens
                             Ok(#name(#names))
@@ -276,8 +276,8 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     #[automatically_derived]
-                    impl #impl_generics Serial for #name #ty_generics #where_clauses {
-                        fn serial<#ident: Buffer>(&self, #out: &mut #ident) {
+                    impl #impl_generics crate::common::Serial for #name #ty_generics #where_clauses {
+                        fn serial<#ident: crate::common::Buffer>(&self, #out: &mut #ident) {
                             #body
                         }
                     }
@@ -332,7 +332,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 quote! {
                     #[automatically_derived]
                     impl #impl_generics Serial for #name #ty_generics #where_clauses {
-                        fn serial<#ident: Buffer>(&self, #out: &mut #ident) {
+                        fn serial<#ident: crate::common::Buffer>(&self, #out: &mut #ident) {
                             let #name( #names ) = self;
                             #body
                         }
