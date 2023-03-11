@@ -195,7 +195,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elgamal::{Message, SecretKey as ElgamalSecretKey};
+    use crate::elgamal::{Message, SecretKey as ElgamalSecretKey};
     use pairing::bls12_381::G1;
 
     #[test]

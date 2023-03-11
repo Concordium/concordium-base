@@ -404,8 +404,8 @@ mod tests {
             let h = G1::generate(rng);
             G_H.push((g, h));
         }
-        let gens = bulletproofs::utils::Generators { G_H };
-        let proof = bulletproofs::range_proof::prove_given_scalars(
+        let gens = crate::bulletproofs::utils::Generators { G_H };
+        let proof = crate::bulletproofs::range_proof::prove_given_scalars(
             &mut ro.split(),
             rng,
             n,
@@ -415,7 +415,7 @@ mod tests {
             &cmm_key,
             &rs_copy,
         );
-        assert!(bulletproofs::range_proof::verify_efficient(
+        assert!(crate::bulletproofs::range_proof::verify_efficient(
             &mut ro,
             n,
             &cmms_copy,

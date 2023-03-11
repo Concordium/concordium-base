@@ -352,7 +352,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elgamal::{PublicKey, Randomness, SecretKey};
+    use crate::elgamal::{PublicKey, Randomness, SecretKey};
     use pairing::bls12_381::G1;
     use crate::pedersen_commitment::{Commitment, CommitmentKey};
     use rand::Rng;

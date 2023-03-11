@@ -351,7 +351,7 @@ fn pok_sig_verifier<
 mod tests {
     use super::*;
 
-    use crate::{account_holder::*, constants::*, identity_provider::*, test::*};
+    use crate::id::{account_holder::*, constants::*, identity_provider::*, test::*};
     use crate::common::types::{KeyIndex, KeyPair};
     use pairing::bls12_381::G1;
     use rand::*;

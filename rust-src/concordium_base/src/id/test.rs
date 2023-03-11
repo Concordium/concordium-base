@@ -1,4 +1,4 @@
-use crate::{
+use crate::id::{
     account_holder::*,
     anonymity_revoker::*,
     chain::*,
@@ -12,10 +12,10 @@ use crate::common::{
     *,
 };
 use crate::curve_arithmetic::Curve;
-use dodis_yampolskiy_prf as prf;
+use crate::dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
-use elgamal::{PublicKey, SecretKey};
+use crate::elgamal::{PublicKey, SecretKey};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
 

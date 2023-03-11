@@ -270,7 +270,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{constants::AttributeKind, id_prover::*};
+    use crate::id::{constants::AttributeKind, id_prover::*};
     use crate::common::types::{KeyIndex, KeyPair};
     use pairing::bls12_381::G1;
     use rand::*;

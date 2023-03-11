@@ -590,7 +590,7 @@ fn ip_info_create_helper(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
+    use crate::id::{
         account_holder::*,
         constants::{ArCurve, BaseField},
         identity_provider::*,
@@ -598,7 +598,7 @@ mod test {
         test::*,
     };
     use crate::common::types::{KeyIndex, KeyPair};
-    use dodis_yampolskiy_prf as prf;
+    use crate::dodis_yampolskiy_prf as prf;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<BaseField, AttributeKind>;

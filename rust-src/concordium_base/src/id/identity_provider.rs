@@ -672,7 +672,7 @@ pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*};
+    use crate::id::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*};
     use crate::common::types::{KeyIndex, KeyPair};
     use ff::Field;
     use crate::pedersen_commitment::{CommitmentKey, Value as PedersenValue};

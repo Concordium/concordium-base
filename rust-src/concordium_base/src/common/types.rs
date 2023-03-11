@@ -432,7 +432,7 @@ mod tests {
                 Err(e) => panic!("{}", e),
             }
 
-            let binary_result = crate::serialize_deserialize(&signatures)
+            let binary_result = crate::common::serialize_deserialize(&signatures)
                 .expect("Binary signature serialization is not invertible.");
             assert_eq!(
                 binary_result, signatures,

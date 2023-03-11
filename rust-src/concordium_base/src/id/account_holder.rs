@@ -1253,7 +1253,7 @@ pub fn generate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
 mod tests {
     use super::*;
 
-    use crate::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*};
+    use crate::id::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*};
     use crate::common::types::{KeyIndex, KeyPair};
     use crate::curve_arithmetic::Curve;
     use either::Either::Left;
