@@ -1,4 +1,4 @@
-use crate::{SerdeDeserialize, SerdeSerialize};
+use crate::common::{SerdeDeserialize, SerdeSerialize};
 use aes::{
     cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit},
     Aes256,

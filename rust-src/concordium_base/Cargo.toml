@@ -35,7 +35,14 @@ num-traits = "0.2"
 bs58 = { version = "0.4", features = ["check"] }
 leb128 = "0.2"
 rayon = "1.7"
-subtle = "2.5"
+subtle = "2.3"
+
+# Dependencies needed by the encryption feature.
+cbc = { version = "0.1.2", features = ["std"], optional = true }
+aes = { version = "0.8", optional = true }
+base64 = { version = "0.13", optional = true }
+pbkdf2 = { version  = "0.11", optional = true }
+hmac = { version  = "0.12", optional = true }
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
@@ -52,6 +59,7 @@ path = "../concordium_base_derive"
 default = ["ffi"]  # TODO: Remove after development.
 ffi = []
 internal-test-helpers = []
+encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 
 [lib]
 name = "concordium_base"
