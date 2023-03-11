@@ -5,11 +5,11 @@
 
 use super::common::*;
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
-use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
-use random_oracle::{Challenge, RandomOracle};
+use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
+use crate::random_oracle::{Challenge, RandomOracle};
+use itertools::izip;
 
 pub struct ComLinSecret<C: Curve> {
     /// The secret values, s's above.

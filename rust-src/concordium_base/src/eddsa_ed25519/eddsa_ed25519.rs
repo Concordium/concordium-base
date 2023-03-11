@@ -4,10 +4,10 @@ use rand::*;
 
 use super::dlog_ed25519::*;
 use crate::common::*;
-use ffi_helpers::*;
+use crate::ffi_helpers::*;
 use std::{convert::TryFrom, io::Cursor};
 
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 
 // foreign function interfacee
 #[no_mangle]

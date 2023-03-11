@@ -48,18 +48,18 @@
 #![allow(non_snake_case)]
 use super::super::types::CHUNK_SIZE;
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::{multiexp, Curve};
-use elgamal::ChunkSize;
+use crate::elgamal::ChunkSize;
 use ff::Field;
-use id::sigma_protocols::{
+use crate::id::sigma_protocols::{
     com_eq::{ComEq, ComEqSecret, CommittedPoints, Witness as ComEqWitness},
     common::*,
     dlog::*,
 };
-use pedersen_scheme::{Randomness as PedersenRandomness, Value};
-use random_oracle::{Challenge, RandomOracle};
+use crate::pedersen_commitment::{Randomness as PedersenRandomness, Value};
+use crate::random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
+use itertools::izip;
 
 /// An auxiliary structure that contains data related to the proof of correct
 /// decryption. This is stated as an independent protocol in the blue papers,
@@ -354,7 +354,7 @@ mod tests {
     use super::*;
     use elgamal::{PublicKey, Randomness, SecretKey};
     use pairing::bls12_381::G1;
-    use pedersen_scheme::{Commitment, CommitmentKey};
+    use crate::pedersen_commitment::{Commitment, CommitmentKey};
     use rand::Rng;
 
     impl<C: Curve> EncTrans<C> {

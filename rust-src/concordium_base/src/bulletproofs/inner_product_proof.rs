@@ -1,10 +1,11 @@
 //! Logarithmic sized inner product proof used as base for the other proofs in
 //! this crate
-use crate::common::*;
-use crate::common::derive::{Serialize, SerdeBase16Serialize};
-use crate::curve_arithmetic::{multiexp, Curve};
+use crate::{
+    common::*,
+    curve_arithmetic::{multiexp, Curve},
+    random_oracle::RandomOracle,
+};
 use ff::Field;
-use random_oracle::RandomOracle;
 
 /// Inner product proof
 #[derive(Clone, Serialize, Debug)]

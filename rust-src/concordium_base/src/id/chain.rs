@@ -5,14 +5,14 @@ use super::{
     types::*,
     utils,
 };
-use bulletproofs::range_proof::verify_less_than_or_equal;
+use crate::bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
 use crate::common::{to_bytes, types::TransactionTime};
 use crate::curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
-use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
-use random_oracle::RandomOracle;
+use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
+use crate::random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -276,8 +276,8 @@ fn pok_sig_verifier<
     choice_ar_parameters: &BTreeSet<ArIdentity>,
     policy: &'a Policy<C, AttributeType>,
     commitments: &'a CredentialDeploymentCommitments<C>,
-    ip_pub_key: &'a ps_sig::PublicKey<P>,
-    blinded_sig: &'a ps_sig::BlindedSignature<P>,
+    ip_pub_key: &'a crate::ps_sig::PublicKey<P>,
+    blinded_sig: &'a crate::ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
     let ar_scalars = utils::encode_ars(choice_ar_parameters)?;
     // Capacity for id_cred_sec, cmm_prf, (threshold, valid_to, created_at), tags

@@ -1,4 +1,3 @@
-#[macro_export]
 macro_rules! macro_derive_binary {
     (Arc $function_name:ident, $type:ty, $f:expr) => {
         macro_derive_binary!($function_name, $type, $f, const);
@@ -16,13 +15,13 @@ macro_rules! macro_derive_binary {
         }
     };
 }
+pub(crate) use macro_derive_binary;
 
 /// Macro to create byte arrays from objects.
 ///
 /// If the value was created through a `Box`, this macro should be called
 /// starting with the keyword `Box`. If it was created through an `Arc`, this
 /// macro should be called starting with the keyword `Arc`.
-#[macro_export]
 macro_rules! macro_derive_to_bytes {
     (Arc $function_name:ident, $type:ty) => {
         macro_derive_to_bytes!($function_name, $type, const);
@@ -67,13 +66,13 @@ macro_rules! macro_derive_to_bytes {
         }
     };
 }
+pub(crate) use macro_derive_to_bytes;
 
 /// Macro to create rust objects from bytes.
 ///
 /// If the value will be created through a `Box`, this macro should be called
 /// starting with the keyword `Box`. If it will be created through an `Arc`,
 /// this macro should be called starting with the keyword `Arc`.
-#[macro_export]
 macro_rules! macro_derive_from_bytes {
     (Arc $function_name:ident, $type:ty) => {
         macro_derive_from_bytes!($function_name, $type, const, std::ptr::null(), |x| {
@@ -102,13 +101,13 @@ macro_rules! macro_derive_from_bytes {
         }
     };
 }
+pub(crate) use macro_derive_from_bytes;
 
 /// Macro to create rust objects from bytes.
 ///
 /// If the value will be created through a `Box`, this macro should be called
 /// starting with the keyword `Box`. If it will be created through an `Arc`,
 /// this macro should be called starting with the keyword `Arc`.
-#[macro_export]
 macro_rules! macro_derive_from_bytes_no_cursor {
     (Arc $function_name:ident, $type:ty, $from:expr) => {
         macro_derive_from_bytes_no_cursor!($function_name, $type, $from, const, std::ptr::null(), |x| {
@@ -135,8 +134,8 @@ macro_rules! macro_derive_from_bytes_no_cursor {
         }
     };
 }
+pub(crate) use macro_derive_from_bytes_no_cursor;
 
-#[macro_export]
 macro_rules! macro_generate_commitment_key {
     ($function_name:ident, $type:ty, $generator:expr) => {
         #[no_mangle]
@@ -147,13 +146,13 @@ macro_rules! macro_generate_commitment_key {
         }
     };
 }
+pub(crate) use macro_generate_commitment_key;
 
 /// Macro to deallocate rust pointers.
 ///
 /// If the value was created through a `Box`, this macro should be called
 /// starting with the keyword `Box`. If it was created through an `Arc`, this
 /// macro should be called starting with the keyword `Arc`.
-#[macro_export]
 macro_rules! macro_free_ffi {
     (Arc $function_name:ident, $t:ty) => {
         macro_free_ffi!($function_name, $t, const, Arc::from_raw);
@@ -175,28 +174,36 @@ macro_rules! macro_free_ffi {
         }
     };
 }
+pub(crate) use macro_free_ffi;
 
-#[macro_export]
 macro_rules! from_ptr {
     ($ptr:expr) => {{
         debug_assert!(!$ptr.is_null());
-        unsafe { &*$ptr }
+        // this is sometimes nested under an unsafe blocks.
+        // It is possible to work around the warning, but it is not worth the code changes.
+        #[allow(unused_unsafe)]
+        unsafe {
+            &*$ptr
+        }
     }};
 }
+pub(crate) use from_ptr;
 
-#[macro_export]
 macro_rules! slice_from_c_bytes_worker {
     ($cstr:expr, $length:expr, $null_ptr_error:expr, $reader:expr) => {{
         if $length != 0 {
             debug_assert!(!$cstr.is_null(), $null_ptr_error);
+            // This is sometimes nested under an unsafe blocks.
+            // It is possible to work around the warning, but it is not worth the code changes.
+            #[allow(unused_unsafe)]
             unsafe { $reader($cstr, $length) }
         } else {
             &[]
         }
     }};
 }
+pub(crate) use slice_from_c_bytes_worker;
 
-#[macro_export]
 macro_rules! slice_from_c_bytes {
     ($cstr:expr, $length:expr) => {
         slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", std::slice::from_raw_parts)
@@ -205,8 +212,8 @@ macro_rules! slice_from_c_bytes {
         slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, std::slice::from_raw_parts)
     };
 }
+pub(crate) use slice_from_c_bytes;
 
-#[macro_export]
 macro_rules! mut_slice_from_c_bytes_worker {
     ($cstr:expr, $length:expr, $null_ptr_error:expr, $reader:expr) => {{
         if $length != 0 {
@@ -217,8 +224,8 @@ macro_rules! mut_slice_from_c_bytes_worker {
         }
     }};
 }
+pub(crate) use mut_slice_from_c_bytes_worker;
 
-#[macro_export]
 macro_rules! mut_slice_from_c_bytes {
     ($cstr:expr, $length:expr) => {
         mut_slice_from_c_bytes_worker!(
@@ -237,8 +244,8 @@ macro_rules! mut_slice_from_c_bytes {
         )
     };
 }
+pub(crate) use mut_slice_from_c_bytes;
 
-#[macro_export]
 macro_rules! macro_derive_to_json {
     ($function_name:ident, $type:ty) => {
         #[no_mangle]
@@ -273,8 +280,8 @@ macro_rules! macro_derive_to_json {
         }
     };
 }
+pub(crate) use macro_derive_to_json;
 
-#[macro_export]
 macro_rules! macro_derive_from_json {
     ($function_name:ident, $type:ty) => {
         #[no_mangle]
@@ -289,3 +296,4 @@ macro_rules! macro_derive_from_json {
         }
     };
 }
+pub(crate) use macro_derive_from_json;

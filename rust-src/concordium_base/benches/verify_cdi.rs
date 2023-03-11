@@ -7,7 +7,7 @@ use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{PublicKey, SecretKey};
-use id::{
+use concordium_base::id::{
     account_holder::*,
     anonymity_revoker::*,
     chain::*,
@@ -31,8 +31,8 @@ const EXPIRY: TransactionTime = TransactionTime {
 fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
 
-    let ip_secret_key = ps_sig::SecretKey::<Bls12>::generate(20, &mut csprng);
-    let ip_public_key = ps_sig::PublicKey::from(&ip_secret_key);
+    let ip_secret_key = crate::ps_sig::SecretKey::<Bls12>::generate(20, &mut csprng);
+    let ip_public_key = crate::ps_sig::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(&mut csprng);
 
     let ah_info = CredentialHolderInfo::<ArCurve> {
@@ -98,7 +98,7 @@ fn bench_parts(c: &mut Criterion) {
         cred_holder_info: ah_info,
         prf_key,
     };
-    let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+    let randomness = crate::ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let alist = ExampleAttributeList {

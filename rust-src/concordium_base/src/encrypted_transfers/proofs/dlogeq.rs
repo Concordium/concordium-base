@@ -5,11 +5,11 @@
 //! demonstration purposes.
 //! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
 use crate::curve_arithmetic::Curve;
-use id::sigma_protocols::{
+use crate::id::sigma_protocols::{
     common::*,
     dlog::{Witness as DlogWitness, *},
 };
-use random_oracle::{Challenge, RandomOracle};
+use crate::random_oracle::{Challenge, RandomOracle};
 
 struct DlogEqual<C: Curve> {
     dlog1: Dlog<C>,

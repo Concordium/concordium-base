@@ -10,7 +10,7 @@ use concordium_contracts_common::{
     ContractAddress, ContractName, OwnedContractName, OwnedParameter, OwnedReceiveName, Parameter,
     ReceiveName,
 };
-use crate::common::derive::Serialize;
+use crate::common::Serialize;
 use derive_more::{Display, From, FromStr, Into};
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
 /// Index of an account key that is to be used.
@@ -45,7 +45,7 @@ pub struct CredentialIndex {
 }
 
 impl Serial for Amount {
-    fn serial<B: crate::Buffer>(&self, out: &mut B) { self.micro_ccd().serial(out) }
+    fn serial<B: super::Buffer>(&self, out: &mut B) { self.micro_ccd().serial(out) }
 }
 
 impl Deserial for Amount {
@@ -262,7 +262,7 @@ impl Serial for TransactionSignature {
         for (idx, map) in self.signatures.iter() {
             idx.serial(out);
             (map.len() as u8).serial(out);
-            crate::serial_map_no_length(map, out);
+            super::serial_map_no_length(map, out);
         }
     }
 }
@@ -285,7 +285,7 @@ impl Deserial for TransactionSignature {
                 inner_len > 0,
                 "Each credential must have at least one signature."
             );
-            let inner_map = crate::deserial_map_no_length(source, inner_len.into())?;
+            let inner_map = super::deserial_map_no_length(source, inner_len.into())?;
             out.insert(idx, inner_map);
         }
         Ok(TransactionSignature { signatures: out })
@@ -349,14 +349,14 @@ impl FromStr for Timestamp {
 pub struct KeyPair {
     #[serde(
         rename = "signKey",
-        serialize_with = "crate::serialize::base16_encode",
-        deserialize_with = "crate::serialize::base16_decode"
+        serialize_with = "crate::common::base16_encode",
+        deserialize_with = "crate::common::base16_decode"
     )]
     pub secret: ed25519_dalek::SecretKey,
     #[serde(
         rename = "verifyKey",
-        serialize_with = "crate::serialize::base16_encode",
-        deserialize_with = "crate::serialize::base16_decode"
+        serialize_with = "crate::common::base16_encode",
+        deserialize_with = "crate::common::base16_decode"
     )]
     pub public: ed25519_dalek::PublicKey,
 }

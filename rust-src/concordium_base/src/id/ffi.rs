@@ -6,12 +6,12 @@ use super::{
     types::*,
 };
 use anyhow::Context;
-use bulletproofs::utils::Generators;
+use crate::bulletproofs::utils::Generators;
 use crate::common::{size_t, types::TransactionTime, *};
 use either::Either::{Left, Right};
-use ffi_helpers::*;
+use crate::ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
-use pedersen_scheme::CommitmentKey as PedersenKey;
+use crate::pedersen_commitment::CommitmentKey as PedersenKey;
 use rand::thread_rng;
 use std::{
     collections::BTreeMap,
@@ -135,14 +135,14 @@ pub extern "C" fn pedersen_key_gen() -> *mut PedersenKey<G1> {
 macro_derive_from_bytes!(
     Box
     ps_sig_key_from_bytes,
-    ps_sig::PublicKey<Bls12>
+    crate::ps_sig::PublicKey<Bls12>
 );
-macro_derive_to_bytes!(Box ps_sig_key_to_bytes, ps_sig::PublicKey<Bls12>);
-macro_free_ffi!(Box ps_sig_key_free, ps_sig::PublicKey<Bls12>);
+macro_derive_to_bytes!(Box ps_sig_key_to_bytes, crate::ps_sig::PublicKey<Bls12>);
+macro_free_ffi!(Box ps_sig_key_free, crate::ps_sig::PublicKey<Bls12>);
 macro_generate_commitment_key!(
     ps_sig_key_gen,
-    ps_sig::PublicKey<Bls12>,
-    ps_sig::PublicKey::arbitrary
+    crate::ps_sig::PublicKey<Bls12>,
+    crate::ps_sig::PublicKey::arbitrary
 );
 
 // derive conversion methods for IpInfo to be used in Haskell.
@@ -364,7 +364,7 @@ fn ar_info_create_helper(
     let ar_public_key = {
         let buf = &mut slice_from_c_bytes!(public_key_ptr, public_key_len as usize);
 
-        from_bytes::<elgamal::PublicKey<G1>, &[u8]>(buf)
+        from_bytes::<crate::elgamal::PublicKey<G1>, &[u8]>(buf)
             .context("Unable to create PublicKey<G1> instance from byte array at public_key_ptr.")?
     };
 
@@ -481,7 +481,7 @@ fn global_context_create_helper(
 
 /// Attempt to create an [`IpInfo`] instance from byte array pointers.
 /// Returns a raw pointer to an [`IpInfo`] instance if
-///  - `verify_key_ptr` points to a serialized `ps_sig::PublicKey<Bls12>`
+///  - `verify_key_ptr` points to a serialized `crate::ps_sig::PublicKey<Bls12>`
 ///    instance,
 ///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
 ///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
@@ -523,7 +523,7 @@ unsafe extern "C" fn ip_info_create(
 
 /// Attempt to create an [`IpInfo`] instance from byte array pointers.
 /// Returns [`Ok`] if
-///  - `verify_key_ptr` points to a serialized `ps_sig::PublicKey<Bls12>`
+///  - `verify_key_ptr` points to a serialized `crate::ps_sig::PublicKey<Bls12>`
 ///    instance,
 ///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
 ///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
@@ -551,7 +551,7 @@ fn ip_info_create_helper(
     // Identity provider verify key.
     let ip_verify_key = {
         let ps_buf = &mut slice_from_c_bytes!(verify_key_ptr, verify_key_len as usize);
-        from_bytes::<ps_sig::PublicKey<Bls12>, &[u8]>(ps_buf).context(
+        from_bytes::<crate::ps_sig::PublicKey<Bls12>, &[u8]>(ps_buf).context(
             "Unable to create PublicKey<Bls12> instance from byte array at verify_key_ptr.",
         )?
     };
@@ -637,7 +637,7 @@ mod test {
             cred_holder_info: ah_info,
             prf_key,
         };
-        let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
+        let randomness = crate::ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
         let id_use_data = IdObjectUseData { aci, randomness };
         let acc_data = InitialAccountData {
             keys:      {

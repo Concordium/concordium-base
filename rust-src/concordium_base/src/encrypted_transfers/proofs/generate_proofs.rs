@@ -2,21 +2,22 @@
 //! all the building parts into a single wrapper per operation.
 #![allow(non_snake_case)]
 use super::{enc_trans::*, super::types::*};
-use bulletproofs::range_proof::{
+use crate::bulletproofs::range_proof::{
     prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
 use crate::common::types::Amount;
 use crate::curve_arithmetic::{Curve, Value};
-use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
-use id::{
+use crate::elgamal::{Cipher, PublicKey, Randomness, SecretKey};
+use crate::id::{
     sigma_protocols::{com_eq::*, common::*, dlog::*},
     types::GlobalContext,
 };
-use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
+use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
 use rand::*;
-use random_oracle::*;
+use crate::random_oracle::*;
 use std::rc::Rc;
+use itertools::izip;
 
 /// This function is an implementation of the genEncExpInfo documented in the
 /// bluepaper without bulletproof part.

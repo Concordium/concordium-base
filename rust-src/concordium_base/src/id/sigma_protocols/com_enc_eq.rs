@@ -4,15 +4,14 @@
 
 use super::common::*;
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::{multiexp, Curve};
-use elgamal::{
+use crate::elgamal::{
     Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
 };
 use ff::Field;
-use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value};
+use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value};
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 
 #[derive(Debug)]
 pub struct ComEncEqSecret<T: Curve> {
@@ -66,7 +65,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn get_challenge(&self, challenge: &random_oracle::Challenge) -> Self::ProtocolChallenge {
+    fn get_challenge(&self, challenge: &crate::random_oracle::Challenge) -> Self::ProtocolChallenge {
         C::scalar_from_bytes(challenge)
     }
 

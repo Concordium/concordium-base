@@ -7,8 +7,9 @@ use super::common::*;
 use crate::common::*;
 use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
-use random_oracle::{Challenge, RandomOracle};
+use crate::random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
+use itertools::izip;
 
 pub struct AggregateDlog<C: Curve> {
     /// Evaluated point.

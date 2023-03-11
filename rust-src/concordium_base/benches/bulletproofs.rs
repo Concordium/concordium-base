@@ -7,9 +7,9 @@ use criterion::Criterion;
 use crate::curve_arithmetic::*;
 use ff::Field;
 use pairing::bls12_381::{Fr, G1};
-use pedersen_scheme::*;
+use concordium_base::pedersen_commitment::*;
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 
 use std::time::Duration;
 

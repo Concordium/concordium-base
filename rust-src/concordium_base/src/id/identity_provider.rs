@@ -6,14 +6,14 @@ use super::{
     types::*,
     utils,
 };
-use bulletproofs::range_proof::verify_efficient;
+use crate::bulletproofs::range_proof::verify_efficient;
 use crate::common::{to_bytes, types::TransactionTime};
 use crate::curve_arithmetic::{multiexp, Curve, Pairing};
-use elgamal::multicombine;
+use crate::elgamal::multicombine;
 use ff::Field;
-use pedersen_scheme::{Commitment, CommitmentKey};
+use crate::pedersen_commitment::{Commitment, CommitmentKey};
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -352,8 +352,8 @@ pub fn sign_identity_object<
     pre_id_obj: &PreIdentityObject<P, C>,
     ip_info: &IpInfo<P>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Reason> {
+    ip_secret_key: &crate::ps_sig::SecretKey<P>,
+) -> Result<crate::ps_sig::Signature<P>, Reason> {
     sign_identity_object_common(
         &pre_id_obj.get_common_pio_fields(),
         ip_info,
@@ -377,8 +377,8 @@ pub fn sign_identity_object_v1<
     pre_id_obj: &PreIdentityObjectV1<P, C>,
     ip_info: &IpInfo<P>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Reason> {
+    ip_secret_key: &crate::ps_sig::SecretKey<P>,
+) -> Result<crate::ps_sig::Signature<P>, Reason> {
     sign_identity_object_common(
         &pre_id_obj.get_common_pio_fields(),
         ip_info,
@@ -403,10 +403,10 @@ fn sign_identity_object_common<
     common_fields: &CommonPioFields<P, C>,
     ip_info: &IpInfo<P>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Reason> {
+    ip_secret_key: &crate::ps_sig::SecretKey<P>,
+) -> Result<crate::ps_sig::Signature<P>, Reason> {
     let choice_ar_handles = common_fields.choice_ar_parameters.ar_identities.clone();
-    let message: ps_sig::UnknownMessage<P> = compute_message(
+    let message: crate::ps_sig::UnknownMessage<P> = compute_message(
         common_fields.cmm_prf,
         common_fields.cmm_sc,
         common_fields.choice_ar_parameters.threshold,
@@ -475,11 +475,11 @@ pub fn verify_credentials<
     context: IpContext<P, C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     expiry: TransactionTime,
-    ip_secret_key: &ps_sig::SecretKey<P>,
+    ip_secret_key: &crate::ps_sig::SecretKey<P>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> Result<
     (
-        ps_sig::Signature<P>,
+        crate::ps_sig::Signature<P>,
         InitialCredentialDeploymentInfo<C, AttributeType>,
     ),
     Reason,
@@ -505,8 +505,8 @@ pub fn verify_credentials_v1<
     pre_id_obj: &PreIdentityObjectV1<P, C>,
     context: IpContext<P, C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Reason> {
+    ip_secret_key: &crate::ps_sig::SecretKey<P>,
+) -> Result<crate::ps_sig::Signature<P>, Reason> {
     validate_request_v1(pre_id_obj, context)?;
     let sig = sign_identity_object_v1(pre_id_obj, context.ip_info, alist, ip_secret_key)?;
     Ok(sig)
@@ -572,8 +572,8 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     threshold: Threshold,
     ar_list: &BTreeSet<ArIdentity>,
     att_list: &AttributeList<P::ScalarField, AttributeType>,
-    ps_public_key: &ps_sig::PublicKey<P>,
-) -> Result<ps_sig::UnknownMessage<P>, Reason> {
+    ps_public_key: &crate::ps_sig::PublicKey<P>,
+) -> Result<crate::ps_sig::UnknownMessage<P>, Reason> {
     let max_accounts = P::G1::scalar_from_u64(att_list.max_accounts.into());
 
     let tags = {
@@ -639,7 +639,7 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         exps.push(att);
     }
     let msg =
-        ps_sig::UnknownMessage(multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)));
+        crate::ps_sig::UnknownMessage(multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)));
     Ok(msg)
 }
 
@@ -675,7 +675,7 @@ mod tests {
     use crate::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*};
     use crate::common::types::{KeyIndex, KeyPair};
     use ff::Field;
-    use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
+    use crate::pedersen_commitment::{CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;
 
     const EXPIRY: TransactionTime = TransactionTime {
@@ -1075,7 +1075,7 @@ mod tests {
             generate_id_recovery_request(&ip_info, &global_ctx, id_cred_sec, timestamp).unwrap();
 
         ip_info.ip_verify_key =
-            ps_sig::PublicKey::arbitrary((5 + num_ars + max_attrs) as usize, &mut csprng);
+            crate::ps_sig::PublicKey::arbitrary((5 + num_ars + max_attrs) as usize, &mut csprng);
 
         let result = validate_id_recovery_request(&ip_info, &global_ctx, &request);
         assert!(

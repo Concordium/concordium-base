@@ -3,10 +3,9 @@
 //! revealing it.
 use super::common::*;
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::{Curve, Value};
 use ff::Field;
-use random_oracle::{Challenge, RandomOracle};
+use crate::random_oracle::{Challenge, RandomOracle};
 
 pub struct Dlog<C: Curve> {
     /// Evaluated point.

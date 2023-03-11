@@ -66,8 +66,8 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
     // Create key for IP long enough to encode the attributes and anonymity
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
-    let ip_secret_key = ps_sig::SecretKey::<IpPairing>::generate(ps_len, csprng);
-    let ip_verify_key = ps_sig::PublicKey::from(&ip_secret_key);
+    let ip_secret_key = crate::ps_sig::SecretKey::<IpPairing>::generate(ps_len, csprng);
+    let ip_verify_key = crate::ps_sig::PublicKey::from(&ip_secret_key);
     let keypair = ed25519::Keypair::generate(csprng);
     let ip_cdi_verify_key = keypair.public;
     let ip_cdi_secret_key = keypair.secret;
@@ -105,7 +105,7 @@ pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ArCurve> {
 /// Create random IdObjectUseData to be used by tests
 pub fn test_create_id_use_data<T: Rng>(csprng: &mut T) -> IdObjectUseData<IpPairing, ArCurve> {
     let aci = test_create_aci(csprng);
-    let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(csprng);
+    let randomness = crate::ps_sig::SigRetrievalRandomness::generate_non_zero(csprng);
     IdObjectUseData { aci, randomness }
 }
 
@@ -119,7 +119,7 @@ pub fn test_create_pio<'a>(
 ) -> (
     IpContext<'a, IpPairing, ArCurve>,
     PreIdentityObject<IpPairing, ArCurve>,
-    ps_sig::SigRetrievalRandomness<IpPairing>,
+    crate::ps_sig::SigRetrievalRandomness<IpPairing>,
 ) {
     // Create context with all anonymity revokers
     let context = IpContext::new(ip_info, ars_infos, global_ctx);
@@ -142,7 +142,7 @@ pub fn test_create_pio_v1<'a>(
 ) -> (
     IpContext<'a, IpPairing, ArCurve>,
     PreIdentityObjectV1<IpPairing, ArCurve>,
-    ps_sig::SigRetrievalRandomness<IpPairing>,
+    crate::ps_sig::SigRetrievalRandomness<IpPairing>,
 ) {
     // Create context with all anonymity revokers
     let context = IpContext::new(ip_info, ars_infos, global_ctx);

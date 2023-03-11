@@ -1,12 +1,11 @@
 //! Implementation of set membership proof along the lines of bulletproofs
 use super::{inner_product_proof::*, utils::*};
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve};
 use ff::Field;
-use pedersen_scheme::*;
+use crate::pedersen_commitment::*;
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use std::{convert::TryInto, iter::once};
 
 /// Bulletproof style set-membership proof

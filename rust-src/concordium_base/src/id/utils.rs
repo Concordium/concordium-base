@@ -10,9 +10,9 @@ use crate::common::{
 use crate::curve_arithmetic::{multiexp, Curve, Pairing, Value};
 use ed25519_dalek::Verifier;
 use either::Either;
-use elgamal::*;
+use crate::elgamal::*;
 use ff::{Field, PrimeField};
-use pedersen_scheme::Commitment;
+use crate::pedersen_commitment::Commitment;
 use rand::*;
 use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, BTreeSet};

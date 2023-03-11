@@ -3,7 +3,6 @@
 //! Commitment type
 
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::*;
 
 use std::ops::Deref;

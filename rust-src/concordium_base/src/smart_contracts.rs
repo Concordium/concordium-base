@@ -7,7 +7,7 @@ pub use concordium_contracts_common::{
     ReceiveName,
 };
 use crate::common::{
-    derive::{Serial, Serialize},
+    Serialize,
     Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
 };
 use derive_more::*;
@@ -119,7 +119,7 @@ impl Deserial for ModuleSource {
             "Maximum size of a Wasm module is {}",
             MAX_WASM_MODULE_SIZE
         );
-        let bytes = crypto_common::deserial_bytes(source, s as usize)?;
+        let bytes = crate::common::deserial_bytes(source, s as usize)?;
         Ok(ModuleSource { bytes })
     }
 }

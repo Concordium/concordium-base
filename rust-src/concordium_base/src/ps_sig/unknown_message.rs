@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::curve_arithmetic::*;
-use pedersen_scheme::Commitment;
+use crate::pedersen_commitment::Commitment;
 
 use rand::*;
 use std::ops::Deref;

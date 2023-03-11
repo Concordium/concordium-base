@@ -2,9 +2,9 @@ use crate::common::*;
 use crate::common::{Serialize,SerdeBase16Serialize};
 use crate::curve_arithmetic::{Curve, Pairing, Value};
 use ff::Field;
-use id::sigma_protocols::{common::*, dlog::*};
+use crate::id::sigma_protocols::{common::*, dlog::*};
 use rand::Rng;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use rayon::iter::*;
 use sha2::{digest::Output, Digest, Sha512};
 

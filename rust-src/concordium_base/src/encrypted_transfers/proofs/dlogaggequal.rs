@@ -7,12 +7,12 @@
 //! When using the code needs to be thouroughly reviewed.
 
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::{multiexp, Curve};
 use ff::Field;
-use id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
-use random_oracle::{Challenge, RandomOracle};
+use crate::id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
+use crate::random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
+use itertools::izip;
 
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog:            Dlog<C>,

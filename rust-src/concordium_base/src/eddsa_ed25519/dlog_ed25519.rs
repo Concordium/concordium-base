@@ -1,6 +1,5 @@
 use anyhow::bail;
 use crate::common::*;
-use crate::common::derive::*;
 use curve25519_dalek::{
     constants,
     edwards::{CompressedEdwardsY, EdwardsPoint},
@@ -8,7 +7,7 @@ use curve25519_dalek::{
 };
 use ed25519_dalek::*;
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use sha2::{Digest, Sha512};
 use thiserror::Error;
 

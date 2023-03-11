@@ -32,14 +32,14 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
         #[automatically_derived]
         impl #serial_impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
             fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
-                crypto_common::base16_encode(self, #ident_serializer)
+                crate::common::base16_encode(self, #ident_serializer)
             }
         }
 
         #[automatically_derived]
         impl #deserial_impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
             fn deserialize<#ident: serde::Deserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
-                crypto_common::base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
+                crate::common::base16_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
             }
         }
     };
@@ -138,7 +138,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crypto_common::deserial_vector_no_length(#source, usize::try_from(len)?)?
+                        crate::common::deserial_vector_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
@@ -146,7 +146,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crypto_common::deserial_map_no_length(#source, usize::try_from(len)?)?
+                        crate::common::deserial_map_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
@@ -154,7 +154,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crypto_common::deserial_set_no_length(#source, usize::try_from(len)?)?
+                        crate::common::deserial_set_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
@@ -162,7 +162,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
-                        crypto_common::deserial_string(#source, usize::try_from(len)?)?
+                        crate::common::deserial_string(#source, usize::try_from(len)?)?
                     };
                 });
             } else {
@@ -245,28 +245,28 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crypto_common::serial_vector_no_length(&self.#ident, #out);
+                            crate::common::serial_vector_no_length(&self.#ident, #out);
                         });
                     } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crypto_common::serial_map_no_length(&self.#ident, #out);
+                            crate::common::serial_map_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crypto_common::serial_set_no_length(&self.#ident, #out);
+                            crate::common::serial_set_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            crypto_common::serial_string(self.#ident.as_str(), #out);
+                            crate::common::serial_string(self.#ident.as_str(), #out);
                         })
                     } else {
                         body.extend(quote! {

@@ -1,7 +1,7 @@
 use criterion::*;
 use crate::common::types::*;
 use crate::curve_arithmetic::*;
-use id::{
+use concordium_base::id::{
     constants::*,
     identity_provider::{compute_message, sign_identity_object, validate_request},
     secret_sharing::Threshold,
@@ -9,7 +9,7 @@ use id::{
     types::*,
 };
 use pairing::bls12_381::{G1, *};
-use pedersen_scheme::Commitment;
+use concordium_base::pedersen_commitment::Commitment;
 use rand::*;
 use serde_json::from_str;
 use std::{
@@ -58,8 +58,8 @@ fn bench_compute_message(c: &mut Criterion) {
 
     // the number of scalars in the pk should be at least the total number of
     // attributes, including mandatory attributes: i.e. `valid_to` etc.
-    let public_key: ps_sig::PublicKey<Bls12> =
-        ps_sig::PublicKey::arbitrary(alist.len() + 3, &mut csprng);
+    let public_key: crate::ps_sig::PublicKey<Bls12> =
+        crate::ps_sig::PublicKey::arbitrary(alist.len() + 3, &mut csprng);
 
     let att_list = ExampleAttributeList {
         valid_to: valid_to_next_year,

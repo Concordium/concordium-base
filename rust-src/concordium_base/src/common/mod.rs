@@ -17,6 +17,8 @@ pub use serde::Deserialize as SerdeDeserialize;
 /// Derive macro to derive [serde::Serialize] instances.
 pub use serde::Serialize as SerdeSerialize;
 
+pub use concordium_base_derive::*;
+
 #[doc(hidden)]
 /// This is provided as a workaround so that we can build these libraries in
 /// Wasm. FIXME: At some point we should handle this better. The FFI exports are

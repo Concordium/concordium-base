@@ -8,6 +8,7 @@ license-file = "../../LICENSE"
 [dependencies]
 ff = "0.5"
 sha2 = "0.10"
+sha3 = "0.10"
 anyhow = "1.0"
 rand_core = "=0.5"
 serde = {version = "1.0", features = ["derive"]}
@@ -33,12 +34,19 @@ num-bigint = "0.4"
 num-traits = "0.2"
 bs58 = { version = "0.4", features = ["check"] }
 leb128 = "0.2"
+rayon = "1.7"
+subtle = "2.5"
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
 version = "*"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde", "sdk"]
+
+# Local dependencies
+[dependencies.concordium_base_derive]
+version = "*"
+path = "../concordium_base_derive"
 
 [features]
 default = ["ffi"]  # TODO: Remove after development.

@@ -6,12 +6,11 @@
 //! the commitment randomness), the user can construct a proof of the statement
 //! (if the statement is true).
 use super::{constants::AttributeKind, sigma_protocols::dlog::Witness as DlogWitness, types::*};
-use bulletproofs::{
+use crate::bulletproofs::{
     range_proof::RangeProof, set_membership_proof::SetMembershipProof,
     set_non_membership_proof::SetNonMembershipProof,
 };
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::Curve;
 use pairing::bls12_381::G1;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};

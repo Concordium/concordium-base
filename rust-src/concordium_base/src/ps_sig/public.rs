@@ -6,7 +6,6 @@ use rand::*;
 
 use super::{known_message::*, signature::*};
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::*;
 use super::secret::*;
 

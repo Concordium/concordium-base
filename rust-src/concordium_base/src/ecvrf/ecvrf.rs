@@ -37,7 +37,7 @@ impl Keypair {
 mod expose_ffi {
     use super::*;
     use crate::common::size_t;
-    use ffi_helpers::*;
+    use crate::ffi_helpers::*;
     use rand::thread_rng;
     use std::{cmp::Ordering, sync::Arc};
     use subtle::ConstantTimeEq;

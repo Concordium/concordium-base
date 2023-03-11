@@ -1,3 +1,4 @@
-pub(crate) mod ffi_macros;
+mod ffi_macros;
+pub(crate) use ffi_macros::*;
 
 mod common;

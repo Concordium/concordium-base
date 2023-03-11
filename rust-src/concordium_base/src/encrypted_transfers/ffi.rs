@@ -2,10 +2,9 @@
 //! This module provides FFI exports of functions, intended to be used by the
 //! scheduler, and the mobile wallet.
 
-use crate::*;
-use crate::common::*;
-use ffi_helpers::*;
-use prelude::StdRng;
+use super::*;
+use crate::{common::*, elgamal, ffi_helpers::*};
+use rand::prelude::StdRng;
 use std::io::Cursor;
 
 type Group = pairing::bls12_381::G1;
@@ -367,7 +366,7 @@ unsafe extern "C" fn decrypt_amount(
     let amount = EncryptedAmount {
         encryptions: [*from_ptr!(low_ptr), *from_ptr!(high_ptr)],
     };
-    crate::decrypt_amount(from_ptr!(table_ptr), sk, &amount).micro_ccd()
+    super::decrypt_amount(from_ptr!(table_ptr), sk, &amount).micro_ccd()
 }
 
 /// # Safety
@@ -383,7 +382,7 @@ unsafe extern "C" fn encrypt_amount(
 ) {
     let gc = from_ptr!(ctx_ptr);
     let pk = from_ptr!(pk_ptr);
-    let encrypted = crate::encrypt_amount(
+    let encrypted = super::encrypt_amount(
         gc,
         pk,
         Amount::from_micro_ccd(micro_ccd),

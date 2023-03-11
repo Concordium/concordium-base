@@ -8,10 +8,11 @@ use super::common::*;
 use crate::common::*;
 use crate::curve_arithmetic::*;
 use ff::Field;
-use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
-use ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey};
+use crate::pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value};
+use crate::ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey};
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
+use itertools::izip;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Witness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
@@ -66,7 +67,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     }
 
     #[inline]
-    fn get_challenge(&self, challenge: &random_oracle::Challenge) -> Self::ProtocolChallenge {
+    fn get_challenge(&self, challenge: &crate::random_oracle::Challenge) -> Self::ProtocolChallenge {
         C::scalar_from_bytes(challenge)
     }
 
@@ -247,7 +248,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         csprng: &mut R,
         f: impl FnOnce(Self, Self::SecretData, &mut R),
     ) {
-        use ps_sig::{SecretKey as PsSigSecretKey, SigRetrievalRandomness, UnknownMessage};
+        use crate::ps_sig::{SecretKey as PsSigSecretKey, SigRetrievalRandomness, UnknownMessage};
         let ps_sk: PsSigSecretKey<P> = PsSigSecretKey::generate(data_size, csprng);
         let ps_pk: PsSigPublicKey<P> = PsSigPublicKey::from(&ps_sk);
         let cmm_key = CommitmentKey::generate(csprng);
@@ -289,7 +290,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
 mod tests {
     use super::*;
     use pairing::bls12_381::{Bls12, G1};
-    use ps_sig::{SecretKey as PsSigSecretKey, Signature};
+    use crate::ps_sig::{SecretKey as PsSigSecretKey, Signature};
 
     #[test]
     #[allow(non_snake_case)]

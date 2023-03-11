@@ -1,12 +1,11 @@
 //! Implementation of range proofs along the lines of bulletproofs
 use super::{inner_product_proof::*, utils::*};
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
 use ff::{Field, PrimeField};
-use pedersen_scheme::*;
+use crate::pedersen_commitment::*;
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use std::iter::once;
 
 pub use super::utils::Generators;

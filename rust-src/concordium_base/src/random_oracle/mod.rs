@@ -13,7 +13,6 @@
 //! needs to be performed in the same order as when producing the proof.
 
 use crate::common::*;
-use crate::common::derive::Serialize;
 use crate::curve_arithmetic::Curve;
 use sha3::{Digest, Sha3_256};
 use std::io::Write;

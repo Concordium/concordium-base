@@ -3,7 +3,7 @@ use anyhow::bail;
 use crate::common::*;
 use crate::curve_arithmetic::*;
 use ff::Field;
-use pedersen_scheme::Value as PedersenValue;
+use crate::pedersen_commitment::Value as PedersenValue;
 use rand::*;
 use serde_json::{json, Value};
 use std::convert::TryFrom;

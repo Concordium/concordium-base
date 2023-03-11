@@ -11,19 +11,19 @@ use crate::{
     hashes, smart_contracts, updates,
 };
 use crate::common::{
-    derive::{Serial, Serialize},
+    Serialize,
     types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
     Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
     Serial,
 };
 use derive_more::*;
 use crate::encrypted_transfers::types::{EncryptedAmountTransferData, SecToPubAmountTransferData};
-use id::types::{
+use crate::id::types::{
     AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
     CredentialPublicKeys,
 };
 use rand::{CryptoRng, Rng};
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use sha2::Digest;
 use std::{collections::BTreeMap, marker::PhantomData};
 use thiserror::Error;
@@ -54,13 +54,13 @@ impl TryFrom<Vec<u8>> for Memo {
 }
 
 impl Deserial for Memo {
-    fn deserial<R: crypto_common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+    fn deserial<R: crate::common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u16 = source.get()?;
         anyhow::ensure!(
             usize::from(len) <= crate::constants::MAX_MEMO_SIZE,
             "Memo too big.."
         );
-        let bytes = crypto_common::deserial_bytes(source, len.into())?;
+        let bytes = crate::common::deserial_bytes(source, len.into())?;
         Ok(Memo { bytes })
     }
 }
@@ -259,7 +259,7 @@ pub fn get_encoded_payload<R: ReadBytesExt>(
 ) -> ParseResult<EncodedPayload> {
     // The use of deserial_bytes is safe here (no execessive allocations) because
     // payload_size is limited
-    let payload = crypto_common::deserial_bytes(source, u32::from(len) as usize)?;
+    let payload = crate::common::deserial_bytes(source, u32::from(len) as usize)?;
     Ok(EncodedPayload { payload })
 }
 
@@ -382,12 +382,12 @@ pub struct BakerKeysPayload<V> {
     pub aggregation_verify_key: BakerAggregationVerifyKey,
     /// Proof of knowledge of the secret key corresponding to the signature
     /// verification key.
-    pub proof_sig:              eddsa_ed25519::Ed25519DlogProof,
+    pub proof_sig:              crate::eddsa_ed25519::Ed25519DlogProof,
     /// Proof of knowledge of the election secret key.
-    pub proof_election:         eddsa_ed25519::Ed25519DlogProof,
+    pub proof_election:         crate::eddsa_ed25519::Ed25519DlogProof,
     /// Proof of knowledge of the secret key for signing finalization
     /// records.
-    pub proof_aggregation:      aggregate_sig::Proof<AggregateSigPairing>,
+    pub proof_aggregation:      crate::aggregate_sig::Proof<AggregateSigPairing>,
 }
 
 /// Baker keys payload containing proofs construct for a `AddBaker` transaction.
@@ -415,13 +415,13 @@ impl<T> BakerKeysPayload<T> {
         baker_keys.signature_verify.serial(&mut challenge);
         baker_keys.aggregation_verify.serial(&mut challenge);
 
-        let proof_election = eddsa_ed25519::prove_dlog_ed25519(
+        let proof_election = crate::eddsa_ed25519::prove_dlog_ed25519(
             csprng,
             &mut RandomOracle::domain(&challenge),
             &baker_keys.election_verify.verify_key,
             &baker_keys.election_sign.sign_key,
         );
-        let proof_sig = eddsa_ed25519::prove_dlog_ed25519(
+        let proof_sig = crate::eddsa_ed25519::prove_dlog_ed25519(
             csprng,
             &mut RandomOracle::domain(&challenge),
             &baker_keys.signature_verify.verify_key,
@@ -708,13 +708,13 @@ impl<M> From<crate::hashes::HashBytes<M>> for RegisteredData {
 }
 
 impl Deserial for RegisteredData {
-    fn deserial<R: crypto_common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+    fn deserial<R: crate::common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u16 = source.get()?;
         anyhow::ensure!(
             usize::from(len) <= crate::constants::MAX_REGISTERED_DATA_SIZE,
             "Data too big to register."
         );
-        let bytes = crypto_common::deserial_bytes(source, len.into())?;
+        let bytes = crate::common::deserial_bytes(source, len.into())?;
         Ok(RegisteredData { bytes })
     }
 }
@@ -724,9 +724,9 @@ impl Deserial for RegisteredData {
 pub type AccountCredentialsMap = BTreeMap<
     CredentialIndex,
     CredentialDeploymentInfo<
-        id::constants::IpPairing,
-        id::constants::ArCurve,
-        id::constants::AttributeKind,
+        crate::id::constants::IpPairing,
+        crate::id::constants::ArCurve,
+        crate::id::constants::AttributeKind,
     >,
 >;
 
@@ -962,7 +962,7 @@ impl Serial for Payload {
                 out.put(&19u8);
                 out.put(to);
                 out.put(&(schedule.len() as u8));
-                crypto_common::serial_vector_no_length(schedule, out);
+                crate::common::serial_vector_no_length(schedule, out);
             }
             Payload::UpdateCredentials {
                 new_cred_infos,
@@ -971,9 +971,9 @@ impl Serial for Payload {
             } => {
                 out.put(&20u8);
                 out.put(&(new_cred_infos.len() as u8));
-                crypto_common::serial_map_no_length(new_cred_infos, out);
+                crate::common::serial_map_no_length(new_cred_infos, out);
                 out.put(&(remove_cred_ids.len() as u8));
-                crypto_common::serial_vector_no_length(remove_cred_ids, out);
+                crate::common::serial_vector_no_length(remove_cred_ids, out);
                 out.put(new_threshold);
             }
             Payload::RegisterData { data } => {
@@ -1001,7 +1001,7 @@ impl Serial for Payload {
                 out.put(to);
                 out.put(memo);
                 out.put(&(schedule.len() as u8));
-                crypto_common::serial_vector_no_length(schedule, out);
+                crate::common::serial_vector_no_length(schedule, out);
             }
             Payload::ConfigureBaker { data } => {
                 out.put(&25u8);
@@ -1141,16 +1141,16 @@ impl Deserial for Payload {
             19 => {
                 let to = source.get()?;
                 let len: u8 = source.get()?;
-                let schedule = crypto_common::deserial_vector_no_length(source, len.into())?;
+                let schedule = crate::common::deserial_vector_no_length(source, len.into())?;
                 Ok(Payload::TransferWithSchedule { to, schedule })
             }
             20 => {
                 let cred_infos_len: u8 = source.get()?;
                 let new_cred_infos =
-                    crypto_common::deserial_map_no_length(source, cred_infos_len.into())?;
+                    crate::common::deserial_map_no_length(source, cred_infos_len.into())?;
                 let remove_cred_ids_len: u8 = source.get()?;
                 let remove_cred_ids =
-                    crypto_common::deserial_vector_no_length(source, remove_cred_ids_len.into())?;
+                    crate::common::deserial_vector_no_length(source, remove_cred_ids_len.into())?;
                 let new_threshold = source.get()?;
                 Ok(Payload::UpdateCredentials {
                     new_cred_infos,
@@ -1182,7 +1182,7 @@ impl Deserial for Payload {
                 let to = source.get()?;
                 let memo = source.get()?;
                 let len: u8 = source.get()?;
-                let schedule = crypto_common::deserial_vector_no_length(source, len.into())?;
+                let schedule = crate::common::deserial_vector_no_length(source, len.into())?;
                 Ok(Payload::TransferWithScheduleAndMemo { to, memo, schedule })
             }
             25 => {
@@ -1275,7 +1275,7 @@ impl Deserial for Payload {
 
 impl PayloadLike for Payload {
     fn encode(&self) -> EncodedPayload {
-        let payload = crypto_common::to_bytes(&self);
+        let payload = crate::common::to_bytes(&self);
         EncodedPayload { payload }
     }
 
@@ -1465,9 +1465,9 @@ pub enum BlockItem<PayloadType> {
     CredentialDeployment(
         Box<
             AccountCredentialMessage<
-                id::constants::IpPairing,
-                id::constants::ArCurve,
-                id::constants::AttributeKind,
+                crate::id::constants::IpPairing,
+                crate::id::constants::ArCurve,
+                crate::id::constants::AttributeKind,
             >,
         >,
     ),
@@ -1481,17 +1481,17 @@ impl<PayloadType> From<AccountTransaction<PayloadType>> for BlockItem<PayloadTyp
 impl<PayloadType>
     From<
         AccountCredentialMessage<
-            id::constants::IpPairing,
-            id::constants::ArCurve,
-            id::constants::AttributeKind,
+            crate::id::constants::IpPairing,
+            crate::id::constants::ArCurve,
+            crate::id::constants::AttributeKind,
         >,
     > for BlockItem<PayloadType>
 {
     fn from(
         at: AccountCredentialMessage<
-            id::constants::IpPairing,
-            id::constants::ArCurve,
-            id::constants::AttributeKind,
+            crate::id::constants::IpPairing,
+            crate::id::constants::ArCurve,
+            crate::id::constants::AttributeKind,
         >,
     ) -> Self {
         Self::CredentialDeployment(Box::new(at))
@@ -1656,7 +1656,7 @@ impl Deserial for BlockItem<EncodedPayload> {
 
 /// Energy costs of transactions.
 pub mod cost {
-    use id::types::CredentialType;
+    use crate::id::types::CredentialType;
 
     use super::*;
 
@@ -2994,7 +2994,7 @@ pub mod send {
 #[cfg(test)]
 mod tests {
     use crate::hashes::TransactionSignHash;
-    use id::types::{SignatureThreshold, VerifyKey};
+    use crate::id::types::{SignatureThreshold, VerifyKey};
     use rand::Rng;
     use std::convert::TryFrom;
 

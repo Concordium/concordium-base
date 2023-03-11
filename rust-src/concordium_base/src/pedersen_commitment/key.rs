@@ -5,7 +5,6 @@ use super::{commitment::*, randomness::*};
 use crate::curve_arithmetic::*;
 
 use crate::common::*;
-use crate::common::derive::*;
 use rand::*;
 
 /// A commitment key is a pair of group elements that are used as a base to

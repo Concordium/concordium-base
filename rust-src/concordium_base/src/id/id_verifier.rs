@@ -2,7 +2,7 @@
 //! about a credential on accounts.
 
 use super::{types::*, utils};
-use bulletproofs::{
+use crate::bulletproofs::{
     range_proof::{verify_efficient, RangeProof, VerificationError},
     set_membership_proof::verify as verify_set_membership,
     set_non_membership_proof::verify as verify_set_non_membership,
@@ -15,10 +15,10 @@ use super::{
 };
 use crate::curve_arithmetic::Curve;
 use ff::Field;
-use pedersen_scheme::{
+use crate::pedersen_commitment::{
     Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
 };
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use sha2::{Digest, Sha256};
 
 /// Function for opening an attribute inside a commitment. The arguments are
@@ -194,7 +194,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
                     if let Some(com) = maybe_com {
                         // There is a commitment to the relevant attribute. We can then check the
                         // proof.
-                        if crate::id_verifier::verify_attribute_range(
+                        if super::id_verifier::verify_attribute_range(
                             &global.on_chain_commitment_key,
                             global.bulletproof_generators(),
                             &statement.lower,

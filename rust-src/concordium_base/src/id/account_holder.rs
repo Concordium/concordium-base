@@ -9,21 +9,22 @@ use super::{
     utils,
 };
 use anyhow::{bail, ensure};
-use bulletproofs::{
+use crate::bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal, RangeProof},
 };
 use crate::common::types::TransactionTime;
 use crate::curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf as prf;
-use elgamal::{multicombine, Cipher};
+use crate::dodis_yampolskiy_prf as prf;
+use crate::elgamal::{multicombine, Cipher};
 use ff::Field;
-use pedersen_scheme::{
+use crate::pedersen_commitment::{
     Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
 };
 use rand::*;
-use random_oracle::RandomOracle;
+use crate::random_oracle::RandomOracle;
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
+use itertools::izip;
 
 /// Build the PublicInformationForIP used to generate an PreIdentityObject, out
 /// of the account holder information and the necessary contextual
@@ -40,7 +41,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
 
     // From create_credential:
     // let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-    let reg_id_exponent = match prf_key.prf_exponent(crate::constants::INITIAL_CREDENTIAL_INDEX) {
+    let reg_id_exponent = match prf_key.prf_exponent(super::constants::INITIAL_CREDENTIAL_INDEX) {
         Ok(exp) => exp,
         Err(_) => return None,
     };
@@ -87,7 +88,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     threshold: Threshold,
     id_use_data: &IdObjectUseData<P, C>,
     initial_account: &impl InitialAccountDataWithSigning,
-) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
+) -> Option<(PreIdentityObject<P, C>, crate::ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Prove ownership of the initial account
@@ -167,7 +168,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         cmm_prf_sharing_coeff,
         poks,
     };
-    Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
+    Some((pio, crate::ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
 }
 
 /// Generate a version 1 PreIdentityObject out of the account holder
@@ -180,7 +181,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IpContext<P, C>,
     threshold: Threshold,
     id_use_data: &IdObjectUseData<P, C>,
-) -> Option<(PreIdentityObjectV1<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
+) -> Option<(PreIdentityObjectV1<P, C>, crate::ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     let CommonPioGenerationOutput {
@@ -230,7 +231,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         cmm_prf_sharing_coeff,
         poks,
     };
-    Some((pio, ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
+    Some((pio, crate::ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand)))
 }
 
 /// Type alias for the sigma protocol prover that are used by both
@@ -401,7 +402,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
             .map(|x| **x)
             .collect::<Vec<_>>();
         let combined_rands = inner_product::<C::Scalar>(&rands_as_scalars, &scalars);
-        let combined_encryption_randomness = elgamal::Randomness::new(combined_rands);
+        let combined_encryption_randomness = crate::elgamal::Randomness::new(combined_rands);
         let secret = com_enc_eq::ComEncEqSecret {
             value:         item.share.clone(),
             elgamal_rand:  combined_encryption_randomness,
@@ -469,7 +470,7 @@ pub struct SingleArData<'a, C: Curve> {
     pub ar:                  &'a ArInfo<C>,
     share:                   Value<C>,
     pub encrypted_share:     Cipher<C>,
-    encryption_randomness:   elgamal::Randomness<C>,
+    encryption_randomness:   crate::elgamal::Randomness<C>,
     pub cmm_to_share:        Commitment<C>,
     randomness_cmm_to_share: PedersenRandomness<C>,
 }
@@ -548,7 +549,7 @@ pub struct SingleArDataPrf<'a, C: Curve> {
     /// Encryption of the share in chunks
     encrypted_share: [Cipher<C>; 8],
     /// Encryption randomness used to encrypt the share
-    encryption_randomness: [elgamal::Randomness<C>; 8],
+    encryption_randomness: [crate::elgamal::Randomness<C>; 8],
     /// Commitment to the share
     cmm_to_share: Commitment<C>,
     /// Randomness used in commitment to share
@@ -956,9 +957,9 @@ fn compute_pok_sig<
     alist: &AttributeList<C::Scalar, AttributeType>,
     threshold: Threshold,
     ar_list: &BTreeSet<ArIdentity>,
-    ip_pub_key: &ps_sig::PublicKey<P>,
-    blinded_sig: &ps_sig::BlindedSignature<P>,
-    blind_rand: ps_sig::BlindingRandomness<P>,
+    ip_pub_key: &crate::ps_sig::PublicKey<P>,
+    blinded_sig: &crate::ps_sig::BlindedSignature<P>,
+    blind_rand: crate::ps_sig::BlindingRandomness<P>,
 ) -> anyhow::Result<(com_eq_sig::ComEqSig<P, C>, com_eq_sig::ComEqSigSecret<P, C>)> {
     let att_vec = &alist.alist;
     // number of user chosen attributes (+4 is for tags, valid_to, created_at,
@@ -1256,7 +1257,7 @@ mod tests {
     use crate::common::types::{KeyIndex, KeyPair};
     use crate::curve_arithmetic::Curve;
     use either::Either::Left;
-    use pedersen_scheme::CommitmentKey as PedersenKey;
+    use crate::pedersen_commitment::CommitmentKey as PedersenKey;
 
     type ExampleCurve = pairing::bls12_381::G1;
 

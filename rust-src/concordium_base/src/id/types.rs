@@ -9,28 +9,27 @@ use super::{
     },
 };
 use anyhow::{anyhow, bail};
-use bulletproofs::{range_proof::RangeProof, utils::Generators};
+use crate::bulletproofs::{range_proof::RangeProof, utils::Generators};
 use byteorder::ReadBytesExt;
 pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crate::common::{
     types::{CredentialIndex, KeyIndex, KeyPair},
     *,
 };
-use crate::common::derive::*;
 use crate::curve_arithmetic::*;
 use derive_more::*;
-use dodis_yampolskiy_prf as prf;
+use crate::dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
 use either::Either;
-use elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
+use crate::elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
-use pedersen_scheme::{
+use crate::pedersen_commitment::{
     Commitment as PedersenCommitment, CommitmentKey as PedersenKey,
     Randomness as PedersenRandomness, Value as PedersenValue,
 };
-use random_oracle::Challenge;
+use crate::random_oracle::Challenge;
 use serde::{
     de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
     Serialize as SerdeSerialize, Serializer,
@@ -965,7 +964,7 @@ pub struct IdentityObject<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub signature:           ps_sig::Signature<P>,
+    pub signature:           crate::ps_sig::Signature<P>,
 }
 
 /// The data we get back from the identity provider in the version 1 flow.
@@ -991,7 +990,7 @@ pub struct IdentityObjectV1<
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub signature:           ps_sig::Signature<P>,
+    pub signature:           crate::ps_sig::Signature<P>,
 }
 
 /// Trait for extracting the relevants parts of an identity object needed for
@@ -1008,7 +1007,7 @@ pub trait HasIdentityObjectFields<
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType>;
 
     /// Get the signature
-    fn get_signature(&self) -> &ps_sig::Signature<P>;
+    fn get_signature(&self) -> &crate::ps_sig::Signature<P>;
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -1020,7 +1019,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { &self.alist }
 
-    fn get_signature(&self) -> &ps_sig::Signature<P> { &self.signature }
+    fn get_signature(&self) -> &crate::ps_sig::Signature<P> { &self.signature }
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
@@ -1032,7 +1031,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 
     fn get_attribute_list(&self) -> &AttributeList<C::Scalar, AttributeType> { &self.alist }
 
-    fn get_signature(&self) -> &ps_sig::Signature<P> { &self.signature }
+    fn get_signature(&self) -> &crate::ps_sig::Signature<P> { &self.signature }
 }
 
 /// Anonymity revokers associated with a single identity provider
@@ -1090,7 +1089,7 @@ pub struct IpInfo<P: Pairing> {
     pub ip_description:    Description,
     /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
-    pub ip_verify_key:     ps_sig::PublicKey<P>,
+    pub ip_verify_key:     crate::ps_sig::PublicKey<P>,
     /// Ed public key of the IP
     #[serde(
         rename = "ipCdiVerifyKey",
@@ -1110,7 +1109,7 @@ pub struct IpInfos<P: Pairing> {
 }
 
 /// Public key of an anonymity revoker.
-pub type ArPublicKey<C> = elgamal::PublicKey<C>;
+pub type ArPublicKey<C> = crate::elgamal::PublicKey<C>;
 
 /// Information on a single anonymity revoker held by the IP.
 /// Typically an IP will hold a more than one.
@@ -1295,7 +1294,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub sig: ps_sig::BlindedSignature<P>,
+    pub sig: crate::ps_sig::BlindedSignature<P>,
     /// list of  commitments to the attributes .
     #[serde(
         rename = "commitments",
@@ -1525,7 +1524,7 @@ impl VerifyKey {
     /// This checks
     /// - the proposed signature can be parsed as a valid signature
     /// - the signature validates with respect to the public key.
-    pub fn verify(&self, msg: impl AsRef<[u8]>, sig: &crypto_common::types::Signature) -> bool {
+    pub fn verify(&self, msg: impl AsRef<[u8]>, sig: &crate::common::types::Signature) -> bool {
         match self {
             VerifyKey::Ed25519VerifyKey(pk) => {
                 let sig: ed25519_dalek::Signature = {
@@ -2044,7 +2043,7 @@ impl From<InitialAccountData> for AccountKeys {
 #[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct CredentialData {
     #[serde(rename = "keys")]
-    pub keys:      BTreeMap<KeyIndex, crypto_common::types::KeyPair>,
+    pub keys:      BTreeMap<KeyIndex, crate::common::types::KeyPair>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
@@ -2066,7 +2065,7 @@ impl CredentialDataWithSigning for CredentialData {
         new_or_existing: &Either<types::TransactionTime, AccountAddress>,
         unsigned_cred_info: &UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
-        let to_sign = crate::utils::credential_hash_to_sign(
+        let to_sign = super::utils::credential_hash_to_sign(
             &unsigned_cred_info.values,
             &unsigned_cred_info.proofs,
             new_or_existing,
@@ -2085,7 +2084,7 @@ impl CredentialDataWithSigning for CredentialData {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct InitialAccountData {
     #[serde(rename = "keys")]
-    pub keys:      BTreeMap<KeyIndex, crypto_common::types::KeyPair>,
+    pub keys:      BTreeMap<KeyIndex, crate::common::types::KeyPair>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
@@ -2194,7 +2193,7 @@ pub struct IpData<P: Pairing> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub ip_secret_key:     ps_sig::SecretKey<P>,
+    pub ip_secret_key:     crate::ps_sig::SecretKey<P>,
     #[serde(
         rename = "ipCdiSecretKey",
         serialize_with = "base16_encode",
@@ -2233,7 +2232,7 @@ pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub randomness: ps_sig::SigRetrievalRandomness<P>,
+    pub randomness: crate::ps_sig::SigRetrievalRandomness<P>,
 }
 
 /// Data that needs to be stored by the identity provider to support anonymity

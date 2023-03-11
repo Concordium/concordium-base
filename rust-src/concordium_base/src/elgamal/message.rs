@@ -3,7 +3,6 @@
 use rand::*;
 
 use crate::common::*;
-use crate::common::derive::*;
 use crate::curve_arithmetic::Curve;
 
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]

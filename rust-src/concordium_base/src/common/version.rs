@@ -1,4 +1,4 @@
-use crate::*;
+use super::*;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
 /// Version 0 as a constant for ease of use.
@@ -63,7 +63,6 @@ impl Deserial for Version {
                 break;
             }
         }
-        use std::convert::TryInto;
         let value: u32 = acc.try_into()?;
         Ok(Version::from(value))
     }
