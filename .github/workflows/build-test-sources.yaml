@@ -229,4 +229,4 @@ jobs:
       run: |
         cargo test --manifest-path rust-src/Cargo.toml --all --verbose --release
         cargo test --manifest-path identity-provider-service/Cargo.toml --features=vendored-ssl --all --verbose --release
-        cargo bench --manifest-path rust-src/Cargo.toml --features id/test-helpers --no-run
+        cargo bench --manifest-path rust-src/Cargo.toml --features concordium_base/internal-test-helpers --no-run
