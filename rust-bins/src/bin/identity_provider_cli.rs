@@ -2,13 +2,15 @@ use anyhow::Context;
 use chrono::TimeZone;
 use clap::AppSettings;
 use client_server_helpers::*;
-use concordium_base::common::{types::TransactionTime, *};
-use dialoguer::Input;
-use concordium_base::id::{
-    constants::{ArCurve, AttributeKind, IpPairing},
-    identity_provider::*,
-    types::*,
+use concordium_base::{
+    common::{types::TransactionTime, *},
+    id::{
+        constants::{ArCurve, AttributeKind, IpPairing},
+        identity_provider::*,
+        types::*,
+    },
 };
+use dialoguer::Input;
 use pairing::bls12_381::Bls12;
 use std::{collections::btree_map::BTreeMap, path::PathBuf};
 use structopt::StructOpt;

@@ -1,15 +1,18 @@
 use clap::AppSettings;
 use client_server_helpers::*;
+use concordium_base::{
+    common::*,
+    curve_arithmetic::Curve,
+    elgamal::{PublicKey, SecretKey},
+    id::types::*,
+    ps_sig,
+};
 use crossterm::{
     execute,
     terminal::{Clear, ClearType},
 };
-use concordium_base::{common::*, ps_sig};
-use concordium_base::curve_arithmetic::Curve;
 use dialoguer::{Confirm, Input};
-use concordium_base::elgamal::{PublicKey, SecretKey};
 use hmac::{Hmac, Mac};
-use concordium_base::id::types::*;
 use keygen_bls::{keygen_bls, keygen_bls_deprecated};
 use pairing::bls12_381::{Bls12, Fr, G1, G2};
 use sha2::Sha512;

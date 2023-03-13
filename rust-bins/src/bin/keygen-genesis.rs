@@ -1,10 +1,9 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use concordium_base::{common::*, ps_sig};
+use concordium_base::{
+    common::*, curve_arithmetic::Curve, elgamal::PublicKey, id::types::*, ps_sig,
+};
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use concordium_base::curve_arithmetic::Curve;
-use concordium_base::elgamal::PublicKey;
-use concordium_base::id::types::*;
 use pairing::bls12_381::{Bls12, G1, G2};
 use sha2::{Digest, Sha512};
 use std::{fs, path::PathBuf};

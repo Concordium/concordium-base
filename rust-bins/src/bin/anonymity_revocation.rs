@@ -1,10 +1,12 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use concordium_base::{common::*, elgamal};
-use concordium_base::curve_arithmetic::{Curve, Value};
-use concordium_base::dodis_yampolskiy_prf as prf;
-use concordium_base::elgamal::{decrypt_from_chunks_given_generator, Message};
-use concordium_base::id::{anonymity_revoker::*, constants::ArCurve, types::*};
+use concordium_base::{
+    common::*,
+    curve_arithmetic::{Curve, Value},
+    dodis_yampolskiy_prf as prf, elgamal,
+    elgamal::{decrypt_from_chunks_given_generator, Message},
+    id::{anonymity_revoker::*, constants::ArCurve, types::*},
+};
 use serde_json::json;
 use std::{
     convert::TryFrom,
@@ -378,8 +380,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 
     let mut ar_decrypted_data_vec: Vec<ChainArDecryptedData<ArCurve>> =
         Vec::with_capacity(shares_values.len());
-    let mut shares: Vec<(ArIdentity, Message<ArCurve>)> =
-        Vec::with_capacity(shares_values.len());
+    let mut shares: Vec<(ArIdentity, Message<ArCurve>)> = Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
         let decrypted = read_json_from_file(&share_value).map_err(|e| {
@@ -444,8 +445,7 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
 
     let mut ar_decrypted_data_vec: Vec<IpArDecryptedData<ArCurve>> =
         Vec::with_capacity(shares_values.len());
-    let mut shares: Vec<(ArIdentity, Value<ArCurve>)> =
-        Vec::with_capacity(shares_values.len());
+    let mut shares: Vec<(ArIdentity, Value<ArCurve>)> = Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
         match read_json_from_file(&share_value) {

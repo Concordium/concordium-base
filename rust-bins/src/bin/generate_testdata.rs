@@ -1,19 +1,22 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use concordium_base::{common::{
-    types::{KeyIndex, KeyPair, TransactionTime},
-    *,
-}, ps_sig};
-use concordium_base::curve_arithmetic::{Curve, Pairing};
-use concordium_base::dodis_yampolskiy_prf as prf;
-use either::{Left, Right};
-use concordium_base::id::{
-    account_holder::*,
-    constants::{ArCurve, IpPairing, *},
-    identity_provider::*,
-    secret_sharing::Threshold,
-    types::*,
+use concordium_base::{
+    common::{
+        types::{KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    curve_arithmetic::{Curve, Pairing},
+    dodis_yampolskiy_prf as prf,
+    id::{
+        account_holder::*,
+        constants::{ArCurve, IpPairing, *},
+        identity_provider::*,
+        secret_sharing::Threshold,
+        types::*,
+    },
+    ps_sig,
 };
+use either::{Left, Right};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::PathBuf};

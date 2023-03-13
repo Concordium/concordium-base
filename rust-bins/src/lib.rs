@@ -1,13 +1,15 @@
 use anyhow::Context;
 use bitvec::prelude::*;
-use concordium_base::common::*;
-use concordium_base::curve_arithmetic::*;
+use concordium_base::{
+    common::*,
+    curve_arithmetic::*,
+    id::{constants::*, types::*},
+    pedersen_commitment::Randomness as PedersenRandomness,
+};
 use dialoguer::Input;
 use ed25519_hd_key_derivation::DeriveError;
 use hkdf::HkdfExtract;
-use concordium_base::id::{constants::*, types::*};
 use pairing::bls12_381::Bls12;
-use concordium_base::pedersen_commitment::Randomness as PedersenRandomness;
 use rand::Rng;
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 use serde_json::{to_string_pretty, to_writer_pretty};
@@ -43,9 +45,7 @@ pub fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).coll
 
 /// Read an object containing a versioned global context from the given file.
 /// Currently only version 0 is supported.
-pub fn read_global_context<P: AsRef<Path> + Debug>(
-    filename: P,
-) -> Option<GlobalContext<ArCurve>> {
+pub fn read_global_context<P: AsRef<Path> + Debug>(filename: P) -> Option<GlobalContext<ArCurve>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename).ok()?;
     match params.version {
         Version { value: 0 } => serde_json::from_value(params.value).ok(),
@@ -124,8 +124,7 @@ pub fn output_possibly_encrypted<X: SerdeSerialize>(
         Ok(false)
     } else {
         let plaintext = serde_json::to_vec(data).expect("JSON serialization does not fail.");
-        let encrypted =
-            encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
+        let encrypted = encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
         write_json_to_file(fname, &encrypted)?;
         Ok(true)
     }

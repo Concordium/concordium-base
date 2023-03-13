@@ -2,21 +2,24 @@ use anyhow::{bail, Context};
 use chrono::TimeZone;
 use clap::AppSettings;
 use client_server_helpers::*;
+use concordium_base::{
+    common::{
+        types::{CredentialIndex, KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    dodis_yampolskiy_prf as prf, elgamal,
+    id::{self, account_holder::*, constants::ArCurve, secret_sharing::*, types::*},
+    pedersen_commitment::Value as PedersenValue,
+    ps_sig,
+};
 use crossterm::{
     execute,
     terminal::{Clear, ClearType},
 };
-use concordium_base::{common::{
-    types::{CredentialIndex, KeyIndex, KeyPair, TransactionTime},
-    *,
-}, id::{self, constants::ArCurve}, ps_sig, elgamal};
 use dialoguer::{Confirm, Input, MultiSelect, Select};
-use concordium_base::dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use concordium_base::id::{account_holder::*, secret_sharing::*, types::*};
 use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
-use concordium_base::pedersen_commitment::Value as PedersenValue;
 use rand::*;
 use serde_json::{json, to_value};
 use std::{collections::btree_map::BTreeMap, convert::TryFrom, path::PathBuf};

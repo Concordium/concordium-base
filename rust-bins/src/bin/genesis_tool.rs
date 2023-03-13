@@ -1,16 +1,17 @@
-use concordium_base::{aggregate_sig as agg, id, elgamal};
 use clap::AppSettings;
 use client_server_helpers::*;
-use concordium_base::common::{
-    base16_encode_string,
-    encryption::{encrypt, Password},
-    types::{Amount, KeyIndex},
-    *,
+use concordium_base::{
+    aggregate_sig as agg,
+    common::{
+        base16_encode_string,
+        encryption::{encrypt, Password},
+        types::{Amount, KeyIndex},
+        *,
+    },
+    dodis_yampolskiy_prf as prf, ecvrf as vrf, elgamal, id,
+    id::{account_holder::*, constants::*, secret_sharing::Threshold, types::*},
 };
-use concordium_base::dodis_yampolskiy_prf as prf;
-use concordium_base::ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use concordium_base::id::{account_holder::*, constants::*, secret_sharing::Threshold, types::*};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
 use std::{
