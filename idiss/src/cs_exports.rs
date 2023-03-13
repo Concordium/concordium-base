@@ -1,5 +1,15 @@
 use crate::*;
-use ffi_helpers::*;
+
+/// Like [`std::slice::from_raw_parts`] but with special handling of empty
+/// arrays. The same caveats as for [`std::slice::from_raw_parts`] apply in
+/// relation to safety and lifetimes.
+unsafe fn slice_from_ptr<'a>(data: *const u8, len: usize) -> &'a [u8] {
+    if len != 0 {
+        std::slice::from_raw_parts(data, len)
+    } else {
+        &[]
+    }
+}
 
 /// This function takes pointers to bytearrays and use the library function
 /// `validate_request`` on these. The arguments are
@@ -45,10 +55,10 @@ pub unsafe extern "C" fn validate_request_cs(
     out_length: *mut i32,
     out_success: *mut i32,
 ) -> *mut u8 {
-    let global_context_bytes = slice_from_c_bytes!(ctx_ptr, ctx_len as usize);
-    let ip_info_bytes = slice_from_c_bytes!(ip_info_ptr, ip_info_len as usize);
-    let ars_infos_bytes = slice_from_c_bytes!(ars_infos_ptr, ars_len as usize);
-    let request_bytes = slice_from_c_bytes!(request_ptr, request_len as usize);
+    let global_context_bytes = slice_from_ptr(ctx_ptr, ctx_len as usize);
+    let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
+    let ars_infos_bytes = slice_from_ptr(ars_infos_ptr, ars_len as usize);
+    let request_bytes = slice_from_ptr(request_ptr, request_len as usize);
     let result = validate_request(
         global_context_bytes,
         ip_info_bytes,
@@ -114,10 +124,10 @@ pub unsafe extern "C" fn validate_request_v1_cs(
     request_len: i32,
     out_length: *mut i32,
 ) -> *mut u8 {
-    let global_context_bytes = slice_from_c_bytes!(ctx_ptr, ctx_len as usize);
-    let ip_info_bytes = slice_from_c_bytes!(ip_info_ptr, ip_info_len as usize);
-    let ars_infos_bytes = slice_from_c_bytes!(ars_infos_ptr, ars_len as usize);
-    let request_bytes = slice_from_c_bytes!(request_ptr, request_len as usize);
+    let global_context_bytes = slice_from_ptr(ctx_ptr, ctx_len as usize);
+    let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
+    let ars_infos_bytes = slice_from_ptr(ars_infos_ptr, ars_len as usize);
+    let request_bytes = slice_from_ptr(request_ptr, request_len as usize);
     let result = validate_request_v1(
         global_context_bytes,
         ip_info_bytes,
@@ -194,12 +204,12 @@ pub unsafe extern "C" fn create_identity_object_cs(
     out_length: *mut i32,
     out_success: *mut i32,
 ) -> *mut u8 {
-    let ip_info_bytes = slice_from_c_bytes!(ip_info_ptr, ip_info_len as usize);
-    let alist_bytes = slice_from_c_bytes!(alist_ptr, alist_len as usize);
-    let ip_private_key_bytes = slice_from_c_bytes!(ip_private_key_ptr, ip_private_key_len as usize);
+    let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
+    let alist_bytes = slice_from_ptr(alist_ptr, alist_len as usize);
+    let ip_private_key_bytes = slice_from_ptr(ip_private_key_ptr, ip_private_key_len as usize);
     let ip_cdi_private_key_bytes =
-        slice_from_c_bytes!(ip_cdi_private_key_ptr, ip_cdi_private_key_len as usize);
-    let request_bytes = slice_from_c_bytes!(request_ptr, request_len as usize);
+        slice_from_ptr(ip_cdi_private_key_ptr, ip_cdi_private_key_len as usize);
+    let request_bytes = slice_from_ptr(request_ptr, request_len as usize);
 
     let response = create_identity_object(
         ip_info_bytes,
@@ -272,10 +282,10 @@ pub unsafe extern "C" fn create_identity_object_v1_cs(
     out_length: *mut i32,
     out_success: *mut i32,
 ) -> *mut u8 {
-    let ip_info_bytes = slice_from_c_bytes!(ip_info_ptr, ip_info_len as usize);
-    let alist_bytes = slice_from_c_bytes!(alist_ptr, alist_len as usize);
-    let ip_private_key_bytes = slice_from_c_bytes!(ip_private_key_ptr, ip_private_key_len as usize);
-    let request_bytes = slice_from_c_bytes!(request_ptr, request_len as usize);
+    let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
+    let alist_bytes = slice_from_ptr(alist_ptr, alist_len as usize);
+    let ip_private_key_bytes = slice_from_ptr(ip_private_key_ptr, ip_private_key_len as usize);
+    let request_bytes = slice_from_ptr(request_ptr, request_len as usize);
 
     let response = create_identity_object_v1(
         ip_info_bytes,
@@ -331,9 +341,9 @@ pub unsafe extern "C" fn validate_recovery_request_cs(
     request_len: i32,
     out_length: *mut i32,
 ) -> *mut u8 {
-    let global_context_bytes = slice_from_c_bytes!(ctx_ptr, ctx_len as usize);
-    let ip_info_bytes = slice_from_c_bytes!(ip_info_ptr, ip_info_len as usize);
-    let request_bytes = slice_from_c_bytes!(request_ptr, request_len as usize);
+    let global_context_bytes = slice_from_ptr(ctx_ptr, ctx_len as usize);
+    let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
+    let request_bytes = slice_from_ptr(request_ptr, request_len as usize);
     let result = validate_recovery_request(global_context_bytes, ip_info_bytes, request_bytes);
     match result {
         Ok(()) => std::ptr::null_mut(),
