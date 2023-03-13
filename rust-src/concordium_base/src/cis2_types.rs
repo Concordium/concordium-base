@@ -948,7 +948,8 @@ impl Deserial for MetadataUrl {
 pub enum Event {
     /// Transfer of an amount of tokens
     #[display(
-        fmt = "Transferred token with ID {} from {} to {}",
+        fmt = "Transferred {} of token with ID {} from {} to {}",
+        amount,
         token_id,
         "display_address(from)",
         "display_address(to)"
@@ -961,7 +962,8 @@ pub enum Event {
     },
     /// Minting an amount of tokens
     #[display(
-        fmt = "Minted token with ID {} for {}",
+        fmt = "Minted {} of token with ID {} for {}",
+        amount,
         token_id,
         "display_address(owner)"
     )]
@@ -972,7 +974,8 @@ pub enum Event {
     },
     /// Burning an amount of tokens
     #[display(
-        fmt = "Burned token with ID {} for {}",
+        fmt = "Burned {} of token with ID {} for {}",
+        amount,
         token_id,
         "display_address(owner)"
     )]
