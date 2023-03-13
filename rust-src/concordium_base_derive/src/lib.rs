@@ -3,9 +3,7 @@ extern crate quote;
 use proc_macro::TokenStream;
 use syn::spanned::Spanned;
 
-fn get_root() -> proc_macro2::TokenStream {
-    quote!( concordium_base )
-}
+fn get_root() -> proc_macro2::TokenStream { quote!(concordium_base) }
 
 #[proc_macro_derive(SerdeBase16Serialize)]
 pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
