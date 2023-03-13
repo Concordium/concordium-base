@@ -63,7 +63,7 @@ encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 
 [lib]
 name = "concordium_base"
-crate-type = ["rlib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dev-dependencies]
 criterion = "0.4"

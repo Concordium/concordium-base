@@ -10,13 +10,8 @@ import System.Environment
 
 concordiumLibs :: [String]
 concordiumLibs =
-    [ "ecvrf",
-      "sha_2",
-      "eddsa_ed25519",
-      "ffi_helpers",
-      "id",
-      "aggregate_sig",
-      "encrypted_transfers"
+    [ "concordium_base",
+      "sha_2"
     ]
 
 type WithEnvAndVerbosity = [(String, String)] -> Verbosity -> IO ()
