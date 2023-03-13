@@ -160,6 +160,8 @@ jobs:
     - name: Run cargo clippy on all targets
       run: |
         cargo clippy --manifest-path rust-src/Cargo.toml --workspace -- -Dclippy::all
+        cargo clippy --manifest-path rust-src/Cargo.toml --features concordium_base/encryption --workspace -- -Dclippy::all
+        cargo clippy --manifest-path rust-src/Cargo.toml --features concordium_base/ffi --workspace -- -Dclippy::all
         cargo clippy --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
         cargo clippy --manifest-path idiss/Cargo.toml --all-features -- -Dclippy::all
         cargo clippy --manifest-path mobile_wallet/Cargo.toml -- -Dclippy::all
