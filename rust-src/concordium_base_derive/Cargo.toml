@@ -2,8 +2,12 @@
 name = "concordium_base_derive"
 version = "1.0.0"
 authors = ["Concordium AG <developers@concordium.com>"]
-edition = "2018"
+edition = "2021"
 license-file = "../../LICENSE"
+readme = "./README.md"
+description = "A library that implements derive macros for traits defined in concordium_base."
+repository = "https://github.com/Concordium/concordium-base"
+homepage = "https://github.com/Concordium/concordium-base"
 
 [lib]
 proc-macro=true

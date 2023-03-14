@@ -1,6 +1,9 @@
 //! Derive macros for deriving serialization in the Concordium binary format.
 //! This crate is intended to be used together with the [`concordium_base`](https://crates.io/crates/concordium_base)
 //! crate and should **not** be imported directly.
+//!
+//! The derivation macros will only work in a context where `concordium_base` is
+//! available as a module.
 
 #[macro_use]
 extern crate quote;
