@@ -480,6 +480,18 @@ impl Energy {
         self.energy.checked_sub(rhs.energy).map(From::from)
     }
 
+    /// "Tick" energy: subtract the provided amount.
+    ///
+    /// Returns an error if the energy goes below `0`.
+    pub fn tick_energy(&mut self, amount: Energy) -> Result<(), OutOfEnergy> {
+        if let Some(nrg) = self.energy.checked_sub(amount.energy) {
+            self.energy = nrg;
+            Ok(())
+        } else {
+            Err(OutOfEnergy)
+        }
+    }
+
     /// Saturating energy subtraction.
     ///
     /// Computes `self - rhs` bottoming out at `0` instead of underflowing.
@@ -489,6 +501,10 @@ impl Energy {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Eq)]
+// TODO: Combine with wasm-chain-integration OutOfEnergy.
+pub struct OutOfEnergy;
 
 /// Position of the transaction in a block.
 #[repr(transparent)]
