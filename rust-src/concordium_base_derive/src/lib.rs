@@ -1,3 +1,7 @@
+//! Derive macros for deriving serialization in the Concordium binary format.
+//! This crate is intended to be used together with the [`concordium_base`](https://crates.io/crates/concordium_base)
+//! crate and should **not** be imported directly.
+
 #[macro_use]
 extern crate quote;
 use proc_macro::TokenStream;
@@ -5,6 +9,11 @@ use syn::spanned::Spanned;
 
 fn get_root() -> proc_macro2::TokenStream { quote!(concordium_base) }
 
+/// Derive a [`serde::Serialize`](https://docs.rs/serde/latest/serde/trait.Serialize.html) and
+/// [`serde::Deserialize`](https://docs.rs/serde/latest/serde/trait.Deserialize.html) implementations for the type.
+/// **This differs from [`serde`](https://serde.rs/)'s serialization macros.** Here the value is
+/// first serialized according to its `concordium_base::Serialize`
+/// implementation and then hex encoded into a string.
 #[proc_macro_derive(SerdeBase16Serialize)]
 pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
@@ -46,6 +55,10 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
+/// Like [`SerdeBase16Serialize`](serde_base16_serialize_derive), but assuming
+/// that the `concordium_base::Serialize` implementation puts length of the data
+/// as 4 bytes in big endian. These 4 bytes are dropped when converting to hex
+/// since the JSON format is self-describing so the length is not needed.
 #[proc_macro_derive(SerdeBase16IgnoreLengthSerialize)]
 pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
@@ -86,6 +99,8 @@ pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenS
     gen.into()
 }
 
+/// Derive the [`Deserial`](https://docs.rs/concordium-std/latest/concordium_base/common/trait.Deserial.html)
+/// trait. At present this only applies to `struct`'s.
 #[proc_macro_derive(
     Deserial,
     attributes(size_length, map_size_length, set_size_length, string_size_length)
@@ -216,6 +231,8 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     }
 }
 
+/// Derive the [`Serial`](https://docs.rs/concordium-std/latest/concordium_base/common/trait.Serial.html)
+/// trait. At present this only applies to `struct`'s.
 #[proc_macro_derive(
     Serial,
     attributes(size_length, map_size_length, set_size_length, string_size_length)
@@ -342,14 +359,17 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                     }
                 }
             }
-            _ => panic!("#[derive(Deserial)] not implemented for empty structs."),
+            _ => panic!("#[derive(Serial)] not implemented for empty structs."),
         };
         gen.into()
     } else {
-        panic!("#[derive(Deserial)] only implemented for structs.")
+        panic!("#[derive(Serial)] only implemented for structs.")
     }
 }
 
+/// Derive both [`Serial`](https://docs.rs/concordium-std/latest/concordium_base/common/trait.Serial.html)
+/// and [`Deserial`](https://docs.rs/concordium-std/latest/concordium_base/common/trait.Deserial.html) traits.
+/// At present this only applies to `struct`'s.
 #[proc_macro_derive(
     Serialize,
     attributes(size_length, map_size_length, set_size_length, string_size_length)
