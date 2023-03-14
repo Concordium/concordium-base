@@ -387,7 +387,7 @@ impl AccountBalance {
     }
 
     /// The current available balance of the account. This is the amount
-    /// an account currently have available for transfering and is not
+    /// an account currently has available for transferring and is not
     /// staked or locked in releases by scheduled transfers.
     pub fn available(&self) -> Amount { self.total - cmp::max(self.locked, self.staked) }
 }
@@ -883,8 +883,8 @@ impl<'a> ContractName<'a> {
     #[inline(always)]
     pub fn get_chain_name(self) -> &'a str { self.0 }
 
-    /// Convert a `ContractName` to its owned counterpart. This is an expensive
-    /// operation that requires memory allocation.
+    /// Convert a [`ContractName`] to its owned counterpart. This is an
+    /// expensive operation that requires memory allocation.
     pub fn to_owned(&self) -> OwnedContractName { OwnedContractName(self.0.to_owned()) }
 
     /// Extract the contract name by removing the "init_" prefix.
@@ -948,7 +948,7 @@ impl OwnedContractName {
     #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
 
-    /// Convert to ContractName by reference.
+    /// Convert to [`ContractName`] by reference.
     #[inline(always)]
     pub fn as_contract_name(&self) -> ContractName { ContractName(self.0.as_str()) }
 }
@@ -1017,7 +1017,7 @@ impl<'a> ReceiveName<'a> {
     /// Get receive name used on chain: "<contract_name>.<func_name>".
     pub fn get_chain_name(self) -> &'a str { self.0 }
 
-    /// Convert a `ReceiveName` to its owned counterpart. This is an expensive
+    /// Convert a [`ReceiveName`] to its owned counterpart. This is an expensive
     /// operation that requires memory allocation.
     pub fn to_owned(self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
 
@@ -1143,7 +1143,7 @@ impl<'a> EntrypointName<'a> {
         Ok(Self(name))
     }
 
-    /// Convert a `EntrypointName` to its owned counterpart. This is an
+    /// Convert a [`EntrypointName`] to its owned counterpart. This is an
     /// expensive operation that requires memory allocation.
     pub fn to_owned(&self) -> OwnedEntrypointName { OwnedEntrypointName(self.0.to_owned()) }
 
@@ -1203,6 +1203,7 @@ impl OwnedEntrypointName {
     #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { Self(name) }
 
+    /// Convert to an [`EntrypointName`] by reference.
     #[inline(always)]
     pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
 }
