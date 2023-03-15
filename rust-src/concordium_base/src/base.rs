@@ -502,8 +502,9 @@ impl Energy {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Error)]
 // TODO: Combine with wasm-chain-integration OutOfEnergy.
+#[error("Out of energy")]
 pub struct OutOfEnergy;
 
 /// Position of the transaction in a block.
