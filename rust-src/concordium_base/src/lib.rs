@@ -1,5 +1,10 @@
+#![doc = include_str!("../README.md")]
 //! A library that defines common types and functionality that is
 //! needed by various Rust projects. The scope of this library is
+//! 
+
+//! This common types and functionality that is
+//! needed by various Rust . The scope of this library is
 //! meant to be limited to core chain definitions. At present this is an
 //! internal library with an unstable API. Where necessary the functionality
 //! should be re-exported, for example like it is in the Rust-SDK.

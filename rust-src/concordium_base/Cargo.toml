@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
 license-file = "../../LICENSE"
+include = ["./data/pi-1000-digits.dat"]
+readme = "./README.md"
 
 [dependencies]
 ff = "0.5"
@@ -46,13 +48,13 @@ hmac = { version  = "0.12", optional = true }
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
-version = "*"
+version = "5.3"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde", "sdk"]
 
 # Local dependencies
 [dependencies.concordium_base_derive]
-version = "*"
+version = "1"
 path = "../concordium_base_derive"
 
 [features]
