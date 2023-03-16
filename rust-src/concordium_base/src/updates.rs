@@ -4,11 +4,15 @@ use std::{
     marker::PhantomData,
 };
 
-use crate::{base::*, hashes, transactions::PayloadSize};
-use crypto_common::{
-    derive, deserial_bytes, deserial_map_no_length, deserial_set_no_length, deserial_string,
-    deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
-    SerdeDeserialize, SerdeSerialize, Serial,
+use crate::{
+    base::*,
+    common::{
+        self, deserial_bytes, deserial_map_no_length, deserial_set_no_length, deserial_string,
+        deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
+        SerdeDeserialize, SerdeSerialize, Serial,
+    },
+    hashes,
+    transactions::PayloadSize,
 };
 use derive_more::*;
 
@@ -84,7 +88,7 @@ impl Deserial for ProtocolUpdate {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(try_from = "transaction_fee_distribution::TransactionFeeDistributionUnchecked")]
 /// Update the transaction fee distribution to the specified value.
@@ -97,7 +101,7 @@ pub struct TransactionFeeDistribution {
 }
 
 impl Deserial for TransactionFeeDistribution {
-    fn deserial<R: crypto_common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+    fn deserial<R: common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let baker: AmountFraction = source.get()?;
         let gas_account: AmountFraction = source.get()?;
         anyhow::ensure!(
@@ -133,7 +137,7 @@ mod transaction_fee_distribution {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serialize, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 /// The reward fractions related to the gas account and inclusion of special
 /// transactions.
@@ -254,7 +258,7 @@ pub enum RootKeysKind {}
 /// type-level marker.
 pub enum Level1KeysKind {}
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound = "Kind: Sized")]
 /// Either root, level1, or level 2 access structure. They all have the same
@@ -286,7 +290,7 @@ impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
 #[serde(rename_all = "camelCase")]
 /// And access structure for performing chain updates. The access structure is
 /// only meaningful in the context of a list of update keys to which the indices
@@ -313,7 +317,7 @@ impl Deserial for AccessStructure {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, derive::Serialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, common::Serialize)]
 #[serde(rename_all = "camelCase")]
 /// Access structures for each of the different possible chain updates, togehter
 /// with the context giving all the possible keys.
@@ -394,7 +398,7 @@ where
     Some(signer)
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, derive::Serialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, common::Serialize)]
 #[serde(rename_all = "camelCase")]
 /// Access structures for each of the different possible chain updates, togehter
 /// with the context giving all the possible keys.
@@ -442,7 +446,7 @@ impl AuthorizationsFamily for ChainParameterVersion1 {
 /// A mapping of chain parameter versions to authorization versions.
 pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
-#[derive(SerdeSerialize, SerdeDeserialize, derive::Serialize, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, common::Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 /// Parameters related to becoming a baker that apply to protocol versions 1-3.
 pub struct BakerParameters {
@@ -450,7 +454,7 @@ pub struct BakerParameters {
     pub minimum_threshold_for_baking: Amount,
 }
 
-#[derive(Debug, derive::Serialize, SerdeSerialize, SerdeDeserialize, Copy, Clone)]
+#[derive(Debug, common::Serialize, SerdeSerialize, SerdeDeserialize, Copy, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CooldownParameters {
     /// Number of seconds that pool owners must cooldown
@@ -477,14 +481,14 @@ pub struct CooldownParameters {
     Into,
     SerdeSerialize,
     SerdeDeserialize,
-    derive::Serialize,
+    common::Serialize,
 )]
 #[serde(transparent)]
 pub struct RewardPeriodLength {
     pub(crate) reward_period_epochs: Epoch,
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serialize, Copy, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Copy, Clone)]
 #[serde(rename_all = "camelCase")]
 /// The time parameters are introduced as of protocol version 4, and consist of
 /// the reward period length and the mint rate per payday. These are coupled as
@@ -494,7 +498,7 @@ pub struct TimeParameters {
     pub mint_per_payday:      MintRate,
 }
 
-#[derive(Debug, derive::Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, common::Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 /// Parameters related to staking pools. This applies to protocol version 4 and
 /// up.
@@ -545,9 +549,9 @@ pub enum UpdatePayload {
     #[serde(rename = "level1")]
     Level1(Level1Update),
     #[serde(rename = "addAnonymityRevoker")]
-    AddAnonymityRevoker(Box<id::types::ArInfo<id::constants::ArCurve>>),
+    AddAnonymityRevoker(Box<crate::id::types::ArInfo<crate::id::constants::ArCurve>>),
     #[serde(rename = "addIdentityProvider")]
-    AddIdentityProvider(Box<id::types::IpInfo<id::constants::IpPairing>>),
+    AddIdentityProvider(Box<crate::id::types::IpInfo<crate::id::constants::IpPairing>>),
     #[serde(rename = "cooldownParametersCPV1")]
     CooldownParametersCPV1(CooldownParameters),
     #[serde(rename = "poolParametersCPV1")]
@@ -627,7 +631,7 @@ impl UpdatePayload {
     }
 }
 
-#[derive(Debug, Clone, derive::Serialize)]
+#[derive(Debug, Clone, common::Serialize)]
 pub struct UpdateInstruction {
     pub header:     UpdateHeader,
     pub payload:    UpdatePayload,
@@ -668,7 +672,7 @@ impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
     }
 }
 
-#[derive(Debug, Clone, Copy, derive::Serialize)]
+#[derive(Debug, Clone, Copy, common::Serialize)]
 /// A header common to all update instructions.
 pub struct UpdateHeader {
     /// Sequence number of the update. Each update queue maintains its own
@@ -682,7 +686,7 @@ pub struct UpdateHeader {
     pub payload_size:   PayloadSize,
 }
 
-#[derive(Debug, Clone, derive::Serial, Into)]
+#[derive(Debug, Clone, common::Serial, Into)]
 /// Signature of an update instruction.
 pub struct UpdateInstructionSignature {
     #[map_size_length = 2]
@@ -725,7 +729,7 @@ pub mod update {
         timeout: TransactionTime,
         payload: UpdatePayload,
     ) -> UpdateInstruction {
-        let serialized_payload = crypto_common::to_bytes(&payload);
+        let serialized_payload = common::to_bytes(&payload);
         let header = UpdateHeader {
             seq_number,
             effective_time,

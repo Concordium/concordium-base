@@ -3,11 +3,13 @@ use concordium_base::{
     base::{self, Energy, Nonce},
     cis2_types::{self, AdditionalData},
     common::{
-        self, c_char,
+        self,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
     contracts_common::{self, schema, AccountAddress, Address, Cursor},
+    dodis_yampolskiy_prf as prf, elgamal,
+    elgamal::BabyStepGiantStep,
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
     id::{
@@ -28,11 +30,10 @@ use concordium_base::{
         UpdateContractPayload,
     },
 };
-use dodis_yampolskiy_prf as prf;
 use ed25519_hd_key_derivation::DeriveError;
 use either::Either::{Left, Right};
-use elgamal::BabyStepGiantStep;
 use key_derivation::{ConcordiumHdWallet, Net};
+use libc::c_char;
 use pairing::bls12_381::Bls12;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};

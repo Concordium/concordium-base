@@ -1,14 +1,16 @@
-use crate::constants::*;
+use crate::{
+    common::{
+        Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
+        Serialize,
+    },
+    constants::*,
+};
 use concordium_contracts_common::ModuleReference;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
     self, ContractName, ExceedsParameterSize, OwnedContractName, OwnedParameter, OwnedReceiveName,
     ReceiveName,
-};
-use crypto_common::{
-    derive::{Serial, Serialize},
-    Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,
 };
 use derive_more::*;
 use sha2::Digest;
@@ -119,7 +121,7 @@ impl Deserial for ModuleSource {
             "Maximum size of a Wasm module is {}",
             MAX_WASM_MODULE_SIZE
         );
-        let bytes = crypto_common::deserial_bytes(source, s as usize)?;
+        let bytes = crate::common::deserial_bytes(source, s as usize)?;
         Ok(ModuleSource { bytes })
     }
 }

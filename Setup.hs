@@ -10,16 +10,15 @@ import System.Environment
 
 concordiumLibs :: [String]
 concordiumLibs =
-    [ "ecvrf",
-      "sha_2",
-      "eddsa_ed25519",
-      "ffi_helpers",
-      "id",
-      "aggregate_sig",
-      "encrypted_transfers"
+    [ "concordium_base",
+      "sha_2"
     ]
 
 type WithEnvAndVerbosity = [(String, String)] -> Verbosity -> IO ()
+
+-- Add features that should be enabled for the rust-src to the end of options.
+addFeatures :: [String] -> [String]
+addFeatures opts = opts ++ ["--features", "concordium_base/ffi"]
 
 -- |In linux, we will produce two kind of builds:
 -- - Static with musl: the rust libraries will only build static artifacts. Intended to be used inside alpine to produce a static binary.
@@ -33,7 +32,7 @@ linuxBuild True env verbosity = do
     rawSystemExitWithEnv
         verbosity
         "cargo"
-        ["build", "--release", "--manifest-path", "rust-src/Cargo.toml", "--target", "x86_64-unknown-linux-musl"]
+        (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml", "--target", "x86_64-unknown-linux-musl"])
         (("RUSTFLAGS", "-C target-feature=-crt-static") : env)
     let copyLib lib = do
             let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ lib ++ ".a"
@@ -43,7 +42,7 @@ linuxBuild True env verbosity = do
     mapM_ copyLib concordiumLibs
 linuxBuild False env verbosity = do
     noticeNoWrap verbosity "Dynamic linking."
-    rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] env
+    rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env
     let copyLib lib = do
             let source = "../rust-src/target/release/lib" ++ lib
                 target = "./lib/lib" ++ lib
@@ -59,7 +58,7 @@ windowsBuild env verbosity = do
             rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
             rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
             notice verbosity $ "Copied " ++ lib ++ "."
-    rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] env
+    rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env
     notice verbosity "Copying libraries to ./lib"
     mapM_ copyLib concordiumLibs
 
@@ -86,7 +85,7 @@ osxBuild static env verbosity = do
                     rawSystemExit verbosity "ln" ["-s", "-f", source, target]
                     noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
                     noticeNoWrap verbosity $ "Removed: " ++ others
-    rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] env
+    rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env
     notice verbosity "Linking libraries to ./lib"
     mapM_ copyLib concordiumLibs
 

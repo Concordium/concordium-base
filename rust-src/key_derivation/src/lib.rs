@@ -1,19 +1,21 @@
-use crypto_common::{base16_decode, base16_encode};
+use concordium_base::{
+    common::{base16_decode, base16_encode, SerdeDeserialize, SerdeSerialize},
+    id::{
+        constants::{ArCurve, IpPairing},
+        curve_arithmetic::Curve,
+        pedersen_commitment::Randomness as CommitmentRandomness,
+        types::AttributeTag,
+    },
+    ps_sig::SigRetrievalRandomness,
+};
 use ed25519_dalek::{PublicKey, SecretKey};
 use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
 use hmac::Hmac;
-use id::{
-    curve_arithmetic::Curve, pedersen_commitment::Randomness as CommitmentRandomness,
-    types::AttributeTag,
-};
 use keygen_bls::keygen_bls;
-use pairing::bls12_381::{Bls12, G1};
-use ps_sig::SigRetrievalRandomness;
-use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 use std::fmt;
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize)]
 pub enum Net {
     Mainnet,
     Testnet,
@@ -33,7 +35,7 @@ impl fmt::Display for Net {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.net_code()) }
 }
 
-fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <G1 as Curve>::Scalar {
+fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <ArCurve as Curve>::Scalar {
     keygen_bls(&key_seed, b"").expect("All the inputs are of the correct length, this cannot fail.")
 }
 
@@ -60,7 +62,7 @@ pub fn words_to_seed_with_passphrase(words: &str, passphrase: &str) -> [u8; 64] 
 /// The wallet should be used as a single point for deriving all required keys
 /// and randomness when creating identities and accounts, as it will allow for
 /// recovering the key material and randomness from just the seed.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct ConcordiumHdWallet {
     /// The seed used as the basis for deriving keys. As all private keys are
     /// derived from this seed it means that it should be considered private
@@ -79,8 +81,8 @@ pub struct ConcordiumHdWallet {
     pub net:  Net,
 }
 
-pub type CredId = <G1 as Curve>::Scalar;
-pub type PrfKey = dodis_yampolskiy_prf::SecretKey<G1>;
+pub type CredId = <ArCurve as Curve>::Scalar;
+pub type PrfKey = concordium_base::dodis_yampolskiy_prf::SecretKey<ArCurve>;
 
 impl ConcordiumHdWallet {
     fn make_path(&self, path: &[u32]) -> Result<Vec<u32>, DeriveError> {
@@ -163,7 +165,7 @@ impl ConcordiumHdWallet {
         &self,
         identity_provider_index: u32,
         identity_index: u32,
-    ) -> Result<SigRetrievalRandomness<Bls12>, DeriveError> {
+    ) -> Result<SigRetrievalRandomness<IpPairing>, DeriveError> {
         let path = self.make_path(&[identity_provider_index, identity_index, 4])?;
         let blinding_randomness_seed = derive_from_parsed_path(&path, &self.seed)?.private_key;
         Ok(SigRetrievalRandomness::new(bls_key_bytes_from_seed(
@@ -183,7 +185,7 @@ impl ConcordiumHdWallet {
         identity_index: u32,
         credential_counter: u32,
         attribute_tag: AttributeTag,
-    ) -> Result<CommitmentRandomness<G1>, DeriveError> {
+    ) -> Result<CommitmentRandomness<ArCurve>, DeriveError> {
         let path = self.make_path(&[
             identity_provider_index,
             identity_index,
@@ -202,7 +204,7 @@ impl ConcordiumHdWallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crypto_common::base16_encode_string;
+    use concordium_base::common::base16_encode_string;
     use ed25519_dalek::*;
     use std::convert::TryInto;
 

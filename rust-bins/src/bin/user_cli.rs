@@ -2,21 +2,24 @@ use anyhow::{bail, Context};
 use chrono::TimeZone;
 use clap::AppSettings;
 use client_server_helpers::*;
+use concordium_base::{
+    common::{
+        types::{CredentialIndex, KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    dodis_yampolskiy_prf as prf, elgamal,
+    id::{self, account_holder::*, constants::ArCurve, secret_sharing::*, types::*},
+    pedersen_commitment::Value as PedersenValue,
+    ps_sig,
+};
 use crossterm::{
     execute,
     terminal::{Clear, ClearType},
 };
-use crypto_common::{
-    types::{CredentialIndex, KeyIndex, KeyPair, TransactionTime},
-    *,
-};
 use dialoguer::{Confirm, Input, MultiSelect, Select};
-use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use id::{account_holder::*, secret_sharing::*, types::*};
 use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
-use pedersen_scheme::Value as PedersenValue;
 use rand::*;
 use serde_json::{json, to_value};
 use std::{collections::btree_map::BTreeMap, convert::TryFrom, path::PathBuf};
@@ -623,7 +626,7 @@ fn handle_start_ip_v1(sip: StartIpV1) -> anyhow::Result<()> {
         .with_prompt("Identity index")
         .interact()
         .unwrap_or(0);
-    let prf_key: prf::SecretKey<ExampleCurve> =
+    let prf_key: prf::SecretKey<ArCurve> =
         match wallet.get_prf_key(identity_provider_index, identity_index) {
             Ok(prf) => prf,
             Err(e) => {
@@ -645,9 +648,9 @@ fn handle_start_ip_v1(sip: StartIpV1) -> anyhow::Result<()> {
         }
     };
 
-    let id_cred_sec: PedersenValue<ExampleCurve> = PedersenValue::new(id_cred_sec_scalar);
-    let id_cred: IdCredentials<ExampleCurve> = IdCredentials { id_cred_sec };
-    let cred_holder_info = CredentialHolderInfo::<ExampleCurve> { id_cred };
+    let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
+    let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+    let cred_holder_info = CredentialHolderInfo::<ArCurve> { id_cred };
 
     let aci = AccCredentialInfo {
         cred_holder_info,
@@ -746,7 +749,7 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
 
     let context = IpContext::new(&ip_info, &ars.anonymity_revokers, &global_ctx);
     let identity_provider_index = ip_info.ip_identity.0;
-    let prf_key: prf::SecretKey<ExampleCurve> =
+    let prf_key: prf::SecretKey<ArCurve> =
         match wallet.get_prf_key(identity_provider_index, identity_index) {
             Ok(prf) => prf,
             Err(e) => {
@@ -768,9 +771,9 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
         }
     };
 
-    let id_cred_sec: PedersenValue<ExampleCurve> = PedersenValue::new(id_cred_sec_scalar);
-    let id_cred: IdCredentials<ExampleCurve> = IdCredentials { id_cred_sec };
-    let cred_holder_info = CredentialHolderInfo::<ExampleCurve> { id_cred };
+    let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
+    let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
+    let cred_holder_info = CredentialHolderInfo::<ArCurve> { id_cred };
 
     let aci = AccCredentialInfo {
         cred_holder_info,
@@ -1166,7 +1169,7 @@ fn handle_recovery(girr: GenerateIdRecoveryRequest) -> anyhow::Result<()> {
         }
     };
 
-    let id_cred_sec: PedersenValue<ExampleCurve> = PedersenValue::new(id_cred_sec_scalar);
+    let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
     let timestamp = chrono::Utc::now().timestamp() as u64;
     let request = generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp);
     let json = Versioned {

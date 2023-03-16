@@ -29,8 +29,8 @@ use thiserror::*;
     From,
     Display,
     FromStr,
-    crypto_common::SerdeSerialize,
-    crypto_common::SerdeDeserialize,
+    crate::common::SerdeSerialize,
+    crate::common::SerdeDeserialize,
 )]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
@@ -269,8 +269,8 @@ impl Deserial for TokenAmount {
     Into,
     AsRef,
     Hash,
-    crypto_common::SerdeSerialize,
-    crypto_common::SerdeDeserialize,
+    crate::common::SerdeSerialize,
+    crate::common::SerdeDeserialize,
 )]
 #[serde(try_from = "String", into = "String")]
 pub struct TokenId(Vec<u8>);
