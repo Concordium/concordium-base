@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased changes
+
+## concordium-contracts-common 5.3.0 (2023-03-16)
+
 - Add `Display` implementation for `OwnedParameter` and `Parameter`, which uses
   hex encoding.
 - Replace `From<Vec<u8>>` instance for `OwnedParameter`/`Parameter` with a `TryFrom`,
