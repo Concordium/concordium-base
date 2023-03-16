@@ -158,7 +158,7 @@ pub fn baby_step_giant_step_bench(c: &mut Criterion) {
 
 criterion_group! {
     name = elgamal_benches;
-    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(2);
+    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
     targets =
         baby_step_giant_step_table_bench,
         baby_step_giant_step_bench
