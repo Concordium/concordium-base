@@ -1,9 +1,9 @@
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
+#[cfg(not(feature = "std"))]
+use alloc::{borrow::ToOwned, string::String, string::ToString, vec::Vec};
 #[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
 use alloc::{boxed::Box, collections::BTreeMap};
-#[cfg(not(feature = "std"))]
-use alloc::{string::String, string::ToString, vec::Vec};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
@@ -20,6 +20,7 @@ pub use serde_impl::*;
 use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::{cmp, convert, fmt, hash, iter, ops, str};
+
 /// Reexport of the `HashMap` from `hashbrown` with the default hasher set to
 /// the `fnv` hash function.
 pub type HashMap<K, V, S = fnv::FnvBuildHasher> = hashbrown::HashMap<K, V, S>;
@@ -226,11 +227,18 @@ impl Amount {
         }
     }
 
-    /// Checked addition. Adds another amount and return None if overflow
-    /// occurred
+    /// Checked addition. Adds another amount and returns None if overflow
+    /// occurred.
     #[inline(always)]
     pub fn checked_add(self, other: Amount) -> Option<Amount> {
         self.micro_ccd.checked_add(other.micro_ccd).map(Amount::from_micro_ccd)
+    }
+
+    /// Checked subtraction. Subtracts another amount and returns None if
+    /// underflow occurred.
+    #[inline(always)]
+    pub fn checked_sub(self, other: Amount) -> Option<Amount> {
+        self.micro_ccd.checked_sub(other.micro_ccd).map(Amount::from_micro_ccd)
     }
 
     /// Add a number of CCD to an amount
@@ -347,6 +355,41 @@ impl ops::MulAssign<u64> for Amount {
 impl ops::RemAssign<u64> for Amount {
     #[inline(always)]
     fn rem_assign(&mut self, other: u64) { *self = *self % other; }
+}
+
+/// The current public balances of an account.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AccountBalance {
+    /// The total balance of the account. Note that part of this balance might
+    /// be staked and/or locked in scheduled transfers.
+    pub total:  Amount,
+    /// The current staked amount of the account. This amount is used for
+    /// staking.
+    pub staked: Amount,
+    /// The current amount locked in releases that resulted from transfers with
+    /// schedule. A locked amount can still be used for staking.
+    pub locked: Amount,
+}
+
+impl AccountBalance {
+    /// Construct a new account balance, ensuring that both the staked amount
+    /// and the locked amount is smaller than or equal to the total balance.
+    pub fn new(total: Amount, staked: Amount, locked: Amount) -> Option<Self> {
+        if total < staked || total < locked {
+            None
+        } else {
+            Some(Self {
+                total,
+                staked,
+                locked,
+            })
+        }
+    }
+
+    /// The current available balance of the account. This is the amount
+    /// an account currently has available for transferring and is not
+    /// staked or locked in releases by scheduled transfers.
+    pub fn available(&self) -> Amount { self.total - cmp::max(self.locked, self.staked) }
 }
 
 /// Timestamp represented as milliseconds since unix epoch.
@@ -840,6 +883,10 @@ impl<'a> ContractName<'a> {
     #[inline(always)]
     pub fn get_chain_name(self) -> &'a str { self.0 }
 
+    /// Convert a [`ContractName`] to its owned counterpart. This is an
+    /// expensive operation that requires memory allocation.
+    pub fn to_owned(&self) -> OwnedContractName { OwnedContractName(self.0.to_owned()) }
+
     /// Extract the contract name by removing the "init_" prefix.
     #[inline(always)]
     pub fn contract_name(self) -> &'a str { self.get_chain_name().strip_prefix("init_").unwrap() }
@@ -901,7 +948,7 @@ impl OwnedContractName {
     #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
 
-    /// Convert to ContractName by reference.
+    /// Convert to [`ContractName`] by reference.
     #[inline(always)]
     pub fn as_contract_name(&self) -> ContractName { ContractName(self.0.as_str()) }
 }
@@ -970,7 +1017,7 @@ impl<'a> ReceiveName<'a> {
     /// Get receive name used on chain: "<contract_name>.<func_name>".
     pub fn get_chain_name(self) -> &'a str { self.0 }
 
-    /// Convert a `ReceiveName` to its owned counterpart. This is an expensive
+    /// Convert a [`ReceiveName`] to its owned counterpart. This is an expensive
     /// operation that requires memory allocation.
     pub fn to_owned(self) -> OwnedReceiveName { OwnedReceiveName(self.0.to_string()) }
 
@@ -1096,6 +1143,10 @@ impl<'a> EntrypointName<'a> {
         Ok(Self(name))
     }
 
+    /// Convert a [`EntrypointName`] to its owned counterpart. This is an
+    /// expensive operation that requires memory allocation.
+    pub fn to_owned(&self) -> OwnedEntrypointName { OwnedEntrypointName(self.0.to_owned()) }
+
     /// Create a new name. **This does not check the format and is therefore
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
@@ -1152,6 +1203,7 @@ impl OwnedEntrypointName {
     #[inline(always)]
     pub fn new_unchecked(name: String) -> Self { Self(name) }
 
+    /// Convert to an [`EntrypointName`] by reference.
     #[inline(always)]
     pub fn as_entrypoint_name(&self) -> EntrypointName { EntrypointName(self.0.as_str()) }
 }
@@ -1264,9 +1316,10 @@ impl fmt::Display for OwnedParameter {
 }
 
 impl OwnedParameter {
+    /// Get [`Self`] as the borrowed variant [`Parameter`].
     pub fn as_parameter(&self) -> Parameter { Parameter(self.0.as_ref()) }
 
-    /// Construct an `OwnedParameter` by serializing the input using its
+    /// Construct an [`Self`]` by serializing the input using its
     /// `Serial` instance.
     ///
     /// Returns an error if the serialized parameter exceeds

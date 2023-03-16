@@ -20,6 +20,10 @@
   - Migrate from `new(x)`: Use `from_serial(x).unwrap()` (if known to be valid length).
 - Add an `empty` method for both `OwnedParameter` and `Parameter`.
 - Implement `Default` for `Parameter`.
+- Move `AccountBalance` from concordium-std.
+- Add `to_owned` method to `EntrypointName` and `ContractName` types.
+- Implement `Serial`/`Deserial` instances for tuples with 4, 5, and 6 elements.
+- Add `checked_sub` to Amount type.
 
 ## concordium-contracts-common 5.2.0 (2023-02-08)
 

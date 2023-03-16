@@ -5,44 +5,19 @@ use alloc::{boxed::Box, collections, string::String, vec::Vec};
 use collections::{BTreeMap, BTreeSet};
 use convert::TryFrom;
 #[cfg(not(feature = "std"))]
-use core::{convert, hash, marker, mem::MaybeUninit, slice};
+use core::{
+    convert, hash, marker,
+    mem::{transmute, MaybeUninit},
+    slice,
+};
 use hash::Hash;
 #[cfg(feature = "std")]
-use std::{collections, convert, hash, marker, mem::MaybeUninit, slice};
+use std::{
+    collections, convert, hash, marker,
+    mem::{transmute, MaybeUninit},
+    slice,
+};
 // Implementations of Serialize
-
-impl<X: Serial, Y: Serial> Serial for (X, Y) {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.0.serial(out)?;
-        self.1.serial(out)
-    }
-}
-
-impl<X: Deserial, Y: Deserial> Deserial for (X, Y) {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let x = X::deserial(source)?;
-        let y = Y::deserial(source)?;
-        Ok((x, y))
-    }
-}
-
-impl<X: Deserial, Y: Deserial, Z: Deserial> Deserial for (X, Y, Z) {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let x = source.get()?;
-        let y = source.get()?;
-        let z = source.get()?;
-        Ok((x, y, z))
-    }
-}
-
-impl<X: Serial, Y: Serial, Z: Serial> Serial for (X, Y, Z) {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.0.serial(out)?;
-        self.1.serial(out)?;
-        self.2.serial(out)?;
-        Ok(())
-    }
-}
 
 impl Serial for () {
     #[inline(always)]
@@ -52,6 +27,111 @@ impl Serial for () {
 impl Deserial for () {
     #[inline(always)]
     fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> { Ok(()) }
+}
+
+impl<A: Serial, B: Serial> Serial for (A, B) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)
+    }
+}
+
+impl<A: Deserial, B: Deserial> Deserial for (A, B) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        Ok((a, b))
+    }
+}
+
+impl<X: Deserial, Y: Deserial, Z: Deserial> Deserial for (X, Y, Z) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        Ok((a, b, c))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial> Serial for (A, B, C) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        Ok(())
+    }
+}
+
+impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial> Deserial for (A, B, C, D) {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        let d = source.get()?;
+        Ok((a, b, c, d))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial, D: Serial> Serial for (A, B, C, D) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        self.3.serial(out)?;
+        Ok(())
+    }
+}
+
+impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial, E: Deserial> Deserial for (A, B, C, D, E) {
+    #[allow(clippy::many_single_char_names)]
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        let d = source.get()?;
+        let e = source.get()?;
+        Ok((a, b, c, d, e))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial, D: Serial, E: Serial> Serial for (A, B, C, D, E) {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        self.3.serial(out)?;
+        self.4.serial(out)?;
+        Ok(())
+    }
+}
+
+impl<A: Deserial, B: Deserial, C: Deserial, D: Deserial, E: Deserial, F: Deserial> Deserial
+    for (A, B, C, D, E, F)
+{
+    #[allow(clippy::many_single_char_names)]
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let a = source.get()?;
+        let b = source.get()?;
+        let c = source.get()?;
+        let d = source.get()?;
+        let e = source.get()?;
+        let f = source.get()?;
+        Ok((a, b, c, d, e, f))
+    }
+}
+
+impl<A: Serial, B: Serial, C: Serial, D: Serial, E: Serial, F: Serial> Serial
+    for (A, B, C, D, E, F)
+{
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.0.serial(out)?;
+        self.1.serial(out)?;
+        self.2.serial(out)?;
+        self.3.serial(out)?;
+        self.4.serial(out)?;
+        self.5.serial(out)?;
+        Ok(())
+    }
 }
 
 impl Serial for u8 {
@@ -178,6 +258,26 @@ impl Serial for Amount {
 impl Deserial for Amount {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         source.read_u64().map(Amount::from_micro_ccd)
+    }
+}
+
+impl Serial for AccountBalance {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.total.serial(out)?;
+        self.staked.serial(out)?;
+        self.locked.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Deserial for AccountBalance {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let bytes: [u8; 24] = source.read_array()?;
+        let chunks = unsafe { transmute::<[u8; 24], [[u8; 8]; 3]>(bytes) };
+        let total = Amount::from_micro_ccd(u64::from_le_bytes(chunks[0]));
+        let staked = Amount::from_micro_ccd(u64::from_le_bytes(chunks[1]));
+        let locked = Amount::from_micro_ccd(u64::from_le_bytes(chunks[2]));
+        Self::new(total, staked, locked).ok_or_else(ParseError::default)
     }
 }
 
