@@ -121,3 +121,8 @@ required-features = ["internal-test-helpers"]
 [[bench]]
 name = "commitment_to_share"
 harness = false
+
+
+[[bench]]
+name = "serialization_benches"
+harness = false

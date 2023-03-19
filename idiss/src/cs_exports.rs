@@ -3,6 +3,11 @@ use crate::*;
 /// Like [`std::slice::from_raw_parts`] but with special handling of empty
 /// arrays. The same caveats as for [`std::slice::from_raw_parts`] apply in
 /// relation to safety and lifetimes.
+///
+/// In the case of empty arrays the pointer, the way this is used, the pointer
+/// is usually arbitrary, it can be `null`, but also unaligned. To avoid
+/// undefined behaviour we explicitly handle that case and return an empty
+/// slice.
 unsafe fn slice_from_ptr<'a>(data: *const u8, len: usize) -> &'a [u8] {
     if len != 0 {
         std::slice::from_raw_parts(data, len)

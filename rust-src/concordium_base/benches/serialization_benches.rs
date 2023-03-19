@@ -1,3 +1,5 @@
+//! Benchmark serialization of G1 and G2 group elements of the BLS curve.
+
 #[macro_use]
 extern crate criterion;
 
@@ -47,7 +49,6 @@ pub fn bench_deserialize_g2(c: &mut Criterion) {
     });
 }
 
-// criterion_group!(hash_to_fq, bench_hash_to_fq);
 criterion_group!(
     bls_12_serialization,
     bench_serialize_g1,

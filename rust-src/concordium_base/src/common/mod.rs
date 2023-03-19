@@ -18,6 +18,10 @@ pub use serde::Deserialize as SerdeDeserialize;
 pub use serde::Serialize as SerdeSerialize;
 
 /// These are re-exported to help the derive crate.
+/// The derive crate uses these so that users don't have to explicitly
+/// import `serde::Deserializer` and `serde::Serializer` in their modules
+/// when deriving serialization implementations using the
+/// `concordium_base_derive` crate.
 #[doc(hidden)]
 pub use serde::Deserializer as SerdeDeserializer;
 #[doc(hidden)]

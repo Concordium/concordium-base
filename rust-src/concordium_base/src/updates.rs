@@ -101,7 +101,7 @@ pub struct TransactionFeeDistribution {
 }
 
 impl Deserial for TransactionFeeDistribution {
-    fn deserial<R: crate::common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+    fn deserial<R: common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let baker: AmountFraction = source.get()?;
         let gas_account: AmountFraction = source.get()?;
         anyhow::ensure!(
@@ -729,7 +729,7 @@ pub mod update {
         timeout: TransactionTime,
         payload: UpdatePayload,
     ) -> UpdateInstruction {
-        let serialized_payload = crate::common::to_bytes(&payload);
+        let serialized_payload = common::to_bytes(&payload);
         let header = UpdateHeader {
             seq_number,
             effective_time,
