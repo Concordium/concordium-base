@@ -1139,7 +1139,7 @@ pub struct ArInfos<C: Curve> {
 
 /// A helper trait to access only the public key of the ArInfo structure.
 /// We use this to have functions work both on a map of public keys only, as
-/// well as on maps of ArInfos, see [crate::chain::verify_cdi].
+/// well as on maps of ArInfos, see [super::chain::verify_cdi].
 
 pub trait HasArPublicKey<C: Curve> {
     fn get_public_key(&self) -> &ArPublicKey<C>;

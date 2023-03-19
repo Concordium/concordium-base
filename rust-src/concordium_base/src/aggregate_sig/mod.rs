@@ -180,7 +180,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
 /// i=1..n` but where `set_i` denotes the set of public keys corresponding to
 /// the secret keys that signed m_i. This implements a combination of
 /// AggregateVerify from Section 3.1.1 and FastAggregateVerify from Section
-/// 3.3.4 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.1.1.
+/// 3.3.4 of <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05>.
 ///
 /// In particular, this function returns:
 ///
