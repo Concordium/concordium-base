@@ -5,8 +5,11 @@ authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
 rust-version = "1.62"
 license-file = "../../LICENSE"
-include = ["./data/pi-1000-digits.dat"]
+include = ["data/", "benches/"]
 readme = "./README.md"
+description = "A library that defines common types and functionality that are needed by Concordium Rust projects."
+repository = "https://github.com/Concordium/concordium-base"
+homepage = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
 ff = "0.5"
@@ -67,6 +70,7 @@ encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 [lib]
 name = "concordium_base"
 crate-type = ["rlib", "staticlib", "cdylib"]
+path = "src/lib.rs"
 
 [dev-dependencies]
 criterion = "0.4"
@@ -79,7 +83,6 @@ harness = false
 [[bench]]
 name = "multiexp_bench"
 harness = false
-
 
 [[bench]]
 name = "elgamal_benchmarks"
