@@ -33,7 +33,7 @@ openssl-src = "=111.25.0" # Fix openssl-src to version 111.25 since the newer on
 
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "0"
+version = "1"
 
 [dev-dependencies]
 tokio-test = "0.4"

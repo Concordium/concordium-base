@@ -1,3 +1,4 @@
+//! Type definitions related to use of smart contracts.
 use crate::{
     common::{
         Buffer, Deserial, Get, ParseResult, ReadBytesExt, SerdeDeserialize, SerdeSerialize, Serial,

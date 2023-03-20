@@ -1951,7 +1951,7 @@ pub mod construct {
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
-    /// [encrypted_transfers::make_transfer_data].
+    /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer(
         num_sigs: u32,
         sender: AccountAddress,
@@ -1976,8 +1976,9 @@ pub mod construct {
         )
     }
 
-    /// Make an encrypted transfer with a memo. The payload can be constructed
-    /// using [encrypted_transfers::make_transfer_data].
+    /// Make an encrypted transfer with a memo.
+    /// The payload can be constructed using
+    /// [make_transfer_data](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer_with_memo(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2029,7 +2030,9 @@ pub mod construct {
 
     /// Transfer the given amount from encrypted to public balance of the given
     /// account. The payload may be constructed using
-    /// [encrypted_transfers::make_sec_to_pub_transfer_data]
+    /// [`make_sec_to_pub_transfer_data`][anchor]
+    ///
+    /// [anchor]: crate::encrypted_transfers::make_sec_to_pub_transfer_data
     pub fn transfer_to_public(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2566,7 +2569,7 @@ pub mod send {
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
-    /// [encrypted_transfers::make_transfer_data].
+    /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2579,8 +2582,9 @@ pub mod send {
             .sign(signer)
     }
 
-    /// Make an encrypted transfer with a memo. The payload can be constructed
-    /// using [encrypted_transfers::make_transfer_data].
+    /// Make an encrypted transfer with a memo.
+    /// The payload can be constructed using
+    /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer_with_memo(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2616,8 +2620,11 @@ pub mod send {
     }
 
     /// Transfer the given amount from encrypted to public balance of the given
-    /// account. The payload may be constructed using
-    /// [encrypted_transfers::make_sec_to_pub_transfer_data]
+    /// account.
+    /// The payload may be constructed using
+    /// [`make_sec_to_pub_transfer_data`][anchor]
+    ///
+    /// [anchor]: crate::encrypted_transfers::make_sec_to_pub_transfer_data
     pub fn transfer_to_public(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,

@@ -1,4 +1,7 @@
+//! Constants for various core chain operations.
+
 use crate::base::Energy;
+
 // Re-export to avoid a breaking change.
 pub use concordium_contracts_common::constants::MAX_PARAMETER_LEN;
 
@@ -6,7 +9,7 @@ pub use concordium_contracts_common::constants::MAX_PARAMETER_LEN;
 pub const MAX_PAYLOAD_SIZE: u32 = MAX_WASM_MODULE_SIZE + 1 + 4 + 4;
 
 /// Minimum valid transaction nonce. Nonces must be strictly sequential starting
-/// with [MIN_NONCE].
+/// with [`MIN_NONCE`].
 pub const MIN_NONCE: crate::base::Nonce = crate::base::Nonce { nonce: 1 };
 
 /// Maximum allowed size of data to register via the register data transaction.

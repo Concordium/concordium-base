@@ -1,3 +1,6 @@
+//! This module and its submodules implement the Concordium identity layer,
+//! providing the core functionality for all entities involved (users, identity
+//! providers, and the chain).
 pub mod account_holder;
 pub mod anonymity_revoker;
 pub mod chain;
