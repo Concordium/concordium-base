@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Fix schema JSON deserialization of negative signed numbers.
+
 ## concordium-contracts-common 5.3.0 (2023-03-16)
 
 - Add `Display` implementation for `OwnedParameter` and `Parameter`, which uses
