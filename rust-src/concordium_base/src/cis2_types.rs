@@ -3,11 +3,15 @@
 
 use crate::{
     hashes::Hash,
-    smart_contracts::concordium_contracts_common::{
-        deserial_vector_no_length, serial_vector_no_length, AccountAddress, Address,
-        ContractAddress, Deserial, OwnedReceiveName, ParseError, Read, Serial, Write,
+    smart_contracts::{
+        concordium_contracts_common::{
+            deserial_vector_no_length, serial_vector_no_length, AccountAddress, Address,
+            ContractAddress, Deserial, OwnedReceiveName, ParseError, Read, Serial, Write,
+        },
+        ContractEvent,
     },
 };
+use concordium_contracts_common::Cursor;
 use derive_more::{AsRef, Display, From, FromStr, Into};
 use num::ToPrimitive;
 use num_bigint::BigUint;
@@ -1058,6 +1062,23 @@ fn display_address(a: &Address) -> String {
     match a {
         Address::Account(addr) => format!("{}", addr),
         Address::Contract(addr) => format!("{}", addr),
+    }
+}
+
+/// Attempt to parse the contract event into an event. This requires that the
+/// entire input is consumed if it is a known CIS2 event.
+impl<'a> TryFrom<&'a ContractEvent> for Event {
+    type Error = ParseError;
+
+    fn try_from(value: &'a super::smart_contracts::ContractEvent) -> Result<Self, Self::Error> {
+        let data = value.as_ref();
+        let mut cursor = Cursor::new(data);
+        let res = Self::deserial(&mut cursor)?;
+        if cursor.offset == data.len() || matches!(&res, Self::Unknown) {
+            Ok(res)
+        } else {
+            Err(ParseError {})
+        }
     }
 }
 

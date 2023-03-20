@@ -1,3 +1,4 @@
+use crate::base::Energy;
 // Re-export to avoid a breaking change.
 pub use concordium_contracts_common::constants::MAX_PARAMETER_LEN;
 
@@ -26,3 +27,9 @@ pub const MAX_URL_TEXT_LENGTH: usize = 2048;
 
 /// Size of the sha256 digest in bytes.
 pub const SHA256: usize = 32;
+
+/// The highest amount of energy allowed when invoking a smart contract endpoint
+/// with a concordium node.
+pub const MAX_ALLOWED_INVOKE_ENERGY: Energy = Energy {
+    energy: 100_000_000_000,
+};
