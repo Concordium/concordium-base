@@ -114,7 +114,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::I8 => {
             if let Value::Number(n) = json {
-                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                let n = n.as_i64().ok_or(JsonError::SignedIntRequired)?;
                 let n: i8 = n.try_into()?;
                 serial!(n, out)
             } else {
@@ -123,7 +123,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::I16 => {
             if let Value::Number(n) = json {
-                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                let n = n.as_i64().ok_or(JsonError::SignedIntRequired)?;
                 let n: i16 = n.try_into()?;
                 serial!(n, out)
             } else {
@@ -132,7 +132,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::I32 => {
             if let Value::Number(n) = json {
-                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                let n = n.as_i64().ok_or(JsonError::SignedIntRequired)?;
                 let n: i32 = n.try_into()?;
                 serial!(n, out)
             } else {
@@ -141,7 +141,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
         }
         Type::I64 => {
             if let Value::Number(n) = json {
-                let n = n.as_u64().ok_or(JsonError::SignedIntRequired)?;
+                let n = n.as_i64().ok_or(JsonError::SignedIntRequired)?;
                 serial!(n, out)
             } else {
                 Err(WrongJsonType("JSON number required".to_string()))
