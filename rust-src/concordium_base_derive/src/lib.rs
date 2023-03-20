@@ -59,9 +59,9 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
 }
 
 /// Like [`SerdeBase16Serialize`](serde_base16_serialize_derive), but assuming
-/// that the `concordium_base::Serialize` implementation puts the length of the data
-/// as 4 bytes in big endian. These 4 bytes are dropped when converting to hex
-/// since the JSON format is self-describing so the length is not needed.
+/// that the `concordium_base::Serialize` implementation puts the length of the
+/// data as 4 bytes in big endian. These 4 bytes are dropped when converting to
+/// hex since the JSON format is self-describing so the length is not needed.
 #[proc_macro_derive(SerdeBase16IgnoreLengthSerialize)]
 pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
