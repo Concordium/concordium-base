@@ -1,22 +1,27 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{
-    types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
-    *,
+use concordium_base::{
+    common::{
+        types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    dodis_yampolskiy_prf as prf,
+    elgamal::{self, PublicKey, SecretKey},
+    id::{
+        self,
+        account_holder::*,
+        constants::{ArCurve, IpPairing},
+        curve_arithmetic::*,
+        identity_provider::*,
+        secret_sharing::*,
+        types::*,
+    },
+    pedersen_commitment::Value as PedersenValue,
+    ps_sig,
 };
 use dialoguer::{Input, MultiSelect, Select};
-use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use elgamal::{PublicKey, SecretKey};
-use id::{
-    account_holder::*,
-    constants::{ArCurve, IpPairing},
-    curve_arithmetic::*,
-    identity_provider::*,
-    secret_sharing::*,
-    types::*,
-};
 use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
@@ -30,8 +35,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use structopt::StructOpt;
-
-use pedersen_scheme::Value as PedersenValue;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
@@ -1050,7 +1053,7 @@ fn handle_create_credential(cc: CreateCredential) {
     // finally we also need the credential holder information with secret keys
     // which we need to generate CDI.
     let (id_use_data, acc_data, maybe_context): (
-        IdObjectUseData<Bls12, ExampleCurve>,
+        IdObjectUseData<Bls12, ArCurve>,
         CredentialData,
         Option<CredentialContext>,
     ) = match cc.private {
@@ -1375,9 +1378,9 @@ fn handle_create_chi(cc: CreateChi) {
 
         let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
         let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
-        CredentialHolderInfo::<ExampleCurve> { id_cred }
+        CredentialHolderInfo::<ArCurve> { id_cred }
     } else {
-        CredentialHolderInfo::<ExampleCurve> {
+        CredentialHolderInfo::<ArCurve> {
             id_cred: IdCredentials::generate(&mut csprng),
         }
     };
@@ -1448,7 +1451,7 @@ fn handle_create_id_use_data(iud: CreateIdUseData) {
             IdObjectUseData { aci, randomness }
         } else {
             let mut csprng = thread_rng();
-            let cred_holder_info = CredentialHolderInfo::<ExampleCurve> {
+            let cred_holder_info = CredentialHolderInfo::<ArCurve> {
                 id_cred: IdCredentials::generate(&mut csprng),
             };
             let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -2299,7 +2302,7 @@ fn handle_recovery(girr: GenerateIdRecoveryRequest) {
         }
     };
 
-    let chi: CredentialHolderInfo<ExampleCurve> = {
+    let chi: CredentialHolderInfo<ArCurve> = {
         match decrypt_input(girr.chi) {
             Ok(chi) => chi,
             Err(e) => {

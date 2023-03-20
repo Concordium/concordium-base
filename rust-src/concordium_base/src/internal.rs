@@ -29,7 +29,7 @@ pub(crate) mod byte_array_hex {
 /// This is particularly interesting for various integer types, where the
 /// default value is 0.
 pub(crate) mod deserialize_non_default {
-    use crypto_common::SerdeDeserialize;
+    use crate::common::SerdeDeserialize;
 
     pub fn deserialize<'de, D, A>(des: D) -> Result<A, D::Error>
     where

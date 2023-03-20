@@ -1,18 +1,21 @@
 use anyhow::ensure;
-use crypto_common::{
-    base16_encode_string, to_bytes, types::TransactionTime, SerdeDeserialize, SerdeSerialize,
-    Versioned, VERSION_0,
+use concordium_base::{
+    common::{
+        base16_encode_string, to_bytes, types::TransactionTime, SerdeDeserialize, SerdeSerialize,
+        Versioned, VERSION_0,
+    },
+    id,
+    id::{
+        constants::{ArCurve, AttributeKind, IpPairing},
+        identity_provider::{
+            create_initial_cdi, sign_identity_object, sign_identity_object_v1,
+            validate_id_recovery_request, validate_request as ip_validate_request,
+            validate_request_v1 as ip_validate_request_v1,
+        },
+        types::*,
+    },
 };
 use ed25519_dalek::{ExpandedSecretKey, PublicKey};
-use id::{
-    constants::{ArCurve, AttributeKind, IpPairing},
-    identity_provider::{
-        create_initial_cdi, sign_identity_object, sign_identity_object_v1,
-        validate_id_recovery_request, validate_request as ip_validate_request,
-        validate_request_v1 as ip_validate_request_v1,
-    },
-    types::*,
-};
 use log::{error, info, warn};
 use reqwest::Client;
 use serde_json::{from_str, json, to_value};

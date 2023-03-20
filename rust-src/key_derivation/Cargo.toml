@@ -8,9 +8,8 @@ license-file = "../../LICENSE"
 [dependencies]
 hmac = "0.12.1"
 sha2 = "0.10.2"
-pairing = "0.15"
 ed25519-dalek = "1.0.0"
-serde = "1.0"
+serde = "1"
 pbkdf2 = "0.10"
 
 [dependencies.ed25519_hd_key_derivation]
@@ -21,21 +20,9 @@ version = "1.0.0"
 path = "../keygen_bls"
 version = "2.0.0"
 
-[dependencies.dodis_yampolskiy_prf]
-path = "../dodis_yampolskiy_prf"
-version = "0"
-
-[dependencies.ps_sig]
-path = "../ps_sig"
-version = "0"
-
-[dependencies.id]
-path = "../id"
-version = "0"
-
-[dependencies.crypto_common]
-path = "../crypto_common"
-version = "0"
+[dependencies.concordium_base]
+path = "../concordium_base"
+version = "*"
 
 [lib]
 name = "key_derivation"
