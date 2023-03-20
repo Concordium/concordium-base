@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "5.2.0"
+version = "5.3.1"
 dependencies = [
  "bs58",
  "chrono",
@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "concordium_base"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "bs58",
@@ -361,7 +361,7 @@ dependencies = [
 
 [[package]]
 name = "concordium_base_derive"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
