@@ -1151,7 +1151,7 @@ impl<'a> EntrypointName<'a> {
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
     #[inline(always)]
-    pub fn new_unchecked(name: &'a str) -> Self { Self(name) }
+    pub const fn new_unchecked(name: &'a str) -> Self { Self(name) }
 }
 
 impl<'a> fmt::Display for EntrypointName<'a> {
