@@ -10,10 +10,10 @@ the `concordium-rust-sdk`.
 The library covers the following areas
 
 - the full implementation of the identity layer cryptography. In particular the
-  data structures, data exchange formats between the different parties, and zero
-  knowledge proofs are implemented by this library.
+  data structures, data exchange formats between the different parties, and zero-knowledge 
+  proofs are implemented by this library.
 - implementation of encrypted transfers, including data exchange formats and
-  zero knowledge proofs.
+  zero-knowledge proofs.
 - implementation of ElGamal encryption over the curve abstraction defined in the
   library.
 - implementation of bulletproofs over the curve abstraction.
@@ -25,7 +25,7 @@ The library covers the following areas
 
 ### Features
 
-The library has no default features, and the following optional ones
+The library has no default features and the following optional ones:
 
 - `encryption` - additionally exposes the `common::encryption` module for
   handling the encryption format used by various Concordium tools (such as
