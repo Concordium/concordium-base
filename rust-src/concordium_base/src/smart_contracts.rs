@@ -183,8 +183,9 @@ pub enum ContractTraceElement {
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 /// Data generated as part of updating a single contract instance.
-/// In general a single [Update](transactions::Payload::Update) transaction will
-/// generate one or more of these events, together with possibly some transfers.
+/// In general a single [Update](crate::transactions::Payload::Update)
+/// transaction will generate one or more of these events, together with
+/// possibly some transfers.
 pub struct InstanceUpdatedEvent {
     #[serde(default)]
     pub contract_version: WasmVersion,
