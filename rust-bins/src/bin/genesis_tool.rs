@@ -1,16 +1,17 @@
-use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{
-    base16_encode_string,
-    encryption::{encrypt, Password},
-    types::{Amount, KeyIndex},
-    *,
+use concordium_base::{
+    aggregate_sig as agg,
+    common::{
+        base16_encode_string,
+        encryption::{encrypt, Password},
+        types::{Amount, KeyIndex},
+        *,
+    },
+    dodis_yampolskiy_prf as prf, ecvrf as vrf, elgamal, id,
+    id::{account_holder::*, constants::*, secret_sharing::Threshold, types::*},
 };
-use dodis_yampolskiy_prf as prf;
-use ecvrf as vrf;
 use ed25519_dalek as ed25519;
-use id::{account_holder::*, constants::*, secret_sharing::Threshold, types::*};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
 use std::{
@@ -183,7 +184,7 @@ fn main() -> std::io::Result<()> {
         for idx in 0..common.num_keys {
             initial_keys.insert(
                 KeyIndex(idx as u8),
-                crypto_common::types::KeyPair::generate(csprng),
+                concordium_base::common::types::KeyPair::generate(csprng),
             );
         }
 

@@ -1,6 +1,6 @@
 [package]
 name = "mobile_wallet"
-version = "0.23.0"
+version = "0.24.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE-APACHE"
@@ -24,18 +24,6 @@ libc = "0.2"
 thiserror = "1.0"
 base64 = "0.13"
 
-[dependencies.concordium_base]
-path = "../rust-src/concordium_base"
-version = "0"
-
-[dependencies.elgamal]
-path = "../rust-src/elgamal"
-version = "0"
-
-[dependencies.dodis_yampolskiy_prf]
-path = "../rust-src/dodis_yampolskiy_prf"
-version = "0"
-
 [dependencies.key_derivation]
 path = "../rust-src/key_derivation"
 version = "1.1.0"
@@ -44,22 +32,13 @@ version = "1.1.0"
 path = "../rust-src/ed25519_hd_key_derivation"
 version = "1.0.0"
 
-[dependencies.ffi_helpers]
-path = "../rust-src/ffi_helpers"
-version = "0"
+[dependencies.concordium_base]
+path = "../rust-src/concordium_base"
+version = "1"
 
-# Dependencies for the build.rs script.
-[build-dependencies.elgamal]
-path = "../rust-src/elgamal"
-version = "0"
-
-[build-dependencies.id]
-path = "../rust-src/id"
-version = "0"
-
-[build-dependencies.crypto_common]
-path = "../rust-src/crypto_common"
-version = "0"
+[build-dependencies.concordium_base]
+path = "../rust-src/concordium_base"
+version = "1"
 
 # Use the same optimization level for building build.rs as for the library
 # itself in release mode. This is necessary because some of the dependencies

@@ -3,11 +3,15 @@
 
 use crate::{
     hashes::Hash,
-    smart_contracts::concordium_contracts_common::{
-        deserial_vector_no_length, serial_vector_no_length, AccountAddress, Address,
-        ContractAddress, Deserial, OwnedReceiveName, ParseError, Read, Serial, Write,
+    smart_contracts::{
+        concordium_contracts_common::{
+            deserial_vector_no_length, serial_vector_no_length, AccountAddress, Address,
+            ContractAddress, Deserial, OwnedReceiveName, ParseError, Read, Serial, Write,
+        },
+        ContractEvent,
     },
 };
+use concordium_contracts_common::Cursor;
 use derive_more::{AsRef, Display, From, FromStr, Into};
 use num::ToPrimitive;
 use num_bigint::BigUint;
@@ -29,8 +33,8 @@ use thiserror::*;
     From,
     Display,
     FromStr,
-    crypto_common::SerdeSerialize,
-    crypto_common::SerdeDeserialize,
+    crate::common::SerdeSerialize,
+    crate::common::SerdeDeserialize,
 )]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
@@ -269,8 +273,8 @@ impl Deserial for TokenAmount {
     Into,
     AsRef,
     Hash,
-    crypto_common::SerdeSerialize,
-    crypto_common::SerdeDeserialize,
+    crate::common::SerdeSerialize,
+    crate::common::SerdeDeserialize,
 )]
 #[serde(try_from = "String", into = "String")]
 pub struct TokenId(Vec<u8>);
@@ -948,7 +952,8 @@ impl Deserial for MetadataUrl {
 pub enum Event {
     /// Transfer of an amount of tokens
     #[display(
-        fmt = "Transferred token with ID {} from {} to {}",
+        fmt = "Transferred {} of token with ID {} from {} to {}",
+        amount,
         token_id,
         "display_address(from)",
         "display_address(to)"
@@ -961,7 +966,8 @@ pub enum Event {
     },
     /// Minting an amount of tokens
     #[display(
-        fmt = "Minted token with ID {} for {}",
+        fmt = "Minted {} of token with ID {} for {}",
+        amount,
         token_id,
         "display_address(owner)"
     )]
@@ -972,7 +978,8 @@ pub enum Event {
     },
     /// Burning an amount of tokens
     #[display(
-        fmt = "Burned token with ID {} for {}",
+        fmt = "Burned {} of token with ID {} for {}",
+        amount,
         token_id,
         "display_address(owner)"
     )]
@@ -1058,6 +1065,23 @@ fn display_address(a: &Address) -> String {
     match a {
         Address::Account(addr) => format!("{}", addr),
         Address::Contract(addr) => format!("{}", addr),
+    }
+}
+
+/// Attempt to parse the contract event into an event. This requires that the
+/// entire input is consumed if it is a known CIS2 event.
+impl<'a> TryFrom<&'a ContractEvent> for Event {
+    type Error = ParseError;
+
+    fn try_from(value: &'a super::smart_contracts::ContractEvent) -> Result<Self, Self::Error> {
+        let data = value.as_ref();
+        let mut cursor = Cursor::new(data);
+        let res = Self::deserial(&mut cursor)?;
+        if cursor.offset == data.len() || matches!(&res, Self::Unknown) {
+            Ok(res)
+        } else {
+            Err(ParseError {})
+        }
     }
 }
 

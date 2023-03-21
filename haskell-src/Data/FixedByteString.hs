@@ -12,6 +12,7 @@ import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short.Internal as BSS
 import Data.Data (Data, Typeable)
+import Data.Foldable
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Word
@@ -127,7 +128,7 @@ encodeInteger z0 = unsafeCreate (initBytes z0 (fixedLength (undefined :: a) - 1)
 
 -- |Convert a 'FixedByteString' to an unsigned 'Integer' with big endian encoding.
 decodeIntegerUnsigned :: forall a. FixedLength a => FixedByteString a -> Integer
-decodeIntegerUnsigned fbs = foldl (\acc v -> acc `shiftL` 8 .|. toInteger (v :: Word8)) 0 (unpack fbs)
+decodeIntegerUnsigned fbs = foldl' (\acc v -> acc `shiftL` 8 .|. toInteger (v :: Word8)) 0 (unpack fbs)
 
 -- |Convert a 'FixedByteString' to a signed 'Integer' with big endian encoding.
 decodeIntegerSigned :: forall a. (FixedLength a) => FixedByteString a -> Integer

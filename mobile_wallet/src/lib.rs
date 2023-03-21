@@ -3,11 +3,13 @@ use concordium_base::{
     base::{self, Energy, Nonce},
     cis2_types::{self, AdditionalData},
     common::{
-        self, c_char,
+        self,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
-    contracts_common::{self, schema::VersionedModuleSchema, AccountAddress, Address, Cursor},
+    contracts_common::{self, schema, AccountAddress, Address, Cursor},
+    dodis_yampolskiy_prf as prf, elgamal,
+    elgamal::BabyStepGiantStep,
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
     id::{
@@ -19,7 +21,7 @@ use concordium_base::{
         secret_sharing::Threshold,
         types::*,
     },
-    smart_contracts::{OwnedReceiveName, Parameter},
+    smart_contracts::{OwnedParameter, OwnedReceiveName},
     transactions::{
         self,
         construct::{GivenEnergy, PreAccountTransaction},
@@ -28,11 +30,10 @@ use concordium_base::{
         UpdateContractPayload,
     },
 };
-use dodis_yampolskiy_prf as prf;
 use ed25519_hd_key_derivation::DeriveError;
 use either::Either::{Left, Right};
-use elgamal::BabyStepGiantStep;
 use key_derivation::{ConcordiumHdWallet, Net};
+use libc::c_char;
 use pairing::bls12_381::Bls12;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
@@ -195,19 +196,31 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
+#[derive(common::SerdeSerialize, common::SerdeDeserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(tag = "type", content = "value")]
+enum SchemaInputType {
+    Module(String),
+    Parameter(String),
+}
+
 fn get_parameter_as_json(
-    parameter: Parameter,
+    parameter: OwnedParameter,
     receive_name: &OwnedReceiveName,
-    schema: &str,
+    schema: &SchemaInputType,
     schema_version: &Option<u8>,
 ) -> anyhow::Result<Value> {
-    let schema_bytes = base64::decode(schema)?;
-
     let contract_name = receive_name.as_receive_name().contract_name();
     let entrypoint_name = &receive_name.as_receive_name().entrypoint_name().to_string();
 
-    let module_schema = VersionedModuleSchema::new(&schema_bytes, schema_version)?;
-    let receive_schema = module_schema.get_receive_param_schema(contract_name, entrypoint_name)?;
+    let receive_schema: schema::Type = match schema {
+        SchemaInputType::Module(raw) => {
+            let module_schema =
+                schema::VersionedModuleSchema::new(&base64::decode(raw)?, schema_version)?;
+            module_schema.get_receive_param_schema(contract_name, entrypoint_name)?
+        }
+        SchemaInputType::Parameter(raw) => contracts_common::from_bytes(&base64::decode(raw)?)?,
+    };
 
     let mut parameter_cursor = Cursor::new(parameter.as_ref());
     match receive_schema.to_json(&mut parameter_cursor) {
@@ -223,8 +236,15 @@ fn parameter_to_json_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let serialized_parameter: String = try_get(&v, "parameter")?;
     let receive_name: OwnedReceiveName = try_get(&v, "receiveName")?;
-    let parameter: Parameter = Parameter::new_unchecked(hex::decode(serialized_parameter)?);
-    let schema: String = try_get(&v, "schema")?;
+    let parameter: OwnedParameter =
+        OwnedParameter::new_unchecked(hex::decode(serialized_parameter)?);
+    let schema: SchemaInputType = match v.get("schema") {
+        Some(v @ Value::Object(_)) => from_value(v.clone())?,
+        // To support the legacy format we also attempt to parse the schema as a string directly:
+        Some(Value::String(v)) => SchemaInputType::Module(v.clone()),
+        Some(_) => bail!(format!("Field schema has unexpected type.")),
+        _ => bail!(format!("Field schema not present, but should be.")),
+    };
     let schema_version: Option<u8> = maybe_get(&v, "schemaVersion")?;
     let parameter_as_json =
         get_parameter_as_json(parameter, &receive_name, &schema, &schema_version)?;
