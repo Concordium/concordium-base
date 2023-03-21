@@ -13,8 +13,11 @@ use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clap::AppSettings;
 use client_server_helpers::read_json_from_file;
-use crypto_common::{types::Amount, *};
-use id::types::*;
+use concordium_base::{
+    common::{types::Amount, *},
+    elgamal, encrypted_transfers, id,
+    id::types::*,
+};
 
 use std::path::PathBuf;
 use structopt::StructOpt;

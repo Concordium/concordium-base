@@ -287,7 +287,7 @@ impl Action {
             } => {
                 let name = data.name.as_receive_name().get_chain_name().as_bytes();
                 let name_len = name.len();
-                let param_len = data.parameter.0.len();
+                let param_len = data.parameter.as_ref().len();
                 let mut out = Vec::with_capacity(1 + 8 + 8 + name_len + 4 + param_len + 4);
                 out.push(0);
                 out.extend_from_slice(&data.to_addr.index.to_be_bytes());
@@ -296,7 +296,7 @@ impl Action {
                 out.extend_from_slice(name);
                 out.extend_from_slice(&data.amount.micro_ccd.to_be_bytes());
                 out.extend_from_slice(&(param_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.parameter.0);
+                out.extend_from_slice(data.parameter.as_ref());
                 out
             }
             SimpleTransfer {

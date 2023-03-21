@@ -130,8 +130,7 @@ impl Outcome {
         let name = rn.to_owned();
 
         ensure!(parameter_bytes.len() <= max_parameter_size, "Parameter exceeds max size.");
-
-        let parameter = OwnedParameter(parameter_bytes.to_vec());
+        let parameter = OwnedParameter::new_unchecked(parameter_bytes.to_vec());
 
         let to_addr = ContractAddress {
             index:    addr_index,

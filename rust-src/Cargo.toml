@@ -1,24 +1,10 @@
 [workspace]
 
 members=[
-   "curve_arithmetic",
-   "ecvrf",
-   "eddsa_ed25519",
    "sha_2",
-   "dodis_yampolskiy_prf",
-   "pedersen_scheme",
-   "elgamal",
-   "ps_sig",
-   "id",
-   "ffi_helpers",
-   "aggregate_sig",
-   "crypto_common",
-   "crypto_common_derive",
-   "random_oracle",
-   "bulletproofs",
-   "encrypted_transfers",
    "keygen_bls",
    "ed25519_hd_key_derivation",
    "key_derivation",
-   "concordium_base"
+   "concordium_base",
+   "concordium_base_derive"
 ]

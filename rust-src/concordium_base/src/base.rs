@@ -1,19 +1,18 @@
 //! Basis type definitions that are used throughout the crate.
 
+use crate::{
+    common::{
+        deserial_string, types::Signature, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt,
+        SerdeBase16Serialize, SerdeDeserialize, SerdeSerialize, Serial, Serialize,
+    },
+    id::types::VerifyKey,
+    random_oracle::RandomOracle,
+};
 pub use concordium_contracts_common::{
     Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
 };
-use crypto_common::{
-    derive::{SerdeBase16Serialize, Serial, Serialize},
-    deserial_string,
-    types::Signature,
-    Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
-    Serial,
-};
 use derive_more::{Add, Display, From, FromStr, Into};
-use id::types::VerifyKey;
 use rand::{CryptoRng, Rng};
-use random_oracle::RandomOracle;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -478,20 +477,20 @@ pub struct TransactionIndex {
     pub index: u64,
 }
 
-pub type AggregateSigPairing = id::constants::IpPairing;
+pub type AggregateSigPairing = crate::id::constants::IpPairing;
 
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
 /// A secret key used by bakers and finalizers to sign finalization records.
 pub struct BakerAggregationSignKey {
-    pub(crate) sign_key: aggregate_sig::SecretKey<AggregateSigPairing>,
+    pub(crate) sign_key: crate::aggregate_sig::SecretKey<AggregateSigPairing>,
 }
 
 impl BakerAggregationSignKey {
     /// Generate a fresh key using the provided random number generatro.
     pub fn generate<T: Rng>(csprng: &mut T) -> Self {
         Self {
-            sign_key: aggregate_sig::SecretKey::generate(csprng),
+            sign_key: crate::aggregate_sig::SecretKey::generate(csprng),
         }
     }
 
@@ -501,7 +500,7 @@ impl BakerAggregationSignKey {
         &self,
         csprng: &mut T,
         random_oracle: &mut RandomOracle,
-    ) -> aggregate_sig::Proof<AggregateSigPairing> {
+    ) -> crate::aggregate_sig::Proof<AggregateSigPairing> {
         self.sign_key.prove(csprng, random_oracle)
     }
 }
@@ -510,13 +509,13 @@ impl BakerAggregationSignKey {
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq)]
 /// Public key corresponding to [`BakerAggregationVerifyKey`].
 pub struct BakerAggregationVerifyKey {
-    pub(crate) verify_key: aggregate_sig::PublicKey<AggregateSigPairing>,
+    pub(crate) verify_key: crate::aggregate_sig::PublicKey<AggregateSigPairing>,
 }
 
 impl From<&BakerAggregationSignKey> for BakerAggregationVerifyKey {
     fn from(secret: &BakerAggregationSignKey) -> Self {
         Self {
-            verify_key: aggregate_sig::PublicKey::from_secret(&secret.sign_key),
+            verify_key: crate::aggregate_sig::PublicKey::from_secret(&secret.sign_key),
         }
     }
 }
@@ -557,13 +556,13 @@ impl From<&BakerSignatureSignKey> for BakerSignatureVerifyKey {
 /// A secret key used by a baker to prove that they won the lottery to produce a
 /// block.
 pub struct BakerElectionSignKey {
-    pub(crate) sign_key: ecvrf::SecretKey,
+    pub(crate) sign_key: crate::ecvrf::SecretKey,
 }
 
 impl BakerElectionSignKey {
     pub fn generate<T: CryptoRng + Rng>(csprng: &mut T) -> Self {
         Self {
-            sign_key: ecvrf::SecretKey::generate(csprng),
+            sign_key: crate::ecvrf::SecretKey::generate(csprng),
         }
     }
 }
@@ -572,13 +571,13 @@ impl BakerElectionSignKey {
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq, Eq)]
 /// A public key that corresponds to [`BakerElectionSignKey`].
 pub struct BakerElectionVerifyKey {
-    pub(crate) verify_key: ecvrf::PublicKey,
+    pub(crate) verify_key: crate::ecvrf::PublicKey,
 }
 
 impl From<&BakerElectionSignKey> for BakerElectionVerifyKey {
     fn from(secret: &BakerElectionSignKey) -> Self {
         Self {
-            verify_key: ecvrf::PublicKey::from(&secret.sign_key),
+            verify_key: crate::ecvrf::PublicKey::from(&secret.sign_key),
         }
     }
 }
@@ -651,15 +650,15 @@ impl BakerCredentials {
 /// key and a sequential counter. [`CredentialRegistrationID`]'s generated from
 /// the same PRF key, but different counter values cannot easily be linked
 /// together.
-pub struct CredentialRegistrationID(id::constants::ArCurve);
+pub struct CredentialRegistrationID(crate::id::constants::ArCurve);
 
 impl CredentialRegistrationID {
-    pub fn new(g: id::constants::ArCurve) -> Self { Self(g) }
+    pub fn new(g: crate::id::constants::ArCurve) -> Self { Self(g) }
 }
 
 impl fmt::Display for CredentialRegistrationID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = hex::encode(&crypto_common::to_bytes(self));
+        let s = hex::encode(&crate::common::to_bytes(self));
         s.fmt(f)
     }
 }
@@ -679,8 +678,8 @@ pub struct UpdatePublicKey {
 pub struct UpdateKeyPair {
     #[serde(
         rename = "signKey",
-        serialize_with = "crypto_common::base16_encode",
-        deserialize_with = "crypto_common::base16_decode"
+        serialize_with = "crate::common::base16_encode",
+        deserialize_with = "crate::common::base16_decode"
     )]
     pub secret: ed25519_dalek::SecretKey,
     #[serde(flatten)]

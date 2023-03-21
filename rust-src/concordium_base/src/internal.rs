@@ -1,10 +1,10 @@
 pub(crate) mod byte_array_hex {
-    /// Serialize (via Serde) chrono::DateTime in milliseconds as an u64.
+    /// Serialize (via Serde)
     pub fn serialize<S: serde::Serializer>(dt: &[u8], ser: S) -> Result<S::Ok, S::Error> {
         ser.serialize_str(hex::encode(dt).as_str())
     }
 
-    /// Deserialize (via Serde) chrono::Duration in milliseconds as an i64.
+    /// Deserialize (via Serde)
     pub fn deserialize<'de, D: serde::Deserializer<'de>>(des: D) -> Result<Vec<u8>, D::Error> {
         struct HexVisitor;
         impl<'de> serde::de::Visitor<'de> for HexVisitor {
@@ -29,7 +29,7 @@ pub(crate) mod byte_array_hex {
 /// This is particularly interesting for various integer types, where the
 /// default value is 0.
 pub(crate) mod deserialize_non_default {
-    use crypto_common::SerdeDeserialize;
+    use crate::common::SerdeDeserialize;
 
     pub fn deserialize<'de, D, A>(des: D) -> Result<A, D::Error>
     where

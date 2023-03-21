@@ -283,6 +283,9 @@ $( singletons
         |]
  )
 
+instance ToJSON ChainParametersVersion where
+    toJSON = toJSON . chainParameterVersionToWord64
+
 deriving instance Show ProtocolVersion
 
 deriving instance Show ChainParametersVersion
@@ -305,6 +308,12 @@ protocolVersionFromWord64 4 = return P4
 protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 6 = return P6
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
+
+-- |Convert a @ChainParametersVersion@ to the corresponding 'Word64'.
+chainParameterVersionToWord64 :: ChainParametersVersion -> Word64
+chainParameterVersionToWord64 ChainParametersV0 = 0
+chainParameterVersionToWord64 ChainParametersV1 = 1
+chainParameterVersionToWord64 ChainParametersV2 = 2
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64

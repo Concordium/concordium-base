@@ -3,11 +3,13 @@ use concordium_base::{
     base::{self, Energy, Nonce},
     cis2_types::{self, AdditionalData},
     common::{
-        self, c_char,
+        self,
         types::{Amount, KeyIndex, KeyPair, TransactionSignature, TransactionTime},
         Deserial,
     },
     contracts_common::{self, schema, AccountAddress, Address, Cursor},
+    dodis_yampolskiy_prf as prf, elgamal,
+    elgamal::BabyStepGiantStep,
     encrypted_transfers,
     hashes::{HashBytes, TransactionSignHash},
     id::{
@@ -19,7 +21,7 @@ use concordium_base::{
         secret_sharing::Threshold,
         types::*,
     },
-    smart_contracts::{OwnedReceiveName, Parameter},
+    smart_contracts::{OwnedParameter, OwnedReceiveName},
     transactions::{
         self,
         construct::{GivenEnergy, PreAccountTransaction},
@@ -28,11 +30,10 @@ use concordium_base::{
         UpdateContractPayload,
     },
 };
-use dodis_yampolskiy_prf as prf;
 use ed25519_hd_key_derivation::DeriveError;
 use either::Either::{Left, Right};
-use elgamal::BabyStepGiantStep;
 use key_derivation::{ConcordiumHdWallet, Net};
+use libc::c_char;
 use pairing::bls12_381::Bls12;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
@@ -204,7 +205,7 @@ enum SchemaInputType {
 }
 
 fn get_parameter_as_json(
-    parameter: Parameter,
+    parameter: OwnedParameter,
     receive_name: &OwnedReceiveName,
     schema: &SchemaInputType,
     schema_version: &Option<u8>,
@@ -235,7 +236,8 @@ fn parameter_to_json_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let serialized_parameter: String = try_get(&v, "parameter")?;
     let receive_name: OwnedReceiveName = try_get(&v, "receiveName")?;
-    let parameter: Parameter = Parameter::new_unchecked(hex::decode(serialized_parameter)?);
+    let parameter: OwnedParameter =
+        OwnedParameter::new_unchecked(hex::decode(serialized_parameter)?);
     let schema: SchemaInputType = match v.get("schema") {
         Some(v @ Value::Object(_)) => from_value(v.clone())?,
         // To support the legacy format we also attempt to parse the schema as a string directly:
