@@ -504,6 +504,14 @@ pub struct InitContractPayload {
     pub param:     smart_contracts::OwnedParameter,
 }
 
+impl InitContractPayload {
+    /// Get the size of the payload in number of bytes.
+    pub fn size(&self) -> usize {
+        let bytes = crate::common::to_bytes(&self);
+        bytes.len()
+    }
+}
+
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
 #[serde(rename_all = "camelCase")]
 /// Data needed to update a smart contract instance.
@@ -517,6 +525,14 @@ pub struct UpdateContractPayload {
     pub receive_name: smart_contracts::OwnedReceiveName,
     /// Message to send to the contract instance.
     pub message:      smart_contracts::OwnedParameter,
+}
+
+impl UpdateContractPayload {
+    /// Get the size of the payload in number of bytes.
+    pub fn size(&self) -> usize {
+        let bytes = crate::common::to_bytes(&self);
+        bytes.len()
+    }
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, Default)]
