@@ -1451,6 +1451,46 @@ pub fn verify_signature_transaction_sign_hash(
     true
 }
 
+/// Verify a signature on a message as produced by the wallets.
+/// This is distinct from a signature on any transaction.
+pub fn verify_message_signature(
+    keys: &impl HasAccountAccessStructure,
+    signer: AccountAddress,
+    message: impl AsRef<[u8]>,
+    signature: &TransactionSignature,
+) -> bool {
+    let mut hash = sha2::Sha256::new();
+    // make the message distinct from any transactions.
+    hash.update(signer);
+    hash.update([0u8; 8]);
+    hash.update(message);
+    let hash: [u8; 32] = hash.finalize().into();
+
+    if usize::from(u8::from(keys.threshold())) > signature.signatures.len() {
+        return false;
+    }
+    // There are enough signatures.
+    for (&ci, cred_sigs) in signature.signatures.iter() {
+        if let Some(cred_keys) = keys.credential_keys(ci) {
+            if usize::from(u8::from(cred_keys.threshold)) > cred_sigs.len() {
+                return false;
+            }
+            for (&ki, sig) in cred_sigs {
+                if let Some(pk) = cred_keys.get(ki) {
+                    if !pk.verify(hash, sig) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
 #[derive(Debug, Clone)]
 /// A block item are data items that are transmitted on the network either as
 /// separate messages, or as part of blocks. They are the only user-generated
