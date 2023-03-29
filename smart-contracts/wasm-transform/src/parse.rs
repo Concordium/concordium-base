@@ -221,8 +221,8 @@ impl<'a, Ctx: Copy, A: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Vec<A> {
     }
 }
 
-/// Same as the instance for Vec<u8>, with the difference that no data is copied
-/// and the result is a reference to the initial byte array.
+/// Same as the instance for [`Vec<u8>`](Vec), with the difference that no data
+/// is copied and the result is a reference to the initial byte array.
 impl<'a, Ctx> Parseable<'a, Ctx> for &'a [u8] {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let len = u32::parse(ctx, cursor)?;
@@ -245,8 +245,8 @@ impl<'a, Ctx: Copy, A: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Option<A> {
     }
 }
 
-/// Same as the instance for Vec<u8>, with the difference that no data is copied
-/// and the result is a reference to the initial byte array.
+/// Same as the instance for [`Vec<u8>`](Vec), with the difference that no data
+/// is copied and the result is a reference to the initial byte array.
 impl<'a, Ctx> Parseable<'a, Ctx> for &'a [ValueType] {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let len = u32::parse(ctx, cursor)?;

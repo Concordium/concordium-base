@@ -167,6 +167,10 @@ jobs:
         cargo clippy --manifest-path mobile_wallet/Cargo.toml -- -Dclippy::all
         cargo clippy --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
 
+    - name: Check concordium base documentation
+      run: |
+          RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path rust-src/concordium_base/Cargo.toml --no-deps --all-features
+
     # HASKELL #
 
     # Set up Haskell by caching '~/.stack', '.stack-work', and '~/.local/bin' separately.

@@ -19,7 +19,7 @@ impl<C: Pairing> PartialEq for UnknownMessage<C> {
 
 impl<C: Pairing> Eq for UnknownMessage<C> {}
 
-/// This trait allows automatic conversion of &Value<C> to &C::Scalar.
+/// This trait allows automatic conversion of `&Value<C>` to `&C::Scalar`.
 impl<P: Pairing> Deref for UnknownMessage<P> {
     type Target = P::G1;
 
@@ -38,8 +38,8 @@ pub struct SigRetrievalRandomness<P: Pairing> {
     pub randomness: Rc<Secret<P::ScalarField>>,
 }
 
-/// This trait allows automatic conversion of &SigRetrievalRandomness<C> to
-/// &C::Scalar.
+/// This trait allows automatic conversion of `&SigRetrievalRandomness<C>` to
+/// `&C::Scalar`.
 impl<C: Pairing> std::ops::Deref for SigRetrievalRandomness<C> {
     type Target = C::ScalarField;
 

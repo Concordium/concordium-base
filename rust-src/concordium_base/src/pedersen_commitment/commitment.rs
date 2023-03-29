@@ -22,7 +22,7 @@ impl<C: Curve> Commitment<C> {
     }
 }
 
-/// This trait allows automatic conversion of &Commitment<C> to &C. In
+/// This trait allows automatic conversion of `&Commitment<C>` to `&C`. In
 /// particular this means that we can simply write `c.mul_by_scalar`, for
 /// example.
 impl<C: Curve> Deref for Commitment<C> {
@@ -31,7 +31,7 @@ impl<C: Curve> Deref for Commitment<C> {
     fn deref(&self) -> &C { &self.0 }
 }
 
-/// This trait allows automatic conversion of &Commitment<C> to &C. In
+/// This trait allows automatic conversion of `&Commitment<C>` to `&C`. In
 /// particular this means that we can simply write `c.mul_by_scalar`, for
 /// example.
 impl<C: Curve> std::borrow::Borrow<C> for Commitment<C> {
