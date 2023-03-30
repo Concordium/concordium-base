@@ -68,7 +68,7 @@ impl Deserial for Version {
     }
 }
 
-/// Versioned<T> represents T as a versioned data-structure.
+/// [`Versioned<T>`](Versioned) represents `T` as a versioned data-structure.
 /// The version is a integer number up to the implementation,
 /// which is serialized using variable integer encoding.
 /// The caller is responsible for ensuring the data structure `T`

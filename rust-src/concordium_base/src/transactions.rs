@@ -193,7 +193,7 @@ pub struct TransactionHeader {
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, AsRef)]
 #[serde(transparent)]
 /// An account transaction payload that has not yet been deserialized.
-/// This is a simple wrapper around Vec<u8> with bespoke serialization.
+/// This is a simple wrapper around [`Vec<u8>`](Vec) with bespoke serialization.
 pub struct EncodedPayload {
     #[serde(with = "crate::internal::byte_array_hex")]
     pub(crate) payload: Vec<u8>,

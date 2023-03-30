@@ -1273,7 +1273,7 @@ pub type ParameterRef<'a> = &'a [u8];
 /// This is needed, for example, when execution passes through Haskell and Rust.
 /// Ideally this would be Arc<[u8]> but then this cannot be passed via the FFI
 /// boundary directly since [u8] is not Sized. To avoid a third type we settle
-/// on Vec<u8>.
+/// on [`Vec<u8>`](Vec).
 pub type ParameterVec = Vec<u8>;
 
 /// Collection of information relevant to invoke a init-function.

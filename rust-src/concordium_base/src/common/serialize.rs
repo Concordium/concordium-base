@@ -246,7 +246,7 @@ impl<T: Deserial> Deserial for Box<T> {
 }
 
 /// Trait for writers which will not fail in normal operation with
-/// small amounts of data, e.g., Vec<u8>.
+/// small amounts of data, e.g., [`Vec<u8>`](Vec).
 /// Moreover having a special trait allows us to implement it for
 /// other types, such as the SHA Digest.
 pub trait Buffer: Sized + WriteBytesExt {
