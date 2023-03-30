@@ -42,6 +42,7 @@ import qualified Concordium.Genesis.Data.P6 as P6
 import Concordium.Genesis.Parameters
 import Concordium.Types
 import Concordium.Types.AnonymityRevokers
+import Concordium.Types.Conditionally
 import Concordium.Types.IdentityProviders
 import Concordium.Types.Parameters
 import Concordium.Types.Updates
@@ -185,6 +186,11 @@ parseParametersAndGetGenesisData value f =
 data VersionedCoreGenesisParameters
     = CGPV0 GDBase.CoreGenesisParameters
     | CGPV1 GDBaseV1.CoreGenesisParametersV1
+
+-- |Show a value wrapped in a @Conditionally@.
+showConditionally :: (Show a) => Conditionally b a -> String
+showConditionally (CFalse) = "N/A"
+showConditionally (CTrue v) = show v
 
 main :: IO ()
 main =
@@ -348,7 +354,7 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
         putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
         putStrLn "    + GAS rewards:"
         putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
-        putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+        putStrLn $ "      * adding a finalization proof: " ++ (showConditionally $ _cpRewardParameters ^. gasFinalizationProof)
         putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
         putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
 
@@ -376,7 +382,7 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
         putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
         putStrLn "    + GAS rewards:"
         putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
-        putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+        putStrLn $ "      * adding a finalization proof: " ++ showConditionally (_cpRewardParameters ^. gasFinalizationProof)
         putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
         putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
         mapM_ printTimeParametersV1 _cpTimeParameters
@@ -404,7 +410,7 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
         putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
         putStrLn "    + GAS rewards:"
         putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
-        putStrLn $ "      * adding a finalization proof: " ++ show (_cpRewardParameters ^. gasFinalizationProof)
+        putStrLn $ "      * adding a finalization proof: " ++ showConditionally (_cpRewardParameters ^. gasFinalizationProof)
         putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
         putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
         mapM_ printTimeParametersV1 _cpTimeParameters

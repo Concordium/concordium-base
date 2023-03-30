@@ -344,11 +344,11 @@ instance ToProto AccountEncryptedAmount where
                 mkEncryptedBalance
                 ProtoFields.aggregatedAmount .= toProto aggAmount
                 ProtoFields.numAggregated .= numAgg
-                ProtoFields.incomingAmounts .= (toProto <$> toList (_incomingEncryptedAmounts encBal))
       where
         mkEncryptedBalance = do
             ProtoFields.selfAmount .= toProto (_selfAmount encBal)
             ProtoFields.startIndex .= coerce (_startIndex encBal)
+            ProtoFields.incomingAmounts .= (toProto <$> toList (_incomingEncryptedAmounts encBal))
 
 instance ToProto AccountReleaseSummary where
     type Output AccountReleaseSummary = Proto.ReleaseSchedule

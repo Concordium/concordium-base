@@ -57,7 +57,7 @@ pub struct Value<C: Curve> {
     pub value: Rc<Secret<C::Scalar>>,
 }
 
-/// This trait allows automatic conversion of &Value<C> to &C::Scalar.
+/// This trait allows automatic conversion of `&Value<C>` to `&C::Scalar`.
 impl<C: Curve> Deref for Value<C> {
     type Target = C::Scalar;
 
