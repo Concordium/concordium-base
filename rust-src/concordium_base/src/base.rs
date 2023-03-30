@@ -540,12 +540,12 @@ impl Energy {
     /// "Tick" energy: subtract the provided amount.
     ///
     /// Returns an error if the energy goes below `0`.
-    pub fn tick_energy(&mut self, amount: Energy) -> Result<(), OutOfEnergy> {
+    pub fn tick_energy(&mut self, amount: Energy) -> Result<(), InsufficientEnergy> {
         if let Some(nrg) = self.energy.checked_sub(amount.energy) {
             self.energy = nrg;
             Ok(())
         } else {
-            Err(OutOfEnergy)
+            Err(InsufficientEnergy)
         }
     }
 
@@ -560,9 +560,10 @@ impl Energy {
 }
 
 #[derive(Debug, PartialEq, Eq, Error)]
-// TODO: Combine with wasm-chain-integration OutOfEnergy.
 #[error("Out of energy")]
-pub struct OutOfEnergy;
+/// An error raised by [`tick_energy`](Energy::tick_energy) when subtracting the
+/// required amount of energy would lead to a negative value.
+pub struct InsufficientEnergy;
 
 /// Position of the transaction in a block.
 #[repr(transparent)]
