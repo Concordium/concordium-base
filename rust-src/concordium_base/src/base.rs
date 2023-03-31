@@ -548,15 +548,6 @@ impl Energy {
             Err(InsufficientEnergy)
         }
     }
-
-    /// Saturating energy subtraction.
-    ///
-    /// Computes `self - rhs` bottoming out at `0` instead of underflowing.
-    pub fn saturating_sub(self, rhs: Energy) -> Energy {
-        Self {
-            energy: self.energy.saturating_sub(rhs.energy),
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Error)]
