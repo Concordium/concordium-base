@@ -1293,7 +1293,6 @@ dependencies = [
  "hmac",
  "key_derivation",
  "keygen_bls",
- "openssl-src",
  "openssl-sys",
  "pairing",
  "pbkdf2 0.11.0",

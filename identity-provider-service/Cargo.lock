@@ -976,7 +976,6 @@ dependencies = [
  "env_logger",
  "hex",
  "log",
- "openssl-src",
  "pairing",
  "reqwest",
  "rust-embed",
