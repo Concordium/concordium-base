@@ -180,7 +180,7 @@ impl Write for Vec<u8> {
 
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Err> {
-        let _ = self.extend_from_slice(buf);
+        self.extend_from_slice(buf);
         Ok(buf.len())
     }
 }
@@ -196,7 +196,7 @@ impl Write for &mut [u8] {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Err> {
         let to_write = core::cmp::min(buf.len(), self.len());
-        let (overwrite, rest) = core::mem::replace(self, &mut []).split_at_mut(to_write);
+        let (overwrite, rest) = std::mem::take(self).split_at_mut(to_write);
         overwrite.copy_from_slice(&buf[..to_write]);
         *self = rest;
         Ok(to_write)
