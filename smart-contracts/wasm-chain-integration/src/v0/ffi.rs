@@ -109,11 +109,9 @@ unsafe extern "C" fn call_receive_v0(
         return std::ptr::null_mut();
     };
     let res = std::panic::catch_unwind(|| {
-        let receive_ctx = deserial_receive_context(slice_from_c_bytes!(
-            receive_ctx_bytes,
-            receive_ctx_bytes_len
-        ))
-        .expect("Precondition violation: Should be given a valid receive context.");
+        let receive_ctx =
+            deserial_receive_context(slice_from_c_bytes!(receive_ctx_bytes, receive_ctx_bytes_len))
+                .expect("Precondition violation: Should be given a valid receive context.");
         let receive_name = slice_from_c_bytes!(receive_name, receive_name_len);
         let state = slice_from_c_bytes!(state_bytes, state_bytes_len);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len);

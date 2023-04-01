@@ -128,11 +128,9 @@ unsafe extern "C" fn call_init_v1(
         let init_name = slice_from_c_bytes!(init_name, init_name_len);
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len);
         let limit_logs_and_return_values = limit_logs_and_return_values != 0;
-        let init_ctx = v0::deserial_init_context(slice_from_c_bytes!(
-            init_ctx_bytes,
-            init_ctx_bytes_len
-        ))
-        .expect("Precondition violation: invalid init ctx given by host.");
+        let init_ctx =
+            v0::deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len))
+                .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(

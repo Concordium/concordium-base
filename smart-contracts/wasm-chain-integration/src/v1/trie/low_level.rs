@@ -3069,7 +3069,7 @@ impl MutableTrie {
                             path: remaining_key,
                             children: ChildrenCow::Owned {
                                 generation,
-                                value:      tinyvec::TinyVec::new(),
+                                value: tinyvec::TinyVec::new(),
                             },
                             origin: None,
                         };
