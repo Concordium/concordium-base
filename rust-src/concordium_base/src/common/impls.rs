@@ -289,7 +289,7 @@ impl<Purpose> Serial for HashBytes<Purpose> {
 
 impl<Purpose> Deserial for HashBytes<Purpose> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let mut bytes = [0u8; SHA256 as usize];
+        let mut bytes = [0u8; SHA256];
         source.read_exact(&mut bytes)?;
         Ok(bytes.into())
     }

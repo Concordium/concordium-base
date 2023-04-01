@@ -114,7 +114,7 @@ mod test {
         let equal = DlogEqual { dlog1, dlog2 };
         let secret = DlogSecret { secret: x_secret };
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let mut ro = RandomOracle::domain(&challenge_prefix);
+        let mut ro = RandomOracle::domain(challenge_prefix);
         let proof = prove(&mut ro.split(), &equal, secret, &mut csprng).unwrap();
         assert!(verify(&mut ro, &equal, &proof));
     }

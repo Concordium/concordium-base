@@ -507,9 +507,9 @@ mod tests {
         v_rand: Randomness<G1>,
     ) -> Commitment<G1> {
         let v_value = Value::<SomeCurve>::new(v);
-        let v_com = v_keys.hide(&v_value, &v_rand);
+        
 
-        v_com
+        v_keys.hide(&v_value, &v_rand)
     }
 
     #[test]

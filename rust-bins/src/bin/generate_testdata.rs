@@ -375,14 +375,14 @@ fn main() {
             }
         };
 
-        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
+        if let Err(err) = write_json_to_file(format!("credential-{}.json", idx), &js) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);
         }
 
         if let Err(err) =
-            write_json_to_file(&format!("credential-private-keys-{}.json", idx), &acc_data)
+            write_json_to_file(format!("credential-private-keys-{}.json", idx), &acc_data)
         {
             eprintln!("Could not output private keys = {}, because {}.", idx, err);
         } else {
@@ -459,7 +459,7 @@ fn main() {
         let versioned_msg = Versioned::new(VERSION_0, cred);
 
         if let Err(err) =
-            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_msg)
+            write_json_to_file(format!("initial-credential-{}.json", idx), &versioned_msg)
         {
             eprintln!(
                 "Could not output initial credential = {}, because {}.",

@@ -109,7 +109,7 @@ mod tests {
         for _ in 0..1000 {
             Dlog::with_valid_data(0, &mut csprng, |dlog: Dlog<G1>, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof =
                     prove(&mut ro.split(), &dlog, secret, csprng).expect("Proving should succeed.");
                 assert!(verify(&mut ro, &dlog, &proof));
@@ -124,7 +124,7 @@ mod tests {
             Dlog::with_valid_data(0, &mut csprng, |dlog, secret, csprng| {
                 // Generate proof
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof =
                     prove(&mut ro.split(), &dlog, secret, csprng).expect("Proving should succeed.");
 
@@ -134,7 +134,7 @@ mod tests {
                 let wrong_public = G1::generate(csprng);
 
                 let wrong_proof_challenge = SigmaProof {
-                    challenge: RandomOracle::domain(&generate_challenge_prefix(csprng))
+                    challenge: RandomOracle::domain(generate_challenge_prefix(csprng))
                         .get_challenge(),
                     ..proof
                 };

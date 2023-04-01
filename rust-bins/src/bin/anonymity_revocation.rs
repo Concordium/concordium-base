@@ -383,7 +383,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
     let mut shares: Vec<(ArIdentity, Message<ArCurve>)> = Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
-        let decrypted = read_json_from_file(&share_value).map_err(|e| {
+        let decrypted = read_json_from_file(share_value).map_err(|e| {
             format!(
                 "Could not read from ar file {}, error: {}",
                 share_value.display(),
@@ -448,7 +448,7 @@ fn handle_combine_prf(cmb: CombinePrf) -> Result<(), String> {
     let mut shares: Vec<(ArIdentity, Value<ArCurve>)> = Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
-        match read_json_from_file(&share_value) {
+        match read_json_from_file(share_value) {
             Err(y) => {
                 return Err(format!(
                     "Could not read from ar file {}, error: {}",

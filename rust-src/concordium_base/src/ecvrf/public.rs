@@ -112,8 +112,8 @@ impl PublicKey {
         let mut h: Sha512 = Sha512::new();
         h.update(SUITE_STRING);
         h.update(ONE_STRING);
-        h.update(&self.as_bytes()); // PK_string
-        h.update(&message); // alpha_string
+        h.update(self.as_bytes()); // PK_string
+        h.update(message); // alpha_string
         for ctr in 0..=u8::max_value() {
             // Each iteration fails, indpendent of other iterations, with probability about
             // a half. This happens if the digest does not represent a point on

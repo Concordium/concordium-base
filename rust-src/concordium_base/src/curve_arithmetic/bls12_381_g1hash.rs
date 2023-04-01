@@ -760,7 +760,7 @@ fn sswu_3mod4(u: Fq) -> (Fq, Fq, Fq, Fq) {
 
     // 21.  y1 = tv4^c1               # (gx1 * gxd^3)^((q - 3) / 4)
     let mut y1 = tv4;
-    y1 = y1.pow(&P_MINUS_3_DIV_4);
+    y1 = y1.pow(P_MINUS_3_DIV_4);
 
     // 22.  y1 = y1 * tv2             # gx1 * gxd * (gx1 * gxd^3)^((q - 3) / 4)
     y1.mul_assign(&tv2);

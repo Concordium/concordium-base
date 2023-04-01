@@ -32,7 +32,7 @@ extern "C" fn verify_initial_cdi_ffi(
     initial_cdi_len: size_t,
     expiry: u64,
 ) -> i32 {
-    let cdi_bytes = slice_from_c_bytes!(initial_cdi_ptr, initial_cdi_len as usize);
+    let cdi_bytes = slice_from_c_bytes!(initial_cdi_ptr, initial_cdi_len);
     match InitialCredentialDeploymentInfo::<G1, AttributeKind>::deserial(&mut Cursor::new(
         &cdi_bytes,
     )) {
@@ -78,7 +78,7 @@ extern "C" fn verify_cdi_ffi(
         return -14;
     };
 
-    let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
+    let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len);
     match CredentialDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(
         &cdi_bytes,
     )) {
@@ -86,7 +86,7 @@ extern "C" fn verify_cdi_ffi(
         Ok(cdi) => {
             let mut ars_infos = BTreeMap::new();
             let ars: &[*mut ArInfo<G1>] =
-                slice_from_c_bytes!(ars_infos_ptr, ars_infos_len as usize);
+                slice_from_c_bytes!(ars_infos_ptr, ars_infos_len);
             for &ptr in ars {
                 let ar_info: &ArInfo<G1> = from_ptr!(ptr);
                 if ars_infos
@@ -364,7 +364,7 @@ fn ar_info_create_helper(
 
     // Public key.
     let ar_public_key = {
-        let buf = &mut slice_from_c_bytes!(public_key_ptr, public_key_len as usize);
+        let buf = &mut slice_from_c_bytes!(public_key_ptr, public_key_len);
 
         from_bytes::<crate::elgamal::PublicKey<G1>, &[u8]>(buf)
             .context("Unable to create PublicKey<G1> instance from byte array at public_key_ptr.")?
@@ -372,15 +372,15 @@ fn ar_info_create_helper(
 
     // Description.
     let ar_description = {
-        let name = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize))
+        let name = from_utf8(slice_from_c_bytes!(name_ptr, name_len))
             .context("Unable to decode byte array at name_ptr as utf8.")?
             .to_string();
 
-        let url = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize))
+        let url = from_utf8(slice_from_c_bytes!(url_ptr, url_len))
             .context("Unable to decode byte array at url_ptr as utf8.")?
             .to_string();
 
-        let description = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize))
+        let description = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len))
             .context("Unable to decode byte array at desc_ptr as utf8.")?
             .to_string();
 
@@ -448,7 +448,7 @@ fn global_context_create_helper(
     // Genesis string.
     let genesis_string = from_utf8(slice_from_c_bytes!(
         genesis_string_ptr,
-        genesis_string_len as usize
+        genesis_string_len
     ))
     .context("Unable to decode byte array at genesis_string_ptr as utf8.")?
     .to_string();
@@ -457,7 +457,7 @@ fn global_context_create_helper(
     let bulletproof_generators = {
         let bulletproof_generators_buf = &mut slice_from_c_bytes!(
             bulletproof_generators_ptr,
-            bulletproof_generators_len as usize
+            bulletproof_generators_len
         );
         from_bytes::<Generators<G1>, &[u8]>(bulletproof_generators_buf).context(
             "Unable to create Generators<G1> instance from byte array at genesis_str_ptr.",
@@ -467,7 +467,7 @@ fn global_context_create_helper(
     // On-chain commitment key.
     let on_chain_commitment_key = {
         let commitment_key_buf =
-            &mut slice_from_c_bytes!(on_chain_commitment_ptr, on_chain_commitment_len as usize);
+            &mut slice_from_c_bytes!(on_chain_commitment_ptr, on_chain_commitment_len);
         from_bytes::<PedersenKey<G1>, &[u8]>(commitment_key_buf).context(
             "Unable to create CommitmentKey<G1> instance from byte array at \
              on_chain_commitment_ptr.",
@@ -552,7 +552,7 @@ fn ip_info_create_helper(
 
     // Identity provider verify key.
     let ip_verify_key = {
-        let ps_buf = &mut slice_from_c_bytes!(verify_key_ptr, verify_key_len as usize);
+        let ps_buf = &mut slice_from_c_bytes!(verify_key_ptr, verify_key_len);
         from_bytes::<crate::ps_sig::PublicKey<Bls12>, &[u8]>(ps_buf).context(
             "Unable to create PublicKey<Bls12> instance from byte array at verify_key_ptr.",
         )?
@@ -560,7 +560,7 @@ fn ip_info_create_helper(
 
     // Identity provider CDI verify key.
     let ip_cdi_verify_key = {
-        let ed_buf = &mut slice_from_c_bytes!(cdi_verify_key_ptr, cdi_verify_key_len as usize);
+        let ed_buf = &mut slice_from_c_bytes!(cdi_verify_key_ptr, cdi_verify_key_len);
         from_bytes::<ed25519_dalek::PublicKey, &[u8]>(ed_buf)
             .context("Unable to create PublicKey instance from byte array at cdi_verify_key_ptr.")?
     };
@@ -568,11 +568,11 @@ fn ip_info_create_helper(
     // Description.
     let ip_description = {
         // Name field.
-        let name = from_utf8(slice_from_c_bytes!(name_ptr, name_len as usize))?.to_string();
+        let name = from_utf8(slice_from_c_bytes!(name_ptr, name_len))?.to_string();
         // URL field.
-        let url = from_utf8(slice_from_c_bytes!(url_ptr, url_len as usize))?.to_string();
+        let url = from_utf8(slice_from_c_bytes!(url_ptr, url_len))?.to_string();
         // Description field.
-        let description = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len as usize))?.to_string();
+        let description = from_utf8(slice_from_c_bytes!(desc_ptr, desc_len))?.to_string();
 
         Description {
             name,
@@ -769,9 +769,7 @@ mod test {
 
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
         // let ip_info_ptr = Box::into_raw(Box::new(ip_info));
-        let ars_infos_ptr = ars_infos
-            .into_iter()
-            .map(|(_, x)| Box::into_raw(Box::new(x)))
+        let ars_infos_ptr = ars_infos.into_values().map(|x| Box::into_raw(Box::new(x)))
             .collect::<Vec<_>>();
 
         let cdi_check = verify_cdi_ffi(

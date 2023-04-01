@@ -61,7 +61,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         // Bench prover for set membership
         let the_set_p = the_set.clone();
         let gens_p = gens.clone();
-        let v_keys_p = v_keys.clone();
+        let v_keys_p = v_keys;
         let w_rand_p = v_rand.clone();
         group.bench_function(BenchmarkId::new("SM Prove", n), move |b| {
             b.iter(|| {
@@ -83,7 +83,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         // Bench prover for set non-membership
         let the_set_p = the_set.clone();
         let gens_p = gens.clone();
-        let v_keys_p = v_keys.clone();
+        let v_keys_p = v_keys;
         let v_rand_p = v_rand.clone();
         group.bench_function(BenchmarkId::new("SNM Prove", n), move |b| {
             b.iter(|| {
@@ -123,9 +123,9 @@ pub fn bench_set_proofs(c: &mut Criterion) {
 
         // Bench verification for set membership
         let the_set_p = the_set.clone();
-        let w_com_p = w_com.clone();
+        let w_com_p = w_com;
         let gens_p = gens.clone();
-        let v_keys_p = v_keys.clone();
+        let v_keys_p = v_keys;
         let sm_proof_p = sm_proof.clone();
         group.bench_function(BenchmarkId::new("SM Verify", n), move |b| {
             b.iter(|| {
@@ -144,9 +144,9 @@ pub fn bench_set_proofs(c: &mut Criterion) {
 
         // Bench verification for set non-membership
         let the_set_p = the_set.clone();
-        let v_com_p = v_com.clone();
+        let v_com_p = v_com;
         let gens_p = gens.clone();
-        let v_keys_p = v_keys.clone();
+        let v_keys_p = v_keys;
         let snm_proof_p = snm_proof.clone();
         group.bench_function(BenchmarkId::new("SNM Verify", n), move |b| {
             b.iter(|| {

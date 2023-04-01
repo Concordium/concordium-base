@@ -234,7 +234,7 @@ mod test {
 
         let shared = share::<G1, _, _, _>(&secret, xs.into_iter(), Threshold(t as u8), &mut csprng);
 
-        assert_eq!(shared.coefficients.len() + 1, t as usize);
+        assert_eq!(shared.coefficients.len() + 1, { t });
         assert_eq!(shared.shares.len(), n as usize);
     }
 
