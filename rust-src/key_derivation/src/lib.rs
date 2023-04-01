@@ -212,7 +212,6 @@ mod tests {
     const PASSPHRASE: &str = "TREZOR";
 
     fn create_wallet(net: Net, seed: &str) -> ConcordiumHdWallet {
-        
         ConcordiumHdWallet {
             seed: hex::decode(seed).unwrap().try_into().unwrap(),
             net,
@@ -341,8 +340,7 @@ mod tests {
             .get_account_signing_key(0, 0, 0)
             .unwrap();
 
-        let sk = signing_key;
-        let expanded_sk = ExpandedSecretKey::from(&sk);
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
         let signature = expanded_sk.sign(&data_to_sign, &pk);

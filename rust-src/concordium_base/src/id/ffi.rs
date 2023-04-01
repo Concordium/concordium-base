@@ -85,8 +85,7 @@ extern "C" fn verify_cdi_ffi(
         Err(_) => -12,
         Ok(cdi) => {
             let mut ars_infos = BTreeMap::new();
-            let ars: &[*mut ArInfo<G1>] =
-                slice_from_c_bytes!(ars_infos_ptr, ars_infos_len);
+            let ars: &[*mut ArInfo<G1>] = slice_from_c_bytes!(ars_infos_ptr, ars_infos_len);
             for &ptr in ars {
                 let ar_info: &ArInfo<G1> = from_ptr!(ptr);
                 if ars_infos
@@ -446,19 +445,14 @@ fn global_context_create_helper(
     on_chain_commitment_len: size_t,
 ) -> Result<*mut GlobalContext<G1>, anyhow::Error> {
     // Genesis string.
-    let genesis_string = from_utf8(slice_from_c_bytes!(
-        genesis_string_ptr,
-        genesis_string_len
-    ))
-    .context("Unable to decode byte array at genesis_string_ptr as utf8.")?
-    .to_string();
+    let genesis_string = from_utf8(slice_from_c_bytes!(genesis_string_ptr, genesis_string_len))
+        .context("Unable to decode byte array at genesis_string_ptr as utf8.")?
+        .to_string();
 
     // Bulletproof generators.
     let bulletproof_generators = {
-        let bulletproof_generators_buf = &mut slice_from_c_bytes!(
-            bulletproof_generators_ptr,
-            bulletproof_generators_len
-        );
+        let bulletproof_generators_buf =
+            &mut slice_from_c_bytes!(bulletproof_generators_ptr, bulletproof_generators_len);
         from_bytes::<Generators<G1>, &[u8]>(bulletproof_generators_buf).context(
             "Unable to create Generators<G1> instance from byte array at genesis_str_ptr.",
         )?
@@ -769,7 +763,9 @@ mod test {
 
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
         // let ip_info_ptr = Box::into_raw(Box::new(ip_info));
-        let ars_infos_ptr = ars_infos.into_values().map(|x| Box::into_raw(Box::new(x)))
+        let ars_infos_ptr = ars_infos
+            .into_values()
+            .map(|x| Box::into_raw(Box::new(x)))
             .collect::<Vec<_>>();
 
         let cdi_check = verify_cdi_ffi(

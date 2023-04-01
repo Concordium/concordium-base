@@ -876,9 +876,7 @@ where
         cred_id,
     );
 
-    let choice_ar_handles = cred_values
-        .ar_data.keys().copied()
-        .collect::<BTreeSet<_>>();
+    let choice_ar_handles = cred_values.ar_data.keys().copied().collect::<BTreeSet<_>>();
 
     // Proof of knowledge of the signature of the identity provider.
     let (prover_sig, secret_sig) = compute_pok_sig(
