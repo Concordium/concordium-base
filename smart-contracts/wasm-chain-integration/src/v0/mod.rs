@@ -196,7 +196,7 @@ impl State {
         let offset = offset as usize;
         let end = offset
             .checked_add(length)
-            .ok_or_else(|| anyhow!("Writing past the end of memory."))? as usize;
+            .ok_or_else(|| anyhow!("Writing past the end of memory."))?;
         let end = std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize) as u32;
         if self.len() < end {
             self.state.resize(end as usize, 0u8);

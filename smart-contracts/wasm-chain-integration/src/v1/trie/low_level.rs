@@ -373,7 +373,7 @@ impl<'a> Deref for MaybeOwned<'a, Box<[u8]>, [u8]> {
     fn deref(&self) -> &Self::Target {
         match self {
             MaybeOwned::Borrowed(v) => v,
-            MaybeOwned::Owned(o) => &*o,
+            MaybeOwned::Owned(o) => o,
         }
     }
 }
@@ -385,7 +385,7 @@ impl<'a, V> Deref for MaybeOwned<'a, V> {
     fn deref(&self) -> &Self::Target {
         match self {
             MaybeOwned::Borrowed(v) => v,
-            MaybeOwned::Owned(o) => &*o,
+            MaybeOwned::Owned(o) => o,
         }
     }
 }
@@ -1034,7 +1034,7 @@ impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for InlineOrHashed {
             InlineOrHashed::Inline {
                 len,
                 data,
-            } => (&data[0..usize::from(*len)]).hash(ctx),
+            } => data[0..usize::from(*len)].hash(ctx),
             InlineOrHashed::Indirect(indirect) => indirect.hash(ctx),
         }
     }
@@ -1113,18 +1113,18 @@ impl<Ctx: BackingStoreLoad> ToSHA256<Ctx> for Node {
         let mut hasher = sha2::Sha256::new();
         match &self.value {
             Some(value) => {
-                hasher.update(&[1]);
+                hasher.update([1]);
                 hasher.update(value.borrow().hash(ctx));
             }
-            None => hasher.update(&[0]),
+            None => hasher.update([0]),
         }
         let (stem_len, stem_ref) = self.path.to_slice();
         hasher.update((stem_len as u64).to_le_bytes());
         hasher.update(stem_ref);
         let mut child_hasher = sha2::Sha256::new();
-        child_hasher.update(&(self.children.len() as u16).to_be_bytes());
+        child_hasher.update((self.children.len() as u16).to_be_bytes());
         for child in self.children.iter() {
-            child_hasher.update(&[child.0.value]);
+            child_hasher.update([child.0.value]);
             child_hasher.update(child.1.borrow().hash(ctx));
         }
         hasher.update(child_hasher.finalize());
@@ -1784,12 +1784,12 @@ impl Node {
 
 /// Make the children owned, and return whether the node has a value, the new
 /// length of owned_nodes, and a mutable reference to the children.
-fn make_owned<'a, 'b>(
+fn make_owned<'a>(
     idx: usize,
     borrowed_values: &mut Vec<ValueLink>,
     owned_nodes: &'a mut Vec<MutableNode>,
     entries: &'a mut Vec<Entry>,
-    loader: &'b mut impl BackingStoreLoad,
+    loader: &'_ mut impl BackingStoreLoad,
 ) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>) {
     let owned_nodes_len = owned_nodes.len();
     let node = unsafe { owned_nodes.get_unchecked(idx) };
@@ -2391,7 +2391,7 @@ impl MutableTrie {
                     let v = borrowed_values.get(entry_idx)?;
                     let v_ref = v.borrow();
                     let x = v_ref.get(loader);
-                    Some(f(&*x))
+                    Some(f(&x))
                 } else {
                     values.get(entry_idx).map(|b| f(&b[..]))
                 }
@@ -3068,7 +3068,7 @@ impl MutableTrie {
                             value: Some(entry_idx),
                             path: remaining_key,
                             children: ChildrenCow::Owned {
-                                generation: generation as u32,
+                                generation,
                                 value:      tinyvec::TinyVec::new(),
                             },
                             origin: None,
