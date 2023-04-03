@@ -474,7 +474,8 @@ unsafe extern "C" fn resume_receive_v1(
         // Before cloning we replace the contents of the pointer with a null pointer.
         // Whether the contents is null or not at the end of execution signals whether
         // the state has changed, so this is crucial.
-        let state_ref: *mut MutableState = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
+        let state_ref: *mut MutableState =
+            std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         // The clone is cheap since this is reference counted.
         let mut state = (*state_ref).clone();
         // it is important to invalidate all previous iterators and entries we have
