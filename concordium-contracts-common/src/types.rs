@@ -1603,7 +1603,7 @@ impl AttributeValue {
 
 #[cfg(feature = "concordium-quickcheck")]
 fn gen_sized_vec<A: quickcheck::Arbitrary>(g: &mut Gen, size: usize) -> Vec<A> {
-    (0..size).into_iter().map(|_| quickcheck::Arbitrary::arbitrary(g)).collect()
+    (0..size).map(|_| quickcheck::Arbitrary::arbitrary(g)).collect()
 }
 
 #[cfg(feature = "concordium-quickcheck")]
@@ -1625,7 +1625,7 @@ impl quickcheck::Arbitrary for AttributeValue {
         let vs = data.to_vec().shrink();
         Box::new(vs.map(|v| {
             let mut inner = [0u8; 32];
-            inner[1..=v.len() as usize].copy_from_slice(&v);
+            inner[1..=v.len()].copy_from_slice(&v);
             inner[0] = v.len() as u8;
             AttributeValue {
                 inner,
@@ -2463,7 +2463,7 @@ mod test {
     #[test]
     fn test_invalid_new_contract_name_too_long() {
         // Is too long when the prefix is included.
-        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize));
+        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE));
         let contract_name = ContractName::new(long_name.as_str());
         assert_eq!(contract_name, Err(NewContractNameError::TooLong))
     }
@@ -2490,7 +2490,7 @@ mod test {
     #[test]
     fn test_invalid_new_owned_contract_name_too_long() {
         // Is too long when the prefix is included.
-        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize));
+        let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE));
         let contract_name = OwnedContractName::new(long_name);
         assert_eq!(contract_name, Err(NewContractNameError::TooLong))
     }
@@ -2516,7 +2516,7 @@ mod test {
 
     #[test]
     fn test_invalid_new_receive_name_too_long() {
-        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize);
+        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE);
         let long_name = format!("{}.{}", long_str, long_str);
         let contract_name = ReceiveName::new(long_name.as_str());
         assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
@@ -2543,7 +2543,7 @@ mod test {
 
     #[test]
     fn test_invalid_new_owned_receive_name_too_long() {
-        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE as usize);
+        let long_str = "c".repeat(constants::MAX_FUNC_NAME_SIZE);
         let long_name = format!("{}.{}", long_str, long_str);
         let contract_name = OwnedReceiveName::new(long_name);
         assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
