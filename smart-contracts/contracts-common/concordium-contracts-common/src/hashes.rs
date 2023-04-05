@@ -31,7 +31,7 @@ use std::{
 /// same, but the phantom type variable makes it impossible to mistakenly misuse
 /// the hashes.
 pub struct HashBytes<Purpose> {
-    pub bytes: [u8; SHA256 as usize],
+    pub bytes: [u8; SHA256],
     #[cfg_attr(feature = "derive-serde", serde(skip))] // use default when deserializing
     _phantom:  PhantomData<Purpose>,
 }
@@ -79,7 +79,7 @@ pub enum HashFromStrError {
 
 impl<Purpose> HashBytes<Purpose> {
     /// Construct [`HashBytes`] from a slice.
-    pub fn new(bytes: [u8; SHA256 as usize]) -> Self {
+    pub fn new(bytes: [u8; SHA256]) -> Self {
         Self {
             bytes,
             _phantom: Default::default(),
@@ -131,7 +131,7 @@ impl<Purpose> TryFrom<&[u8]> for HashBytes<Purpose> {
     type Error = IncorrectLength;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        let bytes: [u8; SHA256 as usize] = value.try_into().map_err(|_| IncorrectLength)?;
+        let bytes: [u8; SHA256] = value.try_into().map_err(|_| IncorrectLength)?;
         Ok(bytes.into())
     }
 }
