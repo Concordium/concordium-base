@@ -410,9 +410,9 @@ impl MutableState {
 
     /// Get the inner mutable state. If it does not yet exist create it,
     /// otherwise return it.
-    pub fn get_inner<'a, 'b>(
+    pub fn get_inner<'a>(
         &'a mut self,
-        loader: &'b mut impl BackingStoreLoad,
+        loader: &'_ mut impl BackingStoreLoad,
     ) -> &'a mut MutableStateInner {
         if let Some(inner) = self.inner.as_mut() {
             inner.lock().normalize(inner.root);

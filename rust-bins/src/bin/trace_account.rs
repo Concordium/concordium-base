@@ -317,7 +317,7 @@ fn main() {
         } => {
             let input = match decryption_key {
                 Some(decryption_key) => {
-                    let encryption_secret_key = match hex::decode(&decryption_key)
+                    let encryption_secret_key = match hex::decode(decryption_key)
                         .context("Hex decoding error")
                         .and_then(|bs| from_bytes(&mut std::io::Cursor::new(bs)))
                     {

@@ -70,7 +70,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let com_a = keys.hide_worker(&a, &zero_randomness);
     let com_b = keys.hide_worker(&b, &zero_randomness);
     let two = C::scalar_from_u64(2);
-    let two_n = two.pow(&[64]);
+    let two_n = two.pow([64]);
     let com_2n = keys.hide_worker(&two_n, &zero_randomness);
     let com_delta_minus_b_plus_2n = Commitment(c.0.minus_point(&com_b.0).plus_point(&com_2n.0));
     let com_delta_minus_a = Commitment(c.0.minus_point(&com_a.0));
@@ -106,7 +106,7 @@ pub fn verify_account_ownership(
     hasher.update(account.0);
     hasher.update([0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8]);
     hasher.update(b"account_ownership_proof");
-    hasher.update(&challenge);
+    hasher.update(challenge);
     let to_sign = &hasher.finalize();
     utils::verify_account_ownership_proof(&public_data.keys, public_data.threshold, proof, to_sign)
 }

@@ -11,7 +11,7 @@ extern "C" fn sha256_free(ptr: *mut Sha256) {
         return;
     }
     unsafe {
-        Box::from_raw(ptr);
+        drop(Box::from_raw(ptr));
     }
 }
 

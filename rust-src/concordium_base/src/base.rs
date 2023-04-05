@@ -716,7 +716,7 @@ impl CredentialRegistrationID {
 
 impl fmt::Display for CredentialRegistrationID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = hex::encode(&crate::common::to_bytes(self));
+        let s = hex::encode(crate::common::to_bytes(self));
         s.fmt(f)
     }
 }

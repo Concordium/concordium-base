@@ -1083,7 +1083,7 @@ fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<(
     let (expiry, cdi_json_value) = match args.new_or_existing {
         Left(tt) => (
             Some(tt),
-            to_value(&Versioned::new(VERSION_0, AccountCredentialMessage {
+            to_value(Versioned::new(VERSION_0, AccountCredentialMessage {
                 message_expiry: tt,
                 credential:     cdi,
             }))
@@ -1091,7 +1091,7 @@ fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<(
         ),
         Right(_) => (
             None,
-            to_value(&Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
+            to_value(Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
         ),
     };
     write_json_to_file(&args.out, &cdi_json_value).context(format!(

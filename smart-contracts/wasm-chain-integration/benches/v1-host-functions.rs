@@ -435,7 +435,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             0x95, 0xd2, 0xd6, 0xba,
         ])
         .expect("Key generated with openssl, so should be valid.");
-        let message = secp256k1::Message::from_slice(&sha2::Sha256::digest(&[])[..])
+        let message = secp256k1::Message::from_slice(&sha2::Sha256::digest([])[..])
             .expect("Hashes are valid messages.");
         let sig = signer.sign_ecdsa(&message, &sk);
         let pk = secp256k1::PublicKey::from_slice(&[

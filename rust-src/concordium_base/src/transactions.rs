@@ -2474,8 +2474,8 @@ pub mod construct {
         new_threshold: AccountThreshold,
     ) -> PreAccountTransaction {
         let num_cred_keys = new_credentials
-            .iter()
-            .map(|(_, v)| v.values.cred_key_info.keys.len() as u16)
+            .values()
+            .map(|v| v.values.cred_key_info.keys.len() as u16)
             .collect::<Vec<_>>();
         let payload = Payload::UpdateCredentials {
             new_cred_infos: new_credentials,

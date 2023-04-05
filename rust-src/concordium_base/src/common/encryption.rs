@@ -42,7 +42,7 @@ where
 fn from_base64<'de, D: Deserializer<'de>, X: From<Vec<u8>>>(des: D) -> Result<X, D::Error> {
     use serde::de::Error;
     let data = String::deserialize(des)?;
-    let decoded = base64::decode(&data).map_err(|err| Error::custom(err.to_string()))?;
+    let decoded = base64::decode(data).map_err(|err| Error::custom(err.to_string()))?;
     Ok(X::from(decoded))
 }
 
