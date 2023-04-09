@@ -1426,6 +1426,7 @@ impl InvokeFailure {
 }
 
 /// Response from an invoke call.
+#[derive(Debug)]
 pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {

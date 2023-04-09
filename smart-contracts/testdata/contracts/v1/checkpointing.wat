@@ -219,7 +219,7 @@
             (call $state_lookup_entry (i32.const 0) (i32.const 1))))
 
     ;; Ensure that the iterator created in an outer entrypoint cannot be accessed here.
-    (call $assert_eq_64 (i64.const 18446744073709551615) (call $state_iterator_next (i64.const 0))) ;; Should return u64::MAX
+    (call $assert_eq_64 (i64.const 13835058055282163711) (call $state_iterator_next (i64.const 0))) ;; Should return u64::MAX with the second most significant bit unset
     (call $assert_eq (i32.const 4294967295) (call $state_iterator_key_size (i64.const 0))) ;; Should return u32::MAX
 
     (return (i32.const 0)) ;; return success
