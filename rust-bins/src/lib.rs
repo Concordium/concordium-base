@@ -137,7 +137,7 @@ pub fn decrypt_input<P: AsRef<Path> + Debug, X: DeserializeOwned>(input: P) -> a
         Ok(data) => Ok(data),
         Err(_) => {
             let parsed_data = serde_json::from_slice(&data)?;
-            let pass = rpassword::prompt_password(&format!(
+            let pass = rpassword::prompt_password(format!(
                 "Enter password to decrypt file {} with: ",
                 input.as_ref().to_string_lossy()
             ))?;
@@ -408,7 +408,7 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
     let checksum = bit_vec.split_off(ent_len);
 
     // checksum is supposed to be first cs_len bits of SHA256(entropy)
-    let hash = Sha256::digest(&bit_vec.into_vec());
+    let hash = Sha256::digest(bit_vec.into_vec());
 
     // convert hash from byte vector to bit vector
     let hash_bits = BitVec::<u8, Msb0>::from_slice(&hash);

@@ -499,7 +499,7 @@ mod host {
         // the cost of this function is adequately reflected by the base cost of a
         // function call so we do not charge extra.
         let param_num = unsafe { stack.pop_u32() } as usize;
-        if let Some(param) = parameters.get(param_num as usize) {
+        if let Some(param) = parameters.get(param_num) {
             stack.push_value(param.as_ref().len() as u32);
         } else {
             stack.push_value(-1i32);
@@ -522,7 +522,7 @@ mod host {
         let param_num = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
         energy.tick_energy(constants::copy_parameter_cost(length))?;
-        if let Some(param) = parameters.get(param_num as usize) {
+        if let Some(param) = parameters.get(param_num) {
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
             let end = std::cmp::min(offset + length as usize, param.as_ref().len());
@@ -1426,6 +1426,7 @@ impl InvokeFailure {
 }
 
 /// Response from an invoke call.
+#[derive(Debug)]
 pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {

@@ -81,7 +81,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         &self,
         challenge: &crate::random_oracle::Challenge,
     ) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(&challenge)
+        C::scalar_from_bytes(challenge)
     }
 
     fn generate_witness(
@@ -161,7 +161,7 @@ mod test {
         for _i in 1..20 {
             ComEq::<G1, G2>::with_valid_data(0, &mut csprng, |com_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_eq, secret, csprng)
                     .expect("Proving should succeed.");
                 let res = verify(&mut ro, &com_eq, &proof);
@@ -176,7 +176,7 @@ mod test {
         for i in 1..20 {
             ComEq::<G1, G2>::with_valid_data(i, &mut csprng, |com_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_eq, secret, csprng)
                     .expect("Proving should succeed.");
 

@@ -660,12 +660,11 @@ pub fn commitment_to_share_and_rand<C: Curve>(
 /// The 'cred_counter' is used to generate a new credential ID.
 #[allow(clippy::too_many_arguments)]
 pub fn create_credential<
-    'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    context: IpContext<'a, P, C>,
+    context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
@@ -709,12 +708,11 @@ where
 
 #[allow(clippy::too_many_arguments)]
 pub fn create_unsigned_credential<
-    'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    context: IpContext<'a, P, C>,
+    context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
@@ -878,11 +876,7 @@ where
         cred_id,
     );
 
-    let choice_ar_handles = cred_values
-        .ar_data
-        .iter()
-        .map(|(x, _)| *x)
-        .collect::<BTreeSet<_>>();
+    let choice_ar_handles = cred_values.ar_data.keys().copied().collect::<BTreeSet<_>>();
 
     // Proof of knowledge of the signature of the identity provider.
     let (prover_sig, secret_sig) = compute_pok_sig(

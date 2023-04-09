@@ -571,8 +571,8 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionSection {
 /// - As offset expressions in element and data segments. In these contexts the
 ///   constant expressions are allowed to refer to `GlobalGet` instructions for
 ///   `const` globals of the right type.
-fn read_constant_expr<'a>(
-    cursor: &mut Cursor<&'a [u8]>,
+fn read_constant_expr(
+    cursor: &mut Cursor<&'_ [u8]>,
     ty: ValueType,
     globals_allowed: Option<&GlobalSection>,
 ) -> ParseResult<GlobalInit> {

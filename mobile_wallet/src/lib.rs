@@ -189,7 +189,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
         "remaining": remaining_amount,
     });
 
@@ -352,7 +352,7 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -429,7 +429,7 @@ fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -452,7 +452,7 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -511,7 +511,7 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
     let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -540,7 +540,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> anyhow::Result<String> {
     let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
         "addedSelfEncryptedAmount": encryption
     });
 
@@ -592,7 +592,7 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
         "remaining": remaining_amount,
     });
 

@@ -351,7 +351,7 @@ mod test {
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
             let mut m_pk_pairs2: Vec<(&[u8], &[PublicKey<Bls12>])> = Vec::new();
             for i in 0..SIGNERS {
-                m_pk_pairs.push((&ms[i], pks[i].clone()));
+                m_pk_pairs.push((&ms[i], pks[i]));
                 m_pk_pairs2.push((&ms[i], std::slice::from_ref(&pks[i])));
             }
 
@@ -373,7 +373,7 @@ mod test {
             m_pk_pairs.pop();
             m_pk_pairs.push((&new_m, pk_));
             m_pk_pairs2.pop();
-            m_pk_pairs2.push((&new_m, &pks_));
+            m_pk_pairs2.push((&new_m, pks_));
 
             // altering a message should make verification fail
             assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
@@ -388,7 +388,7 @@ mod test {
             let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
             let m: [u8; 32] = rng.gen::<[u8; 32]>();
             let sigs: Vec<Signature<Bls12>> = sks.iter().map(|sk| sk.sign(&m)).collect();
-            let mut agg_sig = sigs[0].clone();
+            let mut agg_sig = sigs[0];
             sigs.iter().skip(1).for_each(|x| {
                 agg_sig = agg_sig.aggregate(*x);
             });

@@ -489,7 +489,7 @@ mod tests {
         for _i in 1..20 {
             EncTrans::<G1>::with_valid_data(&mut rng, |enc_trans, secret, rng| {
                 let challenge_prefix = generate_challenge_prefix(rng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
                 let mut ro_copy = ro.split();
                 let proof =
                     prove(&mut ro_copy, &enc_trans, secret, rng).expect("Proving should succeed.");

@@ -132,7 +132,7 @@ mod tests {
                 &mut csprng,
                 |agg: AggregateDlog<G1>, secret, csprng| {
                     let challenge_prefix = generate_challenge_prefix(csprng);
-                    let mut ro = RandomOracle::domain(&challenge_prefix);
+                    let mut ro = RandomOracle::domain(challenge_prefix);
                     let proof =
                         prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
                     assert!(verify(&mut ro, &agg, &proof));
@@ -147,7 +147,7 @@ mod tests {
         for i in 1..20 {
             AggregateDlog::with_valid_data(i, &mut csprng, |agg, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let ro = RandomOracle::domain(challenge_prefix);
                 let proof =
                     prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
 

@@ -47,7 +47,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
-    let ro = RandomOracle::domain(&challenge_prefix);
+    let ro = RandomOracle::domain(challenge_prefix);
 
     let index = csprng.gen::<u64>().into();
 
@@ -127,7 +127,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
-    let ro = RandomOracle::domain(&challenge_prefix);
+    let ro = RandomOracle::domain(challenge_prefix);
 
     let index = csprng.gen::<u64>().into();
 

@@ -742,7 +742,7 @@ use std::{fmt, io::Cursor};
 /// then encode that byte array as a hex string into the provided serde
 /// Serializer.
 pub fn base16_encode<S: Serializer, T: Serial>(v: &T, ser: S) -> Result<S::Ok, S::Error> {
-    let b16_str = encode(&to_bytes(v));
+    let b16_str = encode(to_bytes(v));
     ser.serialize_str(&b16_str)
 }
 
@@ -768,7 +768,7 @@ pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T
 
 /// Analogous to [base16_encode], but encodes into a string rather than a serde
 /// Serializer.
-pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(&to_bytes(x)) }
+pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(to_bytes(x)) }
 
 /// Dual to [base16_encode_string].
 pub fn base16_decode_string<S: Deserial>(x: &str) -> ParseResult<S> {

@@ -189,8 +189,8 @@ unsafe extern "C" fn verify_encrypted_transfer(
         encryptions: [*transfer_low, *transfer_high],
     };
 
-    let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len as usize);
-    let proof = if let Ok(td) = (&mut Cursor::new(transfer_proof)).get() {
+    let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len);
+    let proof = if let Ok(td) = Cursor::new(transfer_proof).get() {
         td
     } else {
         return 0;
@@ -290,8 +290,8 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
         encryptions: [*remaining_low, *remaining_high],
     };
 
-    let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len as usize);
-    let proof = if let Ok(td) = (&mut Cursor::new(transfer_proof)).get() {
+    let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len);
+    let proof = if let Ok(td) = Cursor::new(transfer_proof).get() {
         td
     } else {
         return 0;

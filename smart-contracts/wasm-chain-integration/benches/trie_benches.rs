@@ -33,7 +33,7 @@ impl std::iter::Iterator for GenData {
 /// Generate data deterministically from a seed with repeated hashing.
 fn get_data() -> Vec<Vec<u8>> {
     let mut hasher = sha2::Sha512::new();
-    hasher.update(&SEED.to_be_bytes());
+    hasher.update(SEED.to_be_bytes());
     GenData {
         hasher,
         count: 0,
