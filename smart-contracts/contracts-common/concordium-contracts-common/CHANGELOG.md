@@ -3,6 +3,8 @@
 ## Unreleased changes
 
 - Fix schema JSON deserialization of negative signed numbers.
+- Add `PartialEq` implementations for comparing `ReceiveName`, `ContractName`, and
+  `EntrypointName` and their owned variants to `str`.
 
 ## concordium-contracts-common 5.3.0 (2023-03-16)
 

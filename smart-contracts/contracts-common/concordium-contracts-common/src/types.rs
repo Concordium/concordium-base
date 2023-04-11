@@ -863,6 +863,14 @@ impl<'a> fmt::Display for ContractName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
 }
 
+impl<'a> PartialEq<str> for ContractName<'a> {
+    fn eq(&self, other: &str) -> bool { self.0 == other }
+}
+
+impl<'a> PartialEq<&'a str> for ContractName<'a> {
+    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+}
+
 impl<'a> ContractName<'a> {
     /// Create a new ContractName and check the format. Expected format:
     /// "init_<contract_name>".
@@ -934,6 +942,14 @@ impl fmt::Display for OwnedContractName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
 }
 
+impl PartialEq<str> for OwnedContractName {
+    fn eq(&self, other: &str) -> bool { self.0 == other }
+}
+
+impl<'a> PartialEq<&'a str> for OwnedContractName {
+    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+}
+
 impl OwnedContractName {
     /// Create a new OwnedContractName and check the format. Expected format:
     /// "init_<contract_name>".
@@ -1001,6 +1017,14 @@ impl<'a> fmt::Display for ReceiveName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) }
 }
 
+impl<'a> PartialEq<str> for ReceiveName<'a> {
+    fn eq(&self, other: &str) -> bool { self.0 == other }
+}
+
+impl<'a> PartialEq<&'a str> for ReceiveName<'a> {
+    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+}
+
 impl<'a> ReceiveName<'a> {
     /// Create a new ReceiveName and check the format. Expected format:
     /// "<contract_name>.<func_name>".
@@ -1064,6 +1088,14 @@ impl<'a> ReceiveName<'a> {
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 #[cfg_attr(feature = "derive-serde", serde(try_from = "String"))]
 pub struct OwnedReceiveName(String);
+
+impl PartialEq<str> for OwnedReceiveName {
+    fn eq(&self, other: &str) -> bool { self.0 == other }
+}
+
+impl<'a> PartialEq<&'a str> for OwnedReceiveName {
+    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+}
 
 impl fmt::Display for OwnedReceiveName {
     #[inline(always)]
@@ -1166,6 +1198,14 @@ impl<'a> From<EntrypointName<'a>> for OwnedEntrypointName {
     fn from(epn: EntrypointName<'a>) -> Self { Self(String::from(epn.0)) }
 }
 
+impl<'a> PartialEq<str> for EntrypointName<'a> {
+    fn eq(&self, other: &str) -> bool { self.0 == other }
+}
+
+impl<'a> PartialEq<&'a str> for EntrypointName<'a> {
+    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
+}
+
 /// An entrypoint name (owned version). Expected format:
 /// "<func_name>". Most methods on this type are available via the
 /// [`as_entrypoint_name`](OwnedEntrypointName::as_entrypoint_name) and the
@@ -1187,6 +1227,14 @@ impl convert::TryFrom<String> for OwnedEntrypointName {
     type Error = NewReceiveNameError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> { OwnedEntrypointName::new(value) }
+}
+
+impl PartialEq<str> for OwnedEntrypointName {
+    fn eq(&self, other: &str) -> bool { self.0 == other }
+}
+
+impl<'a> PartialEq<&'a str> for OwnedEntrypointName {
+    fn eq(&self, other: &&'a str) -> bool { self.0 == *other }
 }
 
 impl OwnedEntrypointName {
