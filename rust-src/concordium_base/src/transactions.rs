@@ -507,8 +507,12 @@ pub struct InitContractPayload {
 impl InitContractPayload {
     /// Get the size of the payload in number of bytes.
     pub fn size(&self) -> usize {
-        let bytes = crate::common::to_bytes(&self);
-        bytes.len()
+        8 + // Amount
+        32 + // Module reference
+        2 + // Init name size
+        self.init_name.as_contract_name().get_chain_name().len() +
+        2 + // Parameter size
+        self.param.as_ref().len()
     }
 }
 
@@ -530,8 +534,12 @@ pub struct UpdateContractPayload {
 impl UpdateContractPayload {
     /// Get the size of the payload in number of bytes.
     pub fn size(&self) -> usize {
-        let bytes = crate::common::to_bytes(&self);
-        bytes.len()
+        8 + // Amount
+        16 + // Contract address
+        2 + // Receive name size
+        self.receive_name.as_receive_name().get_chain_name().len() +
+        2 + // Parameter size
+        self.message.as_ref().len()
     }
 }
 
