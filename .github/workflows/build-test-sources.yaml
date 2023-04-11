@@ -101,6 +101,42 @@ jobs:
       run: |
         fourmolu --color always --mode check $(git ls-files '*.hs')
 
+  # This job exists to make sure that concordium-base (the crate) compiles with
+  # the version of the compiler stated in its Cargo.toml manifest. We keep this
+  # as old as reasonable since we publish it as a library.
+  # If this job fails consider carefully whether the new language feature used
+  # adds value. If it does bump the rust version here and in Cargo.toml in rust-src/concordium-base
+  check-base-compiles:
+    needs: [fourmolu, rustfmt]
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+
+    strategy:
+      matrix:
+        plan:
+        - rust: 1.62
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    # RUST #
+
+    # Set up Rust and restore dependencies and targets from cache.
+    # This must be done before checking the Rust sources.
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.plan.rust }}
+        override: true
+        components: clippy
+
+    - name: Check that concordium base compiles with older Rust version.
+      run: |
+        cargo check --manifest-path rust-src/concordium_base/Cargo.toml
+
   build-test:
     needs: [fourmolu, rustfmt]
     runs-on: ubuntu-latest
