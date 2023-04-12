@@ -1363,7 +1363,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// The kind of errors that may occur during handling of contract `invoke` or
 /// `upgrade`.
 pub enum InvokeFailure {

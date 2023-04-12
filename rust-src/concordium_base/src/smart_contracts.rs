@@ -9,12 +9,10 @@ use crate::{
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
-    self, ContractName, ExceedsParameterSize, OwnedContractName, OwnedParameter, OwnedReceiveName,
-    ReceiveName,
+    self, ContractName, ExceedsParameterSize, ModuleReference, OwnedContractName, OwnedParameter,
+    OwnedReceiveName, ReceiveName,
 };
-use concordium_contracts_common::{
-    AccountAddress, Address, Amount, ContractAddress, ModuleReference,
-};
+use concordium_contracts_common::{AccountAddress, Address, Amount, ContractAddress};
 use derive_more::*;
 use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
@@ -147,7 +145,7 @@ impl WasmModule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// A successful contract invocation produces a sequence of effects on smart
 /// contracts and possibly accounts (if any contract transfers CCD to an
 /// account).
@@ -181,7 +179,7 @@ pub enum ContractTraceElement {
     },
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 /// Data generated as part of updating a single contract instance.
 /// In general a single [Update](crate::transactions::Payload::Update)
@@ -206,7 +204,7 @@ pub struct InstanceUpdatedEvent {
     pub events:           Vec<ContractEvent>,
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, AsRef, Into, From)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, AsRef, Into, From, PartialEq, Eq)]
 #[serde(transparent)]
 /// An event logged by a smart contract initialization.
 pub struct ContractEvent {

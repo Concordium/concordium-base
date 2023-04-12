@@ -12,7 +12,7 @@ use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
     Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
 };
-use derive_more::{Add, Display, From, FromStr, Into};
+use derive_more::{Add, Display, From, FromStr, Into, Sub};
 use rand::{CryptoRng, Rng};
 use std::{
     convert::{TryFrom, TryInto},
@@ -522,10 +522,39 @@ pub struct AccountIndex {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add, Sub,
+)]
 pub struct Energy {
     pub energy: u64,
 }
+
+impl Energy {
+    /// Checked `Energy` subtraction.
+    ///
+    /// Computes `self - rhs` and returns `None` if an underflow occurred.
+    pub fn checked_sub(self, rhs: Energy) -> Option<Energy> {
+        self.energy.checked_sub(rhs.energy).map(From::from)
+    }
+
+    /// "Tick" energy: subtract the provided amount.
+    ///
+    /// Returns an error if the energy goes below `0`.
+    pub fn tick_energy(&mut self, amount: Energy) -> Result<(), InsufficientEnergy> {
+        if let Some(nrg) = self.energy.checked_sub(amount.energy) {
+            self.energy = nrg;
+            Ok(())
+        } else {
+            Err(InsufficientEnergy)
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Error)]
+#[error("Out of energy")]
+/// An error raised by [`tick_energy`](Energy::tick_energy) when subtracting the
+/// required amount of energy would lead to a negative value.
+pub struct InsufficientEnergy;
 
 /// Position of the transaction in a block.
 #[repr(transparent)]
