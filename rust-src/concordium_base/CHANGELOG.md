@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 1.1.0 (2023-04-12)
+
 - Additions to `Energy` type:
   - Add helper methods to `Energy`: `checked_sub` and `tick_energy`.
   - Derive `Sub`.

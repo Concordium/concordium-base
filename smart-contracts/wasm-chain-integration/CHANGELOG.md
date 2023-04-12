@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-smart-contract-engine 1.1.0 (2023-04-12)
+
 - Add `saturating_sub` method to `InterpreterEnergy`.
 - Derive `PartialEq`/`Eq` for `Logs` and `InvokeFailure`.
 
