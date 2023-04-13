@@ -1,5 +1,11 @@
 ## Unreleased changes
 
+## 1.1.1 (2023-04-13)
+
+- Add Serialize instances to `Proof` and `Statement` types, and its constituent
+  parts (`AtomicProof` and `AtomicStatement`).
+- `Deserial` for `BTreeMap` and `BTreeSet` no longer requires `Copy`.
+
 ## 1.1.0 (2023-04-12)
 
 - Additions to `Energy` type:
