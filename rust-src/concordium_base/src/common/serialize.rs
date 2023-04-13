@@ -847,3 +847,35 @@ pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
     }
     des.deserialize_str(Base16IgnoreLengthVisitor(Default::default()))
 }
+
+#[test]
+fn test_map_serialization() {
+    use rand::Rng;
+    for n in 0..1000 {
+        let mut map = BTreeMap::<u64, u32>::new();
+        for (k, v) in rand::thread_rng()
+            .sample_iter(rand::distributions::Standard)
+            .take(n)
+        {
+            map.insert(k, v);
+        }
+        let deserialized = super::serialize_deserialize(&map).expect("Deserialization succeeds.");
+        assert_eq!(map, deserialized);
+    }
+}
+
+#[test]
+fn test_set_serialization() {
+    use rand::Rng;
+    for n in 0..1000 {
+        let mut set = BTreeSet::<u64>::new();
+        for k in rand::thread_rng()
+            .sample_iter(rand::distributions::Standard)
+            .take(n)
+        {
+            set.insert(k);
+        }
+        let deserialized = super::serialize_deserialize(&set).expect("Deserialization succeeds.");
+        assert_eq!(set, deserialized);
+    }
+}
