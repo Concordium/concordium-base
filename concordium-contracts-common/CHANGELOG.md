@@ -2,6 +2,12 @@
 
 ## Unreleased changes
 
+- Remove the `Copy` requirement for deserialization of BTreeMap and BTreeSet.
+  This allows using non-copyable (and non-clonable) types as map keys or set
+  values.
+
+## concordium-contracts-common 5.3.1 (2023-04-12)
+
 - Fix schema JSON deserialization of negative signed numbers.
 - Add `PartialEq` implementations for comparing `ReceiveName`, `ContractName`, and
   `EntrypointName` and their owned variants to `str`.
