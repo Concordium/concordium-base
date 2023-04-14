@@ -642,7 +642,7 @@ impl<K: Serial + Ord> SerialCtx for BTreeSet<K> {
     }
 }
 
-impl<K: Deserial + Ord + Copy> DeserialCtx for BTreeSet<K> {
+impl<K: Deserial + Ord> DeserialCtx for BTreeSet<K> {
     fn deserial_ctx<R: Read>(
         size_len: schema::SizeLength,
         ensure_ordered: bool,
@@ -668,7 +668,7 @@ impl<K: Serial + Ord, V: Serial> SerialCtx for BTreeMap<K, V> {
     }
 }
 
-impl<K: Deserial + Ord + Copy, V: Deserial> DeserialCtx for BTreeMap<K, V> {
+impl<K: Deserial + Ord, V: Deserial> DeserialCtx for BTreeMap<K, V> {
     fn deserial_ctx<R: Read>(
         size_len: schema::SizeLength,
         ensure_ordered: bool,
@@ -842,7 +842,7 @@ pub fn serial_map_no_length<W: Write, K: Serial, V: Serial>(
 /// Read a [BTreeMap](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html) as a list of key-value pairs given some length.
 /// NB: This ensures there are no duplicates, hence the specialized type.
 /// Moreover this will only succeed if keys are listed in order.
-pub fn deserial_map_no_length<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
+pub fn deserial_map_no_length<R: Read, K: Deserial + Ord, V: Deserial>(
     source: &mut R,
     len: usize,
 ) -> ParseResult<BTreeMap<K, V>> {
@@ -851,19 +851,17 @@ pub fn deserial_map_no_length<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
     for _ in 0..len {
         let k = source.get()?;
         let v = source.get()?;
-        match x {
-            None => {
-                out.insert(k, v);
-            }
-            Some(kk) => {
-                if k > kk {
-                    out.insert(k, v);
-                } else {
-                    return Err(ParseError::default());
-                }
+        if let Some((old_k, old_v)) = x.take() {
+            if k > old_k {
+                out.insert(old_k, old_v);
+            } else {
+                return Err(ParseError::default());
             }
         }
-        x = Some(k);
+        x = Some((k, v));
+    }
+    if let Some((k, v)) = x {
+        out.insert(k, v);
     }
     Ok(out)
 }
@@ -929,7 +927,7 @@ pub fn serial_set_no_length<W: Write, K: Serial>(
 /// Read a [BTreeSet](https://doc.rust-lang.org/std/collections/struct.BTreeSet.html) as a list of keys, given some length.
 /// NB: This ensures there are no duplicates, hence the specialized type.
 /// Moreover this will only succeed if keys are listed in order.
-pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
+pub fn deserial_set_no_length<R: Read, K: Deserial + Ord>(
     source: &mut R,
     len: usize,
 ) -> ParseResult<BTreeSet<K>> {
@@ -937,12 +935,17 @@ pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
     let mut prev = None;
     for _ in 0..len {
         let key = source.get()?;
-        let next = Some(key);
-        if next <= prev {
-            return Err(ParseError::default());
+        if let Some(old_key) = prev.take() {
+            if key > old_key {
+                out.insert(old_key);
+            } else {
+                return Err(ParseError::default());
+            }
         }
+        prev = Some(key);
+    }
+    if let Some(key) = prev {
         out.insert(key);
-        prev = next;
     }
     Ok(out)
 }
