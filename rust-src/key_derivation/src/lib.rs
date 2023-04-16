@@ -9,7 +9,8 @@ use concordium_base::{
     ps_sig::SigRetrievalRandomness,
 };
 use ed25519_dalek::{PublicKey, SecretKey};
-use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
+pub use ed25519_hd_key_derivation::DeriveError;
+use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden};
 use hmac::Hmac;
 use keygen_bls::keygen_bls;
 use sha2::Sha512;
@@ -92,6 +93,21 @@ impl ConcordiumHdWallet {
             derivation_path.push(checked_harden(index)?)
         }
         Ok(derivation_path)
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a seed phrase. The intention
+    /// is that the `phrase` is a single-space separated list of words.
+    ///
+    /// See also [`from_words`](Self::from_words) which ensures a canonical
+    /// representation of the list of words, and is thus less error prone.
+    pub fn from_seed_phrase(phrase: &str, net: Net) -> Self {
+        let seed = words_to_seed(phrase);
+        Self { seed, net }
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a list of words.
+    pub fn from_words(words: &[&str], net: Net) -> Self {
+        Self::from_seed_phrase(&words.join(" "), net)
     }
 
     /// Get the account signing key for the identity provider
