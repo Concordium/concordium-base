@@ -13,7 +13,7 @@ use std::rc::Rc;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 pub struct SecretKey<C: Curve>(Rc<Secret<C::Scalar>>);
 
-/// This trait allows automatic conversion of &SecretKey<C> to &C::Scalar.
+/// This trait allows automatic conversion of `&SecretKey<C>` to `&C::Scalar`.
 impl<C: Curve> std::ops::Deref for SecretKey<C> {
     type Target = C::Scalar;
 

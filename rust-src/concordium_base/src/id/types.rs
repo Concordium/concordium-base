@@ -1408,7 +1408,7 @@ impl SerdeSerialize for VerifyKey {
         match self {
             VerifyKey::Ed25519VerifyKey(ref key) => {
                 map.serialize_entry("schemeId", "Ed25519")?;
-                map.serialize_entry("verifyKey", &encode(&to_bytes(key)))?;
+                map.serialize_entry("verifyKey", &encode(to_bytes(key)))?;
             }
         }
         map.end()
@@ -2107,7 +2107,7 @@ impl InitialAccountDataWithSigning for InitialAccountData {
         &self,
         pub_info_for_ip: &PublicInformationForIp<C>,
     ) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
-        let to_sign = Sha256::digest(&to_bytes(pub_info_for_ip));
+        let to_sign = Sha256::digest(to_bytes(pub_info_for_ip));
         self.keys
             .iter()
             .map(|(&idx, kp)| {

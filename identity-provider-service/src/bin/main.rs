@@ -949,7 +949,7 @@ async fn save_validated_request(
         .pub_info_for_ip
         .id_cred_pub;
 
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -986,7 +986,7 @@ async fn save_validated_request_v1(
 ) -> Result<impl Reply, Rejection> {
     let id_cred_pub = &identity_object_request.id_object_request.value.id_cred_pub;
 
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -1572,7 +1572,7 @@ fn extract_and_validate_request(
         async move {
             let id_cred_pub = &input.id_object_request.value.pub_info_for_ip.id_cred_pub;
 
-            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
             let base_16_encoded_id_cred_pub_hash =
                 base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -1643,7 +1643,7 @@ fn extract_and_validate_request_query(
 
             let id_cred_pub = &id_object_request.value.pub_info_for_ip.id_cred_pub;
 
-            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
             let base_16_encoded_id_cred_pub_hash =
                 base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -1717,7 +1717,7 @@ fn extract_and_validate_request_query_v1(
             };
             let id_cred_pub = &id_object_request.value.id_cred_pub;
 
-            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
             let base_16_encoded_id_cred_pub_hash =
                 base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -1805,7 +1805,7 @@ fn validate_recovery_request(
 
             if pok_result {
                 let id_cred_pub_hash =
-                    Sha256::digest(&to_bytes(&id_recovery_request.value.id_cred_pub));
+                    Sha256::digest(to_bytes(&id_recovery_request.value.id_cred_pub));
                 let base_16_encoded_id_cred_pub_hash =
                     base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
                 match db.read_identity_object(&base_16_encoded_id_cred_pub_hash) {
@@ -1851,7 +1851,7 @@ fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
         max_accounts: alist.max_accounts,
         threshold:    pre_identity_object.choice_ar_parameters.threshold,
     };
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(&ar_record.id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(&ar_record.id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
     db.write_revocation_record(&base_16_encoded_id_cred_pub_hash, ar_record)
@@ -1871,7 +1871,7 @@ fn save_revocation_record_v1<A: Attribute<id::constants::BaseField>>(
         max_accounts: alist.max_accounts,
         threshold:    pre_identity_object.choice_ar_parameters.threshold,
     };
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(&ar_record.id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(&ar_record.id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
     db.write_revocation_record(&base_16_encoded_id_cred_pub_hash, ar_record)
@@ -1965,13 +1965,13 @@ mod tests {
         let ar_info_contents = include_str!("../../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../../data/global.json");
 
-        let ip_data: IpData<IpPairing> = from_str(&ip_data_contents)
+        let ip_data: IpData<IpPairing> = from_str(ip_data_contents)
             .expect("File did not contain a valid IpData object as JSON.");
-        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
+        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(ar_info_contents)
             .expect("File did not contain a valid ArInfos object as JSON");
         assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
         let ars = ar_info.value;
-        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
+        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(global_context_contents)
             .expect("File did not contain a valid GlobalContext object as JSON");
         assert_eq!(global_context.version, VERSION_0);
         let global = global_context.value;
@@ -2028,10 +2028,10 @@ mod tests {
             if let Err(e) = matches {
                 if let Some(IdRequestRejection::InvalidProofs) = e.find() {
                 } else {
-                    assert!(false, "Request should fail due to invalid proofs.")
+                    panic!("Request should fail due to invalid proofs.")
                 }
             } else {
-                assert!(false, "Invalid request should not pass the filter.")
+                panic!("Invalid request should not pass the filter.")
             }
         });
     }
@@ -2107,7 +2107,7 @@ mod tests {
         );
 
         let id_cred_pub_hash_digest =
-            Sha256::digest(&to_bytes(&idi.id_object_request.value.id_cred_pub));
+            Sha256::digest(to_bytes(&idi.id_object_request.value.id_cred_pub));
         let id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash_digest.into());
 
         let root = std::path::Path::new("test-database").to_path_buf();

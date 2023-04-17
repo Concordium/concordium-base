@@ -202,7 +202,7 @@ mod test {
             Rc::new(y2),
         ]]);
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let mut ro = RandomOracle::domain(&challenge_prefix);
+        let mut ro = RandomOracle::domain(challenge_prefix);
         let proof = prove(&mut ro.split(), &protocol, secret, &mut csprng).unwrap();
         assert!(verify(&mut ro, &protocol, &proof));
     }

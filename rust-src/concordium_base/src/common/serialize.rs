@@ -174,6 +174,24 @@ impl<T: Deserial> Deserial for Vec<T> {
     }
 }
 
+/// Read a set where the first 8 bytes are taken as length in big endian.
+/// The values must be serialized in strictly increasing order.
+impl<T: Deserial + std::cmp::Ord> Deserial for BTreeSet<T> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u64 = u64::deserial(source)?;
+        deserial_set_no_length(source, usize::try_from(len)?)
+    }
+}
+
+/// Read a map where the first 8 bytes are taken as length in big endian.
+/// The values must be serialized in strictly increasing order of keys.
+impl<K: Deserial + std::cmp::Ord, V: Deserial> Deserial for BTreeMap<K, V> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len: u64 = u64::deserial(source)?;
+        deserial_map_no_length(source, usize::try_from(len)?)
+    }
+}
+
 impl<T: Deserial, U: Deserial> Deserial for (T, U) {
     #[inline]
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
@@ -246,7 +264,7 @@ impl<T: Deserial> Deserial for Box<T> {
 }
 
 /// Trait for writers which will not fail in normal operation with
-/// small amounts of data, e.g., Vec<u8>.
+/// small amounts of data, e.g., [`Vec<u8>`](Vec).
 /// Moreover having a special trait allows us to implement it for
 /// other types, such as the SHA Digest.
 pub trait Buffer: Sized + WriteBytesExt {
@@ -426,6 +444,24 @@ impl<T: Serial> Serial for Vec<T> {
     }
 }
 
+/// Serialize a set by encoding its size as a u64 in big endian and then
+/// the list of elements in increasing order.
+impl<V: Serial> Serial for BTreeSet<V> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.len() as u64).serial(out);
+        serial_set_no_length(self, out)
+    }
+}
+
+/// Serialize a map by encoding its size as a u64 in big endian and then
+/// the list of key-value pairs in increasing order of keys.
+impl<K: Serial, V: Serial> Serial for BTreeMap<K, V> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.len() as u64).serial(out);
+        serial_map_no_length(self, out)
+    }
+}
+
 /// Serialize all of the elements in the iterator.
 pub fn serial_iter<'a, B: Buffer, T: Serial + 'a, I: Iterator<Item = &'a T>>(xs: I, out: &mut B) {
     for x in xs {
@@ -449,7 +485,7 @@ pub fn serial_map_no_length<B: Buffer, K: Serial, V: Serial>(map: &BTreeMap<K, V
 
 /// Deserialize a map from a byte source. This ensures there are no duplicates,
 /// as well as that all keys are in strictly increasing order.
-pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Deserial>(
+pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord, V: Deserial>(
     source: &mut R,
     len: usize,
 ) -> ParseResult<BTreeMap<K, V>> {
@@ -458,19 +494,17 @@ pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Dese
     for _ in 0..len {
         let k = source.get()?;
         let v = source.get()?;
-        match x {
-            None => {
-                out.insert(k, v);
-            }
-            Some(kk) => {
-                if k > kk {
-                    out.insert(k, v);
-                } else {
-                    bail!("Keys not in order.")
-                }
+        if let Some((old_k, old_v)) = x.take() {
+            if k > old_k {
+                out.insert(old_k, old_v);
+            } else {
+                bail!("Keys not in order.")
             }
         }
-        x = Some(k);
+        x = Some((k, v));
+    }
+    if let Some((k, v)) = x {
+        out.insert(k, v);
     }
     Ok(out)
 }
@@ -485,7 +519,7 @@ pub fn serial_set_no_length<B: Buffer, K: Serial>(map: &BTreeSet<K>, out: &mut B
 /// Analogous to [deserial_map_no_length], but for sets.
 /// NB: This ensures there are no duplicates, and that all the keys are in
 /// strictly increasing order.
-pub fn deserial_set_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy>(
+pub fn deserial_set_no_length<R: ReadBytesExt, K: Deserial + Ord>(
     source: &mut R,
     len: usize,
 ) -> ParseResult<BTreeSet<K>> {
@@ -493,19 +527,17 @@ pub fn deserial_set_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy>(
     let mut x = None;
     for _ in 0..len {
         let k = source.get()?;
-        match x {
-            None => {
-                out.insert(k);
-            }
-            Some(kk) => {
-                if k > kk {
-                    out.insert(k);
-                } else {
-                    bail!("Keys not in order.")
-                }
+        if let Some(old_k) = x.take() {
+            if k > old_k {
+                out.insert(old_k);
+            } else {
+                bail!("Keys not in order.")
             }
         }
         x = Some(k);
+    }
+    if let Some(k) = x {
+        out.insert(k);
     }
     Ok(out)
 }
@@ -742,7 +774,7 @@ use std::{fmt, io::Cursor};
 /// then encode that byte array as a hex string into the provided serde
 /// Serializer.
 pub fn base16_encode<S: Serializer, T: Serial>(v: &T, ser: S) -> Result<S::Ok, S::Error> {
-    let b16_str = encode(&to_bytes(v));
+    let b16_str = encode(to_bytes(v));
     ser.serialize_str(&b16_str)
 }
 
@@ -768,7 +800,7 @@ pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T
 
 /// Analogous to [base16_encode], but encodes into a string rather than a serde
 /// Serializer.
-pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(&to_bytes(x)) }
+pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(to_bytes(x)) }
 
 /// Dual to [base16_encode_string].
 pub fn base16_decode_string<S: Deserial>(x: &str) -> ParseResult<S> {
@@ -814,4 +846,36 @@ pub fn base16_ignore_length_decode<'de, D: Deserializer<'de>, T: Deserial>(
         }
     }
     des.deserialize_str(Base16IgnoreLengthVisitor(Default::default()))
+}
+
+#[test]
+fn test_map_serialization() {
+    use rand::Rng;
+    for n in 0..1000 {
+        let mut map = BTreeMap::<u64, u32>::new();
+        for (k, v) in rand::thread_rng()
+            .sample_iter(rand::distributions::Standard)
+            .take(n)
+        {
+            map.insert(k, v);
+        }
+        let deserialized = super::serialize_deserialize(&map).expect("Deserialization succeeds.");
+        assert_eq!(map, deserialized);
+    }
+}
+
+#[test]
+fn test_set_serialization() {
+    use rand::Rng;
+    for n in 0..1000 {
+        let mut set = BTreeSet::<u64>::new();
+        for k in rand::thread_rng()
+            .sample_iter(rand::distributions::Standard)
+            .take(n)
+        {
+            set.insert(k);
+        }
+        let deserialized = super::serialize_deserialize(&set).expect("Deserialization succeeds.");
+        assert_eq!(set, deserialized);
+    }
 }

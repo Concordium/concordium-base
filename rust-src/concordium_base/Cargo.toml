@@ -1,6 +1,6 @@
 [package]
 name = "concordium_base"
-version = "1.0.0"
+version = "1.1.1"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
 rust-version = "1.62"
@@ -55,7 +55,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
-version = "5.3"
+version = "5.3.1"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde", "sdk"]
 

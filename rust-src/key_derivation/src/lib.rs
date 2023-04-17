@@ -212,17 +212,16 @@ mod tests {
     const PASSPHRASE: &str = "TREZOR";
 
     fn create_wallet(net: Net, seed: &str) -> ConcordiumHdWallet {
-        let wallet = ConcordiumHdWallet {
-            seed: hex::decode(&seed).unwrap().try_into().unwrap(),
+        ConcordiumHdWallet {
+            seed: hex::decode(seed).unwrap().try_into().unwrap(),
             net,
-        };
-        wallet
+        }
     }
 
     /// Used to verify test vectors from https://github.com/trezor/python-mnemonic/blob/master/vectors.json.
     fn check_seed_vector(words: &str, expected_seed: &str) {
         let seed = words_to_seed_with_passphrase(words, PASSPHRASE);
-        assert_eq!(hex::encode(&seed), expected_seed);
+        assert_eq!(hex::encode(seed), expected_seed);
     }
 
     #[test]
@@ -242,7 +241,7 @@ mod tests {
             .get_account_public_key(1, 341, 9)
             .unwrap();
         assert_eq!(
-            hex::encode(&public_key),
+            hex::encode(public_key),
             "d54aab7218fc683cbd4d822f7c2b4e7406c41ae08913012fab0fa992fa008e98"
         );
     }
@@ -341,8 +340,7 @@ mod tests {
             .get_account_signing_key(0, 0, 0)
             .unwrap();
 
-        let sk = ed25519_dalek::SecretKey::from(signing_key);
-        let expanded_sk = ExpandedSecretKey::from(&sk);
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
         let signature = expanded_sk.sign(&data_to_sign, &pk);

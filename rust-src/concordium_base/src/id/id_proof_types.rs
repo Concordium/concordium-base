@@ -53,7 +53,7 @@ pub struct AttributeInRangeStatement<C: Curve, AttributeType: Attribute<C::Scala
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// in a set of attributes.
-#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -71,7 +71,7 @@ pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// not in a set of attributes.
-#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -121,6 +121,53 @@ pub enum AtomicStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     },
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for AtomicStatement<C, AttributeType> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            AtomicStatement::RevealAttribute { statement } => {
+                0u8.serial(out);
+                statement.serial(out);
+            }
+            AtomicStatement::AttributeInRange { statement } => {
+                1u8.serial(out);
+                statement.serial(out);
+            }
+            AtomicStatement::AttributeInSet { statement } => {
+                2u8.serial(out);
+                statement.serial(out);
+            }
+            AtomicStatement::AttributeNotInSet { statement } => {
+                3u8.serial(out);
+                statement.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for AtomicStatement<C, AttributeType> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let statement = source.get()?;
+                Ok(Self::RevealAttribute { statement })
+            }
+            1u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInRange { statement })
+            }
+            2u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeInSet { statement })
+            }
+            3u8 => {
+                let statement = source.get()?;
+                Ok(Self::AttributeNotInSet { statement })
+            }
+            n => anyhow::bail!("Unknown statement tag: {}.", n),
+        }
+    }
+}
+
 /// The different types of proofs, corresponding to the statements above.
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
@@ -167,9 +214,58 @@ pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     },
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for AtomicProof<C, AttributeType> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            AtomicProof::RevealAttribute { attribute, proof } => {
+                0u8.serial(out);
+                attribute.serial(out);
+                proof.serial(out);
+            }
+            AtomicProof::AttributeInRange { proof } => {
+                1u8.serial(out);
+                proof.serial(out);
+            }
+            AtomicProof::AttributeInSet { proof } => {
+                2u8.serial(out);
+                proof.serial(out);
+            }
+            AtomicProof::AttributeNotInSet { proof } => {
+                3u8.serial(out);
+                proof.serial(out);
+            }
+        }
+    }
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for AtomicProof<C, AttributeType> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        match u8::deserial(source)? {
+            0u8 => {
+                let attribute = source.get()?;
+                let proof = source.get()?;
+                Ok(Self::RevealAttribute { attribute, proof })
+            }
+            1u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInRange { proof })
+            }
+            2u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeInSet { proof })
+            }
+            3u8 => {
+                let proof = source.get()?;
+                Ok(Self::AttributeNotInSet { proof })
+            }
+            n => anyhow::bail!("Unknown proof type tag: {}", n),
+        }
+    }
+}
+
 /// A statement with a context is a statement about a credential,
 /// the context being the credential.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -183,7 +279,7 @@ pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
 }
 
 /// A statement is a list of atomic statements.
-#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
@@ -461,7 +557,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
 }
 
 /// A proof of a statement, composed of one or more atomic proofs.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"

@@ -75,7 +75,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let threshold = pub_info_for_ip.vk_acc.threshold;
 
     // message signed
-    let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));
+    let signed = Sha256::digest(to_bytes(&pub_info_for_ip));
 
     // Notice that here we provide all the verification keys, and the
     // function `verify_accunt_ownership_proof` assumes that

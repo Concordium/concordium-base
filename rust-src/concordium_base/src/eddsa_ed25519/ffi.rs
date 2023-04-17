@@ -56,7 +56,7 @@ extern "C" fn eddsa_public_to_bytes(
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 extern "C" fn eddsa_public_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut PublicKey {
-    let len = input_len as usize;
+    let len = input_len;
     let bytes = slice_from_c_bytes!(input_bytes, len);
     let e = PublicKey::from_bytes(bytes);
     match e {
@@ -68,7 +68,7 @@ extern "C" fn eddsa_public_from_bytes(input_bytes: *mut u8, input_len: size_t) -
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 extern "C" fn eddsa_sign_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut SecretKey {
-    let len = input_len as usize;
+    let len = input_len;
     let bytes = slice_from_c_bytes!(input_bytes, len);
     let e = SecretKey::from_bytes(bytes);
     match e {
@@ -124,7 +124,7 @@ extern "C" fn eddsa_verify_dlog_ed25519(
     public_key_bytes: *const u8,
     proof_bytes: *const u8,
 ) -> i32 {
-    let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len as usize);
+    let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len);
     let public_key = {
         let pk_bytes = slice_from_c_bytes!(public_key_bytes, PUBLIC_KEY_LENGTH);
         match PublicKey::from_bytes(pk_bytes) {
@@ -139,7 +139,7 @@ extern "C" fn eddsa_verify_dlog_ed25519(
             Ok(proof) => proof,
         }
     };
-    if verify_dlog_ed25519(&mut RandomOracle::domain(&challenge), &public_key, &proof) {
+    if verify_dlog_ed25519(&mut RandomOracle::domain(challenge), &public_key, &proof) {
         1
     } else {
         0
@@ -155,7 +155,7 @@ extern "C" fn eddsa_prove_dlog_ed25519(
     secret_key_bytes: *const u8,
     proof_ptr: *mut u8,
 ) -> i32 {
-    let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len as usize);
+    let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len);
     let public_key = {
         let pk_bytes = slice_from_c_bytes!(public_key_bytes, PUBLIC_KEY_LENGTH);
         match PublicKey::from_bytes(pk_bytes) {
@@ -174,7 +174,7 @@ extern "C" fn eddsa_prove_dlog_ed25519(
     let mut csprng = thread_rng();
     let proof = prove_dlog_ed25519(
         &mut csprng,
-        &mut RandomOracle::domain(&challenge),
+        &mut RandomOracle::domain(challenge),
         &public_key,
         &secret_key,
     );

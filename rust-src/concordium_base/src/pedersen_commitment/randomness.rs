@@ -20,7 +20,7 @@ pub struct Randomness<C: Curve> {
     pub randomness: Rc<Secret<C::Scalar>>,
 }
 
-/// This trait allows automatic conversion of &Randomness<C> to &C::Scalar.
+/// This trait allows automatic conversion of `&Randomness<C>` to `&C::Scalar`.
 impl<C: Curve> Deref for Randomness<C> {
     type Target = C::Scalar;
 

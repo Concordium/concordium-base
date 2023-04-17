@@ -221,7 +221,7 @@ pub struct Storer<X> {
 
 impl<X: Seek + Write> BackingStoreStore for Storer<X> {
     fn store_raw(&mut self, data: &[u8]) -> Result<Reference, WriteError> {
-        let pos = self.inner.seek(SeekFrom::Current(0))?;
+        let pos = self.inner.stream_position()?;
         let data_len = data.len() as u32;
         self.inner.write_u32::<BigEndian>(data_len)?;
         self.inner.write_all(data)?;
@@ -411,7 +411,7 @@ pub trait ToSHA256<Ctx> {
 impl<Ctx> ToSHA256<Ctx> for u64 {
     #[inline(always)]
     fn hash(&self, _ctx: &mut Ctx) -> Hash {
-        let hash: [u8; 32] = sha2::Sha256::digest(&self.to_be_bytes()).into();
+        let hash: [u8; 32] = sha2::Sha256::digest(self.to_be_bytes()).into();
         Hash::from(hash)
     }
 }
@@ -430,7 +430,7 @@ impl<Ctx> ToSHA256<Ctx> for [u8] {
     #[inline(always)]
     fn hash(&self, _ctx: &mut Ctx) -> Hash {
         let mut hasher = sha2::Sha256::new();
-        hasher.update(&(self.len() as u64).to_be_bytes());
+        hasher.update((self.len() as u64).to_be_bytes());
         hasher.update(self);
         let hash: [u8; 32] = hasher.finalize().into();
         Hash::from(hash)
@@ -441,7 +441,7 @@ impl<Ctx, const N: usize> ToSHA256<Ctx> for [u8; N] {
     #[inline(always)]
     fn hash(&self, _ctx: &mut Ctx) -> Hash {
         let mut hasher = sha2::Sha256::new();
-        hasher.update(&(N as u64).to_be_bytes());
+        hasher.update((N as u64).to_be_bytes());
         hasher.update(self);
         let hash: [u8; 32] = hasher.finalize().into();
         Hash::from(hash)
