@@ -4,12 +4,13 @@ use concordium_base::{
         constants::{ArCurve, IpPairing},
         curve_arithmetic::Curve,
         pedersen_commitment::Randomness as CommitmentRandomness,
-        types::AttributeTag,
+        types::{AttributeTag, HasAttributeRandomness, IpIdentity},
     },
     ps_sig::SigRetrievalRandomness,
 };
 use ed25519_dalek::{PublicKey, SecretKey};
-use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
+pub use ed25519_hd_key_derivation::DeriveError;
+use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden};
 use hmac::Hmac;
 use keygen_bls::keygen_bls;
 use sha2::Sha512;
@@ -92,6 +93,21 @@ impl ConcordiumHdWallet {
             derivation_path.push(checked_harden(index)?)
         }
         Ok(derivation_path)
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a seed phrase. The intention
+    /// is that the `phrase` is a single-space separated list of words.
+    ///
+    /// See also [`from_words`](Self::from_words) which ensures a canonical
+    /// representation of the list of words, and is thus less error prone.
+    pub fn from_seed_phrase(phrase: &str, net: Net) -> Self {
+        let seed = words_to_seed(phrase);
+        Self { seed, net }
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a list of words.
+    pub fn from_words(words: &[&str], net: Net) -> Self {
+        Self::from_seed_phrase(&words.join(" "), net)
     }
 
     /// Get the account signing key for the identity provider
@@ -198,6 +214,52 @@ impl ConcordiumHdWallet {
         Ok(CommitmentRandomness::new(bls_key_bytes_from_seed(
             attribute_commitment_randomness_seed,
         )))
+    }
+}
+
+/// The [`ConcordiumHdWallet`] together indices that uniquely determine the
+/// account.
+pub struct CredentialContext {
+    pub wallet:                  ConcordiumHdWallet,
+    /// Index of the identity provider on the network.
+    pub identity_provider_index: IpIdentity,
+    /// Index of the identity. This is used to distinguish different identity
+    /// objects for the same identity provider.
+    pub identity_index:          u32,
+    /// Index of a credential. This is used to generate credentials from an
+    /// identity object.
+    pub credential_index:        u8,
+}
+
+impl CredentialContext {
+    /// Get the exponent used to determine credential registration id. This is
+    /// derived from the PRF key and the credential index. This function returns
+    /// an `Err` if the PRF key cannot be derived. It returns `Ok(None)` in the
+    /// unlikely case the PRF key and the credential index add up to 0.
+    pub fn get_cred_id_exponent(&self) -> Result<Option<<ArCurve as Curve>::Scalar>, DeriveError> {
+        let prf_key = self
+            .wallet
+            .get_prf_key(self.identity_provider_index.0, self.identity_index)?;
+        match prf_key.prf_exponent(self.credential_index) {
+            Ok(exp) => Ok(Some(exp)),
+            Err(_) => Ok(None),
+        }
+    }
+}
+
+impl HasAttributeRandomness<ArCurve> for CredentialContext {
+    type ErrorType = DeriveError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: AttributeTag,
+    ) -> Result<CommitmentRandomness<ArCurve>, Self::ErrorType> {
+        self.wallet.get_attribute_commitment_randomness(
+            self.identity_provider_index.0,
+            self.identity_index,
+            self.credential_index.into(),
+            attribute_tag,
+        )
     }
 }
 

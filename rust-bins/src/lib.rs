@@ -4,10 +4,8 @@ use concordium_base::{
     common::*,
     curve_arithmetic::*,
     id::{constants::*, types::*},
-    pedersen_commitment::Randomness as PedersenRandomness,
 };
 use dialoguer::Input;
-use ed25519_hd_key_derivation::DeriveError;
 use hkdf::HkdfExtract;
 use pairing::bls12_381::Bls12;
 use rand::Rng;
@@ -22,8 +20,6 @@ use std::{
     path::Path,
     str::FromStr,
 };
-
-use key_derivation::ConcordiumHdWallet;
 
 pub type ExampleAttribute = AttributeKind;
 
@@ -498,27 +494,4 @@ pub fn rerandomize_bip39(
     let output_words = bytes_to_bip39(&prk, bip_word_list)?;
 
     Ok(output_words)
-}
-
-pub struct CredentialContext {
-    pub wallet:                  ConcordiumHdWallet,
-    pub identity_provider_index: u32,
-    pub identity_index:          u32,
-    pub credential_index:        u32,
-}
-
-impl HasAttributeRandomness<ArCurve> for CredentialContext {
-    type ErrorType = DeriveError;
-
-    fn get_attribute_commitment_randomness(
-        &self,
-        attribute_tag: AttributeTag,
-    ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
-        self.wallet.get_attribute_commitment_randomness(
-            self.identity_provider_index,
-            self.identity_index,
-            self.credential_index,
-            attribute_tag,
-        )
-    }
 }
