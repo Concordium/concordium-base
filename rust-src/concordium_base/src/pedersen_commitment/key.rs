@@ -17,6 +17,17 @@ pub struct CommitmentKey<C: Curve> {
     pub h: C,
 }
 
+/// A vector commitment key is a list of group elements that are used as bases
+/// to raise the values and randomness, respectively.
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
+pub struct VecCommitmentKey<C: Curve> {
+    /// Bases to raise the values to when committing.
+    #[size_length = 4]
+    pub gs: Vec<C>,
+    /// Base to raise the randomness to when committing.
+    pub h:  C,
+}
+
 impl<C: Curve> CommitmentKey<C> {
     pub fn new(g: C, h: C) -> Self { CommitmentKey { g, h } }
 
@@ -40,9 +51,7 @@ impl<C: Curve> CommitmentKey<C> {
         let h = self.h;
         let g = self.g;
         let cmm = multiexp(&[g, h], &[*value, *randomness]);
-        // let hr = h.mul_by_scalar(randomness);
-        // let gm = g.mul_by_scalar(value);
-        Commitment(cmm) // hr.plus_point(&gm))
+        Commitment(cmm)
     }
 
     #[inline(always)]
@@ -63,6 +72,67 @@ impl<C: Curve> CommitmentKey<C> {
         let h = C::generate(csprng);
         let g = C::generate(csprng);
         CommitmentKey { g, h }
+    }
+}
+
+impl<C: Curve> VecCommitmentKey<C> {
+    pub fn new(gs: Vec<C>, h: C) -> Self { VecCommitmentKey { gs, h } }
+
+    /// Commit to the given values using a freshly generated randomness, and
+    /// return the randomness that was generated.
+    pub fn commit<T>(
+        &self,
+        s: &[C::Scalar],
+        csprng: &mut T,
+    ) -> Option<(Commitment<C>, Randomness<C>)>
+    where
+        T: Rng, {
+        let r = Randomness::<C>::generate(csprng);
+        Some((self.hide(s, &r)?, r))
+    }
+
+    /// The low-level worker function that actually does the commitment.
+    pub fn hide_worker(
+        &self,
+        values: &[C::Scalar],
+        randomness: &C::Scalar,
+    ) -> Option<Commitment<C>> {
+        let mut bases = self.gs.clone();
+        bases.push(self.h);
+        let mut scalars = values.to_vec();
+        scalars.push(*randomness);
+        if scalars.len() != bases.len() {
+            return None;
+        }
+        let cmm = multiexp(&bases, &scalars);
+        Some(Commitment(cmm))
+    }
+
+    #[inline(always)]
+    /// Hide the values inside a commitment using the given randomness.
+    pub fn hide(&self, s: &[C::Scalar], r: &Randomness<C>) -> Option<Commitment<C>> {
+        self.hide_worker(s, r.as_ref())
+    }
+
+    /// Prove that the commitment `self` contains the given values and
+    /// randomness.
+    pub fn open(&self, s: &[C::Scalar], r: &Randomness<C>, c: &Commitment<C>) -> bool {
+        if let Some(comm) = self.hide(s, r) {
+            comm == *c
+        } else {
+            false
+        }
+    }
+
+    pub fn generate<T>(csprng: &mut T, n: usize) -> VecCommitmentKey<C>
+    where
+        T: Rng, {
+        let h = C::generate(csprng);
+        let mut gs = Vec::with_capacity(n);
+        for _ in 0..n {
+            gs.push(C::generate(csprng));
+        }
+        VecCommitmentKey { gs, h }
     }
 }
 
@@ -108,9 +178,45 @@ mod tests {
         };
     }
 
+    macro_rules! macro_test_commit_open_vec {
+        ($function_name:ident, $curve_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                let n = 10;
+                for _ in 1..10 {
+                    let sk = VecCommitmentKey::<$curve_type>::generate(&mut csprng, n);
+                    let mut scalars = Vec::with_capacity(n);
+                    for _ in 0..n {
+                        scalars.push(*Value::<$curve_type>::generate(&mut csprng).as_ref());
+                    }
+                    let (c, r) = sk.commit(&scalars, &mut csprng).unwrap();
+
+                    assert!(sk.open(&scalars, &r, &c));
+                    assert!(!sk.open(
+                        &scalars,
+                        &r,
+                        &Commitment::<$curve_type>::generate(&mut csprng)
+                    ));
+                    assert!(!sk.open(
+                        &scalars,
+                        &Randomness::<$curve_type>::generate(&mut csprng),
+                        &c
+                    ));
+                }
+            }
+        };
+    }
+
     macro_test_commit_open!(commit_open_bls12_381_g1_affine, G1Affine);
     macro_test_commit_open!(commit_open_bls12_381_g1_projectitve, G1);
 
     macro_test_commit_open!(commit_open_bls12_381_g2_affine, G2Affine);
     macro_test_commit_open!(commit_open_bls12_381_g2_projective, G2);
+
+    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_affine, G1Affine);
+    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_projectitve, G1);
+
+    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g2_affine, G2Affine);
+    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g2_projective, G2);
 }
