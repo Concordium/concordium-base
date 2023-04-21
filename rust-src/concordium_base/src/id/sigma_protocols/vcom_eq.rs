@@ -75,8 +75,9 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         let mut alphas = Vec::with_capacity(n);
         let mut rtildes = BTreeMap::new();
         let mut ais = Vec::with_capacity(self.comms.len());
-        let mut i = 0;
-        for _ in 0..n {
+        // let mut i = 0;
+        for i_usize in 0..n {
+            let i = i_usize.try_into().ok()?;
             let alpha_i = C::generate_non_zero_scalar(csprng);
             alphas.push(alpha_i);
             if self.comms.contains_key(&i) {
@@ -85,7 +86,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
                 let ai = multiexp(&[self.g_bar, self.h_bar], &[alpha_i, rtilde_i]);
                 ais.push(ai);
             }
-            i += 1;
+            // i += 1;
         }
         // for the factor h^{r_tilde}
         alphas.push(rtilde);
@@ -110,24 +111,20 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         }
         let mut sis = Vec::with_capacity(n);
         let mut tis = BTreeMap::new();
-        let mut i = 0;
-        for (ref alpha_i, ref xi) in izip!(alphas, xis) {
+        for (i_usize, (ref alpha_i, ref xi)) in izip!(alphas, xis).enumerate() {
             let mut si = *challenge;
             si.mul_assign(xi);
             si.negate();
             si.add_assign(alpha_i);
             sis.push(si);
-            match (rtildes.get(&i), ris.get(&i)) {
-                (Some(rtilde_i), Some(ri)) => {
-                    let mut ti = *challenge;
-                    ti.mul_assign(ri);
-                    ti.negate();
-                    ti.add_assign(rtilde_i);
-                    tis.insert(i, ti);
-                }
-                _ => (),
+            let i = i_usize.try_into().ok()?;
+            if let (Some(rtilde_i), Some(ri)) = (rtildes.get(&i), ris.get(&i)) {
+                let mut ti = *challenge;
+                ti.mul_assign(ri);
+                ti.negate();
+                ti.add_assign(rtilde_i);
+                tis.insert(i, ti);
             }
-            i += 1;
         }
         let mut t = *challenge;
         t.mul_assign(&r);
@@ -161,18 +158,14 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
 
         let point = multiexp(&bases, &scalars); //  h^t C^challenge \prod g_i^(s_i)
 
-        let mut i = 0;
-        for si in sis.iter() {
-            match (self.comms.get(&i), tis.get(&i)) {
-                (Some(comm_i), Some(ti)) => {
-                    let ai_scalars = vec![*si, *ti, *challenge];
-                    let ai_bases = vec![self.g_bar, self.h_bar, *comm_i];
-                    let ai = multiexp(&ai_bases, &ai_scalars); // g_bar^{s_i}h_bar^{s_i} C_i^challenge
-                    points.push(ai);
-                }
-                _ => (),
+        for (i_usize, si) in sis.iter().enumerate() {
+            let i = i_usize.try_into().ok()?;
+            if let (Some(comm_i), Some(ti)) = (self.comms.get(&i), tis.get(&i)) {
+                let ai_scalars = vec![*si, *ti, *challenge];
+                let ai_bases = vec![self.g_bar, self.h_bar, *comm_i];
+                let ai = multiexp(&ai_bases, &ai_scalars); // g_bar^{s_i}h_bar^{s_i} C_i^challenge
+                points.push(ai);
             }
-            i += 1;
         }
         Some((point, points))
     }
