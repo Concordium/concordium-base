@@ -163,7 +163,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
             if let (Some(comm_i), Some(ti)) = (self.comms.get(&i), tis.get(&i)) {
                 let ai_scalars = vec![*si, *ti, *challenge];
                 let ai_bases = vec![self.g_bar, self.h_bar, *comm_i];
-                let ai = multiexp(&ai_bases, &ai_scalars); // g_bar^{s_i}h_bar^{s_i} C_i^challenge
+                let ai = multiexp(&ai_bases, &ai_scalars); // g_bar^{s_i}h_bar^{t_i} C_i^challenge
                 points.push(ai);
             }
         }
