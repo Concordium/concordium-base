@@ -432,6 +432,25 @@ pub struct YearMonth {
     pub month: u8,
 }
 
+impl YearMonth {
+    /// Return the time at the beginning of the month.
+    pub fn lower(self) -> Option<chrono::DateTime<chrono::Utc>> {
+        let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
+        let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
+        let dt = date.and_time(time);
+        Some(chrono::DateTime::from_utc(dt, chrono::Utc))
+    }
+
+    /// Return the time at the beginning of the next month.
+    pub fn upper(self) -> Option<chrono::DateTime<chrono::Utc>> {
+        let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
+        let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
+        let date = date.checked_add_months(chrono::Months::new(1))?;
+        let dt = date.and_time(time);
+        Some(chrono::DateTime::from_utc(dt, chrono::Utc))
+    }
+}
+
 impl ToString for YearMonth {
     fn to_string(&self) -> String { format!("{:04}{:02}", self.year, self.month) }
 }
@@ -1695,6 +1714,24 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
         #[serde(rename = "commitments")]
         commitments: CredentialDeploymentCommitments<C>,
     },
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>>
+    AccountCredentialWithoutProofs<C, AttributeType>
+{
+    pub fn policy(&self) -> &Policy<C, AttributeType> {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => &icdv.policy,
+            AccountCredentialWithoutProofs::Normal { cdv, .. } => &cdv.policy,
+        }
+    }
+
+    pub fn issuer(&self) -> IpIdentity {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => icdv.ip_identity,
+            AccountCredentialWithoutProofs::Normal { cdv, .. } => cdv.ip_identity,
+        }
+    }
 }
 
 impl<C: Curve, AttributeType: Serial + Attribute<C::Scalar>> Serial
