@@ -14,7 +14,7 @@ use std::{collections::BTreeMap, rc::Rc};
 
 type IndexType = u8;
 
-/// The public information known to both the prover and the verfier.
+/// The public information known to both the prover and the verifier.
 pub struct VecComEq<C: Curve> {
     /// The commitment C
     pub comm:  C,
