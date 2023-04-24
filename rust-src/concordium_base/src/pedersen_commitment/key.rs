@@ -215,7 +215,7 @@ mod tests {
     macro_test_commit_open!(commit_open_bls12_381_g2_projective, G2);
 
     macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_affine, G1Affine);
-    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_projectitve, G1);
+    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_projective, G1);
 
     macro_test_commit_open_vec!(vec_commit_open_bls12_381_g2_affine, G2Affine);
     macro_test_commit_open_vec!(vec_commit_open_bls12_381_g2_projective, G2);
