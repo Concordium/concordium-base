@@ -246,8 +246,8 @@ mod tests {
         let h_bar = G1::generate(csprng);
         let r = Rc::new(G1::generate_scalar(csprng));
         let mut comm = h.mul_by_scalar(&r);
-        let mut i = 0;
-        for _ in 0..data_size {
+        for j in 0..data_size {
+            let i = j as u8;
             let xi = G1::generate_scalar(csprng);
             let gi = G1::generate(csprng);
             comm = comm.plus_point(&gi.mul_by_scalar(&xi));
@@ -261,7 +261,6 @@ mod tests {
                     .plus_point(&h_bar.mul_by_scalar(&ri));
                 comms.insert(i, comm_i);
             }
-            i += 1;
         }
         let agg = VecComEq {
             comm,
