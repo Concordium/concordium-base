@@ -24,7 +24,7 @@ pub struct VecComEq<C: Curve> {
     pub gis:   Vec<C>,
     /// The generator h
     pub h:     C,
-    /// The generator \bar{g}
+    /// The generator `\bar{g}`
     pub g_bar: C,
     /// The generator \bar{h}
     pub h_bar: C,
