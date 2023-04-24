@@ -26,7 +26,7 @@ pub struct VecComEq<C: Curve> {
     pub h:     C,
     /// The generator `\bar{g}`
     pub g_bar: C,
-    /// The generator \bar{h}
+    /// The generator `\bar{h}`
     pub h_bar: C,
 }
 
