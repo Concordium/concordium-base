@@ -30,7 +30,7 @@ pub struct VecComEq<C: Curve> {
     pub h_bar: C,
 }
 
-/// VComEq witness. We deliberately make it opaque.
+/// `VComEq` witness. We deliberately make it opaque.
 #[derive(Debug, Serialize)]
 pub struct Witness<C: Curve> {
     #[size_length = 4]
