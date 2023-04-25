@@ -22,6 +22,7 @@ pub struct CommitmentKey<C: Curve> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
 pub struct VecCommitmentKey<C: Curve> {
     /// Bases to raise the values to when committing.
+    /// It is assumed that this is non-empty.
     #[size_length = 4]
     pub gs: Vec<C>,
     /// Base to raise the randomness to when committing.
@@ -97,13 +98,13 @@ impl<C: Curve> VecCommitmentKey<C> {
         values: &[C::Scalar],
         randomness: &C::Scalar,
     ) -> Option<Commitment<C>> {
+        if values.len() != self.gs.len() {
+            return None;
+        }
         let mut bases = self.gs.clone();
         bases.push(self.h);
         let mut scalars = values.to_vec();
         scalars.push(*randomness);
-        if scalars.len() != bases.len() {
-            return None;
-        }
         let cmm = multiexp(&bases, &scalars);
         Some(Commitment(cmm))
     }
@@ -124,6 +125,9 @@ impl<C: Curve> VecCommitmentKey<C> {
         }
     }
 
+    /// Generate a vector commitment key.
+    /// NB: `n` should be non-zero in order to generate a meaningful commitment
+    /// key.
     pub fn generate<T>(csprng: &mut T, n: usize) -> VecCommitmentKey<C>
     where
         T: Rng, {

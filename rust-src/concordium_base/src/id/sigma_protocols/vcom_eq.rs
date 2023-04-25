@@ -21,6 +21,7 @@ pub struct VecComEq<C: Curve> {
     /// The commitments C_i for i in I
     pub comms: BTreeMap<IndexType, C>,
     /// The points g_i references in the module description, in the given order.
+    /// It is assumed that this is non-empty.
     pub gis:   Vec<C>,
     /// The generator h
     pub h:     C,
@@ -30,12 +31,13 @@ pub struct VecComEq<C: Curve> {
     pub h_bar: C,
 }
 
-/// `VComEq` witness. We deliberately make it opaque.
+/// `VecComEq` witness. We deliberately make it opaque.
 #[derive(Debug, Serialize)]
 pub struct Witness<C: Curve> {
     #[size_length = 4]
     sis: Vec<C::Scalar>,
     t:   C::Scalar,
+    #[map_size_length = 4]
     tis: BTreeMap<IndexType, C::Scalar>,
 }
 
@@ -75,7 +77,6 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         let mut alphas = Vec::with_capacity(n);
         let mut rtildes = BTreeMap::new();
         let mut ais = Vec::with_capacity(self.comms.len());
-        // let mut i = 0;
         for i_usize in 0..n {
             let i = i_usize.try_into().ok()?;
             let alpha_i = C::generate_non_zero_scalar(csprng);
@@ -86,7 +87,6 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
                 let ai = multiexp(&[self.g_bar, self.h_bar], &[alpha_i, rtilde_i]);
                 ais.push(ai);
             }
-            // i += 1;
         }
         // for the factor h^{r_tilde}
         alphas.push(rtilde);
@@ -139,6 +139,10 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage> {
         let Witness { sis, t, tis } = witness;
+        if sis.is_empty() {
+            return None;
+        }
+        // The below subtraction is fine, since we know `sis.len() >= 1`.
         let maybe_fit: Result<IndexType, _> = (sis.len() - 1).try_into();
         if sis.len() != self.gis.len()
             || tis.len() != self.comms.len()
@@ -246,20 +250,20 @@ mod tests {
         let h_bar = G1::generate(csprng);
         let r = Rc::new(G1::generate_scalar(csprng));
         let mut comm = h.mul_by_scalar(&r);
-        for j in 0..data_size {
-            let i = j as u8;
+        for i in 0..data_size {
             let xi = G1::generate_scalar(csprng);
             let gi = G1::generate(csprng);
             comm = comm.plus_point(&gi.mul_by_scalar(&xi));
             xis.push(Rc::new(xi));
             gis.push(gi);
             if i >= 5 && i <= 10 {
+                let i_u8 = i.try_into().unwrap(); // This if fine since `i` is small.
                 let ri = G1::generate_scalar(csprng);
-                ris.insert(i, Rc::new(ri));
+                ris.insert(i_u8, Rc::new(ri));
                 let comm_i = g_bar
                     .mul_by_scalar(&xi)
                     .plus_point(&h_bar.mul_by_scalar(&ri));
-                comms.insert(i, comm_i);
+                comms.insert(i_u8, comm_i);
             }
         }
         let agg = VecComEq {
