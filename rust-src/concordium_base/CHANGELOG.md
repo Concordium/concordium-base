@@ -1,5 +1,9 @@
 ## Unreleased changes
 
+- Add helpers to extract policy from credentials.
+- Add helpers to `TransactionTime` to construct future timestamps relative to
+  current time.
+
 ## 1.1.1 (2023-04-13)
 
 - Add Serialize instances to `Proof` and `Statement` types, and its constituent
