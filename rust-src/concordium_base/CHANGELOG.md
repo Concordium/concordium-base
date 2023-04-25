@@ -1,5 +1,8 @@
 ## Unreleased changes
 
+- Add new sigma protocol `VecComEq` for linking a vector commitment with individual commitments.
+- Add `VecCommitmentKey` for generating vector commitments.
+
 ## 1.1.1 (2023-04-13)
 
 - Add Serialize instances to `Proof` and `Statement` types, and its constituent
