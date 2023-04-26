@@ -9,6 +9,7 @@ pub mod com_lin;
 pub mod com_mult;
 pub mod common;
 pub mod dlog;
+pub mod vcom_eq;
 
 #[cfg(test)]
 pub mod sigma_test;
