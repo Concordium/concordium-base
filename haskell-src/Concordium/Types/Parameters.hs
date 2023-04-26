@@ -2104,6 +2104,9 @@ type IsConsensusV1 (pv :: ProtocolVersion) =
     ( ConsensusParametersVersionFor (ChainParametersVersionFor pv) ~ 'ConsensusParametersVersion1,
       SeedStateVersionFor pv ~ 'SeedStateVersion1,
       IsSupported 'PTFinalizationCommitteeParameters (ChainParametersVersionFor pv) ~ 'True,
+      IsSupported 'PTTimeParameters (ChainParametersVersionFor pv) ~ 'True,
+      PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1,
+      MintDistributionVersionFor (ChainParametersVersionFor pv) ~ 'MintDistributionVersion1,
       PVSupportsDelegation pv
     )
 
