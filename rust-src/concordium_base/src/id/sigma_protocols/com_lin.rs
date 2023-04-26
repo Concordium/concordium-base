@@ -230,7 +230,7 @@ mod tests {
         for _ in 0..10 {
             ComLin::<G1>::with_valid_data(10, &mut csprng, |com_lin, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_lin, secret, csprng)
                     .expect("Proving should succeed.");
                 assert!(

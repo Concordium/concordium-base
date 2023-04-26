@@ -22,7 +22,7 @@ use concordium_base::{
 use dialoguer::{Input, MultiSelect, Select};
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
+use key_derivation::{words_to_seed, ConcordiumHdWallet, CredentialContext, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use serde_json::{json, to_value};
@@ -1058,7 +1058,7 @@ fn handle_create_credential(cc: CreateCredential) {
         Option<CredentialContext>,
     ) = match cc.private {
         Some(path) => {
-            let id_use_data = match read_id_use_data(&path) {
+            let id_use_data = match read_id_use_data(path) {
                 Ok(v) => v,
                 Err(x) => {
                     eprintln!("Could not read ID use data object because: {}", x);
@@ -1080,7 +1080,7 @@ fn handle_create_credential(cc: CreateCredential) {
             (id_use_data, acc_data, None)
         }
         None => {
-            let wallet: ConcordiumHdWallet = match read_json_from_file(&cc.hd_wallet.unwrap()) {
+            let wallet: ConcordiumHdWallet = match read_json_from_file(cc.hd_wallet.unwrap()) {
                 Ok(w) => w,
                 Err(e) => {
                     eprintln!("Could not read file because {}", e);
@@ -1154,9 +1154,9 @@ fn handle_create_credential(cc: CreateCredential) {
             };
             let context = CredentialContext {
                 wallet,
-                identity_provider_index,
+                identity_provider_index: identity_provider_index.into(),
                 identity_index,
-                credential_index: u32::from(acc_num),
+                credential_index: acc_num,
             };
             (id_use_data, cred_data, Some(context))
         }
@@ -1298,12 +1298,12 @@ fn handle_create_credential(cc: CreateCredential) {
         // if it is an existing account then just write the credential.
         // otherwise write the credential message that can be sent to the chain.
         let cdi_json_value = match new_or_existing {
-            Left(tt) => to_value(&Versioned::new(VERSION_0, AccountCredentialMessage {
+            Left(tt) => to_value(Versioned::new(VERSION_0, AccountCredentialMessage {
                 message_expiry: tt,
                 credential:     cdi,
             }))
             .expect("Cannot fail."),
-            Right(_) => to_value(&Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
+            Right(_) => to_value(Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
         };
         match write_json_to_file(json_file, &cdi_json_value) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
@@ -1360,7 +1360,7 @@ fn handle_create_chi(cc: CreateChi) {
     let ah_info = if let (Some(path), Some(identity_provider_index), Some(identity_index)) =
         (cc.hd_wallet, cc.identity_provider_index, cc.identity_index)
     {
-        let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
+        let wallet: ConcordiumHdWallet = match read_json_from_file(path) {
             Ok(w) => w,
             Err(e) => {
                 eprintln!("Could not read file because {}", e);
@@ -1406,7 +1406,7 @@ fn handle_create_id_use_data(iud: CreateIdUseData) {
             iud.identity_provider_index,
             iud.identity_index,
         ) {
-            let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
+            let wallet: ConcordiumHdWallet = match read_json_from_file(path) {
                 Ok(w) => w,
                 Err(e) => {
                     eprintln!("Could not read file because {}", e);
@@ -1633,7 +1633,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
                 }
             }
             if let Some(bin_file) = aai.bin_out {
-                match File::create(&bin_file) {
+                match File::create(bin_file) {
                     // This is a bit stupid, we should write directly to the sink.
                     Ok(mut file) => match file.write_all(&to_bytes(&versioned_icdi)) {
                         Ok(_) => println!("Wrote binary data to provided file."),

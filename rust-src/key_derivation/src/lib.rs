@@ -4,12 +4,13 @@ use concordium_base::{
         constants::{ArCurve, IpPairing},
         curve_arithmetic::Curve,
         pedersen_commitment::Randomness as CommitmentRandomness,
-        types::AttributeTag,
+        types::{AttributeTag, HasAttributeRandomness, IpIdentity},
     },
     ps_sig::SigRetrievalRandomness,
 };
 use ed25519_dalek::{PublicKey, SecretKey};
-use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
+pub use ed25519_hd_key_derivation::DeriveError;
+use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden};
 use hmac::Hmac;
 use keygen_bls::keygen_bls;
 use sha2::Sha512;
@@ -92,6 +93,21 @@ impl ConcordiumHdWallet {
             derivation_path.push(checked_harden(index)?)
         }
         Ok(derivation_path)
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a seed phrase. The intention
+    /// is that the `phrase` is a single-space separated list of words.
+    ///
+    /// See also [`from_words`](Self::from_words) which ensures a canonical
+    /// representation of the list of words, and is thus less error prone.
+    pub fn from_seed_phrase(phrase: &str, net: Net) -> Self {
+        let seed = words_to_seed(phrase);
+        Self { seed, net }
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a list of words.
+    pub fn from_words(words: &[&str], net: Net) -> Self {
+        Self::from_seed_phrase(&words.join(" "), net)
     }
 
     /// Get the account signing key for the identity provider
@@ -201,6 +217,52 @@ impl ConcordiumHdWallet {
     }
 }
 
+/// The [`ConcordiumHdWallet`] together indices that uniquely determine the
+/// account.
+pub struct CredentialContext {
+    pub wallet:                  ConcordiumHdWallet,
+    /// Index of the identity provider on the network.
+    pub identity_provider_index: IpIdentity,
+    /// Index of the identity. This is used to distinguish different identity
+    /// objects for the same identity provider.
+    pub identity_index:          u32,
+    /// Index of a credential. This is used to generate credentials from an
+    /// identity object.
+    pub credential_index:        u8,
+}
+
+impl CredentialContext {
+    /// Get the exponent used to determine credential registration id. This is
+    /// derived from the PRF key and the credential index. This function returns
+    /// an `Err` if the PRF key cannot be derived. It returns `Ok(None)` in the
+    /// unlikely case the PRF key and the credential index add up to 0.
+    pub fn get_cred_id_exponent(&self) -> Result<Option<<ArCurve as Curve>::Scalar>, DeriveError> {
+        let prf_key = self
+            .wallet
+            .get_prf_key(self.identity_provider_index.0, self.identity_index)?;
+        match prf_key.prf_exponent(self.credential_index) {
+            Ok(exp) => Ok(Some(exp)),
+            Err(_) => Ok(None),
+        }
+    }
+}
+
+impl HasAttributeRandomness<ArCurve> for CredentialContext {
+    type ErrorType = DeriveError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: AttributeTag,
+    ) -> Result<CommitmentRandomness<ArCurve>, Self::ErrorType> {
+        self.wallet.get_attribute_commitment_randomness(
+            self.identity_provider_index.0,
+            self.identity_index,
+            self.credential_index.into(),
+            attribute_tag,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,17 +274,16 @@ mod tests {
     const PASSPHRASE: &str = "TREZOR";
 
     fn create_wallet(net: Net, seed: &str) -> ConcordiumHdWallet {
-        let wallet = ConcordiumHdWallet {
-            seed: hex::decode(&seed).unwrap().try_into().unwrap(),
+        ConcordiumHdWallet {
+            seed: hex::decode(seed).unwrap().try_into().unwrap(),
             net,
-        };
-        wallet
+        }
     }
 
     /// Used to verify test vectors from https://github.com/trezor/python-mnemonic/blob/master/vectors.json.
     fn check_seed_vector(words: &str, expected_seed: &str) {
         let seed = words_to_seed_with_passphrase(words, PASSPHRASE);
-        assert_eq!(hex::encode(&seed), expected_seed);
+        assert_eq!(hex::encode(seed), expected_seed);
     }
 
     #[test]
@@ -242,7 +303,7 @@ mod tests {
             .get_account_public_key(1, 341, 9)
             .unwrap();
         assert_eq!(
-            hex::encode(&public_key),
+            hex::encode(public_key),
             "d54aab7218fc683cbd4d822f7c2b4e7406c41ae08913012fab0fa992fa008e98"
         );
     }
@@ -341,8 +402,7 @@ mod tests {
             .get_account_signing_key(0, 0, 0)
             .unwrap();
 
-        let sk = ed25519_dalek::SecretKey::from(signing_key);
-        let expanded_sk = ExpandedSecretKey::from(&sk);
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
         let signature = expanded_sk.sign(&data_to_sign, &pk);

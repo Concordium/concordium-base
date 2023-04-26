@@ -165,7 +165,7 @@ pub fn prove_ownership_of_account(
     hasher.update(account.0);
     hasher.update([0u8; 8]);
     hasher.update(b"account_ownership_proof");
-    hasher.update(&challenge);
+    hasher.update(challenge);
     let to_sign = &hasher.finalize();
     let sigs = data
         .keys
@@ -205,7 +205,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let b = upper.to_field_element();
     let mut scalar1 = delta;
     let two = C::scalar_from_u64(2);
-    let two_n = two.pow(&[64]);
+    let two_n = two.pow([64]);
     scalar1.add_assign(&two_n);
     scalar1.sub_assign(&b);
     let mut scalar2 = delta;

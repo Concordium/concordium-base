@@ -182,7 +182,7 @@ mod tests {
         for _ in 0..100 {
             ComMult::<G1>::with_valid_data(0, &mut csprng, |com_mult, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_mult, secret, csprng)
                     .expect("Proving should succeed.");
                 assert!(verify(&mut ro, &com_mult, &proof));

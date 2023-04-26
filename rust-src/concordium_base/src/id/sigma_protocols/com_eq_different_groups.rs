@@ -173,7 +173,7 @@ mod tests {
         for _i in 0..100 {
             ComEqDiffGroups::<G1, G2>::with_valid_data(0, &mut csprng, |cdg, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
 
                 let proof =
                     prove(&mut ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
@@ -188,7 +188,7 @@ mod tests {
         for _i in 0..100 {
             ComEqDiffGroups::<G1, G2>::with_valid_data(0, &mut csprng, |cdg, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let ro = RandomOracle::domain(challenge_prefix);
 
                 let proof =
                     prove(&mut ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");

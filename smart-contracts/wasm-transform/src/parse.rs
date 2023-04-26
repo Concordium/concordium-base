@@ -221,8 +221,8 @@ impl<'a, Ctx: Copy, A: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Vec<A> {
     }
 }
 
-/// Same as the instance for Vec<u8>, with the difference that no data is copied
-/// and the result is a reference to the initial byte array.
+/// Same as the instance for [`Vec<u8>`](Vec), with the difference that no data
+/// is copied and the result is a reference to the initial byte array.
 impl<'a, Ctx> Parseable<'a, Ctx> for &'a [u8] {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let len = u32::parse(ctx, cursor)?;
@@ -245,8 +245,8 @@ impl<'a, Ctx: Copy, A: Parseable<'a, Ctx>> Parseable<'a, Ctx> for Option<A> {
     }
 }
 
-/// Same as the instance for Vec<u8>, with the difference that no data is copied
-/// and the result is a reference to the initial byte array.
+/// Same as the instance for [`Vec<u8>`](Vec), with the difference that no data
+/// is copied and the result is a reference to the initial byte array.
 impl<'a, Ctx> Parseable<'a, Ctx> for &'a [ValueType] {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let len = u32::parse(ctx, cursor)?;
@@ -571,8 +571,8 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionSection {
 /// - As offset expressions in element and data segments. In these contexts the
 ///   constant expressions are allowed to refer to `GlobalGet` instructions for
 ///   `const` globals of the right type.
-fn read_constant_expr<'a>(
-    cursor: &mut Cursor<&'a [u8]>,
+fn read_constant_expr(
+    cursor: &mut Cursor<&'_ [u8]>,
     ty: ValueType,
     globals_allowed: Option<&GlobalSection>,
 ) -> ParseResult<GlobalInit> {

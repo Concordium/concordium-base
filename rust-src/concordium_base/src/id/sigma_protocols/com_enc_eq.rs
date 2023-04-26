@@ -209,7 +209,7 @@ mod tests {
         for _i in 0..100 {
             ComEncEq::<G1>::with_valid_data(0, &mut csprng, |com_enc_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_enc_eq, secret, csprng)
                     .expect("Proving should succeed.");
                 assert!(verify(&mut ro, &com_enc_eq, &proof));
@@ -223,7 +223,7 @@ mod tests {
         for _i in 0..100 {
             ComEncEq::<G1>::with_valid_data(0, &mut csprng, |com_enc_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let ro = RandomOracle::domain(challenge_prefix);
                 let proof = prove(&mut ro.split(), &com_enc_eq, secret, csprng)
                     .expect("Proving should succeed.");
                 assert!(verify(&mut ro.split(), &com_enc_eq, &proof));

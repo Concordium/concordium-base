@@ -16,7 +16,7 @@ use concordium_base::{
         self, account_holder,
         constants::{ArCurve, AttributeKind},
         id_proof_types::{Statement, StatementWithContext},
-        pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue},
+        pedersen_commitment::Value as PedersenValue,
         ps_sig,
         secret_sharing::Threshold,
         types::*,
@@ -30,9 +30,8 @@ use concordium_base::{
         UpdateContractPayload,
     },
 };
-use ed25519_hd_key_derivation::DeriveError;
 use either::Either::{Left, Right};
-use key_derivation::{ConcordiumHdWallet, Net};
+use key_derivation::{ConcordiumHdWallet, CredentialContext, Net};
 use libc::c_char;
 use pairing::bls12_381::Bls12;
 use rand::thread_rng;
@@ -45,33 +44,6 @@ use std::{
     ffi::{CStr, CString},
     str::FromStr,
 };
-
-/// A ConcordiumHdWallet together with an identity provider index, an identity
-/// index and a credential index for the credential to be created. A
-/// CredentialContext can then be parsed to the `create_credential` function due
-/// to the implementation of `HasAttributeRandomness` below.
-struct CredentialContext {
-    wallet:                  ConcordiumHdWallet,
-    identity_provider_index: u32,
-    identity_index:          u32,
-    credential_index:        u32,
-}
-
-impl HasAttributeRandomness<ArCurve> for CredentialContext {
-    type ErrorType = DeriveError;
-
-    fn get_attribute_commitment_randomness(
-        &self,
-        attribute_tag: AttributeTag,
-    ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
-        self.wallet.get_attribute_commitment_randomness(
-            self.identity_provider_index,
-            self.identity_index,
-            self.credential_index,
-            attribute_tag,
-        )
-    }
-}
 
 /// Context for a transaction to send.
 #[derive(common::SerdeDeserialize)]
@@ -189,7 +161,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
         "remaining": remaining_amount,
     });
 
@@ -352,7 +324,7 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -429,7 +401,7 @@ fn create_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -452,7 +424,7 @@ fn create_configure_delegation_transaction_aux(input: &str) -> anyhow::Result<St
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -511,7 +483,7 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
     let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
     });
 
     Ok(to_string(&response)?)
@@ -540,7 +512,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> anyhow::Result<String> {
     let (signatures, body) = make_signatures(&ctx.keys, pre_tx);
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
         "addedSelfEncryptedAmount": encryption
     });
 
@@ -592,7 +564,7 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let response = serde_json::json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body),
+        "transaction": hex::encode(body),
         "remaining": remaining_amount,
     });
 
@@ -974,9 +946,9 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
 
     let credential_context = CredentialContext {
         wallet,
-        identity_provider_index,
+        identity_provider_index: identity_provider_index.into(),
         identity_index,
-        credential_index: u32::from(acc_num),
+        credential_index: acc_num,
     };
     let (cdi, randomness) = account_holder::create_credential(
         context,
@@ -1061,9 +1033,9 @@ fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
     let acc_num: u8 = try_get(&v, "accountNumber")?;
     let credential_context = CredentialContext {
         wallet,
-        identity_provider_index,
+        identity_provider_index: identity_provider_index.into(),
         identity_index,
-        credential_index: u32::from(acc_num),
+        credential_index: acc_num,
     };
 
     let cred_id = credential_context

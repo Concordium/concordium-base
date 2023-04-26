@@ -193,7 +193,7 @@ pub struct TransactionHeader {
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, AsRef)]
 #[serde(transparent)]
 /// An account transaction payload that has not yet been deserialized.
-/// This is a simple wrapper around Vec<u8> with bespoke serialization.
+/// This is a simple wrapper around [`Vec<u8>`](Vec) with bespoke serialization.
 pub struct EncodedPayload {
     #[serde(with = "crate::internal::byte_array_hex")]
     pub(crate) payload: Vec<u8>,
@@ -504,6 +504,18 @@ pub struct InitContractPayload {
     pub param:     smart_contracts::OwnedParameter,
 }
 
+impl InitContractPayload {
+    /// Get the size of the payload in number of bytes.
+    pub fn size(&self) -> usize {
+        8 + // Amount
+        32 + // Module reference
+        2 + // Init name size
+        self.init_name.as_contract_name().get_chain_name().len() +
+        2 + // Parameter size
+        self.param.as_ref().len()
+    }
+}
+
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
 #[serde(rename_all = "camelCase")]
 /// Data needed to update a smart contract instance.
@@ -517,6 +529,18 @@ pub struct UpdateContractPayload {
     pub receive_name: smart_contracts::OwnedReceiveName,
     /// Message to send to the contract instance.
     pub message:      smart_contracts::OwnedParameter,
+}
+
+impl UpdateContractPayload {
+    /// Get the size of the payload in number of bytes.
+    pub fn size(&self) -> usize {
+        8 + // Amount
+        16 + // Contract address
+        2 + // Receive name size
+        self.receive_name.as_receive_name().get_chain_name().len() +
+        2 + // Parameter size
+        self.message.as_ref().len()
+    }
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, Default)]
@@ -2474,8 +2498,8 @@ pub mod construct {
         new_threshold: AccountThreshold,
     ) -> PreAccountTransaction {
         let num_cred_keys = new_credentials
-            .iter()
-            .map(|(_, v)| v.values.cred_key_info.keys.len() as u16)
+            .values()
+            .map(|v| v.values.cred_key_info.keys.len() as u16)
             .collect::<Vec<_>>();
         let payload = Payload::UpdateCredentials {
             new_cred_infos: new_credentials,

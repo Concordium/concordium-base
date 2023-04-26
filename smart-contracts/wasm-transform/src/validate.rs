@@ -860,9 +860,9 @@ pub trait ValidateImportExport {
 
 /// Validate the module. This function parses and validates the module at the
 /// same time, failing at the first encountered error.
-pub fn validate_module<'a>(
+pub fn validate_module(
     imp: &impl ValidateImportExport,
-    skeleton: &Skeleton<'a>,
+    skeleton: &Skeleton<'_>,
 ) -> ValidateResult<Module> {
     // This is a technicality, but we need to parse the custom sections to ensure
     // that they are valid. Validity consists only of checking that the name part

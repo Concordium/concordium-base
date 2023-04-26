@@ -149,7 +149,7 @@ pub struct State {
     pub state: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Structure to support logging of events from smart contracts.
 /// This is a list of items emitted by the contract, in the order they were
 /// emitted.
@@ -202,7 +202,7 @@ impl InitResult {
             } => {
                 let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
                 out.push(2);
-                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
+                out.extend_from_slice(&(state.len()).to_be_bytes());
                 out.extend_from_slice(&state.state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.energy.to_be_bytes());

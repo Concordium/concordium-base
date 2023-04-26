@@ -5,20 +5,83 @@ use crate::{
         deserial_string, types::Signature, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt,
         SerdeBase16Serialize, SerdeDeserialize, SerdeSerialize, Serial, Serialize,
     },
-    id::types::VerifyKey,
+    curve_arithmetic::Curve,
+    id::{
+        constants::ArCurve,
+        types::{GlobalContext, VerifyKey},
+    },
+    pedersen_commitment::{Randomness, Value},
     random_oracle::RandomOracle,
 };
+use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
     Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
 };
-use derive_more::{Add, Display, From, FromStr, Into};
+use derive_more::{Add, Display, From, FromStr, Into, Sub};
 use rand::{CryptoRng, Rng};
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
+    hash::Hash,
     str::FromStr,
 };
 use thiserror::Error;
+
+/// An equivalence class of account addresses. Two account addresses are
+/// equivalent if they are aliases of each other.
+///
+/// Account aliases share the first 29 bytes of the address, so the
+/// [`PartialEq`]/[`PartialOrd`] for this type adheres to that.
+#[repr(transparent)] // this is essential for the AsRef implementation
+#[derive(Eq, Debug, Clone, Copy)]
+pub struct AccountAddressEq(pub(crate) AccountAddress);
+
+impl From<AccountAddressEq> for AccountAddress {
+    fn from(aae: AccountAddressEq) -> Self { aae.0 }
+}
+
+impl From<AccountAddress> for AccountAddressEq {
+    fn from(address: AccountAddress) -> Self { Self(address) }
+}
+
+impl PartialEq for AccountAddressEq {
+    fn eq(&self, other: &Self) -> bool {
+        let bytes_1 = &self.0 .0;
+        let bytes_2 = &other.0 .0;
+        bytes_1[0..29] == bytes_2[0..29]
+    }
+}
+
+impl PartialOrd for AccountAddressEq {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+}
+
+impl Ord for AccountAddressEq {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let bytes_1 = &self.0 .0;
+        let bytes_2 = &other.0 .0;
+        bytes_1[0..29].cmp(&bytes_2[0..29])
+    }
+}
+
+impl Hash for AccountAddressEq {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0 .0[0..29].hash(state) }
+}
+
+// NB: We cannot implement `Borrow` since the equality instance for
+// AccountAddressEq is, deliberately, different, from the one for account
+// addresses.
+impl AsRef<AccountAddressEq> for AccountAddress {
+    fn as_ref(&self) -> &AccountAddressEq { unsafe { std::mem::transmute(self) } }
+}
+
+// NB: We cannot implement `Borrow` since the equality instance for
+// AccountAddressEq is, deliberately, different, from the one for account
+// addresses.
+impl AsRef<AccountAddress> for AccountAddressEq {
+    fn as_ref(&self) -> &AccountAddress { &self.0 }
+}
 
 /// Duration of a slot in milliseconds.
 #[repr(transparent)]
@@ -464,10 +527,39 @@ pub struct AccountIndex {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add, Sub,
+)]
 pub struct Energy {
     pub energy: u64,
 }
+
+impl Energy {
+    /// Checked `Energy` subtraction.
+    ///
+    /// Computes `self - rhs` and returns `None` if an underflow occurred.
+    pub fn checked_sub(self, rhs: Energy) -> Option<Energy> {
+        self.energy.checked_sub(rhs.energy).map(From::from)
+    }
+
+    /// "Tick" energy: subtract the provided amount.
+    ///
+    /// Returns an error if the energy goes below `0`.
+    pub fn tick_energy(&mut self, amount: Energy) -> Result<(), InsufficientEnergy> {
+        if let Some(nrg) = self.energy.checked_sub(amount.energy) {
+            self.energy = nrg;
+            Ok(())
+        } else {
+            Err(InsufficientEnergy)
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Error)]
+#[error("Out of energy")]
+/// An error raised by [`tick_energy`](Energy::tick_energy) when subtracting the
+/// required amount of energy would lead to a negative value.
+pub struct InsufficientEnergy;
 
 /// Position of the transaction in a block.
 #[repr(transparent)]
@@ -645,7 +737,9 @@ impl BakerCredentials {
 }
 
 // FIXME: Move to somewhere else in the dependency. This belongs to rust-src.
-#[derive(SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef)]
+#[derive(
+    SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef, derive_more::Into,
+)]
 /// A registration ID of a credential. This ID is generated from the user's PRF
 /// key and a sequential counter. [`CredentialRegistrationID`]'s generated from
 /// the same PRF key, but different counter values cannot easily be linked
@@ -654,11 +748,24 @@ pub struct CredentialRegistrationID(crate::id::constants::ArCurve);
 
 impl CredentialRegistrationID {
     pub fn new(g: crate::id::constants::ArCurve) -> Self { Self(g) }
+
+    /// Construct the cred id from the exponent derived from the PRF key, in
+    /// the context of chain cryptographic parameters `crypto_params`.
+    pub fn from_exponent(
+        crypto_params: &GlobalContext<ArCurve>,
+        cexp: <crate::id::constants::ArCurve as Curve>::Scalar,
+    ) -> Self {
+        let cred_id = crypto_params
+            .on_chain_commitment_key
+            .hide(&Value::<ArCurve>::new(cexp), &Randomness::zero())
+            .0;
+        Self::new(cred_id)
+    }
 }
 
 impl fmt::Display for CredentialRegistrationID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = hex::encode(&crate::common::to_bytes(self));
+        let s = hex::encode(crate::common::to_bytes(self));
         s.fmt(f)
     }
 }

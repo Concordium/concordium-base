@@ -24,7 +24,7 @@ pub fn bench_multiexp(c: &mut Criterion) {
         group.bench_function("Baseline", move |b| {
             b.iter(|| {
                 let mut a = G1::zero_point();
-                for (g, e) in (&gsc).iter().zip((&esc).iter()) {
+                for (g, e) in gsc.iter().zip(esc.iter()) {
                     a = a.plus_point(&g.mul_by_scalar(e))
                 }
             })
