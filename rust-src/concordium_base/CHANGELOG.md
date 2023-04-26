@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+- Add `new_` helpers to `cis2::TokenId` to simplify the common case of token id
+  construction from integral types.
 - Add new sigma protocol `VecComEq` for linking a vector commitment with individual commitments.
 - Add `VecCommitmentKey` for generating vector commitments.
 
