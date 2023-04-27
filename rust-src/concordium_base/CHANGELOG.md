@@ -2,7 +2,7 @@
 
 - Add helpers to extract policy from credentials.
 - Add helpers to `TransactionTime` to construct future timestamps relative to
-  current time.
+  current time, and from a unix timestamp.
 
 ## 1.1.1 (2023-04-13)
 

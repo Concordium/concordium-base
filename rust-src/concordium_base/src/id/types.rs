@@ -543,6 +543,17 @@ impl YearMonth {
             month: now.month() as u8,
         }
     }
+
+    /// Construct a [`YearMonth`](Self) from a unix timestamp in seconds.
+    /// This fails if the conversion would lead to an out of range value,
+    /// meaning a year outside of the range `1000..=9999`.
+    pub fn from_timestamp(unix_seconds: i64) -> Option<YearMonth> {
+        use chrono::{Datelike, TimeZone};
+        let date = chrono::Utc.timestamp_opt(unix_seconds, 0).earliest()?;
+        let year = date.year().try_into().ok()?;
+        let month = date.month().try_into().ok()?;
+        Self::new(year, month)
+    }
 }
 
 impl TryFrom<u64> for YearMonth {
@@ -2520,5 +2531,33 @@ mod tests {
         }
         anyhow::ensure!(base.get_alias(1 << 24).is_none());
         Ok(())
+    }
+
+    #[test]
+    fn test_timestamp_lower_upper() {
+        use chrono::Datelike;
+        for year in 1000..=9999 {
+            for month in 1..=12 {
+                if month == 12 && year == 9999 {
+                    continue;
+                }
+                let ym = YearMonth::new(year, month).unwrap();
+                let lower = ym.lower().unwrap();
+                let upper = ym.upper().unwrap();
+                assert_eq!(lower.year(), year as i32);
+                assert_eq!(lower.month(), month as u32);
+                assert_eq!(
+                    upper.year(),
+                    if month == 12 { year + 1 } else { year } as i32
+                );
+                assert_eq!(
+                    upper.month(),
+                    if month == 12 { 1 } else { (month + 1) as u32 }
+                );
+
+                let lower_from_ts = YearMonth::from_timestamp(lower.timestamp()).unwrap();
+                assert_eq!(ym, lower_from_ts);
+            }
+        }
     }
 }
