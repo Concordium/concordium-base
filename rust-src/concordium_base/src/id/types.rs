@@ -1730,6 +1730,7 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
 impl<C: Curve, AttributeType: Attribute<C::Scalar>>
     AccountCredentialWithoutProofs<C, AttributeType>
 {
+    /// Retrieve the policy of the credential.
     pub fn policy(&self) -> &Policy<C, AttributeType> {
         match self {
             AccountCredentialWithoutProofs::Initial { icdv } => &icdv.policy,
@@ -1737,6 +1738,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>>
         }
     }
 
+    /// Retrieve the issuer of the credential. The [`IpIdentity`] is a reference
+    /// to the identity provider on the chain of which the credential is a part
+    /// of.
     pub fn issuer(&self) -> IpIdentity {
         match self {
             AccountCredentialWithoutProofs::Initial { icdv } => icdv.ip_identity,
