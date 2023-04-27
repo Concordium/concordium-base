@@ -294,9 +294,29 @@ impl TokenId {
         Ok(TokenId(bytes))
     }
 
-    /// Construct a new TokenId.
+    /// Construct a new [`Self`].
     /// Without ensuring the length of the provided bytes are within `u8::MAX`.
     pub fn new_unchecked(bytes: Vec<u8>) -> Self { TokenId(bytes) }
+
+    /// Construct a new [`Self`] from a 128-bit integer. This id will always be
+    /// 16 bytes.
+    pub fn new_u128(id: u128) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from a 64-bit integer. This id will always be 8
+    /// bytes.
+    pub fn new_u64(id: u64) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from a 32-bit integer. This id will always be 4
+    /// bytes.
+    pub fn new_u32(id: u32) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from a 16-bit integer. This id will always be 2
+    /// bytes.
+    pub fn new_u16(id: u16) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from an 8-bit integer. This id will always be 1
+    /// byte.
+    pub fn new_u8(id: u8) -> Self { Self(vec![id]) }
 }
 
 /// Error from parsing a token ID bytes from a hex encoded string.

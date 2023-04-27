@@ -3,6 +3,10 @@
 - Add helpers to extract policy from credentials.
 - Add helpers to `TransactionTime` to construct future timestamps relative to
   current time, and from a unix timestamp.
+- Add `new_` helpers to `cis2::TokenId` to simplify the common case of token id
+  construction from integral types.
+- Add new sigma protocol `VecComEq` for linking a vector commitment with individual commitments.
+- Add `VecCommitmentKey` for generating vector commitments.
 
 ## 1.1.1 (2023-04-13)
 
