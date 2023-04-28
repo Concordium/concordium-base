@@ -433,7 +433,8 @@ pub struct YearMonth {
 }
 
 impl YearMonth {
-    /// Return the time at the beginning of the month.
+    /// Return the time at the beginning of the month. This is typically
+    /// used as the lower bound of a validity of a credential.
     pub fn lower(self) -> Option<chrono::DateTime<chrono::Utc>> {
         let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
         let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
@@ -441,7 +442,8 @@ impl YearMonth {
         Some(chrono::DateTime::from_utc(dt, chrono::Utc))
     }
 
-    /// Return the time at the beginning of the next month.
+    /// Return the time at the beginning of the next month. This is typically
+    /// used as the strict upper bound of a validity of a credential.
     pub fn upper(self) -> Option<chrono::DateTime<chrono::Utc>> {
         let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
         let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
