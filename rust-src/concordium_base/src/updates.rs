@@ -843,12 +843,28 @@ impl Deserial for UpdatePayload {
             10u8 => Ok(UpdatePayload::Root(source.get()?)),
             11u8 => Ok(UpdatePayload::Level1(source.get()?)),
             12u8 => {
-                let _len: u32 = source.get()?;
-                Ok(UpdatePayload::AddAnonymityRevoker(source.get()?))
+                let len: u32 = source.get()?;
+                let mut limited = std::io::Read::take(source, len.into());
+                let ar = limited.get()?;
+                if limited.limit() == 0 {
+                    Ok(UpdatePayload::AddAnonymityRevoker(ar))
+                } else {
+                    anyhow::bail!(
+                        "Incorrectly serialized anonymity revoker. Not all data was consumed."
+                    )
+                }
             }
             13u8 => {
-                let _len: u32 = source.get()?;
-                Ok(UpdatePayload::AddIdentityProvider(source.get()?))
+                let len: u32 = source.get()?;
+                let mut limited = std::io::Read::take(source, len.into());
+                let ip = limited.get()?;
+                if limited.limit() == 0 {
+                    Ok(UpdatePayload::AddIdentityProvider(ip))
+                } else {
+                    anyhow::bail!(
+                        "Incorrectly serialized identity provider. Not all data was consumed."
+                    )
+                }
             }
             14u8 => Ok(UpdatePayload::CooldownParametersCPV1(source.get()?)),
             15u8 => Ok(UpdatePayload::PoolParametersCPV1(source.get()?)),
