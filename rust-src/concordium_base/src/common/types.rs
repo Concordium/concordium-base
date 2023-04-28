@@ -303,7 +303,19 @@ pub struct TransactionTime {
 }
 
 impl TransactionTime {
+    /// Construct a timestamp from seconds since the unix epoch.
     pub fn from_seconds(seconds: u64) -> Self { Self { seconds } }
+
+    /// Construct a timestamp that is the given amount of seconds in the future.
+    pub fn seconds_after(seconds: u32) -> Self {
+        Self::from_seconds(chrono::offset::Utc::now().timestamp() as u64 + u64::from(seconds))
+    }
+
+    /// Construct a timestamp that is the given amount of minutes in the future.
+    pub fn minutes_after(minutes: u32) -> Self { Self::seconds_after(minutes * 60) }
+
+    /// Construct a timestamp that is the given amount of hours in the future.
+    pub fn hours_after(hours: u32) -> Self { Self::minutes_after(hours * 60) }
 }
 
 impl From<u64> for TransactionTime {
