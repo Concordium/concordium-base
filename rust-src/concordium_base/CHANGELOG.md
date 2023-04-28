@@ -7,6 +7,8 @@
   construction from integral types.
 - Add new sigma protocol `VecComEq` for linking a vector commitment with individual commitments.
 - Add `VecCommitmentKey` for generating vector commitments.
+- Fix a serialization bug for UpdatePayload. The serialization did not match
+  that of the node for AddIdentityProvider and AddAnonymityRevoker payloads.
 
 ## 1.1.1 (2023-04-13)
 
