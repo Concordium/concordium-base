@@ -23,10 +23,10 @@ use std::{collections::BTreeSet, convert::TryFrom, marker::PhantomData, str::Fro
 /// commitment. Since the verifier does not know the attribute value before
 /// seing the proof, the value is not present here.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-pub struct RevealAttributeStatement {
+pub struct RevealAttributeStatement<TagType: Serialize> {
     /// The attribute that the verifier wants the user to reveal.
     #[serde(rename = "attributeTag")]
-    pub attribute_tag: AttributeTag,
+    pub attribute_tag: TagType,
 }
 
 /// For the case where the verifier wants the user to prove that an attribute is
@@ -34,13 +34,19 @@ pub struct RevealAttributeStatement {
 /// upper)` in the scalar field.
 #[derive(Debug, Clone, Serialize, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
-    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
+                 SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>, \
+                   TagType: SerdeDeserialize<'de>"
 ))]
-pub struct AttributeInRangeStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct AttributeInRangeStatement<
+    C: Curve,
+    TagType: Serialize,
+    AttributeType: Attribute<C::Scalar>,
+> {
     /// The attribute that the verifier wants the user to prove is in a range.
     #[serde(rename = "attributeTag")]
-    pub attribute_tag: AttributeTag,
+    pub attribute_tag: TagType,
     /// The lower bound on the range.
     #[serde(rename = "lower")]
     pub lower:         AttributeType,
@@ -55,13 +61,19 @@ pub struct AttributeInRangeStatement<C: Curve, AttributeType: Attribute<C::Scala
 /// in a set of attributes.
 #[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
-    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
+                 SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>, \
+                   TagType: SerdeDeserialize<'de>"
 ))]
-pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct AttributeInSetStatement<
+    C: Curve,
+    TagType: Serialize,
+    AttributeType: Attribute<C::Scalar>,
+> {
     /// The attribute that the verifier wants the user prove lies in a set.
     #[serde(rename = "attributeTag")]
-    pub attribute_tag: AttributeTag,
+    pub attribute_tag: TagType,
     /// The set that the attribute should lie in.
     #[serde(rename = "set")]
     pub set:           std::collections::BTreeSet<AttributeType>,
@@ -73,14 +85,20 @@ pub struct AttributeInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>
 /// not in a set of attributes.
 #[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
-    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
+                 SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>, \
+                   TagType: SerdeDeserialize<'de>"
 ))]
-pub struct AttributeNotInSetStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub struct AttributeNotInSetStatement<
+    C: Curve,
+    TagType: Serialize,
+    AttributeType: Attribute<C::Scalar>,
+> {
     /// The attribute that the verifier wants the user to prove does not lie in
     /// a set.
     #[serde(rename = "attributeTag")]
-    pub attribute_tag: AttributeTag,
+    pub attribute_tag: TagType,
     /// The set that the attribute should not lie in.
     #[serde(rename = "set")]
     pub set:           std::collections::BTreeSet<AttributeType>,
@@ -92,38 +110,40 @@ pub struct AttributeNotInSetStatement<C: Curve, AttributeType: Attribute<C::Scal
 /// This type defines the different types of atomic statements.
 #[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> +
-SerdeSerialize",
-    deserialize = "C: Curve, AttributeType:
-Attribute<C::Scalar> + SerdeDeserialize<'de>"
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
+                 SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>, \
+                   TagType: SerdeDeserialize<'de>"
 ))]
 #[serde(tag = "type")]
-pub enum AtomicStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+pub enum AtomicStatement<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> {
     /// The atomic statement stating that an attribute should be revealed.
     RevealAttribute {
         #[serde(flatten)]
-        statement: RevealAttributeStatement,
+        statement: RevealAttributeStatement<TagType>,
     },
     /// The atomic statement stating that an attribute is in a range.
     AttributeInRange {
         #[serde(flatten)]
-        statement: AttributeInRangeStatement<C, AttributeType>,
+        statement: AttributeInRangeStatement<C, TagType, AttributeType>,
     },
     /// The atomic statement stating that an attribute is in a set.
     AttributeInSet {
         #[serde(flatten)]
-        statement: AttributeInSetStatement<C, AttributeType>,
+        statement: AttributeInSetStatement<C, TagType, AttributeType>,
     },
     /// The atomic statement stating that an attribute is not in a set.
     AttributeNotInSet {
         #[serde(flatten)]
-        statement: AttributeNotInSetStatement<C, AttributeType>,
+        statement: AttributeNotInSetStatement<C, TagType, AttributeType>,
     },
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, AttributeType> {
+impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>>
+    AtomicStatement<C, TagType, AttributeType>
+{
     /// Attribute to which this statement applies.
-    pub fn attribute(&self) -> AttributeTag {
+    pub fn attribute(&self) -> TagType {
         match self {
             AtomicStatement::RevealAttribute { statement } => statement.attribute_tag,
             AtomicStatement::AttributeInRange { statement } => statement.attribute_tag,
@@ -133,7 +153,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, Attribute
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for AtomicStatement<C, AttributeType> {
+impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Serial
+    for AtomicStatement<C, TagType, AttributeType>
+{
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
             AtomicStatement::RevealAttribute { statement } => {
@@ -156,7 +178,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for AtomicStatement<C
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for AtomicStatement<C, AttributeType> {
+impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>> Deserial
+    for AtomicStatement<C, TagType, AttributeType>
+{
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         match u8::deserial(source)? {
             0u8 => {
@@ -299,7 +323,7 @@ pub struct StatementWithContext<C: Curve, AttributeType: Attribute<C::Scalar>> {
 #[serde(transparent)]
 pub struct Statement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The list of atomic statements
-    pub statements: Vec<AtomicStatement<C, AttributeType>>,
+    pub statements: Vec<AtomicStatement<C, AttributeTag, AttributeType>>,
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Default for Statement<C, AttributeType> {
@@ -324,7 +348,7 @@ impl Statement<G1, AttributeKind> {
         let upper = AttributeKind(date_years_ago);
         let lower = AttributeKind(String::from("18000101"));
 
-        let statement = AttributeInRangeStatement::<G1, _> {
+        let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
@@ -352,7 +376,7 @@ impl Statement<G1, AttributeKind> {
         let lower = AttributeKind(date_years_ago);
         let upper = AttributeKind(today);
 
-        let statement = AttributeInRangeStatement::<G1, _> {
+        let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
@@ -381,7 +405,7 @@ impl Statement<G1, AttributeKind> {
         let lower = AttributeKind(lower_date);
         let upper = AttributeKind(upper_date);
 
-        let statement = AttributeInRangeStatement::<G1, _> {
+        let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
@@ -399,7 +423,7 @@ impl Statement<G1, AttributeKind> {
     pub fn doc_expiry_no_earlier_than(mut self, lower: AttributeKind) -> Option<Self> {
         let upper = AttributeKind(String::from("99990101"));
 
-        let statement = AttributeInRangeStatement::<G1, _> {
+        let statement = AttributeInRangeStatement::<G1, _, _> {
             attribute_tag: AttributeTag::from_str("idDocExpiresAt").ok()?, // doc expiry
             lower,
             upper,

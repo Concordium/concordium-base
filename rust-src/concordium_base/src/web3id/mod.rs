@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, fmt::Display, str::FromStr};
 // - Add FromStr and Display for Method.
 // - ensure EOF?
 // - Documentation.
+// - Revise the use of AttributeTag
 use crate::{
     base::CredentialRegistrationID,
     common::base16_decode_string,
@@ -14,10 +15,7 @@ use crate::{
         constants::AttributeKind,
         id_proof_types::{AtomicProof, AtomicStatement},
         sigma_protocols::{self, vcom_eq::VecComEq},
-        types::{
-            Attribute, AttributeTag, CredId, CredentialDeploymentCommitments, GlobalContext,
-            IpIdentity,
-        },
+        types::{Attribute, CredentialDeploymentCommitments, GlobalContext, IpIdentity},
     },
     pedersen_commitment::{self, VecCommitmentKey},
     random_oracle::RandomOracle,
@@ -180,7 +178,7 @@ pub struct CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// The statement composed by one or more atomic statements for the same
     /// method. The statements are grouped together since that fits
     /// naturally into how the proof is constructed.
-    pub statement: Vec<AtomicStatement<C, AttributeType>>,
+    pub statement: Vec<AtomicStatement<C, u8, AttributeType>>,
 }
 
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
@@ -237,11 +235,13 @@ pub struct Proof<C: Curve, AttributeType: Attribute<C::Scalar>> {
 
 pub enum CommitmentInputs<'a, C: Curve, AttributeType> {
     Single {
-        values:     &'a BTreeMap<AttributeTag, AttributeType>,
-        randomness: &'a BTreeMap<AttributeTag, pedersen_commitment::Randomness<C>>,
+        // TODO: Should be able to supply AttributeList here directly. Now there is a problem since
+        // u8 != AttributeTag.
+        values:     &'a BTreeMap<u8, AttributeType>,
+        randomness: &'a BTreeMap<u8, pedersen_commitment::Randomness<C>>,
     },
     Vector {
-        values:     &'a BTreeMap<AttributeTag, AttributeType>,
+        values:     &'a BTreeMap<u8, AttributeType>,
         randomness: pedersen_commitment::Randomness<C>,
     },
 }
@@ -348,10 +348,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                 let (&rand_base, base_size, base) = global.vector_commitment_base();
                 // First construct individual commitments.
                 let vec_key = values.last_key_value().ok_or(ProofError::NoAttributes)?;
-                if usize::from(vec_key.0 .0) >= base_size {
+                if usize::from(*vec_key.0) >= base_size {
                     return Err(ProofError::TooManyAttributes);
                 }
-                let gis = base.take(vec_key.0 .0.into()).copied().collect();
+                let gis = base.take((*vec_key.0).into()).copied().collect();
                 let vec_comm_key = VecCommitmentKey {
                     gs: gis,
                     h:  rand_base,
@@ -359,7 +359,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                 let committed_values = {
                     let mut out = Vec::new();
                     for (idx, (tag, value)) in values.iter().enumerate() {
-                        for _ in idx..usize::from(tag.0) {
+                        for _ in idx..usize::from(*tag) {
                             out.push(C::scalar_from_u64(0));
                         }
                         out.push(value.to_field_element());
@@ -381,8 +381,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                             &pedersen_commitment::Value::<C>::new(value.to_field_element()),
                             csprng,
                         );
-                        ris.insert(attr.0, randomness.as_value());
-                        Ok::<_, ProofError>((attr.0, ind_comm))
+                        ris.insert(attr, randomness.as_value());
+                        Ok::<_, ProofError>((attr, ind_comm))
                     })
                     .collect::<Result<BTreeMap<_, _>, _>>()?;
                 let prover = VecComEq {

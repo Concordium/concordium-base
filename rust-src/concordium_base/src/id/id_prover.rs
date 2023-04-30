@@ -36,7 +36,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         &self,
         global: &GlobalContext<C>,
         challenge: &[u8],
-        attribute_values: &impl HasAttributeValues<C::Scalar, AttributeType>,
+        attribute_values: &impl HasAttributeValues<C::Scalar, AttributeTag, AttributeType>,
         attribute_randomness: &impl HasAttributeRandomness<C>,
     ) -> Option<Proof<C, AttributeType>> {
         let mut proofs: Vec<AtomicProof<C, AttributeType>> =
@@ -60,14 +60,16 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, AttributeType> {
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+    AtomicStatement<C, TagType, AttributeType>
+{
     pub(crate) fn prove(
         &self,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
-        attribute_values: &impl HasAttributeValues<C::Scalar, AttributeType>,
-        attribute_randomness: &impl HasAttributeRandomness<C>,
+        attribute_values: &impl HasAttributeValues<C::Scalar, TagType, AttributeType>,
+        attribute_randomness: &impl HasAttributeRandomness<C, TagType>,
     ) -> Option<AtomicProof<C, AttributeType>> {
         match self {
             AtomicStatement::RevealAttribute { statement } => {
@@ -75,7 +77,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, Attribute
                     .get_attribute_value(statement.attribute_tag)?
                     .clone();
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attributeg_commitment_randomness(statement.attribute_tag)
                     .ok()?;
                 let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                 transcript.add_bytes(b"RevealAttributeDlogProof");

@@ -134,8 +134,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, AttributeType> {
-    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<u8>>(
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AtomicStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
         &self,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
@@ -149,7 +154,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, Attribute
                 },
                 AtomicProof::RevealAttribute { attribute, proof },
             ) => {
-                let maybe_com = cmm_attributes.get(&attribute_tag.0);
+                let maybe_com = cmm_attributes.get(attribute_tag);
                 if let Some(com) = maybe_com {
                     // There is a commitment to the relevant attribute. We can then check the
                     // proof.
@@ -176,7 +181,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, Attribute
                 AtomicStatement::AttributeInRange { statement },
                 AtomicProof::AttributeInRange { proof },
             ) => {
-                let maybe_com = cmm_attributes.get(&statement.attribute_tag.0);
+                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
                 if let Some(com) = maybe_com {
                     // There is a commitment to the relevant attribute. We can then check the
                     // proof.
@@ -200,7 +205,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, Attribute
                 AtomicStatement::AttributeInSet { statement },
                 AtomicProof::AttributeInSet { proof },
             ) => {
-                let maybe_com = cmm_attributes.get(&statement.attribute_tag.0);
+                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
                 if let Some(com) = maybe_com {
                     let attribute_vec: Vec<_> =
                         statement.set.iter().map(|x| x.to_field_element()).collect();
@@ -224,7 +229,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, Attribute
                 AtomicStatement::AttributeNotInSet { statement },
                 AtomicProof::AttributeNotInSet { proof },
             ) => {
-                let maybe_com = cmm_attributes.get(&statement.attribute_tag.0);
+                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
                 if let Some(com) = maybe_com {
                     let attribute_vec: Vec<_> =
                         statement.set.iter().map(|x| x.to_field_element()).collect();
