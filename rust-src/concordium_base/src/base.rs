@@ -2,8 +2,9 @@
 
 use crate::{
     common::{
-        deserial_string, types::Signature, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt,
-        SerdeBase16Serialize, SerdeDeserialize, SerdeSerialize, Serial, Serialize,
+        base16_decode_string, deserial_string, types::Signature, Buffer, Deserial, Get,
+        ParseResult, Put, ReadBytesExt, SerdeBase16Serialize, SerdeDeserialize, SerdeSerialize,
+        Serial, Serialize,
     },
     curve_arithmetic::Curve,
     id::{
@@ -736,7 +737,6 @@ impl BakerCredentials {
     }
 }
 
-// FIXME: Move to somewhere else in the dependency. This belongs to rust-src.
 #[derive(
     SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef, derive_more::Into,
 )]
@@ -745,6 +745,12 @@ impl BakerCredentials {
 /// the same PRF key, but different counter values cannot easily be linked
 /// together.
 pub struct CredentialRegistrationID(crate::id::constants::ArCurve);
+
+impl FromStr for CredentialRegistrationID {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { base16_decode_string(s) }
+}
 
 impl CredentialRegistrationID {
     pub fn new(g: crate::id::constants::ArCurve) -> Self { Self(g) }

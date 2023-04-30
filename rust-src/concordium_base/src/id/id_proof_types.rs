@@ -121,6 +121,18 @@ pub enum AtomicStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     },
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AtomicStatement<C, AttributeType> {
+    /// Attribute to which this statement applies.
+    pub fn attribute(&self) -> AttributeTag {
+        match self {
+            AtomicStatement::RevealAttribute { statement } => statement.attribute_tag,
+            AtomicStatement::AttributeInRange { statement } => statement.attribute_tag,
+            AtomicStatement::AttributeInSet { statement } => statement.attribute_tag,
+            AtomicStatement::AttributeNotInSet { statement } => statement.attribute_tag,
+        }
+    }
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for AtomicStatement<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
