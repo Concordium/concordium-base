@@ -5,6 +5,7 @@
 - Remove the `Copy` requirement for deserialization of BTreeMap and BTreeSet.
   This allows using non-copyable (and non-clonable) types as map keys or set
   values.
+- Add the method `serial_for_smart_contracts` to `OwnedPolicy`, which serializes the policy for easy consumption by smart contracts.
 
 ## concordium-contracts-common 5.3.1 (2023-04-12)
 

@@ -1765,6 +1765,29 @@ repeat_macro!(
 /// since the values are easier to construct.
 pub type OwnedPolicy = Policy<Vec<(AttributeTag, AttributeValue)>>;
 
+impl OwnedPolicy {
+    /// Serialize the policy for easy consumption by a smart contract.
+    ///
+    /// This entails the following serialization scheme:
+    /// - `1`:             u8            specifying a single policy.
+    /// - `len`:           u16           length of the inner payload
+    /// - `inner payload`: `len` bytes   the serialized `OwnedPolicy`
+    pub fn serial_for_smart_contract<W: crate::traits::Write>(
+        &self,
+        out: &mut W,
+    ) -> Result<(), W::Err> {
+        // Serialize to an inner vector.
+        let inner = to_bytes(self);
+        // Specify that there is only one policy.
+        out.write_u8(1)?;
+        // Write length of the inner.
+        (inner.len() as u16).serial(out)?;
+        // Write the inner buffer.
+        out.write_all(&inner)?;
+        Ok(())
+    }
+}
+
 /// Index of the identity provider on the chain.
 /// An identity provider with the given index will not be replaced,
 /// so this is a stable identifier.
