@@ -19,12 +19,6 @@ const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 3] = ["size_length", "ensure_ord
 /// A list of valid concordium attributes
 const VALID_CONCORDIUM_ATTRIBUTES: [&str; 1] = ["state_parameter"];
 
-#[cfg(feature = "sdk")]
-fn get_root() -> proc_macro2::TokenStream {
-    quote!(concordium_rust_sdk::types::smart_contracts::concordium_contracts_common)
-}
-
-#[cfg(not(feature = "sdk"))]
 fn get_root() -> proc_macro2::TokenStream { quote!(concordium_std) }
 
 /// A helper to report meaningful compilation errors
