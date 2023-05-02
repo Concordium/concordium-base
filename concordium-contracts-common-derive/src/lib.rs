@@ -292,7 +292,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 matches_tokens.extend(quote! {
                     #idx_lit => {
                         #field_tokens
-                        Ok(#data_name::#variant_ident#pattern)
+                        Ok(#data_name::#variant_ident #pattern)
                     },
                 })
             }
@@ -463,7 +463,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 let variant_ident = &variant.ident;
 
                 matches_tokens.extend(quote! {
-                    #data_name::#variant_ident#pattern => {
+                    #data_name::#variant_ident #pattern => {
                         #root::Serial::serial(&#idx_lit, #out_ident)?;
                         #field_tokens
                     },
