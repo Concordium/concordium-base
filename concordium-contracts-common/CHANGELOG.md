@@ -8,6 +8,9 @@
 - Add the method `serial_for_smart_contracts` to `OwnedPolicy`, which serializes the policy for easy consumption by smart contracts.
 - Set minimum Rust version to 1.60.
 - Set Rust edition to 2021.
+- Remove the `sdk` feature.
+  - Migrate by adding `use concordium_rust_sdk::types::smart_contracts::concordium_contracts_common as concordium_std;`
+    in the files where you derive `Serial` or `Deserial` with the help from this crate.
 
 ## concordium-contracts-common 5.3.1 (2023-04-12)
 

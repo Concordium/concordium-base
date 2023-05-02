@@ -46,7 +46,6 @@ jobs:
           - "std"
           - "derive-serde"
           - "fuzz"
-          - "sdk"
           - "concordium-quickcheck"
         target:
           - wasm32-unknown-unknown
@@ -75,9 +74,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        features:
-          - ""
-          - "sdk"
         target:
           - wasm32-unknown-unknown
           - x86_64-unknown-linux-gnu
@@ -98,7 +94,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
+          args: --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
 
   test:
     name: x86_64 tests on concordium-contracts-common
