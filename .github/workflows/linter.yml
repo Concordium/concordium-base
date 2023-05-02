@@ -10,6 +10,10 @@ on:
 
 name: Clippy & fmt
 
+env:
+  RUST_VERSION: "1.60"
+  RUST_FMT: "nightly-2023-04-01"
+
 jobs:
   rustfmt:
     name: Format
@@ -22,7 +26,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2021-06-09
+          toolchain: ${{ env.RUST_FMT }}
           override: true
           components: rustfmt
 
@@ -55,7 +59,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.56
+          toolchain: ${{ env.RUST_VERSION }}
           target: ${{ matrix.target }}
           override: true
           components: clippy
@@ -85,7 +89,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.56
+          toolchain: ${{ env.RUST_VERSION }}
           target: ${{ matrix.target }}
           override: true
           components: clippy
@@ -107,7 +111,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.56
+          toolchain: ${{ env.RUST_VERSION }}
           override: true
 
       - name: Run cargo test
