@@ -57,7 +57,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 [dependencies.concordium-contracts-common]
 version = "5.3.1"
 path = "../../concordium-contracts-common/concordium-contracts-common"
-features = ["derive-serde", "sdk"]
+features = ["derive-serde"]
 
 # Local dependencies
 [dependencies.concordium_base_derive]
