@@ -77,7 +77,7 @@ impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Sc
                     .get_attribute_value(statement.attribute_tag)?
                     .clone();
                 let randomness = attribute_randomness
-                    .get_attributeg_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(statement.attribute_tag)
                     .ok()?;
                 let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                 transcript.add_bytes(b"RevealAttributeDlogProof");
