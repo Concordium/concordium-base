@@ -1765,12 +1765,13 @@ repeat_macro!(
 pub type OwnedPolicy = Policy<Vec<(AttributeTag, AttributeValue)>>;
 
 impl OwnedPolicy {
-    /// Serialize the policy for easy consumption by a smart contract.
+    /// Serialize the policy for consumption by smart contract execution engine.
     ///
     /// This entails the following serialization scheme:
     /// - `1`:             u8            specifying a single policy.
     /// - `len`:           u16           length of the inner payload
     /// - `inner payload`: `len` bytes   the serialized `OwnedPolicy`
+    #[doc(hidden)]
     pub fn serial_for_smart_contract<W: crate::traits::Write>(
         &self,
         out: &mut W,
