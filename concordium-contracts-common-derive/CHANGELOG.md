@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased changes
+
+## concordium-contracts-common-derive 2.0.0 (2023-05-08)
+
 - Set minimum Rust version to 1.60.
 - Set Rust edition to 2021.
 - Remove the `sdk` feature.

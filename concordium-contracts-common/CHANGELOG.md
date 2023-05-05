@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 6.0.0 (2023-05-08)
+
 - Remove the `Copy` requirement for deserialization of BTreeMap and BTreeSet.
   This allows using non-copyable (and non-clonable) types as map keys or set
   values.
