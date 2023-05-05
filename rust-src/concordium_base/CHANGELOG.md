@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 1.2.0 (2023-05-08)
+
 - Add helpers to extract policy from credentials.
 - Add helpers to `TransactionTime` to construct future timestamps relative to
   current time, and from a unix timestamp.
