@@ -1,8 +1,9 @@
 [package]
 name = "concordium-contracts-common"
-version = "5.3.1"
+version = "6.0.0"
 authors = ["Concordium <developers@concordium.com>"]
-edition = "2018"
+edition = "2021"
+rust-version = "1.60"
 license = "MPL-2.0"
 description = "Common functionality used by smart contracts and the host environment on the Concordium blockchain."
 homepage = "https://github.com/Concordium/concordium-contracts-common"
@@ -64,7 +65,7 @@ version = "1.0"
 
 [dependencies.concordium-contracts-common-derive]
 path = "../concordium-contracts-common-derive"
-version = "1"
+version = "2"
 
 [dependencies.hex]
 optional = true
@@ -76,7 +77,6 @@ default = ["std"]
 std = ["fnv/std"]
 concordium-quickcheck = ["getrandom", "quickcheck"]
 derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror", "hex"]
-sdk = ["concordium-contracts-common-derive/sdk"]
 fuzz = ["derive-serde", "arbitrary"]
 
 [lib]

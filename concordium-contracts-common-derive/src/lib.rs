@@ -19,12 +19,6 @@ const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 3] = ["size_length", "ensure_ord
 /// A list of valid concordium attributes
 const VALID_CONCORDIUM_ATTRIBUTES: [&str; 1] = ["state_parameter"];
 
-#[cfg(feature = "sdk")]
-fn get_root() -> proc_macro2::TokenStream {
-    quote!(concordium_rust_sdk::types::smart_contracts::concordium_contracts_common)
-}
-
-#[cfg(not(feature = "sdk"))]
 fn get_root() -> proc_macro2::TokenStream { quote!(concordium_std) }
 
 /// A helper to report meaningful compilation errors
@@ -292,7 +286,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 matches_tokens.extend(quote! {
                     #idx_lit => {
                         #field_tokens
-                        Ok(#data_name::#variant_ident#pattern)
+                        Ok(#data_name::#variant_ident #pattern)
                     },
                 })
             }
@@ -463,7 +457,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 let variant_ident = &variant.ident;
 
                 matches_tokens.extend(quote! {
-                    #data_name::#variant_ident#pattern => {
+                    #data_name::#variant_ident #pattern => {
                         #root::Serial::serial(&#idx_lit, #out_ident)?;
                         #field_tokens
                     },
