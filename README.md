@@ -18,7 +18,6 @@ The functionality in this library is re-exported via the [concordium-std](https:
 - `std` (enabled by default): Enables functionality that depends on the standard library.
 - `derive-serde`: Enable serialization and deserialization via `serde`. Enables `std` as well.
 - `fuzz`: Enable fuzzing via `arbitrary`. Enables `derive-serde` as well.
-- `sdk`: Enable functionality only meant for `concordium-rust-sdk`. Enabling will change procedural macros to assume the context of the `concordium-rust-sdk` and enable functionality only meant for off-chain development.
 
 ## MSRV
 
