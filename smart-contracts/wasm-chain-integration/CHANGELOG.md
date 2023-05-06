@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+## concordium-smart-contract-engine 1.2.0 (2023-05-08)
+
+- Bump concordium-contracts-common to version 6.
+
 ## concordium-smart-contract-engine 1.1.0 (2023-04-12)
 
 - Add `saturating_sub` method to `InterpreterEnergy`.
