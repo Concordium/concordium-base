@@ -421,7 +421,7 @@ mod tests {
         let uk = AttributeKind(String::from("UK"));
         let set = BTreeSet::from([dk, no, se, de.clone(), uk.clone()]);
         let set2 = BTreeSet::from([de, uk]);
-        let set_statement = AttributeInSetStatement::<G1, AttributeKind> {
+        let set_statement = AttributeInSetStatement::<G1, _, AttributeKind> {
             attribute_tag: AttributeTag::from(4u8),
             _phantom:      PhantomData::default(),
             set:           set.clone(),

@@ -739,6 +739,7 @@ impl BakerCredentials {
 
 #[derive(
     SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef, derive_more::Into,
+    PartialEq, Eq,
 )]
 /// A registration ID of a credential. This ID is generated from the user's PRF
 /// key and a sequential counter. [`CredentialRegistrationID`]'s generated from

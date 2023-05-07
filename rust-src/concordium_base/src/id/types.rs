@@ -297,7 +297,7 @@ impl ArIdentity {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Into)]
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(try_from = "AttributeStringTag", into = "AttributeStringTag")]
@@ -632,7 +632,6 @@ impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeTag, 
     for AttributeList<F, AttributeType>
 {
     fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType> {
-        for x in self.alist.iter() {}
         self.alist.get(&attribute_tag)
     }
 }
@@ -2453,31 +2452,37 @@ pub struct MissingAttributeRandomnessError {
     tag: u8,
 }
 
-impl<C: Curve> HasAttributeRandomness<C> for BTreeMap<AttributeTag, PedersenRandomness<C>> {
+impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
+    for BTreeMap<TagType, PedersenRandomness<C>>
+{
     type ErrorType = MissingAttributeRandomnessError;
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: AttributeTag,
+        attribute_tag: TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
         self.get(&attribute_tag)
             .cloned()
             .ok_or(MissingAttributeRandomnessError {
-                tag: attribute_tag.0,
+                tag: attribute_tag.into(),
             })
     }
 }
 
-impl<C: Curve> HasAttributeRandomness<C, u8> for BTreeMap<u8, Value<C>> {
+impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
+    for BTreeMap<TagType, Value<C>>
+{
     type ErrorType = MissingAttributeRandomnessError;
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: u8,
+        attribute_tag: TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
         self.get(&attribute_tag)
             .map(PedersenRandomness::from_value)
-            .ok_or(MissingAttributeRandomnessError { tag: attribute_tag })
+            .ok_or(MissingAttributeRandomnessError {
+                tag: attribute_tag.into(),
+            })
     }
 }
 

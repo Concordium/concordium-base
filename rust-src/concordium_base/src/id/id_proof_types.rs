@@ -139,7 +139,7 @@ pub enum AtomicStatement<C: Curve, TagType: Serialize, AttributeType: Attribute<
     },
 }
 
-impl<C: Curve, TagType: Serialize, AttributeType: Attribute<C::Scalar>>
+impl<C: Curve, TagType: Serialize + Copy, AttributeType: Attribute<C::Scalar>>
     AtomicStatement<C, TagType, AttributeType>
 {
     /// Attribute to which this statement applies.

@@ -23,8 +23,8 @@ pub struct VecComEq<C: Curve> {
     /// The commitments C_i for i in I
     #[map_size_length = 2]
     pub comms: BTreeMap<IndexType, Commitment<C>>,
-    /// The points g_i references in the module description, in the given order.
-    /// It is assumed that this is non-empty.
+    /// The points `g_i` references in the module description, in the given
+    /// order. It is assumed that this is non-empty.
     /// TODO: It would be better if this gis was also an indexed map.
     #[size_length = 2]
     pub gis:   Vec<C>,

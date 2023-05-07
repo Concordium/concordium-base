@@ -60,7 +60,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     }
 }
 
-impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
+impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribute<C::Scalar>>
     AtomicStatement<C, TagType, AttributeType>
 {
     pub(crate) fn prove(
