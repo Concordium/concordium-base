@@ -276,7 +276,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 let json = serde_json::json!({
                     "@context": CONTEXT,
                     "id": format!("did:ccd:{network}:cred:{cred_id}"),
-                    "type": ["VerifiableCredential"],
+                    "type": ["VerifiableCredential", "ConcordiumVerifiableCredential"],
                     "issuer": format!("did:ccd:{network}:idp:{issuer}"),
                     "issuanceDate": issuance_date,
                     "credentialSubject": {
@@ -306,7 +306,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 let json = serde_json::json!({
                     "@context": CONTEXT,
                     "id": format!("urn:uuid:{credential}"),
-                    "type": ["VerifiableCredential"],
+                    "type": ["VerifiableCredential", "ConcordiumVerifiableCredential"],
                     "issuer": format!("did:ccd:{network}:sci:{}:{}#issuer", contract.index, contract.subindex),
                     "issuanceDate": issuance_date,
                     "credentialSubject": {
@@ -347,10 +347,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
         use anyhow::Context;
         let issuer: String = serde_json::from_value(get_field(&mut value, "issuer")?)?;
         let ty: Vec<String> = serde_json::from_value(get_field(&mut value, "type")?)?;
-        anyhow::ensure!(
-            ty.iter().any(|v| v == "VerifiableCredential"),
-            "type must contain 'VerifiableCredential'"
-        );
+        anyhow::ensure!(ty.starts_with(&[
+            "VerifiableCredential".into(),
+            "ConcordiumVerifiableCredential".into()
+        ]),);
         let id: String = serde_json::from_value(get_field(&mut value, "id")?)?;
         let issuance_date = serde_json::from_value::<chrono::DateTime<chrono::Utc>>(
             value
@@ -367,7 +367,39 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
             .1;
         match issuer.ty {
             IdentifierType::Idp { idp_identity } => {
-                todo!()
+                let id = get_field(&mut credential_subject, "id")?;
+                let Some(Ok(id)) = id.as_str().map(parse_did) else {
+                    anyhow::bail!("Credential ID invalid.")
+                };
+                let IdentifierType::Credential { cred_id } = id.1.ty else {
+                    anyhow::bail!("Credential identifier must be a public key.")
+                };
+                anyhow::ensure!(issuer.network == id.1.network);
+                let statement: Vec<AtomicStatement<_, _, _>> =
+                    serde_json::from_value(get_field(&mut credential_subject, "statement")?)?;
+
+                let mut proof = get_field(&mut credential_subject, "proof")?;
+
+                anyhow::ensure!(
+                    get_field(&mut proof, "type")?.as_str() == Some("ConcordiumZKProofV3")
+                );
+                let created = serde_json::from_value::<chrono::DateTime<chrono::Utc>>(get_field(
+                    &mut proof, "created",
+                )?)?;
+
+                let proof_value: Vec<_> =
+                    serde_json::from_value(get_field(&mut proof, "proofValue")?)?;
+
+                anyhow::ensure!(proof_value.len() == statement.len());
+                let proofs = statement.into_iter().zip(proof_value.into_iter()).collect();
+                Ok(Self::Identity {
+                    created,
+                    network: issuer.network,
+                    cred_id,
+                    issuer: idp_identity,
+                    issuance_date,
+                    proofs,
+                })
             }
             IdentifierType::Instance { address } => {
                 let Some(credential_str) = id.strip_prefix("urn:uuid:") else {
@@ -1266,8 +1298,7 @@ mod tests {
             verify(&params, public.into_iter(), &proof),
             "Proof verification failed."
         );
-        println!("{}", serde_json::to_string_pretty(&proof).unwrap());
-
+        
         Ok(())
     }
 }
