@@ -19,7 +19,7 @@ use crossterm::{
 use dialoguer::{Confirm, Input, MultiSelect, Select};
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
+use key_derivation::{words_to_seed, ConcordiumHdWallet, CredentialContext, Net};
 use rand::*;
 use serde_json::{json, to_value};
 use std::{collections::btree_map::BTreeMap, convert::TryFrom, path::PathBuf};
@@ -800,9 +800,9 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
     };
     let credential_context = CredentialContext {
         wallet,
-        identity_provider_index,
+        identity_provider_index: identity_provider_index.into(),
         identity_index,
-        credential_index: u32::from(x),
+        credential_index: x,
     };
 
     let cdi = create_credential(
