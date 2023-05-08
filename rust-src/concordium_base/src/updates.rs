@@ -15,6 +15,7 @@ use crate::{
     transactions::PayloadSize,
 };
 use derive_more::*;
+use num::rational::Ratio;
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -154,6 +155,22 @@ pub struct GASRewards {
     /// `FeeUpdate`: fraction paid for including an update transaction in a
     /// block.
     pub chain_update:       AmountFraction,
+}
+
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+/// The reward fractions related to the gas account and inclusion of special
+/// transactions.
+pub struct GASRewardsV1 {
+    /// `BakerPrevTransFrac`: fraction of the previous gas account paid to the
+    /// baker.
+    pub baker:            AmountFraction,
+    /// `FeeAccountCreation`: fraction paid for including each account creation
+    /// transaction in a block.
+    pub account_creation: AmountFraction,
+    /// `FeeUpdate`: fraction paid for including an update transaction in a
+    /// block.
+    pub chain_update:     AmountFraction,
 }
 
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
@@ -443,6 +460,10 @@ impl AuthorizationsFamily for ChainParameterVersion1 {
     type Output = AuthorizationsV1;
 }
 
+impl AuthorizationsFamily for ChainParameterVersion2 {
+    type Output = AuthorizationsV1;
+}
+
 /// A mapping of chain parameter versions to authorization versions.
 pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
@@ -463,6 +484,18 @@ pub struct CooldownParameters {
     /// Number of seconds that a delegator must cooldown
     /// when reducing their delegated stake.
     pub delegator_cooldown:  DurationSeconds,
+}
+
+/// Parameters controlling consensus timeouts for the consensus protocol version
+/// 2.
+#[derive(Debug, common::Serial, Copy, Clone)]
+pub struct TimeoutParameters {
+    /// The base value for triggering a timeout.
+    pub base:     concordium_contracts_common::Duration,
+    /// Factor for increasing the timeout. Must be greater than 1.
+    pub increase: Ratio<u64>,
+    /// Factor for decreasing the timeout. Must be between 0 and 1.
+    pub decrease: Ratio<u64>,
 }
 
 /// Length of a reward period in epochs.
@@ -520,6 +553,22 @@ pub struct PoolParameters {
     /// The maximum leverage that a baker can have as a ratio of total stake
     /// to equity capital.
     pub leverage_bound:                  LeverageFactor,
+}
+
+#[derive(Debug, common::Serial, Clone)]
+/// Finalization committee parameters. These parameters control which bakers are
+/// in the finalization committee.
+pub struct FinalizationCommitteeParameters {
+    /// Minimum number of bakers to include in the finalization committee before
+    /// the '_fcpFinalizerRelativeStakeThreshold' takes effect.
+    pub min_finalizers: u32,
+    /// Maximum number of bakers to include in the finalization committee.
+    pub max_finalizers: u32,
+    /// Determining the staking threshold required for being eligible the
+    /// finalization committee. The required amount is given by `total stake
+    /// in pools * finalizer_relative_stake_threshold` Provided as part per
+    /// hundred thousands. Accepted values are between a value of 0 and 1.
+    pub finalizers_relative_stake_threshold: PartsPerHundredThousands,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]

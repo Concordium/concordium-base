@@ -1,13 +1,14 @@
 pub use super::impls::*;
 use anyhow::{bail, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use concordium_contracts_common::ExchangeRate;
+use concordium_contracts_common::{Duration, ExchangeRate};
 use core::cmp;
 use sha2::Digest;
 use std::{
     collections::btree_map::BTreeMap,
     convert::{TryFrom, TryInto},
     marker::PhantomData,
+    ops::Deref,
 };
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
@@ -435,6 +436,15 @@ impl Serial for std::num::NonZeroI128 {
     }
 }
 
+impl Serial for num::rational::Ratio<u64> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_u64::<BigEndian>(*self.numer())
+            .expect("Writing to a buffer should not fail.");
+        out.write_u64::<BigEndian>(*self.denom().deref())
+            .expect("Writing to a buffer should not fail.");
+    }
+}
+
 /// Serialize a vector by encoding its length as a u64 in big endian and then
 /// the list of elements in sequence.
 impl<T: Serial> Serial for Vec<T> {
@@ -731,6 +741,10 @@ impl Deserial for ExchangeRate {
         let denominator = source.get()?;
         Self::new(numerator, denominator).ok_or_else(|| anyhow::anyhow!("Invalid exchange rate."))
     }
+}
+
+impl Serial for Duration {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { self.millis().serial(target); }
 }
 
 use std::{
