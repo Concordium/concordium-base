@@ -270,7 +270,7 @@ pub struct HigherLevelAccessStructure<Kind> {
     pub keys:      Vec<UpdatePublicKey>,
     pub threshold: UpdateKeysThreshold,
     #[serde(skip)] // use default when deserializing
-    pub _phantom:  PhantomData<Kind>,
+    pub _phantom: PhantomData<Kind>,
 }
 
 impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
