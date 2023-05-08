@@ -372,7 +372,7 @@ pub enum ConfigureBakerKeysMarker {}
 /// markers: `AddBakerKeysMarker` and `UpdateBakerKeysMarker`.
 pub struct BakerKeysPayload<V> {
     #[serde(skip)] // use default when deserializing
-    phantom:                    PhantomData<V>,
+    phantom: PhantomData<V>,
     /// New public key for participating in the election lottery.
     pub election_verify_key:    BakerElectionVerifyKey,
     /// New public key for verifying this baker's signatures.
