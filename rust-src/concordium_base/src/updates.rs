@@ -161,7 +161,7 @@ pub struct GASRewards {
 #[serde(rename_all = "camelCase")]
 /// The reward fractions related to the gas account and inclusion of special
 /// transactions.
-pub struct GASRewardsV1 {
+pub struct GASRewardsCPV2 {
     /// `BakerPrevTransFrac`: fraction of the previous gas account paid to the
     /// baker.
     pub baker:            AmountFraction,

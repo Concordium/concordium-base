@@ -12,7 +12,7 @@ use crate::{
     },
     pedersen_commitment::{Randomness, Value},
     random_oracle::RandomOracle,
-    updates::{GASRewards, GASRewardsV1},
+    updates::{GASRewards, GASRewardsCPV2},
 };
 use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
@@ -1166,7 +1166,7 @@ impl GASRewardsFamily for ChainParameterVersion1 {
 }
 
 impl GASRewardsFamily for ChainParameterVersion2 {
-    type Output = GASRewardsV1;
+    type Output = GASRewardsCPV2;
 }
 
 pub type GASRewardsFor<CPV> = <CPV as GASRewardsFamily>::Output;
