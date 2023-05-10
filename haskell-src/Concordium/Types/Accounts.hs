@@ -76,6 +76,7 @@ module Concordium.Types.Accounts (
     AccountInfo (..),
     AccountStakingInfo (..),
     toAccountStakingInfo,
+    toAccountStakingInfoP4,
 
     -- * Account structure version
     AccountStructureVersion (..),
@@ -575,6 +576,16 @@ toAccountStakingInfo _ (AccountStakeDelegate AccountDelegationV1{..}) =
   where
     pcTime :: AVSupportsDelegation av => PendingChangeEffective av -> UTCTime
     pcTime (PendingChangeEffectiveV1 t) = timestampToUTCTime t
+
+-- |Convert an 'AccountStake' to an 'AccountStakingInfo' in protocol versions from 'P4' onwards.
+toAccountStakingInfoP4 ::
+    forall av.
+    (IsAccountVersion av, AVSupportsDelegation av) =>
+    AccountStake av ->
+    AccountStakingInfo
+toAccountStakingInfoP4 =
+    toAccountStakingInfo
+        (error "Epoch conversion is not used for account staking info in this protocol version")
 
 pendingChangeToJSON :: KeyValue kv => StakePendingChange' UTCTime -> [kv]
 pendingChangeToJSON NoChange = []
