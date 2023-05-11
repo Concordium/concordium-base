@@ -1,5 +1,5 @@
 pub use super::impls::*;
-use anyhow::{bail, Context};
+use anyhow::{bail, ensure, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use concordium_contracts_common::{Duration, ExchangeRate};
 use core::cmp;
@@ -8,7 +8,6 @@ use std::{
     collections::btree_map::BTreeMap,
     convert::{TryFrom, TryInto},
     marker::PhantomData,
-    ops::Deref,
 };
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
@@ -164,6 +163,15 @@ impl Deserial for std::num::NonZeroI128 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let value = source.get()?;
         Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for num::rational::Ratio<u64> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let numerator = source.get()?;
+        let denominator = source.get()?;
+        ensure!(denominator != 0, "Denominator of zero is not valid.");
+        Ok(Self::new_raw(numerator, denominator))
     }
 }
 
@@ -438,10 +446,8 @@ impl Serial for std::num::NonZeroI128 {
 
 impl Serial for num::rational::Ratio<u64> {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        out.write_u64::<BigEndian>(*self.numer())
-            .expect("Writing to a buffer should not fail.");
-        out.write_u64::<BigEndian>(*self.denom().deref())
-            .expect("Writing to a buffer should not fail.");
+        self.numer().serial(out);
+        self.denom().serial(out);
     }
 }
 
@@ -745,6 +751,13 @@ impl Deserial for ExchangeRate {
 
 impl Serial for Duration {
     fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { self.millis().serial(target); }
+}
+
+impl Deserial for Duration {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let milliseconds = source.get()?;
+        Ok(Self::from_millis(milliseconds))
+    }
 }
 
 use std::{

@@ -1,6 +1,6 @@
 ## Unreleased changes
 
-- Implement Serial for `num::rational::Ratio<u64>` and `Duration`.
+- Implement `Serial` and `Deserial` for `num::rational::Ratio<u64>` and `Duration`.
 - Introduce types for protocol version 6: `ChainParameterVersion2`, `GASRewardsCPV1`, `TimeoutParameters` and `FinalizationCommitteeParameters`.
 
 ## 1.2.0 (2023-05-08)

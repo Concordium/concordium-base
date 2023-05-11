@@ -14,6 +14,7 @@ use crate::{
     hashes,
     transactions::PayloadSize,
 };
+use anyhow::ensure;
 use derive_more::*;
 use num::rational::Ratio;
 
@@ -498,6 +499,32 @@ pub struct TimeoutParameters {
     pub decrease: Ratio<u64>,
 }
 
+impl Deserial for TimeoutParameters {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let base = source.get()?;
+        let increase: Ratio<u64> = source.get()?;
+        ensure!(
+            increase.numer() > increase.denom(),
+            "Timeout increase must be greater than 1."
+        );
+        let decrease: Ratio<u64> = source.get()?;
+        ensure!(
+            decrease.numer() > &0,
+            "Timeout decrease must be greater than 0."
+        );
+        ensure!(
+            decrease.denom() < decrease.numer(),
+            "Timeout decrease must be less than 1."
+        );
+
+        Ok(Self {
+            base,
+            increase,
+            decrease,
+        })
+    }
+}
+
 /// Length of a reward period in epochs.
 /// Must always be a strictly positive integer.
 #[derive(
@@ -555,7 +582,7 @@ pub struct PoolParameters {
     pub leverage_bound:                  LeverageFactor,
 }
 
-#[derive(Debug, common::Serial, Clone)]
+#[derive(Debug, common::Serialize, Clone, Copy)]
 /// Finalization committee parameters. These parameters control which bakers are
 /// in the finalization committee.
 pub struct FinalizationCommitteeParameters {
@@ -566,7 +593,7 @@ pub struct FinalizationCommitteeParameters {
     pub max_finalizers: u32,
     /// Determining the staking threshold required for being eligible the
     /// finalization committee. The required amount is given by `total stake
-    /// in pools * finalizer_relative_stake_threshold` Provided as part per
+    /// in pools * finalizer_relative_stake_threshold` provided as parts per
     /// hundred thousands. Accepted values are between a value of 0 and 1.
     pub finalizers_relative_stake_threshold: PartsPerHundredThousands,
 }
