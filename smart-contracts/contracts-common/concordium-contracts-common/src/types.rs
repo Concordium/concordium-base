@@ -675,6 +675,25 @@ impl fmt::Display for Duration {
     }
 }
 
+#[cfg(feature = "derive-serde")]
+/// The JSON serialization serialized the string obtained by using the Display
+/// implementation of the Duration.
+impl SerdeSerialize for Duration {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(feature = "derive-serde")]
+/// Deserialize using `from_str` implementation of [`Duration`].
+impl<'de> SerdeDeserialize<'de> for Duration {
+    fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(des)?;
+        let t = str::FromStr::from_str(&s).map_err(serde::de::Error::custom)?;
+        Ok(t)
+    }
+}
+
 /// Address of an account, as raw bytes.
 #[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug, Hash)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
