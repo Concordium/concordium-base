@@ -5,6 +5,7 @@ use super::{
     SerdeSerialize, Serial,
 };
 use crate::common::Serialize;
+use anyhow::{ensure, Context};
 use byteorder::{BigEndian, ReadBytesExt};
 pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use concordium_contracts_common::{
@@ -184,6 +185,91 @@ impl Deserial for OwnedParameter {
         source.read_exact(&mut bytes)?;
         Ok(OwnedParameter::new_unchecked(bytes))
     }
+}
+
+/// A ratio between two `u64` integers.
+/// It should be safe to assume the denominator is not zero and that numerator
+/// and denominator are coprime.
+#[derive(Debug, SerdeDeserialize, SerdeSerialize, Serial, Clone, Copy)]
+#[serde(try_from = "rust_decimal::Decimal", into = "rust_decimal::Decimal")]
+pub struct Ratio {
+    pub numerator:   u64,
+    pub denominator: u64,
+}
+
+/// Error during creating a new ratio.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum NewRatioError {
+    #[error("Denominator cannot be 0.")]
+    ZeroDenominator,
+    #[error("Numerator and denominator must be coprime.")]
+    NotCoprime,
+}
+
+impl Ratio {
+    /// Construct a new ratio. Returns an error if denominator is non-zero or
+    /// numerator and denominator are coprime.
+    pub fn new(numerator: u64, denominator: u64) -> Result<Self, NewRatioError> {
+        if denominator == 0 {
+            return Err(NewRatioError::ZeroDenominator);
+        }
+        if num::Integer::gcd(&numerator, &denominator) != 1 {
+            return Err(NewRatioError::NotCoprime);
+        }
+        Ok(Self {
+            numerator,
+            denominator,
+        })
+    }
+
+    /// Construct a new ratio without checking anything.
+    ///
+    /// It is up to the caller to ensure the denominator is not zero and that
+    /// numerator and denominator are coprime.
+    pub fn new_unchecked(numerator: u64, denominator: u64) -> Self {
+        Self {
+            numerator,
+            denominator,
+        }
+    }
+}
+
+impl Deserial for Ratio {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let numerator: u64 = source.get()?;
+        let denominator: u64 = source.get()?;
+        Ok(Self::new(numerator, denominator)?)
+    }
+}
+
+impl From<Ratio> for rust_decimal::Decimal {
+    fn from(ratio: Ratio) -> rust_decimal::Decimal {
+        rust_decimal::Decimal::from(ratio.numerator)
+            / rust_decimal::Decimal::from(ratio.denominator)
+    }
+}
+
+impl TryFrom<rust_decimal::Decimal> for Ratio {
+    type Error = anyhow::Error;
+
+    fn try_from(mut value: rust_decimal::Decimal) -> Result<Self, Self::Error> {
+        value.normalize_assign();
+        let mantissa = value.mantissa();
+        let scale = value.scale();
+        let denominator = 10u64.checked_pow(scale).context("Unrepresentable number")?;
+        let numerator: u64 = mantissa.try_into().context("Unrepresentable number")?;
+        let g = num::Integer::gcd(&numerator, &denominator);
+        let numerator = numerator / g;
+        let denominator = denominator / g;
+        Ok(Self {
+            numerator,
+            denominator,
+        })
+    }
+}
+
+impl From<Ratio> for num::rational::Ratio<u64> {
+    fn from(ratio: Ratio) -> Self { Self::new_raw(ratio.numerator, ratio.denominator) }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
