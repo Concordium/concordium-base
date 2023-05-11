@@ -103,21 +103,6 @@ runSilentLogger = flip runLoggerT (\_ _ _ -> pure ())
 
 ------------------------------------------------------------------------------
 
--- * The @Loggable@ class
-
--- | Class for structured log messages.
-class Loggable event where
-    -- | The source of the log event.
-    loggableSource :: event -> LogSource
-
-    -- | The level at which to log the event.
-    loggableLevel :: event -> LogLevel
-
-    -- | The message to log.
-    loggableMessage :: event -> String
-
-------------------------------------------------------------------------------
-
 -- * The @MonadLogger@ class
 
 -- | Class for a monad that supports logging.
@@ -137,10 +122,6 @@ instance Monad m => MonadLogger (LoggerT m) where
 -- The Identity Monad will not do any logging. This instance is only used in the StaticEnvironment implementation
 instance MonadLogger Identity where
     logEvent _ _ _ = pure ()
-
--- | Log a 'Loggable' event.
-logLoggable :: (MonadLogger m, Loggable event) => event -> m ()
-logLoggable e = logEvent (loggableSource e) (loggableLevel e) (loggableMessage e)
 
 ------------------------------------------------------------------------------
 -- Instances for other mtl transformers.
