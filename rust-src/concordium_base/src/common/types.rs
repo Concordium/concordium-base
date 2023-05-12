@@ -5,7 +5,6 @@ use super::{
     SerdeSerialize, Serial,
 };
 use crate::common::Serialize;
-use anyhow::{ensure, Context};
 use byteorder::{BigEndian, ReadBytesExt};
 pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use concordium_contracts_common::{
@@ -188,13 +187,18 @@ impl Deserial for OwnedParameter {
 }
 
 /// A ratio between two `u64` integers.
+///
 /// It should be safe to assume the denominator is not zero and that numerator
 /// and denominator are coprime.
+///
+/// This type is introduced (over using `num::rational::Ratio<u64>`) to add the
+/// above requirements and to provide implementations for `serde::Serialize` and
+/// `serde::Deserialize`.
 #[derive(Debug, SerdeDeserialize, SerdeSerialize, Serial, Clone, Copy)]
 #[serde(try_from = "rust_decimal::Decimal", into = "rust_decimal::Decimal")]
 pub struct Ratio {
-    pub numerator:   u64,
-    pub denominator: u64,
+    numerator:   u64,
+    denominator: u64,
 }
 
 /// Error during creating a new ratio.
@@ -208,7 +212,7 @@ pub enum NewRatioError {
 
 impl Ratio {
     /// Construct a new ratio. Returns an error if denominator is non-zero or
-    /// numerator and denominator are coprime.
+    /// numerator and denominator are not coprime.
     pub fn new(numerator: u64, denominator: u64) -> Result<Self, NewRatioError> {
         if denominator == 0 {
             return Err(NewRatioError::ZeroDenominator);
@@ -232,6 +236,12 @@ impl Ratio {
             denominator,
         }
     }
+
+    /// Get the numerator of the ratio.
+    pub fn numerator(&self) -> u64 { self.numerator }
+
+    /// Get the denominator of the ratio.
+    pub fn denominator(&self) -> u64 { self.denominator }
 }
 
 impl Deserial for Ratio {
@@ -249,15 +259,20 @@ impl From<Ratio> for rust_decimal::Decimal {
     }
 }
 
+/// Error from converting a decimal to a [`Ratio`].
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("Unrepresentable number.")]
+pub struct RatioFromDecimalError;
+
 impl TryFrom<rust_decimal::Decimal> for Ratio {
-    type Error = anyhow::Error;
+    type Error = RatioFromDecimalError;
 
     fn try_from(mut value: rust_decimal::Decimal) -> Result<Self, Self::Error> {
         value.normalize_assign();
         let mantissa = value.mantissa();
         let scale = value.scale();
-        let denominator = 10u64.checked_pow(scale).context("Unrepresentable number")?;
-        let numerator: u64 = mantissa.try_into().context("Unrepresentable number")?;
+        let denominator = 10u64.checked_pow(scale).ok_or(RatioFromDecimalError)?;
+        let numerator: u64 = mantissa.try_into().map_err(|_| RatioFromDecimalError)?;
         let g = num::Integer::gcd(&numerator, &denominator);
         let numerator = numerator / g;
         let denominator = denominator / g;

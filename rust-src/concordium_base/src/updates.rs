@@ -14,7 +14,6 @@ use crate::{
     hashes,
     transactions::PayloadSize,
 };
-use anyhow::ensure;
 use derive_more::*;
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
@@ -508,17 +507,18 @@ pub enum NewTimeoutParametersError {
 }
 
 impl TimeoutParameters {
-    /// Construct [`Self`] ensuring the provided values are valid.
+    /// Construct [`Self`] ensuring the ratio `increase` is greater than 1 and
+    /// the `decrease` is between 0 and 1.
     pub fn new(
         base: concordium_contracts_common::Duration,
         increase: Ratio,
         decrease: Ratio,
     ) -> Result<Self, NewTimeoutParametersError> {
-        if increase.numerator <= increase.denominator {
+        if increase.numerator() <= increase.denominator() {
             return Err(NewTimeoutParametersError::InvalidIncrease);
         }
 
-        if decrease.numerator == 0 || decrease.denominator <= decrease.numerator {
+        if decrease.numerator() == 0 || decrease.denominator() <= decrease.numerator() {
             return Err(NewTimeoutParametersError::InvalidDecrease);
         }
 
@@ -529,7 +529,8 @@ impl TimeoutParameters {
         })
     }
 
-    /// Construct [`Self`] without checking the provided values.
+    /// Construct [`Self`] without ensuring the ratio `increase` is greater than
+    /// 1 and the `decrease` is between 0 and 1.
     pub fn new_unchecked(
         base: concordium_contracts_common::Duration,
         increase: Ratio,
