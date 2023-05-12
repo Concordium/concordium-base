@@ -160,7 +160,8 @@ pub struct GASRewards {
 #[serde(rename_all = "camelCase")]
 /// The reward fractions related to the gas account and inclusion of special
 /// transactions.
-pub struct GASRewardsCPV2 {
+/// Introduce for protocol version 6.
+pub struct GASRewardsV1 {
     /// `BakerPrevTransFrac`: fraction of the previous gas account paid to the
     /// baker.
     pub baker:            AmountFraction,
@@ -665,7 +666,7 @@ pub enum UpdatePayload {
     #[serde(rename = "mintDistributionCPV1")]
     MintDistributionCPV1(MintDistribution<ChainParameterVersion1>),
     #[serde(rename = "gASRewardsCPV2")]
-    GASRewardsCPV2(GASRewardsCPV2),
+    GASRewardsCPV2(GASRewardsV1),
     #[serde(rename = "TimeoutParametersCPV2")]
     TimeoutParametersCPV2(TimeoutParameters),
     #[serde(rename = "minBlockTimeCPV2")]
