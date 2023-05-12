@@ -261,7 +261,7 @@ impl ConcordiumHdWallet {
         &self,
         verifiable_credential_index: u32,
     ) -> Result<[u8; 32], DeriveError> {
-        let path = self.make_verifiable_credential_path(&[0, verifiable_credential_index, 2])?;
+        let path = self.make_verifiable_credential_path(&[0, verifiable_credential_index, 1])?;
         Ok(derive_from_parsed_path(&path, &self.seed)?.private_key)
     }
 }
@@ -614,7 +614,7 @@ mod tests {
 
         assert_eq!(
             hex::encode(encryption_key),
-            "6f16f0d1b1fede12656e953cb8483d322b98dff1c81d989b9fb5596e0515ad8a"
+            "30be8892d89599867fca90dcd841ac62cc07ea0ea521e8708eb8ae143c093210"
         );
     }
 
@@ -664,7 +664,7 @@ mod tests {
 
         assert_eq!(
             hex::encode(encryption_key),
-            "0b999118bad636ad02720d891bbd7b67adb622a5f3b30d0cd2d528fdfb4f7131"
+            "f263c915c8000b5164e3fc1d84ce80a451eef2b32f9749a4d0d390844bb1673e"
         );
     }
 }
