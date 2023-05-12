@@ -14,9 +14,7 @@ use crate::{
     hashes,
     transactions::PayloadSize,
 };
-use anyhow::ensure;
 use derive_more::*;
-use num::rational::Ratio;
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -162,7 +160,8 @@ pub struct GASRewards {
 #[serde(rename_all = "camelCase")]
 /// The reward fractions related to the gas account and inclusion of special
 /// transactions.
-pub struct GASRewardsCPV2 {
+/// Introduce for protocol version 6.
+pub struct GASRewardsV1 {
     /// `BakerPrevTransFrac`: fraction of the previous gas account paid to the
     /// baker.
     pub baker:            AmountFraction,
@@ -489,39 +488,69 @@ pub struct CooldownParameters {
 
 /// Parameters controlling consensus timeouts for the consensus protocol version
 /// 2.
-#[derive(Debug, common::Serial, Copy, Clone)]
+#[derive(Debug, common::Serial, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
 pub struct TimeoutParameters {
     /// The base value for triggering a timeout.
     pub base:     concordium_contracts_common::Duration,
     /// Factor for increasing the timeout. Must be greater than 1.
-    pub increase: Ratio<u64>,
+    pub increase: Ratio,
     /// Factor for decreasing the timeout. Must be between 0 and 1.
-    pub decrease: Ratio<u64>,
+    pub decrease: Ratio,
 }
 
-impl Deserial for TimeoutParameters {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let base = source.get()?;
-        let increase: Ratio<u64> = source.get()?;
-        ensure!(
-            increase.numer() > increase.denom(),
-            "Timeout increase must be greater than 1."
-        );
-        let decrease: Ratio<u64> = source.get()?;
-        ensure!(
-            decrease.numer() > &0,
-            "Timeout decrease must be greater than 0."
-        );
-        ensure!(
-            decrease.denom() < decrease.numer(),
-            "Timeout decrease must be less than 1."
-        );
+/// Error type for when constructing [`TimeoutParameters`].
+#[derive(Debug, thiserror::Error)]
+pub enum NewTimeoutParametersError {
+    #[error("Timeout increase must be greater than 1.")]
+    InvalidIncrease,
+    #[error("Timeout decrease must be between 0 and 1.")]
+    InvalidDecrease,
+}
+
+impl TimeoutParameters {
+    /// Construct [`Self`] ensuring the ratio `increase` is greater than 1 and
+    /// the `decrease` is between 0 and 1.
+    pub fn new(
+        base: concordium_contracts_common::Duration,
+        increase: Ratio,
+        decrease: Ratio,
+    ) -> Result<Self, NewTimeoutParametersError> {
+        if increase.numerator() <= increase.denominator() {
+            return Err(NewTimeoutParametersError::InvalidIncrease);
+        }
+
+        if decrease.numerator() == 0 || decrease.denominator() <= decrease.numerator() {
+            return Err(NewTimeoutParametersError::InvalidDecrease);
+        }
 
         Ok(Self {
             base,
             increase,
             decrease,
         })
+    }
+
+    /// Construct [`Self`] without ensuring the ratio `increase` is greater than
+    /// 1 and the `decrease` is between 0 and 1.
+    pub fn new_unchecked(
+        base: concordium_contracts_common::Duration,
+        increase: Ratio,
+        decrease: Ratio,
+    ) -> Self {
+        Self {
+            base,
+            increase,
+            decrease,
+        }
+    }
+}
+
+impl Deserial for TimeoutParameters {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let base = source.get()?;
+        let increase: Ratio = source.get()?;
+        let decrease: Ratio = source.get()?;
+        Ok(Self::new(base, increase, decrease)?)
     }
 }
 
@@ -582,7 +611,7 @@ pub struct PoolParameters {
     pub leverage_bound:                  LeverageFactor,
 }
 
-#[derive(Debug, common::Serialize, Clone, Copy)]
+#[derive(Debug, common::Serialize, Clone, Copy, SerdeSerialize, SerdeDeserialize)]
 /// Finalization committee parameters. These parameters control which bakers are
 /// in the finalization committee.
 pub struct FinalizationCommitteeParameters {
@@ -636,6 +665,16 @@ pub enum UpdatePayload {
     TimeParametersCPV1(TimeParameters),
     #[serde(rename = "mintDistributionCPV1")]
     MintDistributionCPV1(MintDistribution<ChainParameterVersion1>),
+    #[serde(rename = "gASRewardsCPV2")]
+    GASRewardsCPV2(GASRewardsV1),
+    #[serde(rename = "TimeoutParametersCPV2")]
+    TimeoutParametersCPV2(TimeoutParameters),
+    #[serde(rename = "minBlockTimeCPV2")]
+    MinBlockTimeCPV2(concordium_contracts_common::Duration),
+    #[serde(rename = "blockEnergyLimitCPV2")]
+    BlockEnergyLimitCPV2(Energy),
+    #[serde(rename = "finalizationCommitteeParametersCPV2")]
+    FinalizationCommitteeParametersCPV2(FinalizationCommitteeParameters),
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
@@ -658,7 +697,8 @@ pub enum UpdateType {
     UpdateMintDistribution,
     /// Update the distribution of transaction fees
     UpdateTransactionFeeDistribution,
-    /// Update the GAS rewards
+    /// Update the GAS rewards. Only applies to and including protocol version
+    /// 5.
     UpdateGASRewards,
     /// Add new anonymity revoker
     UpdateAddAnonymityRevoker,
@@ -680,6 +720,21 @@ pub enum UpdateType {
     /// Update of the time parameters. Only applies to protocol version
     /// [`P4`](ProtocolVersion::P4) and up.
     UpdateTimeParameters,
+    /// Update of the GAS rewards for chain parameter version 2. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateGASRewardsCPV2,
+    /// Update of the timeout parameters. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateTimeoutParameters,
+    /// Update of the min block time. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateMinBlockTime,
+    /// Update of the block energy limit. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateBlockEnergyLimit,
+    /// Update of the finalization committee parameters. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateFinalizationCommitteeParameters,
 }
 
 impl UpdatePayload {
@@ -703,6 +758,13 @@ impl UpdatePayload {
             UpdatePayload::PoolParametersCPV1(_) => UpdatePoolParameters,
             UpdatePayload::TimeParametersCPV1(_) => UpdateTimeParameters,
             UpdatePayload::MintDistributionCPV1(_) => UpdateMintDistribution,
+            UpdatePayload::GASRewardsCPV2(_) => UpdateGASRewardsCPV2,
+            UpdatePayload::TimeoutParametersCPV2(_) => UpdateTimeoutParameters,
+            UpdatePayload::MinBlockTimeCPV2(_) => UpdateMinBlockTime,
+            UpdatePayload::BlockEnergyLimitCPV2(_) => UpdateBlockEnergyLimit,
+            UpdatePayload::FinalizationCommitteeParametersCPV2(_) => {
+                UpdateFinalizationCommitteeParameters
+            }
         }
     }
 }
@@ -900,6 +962,26 @@ impl Serial for UpdatePayload {
                 17u8.serial(out);
                 md.serial(out)
             }
+            UpdatePayload::TimeoutParametersCPV2(update) => {
+                18u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::MinBlockTimeCPV2(update) => {
+                19u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::BlockEnergyLimitCPV2(update) => {
+                20u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::GASRewardsCPV2(update) => {
+                21u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::FinalizationCommitteeParametersCPV2(update) => {
+                22u8.serial(out);
+                update.serial(out)
+            }
         }
     }
 }
@@ -946,6 +1028,13 @@ impl Deserial for UpdatePayload {
             15u8 => Ok(UpdatePayload::PoolParametersCPV1(source.get()?)),
             16u8 => Ok(UpdatePayload::TimeParametersCPV1(source.get()?)),
             17u8 => Ok(UpdatePayload::MintDistributionCPV1(source.get()?)),
+            18u8 => Ok(UpdatePayload::TimeoutParametersCPV2(source.get()?)),
+            19u8 => Ok(UpdatePayload::MinBlockTimeCPV2(source.get()?)),
+            20u8 => Ok(UpdatePayload::BlockEnergyLimitCPV2(source.get()?)),
+            21u8 => Ok(UpdatePayload::GASRewardsCPV2(source.get()?)),
+            22u8 => Ok(UpdatePayload::FinalizationCommitteeParametersCPV2(
+                source.get()?,
+            )),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
     }
