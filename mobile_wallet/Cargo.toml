@@ -1,6 +1,6 @@
 [package]
 name = "mobile_wallet"
-version = "0.24.0"
+version = "0.25.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE-APACHE"
@@ -26,7 +26,7 @@ base64 = "0.13"
 
 [dependencies.key_derivation]
 path = "../rust-src/key_derivation"
-version = "1.1.0"
+version = "1.2.0"
 
 [dependencies.ed25519_hd_key_derivation]
 path = "../rust-src/ed25519_hd_key_derivation"

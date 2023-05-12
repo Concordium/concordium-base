@@ -744,7 +744,7 @@ dependencies = [
 
 [[package]]
 name = "key_derivation"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "concordium_base",
  "ed25519-dalek",
@@ -815,7 +815,7 @@ dependencies = [
 
 [[package]]
 name = "mobile_wallet"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "anyhow",
  "base64",
