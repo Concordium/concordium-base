@@ -587,7 +587,7 @@ pub struct PoolParameters {
 /// in the finalization committee.
 pub struct FinalizationCommitteeParameters {
     /// Minimum number of bakers to include in the finalization committee before
-    /// the '_fcpFinalizerRelativeStakeThreshold' takes effect.
+    /// the 'finalizer_relative_stake_threshold' takes effect.
     pub min_finalizers: u32,
     /// Maximum number of bakers to include in the finalization committee.
     pub max_finalizers: u32,
