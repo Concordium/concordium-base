@@ -2,8 +2,6 @@ use std::{collections::BTreeMap, fmt::Display, marker::PhantomData, str::FromStr
 
 // TODO:
 // - have proper parser for hex values
-// - base encoding prefix?
-// - Add FromStr and Display for Method.
 // - ensure EOF?
 // - Documentation.
 // - Revise the use of AttributeTag
@@ -122,7 +120,38 @@ impl FromStr for Method {
 }
 
 impl Display for Method {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { todo!() }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.ty {
+            IdentifierType::Account { address } => {
+                write!(f, "did:ccd:{}:acc:{address}", self.network)
+            }
+            IdentifierType::Credential { cred_id } => {
+                write!(f, "did:ccd:{}:cred:{cred_id}", self.network)
+            }
+            IdentifierType::ContractData {
+                address,
+                entrypoint,
+                parameter,
+            } => {
+                write!(
+                    f,
+                    "did:ccd:{}:sci:{}:{}/{entrypoint}/{parameter}",
+                    self.network, address.index, address.subindex
+                )
+            }
+            IdentifierType::PublicKey { key } => {
+                write!(
+                    f,
+                    "did:ccd:{}:pkc:{}",
+                    self.network,
+                    hex::encode(key.as_bytes())
+                )
+            }
+            IdentifierType::Idp { idp_identity } => {
+                write!(f, "did:ccd:{}:idp:{idp_identity}", self.network)
+            }
+        }
+    }
 }
 
 impl From<Method> for String {
