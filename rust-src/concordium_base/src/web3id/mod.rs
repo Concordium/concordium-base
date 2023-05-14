@@ -31,7 +31,7 @@ use nom::{
     multi::many_m_n,
     IResult,
 };
-use serde::{de::DeserializeOwned, Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
+use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 #[derive(
@@ -202,11 +202,11 @@ pub fn parse_did<'a>(input: &'a str) -> IResult<&'a str, Method> {
 }
 
 /// A statement about a single credential.
-#[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
-    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
-))]
+#[derive(Debug, Clone)]
+// #[serde(
+//     try_from = "serde_json::Value",
+//     bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> +
+// DeserializeOwned") )]
 pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Identity {
         network:   Network,
@@ -220,6 +220,40 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
         credential: Uuid,
         statement:  Vec<AtomicStatement<C, u8, AttributeType>>,
     },
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
+    for CredentialStatement<C, AttributeType>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer, {
+        match self {
+            CredentialStatement::Identity {
+                network,
+                cred_id,
+                statement,
+            } => {
+                let json = serde_json::json!({
+                    "id": format!("did:ccd:{network}:cred:{cred_id}"),
+                    "statement": statement,
+                });
+                json.serialize(serializer)
+            }
+            CredentialStatement::Web3Id {
+                network,
+                contract,
+                credential,
+                statement,
+            } => {
+                let json = serde_json::json!({
+                    "id": format!("did:ccd:{network}:sci:{}:{}/viewCredentialData?parameter={credential}", contract.index, contract.subindex),
+                    "statement": statement,
+                });
+                json.serialize(serializer)
+            }
+        }
+    }
 }
 
 #[derive(Clone, serde::Deserialize)]
@@ -495,7 +529,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 created.timestamp_millis().serial(out);
                 network.serial(out);
                 contract.serial(out);
-                out.write_all(credential.as_bytes());
+                out.write_all(credential.as_bytes()).unwrap();
                 owner.serial(out);
                 issuance_date.timestamp_millis().serial(out);
                 additional_commitments.serial(out);
@@ -514,7 +548,8 @@ pub enum Web3IdChallengeMarker {}
 
 pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize)]
+#[serde(bound(serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize"))]
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     challenge:  Challenge,
     statements: Vec<CredentialStatement<C, AttributeType>>,
@@ -1298,7 +1333,7 @@ mod tests {
             verify(&params, public.into_iter(), &proof),
             "Proof verification failed."
         );
-        
+
         Ok(())
     }
 }
