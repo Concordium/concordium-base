@@ -20,7 +20,9 @@ use crate::{
     pedersen_commitment::{self, VecCommitmentKey},
     random_oracle::RandomOracle,
 };
-use concordium_contracts_common::{hashes::HashBytes, AccountAddress, ContractAddress};
+use concordium_contracts_common::{
+    hashes::HashBytes, AccountAddress, ContractAddress, OwnedEntrypointName, OwnedParameter,
+};
 use ed25519_dalek::Verifier;
 use nom::{
     branch::alt,
@@ -79,7 +81,11 @@ pub enum IdentifierType {
     /// Reference to a specific credential via its ID.
     Credential { cred_id: CredentialRegistrationID },
     /// Reference to a specific smart contract instance.
-    Instance { address: ContractAddress },
+    ContractData {
+        address:    ContractAddress,
+        entrypoint: OwnedEntrypointName,
+        parameter:  OwnedParameter,
+    },
     /// Reference to a specific Ed25519 public key.
     PublicKey { key: ed25519_dalek::PublicKey },
     /// Reference to a specific identity provider.
@@ -176,9 +182,36 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
             })(input)?;
             (r.0, r.1.unwrap_or(0))
         };
-
-        Ok((input, IdentifierType::Instance {
+        let (input, _) = tag("/")(input)?;
+        let (input, entrypoint_str): (_, &str) = cut(nom::combinator::recognize(
+            nom::multi::many0(nom::character::complete::satisfy(|x| x != '/')),
+        ))(input)?;
+        let Ok(entrypoint) = OwnedEntrypointName::new(entrypoint_str.into()) else {
+            return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
+        };
+        let (input, parameter) = {
+            let (input, r) = nom::combinator::opt(|input| {
+                let (input, _) = tag("/")(input)?;
+                let (input, param_str) = cut(nom::combinator::recognize(
+                    nom::character::complete::hex_digit0,
+                ))(input)?;
+                let Ok(v) = hex::decode(param_str) else {
+                    return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
+                };
+                let Ok(param) = OwnedParameter::try_from(v) else {
+                    return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
+                };
+                Ok((input, param))
+            })(input)?;
+            match r {
+                None => (input, OwnedParameter::empty()),
+                Some(d) => (input, d),
+            }
+        };
+        Ok((input, IdentifierType::ContractData {
             address: ContractAddress::new(index, subindex),
+            entrypoint,
+            parameter,
         }))
     };
     let pkc = |input| {
@@ -201,11 +234,11 @@ pub fn parse_did<'a>(input: &'a str) -> IResult<&'a str, Method> {
 }
 
 /// A statement about a single credential.
-#[derive(Debug, Clone)]
-// #[serde(
-//     try_from = "serde_json::Value",
-//     bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> +
-// DeserializeOwned") )]
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(
+    try_from = "serde_json::Value",
+    bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned")
+)]
 pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Identity {
         network:   Network,
@@ -213,13 +246,58 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
         statement: Vec<AtomicStatement<C, u8, AttributeType>>,
     },
     Web3Id {
-        ty: Vec<String>,
+        ty:         Vec<String>,
         network:    Network,
         /// Reference to a specific smart contract instance.
         contract:   ContractAddress,
         credential: Uuid,
         statement:  Vec<AtomicStatement<C, u8, AttributeType>>,
     },
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<serde_json::Value>
+    for CredentialStatement<C, AttributeType>
+{
+    type Error = anyhow::Error;
+
+    fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
+        let id_value = get_field(&mut value, "id")?;
+        let Some(Ok((_, id))) = id_value.as_str().map(parse_did) else {
+            anyhow::bail!("id field is not a valid DID");
+        };
+        match id.ty {
+            IdentifierType::Credential { cred_id } => {
+                let statement = get_field(&mut value, "statement")?;
+                Ok(Self::Identity {
+                    network: id.network,
+                    cred_id,
+                    statement: serde_json::from_value(statement)?,
+                })
+            }
+            IdentifierType::ContractData {
+                address,
+                entrypoint,
+                parameter,
+            } => {
+                let statement = get_field(&mut value, "statement")?;
+                let ty = get_field(&mut value, "type")?;
+                anyhow::ensure!(entrypoint == "credentialEntry", "Invalid entrypoint.");
+                let Ok(param) = Vec::from(parameter).try_into() else {
+                    anyhow::bail!("Invalid credentialEntry parameter");
+                };
+                Ok(Self::Web3Id {
+                    ty:         serde_json::from_value(ty)?,
+                    network:    id.network,
+                    contract:   address,
+                    credential: Uuid::from_bytes(param),
+                    statement:  serde_json::from_value(statement)?,
+                })
+            }
+            _ => {
+                anyhow::bail!("Only ID credentials and Web3 credentials are supported.")
+            }
+        }
+    }
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Serialize
@@ -437,7 +515,16 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     proofs,
                 })
             }
-            IdentifierType::Instance { address } => {
+            IdentifierType::ContractData {
+                address,
+                entrypoint,
+                parameter,
+            } => {
+                anyhow::ensure!(entrypoint == "issuer", "Invalid issuer DID.");
+                anyhow::ensure!(
+                    parameter.as_ref().is_empty(),
+                    "Issuer must have an empty parameter."
+                );
                 let Some(credential_str) = id.strip_prefix("urn:uuid:") else {
                     anyhow::bail!("credential identifier must be a UUID");
                 };
@@ -535,7 +622,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 len.serial(out);
                 for s in ty {
                     (s.len() as u16).serial(out);
-                    out.write_all(s.as_bytes());
+                    out.write_all(s.as_bytes())
+                        .expect("Writing to buffer succeeds.");
                 }
                 network.serial(out);
                 contract.serial(out);
@@ -1184,7 +1272,10 @@ mod tests {
         let challenge = Challenge::new(rng.gen());
         let statements = vec![
             CredentialStatement::Web3Id {
-                ty: vec!["VerifiableCredential".into(), "ConcordiumVerifiableCredential".into()],
+                ty:         vec![
+                    "VerifiableCredential".into(),
+                    "ConcordiumVerifiableCredential".into(),
+                ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
                 credential: Uuid::new_v4(),
@@ -1213,7 +1304,10 @@ mod tests {
                 ],
             },
             CredentialStatement::Web3Id {
-                ty: vec!["VerifiableCredential".into(), "ConcordiumVerifiableCredential".into()],
+                ty:         vec![
+                    "VerifiableCredential".into(),
+                    "ConcordiumVerifiableCredential".into(),
+                ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1338, 0),
                 credential: Uuid::new_v4(),
