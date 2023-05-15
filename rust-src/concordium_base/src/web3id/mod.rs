@@ -1391,8 +1391,6 @@ mod tests {
             "Cannot deserialize proof correctly."
         );
 
-        println!("{}", data);
-
         let data = serde_json::to_string_pretty(&request)?;
         assert_eq!(
             serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
@@ -1400,7 +1398,6 @@ mod tests {
             "Cannot deserialize request correctly."
         );
 
-        println!("{}", data);
         Ok(())
     }
 }
