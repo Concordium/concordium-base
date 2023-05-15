@@ -40,6 +40,20 @@ pub enum JsonError {
     ParseDurationError(#[from] ParseDurationError),
     #[error("{0}")]
     ParseTimestampError(#[from] ParseTimestampError),
+    #[error("{trace} -> {error}")]
+    TraceError {
+        trace: String,
+        error: Box<JsonError>,
+    },
+}
+
+impl JsonError {
+    fn add_trace(&self, trace: String) -> Self {
+        JsonError::TraceError {
+            trace,
+            error: Box::new(self.clone()),
+        }
+    }
 }
 
 // Serializes a value to the provided output buffer
@@ -218,8 +232,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
                     values.len() == 2,
                     PairError("Only pairs of two are supported".to_string())
                 );
-                write_bytes_from_json_schema_type(left_type, &values[0], out)?;
+                write_bytes_from_json_schema_type(left_type, &values[0], out)
+                    .map_err(|e| e.add_trace("0".to_string()))?;
                 write_bytes_from_json_schema_type(right_type, &values[1], out)
+                    .map_err(|e| e.add_trace("1".to_string()))
             } else {
                 Err(WrongJsonType("JSON Array required for a pair".to_string()))
             }
@@ -228,8 +244,12 @@ fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Array(values) = json {
                 let len = values.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
+
+                let mut i = 0;
                 for value in values {
-                    write_bytes_from_json_schema_type(ty, value, out)?;
+                    write_bytes_from_json_schema_type(ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i)))?;
+                    i += 1;
                 }
                 Ok(())
             } else {
@@ -240,8 +260,12 @@ fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Array(values) = json {
                 let len = values.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
+
+                let mut i = 0;
                 for value in values {
-                    write_bytes_from_json_schema_type(ty, value, out)?;
+                    write_bytes_from_json_schema_type(ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i)))?;
+                    i += 1;
                 }
                 Ok(())
             } else {
@@ -255,8 +279,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 for entry in entries {
                     if let Value::Array(pair) = entry {
                         ensure!(pair.len() == 2, MapError("Expected key-value pair".to_string()));
-                        write_bytes_from_json_schema_type(key_ty, &pair[0], out)?;
-                        write_bytes_from_json_schema_type(val_ty, &pair[1], out)?;
+                        write_bytes_from_json_schema_type(key_ty, &pair[0], out)
+                            .map_err(|e| e.add_trace(format!("'{}' (key)", &pair[0])))?;
+                        write_bytes_from_json_schema_type(val_ty, &pair[1], out)
+                            .map_err(|e| e.add_trace(format!("'{}'", &pair[0])))?;
                     } else {
                         return Err(WrongJsonType(
                             "Expected key value pairs as JSON arrays".to_string(),
@@ -278,8 +304,12 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         values.len()
                     ))
                 );
+
+                let mut i = 0;
                 for value in values {
-                    write_bytes_from_json_schema_type(ty, value, out)?;
+                    write_bytes_from_json_schema_type(ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i)))?;
+                    i += 1;
                 }
                 Ok(())
             } else {
@@ -306,6 +336,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         ));
                     };
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
+                        .map_err(|e| e.add_trace(format!("'{}'", variant_name)))
                 } else {
                     // Non-existing variant
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
@@ -324,6 +355,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 if let Some((&i, (_, variant_fields))) = schema_fields_opt {
                     out.write_u8(i).or(Err(JsonError::FailedWriting))?;
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
+                        .map_err(|e| e.add_trace(format!("'{}'", variant_name)))
                 } else {
                     // Non-existing variant
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
@@ -563,7 +595,8 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 for (field_name, field_ty) in fields {
                     let field_value_opt = map.get(field_name);
                     if let Some(field_value) = field_value_opt {
-                        write_bytes_from_json_schema_type(field_ty, field_value, out)?;
+                        write_bytes_from_json_schema_type(field_ty, field_value, out)
+                            .map_err(|e| e.add_trace(format!("'{}'", field_name)))?;
                     } else {
                         return Err(FieldError(format!("Missing field: {}", field_name)));
                     }
@@ -579,8 +612,9 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                     fields.len() == values.len(),
                     FieldError(format!("Expected {} unnamed fields", fields.len()))
                 );
-                for (field_ty, value) in fields.iter().zip(values.iter()) {
-                    write_bytes_from_json_schema_type(field_ty, value, out)?;
+                for (i, (field_ty, value)) in fields.iter().zip(values.iter()).enumerate() {
+                    write_bytes_from_json_schema_type(field_ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i)))?;
                 }
                 Ok(())
             } else {
@@ -914,7 +948,9 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+    fn from(_: std::string::FromUtf8Error) -> Self {
+        ParseError::default()
+    }
 }
 
 fn item_list_to_json<R: Read>(
