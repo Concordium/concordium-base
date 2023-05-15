@@ -13,6 +13,7 @@ use crate::{
     },
     pedersen_commitment::{Randomness, Value},
     random_oracle::RandomOracle,
+    updates::{GASRewards, GASRewardsV1},
 };
 use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
@@ -494,6 +495,7 @@ impl Deserial for ProtocolVersion {
 
 pub struct ChainParameterVersion0;
 pub struct ChainParameterVersion1;
+pub struct ChainParameterVersion2;
 
 /// Height of a block since chain genesis.
 #[repr(transparent)]
@@ -1140,6 +1142,7 @@ impl Deserial for MintDistributionV1 {
     }
 }
 
+/// Trait used to define mapping from a type to a `MintDistribution` type.
 pub trait MintDistributionFamily {
     type Output;
 }
@@ -1152,7 +1155,34 @@ impl MintDistributionFamily for ChainParameterVersion1 {
     type Output = MintDistributionV1;
 }
 
+impl MintDistributionFamily for ChainParameterVersion2 {
+    type Output = MintDistributionV1;
+}
+
+/// Type family mapping a `ChainParameterVersion` to its corresponding type for
+/// the `MintDistribution`.
 pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
+
+/// Trait used to define mapping from a type to a `GasRewards` type.
+pub trait GASRewardsFamily {
+    type Output;
+}
+
+impl GASRewardsFamily for ChainParameterVersion0 {
+    type Output = GASRewards;
+}
+
+impl GASRewardsFamily for ChainParameterVersion1 {
+    type Output = GASRewards;
+}
+
+impl GASRewardsFamily for ChainParameterVersion2 {
+    type Output = GASRewardsV1;
+}
+
+/// Type family mapping a `ChainParameterVersion` to its corresponding type for
+/// the `GasRewards`.
+pub type GASRewardsFor<CPV> = <CPV as GASRewardsFamily>::Output;
 
 #[derive(Debug, Serialize, Clone, Copy)]
 /// Rate of creation of new CCDs. For example, A value of `0.05` would mean an

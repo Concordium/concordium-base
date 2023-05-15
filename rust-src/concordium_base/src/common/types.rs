@@ -186,6 +186,107 @@ impl Deserial for OwnedParameter {
     }
 }
 
+/// A ratio between two `u64` integers.
+///
+/// It should be safe to assume the denominator is not zero and that numerator
+/// and denominator are coprime.
+///
+/// This type is introduced (over using `num::rational::Ratio<u64>`) to add the
+/// above requirements and to provide implementations for `serde::Serialize` and
+/// `serde::Deserialize`.
+#[derive(Debug, SerdeDeserialize, SerdeSerialize, Serial, Clone, Copy)]
+#[serde(try_from = "rust_decimal::Decimal", into = "rust_decimal::Decimal")]
+pub struct Ratio {
+    numerator:   u64,
+    denominator: u64,
+}
+
+/// Error during creating a new ratio.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum NewRatioError {
+    #[error("Denominator cannot be 0.")]
+    ZeroDenominator,
+    #[error("Numerator and denominator must be coprime.")]
+    NotCoprime,
+}
+
+impl Ratio {
+    /// Construct a new ratio. Returns an error if denominator is non-zero or
+    /// numerator and denominator are not coprime.
+    pub fn new(numerator: u64, denominator: u64) -> Result<Self, NewRatioError> {
+        if denominator == 0 {
+            return Err(NewRatioError::ZeroDenominator);
+        }
+        if num::Integer::gcd(&numerator, &denominator) != 1 {
+            return Err(NewRatioError::NotCoprime);
+        }
+        Ok(Self {
+            numerator,
+            denominator,
+        })
+    }
+
+    /// Construct a new ratio without checking anything.
+    ///
+    /// It is up to the caller to ensure the denominator is not zero and that
+    /// numerator and denominator are coprime.
+    pub fn new_unchecked(numerator: u64, denominator: u64) -> Self {
+        Self {
+            numerator,
+            denominator,
+        }
+    }
+
+    /// Get the numerator of the ratio.
+    pub fn numerator(&self) -> u64 { self.numerator }
+
+    /// Get the denominator of the ratio.
+    pub fn denominator(&self) -> u64 { self.denominator }
+}
+
+impl Deserial for Ratio {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let numerator: u64 = source.get()?;
+        let denominator: u64 = source.get()?;
+        Ok(Self::new(numerator, denominator)?)
+    }
+}
+
+impl From<Ratio> for rust_decimal::Decimal {
+    fn from(ratio: Ratio) -> rust_decimal::Decimal {
+        rust_decimal::Decimal::from(ratio.numerator)
+            / rust_decimal::Decimal::from(ratio.denominator)
+    }
+}
+
+/// Error from converting a decimal to a [`Ratio`].
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("Unrepresentable number.")]
+pub struct RatioFromDecimalError;
+
+impl TryFrom<rust_decimal::Decimal> for Ratio {
+    type Error = RatioFromDecimalError;
+
+    fn try_from(mut value: rust_decimal::Decimal) -> Result<Self, Self::Error> {
+        value.normalize_assign();
+        let mantissa = value.mantissa();
+        let scale = value.scale();
+        let denominator = 10u64.checked_pow(scale).ok_or(RatioFromDecimalError)?;
+        let numerator: u64 = mantissa.try_into().map_err(|_| RatioFromDecimalError)?;
+        let g = num::Integer::gcd(&numerator, &denominator);
+        let numerator = numerator / g;
+        let denominator = denominator / g;
+        Ok(Self {
+            numerator,
+            denominator,
+        })
+    }
+}
+
+impl From<Ratio> for num::rational::Ratio<u64> {
+    fn from(ratio: Ratio) -> Self { Self::new_raw(ratio.numerator, ratio.denominator) }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 /// A single signature. Using the same binary and JSON serialization as the
 /// Haskell counterpart. In particular this means encoding the length as 2
