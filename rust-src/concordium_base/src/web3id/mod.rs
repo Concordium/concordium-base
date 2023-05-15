@@ -1,10 +1,7 @@
 pub mod did;
 
 // TODO:
-// - have proper parser for hex values
-// - ensure EOF?
 // - Documentation.
-// - Revise the use of AttributeTag
 use crate::{
     base::CredentialRegistrationID,
     common::base16_encode_string,
@@ -25,23 +22,34 @@ use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
-/// A statement about a single credential.
+/// A statement about a single credential, either an identity credential or a
+/// Web3 credential.
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 #[serde(
     try_from = "serde_json::Value",
     bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned")
 )]
 pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Statement about a credential derived from an identity issued by an
+    /// identity provider.
     Identity {
         network:   Network,
         cred_id:   CredentialRegistrationID,
         statement: Vec<AtomicStatement<C, u8, AttributeType>>,
     },
+    /// Statement about a credential issued by a Web3 identity provider, a smart
+    /// contract.
     Web3Id {
+        /// The credential type. This is chosen by the provider to provide
+        /// some information about what the credential is about. The list should
+        /// be considered as a "path", refining the meaning, e.g.,
+        /// "VerifiableCredential", "ConcordiumVerifiableCredential".
         ty:         Vec<String>,
         network:    Network,
-        /// Reference to a specific smart contract instance.
+        /// Reference to a specific smart contract instance that issued the
+        /// credential.
         contract:   ContractAddress,
+        /// Credential identifier inside the contract.
         credential: Uuid,
         statement:  Vec<AtomicStatement<C, u8, AttributeType>>,
     },
@@ -131,8 +139,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
 #[derive(Clone, serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
 #[serde(try_from = "serde_json::Value")]
+/// A proof corresponding to one [`CredentialStatement`]. This contains the
+/// statement and the metadata. The only data missing to verify the
+/// cryptographic proof are the public commitments.
 pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Identity {
+        /// Creation timestamp of the proof.
         created:       chrono::DateTime<chrono::Utc>,
         network:       Network,
         /// Reference to the credential to which this statement applies.
@@ -140,6 +152,7 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// Issuer of this credential, the identity provider index on the
         /// relevant network.
         issuer:        IpIdentity,
+        /// Issuance date of the credential that the proof is about.
         issuance_date: chrono::DateTime<chrono::Utc>,
         proofs: Vec<(
             AtomicStatement<C, u8, AttributeType>,
@@ -147,17 +160,37 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         )>,
     },
     Web3Id {
+        /// Creation timestamp of the proof.
         created:                chrono::DateTime<chrono::Utc>,
+        /// Owner of the credential, a public key.
         owner:                  CredentialOwner,
         network:                Network,
         /// Reference to a specific smart contract instance.
         contract:               ContractAddress,
+        /// The ID of the credential inside the contract instance.
         credential:             Uuid,
+        /// The credential type. This is chosen by the provider to provide
+        /// some information about what the credential is about. The list should
+        /// be considered as a "path", refining the meaning, e.g.,
+        /// "VerifiableCredential", "ConcordiumVerifiableCredential".
         ty:                     Vec<String>,
+        /// Issuance date of the credential.
         issuance_date:          chrono::DateTime<chrono::Utc>,
+        /// Additional commitments produced as part of the proof. These are
+        /// commitments for the values in the statement.
         additional_commitments: BTreeMap<u8, pedersen_commitment::Commitment<C>>,
+        /// The maximum index that is used in the vector commitment. This is
+        /// needed since the vector commitment key is part of the
+        /// context when constructing the proof, so it matters exactly
+        /// what the key is, even if the rest (algebraic part) of the proof
+        /// works equally well with the full key.
         max_base_used:          u8,
+        /// The proof that the individual commitments that are part of
+        /// `additional-commitments` above are commitments to the same
+        /// values as those found inside the vector commitment that is part of
+        /// the credential.
         glueing_proof: sigma_protocols::common::SigmaProof<sigma_protocols::vcom_eq::Witness<C>>,
+        /// Individual proofs for statements.
         proofs: Vec<(
             AtomicStatement<C, u8, AttributeType>,
             AtomicProof<C, AttributeType>,
@@ -234,6 +267,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     }
 }
 
+/// Extract the value at the given key. This mutates the `value` replacing the
+/// value at the provided key with `Null`.
 fn get_field(
     value: &mut serde_json::Value,
     field: &'static str,
@@ -453,6 +488,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
 /// Used as a phantom type to indicate a Web3ID challenge.
 pub enum Web3IdChallengeMarker {}
 
+/// Challenge string that serves as a distinguishing context when requesting
+/// proofs.
 pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
@@ -461,6 +498,8 @@ pub type Challenge = HashBytes<Web3IdChallengeMarker>;
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
 ))]
+/// A request for proof. This is the statement and challenge. The secret data
+/// comes separately.
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     challenge:             Challenge,
     credential_statements: Vec<CredentialStatement<C, AttributeType>>,
@@ -468,10 +507,12 @@ pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
 
 pub type CredentialOwner = ed25519_dalek::PublicKey;
 
-// TODO: Make this non-generic maybe?
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
 #[serde(try_from = "serde_json::Value")]
+/// A presentation is the response to a [`Request`]. It contains proofs for
+/// statements, ownership proof for all Web3 credentials, and a context. The
+/// only missing part to verify the proof are the public commitments.
 pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub presentation_context:  Challenge,
     pub verifiable_credential: Vec<CredentialProof<C, AttributeType>>,
@@ -528,6 +569,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
 }
 
 #[derive(Debug, crate::common::SerdeBase16Serialize, crate::common::Serialize)]
+/// A proof that establishes that the owner of the credential itself produced
+/// the proof. Technically this means that there is a signature on the entire
+/// rest of the presentation using the public key that is associated with the
+/// Web3 credential. The identity credentials do not have linking proofs since
+/// the owner of those credentials retains full control of their secret
+/// material.
 struct WeakLinkingProof {
     signature: ed25519_dalek::Signature,
 }
@@ -590,13 +637,9 @@ impl TryFrom<serde_json::Value> for LinkingProof {
     }
 }
 
-pub struct VerifiableCredential<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub context:            Vec<String>,
-    pub id:                 Uuid,
-    pub issuance_date:      chrono::DateTime<chrono::Utc>,
-    pub credential_subject: CredentialProof<C, AttributeType>,
-}
-
+/// An auxiliary trait that provides access to the owner of the Web3 verifiable
+/// credential. The intention is that this is implemented by ed25519 keypairs
+/// or hardware wallets.
 pub trait Web3IdSigner {
     fn id(&self) -> CredentialOwner;
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature;
@@ -610,13 +653,13 @@ impl Web3IdSigner for ed25519_dalek::Keypair {
     }
 }
 
+/// The additional inputs, additional to the [`Request`] that are needed to
+/// produce a [`Presentation`].
 pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
     /// Inputs are for an identity credential issued by an identity provider.
     Identity {
         issuance_date: chrono::DateTime<chrono::Utc>,
         issuer:        IpIdentity,
-        // TODO: Should be able to supply AttributeList here directly. Now there is a problem since
-        // u8 != AttributeTag.
         values:        &'a BTreeMap<u8, AttributeType>,
         randomness:    &'a BTreeMap<u8, pedersen_commitment::Randomness<C>>,
     },
@@ -630,6 +673,7 @@ pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
 }
 
 #[derive(thiserror::Error, Debug)]
+/// An error that can occurr when attempting to produce a proof.
 pub enum ProofError {
     #[error("Too many attributes to produce a proof.")]
     TooManyAttributes,
@@ -645,6 +689,8 @@ pub enum ProofError {
     CommitmentsStatementsMismatch,
 }
 
+/// Verify a single credential. This only checks the cryptographic parts and
+/// ignores the metadata such as issuance date.
 fn verify_single_credential<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
     global: &GlobalContext<C>,
     transcript: &mut RandomOracle,
@@ -844,7 +890,24 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
     }
 }
 
+fn message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    challenge: Challenge,
+    proofs: &[CredentialProof<C, AttributeType>],
+) -> Vec<u8> {
+    use crate::common::Serial;
+    use sha2::Digest;
+    // hash the context and proof.
+    let mut out = sha2::Sha256::new();
+    challenge.serial(&mut out);
+    proofs.serial(&mut out);
+    let mut msg = b"WEB3ID:LINKING".to_vec();
+    msg.extend_from_slice(&out.finalize());
+    msg
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
+    /// Construct a proof for the [`Request`] using the provided cryptographic
+    /// parameters and secrets.
     pub fn prove<'a, Signer: 'a + Web3IdSigner>(
         self,
         params: &GlobalContext<C>,
@@ -870,17 +933,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
         }
         // TODO: Factor this into a helper function to make sure it matches in prover
         // and verifier.
-        let to_sign = {
-            use crate::common::Serial;
-            use sha2::Digest;
-            // hash the context and proof.
-            let mut out = sha2::Sha256::new();
-            self.challenge.serial(&mut out);
-            proofs.serial(&mut out);
-            let mut msg = b"WEB3ID:LINKING".to_vec();
-            msg.extend_from_slice(&out.finalize());
-            msg
-        };
+        let to_sign = message_to_sign(self.challenge, &proofs);
         // Linking proof
         let mut proof_value = Vec::new();
         for signer in signers {
@@ -918,17 +971,7 @@ pub fn verify<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
     transcript.append_message(b"ctx", &params);
 
     // Compute the data that the linking proof signed.
-    let to_sign = {
-        use crate::common::Serial;
-        use sha2::Digest;
-        // hash the context and proof.
-        let mut out = sha2::Sha256::new();
-        proof.presentation_context.serial(&mut out);
-        proof.verifiable_credential.serial(&mut out);
-        let mut msg = b"WEB3ID:LINKING".to_vec();
-        msg.extend_from_slice(&out.finalize());
-        msg
-    };
+    let to_sign = message_to_sign(proof.presentation_context, &proof.verifiable_credential);
 
     let mut linking_proof_iter = proof.linking_proof.proof_value.iter();
 

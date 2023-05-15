@@ -460,6 +460,15 @@ impl<T: Serial> Serial for Vec<T> {
     }
 }
 
+/// Serialize a slice by encoding its length as a u64 in big endian and then
+/// the list of elements in sequence.
+impl<T: Serial> Serial for &[T] {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.len() as u64).serial(out);
+        serial_vector_no_length(self, out)
+    }
+}
+
 /// Serialize a set by encoding its size as a u64 in big endian and then
 /// the list of elements in increasing order.
 impl<V: Serial> Serial for BTreeSet<V> {
