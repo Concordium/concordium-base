@@ -1,5 +1,3 @@
-use std::{collections::BTreeMap, marker::PhantomData, str::FromStr};
-
 pub mod did;
 
 // TODO:
@@ -24,6 +22,7 @@ use concordium_contracts_common::{hashes::HashBytes, ContractAddress};
 use did::*;
 use ed25519_dalek::Verifier;
 use serde::de::DeserializeOwned;
+use std::{collections::BTreeMap, marker::PhantomData};
 use uuid::Uuid;
 
 /// A statement about a single credential.
@@ -577,45 +576,6 @@ pub struct VerifiableCredential<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub id:                 Uuid,
     pub issuance_date:      chrono::DateTime<chrono::Utc>,
     pub credential_subject: CredentialProof<C, AttributeType>,
-}
-
-pub struct WithSchema<Schema, A> {
-    pub data: A,
-    phantom:  PhantomData<Schema>,
-}
-
-#[derive(Copy, Clone, Debug)]
-#[doc(hidden)]
-pub enum UuidSchema {}
-
-#[derive(thiserror::Error, Debug)]
-pub enum WithSchemaFromStringError<A> {
-    #[error("No recognizable schema.")]
-    NoSchema,
-    #[error("Unable to parse: {0}.")]
-    Inner(#[from] A),
-}
-
-impl<Schema, A> WithSchema<Schema, A> {
-    pub fn new(data: A) -> Self {
-        Self {
-            data,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<A: FromStr> TryFrom<String> for WithSchema<UuidSchema, A> {
-    type Error = WithSchemaFromStringError<A::Err>;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if let Some(data) = value.strip_prefix("urn:uuid:") {
-            let a = data.parse()?;
-            Ok(Self::new(a))
-        } else {
-            Err(Self::Error::NoSchema)
-        }
-    }
 }
 
 pub trait Web3IdSigner {
