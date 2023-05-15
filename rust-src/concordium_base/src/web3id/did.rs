@@ -290,6 +290,109 @@ mod tests {
     }
 
     #[test]
+    fn test_contract() -> anyhow::Result<()> {
+        let index = 37;
+        let subindex = 123;
+        let entrypoint = OwnedEntrypointName::new_unchecked("viewStuff".into());
+        let parameter = OwnedParameter::new_unchecked(vec![123, 11, 0, 0, 13]);
+        let target = Method {
+            network: Network::Mainnet,
+            ty:      IdentifierType::ContractData {
+                address:    ContractAddress::new(index, subindex),
+                entrypoint: entrypoint.clone(),
+                parameter:  parameter.clone(),
+            },
+        };
+        assert_eq!(
+            format!("did:ccd:sci:{index}:{subindex}/{entrypoint}/{parameter}").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
+                .parse::<Method>()?,
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:testnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
+                .parse::<Method>()?,
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        assert!(
+            format!("did:ccd:testnet:sci:{index}:{subindex}/{entrypoint}/{parameter}/ff")
+                .parse::<Method>()
+                .is_err()
+        );
+
+        // Section to test that omitting the subindex is OK when it is 0, and omitting
+        // the parameter is OK when it is empty.
+        let index = 37;
+        let subindex = 0;
+        let entrypoint = OwnedEntrypointName::new_unchecked("viewStuff".into());
+        let parameter = OwnedParameter::new_unchecked(vec![]);
+        let target = Method {
+            network: Network::Mainnet,
+            ty:      IdentifierType::ContractData {
+                address:    ContractAddress::new(index, subindex),
+                entrypoint: entrypoint.clone(),
+                parameter:  parameter.clone(),
+            },
+        };
+        assert_eq!(
+            format!("did:ccd:sci:{index}:{subindex}/{entrypoint}/{parameter}").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:sci:{index}/{entrypoint}/{parameter}").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:sci:{index}/{entrypoint}/").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:sci:{index}/{entrypoint}").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
+                .parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:sci:{index}/{entrypoint}/{parameter}").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:sci:{index}/{entrypoint}").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:sci:{index}/{entrypoint}/").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:sci:{index}/{entrypoint}").parse::<Method>()?,
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:testnet:sci:{index}:{subindex}/{entrypoint}/{parameter}")
+                .parse::<Method>()?,
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_id_credential() -> anyhow::Result<()> {
         let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90".parse()?;
         let target = Method {
