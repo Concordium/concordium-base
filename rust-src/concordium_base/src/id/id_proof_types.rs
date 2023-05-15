@@ -32,7 +32,7 @@ pub struct RevealAttributeStatement<TagType: Serialize> {
 /// For the case where the verifier wants the user to prove that an attribute is
 /// in a range. The statement is that the attribute value lies in `[lower,
 /// upper)` in the scalar field.
-#[derive(Debug, Clone, Serialize, PartialEq, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, SerdeSerialize, SerdeDeserialize, Eq)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
                  SerdeSerialize",
@@ -59,7 +59,7 @@ pub struct AttributeInRangeStatement<
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// in a set of attributes.
-#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize, Eq)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
                  SerdeSerialize",
@@ -83,7 +83,7 @@ pub struct AttributeInSetStatement<
 
 /// For the case where the verifier wants the user to prove that an attribute is
 /// not in a set of attributes.
-#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Serialize, Eq)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
                  SerdeSerialize",
@@ -108,7 +108,7 @@ pub struct AttributeNotInSetStatement<
 
 /// Statements are composed of one or more atomic statements.
 /// This type defines the different types of atomic statements.
-#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Clone, PartialEq, SerdeSerialize, SerdeDeserialize, Eq)]
 #[serde(bound(
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize, TagType: \
                  SerdeSerialize",

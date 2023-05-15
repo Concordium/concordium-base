@@ -22,11 +22,11 @@ use concordium_contracts_common::{hashes::HashBytes, ContractAddress};
 use did::*;
 use ed25519_dalek::Verifier;
 use serde::de::DeserializeOwned;
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// A statement about a single credential.
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
 #[serde(
     try_from = "serde_json::Value",
     bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned")
@@ -455,9 +455,12 @@ pub enum Web3IdChallengeMarker {}
 
 pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
-#[serde(bound(serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize"))]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
+))]
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     challenge:             Challenge,
     credential_statements: Vec<CredentialStatement<C, AttributeType>>,
@@ -945,7 +948,7 @@ pub fn verify<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
     linking_proof_iter.next().is_none()
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, serde::Deserialize)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, serde::Deserialize, Debug)]
 #[serde(try_from = "serde_json::Value")]
 pub enum Web3IdAttribute {
     String(AttributeKind),
@@ -1033,6 +1036,7 @@ mod tests {
     };
     use anyhow::Context;
     use rand::Rng;
+    use std::marker::PhantomData;
 
     use super::*;
 
@@ -1199,7 +1203,17 @@ mod tests {
         );
 
         let data = serde_json::to_string_pretty(&proof)?;
-        assert!(serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok());
+        assert!(
+            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            "Cannot deserialize proof correctly."
+        );
+
+        let data = serde_json::to_string_pretty(&request)?;
+        assert_eq!(
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
+            request,
+            "Cannot deserialize request correctly."
+        );
 
         Ok(())
     }
