@@ -13,7 +13,7 @@ use crate::{
         constants::{ArCurve, AttributeKind},
         id_proof_types::{AtomicProof, AtomicStatement},
         sigma_protocols::{self, vcom_eq::VecComEq},
-        types::{Attribute, CredentialDeploymentCommitments, GlobalContext, IpIdentity},
+        types::{Attribute, AttributeTag, GlobalContext, IpIdentity},
     },
     pedersen_commitment::{self, VecCommitmentKey},
     random_oracle::RandomOracle,
@@ -664,7 +664,7 @@ fn verify_single_credential<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
             CredentialsInputs::Identity { commitments },
         ) => {
             for (statement, proof) in proofs.iter() {
-                if !statement.verify(global, transcript, &commitments.cmm_attributes, proof) {
+                if !statement.verify(global, transcript, commitments, proof) {
                     return false;
                 }
             }
@@ -901,7 +901,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
 
 pub enum CredentialsInputs<'a, C: Curve> {
     Identity {
-        commitments: &'a CredentialDeploymentCommitments<C>,
+        commitments: &'a BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
     },
     Web3 {
         commitment: pedersen_commitment::Commitment<C>,
@@ -1041,7 +1041,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn basic_test() -> anyhow::Result<()> {
+    /// Test that constructing proofs for web3 only credentials works in the
+    /// sense that the proof verifies.
+    ///
+    /// JSON serialization of requests and presentations is also tested.
+    fn test_web3_only() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::new(rng.gen());
         let credential_statements = vec![
@@ -1215,6 +1219,188 @@ mod tests {
             "Cannot deserialize request correctly."
         );
 
+        Ok(())
+    }
+
+    #[test]
+    /// Test that constructing proofs for a mixed (both web3 and id2 credentials
+    /// involved) request works in the sense that the proof verifies.
+    ///
+    /// JSON serialization of requests and presentations is also tested.
+    fn test_mixed() -> anyhow::Result<()> {
+        let mut rng = rand::thread_rng();
+        let challenge = Challenge::new(rng.gen());
+        let params = GlobalContext::generate("Test".into());
+        let cred_id_exp = ArCurve::generate_scalar(&mut rng);
+        let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
+        let credential_statements = vec![
+            CredentialStatement::Web3Id {
+                ty:         vec![
+                    "VerifiableCredential".into(),
+                    "ConcordiumVerifiableCredential".into(),
+                    "TestCredential".into(),
+                ],
+                network:    Network::Testnet,
+                contract:   ContractAddress::new(1337, 42),
+                credential: Uuid::new_v4(),
+                statement:  vec![
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 17,
+                            lower:         Web3IdAttribute::Numeric(80),
+                            upper:         Web3IdAttribute::Numeric(1237),
+                            _phantom:      PhantomData,
+                        },
+                    },
+                    AtomicStatement::AttributeInSet {
+                        statement: AttributeInSetStatement {
+                            attribute_tag: 23u8,
+                            set:           [
+                                Web3IdAttribute::String(AttributeKind("ff".into())),
+                                Web3IdAttribute::String(AttributeKind("aa".into())),
+                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                            ]
+                            .into_iter()
+                            .collect(),
+                            _phantom:      PhantomData,
+                        },
+                    },
+                ],
+            },
+            CredentialStatement::Identity {
+                network: Network::Testnet,
+                cred_id,
+                statement: vec![
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 3,
+                            lower:         Web3IdAttribute::Numeric(80),
+                            upper:         Web3IdAttribute::Numeric(1237),
+                            _phantom:      PhantomData,
+                        },
+                    },
+                    AtomicStatement::AttributeNotInSet {
+                        statement: AttributeNotInSetStatement {
+                            attribute_tag: 1u8,
+                            set:           [
+                                Web3IdAttribute::String(AttributeKind("ff".into())),
+                                Web3IdAttribute::String(AttributeKind("aa".into())),
+                                Web3IdAttribute::String(AttributeKind("zz".into())),
+                            ]
+                            .into_iter()
+                            .collect(),
+                            _phantom:      PhantomData,
+                        },
+                    },
+                ],
+            },
+        ];
+
+        let request = Request::<ArCurve, Web3IdAttribute> {
+            challenge,
+            credential_statements,
+        };
+        let mut values_1 = BTreeMap::new();
+        values_1.insert(17, Web3IdAttribute::Numeric(137));
+        values_1.insert(23, Web3IdAttribute::String(AttributeKind("ff".into())));
+        let randomness_1 = pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng);
+        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
+        let secrets_1 = CommitmentInputs::Web3Issuer {
+            issuance_date: chrono::Utc::now(),
+            signer:        &signer_1,
+            values:        &values_1,
+            randomness:    randomness_1.clone(),
+        };
+
+        let mut values_2 = BTreeMap::new();
+        values_2.insert(3, Web3IdAttribute::Numeric(137));
+        values_2.insert(1, Web3IdAttribute::String(AttributeKind("xkcd".into())));
+        let mut randomness_2 = BTreeMap::new();
+        for tag in values_2.keys() {
+            randomness_2.insert(
+                *tag,
+                pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
+            );
+        }
+        let secrets_2 = CommitmentInputs::Identity {
+            issuance_date: chrono::Utc::now(),
+            values:        &values_2,
+            randomness:    &randomness_2,
+            issuer:        IpIdentity::from(17u32),
+        };
+        let attrs = [secrets_1, secrets_2];
+        let proof = request
+            .clone()
+            .prove(&params, attrs.into_iter())
+            .context("Cannot prove")?;
+
+        let commitment_1 = {
+            let (&rand_base, _, base) = params.vector_commitment_base();
+            let gis = base.take(24).copied().collect();
+            let vec_comm_key = VecCommitmentKey {
+                gs: gis,
+                h:  rand_base,
+            };
+            let committed_values = {
+                let mut out = Vec::new();
+                for (tag, value) in values_1.iter() {
+                    while out.len() < usize::from(*tag) {
+                        out.push(ArCurve::scalar_from_u64(0));
+                    }
+                    out.push(value.to_field_element());
+                }
+                out
+            };
+            vec_comm_key
+                .hide(&committed_values, &randomness_1)
+                .context("Unable to commit in the test.")?
+        };
+        let commitments_2 = {
+            let key = params.on_chain_commitment_key;
+            let mut comms = BTreeMap::new();
+            for (tag, value) in randomness_2.iter() {
+                let _ = comms.insert(
+                    AttributeTag::from(*tag),
+                    key.hide(
+                        &pedersen_commitment::Value::<ArCurve>::new(
+                            values_2.get(tag).unwrap().to_field_element(),
+                        ),
+                        value,
+                    ),
+                );
+            }
+            comms
+        };
+
+        let public = vec![
+            CredentialsInputs::Web3 {
+                commitment: commitment_1,
+            },
+            CredentialsInputs::Identity {
+                commitments: &commitments_2,
+            },
+        ];
+        anyhow::ensure!(
+            verify(&params, public.into_iter(), &proof),
+            "Proof verification failed."
+        );
+
+        let data = serde_json::to_string_pretty(&proof)?;
+        assert!(
+            serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok(),
+            "Cannot deserialize proof correctly."
+        );
+
+        println!("{}", data);
+
+        let data = serde_json::to_string_pretty(&request)?;
+        assert_eq!(
+            serde_json::from_str::<Request<ArCurve, Web3IdAttribute>>(&data)?,
+            request,
+            "Cannot deserialize request correctly."
+        );
+
+        println!("{}", data);
         Ok(())
     }
 }
