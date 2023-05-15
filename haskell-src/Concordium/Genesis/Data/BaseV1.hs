@@ -33,7 +33,7 @@ instance Serialize CoreGenesisParametersV1 where
         genesisEpochDuration <- get
         gstNumerator <- get
         gstDenominator <- get
-        unless (gstDenominator == 0) $ fail "genesisSignatureThreshold: zero denominator"
+        when (gstDenominator == 0) $ fail "genesisSignatureThreshold: zero denominator"
         unless (gstNumerator <= gstDenominator) $ fail "genesisSignatureThreshold > 1"
         -- Ratios of fixed size (unsigned) integers can be subject to arithmetic overflow on basic
         -- operations. This >=2/3 check is implemented so as to avoid overflow.
