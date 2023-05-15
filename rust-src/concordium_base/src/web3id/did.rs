@@ -49,7 +49,7 @@ impl crate::common::Deserial for Network {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// The supported DID identifiers on Concordium.
 pub enum IdentifierType {
     /// Reference to an account via an address.
@@ -68,31 +68,42 @@ pub enum IdentifierType {
     Idp { idp_identity: IpIdentity },
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
 pub struct Method {
     pub network: Network,
     pub ty:      IdentifierType,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum MethodFromStrError {
+    #[error("Unable to parse DID: {0}")]
+    Parse(#[from] nom::Err<nom::error::Error<String>>),
+    #[error("The input was not consumed. There is a leftover: {0}")]
+    Leftover(String),
+}
+
 impl<'a> TryFrom<&'a str> for Method {
-    type Error = nom::Err<nom::error::Error<String>>;
+    type Error = MethodFromStrError;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        // TODO: Ensure the string is consumed.
         let (r, v) = parse_did(value).map_err(|e| e.to_owned())?;
-        Ok(v)
+        if r.is_empty() {
+            Ok(v)
+        } else {
+            Err(MethodFromStrError::Leftover(r.into()))
+        }
     }
 }
 
 impl TryFrom<String> for Method {
-    type Error = nom::Err<nom::error::Error<String>>;
+    type Error = MethodFromStrError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> { Self::try_from(value.as_str()) }
 }
 
 impl std::str::FromStr for Method {
-    type Err = nom::Err<nom::error::Error<String>>;
+    type Err = MethodFromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
@@ -230,7 +241,14 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
         Ok((input, IdentifierType::PublicKey { key }))
     };
 
-    alt((account, credential, contract, pkc))(input)
+    let idp = |input| {
+        let (input, _) = tag("idp:")(input)?;
+        let (input, data) = cut(nom::character::complete::u32)(input)?;
+        let idp_identity = IpIdentity::from(data);
+        Ok((input, IdentifierType::Idp { idp_identity }))
+    };
+
+    alt((account, credential, contract, pkc, idp))(input)
 }
 
 pub fn parse_did<'a>(input: &'a str) -> IResult<&'a str, Method> {
@@ -238,4 +256,120 @@ pub fn parse_did<'a>(input: &'a str) -> IResult<&'a str, Method> {
     let (input, network) = network(input)?;
     let (input, ty) = ty(input)?;
     Ok((input, Method { network, ty }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_account() -> anyhow::Result<()> {
+        let address = "3kBx2h5Y2veb4hZgAJWPrr8RyQESKm5TjzF3ti1QQ4VSYLwK1G".parse()?;
+        let target = Method {
+            network: Network::Mainnet,
+            ty:      IdentifierType::Account { address },
+        };
+        assert_eq!(format!("did:ccd:acc:{address}").parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:mainnet:acc:{address}").parse::<Method>()?,
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:testnet:acc:{address}").parse::<Method>()?,
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        assert!(format!("did:ccd:acc:{address}/ff")
+            .parse::<Method>()
+            .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_id_credential() -> anyhow::Result<()> {
+        let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90".parse()?;
+        let target = Method {
+            network: Network::Mainnet,
+            ty:      IdentifierType::Credential { cred_id },
+        };
+        assert_eq!(format!("did:ccd:cred:{cred_id}").parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:mainnet:cred:{cred_id}").parse::<Method>()?,
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:testnet:cred:{cred_id}").parse::<Method>()?,
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        assert!(format!("did:ccd:cred:{cred_id}/ff")
+            .parse::<Method>()
+            .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_public_key() -> anyhow::Result<()> {
+        let key = "9cb20e36766a8c1fee1cae8e09eca75785f3bfda220f83b2f0d865cc8a44cd86";
+        let target = Method {
+            network: Network::Mainnet,
+            ty:      IdentifierType::PublicKey {
+                key: base16_decode_string(key)?,
+            },
+        };
+        assert_eq!(format!("did:ccd:pkc:{key}").parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:mainnet:pkc:{key}").parse::<Method>()?,
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:testnet:pkc:{key}").parse::<Method>()?,
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        assert!(format!("did:ccd:cred:{key}/ff").parse::<Method>().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_idp() -> anyhow::Result<()> {
+        let idp_identity = "37".parse()?;
+        let target = Method {
+            network: Network::Mainnet,
+            ty:      IdentifierType::Idp { idp_identity },
+        };
+        assert_eq!(
+            format!("did:ccd:idp:{idp_identity}").parse::<Method>()?,
+            target
+        );
+        assert_eq!(
+            format!("did:ccd:mainnet:idp:{idp_identity}").parse::<Method>()?,
+            target
+        );
+        let s = target.to_string();
+        assert_eq!(s.parse::<Method>()?, target);
+        assert_eq!(
+            format!("did:ccd:testnet:idp:{idp_identity}").parse::<Method>()?,
+            Method {
+                network: Network::Testnet,
+                ..target
+            }
+        );
+        assert!(format!("did:ccd:idp:{idp_identity}/ff")
+            .parse::<Method>()
+            .is_err());
+        Ok(())
+    }
 }

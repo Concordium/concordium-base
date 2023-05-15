@@ -210,6 +210,7 @@ impl AccountOwnershipProof {
     Serialize,
     SerdeSerialize,
     SerdeDeserialize,
+    FromStr,
 )]
 #[repr(transparent)]
 #[serde(transparent)]
