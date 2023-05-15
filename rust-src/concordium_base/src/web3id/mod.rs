@@ -211,7 +211,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 owner,
             } => {
                 let json = serde_json::json!({
-                    "id": format!("urn:uuid:{credential}"),
+                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential.simple()),
                     "type": ty,
                     "issuer": format!("did:ccd:{network}:sci:{}:{}/issuer", contract.index, contract.subindex),
                     "issuanceDate": issuance_date,
@@ -264,15 +264,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 .context("issuanceDate field not present")?
                 .take(),
         )?;
-        let mut credential_subject = value
-            .get_mut("credentialSubject")
-            .context("credentialSubject field not present")?
-            .take();
+        let mut credential_subject = get_field(&mut value, "credentialSubject")?;
         let issuer = parse_did(&issuer)
             .map_err(|e| anyhow::anyhow!("Unable to parse issuer: {e}"))?
             .1;
         match issuer.ty {
             IdentifierType::Idp { idp_identity } => {
+                // TODO: Check the `id` parsed above here.
                 let id = get_field(&mut credential_subject, "id")?;
                 let Some(Ok(id)) = id.as_str().map(parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
@@ -317,10 +315,29 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     parameter.as_ref().is_empty(),
                     "Issuer must have an empty parameter."
                 );
-                let Some(credential_str) = id.strip_prefix("urn:uuid:") else {
-                    anyhow::bail!("credential identifier must be a UUID");
+                let Ok((rest, method)) = parse_did(&id) else {
+                    anyhow::bail!("credential identifier must be a valid Concordium DID");
                 };
-                let credential: Uuid = credential_str.parse()?;
+                anyhow::ensure!(
+                    rest.is_empty(),
+                    "Leftover DID data for credential identifier."
+                );
+                let IdentifierType::ContractData { address: id_address, entrypoint: id_entrypoint, parameter } = method.ty
+                else {
+                    anyhow::bail!("Unexpected identifier. Issuer is a contract, but credential is not a Web3ID credential.");
+                };
+                anyhow::ensure!(
+                    address == id_address,
+                    "Issuer address is not the same as credential address."
+                );
+                anyhow::ensure!(
+                    id_entrypoint == "credentialEntry",
+                    "Invalid entrypoint for credential DID."
+                );
+                let Ok(uuid) = Vec::from(parameter).try_into() else {
+                    anyhow::bail!("Invalid credentialEntry parameter");
+                };
+                let credential: Uuid = Uuid::from_bytes(uuid);
 
                 let id = get_field(&mut credential_subject, "id")?;
                 let Some(Ok(id)) = id.as_str().map(parse_did) else {
@@ -478,7 +495,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
     fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
         let ty: String = serde_json::from_value(get_field(&mut value, "type")?)?;
         anyhow::ensure!(ty == "VerifiablePresentation");
-        let _id: String = serde_json::from_value(get_field(&mut value, "id")?)?;
         let presentation_context =
             serde_json::from_value(get_field(&mut value, "presentationContext")?)?;
         let verifiable_credential =
@@ -1181,6 +1197,9 @@ mod tests {
             verify(&params, public.into_iter(), &proof),
             "Proof verification failed."
         );
+
+        let data = serde_json::to_string_pretty(&proof)?;
+        assert!(serde_json::from_str::<Presentation<ArCurve, Web3IdAttribute>>(&data).is_ok());
 
         Ok(())
     }
