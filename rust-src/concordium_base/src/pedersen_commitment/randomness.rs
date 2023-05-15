@@ -20,7 +20,7 @@ pub struct Randomness<C: Curve> {
     pub randomness: Rc<Secret<C::Scalar>>,
 }
 
-impl <C: Curve>Clone for Randomness<C> {
+impl<C: Curve> Clone for Randomness<C> {
     fn clone(&self) -> Self {
         Self {
             randomness: self.randomness.clone(),

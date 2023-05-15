@@ -1,23 +1,17 @@
 use crate::{
-    common::{
-        types::{KeyIndex, KeyPair, TransactionTime},
-        *,
-    },
+    common::types::TransactionTime,
     curve_arithmetic::Curve,
     dodis_yampolskiy_prf as prf,
     elgamal::{PublicKey, SecretKey},
     id::{
         account_holder::*,
-        anonymity_revoker::*,
-        chain::*,
         constants::{ArCurve, BaseField, IpPairing, *},
-        identity_provider::*,
         secret_sharing::Threshold,
         types::*,
     },
 };
 use ed25519_dalek as ed25519;
-use either::Either::Left;
+
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
 

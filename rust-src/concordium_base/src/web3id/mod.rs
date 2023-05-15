@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, fmt::Display, marker::PhantomData, str::FromStr};
+use std::{collections::BTreeMap, marker::PhantomData, str::FromStr};
+
+pub mod did;
 
 // TODO:
 // - have proper parser for hex values
@@ -7,7 +9,7 @@ use std::{collections::BTreeMap, fmt::Display, marker::PhantomData, str::FromStr
 // - Revise the use of AttributeTag
 use crate::{
     base::CredentialRegistrationID,
-    common::{base16_decode_string, base16_encode_string},
+    common::base16_encode_string,
     curve_arithmetic::Curve,
     id::{
         constants::{ArCurve, AttributeKind},
@@ -18,249 +20,11 @@ use crate::{
     pedersen_commitment::{self, VecCommitmentKey},
     random_oracle::RandomOracle,
 };
-use concordium_contracts_common::{
-    hashes::HashBytes, AccountAddress, ContractAddress, OwnedEntrypointName, OwnedParameter,
-};
+use concordium_contracts_common::{hashes::HashBytes, ContractAddress};
+use did::*;
 use ed25519_dalek::Verifier;
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    character::complete::{self, anychar},
-    combinator::{cut, recognize},
-    multi::many_m_n,
-    IResult,
-};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
-
-#[derive(
-    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord,
-)]
-pub enum Network {
-    #[serde(rename = "testnet")]
-    Testnet,
-    #[serde(rename = "mainnet")]
-    Mainnet,
-}
-
-impl std::fmt::Display for Network {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Network::Testnet => f.write_str("testnet"),
-            Network::Mainnet => f.write_str("mainnet"),
-        }
-    }
-}
-
-impl crate::common::Serial for Network {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        match self {
-            Network::Testnet => 0u8.serial(out),
-            Network::Mainnet => 1u8.serial(out),
-        }
-    }
-}
-
-impl crate::common::Deserial for Network {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
-        match u8::deserial(source)? {
-            0u8 => Ok(Self::Testnet),
-            1u8 => Ok(Self::Mainnet),
-            n => anyhow::bail!("Unrecognized network tag {n}"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-/// The supported DID identifiers on Concordium.
-pub enum IdentifierType {
-    /// Reference to an account via an address.
-    Account { address: AccountAddress },
-    /// Reference to a specific credential via its ID.
-    Credential { cred_id: CredentialRegistrationID },
-    /// Reference to a specific smart contract instance.
-    ContractData {
-        address:    ContractAddress,
-        entrypoint: OwnedEntrypointName,
-        parameter:  OwnedParameter,
-    },
-    /// Reference to a specific Ed25519 public key.
-    PublicKey { key: ed25519_dalek::PublicKey },
-    /// Reference to a specific identity provider.
-    Idp { idp_identity: IpIdentity },
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct Method {
-    pub network: Network,
-    pub ty:      IdentifierType,
-}
-
-impl<'a> TryFrom<&'a str> for Method {
-    type Error = nom::Err<nom::error::Error<String>>;
-
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        // TODO: Ensure the string is consumed.
-        let (r, v) = parse_did(value).map_err(|e| e.to_owned())?;
-        Ok(v)
-    }
-}
-
-impl TryFrom<String> for Method {
-    type Error = nom::Err<nom::error::Error<String>>;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> { Self::try_from(value.as_str()) }
-}
-
-impl FromStr for Method {
-    type Err = nom::Err<nom::error::Error<String>>;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
-}
-
-impl Display for Method {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.ty {
-            IdentifierType::Account { address } => {
-                write!(f, "did:ccd:{}:acc:{address}", self.network)
-            }
-            IdentifierType::Credential { cred_id } => {
-                write!(f, "did:ccd:{}:cred:{cred_id}", self.network)
-            }
-            IdentifierType::ContractData {
-                address,
-                entrypoint,
-                parameter,
-            } => {
-                write!(
-                    f,
-                    "did:ccd:{}:sci:{}:{}/{entrypoint}/{parameter}",
-                    self.network, address.index, address.subindex
-                )
-            }
-            IdentifierType::PublicKey { key } => {
-                write!(
-                    f,
-                    "did:ccd:{}:pkc:{}",
-                    self.network,
-                    hex::encode(key.as_bytes())
-                )
-            }
-            IdentifierType::Idp { idp_identity } => {
-                write!(f, "did:ccd:{}:idp:{idp_identity}", self.network)
-            }
-        }
-    }
-}
-
-impl From<Method> for String {
-    fn from(value: Method) -> Self { value.to_string() }
-}
-
-fn prefix(input: &str) -> IResult<&str, ()> {
-    let (input, _) = tag("did:ccd:")(input)?;
-    Ok((input, ()))
-}
-
-fn network(input: &str) -> IResult<&str, Network> {
-    match alt::<&str, &str, _, _>((
-        tag::<&str, &str, nom::error::Error<&str>>("testnet"),
-        tag("mainnet"),
-    ))(input)
-    {
-        Ok((input, network)) => {
-            let (input, _) = tag(":")(input)?;
-            if network == "testnet" {
-                Ok((input, Network::Testnet))
-            } else {
-                Ok((input, Network::Mainnet))
-            }
-        }
-        Err(_) => {
-            // No network means we default to mainnet.
-            Ok((input, Network::Mainnet))
-        }
-    }
-}
-
-fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
-    let account = |input: &'a str| {
-        let (input, _) = tag("acc:")(input)?;
-        let (input, data) = cut(recognize(many_m_n(50, 50, cut(anychar))))(input)?;
-        let address = data.parse::<AccountAddress>().map_err(|_| {
-            nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
-        })?;
-        Ok((input, IdentifierType::Account { address }))
-    };
-    let credential = |input: &'a str| {
-        let (input, _) = tag("cred:")(input)?;
-        let (input, data) = cut(recognize(many_m_n(96, 96, cut(anychar))))(input)?;
-        let cred_id = data.parse::<CredentialRegistrationID>().map_err(|_| {
-            nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
-        })?;
-        Ok((input, IdentifierType::Credential { cred_id }))
-    };
-    let contract = |input| {
-        let (input, _) = tag("sci:")(input)?;
-        let (input, index) = cut(complete::u64)(input)?;
-        let (input, subindex) = {
-            let r = nom::combinator::opt(|input| {
-                let (input, _) = tag(":")(input)?;
-                cut(complete::u64)(input)
-            })(input)?;
-            (r.0, r.1.unwrap_or(0))
-        };
-        let (input, _) = tag("/")(input)?;
-        let (input, entrypoint_str): (_, &str) = cut(nom::combinator::recognize(
-            nom::multi::many0(nom::character::complete::satisfy(|x| x != '/')),
-        ))(input)?;
-        let Ok(entrypoint) = OwnedEntrypointName::new(entrypoint_str.into()) else {
-            return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
-        };
-        let (input, parameter) = {
-            let (input, r) = nom::combinator::opt(|input| {
-                let (input, _) = tag("/")(input)?;
-                let (input, param_str) = cut(nom::combinator::recognize(
-                    nom::character::complete::hex_digit0,
-                ))(input)?;
-                let Ok(v) = hex::decode(param_str) else {
-                    return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
-                };
-                let Ok(param) = OwnedParameter::try_from(v) else {
-                    return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
-                };
-                Ok((input, param))
-            })(input)?;
-            match r {
-                None => (input, OwnedParameter::empty()),
-                Some(d) => (input, d),
-            }
-        };
-        Ok((input, IdentifierType::ContractData {
-            address: ContractAddress::new(index, subindex),
-            entrypoint,
-            parameter,
-        }))
-    };
-    let pkc = |input| {
-        let (input, _) = tag("pkc:")(input)?;
-        let (input, data) = cut(recognize(many_m_n(64, 64, cut(anychar))))(input)?;
-        let key = base16_decode_string(data).map_err(|_| {
-            nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
-        })?;
-        Ok((input, IdentifierType::PublicKey { key }))
-    };
-
-    alt((account, credential, contract, pkc))(input)
-}
-
-pub fn parse_did<'a>(input: &'a str) -> IResult<&'a str, Method> {
-    let (input, _) = prefix(input)?;
-    let (input, network) = network(input)?;
-    let (input, ty) = ty(input)?;
-    Ok((input, Method { network, ty }))
-}
 
 /// A statement about a single credential.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -356,7 +120,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
             } => {
                 let json = serde_json::json!({
                     "type": ty,
-                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{credential}", contract.index, contract.subindex),
+                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential.simple()),
                     "statement": statement,
                 });
                 json.serialize(serializer)
@@ -676,10 +440,11 @@ pub enum Web3IdChallengeMarker {}
 pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 
 #[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 #[serde(bound(serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize"))]
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    challenge:  Challenge,
-    statements: Vec<CredentialStatement<C, AttributeType>>,
+    challenge:             Challenge,
+    credential_statements: Vec<CredentialStatement<C, AttributeType>>,
 }
 
 pub type CredentialOwner = ed25519_dalek::PublicKey;
@@ -714,7 +479,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
     fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
         let ty: String = serde_json::from_value(get_field(&mut value, "type")?)?;
         anyhow::ensure!(ty == "VerifiablePresentation");
-        let id: String = serde_json::from_value(get_field(&mut value, "id")?)?;
+        let _id: String = serde_json::from_value(get_field(&mut value, "id")?)?;
         let presentation_context =
             serde_json::from_value(get_field(&mut value, "presentationContext")?)?;
         let verifiable_credential =
@@ -910,12 +675,12 @@ fn verify_single_credential<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
     match (&cred_proof, public) {
         (
             CredentialProof::Identity {
-                network,
-                cred_id,
+                network: _,
+                cred_id: _,
                 proofs,
-                created,
-                issuer,
-                issuance_date,
+                created: _,
+                issuer: _,
+                issuance_date: _,
             },
             CredentialsInputs::Identity { commitments },
         ) => {
@@ -927,16 +692,16 @@ fn verify_single_credential<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
         }
         (
             CredentialProof::Web3Id {
-                network: proof_network,
-                contract: proof_contract,
-                credential: proof_credential,
+                network: _proof_network,
+                contract: _proof_contract,
+                credential: _proof_credential,
                 additional_commitments,
                 glueing_proof,
                 proofs,
-                created,
-                issuance_date,
+                created: _,
+                issuance_date: _,
                 max_base_used,
-                owner,
+                owner: _,
                 ty: _,
             },
             CredentialsInputs::Web3 { commitment, .. },
@@ -954,7 +719,7 @@ fn verify_single_credential<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
                 h_bar: global.on_chain_commitment_key.h,
             };
             for (statement, proof) in proofs.iter() {
-                if !statement.verify(global, transcript, &additional_commitments, proof) {
+                if !statement.verify(global, transcript, additional_commitments, proof) {
                     return false;
                 }
             }
@@ -1113,11 +878,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
         transcript.add_bytes(self.challenge);
         transcript.append_message(b"ctx", &params);
         let mut csprng = rand::thread_rng();
-        if self.statements.len() != attrs.len() {
+        if self.credential_statements.len() != attrs.len() {
             return Err(ProofError::CommitmentsStatementsMismatch);
         }
         let mut signers = Vec::new();
-        for (cred_statement, attributes) in self.statements.into_iter().zip(attrs) {
+        for (cred_statement, attributes) in self.credential_statements.into_iter().zip(attrs) {
             if let CommitmentInputs::Web3Issuer { signer, .. } = attributes {
                 signers.push(signer);
             }
@@ -1299,11 +1064,12 @@ mod tests {
     fn basic_test() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::new(rng.gen());
-        let statements = vec![
+        let credential_statements = vec![
             CredentialStatement::Web3Id {
                 ty:         vec![
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
+                    "TestCredential".into(),
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
@@ -1336,6 +1102,7 @@ mod tests {
                 ty:         vec![
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
+                    "TestCredential".into(),
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1338, 0),
@@ -1368,7 +1135,7 @@ mod tests {
 
         let request = Request::<ArCurve, Web3IdAttribute> {
             challenge,
-            statements,
+            credential_statements,
         };
         let params = GlobalContext::generate("Test".into());
         let mut values_1 = BTreeMap::new();
