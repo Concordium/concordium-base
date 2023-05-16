@@ -251,7 +251,9 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
     alt((account, credential, contract, pkc, idp))(input)
 }
 
-pub fn parse_did<'a>(input: &'a str) -> IResult<&'a str, Method> {
+/// Parse a DID, returning either an error or the parsed method and leftover
+/// input.
+pub fn parse_did(input: &str) -> IResult<&str, Method> {
     let (input, _) = prefix(input)?;
     let (input, network) = network(input)?;
     let (input, ty) = ty(input)?;

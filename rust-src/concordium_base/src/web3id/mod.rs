@@ -136,6 +136,81 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     }
 }
 
+/// A pair of a statement and a proof.
+pub type StatementWithProof<C, AttributeType> = (
+    AtomicStatement<C, u8, AttributeType>,
+    AtomicProof<C, AttributeType>,
+);
+
+/// Metadata of a single credential.
+pub enum CredentialMetadata {
+    Identity {
+        issuer:  IpIdentity,
+        cred_id: CredentialRegistrationID,
+    },
+    Web3Id {
+        contract: ContractAddress,
+        owner:    CredentialOwner,
+        id:       Uuid,
+    },
+}
+
+/// Metadata about a single [`CredentialProof`].
+pub struct ProofMetadata {
+    /// Timestamp of when the proof was created.
+    pub created:       chrono::DateTime<chrono::Utc>,
+    /// Issuance date/valid_from date of the credential.
+    pub issuance_date: chrono::DateTime<chrono::Utc>,
+    pub network:       Network,
+    /// The DID of the credential the proof is about.
+    pub cred_metadata: CredentialMetadata,
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, AttributeType> {
+    pub fn metadata(&self) -> ProofMetadata {
+        match self {
+            CredentialProof::Identity {
+                created,
+                network,
+                cred_id,
+                issuer,
+                issuance_date,
+                proofs: _,
+            } => ProofMetadata {
+                created:       *created,
+                issuance_date: *issuance_date,
+                network:       *network,
+                cred_metadata: CredentialMetadata::Identity {
+                    issuer:  *issuer,
+                    cred_id: *cred_id,
+                },
+            },
+            CredentialProof::Web3Id {
+                created,
+                owner,
+                network,
+                contract,
+                credential,
+                ty: _,
+                issuance_date,
+                additional_commitments: _,
+                max_base_used: _,
+                glueing_proof: _,
+                proofs: _,
+            } => ProofMetadata {
+                created:       *created,
+                issuance_date: *issuance_date,
+                network:       *network,
+                cred_metadata: CredentialMetadata::Web3Id {
+                    contract: *contract,
+                    owner:    *owner,
+                    id:       *credential,
+                },
+            },
+        }
+    }
+}
+
 #[derive(Clone, serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
 #[serde(try_from = "serde_json::Value")]
@@ -156,10 +231,7 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// This is an unfortunate name to conform to the standard, but the
         /// meaning here really is `validFrom` for the credential.
         issuance_date: chrono::DateTime<chrono::Utc>,
-        proofs: Vec<(
-            AtomicStatement<C, u8, AttributeType>,
-            AtomicProof<C, AttributeType>,
-        )>,
+        proofs:        Vec<StatementWithProof<C, AttributeType>>,
     },
     Web3Id {
         /// Creation timestamp of the proof.
@@ -195,10 +267,7 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// the credential.
         glueing_proof: sigma_protocols::common::SigmaProof<sigma_protocols::vcom_eq::Witness<C>>,
         /// Individual proofs for statements.
-        proofs: Vec<(
-            AtomicStatement<C, u8, AttributeType>,
-            AtomicProof<C, AttributeType>,
-        )>,
+        proofs:                 Vec<StatementWithProof<C, AttributeType>>,
     },
 }
 
@@ -525,6 +594,14 @@ pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub linking_proof:         LinkingProof,
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
+    /// Get an iterator over the metadata for each of the verifiable credentials
+    /// in the order they appear in the presentation.
+    pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadata> + '_ {
+        self.verifiable_credential.iter().map(|cp| cp.metadata())
+    }
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
     for Presentation<C, AttributeType>
 {
@@ -706,11 +783,11 @@ pub enum ProofError {
 
 /// Verify a single credential. This only checks the cryptographic parts and
 /// ignores the metadata such as issuance date.
-fn verify_single_credential<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
+fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
     global: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     cred_proof: &CredentialProof<C, AttributeType>,
-    public: CredentialsInputs<'a, C>,
+    public: CredentialsInputs<C>,
 ) -> bool {
     match (&cred_proof, public) {
         (
@@ -773,12 +850,12 @@ fn verify_single_credential<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, AttributeType> {
-    fn prove<'a, Signer: Web3IdSigner>(
+    fn prove<Signer: Web3IdSigner>(
         self,
         global: &GlobalContext<C>,
         ro: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
-        input: CommitmentInputs<'a, C, AttributeType, Signer>,
+        input: CommitmentInputs<C, AttributeType, Signer>,
     ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
         let mut proofs = Vec::new();
         match (self, input) {
