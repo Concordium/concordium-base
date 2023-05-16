@@ -153,6 +153,8 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// relevant network.
         issuer:        IpIdentity,
         /// Issuance date of the credential that the proof is about.
+        /// This is an unfortunate name to conform to the standard, but the
+        /// meaning here really is `validFrom` for the credential.
         issuance_date: chrono::DateTime<chrono::Utc>,
         proofs: Vec<(
             AtomicStatement<C, u8, AttributeType>,
@@ -174,7 +176,9 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// be considered as a "path", refining the meaning, e.g.,
         /// "VerifiableCredential", "ConcordiumVerifiableCredential".
         ty:                     Vec<String>,
-        /// Issuance date of the credential.
+        /// Issuance date of the credential that the proof is about.
+        /// This is an unfortunate name to conform to the standard, but the
+        /// meaning here really is `validFrom` for the credential.
         issuance_date:          chrono::DateTime<chrono::Utc>,
         /// Additional commitments produced as part of the proof. These are
         /// commitments for the values in the statement.
@@ -658,16 +662,27 @@ impl Web3IdSigner for ed25519_dalek::Keypair {
 pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
     /// Inputs are for an identity credential issued by an identity provider.
     Identity {
+        /// Issuance date of the credential that the proof is about.
+        /// This is an unfortunate name to conform to the standard, but the
+        /// meaning here really is `validFrom` for the credential.
         issuance_date: chrono::DateTime<chrono::Utc>,
         issuer:        IpIdentity,
+        /// The values that are committed to and are required in the proofs.
         values:        &'a BTreeMap<u8, AttributeType>,
+        /// The randomness to go along with commitments in `values`.
         randomness:    &'a BTreeMap<u8, pedersen_commitment::Randomness<C>>,
     },
     /// Inputs are for a credential issued by Web3ID issuer.
     Web3Issuer {
+        /// Issuance date of the credential that the proof is about.
+        /// This is an unfortunate name to conform to the standard, but the
+        /// meaning here really is `validFrom` for the credential.
         issuance_date: chrono::DateTime<chrono::Utc>,
+        /// The signer that will sign the presentation.
         signer:        &'a Web3IdSigner,
+        /// Values that are committed to.
         values:        &'a BTreeMap<u8, AttributeType>,
+        /// The randomness for the vector commitment.
         randomness:    pedersen_commitment::Randomness<C>,
     },
 }
@@ -961,6 +976,8 @@ pub enum CredentialsInputs<'a, C: Curve> {
     },
 }
 
+/// Verify a presentation in the context of the provided public data and
+/// cryptographic parameters.
 pub fn verify<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
     params: &GlobalContext<C>,
     public: impl ExactSizeIterator<Item = CredentialsInputs<'a, C>>,
@@ -993,6 +1010,10 @@ pub fn verify<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, serde::Deserialize, Debug)]
 #[serde(try_from = "serde_json::Value")]
+/// A value of an attribute. This is the low-level representation. The two
+/// different variants are present to enable range proofs for numeric values
+/// since their embedding into field elements are more natural and more amenable
+/// to range proof than string embeddings.
 pub enum Web3IdAttribute {
     String(AttributeKind),
     Numeric(u64),
@@ -1067,21 +1088,15 @@ impl Attribute<<ArCurve as Curve>::Scalar> for Web3IdAttribute {
     }
 }
 
-pub struct Web3IdCredential {
-    pub id:         CredentialOwner,
-    pub attributes: BTreeMap<u8, Web3IdAttribute>,
-}
-
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::id::id_proof_types::{
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     };
     use anyhow::Context;
     use rand::Rng;
     use std::marker::PhantomData;
-
-    use super::*;
 
     #[test]
     /// Test that constructing proofs for web3 only credentials works in the
