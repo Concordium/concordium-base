@@ -905,7 +905,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
             ) => {
                 let (&rand_base, base_size, base) = global.vector_commitment_base();
                 // First construct individual commitments.
-                let vec_key = values.last_key_value().ok_or(ProofError::NoAttributes)?;
+
+                // Get the last (maximum) key in the map.
+                let vec_key = values.iter().rev().next().ok_or(ProofError::NoAttributes)?;
                 if usize::from(*vec_key.0) >= base_size {
                     return Err(ProofError::TooManyAttributes);
                 }
