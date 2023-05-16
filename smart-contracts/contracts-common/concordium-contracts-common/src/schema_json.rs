@@ -48,11 +48,27 @@ pub enum JsonError {
 }
 
 impl JsonError {
+    /// Wraps a [JsonError] in a [JsonError::TraceError], providing a trace to the origin of the
+    /// error.
     fn add_trace(&self, trace: String) -> Self {
         JsonError::TraceError {
             trace,
             error: Box::new(self.clone()),
         }
+    }
+
+    /// Gets the underlying error of a [JsonError::TraceError]. For any other variant, this simply returns
+    /// the error itself.
+    fn get_error(&self) -> Self {
+        if let JsonError::TraceError {
+            error,
+            ..
+        } = self
+        {
+            return error.get_error();
+        }
+
+        *self
     }
 }
 
