@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Debug, thiserror::Error, Clone)]
-pub enum JsonError {
+pub enum JsonError<'a> {
     #[error("Failed writing")]
     FailedWriting,
     #[error("Unsigned integer required")]
@@ -40,26 +40,28 @@ pub enum JsonError {
     ParseDurationError(#[from] ParseDurationError),
     #[error("{0}")]
     ParseTimestampError(#[from] ParseTimestampError),
-    #[error("{trace} -> {error}")]
+    #[error("{field} -> {error}")]
     TraceError {
-        trace: String,
-        error: Box<JsonError>,
+        field: String,
+        json: &'a serde_json::Value,
+        error: Box<JsonError<'a>>,
     },
 }
 
-impl JsonError {
+impl<'a> JsonError<'a> {
     /// Wraps a [JsonError] in a [JsonError::TraceError], providing a trace to
     /// the origin of the error.
-    fn add_trace(&self, trace: String) -> Self {
+    fn add_trace(self, field: String, json: &'a serde_json::Value) -> Self {
         JsonError::TraceError {
-            trace,
-            error: Box::new(self.clone()),
+            field,
+            json,
+            error: Box::new(self),
         }
     }
 
     /// Gets the underlying error of a [JsonError::TraceError]. For any other
     /// variant, this simply returns the error itself.
-    fn get_error(&self) -> Self {
+    pub fn get_error(&self) -> &Self {
         if let JsonError::TraceError {
             error,
             ..
@@ -68,9 +70,23 @@ impl JsonError {
             return error.get_error();
         }
 
-        *self
+        self
     }
 }
+
+#[derive(thiserror::Error, Debug)]
+pub enum ToJsonError {
+    #[error("{0}")]
+    DeserialError(String),
+    #[error("{position} as {schema_type:?} -> {error}")]
+    TraceError {
+        position: u16,
+        schema_type: Type,
+        error: Box<ToJsonError>,
+    },
+}
+
+pub type ToJsonResult<A> = Result<A, ToJsonError>;
 
 // Serializes a value to the provided output buffer
 macro_rules! serial {
@@ -91,11 +107,11 @@ macro_rules! ensure {
 
 /// Uses the schema to parse JSON into bytes
 /// It is assumed the array of values for Map and Set are already ordered.
-fn write_bytes_from_json_schema_type<W: Write>(
+fn write_bytes_from_json_schema_type<'a, W: Write>(
     schema: &Type,
-    json: &serde_json::Value,
+    json: &'a serde_json::Value,
     out: &mut W,
-) -> Result<(), JsonError> {
+) -> Result<(), JsonError<'a>> {
     use JsonError::*;
 
     match schema {
@@ -249,9 +265,9 @@ fn write_bytes_from_json_schema_type<W: Write>(
                     PairError("Only pairs of two are supported".to_string())
                 );
                 write_bytes_from_json_schema_type(left_type, &values[0], out)
-                    .map_err(|e| e.add_trace("0".to_string()))?;
+                    .map_err(|e| e.add_trace("0".to_string(), json))?;
                 write_bytes_from_json_schema_type(right_type, &values[1], out)
-                    .map_err(|e| e.add_trace("1".to_string()))
+                    .map_err(|e| e.add_trace("1".to_string(), json))
             } else {
                 Err(WrongJsonType("JSON Array required for a pair".to_string()))
             }
@@ -264,7 +280,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 let mut i = 0;
                 for value in values {
                     write_bytes_from_json_schema_type(ty, value, out)
-                        .map_err(|e| e.add_trace(format!("{}", i)))?;
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                     i += 1;
                 }
                 Ok(())
@@ -280,7 +296,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 let mut i = 0;
                 for value in values {
                     write_bytes_from_json_schema_type(ty, value, out)
-                        .map_err(|e| e.add_trace(format!("{}", i)))?;
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                     i += 1;
                 }
                 Ok(())
@@ -299,12 +315,12 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         ensure!(pair.len() == 2, MapError("Expected key-value pair".to_string()));
                         let result: Result<(), JsonError> = {
                             write_bytes_from_json_schema_type(key_ty, &pair[0], out)
-                                .map_err(|e| e.add_trace("0".to_string()))?;
+                                .map_err(|e| e.add_trace("0".to_string(), entry))?;
                             write_bytes_from_json_schema_type(val_ty, &pair[1], out)
-                                .map_err(|e| e.add_trace("1".to_string()))?;
+                                .map_err(|e| e.add_trace("1".to_string(), entry))?;
                             Ok(())
                         };
-                        result.map_err(|e| e.add_trace(format!("{}", i)))?;
+                        result.map_err(|e| e.add_trace(format!("{}", i), json))?;
                         i += 1;
                     } else {
                         return Err(WrongJsonType(
@@ -331,7 +347,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 let mut i = 0;
                 for value in values {
                     write_bytes_from_json_schema_type(ty, value, out)
-                        .map_err(|e| e.add_trace(format!("{}", i)))?;
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                     i += 1;
                 }
                 Ok(())
@@ -359,7 +375,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         ));
                     };
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
-                        .map_err(|e| e.add_trace(format!("'{}'", variant_name)))
+                        .map_err(|e| e.add_trace(format!("'{}'", variant_name), json))
                 } else {
                     // Non-existing variant
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
@@ -378,7 +394,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 if let Some((&i, (_, variant_fields))) = schema_fields_opt {
                     out.write_u8(i).or(Err(JsonError::FailedWriting))?;
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
-                        .map_err(|e| e.add_trace(format!("'{}'", variant_name)))
+                        .map_err(|e| e.add_trace(format!("'{}'", variant_name), json))
                 } else {
                     // Non-existing variant
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
@@ -528,7 +544,7 @@ impl Type {
     /// Serialize the given JSON value into the binary format represented by the
     /// schema. If the JSON value does not match the schema an error will be
     /// returned.
-    pub fn serial_value(&self, json: &serde_json::Value) -> Result<Vec<u8>, JsonError> {
+    pub fn serial_value<'a>(&self, json: &'a serde_json::Value) -> Result<Vec<u8>, JsonError<'a>> {
         let mut out = Vec::new();
         self.serial_value_into(json, &mut out)?;
         Ok(out)
@@ -537,11 +553,11 @@ impl Type {
     /// Serialize the given JSON value into the binary format represented by the
     /// schema. The resulting byte array is written into the provided sink.
     /// If the JSON value does not match the schema an error will be returned.
-    pub fn serial_value_into(
+    pub fn serial_value_into<'a>(
         &self,
-        json: &serde_json::Value,
+        json: &'a serde_json::Value,
         out: &mut impl Write,
-    ) -> Result<(), JsonError> {
+    ) -> Result<(), JsonError<'a>> {
         write_bytes_from_json_schema_type(self, json, out)
     }
 
@@ -551,11 +567,11 @@ impl Type {
         since = "5.2.0",
         note = "Use the more ergonomic [`serial_value_into`](Self::serial_value_into) instead."
     )]
-    pub fn write_bytes_from_json_schema_type<W: Write>(
+    pub fn write_bytes_from_json_schema_type<'a, W: Write>(
         schema: &Type,
-        json: &serde_json::Value,
+        json: &'a serde_json::Value,
         out: &mut W,
-    ) -> Result<(), JsonError> {
+    ) -> Result<(), JsonError<'a>> {
         write_bytes_from_json_schema_type(schema, json, out)
     }
 }
@@ -601,11 +617,11 @@ fn serial_bigint<W: Write>(bigint: BigInt, constraint: u32, out: &mut W) -> Resu
     Err(W::Err::default())
 }
 
-fn write_bytes_from_json_schema_fields<W: Write>(
+fn write_bytes_from_json_schema_fields<'a, W: Write>(
     fields: &Fields,
-    json: &serde_json::Value,
+    json: &'a serde_json::Value,
     out: &mut W,
-) -> Result<(), JsonError> {
+) -> Result<(), JsonError<'a>> {
     use JsonError::*;
 
     match fields {
@@ -619,7 +635,7 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                     let field_value_opt = map.get(field_name);
                     if let Some(field_value) = field_value_opt {
                         write_bytes_from_json_schema_type(field_ty, field_value, out)
-                            .map_err(|e| e.add_trace(format!("'{}'", field_name)))?;
+                            .map_err(|e| e.add_trace(format!("'{}'", field_name), json))?;
                     } else {
                         return Err(FieldError(format!("Missing field: {}", field_name)));
                     }
@@ -637,7 +653,7 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 );
                 for (i, (field_ty, value)) in fields.iter().zip(values.iter()).enumerate() {
                     write_bytes_from_json_schema_type(field_ty, value, out)
-                        .map_err(|e| e.add_trace(format!("{}", i)))?;
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                 }
                 Ok(())
             } else {
@@ -654,7 +670,7 @@ fn write_bytes_for_length_of_size<W: Write>(
     len: usize,
     size_len: &SizeLength,
     out: &mut W,
-) -> Result<(), JsonError> {
+) -> Result<(), JsonError<'static>> {
     match size_len {
         SizeLength::U8 => {
             let len: u8 = len.try_into()?;
@@ -971,7 +987,9 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+    fn from(_: std::string::FromUtf8Error) -> Self {
+        ParseError::default()
+    }
 }
 
 fn item_list_to_json<R: Read>(
