@@ -48,8 +48,8 @@ pub enum JsonError {
 }
 
 impl JsonError {
-    /// Wraps a [JsonError] in a [JsonError::TraceError], providing a trace to the origin of the
-    /// error.
+    /// Wraps a [JsonError] in a [JsonError::TraceError], providing a trace to
+    /// the origin of the error.
     fn add_trace(&self, trace: String) -> Self {
         JsonError::TraceError {
             trace,
@@ -57,8 +57,8 @@ impl JsonError {
         }
     }
 
-    /// Gets the underlying error of a [JsonError::TraceError]. For any other variant, this simply returns
-    /// the error itself.
+    /// Gets the underlying error of a [JsonError::TraceError]. For any other
+    /// variant, this simply returns the error itself.
     fn get_error(&self) -> Self {
         if let JsonError::TraceError {
             error,
@@ -292,13 +292,20 @@ fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Array(entries) = json {
                 let len = entries.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
+
+                let mut i = 0;
                 for entry in entries {
                     if let Value::Array(pair) = entry {
                         ensure!(pair.len() == 2, MapError("Expected key-value pair".to_string()));
-                        write_bytes_from_json_schema_type(key_ty, &pair[0], out)
-                            .map_err(|e| e.add_trace(format!("'{}' (key)", &pair[0])))?;
-                        write_bytes_from_json_schema_type(val_ty, &pair[1], out)
-                            .map_err(|e| e.add_trace(format!("'{}'", &pair[0])))?;
+                        let result: Result<(), JsonError> = {
+                            write_bytes_from_json_schema_type(key_ty, &pair[0], out)
+                                .map_err(|e| e.add_trace("0".to_string()))?;
+                            write_bytes_from_json_schema_type(val_ty, &pair[1], out)
+                                .map_err(|e| e.add_trace("1".to_string()))?;
+                            Ok(())
+                        };
+                        result.map_err(|e| e.add_trace(format!("{}", i)))?;
+                        i += 1;
                     } else {
                         return Err(WrongJsonType(
                             "Expected key value pairs as JSON arrays".to_string(),
@@ -964,9 +971,7 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self {
-        ParseError::default()
-    }
+    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
 }
 
 fn item_list_to_json<R: Read>(
