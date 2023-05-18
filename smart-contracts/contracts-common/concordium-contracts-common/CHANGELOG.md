@@ -2,7 +2,10 @@
 
 ## Unreleased changes
 
-- Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using `FromStr` and `Display` implementations, when feature `derive-serde` is enabled.
+- Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using
+  `FromStr` and `Display` implementations, when feature `derive-serde` is
+  enabled.
+- Implement Serialize any `HashBytes<Purpose>` over any `Purpose`.
 
 ## concordium-contracts-common 6.0.0 (2023-05-08)
 
