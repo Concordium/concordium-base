@@ -341,17 +341,6 @@ impl Deserial for ExchangeRates {
     }
 }
 
-impl Serial for ModuleReference {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(self.as_ref()) }
-}
-
-impl Deserial for ModuleReference {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let bytes: [u8; 32] = source.get()?;
-        Ok(bytes.into())
-    }
-}
-
 impl Serial for Timestamp {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.timestamp_millis().serial(out)
