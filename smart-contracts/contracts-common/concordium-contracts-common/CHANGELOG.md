@@ -7,6 +7,7 @@
   enabled.
 - Implement Serialize any `HashBytes<Purpose>` over any `Purpose`.
 - Add `TryFrom` implementation to convert `Timestamp` to `chrono::DateTime`.
+- Add a `Serial` implementation for any `&A` if `A: Serial`.
 
 ## concordium-contracts-common 6.0.0 (2023-05-08)
 
