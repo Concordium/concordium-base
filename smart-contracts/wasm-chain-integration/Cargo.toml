@@ -1,6 +1,6 @@
 [package]
 name = "concordium-smart-contract-engine"
-version = "1.1.0"
+version = "1.2.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
@@ -45,7 +45,7 @@ path = "../wasm-transform"
 version = "1"
 
 [dependencies.concordium-contracts-common]
-version = "5.3.1"
+version = "6.0"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 

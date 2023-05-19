@@ -270,7 +270,7 @@ pub struct HigherLevelAccessStructure<Kind> {
     pub keys:      Vec<UpdatePublicKey>,
     pub threshold: UpdateKeysThreshold,
     #[serde(skip)] // use default when deserializing
-    pub _phantom:  PhantomData<Kind>,
+    pub _phantom: PhantomData<Kind>,
 }
 
 impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
@@ -796,11 +796,17 @@ impl Serial for UpdatePayload {
             }
             UpdatePayload::AddAnonymityRevoker(add_ar) => {
                 12u8.serial(out);
-                add_ar.serial(out)
+                let mut inner = Vec::new();
+                add_ar.serial(&mut inner);
+                (inner.len() as u32).serial(out);
+                out.write_all(&inner).unwrap();
             }
             UpdatePayload::AddIdentityProvider(add_ip) => {
                 13u8.serial(out);
-                add_ip.serial(out)
+                let mut inner = Vec::new();
+                add_ip.serial(&mut inner);
+                (inner.len() as u32).serial(out);
+                out.write_all(&inner).unwrap();
             }
             UpdatePayload::CooldownParametersCPV1(cp) => {
                 14u8.serial(out);
@@ -836,8 +842,30 @@ impl Deserial for UpdatePayload {
             9u8 => Ok(UpdatePayload::BakerStakeThreshold(source.get()?)),
             10u8 => Ok(UpdatePayload::Root(source.get()?)),
             11u8 => Ok(UpdatePayload::Level1(source.get()?)),
-            12u8 => Ok(UpdatePayload::AddAnonymityRevoker(source.get()?)),
-            13u8 => Ok(UpdatePayload::AddIdentityProvider(source.get()?)),
+            12u8 => {
+                let len: u32 = source.get()?;
+                let mut limited = std::io::Read::take(source, len.into());
+                let ar = limited.get()?;
+                if limited.limit() == 0 {
+                    Ok(UpdatePayload::AddAnonymityRevoker(ar))
+                } else {
+                    anyhow::bail!(
+                        "Incorrectly serialized anonymity revoker. Not all data was consumed."
+                    )
+                }
+            }
+            13u8 => {
+                let len: u32 = source.get()?;
+                let mut limited = std::io::Read::take(source, len.into());
+                let ip = limited.get()?;
+                if limited.limit() == 0 {
+                    Ok(UpdatePayload::AddIdentityProvider(ip))
+                } else {
+                    anyhow::bail!(
+                        "Incorrectly serialized identity provider. Not all data was consumed."
+                    )
+                }
+            }
             14u8 => Ok(UpdatePayload::CooldownParametersCPV1(source.get()?)),
             15u8 => Ok(UpdatePayload::PoolParametersCPV1(source.get()?)),
             16u8 => Ok(UpdatePayload::TimeParametersCPV1(source.get()?)),

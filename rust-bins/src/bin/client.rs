@@ -22,7 +22,7 @@ use concordium_base::{
 use dialoguer::{Input, MultiSelect, Select};
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
+use key_derivation::{words_to_seed, ConcordiumHdWallet, CredentialContext, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use serde_json::{json, to_value};
@@ -1154,9 +1154,9 @@ fn handle_create_credential(cc: CreateCredential) {
             };
             let context = CredentialContext {
                 wallet,
-                identity_provider_index,
+                identity_provider_index: identity_provider_index.into(),
                 identity_index,
-                credential_index: u32::from(acc_num),
+                credential_index: acc_num,
             };
             (id_use_data, cred_data, Some(context))
         }
