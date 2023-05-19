@@ -466,6 +466,30 @@ impl Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
+#[derive(Debug, thiserror::Error)]
+#[error("The timestamp is too far in the future.")]
+pub struct TimestampOverflow;
+
+#[cfg(feature = "derive-serde")]
+impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
+    type Error = TimestampOverflow;
+
+    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
+        use chrono::TimeZone;
+        if let Some(utc) = chrono::Utc
+            .timestamp_millis_opt(value.milliseconds.try_into().map_err(|_| TimestampOverflow)?)
+            .single()
+        {
+            Ok(utc)
+        } else {
+            // according to the documentation of `timestamp_millis_opt` this case only
+            // happens on overflow.
+            Err(TimestampOverflow)
+        }
+    }
+}
+
+#[cfg(feature = "derive-serde")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseTimestampError {
     ParseError(chrono::format::ParseError),
