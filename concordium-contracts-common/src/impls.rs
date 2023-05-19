@@ -374,6 +374,10 @@ impl Serial for &str {
     }
 }
 
+impl<A: Serial> Serial for &A {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { (*self).serial(out) }
+}
+
 /// Serialized by writing an `u32` representing the number of bytes for a
 /// utf8-encoding of the string, then writing the bytes. Similar to `&str`.
 impl Serial for String {
