@@ -23,6 +23,8 @@ pub mod encrypted_transfers;
 pub mod id;
 pub mod random_oracle;
 
+pub mod web3id;
+
 pub mod pedersen_commitment;
 pub mod ps_sig;
 

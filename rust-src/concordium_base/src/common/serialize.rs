@@ -304,7 +304,7 @@ impl Buffer for sha2::Sha256 {
 /// Trait implemented by types which can be encoded into byte arrays.
 /// The intention is that the encoding is binary and not human readable.
 pub trait Serial {
-    fn serial<B: Buffer>(&self, _out: &mut B);
+    fn serial<B: Buffer>(&self, out: &mut B);
 }
 
 impl Serial for u64 {
@@ -454,6 +454,15 @@ impl Serial for num::rational::Ratio<u64> {
 /// Serialize a vector by encoding its length as a u64 in big endian and then
 /// the list of elements in sequence.
 impl<T: Serial> Serial for Vec<T> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.len() as u64).serial(out);
+        serial_vector_no_length(self, out)
+    }
+}
+
+/// Serialize a slice by encoding its length as a u64 in big endian and then
+/// the list of elements in sequence.
+impl<T: Serial> Serial for &[T] {
     fn serial<B: Buffer>(&self, out: &mut B) {
         (self.len() as u64).serial(out);
         serial_vector_no_length(self, out)
