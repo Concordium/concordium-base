@@ -991,7 +991,7 @@ fn message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
     use crate::common::Serial;
     use sha2::Digest;
     // hash the context and proof.
-    let mut out = sha2::Sha256::new();
+    let mut out = sha2::Sha512::new();
     challenge.serial(&mut out);
     proofs.serial(&mut out);
     let mut msg = b"WEB3ID:LINKING".to_vec();

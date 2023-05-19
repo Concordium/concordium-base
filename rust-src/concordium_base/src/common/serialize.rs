@@ -301,6 +301,14 @@ impl Buffer for sha2::Sha256 {
     fn result(self) -> Self::Result { self.finalize().into() }
 }
 
+impl Buffer for sha2::Sha512 {
+    type Result = [u8; 64];
+
+    fn start() -> Self { sha2::Sha512::new() }
+
+    fn result(self) -> Self::Result { self.finalize().into() }
+}
+
 /// Trait implemented by types which can be encoded into byte arrays.
 /// The intention is that the encoding is binary and not human readable.
 pub trait Serial {
