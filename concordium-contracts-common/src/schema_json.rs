@@ -121,6 +121,27 @@ impl<'a> ToJsonError<'a> {
             error: Box::new(self),
         }
     }
+
+    /// Prints a formatted error message for variant. [ToJsonError::TraceError] supports printing a
+    /// verbose form including a more detailed description of the error stack, which is returned if
+    /// `verbose` is set to true.
+    pub fn print(&self, verbose: bool) -> String {
+        match self {
+            ToJsonError::TraceError {
+                position,
+                schema,
+                error,
+            } if verbose => {
+                format!(
+                    "{}\nIn deserializing position {} into type {:?}",
+                    error.print(verbose),
+                    position,
+                    schema
+                )
+            }
+            _ => format!("{}", self),
+        }
+    }
 }
 
 pub type ToJsonResult<'a, A> = Result<A, ToJsonError<'a>>;
