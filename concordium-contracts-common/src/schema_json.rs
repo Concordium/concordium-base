@@ -1,5 +1,4 @@
 use crate::{constants::*, schema::*, *};
-use core::num::TryFromIntError;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::Value;
@@ -44,7 +43,7 @@ pub enum JsonError<'a> {
     #[error("{field} -> {error}")]
     TraceError {
         field: String,
-        json: &'a serde_json::Value,
+        json:  &'a serde_json::Value,
         error: Box<JsonError<'a>>,
     },
 }
@@ -74,9 +73,10 @@ impl<'a> JsonError<'a> {
         self
     }
 
-    /// Prints a formatted error message for variant. [JsonError::TraceError] supports printing a
-    /// verbose form including a more detailed description of the error stack, which is returned if
-    /// `verbose` is set to true.
+    /// Prints a formatted error message for variant. [JsonError::TraceError]
+    /// supports printing a verbose form including a more detailed
+    /// description of the error stack, which is returned if `verbose` is
+    /// set to true.
     pub fn print(&self, verbose: bool) -> String {
         match self {
             JsonError::TraceError {
@@ -100,20 +100,20 @@ pub enum ToJsonError<'a> {
     #[error("Failed to deserialize {schema:?} from position {position} of {data:x?}")]
     DeserialError {
         position: u32,
-        schema: Type,
-        data: &'a [u8],
+        schema:   Type,
+        data:     &'a [u8],
     },
     #[error("{schema:?} from {position} -> {error}")]
     TraceError {
         position: u32,
-        schema: Type,
-        error: Box<ToJsonError<'a>>,
+        schema:   Type,
+        error:    Box<ToJsonError<'a>>,
     },
 }
 
 impl<'a> ToJsonError<'a> {
-    /// Wraps a [ToJsonError] in a [ToJsonError::TraceError], providing a trace to
-    /// the origin of the error.
+    /// Wraps a [ToJsonError] in a [ToJsonError::TraceError], providing a trace
+    /// to the origin of the error.
     fn add_trace(self, position: u32, schema: &Type) -> Self {
         ToJsonError::TraceError {
             position,
@@ -122,9 +122,10 @@ impl<'a> ToJsonError<'a> {
         }
     }
 
-    /// Prints a formatted error message for variant. [ToJsonError::TraceError] supports printing a
-    /// verbose form including a more detailed description of the error stack, which is returned if
-    /// `verbose` is set to true.
+    /// Prints a formatted error message for variant. [ToJsonError::TraceError]
+    /// supports printing a verbose form including a more detailed
+    /// description of the error stack, which is returned if `verbose` is
+    /// set to true.
     pub fn print(&self, verbose: bool) -> String {
         match self {
             ToJsonError::TraceError {
@@ -1048,9 +1049,7 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self {
-        ParseError::default()
-    }
+    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
 }
 
 fn item_list_to_json<'a, T: AsRef<[u8]>>(
