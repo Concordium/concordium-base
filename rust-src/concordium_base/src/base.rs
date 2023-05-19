@@ -5,7 +5,12 @@ use crate::{
         deserial_string, types::Signature, Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt,
         SerdeBase16Serialize, SerdeDeserialize, SerdeSerialize, Serial, Serialize,
     },
-    id::types::VerifyKey,
+    curve_arithmetic::Curve,
+    id::{
+        constants::ArCurve,
+        types::{GlobalContext, VerifyKey},
+    },
+    pedersen_commitment::{Randomness, Value},
     random_oracle::RandomOracle,
 };
 use concordium_contracts_common::AccountAddress;
@@ -732,7 +737,9 @@ impl BakerCredentials {
 }
 
 // FIXME: Move to somewhere else in the dependency. This belongs to rust-src.
-#[derive(SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef)]
+#[derive(
+    SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef, derive_more::Into,
+)]
 /// A registration ID of a credential. This ID is generated from the user's PRF
 /// key and a sequential counter. [`CredentialRegistrationID`]'s generated from
 /// the same PRF key, but different counter values cannot easily be linked
@@ -741,6 +748,19 @@ pub struct CredentialRegistrationID(crate::id::constants::ArCurve);
 
 impl CredentialRegistrationID {
     pub fn new(g: crate::id::constants::ArCurve) -> Self { Self(g) }
+
+    /// Construct the cred id from the exponent derived from the PRF key, in
+    /// the context of chain cryptographic parameters `crypto_params`.
+    pub fn from_exponent(
+        crypto_params: &GlobalContext<ArCurve>,
+        cexp: <crate::id::constants::ArCurve as Curve>::Scalar,
+    ) -> Self {
+        let cred_id = crypto_params
+            .on_chain_commitment_key
+            .hide(&Value::<ArCurve>::new(cexp), &Randomness::zero())
+            .0;
+        Self::new(cred_id)
+    }
 }
 
 impl fmt::Display for CredentialRegistrationID {

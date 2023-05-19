@@ -26,15 +26,15 @@ instance Serialize CoreGenesisParametersV1 where
     put CoreGenesisParametersV1{..} = do
         put genesisTime
         put genesisEpochDuration
-        put (numerator genesisSignatureThreshold)
-        put (denominator genesisSignatureThreshold)
+        putWord64be (numerator genesisSignatureThreshold)
+        putWord64be (denominator genesisSignatureThreshold)
     get = label "CoreGenesisParametersV1" $ do
         genesisTime <- get
         genesisEpochDuration <- get
-        gstNumerator <- get
-        gstDenominator <- get
-        unless (gstDenominator == 0) $ fail "genesisSignatureThreshold: zero denominator"
-        unless (gstNumerator <= gstDenominator) $ fail "genesisSignatureThreshold > 1"
+        gstNumerator <- getWord64be
+        gstDenominator <- getWord64be
+        when (gstDenominator == 0) $ fail "genesisSignatureThreshold: zero denominator"
+        when (gstNumerator > gstDenominator) $ fail "genesisSignatureThreshold > 1"
         -- Ratios of fixed size (unsigned) integers can be subject to arithmetic overflow on basic
         -- operations. This >=2/3 check is implemented so as to avoid overflow.
         unless (gstNumerator >= gstDenominator - gstDenominator `div` 3) $

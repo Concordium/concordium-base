@@ -432,6 +432,27 @@ pub struct YearMonth {
     pub month: u8,
 }
 
+impl YearMonth {
+    /// Return the time at the beginning of the month. This is typically
+    /// used as the lower bound of a validity of a credential.
+    pub fn lower(self) -> Option<chrono::DateTime<chrono::Utc>> {
+        let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
+        let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
+        let dt = date.and_time(time);
+        Some(chrono::DateTime::from_utc(dt, chrono::Utc))
+    }
+
+    /// Return the time at the beginning of the next month. This is typically
+    /// used as the strict upper bound of a validity of a credential.
+    pub fn upper(self) -> Option<chrono::DateTime<chrono::Utc>> {
+        let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
+        let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
+        let date = date.checked_add_months(chrono::Months::new(1))?;
+        let dt = date.and_time(time);
+        Some(chrono::DateTime::from_utc(dt, chrono::Utc))
+    }
+}
+
 impl ToString for YearMonth {
     fn to_string(&self) -> String { format!("{:04}{:02}", self.year, self.month) }
 }
@@ -523,6 +544,17 @@ impl YearMonth {
             year:  now.year() as u16,
             month: now.month() as u8,
         }
+    }
+
+    /// Construct a [`YearMonth`](Self) from a unix timestamp in seconds.
+    /// This fails if the conversion would lead to an out of range value,
+    /// meaning a year outside of the range `1000..=9999`.
+    pub fn from_timestamp(unix_seconds: i64) -> Option<YearMonth> {
+        use chrono::{Datelike, TimeZone};
+        let date = chrono::Utc.timestamp_opt(unix_seconds, 0).earliest()?;
+        let year = date.year().try_into().ok()?;
+        let month = date.month().try_into().ok()?;
+        Self::new(year, month)
     }
 }
 
@@ -1697,6 +1729,28 @@ pub enum AccountCredentialWithoutProofs<C: Curve, AttributeType: Attribute<C::Sc
     },
 }
 
+impl<C: Curve, AttributeType: Attribute<C::Scalar>>
+    AccountCredentialWithoutProofs<C, AttributeType>
+{
+    /// Retrieve the policy of the credential.
+    pub fn policy(&self) -> &Policy<C, AttributeType> {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => &icdv.policy,
+            AccountCredentialWithoutProofs::Normal { cdv, .. } => &cdv.policy,
+        }
+    }
+
+    /// Retrieve the issuer of the credential. The [`IpIdentity`] is a reference
+    /// to the identity provider on the chain of which the credential is a part
+    /// of.
+    pub fn issuer(&self) -> IpIdentity {
+        match self {
+            AccountCredentialWithoutProofs::Initial { icdv } => icdv.ip_identity,
+            AccountCredentialWithoutProofs::Normal { cdv, .. } => cdv.ip_identity,
+        }
+    }
+}
+
 impl<C: Curve, AttributeType: Serial + Attribute<C::Scalar>> Serial
     for AccountCredentialWithoutProofs<C, AttributeType>
 {
@@ -2483,5 +2537,33 @@ mod tests {
         }
         anyhow::ensure!(base.get_alias(1 << 24).is_none());
         Ok(())
+    }
+
+    #[test]
+    fn test_timestamp_lower_upper() {
+        use chrono::Datelike;
+        for year in 1000..=9999 {
+            for month in 1..=12 {
+                if month == 12 && year == 9999 {
+                    continue;
+                }
+                let ym = YearMonth::new(year, month).unwrap();
+                let lower = ym.lower().unwrap();
+                let upper = ym.upper().unwrap();
+                assert_eq!(lower.year(), year as i32);
+                assert_eq!(lower.month(), month as u32);
+                assert_eq!(
+                    upper.year(),
+                    if month == 12 { year + 1 } else { year } as i32
+                );
+                assert_eq!(
+                    upper.month(),
+                    if month == 12 { 1 } else { (month + 1) as u32 }
+                );
+
+                let lower_from_ts = YearMonth::from_timestamp(lower.timestamp()).unwrap();
+                assert_eq!(ym, lower_from_ts);
+            }
+        }
     }
 }

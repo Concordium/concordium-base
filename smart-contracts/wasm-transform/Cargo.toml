@@ -1,6 +1,6 @@
 [package]
 name = "concordium-wasm"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
@@ -21,7 +21,7 @@ derive_more = "0.99"
 
 
 [dependencies.concordium-contracts-common]
-version = "5"
+version = "6"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
