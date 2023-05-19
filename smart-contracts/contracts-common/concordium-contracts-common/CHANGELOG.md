@@ -6,6 +6,7 @@
   `FromStr` and `Display` implementations, when feature `derive-serde` is
   enabled.
 - Implement Serialize any `HashBytes<Purpose>` over any `Purpose`.
+- Add `TryFrom` implementation to convert `Timestamp` to `chrono::DateTime`.
 
 ## concordium-contracts-common 6.0.0 (2023-05-08)
 
