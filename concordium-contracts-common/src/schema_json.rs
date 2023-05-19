@@ -72,6 +72,24 @@ impl<'a> JsonError<'a> {
 
         self
     }
+
+    /// Prints a formatted error message for variant. [JsonError::TraceError] supports printing a
+    /// verbose form including a more detailed description of the error stack, which is returned if
+    /// `verbose` is set to true.
+    pub fn print(&self, verbose: bool) -> String {
+        match self {
+            JsonError::TraceError {
+                field,
+                json,
+                error,
+            } if verbose => {
+                let formatted_json =
+                    serde_json::to_string_pretty(json).unwrap_or(format!("{}", json));
+                format!("{}\nIn {} of {}", error.print(verbose), field, formatted_json)
+            }
+            _ => format!("{}", self),
+        }
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -375,7 +393,7 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                         ));
                     };
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
-                        .map_err(|e| e.add_trace(format!("'{}'", variant_name), json))
+                        .map_err(|e| e.add_trace(format!("\"{}\"", variant_name), json))
                 } else {
                     // Non-existing variant
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
@@ -415,7 +433,7 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
         Type::ContractName(size_len) => {
             if let Value::Object(fields) = json {
                 let contract = fields.get("contract").ok_or_else(|| {
-                    FieldError("Missing field 'contract' of type JSON String.".to_string())
+                    FieldError("Missing field \"contract\" of type JSON String.".to_string())
                 })?;
                 ensure!(
                     fields.len() == 1,
@@ -431,7 +449,7 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                     serial_vector_no_length(contract_name.as_bytes(), out)
                         .or(Err(JsonError::FailedWriting))
                 } else {
-                    Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
+                    Err(WrongJsonType("JSON String required for field \"contract\".".to_string()))
                 }
             } else {
                 Err(WrongJsonType("JSON Object required for contract name.".to_string()))
@@ -440,10 +458,10 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
         Type::ReceiveName(size_len) => {
             if let Value::Object(fields) = json {
                 let contract = fields.get("contract").ok_or_else(|| {
-                    FieldError("Missing field 'contract' of type JSON String.".to_string())
+                    FieldError("Missing field \"contract\" of type JSON String.".to_string())
                 })?;
                 let func = fields.get("func").ok_or_else(|| {
-                    WrongJsonType("Missing field 'func' of type JSON String.".to_string())
+                    WrongJsonType("Missing field \"func\" of type JSON String.".to_string())
                 })?;
                 ensure!(
                     fields.len() == 2,
@@ -460,10 +478,10 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                         serial_vector_no_length(receive_name.as_bytes(), out)
                             .or(Err(JsonError::FailedWriting))
                     } else {
-                        Err(WrongJsonType("JSON String required for field 'func'.".to_string()))
+                        Err(WrongJsonType("JSON String required for field \"func\".".to_string()))
                     }
                 } else {
-                    Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
+                    Err(WrongJsonType("JSON String required for field \"contract\".".to_string()))
                 }
             } else {
                 Err(WrongJsonType("JSON Object required for contract name.".to_string()))
@@ -635,7 +653,7 @@ fn write_bytes_from_json_schema_fields<'a, W: Write>(
                     let field_value_opt = map.get(field_name);
                     if let Some(field_value) = field_value_opt {
                         write_bytes_from_json_schema_type(field_ty, field_value, out)
-                            .map_err(|e| e.add_trace(format!("'{}'", field_name), json))?;
+                            .map_err(|e| e.add_trace(format!("\"{}\"", field_name), json))?;
                     } else {
                         return Err(FieldError(format!("Missing field: {}", field_name)));
                     }
@@ -962,7 +980,10 @@ mod tests {
 }
 
 impl Fields {
-    pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
+        source: &mut Cursor<T>,
+    ) -> ParseResult<serde_json::Value> {
         use serde_json::*;
 
         match self {
@@ -1044,7 +1065,10 @@ impl Type {
     }
 
     /// Uses the schema to deserialize bytes into json
-    pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
+        source: &mut Cursor<T>,
+    ) -> ParseResult<serde_json::Value> {
         use serde_json::*;
 
         match self {
