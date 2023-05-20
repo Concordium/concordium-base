@@ -802,7 +802,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
             CredentialsInputs::Identity { commitments },
         ) => {
             for (statement, proof) in proofs.iter() {
-                if !statement.verify(global, transcript, commitments, proof) {
+                if !statement.verify(global, transcript, &commitments, proof) {
                     return false;
                 }
             }
@@ -1046,9 +1046,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     }
 }
 
-pub enum CredentialsInputs<'a, C: Curve> {
+pub enum CredentialsInputs<C: Curve> {
     Identity {
-        commitments: &'a BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
+        // All the commitments of the credential.
+        // In principle we only ever need to borrow this, but it is simpler to
+        // have the owned map instead of a reference to it.
+        commitments: BTreeMap<AttributeTag, pedersen_commitment::Commitment<C>>,
     },
     Web3 {
         commitment: pedersen_commitment::Commitment<C>,
@@ -1057,9 +1060,9 @@ pub enum CredentialsInputs<'a, C: Curve> {
 
 /// Verify a presentation in the context of the provided public data and
 /// cryptographic parameters.
-pub fn verify<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
+pub fn verify<C: Curve, AttributeType: Attribute<C::Scalar>>(
     params: &GlobalContext<C>,
-    public: impl ExactSizeIterator<Item = CredentialsInputs<'a, C>>,
+    public: impl ExactSizeIterator<Item = CredentialsInputs<C>>,
     proof: &Presentation<C, AttributeType>,
 ) -> bool {
     let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
@@ -1514,7 +1517,7 @@ mod tests {
                 commitment: commitment_1,
             },
             CredentialsInputs::Identity {
-                commitments: &commitments_2,
+                commitments: commitments_2,
             },
         ];
         anyhow::ensure!(
