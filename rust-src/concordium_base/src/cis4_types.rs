@@ -127,7 +127,7 @@ pub struct CredentialInfo {
 
 /// Response to a credential data query.
 #[derive(contracts_common::Serialize, Clone, Debug)]
-pub struct CredentialQueryResponse {
+pub struct CredentialEntry {
     credential_info:  CredentialInfo,
     /// A schema URL or DID address pointing to the JSON schema for a verifiable
     /// credential.
