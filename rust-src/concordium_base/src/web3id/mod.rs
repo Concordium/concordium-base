@@ -22,6 +22,61 @@ use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
+#[derive(
+    PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct CredentialId {
+    pub id: uuid::Uuid,
+}
+
+impl crate::common::Serial for CredentialId {
+    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
+        out.write_all(self.id.as_bytes())
+            .expect("Writing to buffer always succeeds.");
+    }
+}
+
+impl crate::common::Deserial for CredentialId {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
+        let bytes = <[u8; 16]>::deserial(source)?;
+        Ok(Self {
+            id: uuid::Uuid::from_bytes(bytes),
+        })
+    }
+}
+
+impl crate::contracts_common::Serial for CredentialId {
+    fn serial<W: crate::contracts_common::Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_all(self.id.as_bytes())
+    }
+}
+
+impl crate::contracts_common::Deserial for CredentialId {
+    fn deserial<R: crate::contracts_common::Read>(
+        source: &mut R,
+    ) -> crate::contracts_common::ParseResult<Self> {
+        let bytes = <[u8; 16]>::deserial(source)?;
+        Ok(Self {
+            id: uuid::Uuid::from_bytes(bytes),
+        })
+    }
+}
+
+impl CredentialId {
+    pub fn new() -> Self {
+        Self {
+            id: uuid::Uuid::new_v4(),
+        }
+    }
+}
+
+impl std::fmt::Display for CredentialId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.id.simple())
+    }
+}
+
 /// A statement about a single credential, either an identity credential or a
 /// Web3 credential.
 #[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
@@ -50,7 +105,7 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// credential.
         contract:   ContractAddress,
         /// Credential identifier inside the contract.
-        credential: Uuid,
+        credential: CredentialId,
         statement:  Vec<AtomicStatement<C, u8, AttributeType>>,
     },
 }
@@ -89,7 +144,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                     ty:         serde_json::from_value(ty)?,
                     network:    id.network,
                     contract:   address,
-                    credential: Uuid::from_bytes(param),
+                    credential: CredentialId {
+                        id: Uuid::from_bytes(param),
+                    },
                     statement:  serde_json::from_value(statement)?,
                 })
             }
@@ -127,7 +184,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
             } => {
                 let json = serde_json::json!({
                     "type": ty,
-                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential.simple()),
+                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential),
                     "statement": statement,
                 });
                 json.serialize(serializer)
@@ -151,7 +208,7 @@ pub enum CredentialMetadata {
     Web3Id {
         contract: ContractAddress,
         owner:    CredentialOwner,
-        id:       Uuid,
+        id:       CredentialId,
     },
 }
 
@@ -242,7 +299,7 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// Reference to a specific smart contract instance.
         contract:               ContractAddress,
         /// The ID of the credential inside the contract instance.
-        credential:             Uuid,
+        credential:             CredentialId,
         /// The credential type. This is chosen by the provider to provide
         /// some information about what the credential is about. The list should
         /// be considered as a "path", refining the meaning, e.g.,
@@ -317,7 +374,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 owner,
             } => {
                 let json = serde_json::json!({
-                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential.simple()),
+                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential),
                     "type": ty,
                     "issuer": format!("did:ccd:{network}:sci:{}:{}/issuer", contract.index, contract.subindex),
                     "issuanceDate": issuance_date,
@@ -445,7 +502,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 let Ok(uuid) = Vec::from(parameter).try_into() else {
                     anyhow::bail!("Invalid credentialEntry parameter");
                 };
-                let credential: Uuid = Uuid::from_bytes(uuid);
+                let credential = CredentialId {
+                    id: Uuid::from_bytes(uuid),
+                };
 
                 let id = get_field(&mut credential_subject, "id")?;
                 let Some(Ok(id)) = id.as_str().map(parse_did) else {
@@ -544,7 +603,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 }
                 network.serial(out);
                 contract.serial(out);
-                out.write_all(credential.as_bytes()).unwrap();
+                credential.serial(out);
                 owner.serial(out);
                 issuance_date.timestamp_millis().serial(out);
                 additional_commitments.serial(out);
@@ -1197,7 +1256,7 @@ mod tests {
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
-                credential: Uuid::new_v4(),
+                credential: CredentialId::new(),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1230,7 +1289,7 @@ mod tests {
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1338, 0),
-                credential: Uuid::new_v4(),
+                credential: CredentialId::new(),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1382,7 +1441,7 @@ mod tests {
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
-                credential: Uuid::new_v4(),
+                credential: CredentialId::new(),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {

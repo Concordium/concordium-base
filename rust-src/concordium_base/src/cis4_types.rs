@@ -1,5 +1,8 @@
 pub use crate::cis2_types::MetadataUrl;
-use crate::contracts_common::{self, self as concordium_std};
+use crate::{
+    contracts_common::{self, self as concordium_std},
+    web3id::CredentialId,
+};
 use std::marker::PhantomData;
 
 /// Credential type is a string that corresponds to the value of the "name"
@@ -83,59 +86,39 @@ pub enum CredentialHolderIdRole {}
 
 pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash)]
-pub struct CredentialId {
-    pub id: uuid::Uuid,
-}
-
-impl contracts_common::Serial for CredentialId {
-    fn serial<W: contracts_common::Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_all(self.id.as_bytes())
-    }
-}
-
-impl contracts_common::Deserial for CredentialId {
-    fn deserial<R: contracts_common::Read>(source: &mut R) -> contracts_common::ParseResult<Self> {
-        let bytes = <[u8; 16]>::deserial(source)?;
-        Ok(Self {
-            id: uuid::Uuid::from_bytes(bytes),
-        })
-    }
-}
-
 #[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct CredentialInfo {
     /// The holder's identifier.
-    holder_id:        CredentialHolderId,
+    pub holder_id:        CredentialHolderId,
     /// Whether the holder is allowed to revoke the credential or not.
-    holder_revocable: bool,
+    pub holder_revocable: bool,
     /// A vector Pedersen commitment to the attributes of the verifiable
     /// credential.
     #[concordium(size_length = 2)]
-    commitment:       Vec<u8>,
+    pub commitment:       Vec<u8>,
     /// The date from which the credential is considered valid.
-    valid_from:       contracts_common::Timestamp,
+    pub valid_from:       contracts_common::Timestamp,
     /// After this date, the credential becomes expired. `None` corresponds to a
     /// credential that cannot expire.
-    valid_until:      Option<contracts_common::Timestamp>,
+    pub valid_until:      Option<contracts_common::Timestamp>,
     /// A type of the credential that is used to identify which schema the
     /// credential is based on.
-    credential_type:  CredentialType,
+    pub credential_type:  CredentialType,
     /// Metadata URL of the credential.
-    metadata_url:     MetadataUrl,
+    pub metadata_url:     MetadataUrl,
 }
 
 /// Response to a credential data query.
 #[derive(contracts_common::Serialize, Clone, Debug)]
 pub struct CredentialEntry {
-    credential_info:  CredentialInfo,
+    pub credential_info:  CredentialInfo,
     /// A schema URL or DID address pointing to the JSON schema for a verifiable
     /// credential.
-    schema_ref:       SchemaRef,
+    pub schema_ref:       SchemaRef,
     /// The nonce is used to avoid replay attacks when checking the holder's
     /// signature on a revocation message. This is the nonce that should be used
     /// when signing a revocation.
-    revocation_nonce: u64,
+    pub revocation_nonce: u64,
 }
 
 #[derive(

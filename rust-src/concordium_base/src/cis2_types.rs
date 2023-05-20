@@ -5,10 +5,9 @@ use crate::{
     hashes::Hash,
     smart_contracts::{
         concordium_contracts_common::{
-            Serialize,
-            self as concordium_std,
-            deserial_vector_no_length, serial_vector_no_length, AccountAddress, Address,
-            ContractAddress, Deserial, OwnedReceiveName, ParseError, Read, Serial, Write,
+            self as concordium_std, deserial_vector_no_length, serial_vector_no_length,
+            AccountAddress, Address, ContractAddress, Deserial, OwnedReceiveName, ParseError, Read,
+            Serial, Serialize, Write,
         },
         ContractEvent,
     },
