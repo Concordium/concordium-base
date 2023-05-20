@@ -541,7 +541,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
 
                 Ok(Self::Web3Id {
                     created,
-                    owner: key,
+                    owner: CredentialOwner::new(key),
                     network: issuer.network,
                     contract: address,
                     credential,
@@ -637,7 +637,8 @@ pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     credential_statements: Vec<CredentialStatement<C, AttributeType>>,
 }
 
-pub type CredentialOwner = ed25519_dalek::PublicKey;
+// TODO: Structure types in a better location.
+pub type CredentialOwner = crate::cis4_types::CredentialHolderId;
 
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
@@ -786,7 +787,7 @@ pub trait Web3IdSigner {
 }
 
 impl Web3IdSigner for ed25519_dalek::Keypair {
-    fn id(&self) -> CredentialOwner { self.public }
+    fn id(&self) -> CredentialOwner { CredentialOwner::new(self.public) }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         ed25519_dalek::Signer::sign(self, msg.as_ref())
@@ -1136,7 +1137,7 @@ pub fn verify<C: Curve, AttributeType: Attribute<C::Scalar>>(
     for (cred_public, cred_proof) in public.zip(&proof.verifiable_credential) {
         if let CredentialProof::Web3Id { owner, .. } = &cred_proof {
             let Some(sig) = linking_proof_iter.next() else {return false};
-            if owner.verify(&to_sign, &sig.signature).is_err() {
+            if owner.public_key.verify(&to_sign, &sig.signature).is_err() {
                 return false;
             }
         }

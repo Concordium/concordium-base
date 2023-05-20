@@ -27,6 +27,15 @@ pub struct Ed25519PublicKey<Role> {
     phantom:        PhantomData<Role>,
 }
 
+impl<Role> Ed25519PublicKey<Role> {
+    pub fn new(public_key: ed25519_dalek::PublicKey) -> Self {
+        Self {
+            public_key,
+            phantom: PhantomData,
+        }
+    }
+}
+
 impl<Role> std::fmt::Debug for Ed25519PublicKey<Role> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.public_key.as_bytes() {
@@ -74,6 +83,26 @@ impl<Role> contracts_common::Deserial for Ed25519PublicKey<Role> {
         let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
         let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
             .map_err(|_| contracts_common::ParseError {})?;
+        Ok(Self {
+            public_key,
+            phantom: PhantomData,
+        })
+    }
+}
+
+impl<Role> crate::common::Serial for Ed25519PublicKey<Role> {
+    fn serial<W: crate::common::Buffer>(&self, out: &mut W) {
+        out.write_all(self.public_key.as_bytes())
+            .expect("Writing to buffer always succeeds.");
+    }
+}
+
+impl<Role> crate::common::Deserial for Ed25519PublicKey<Role> {
+    fn deserial<R: std::io::Read>(source: &mut R) -> crate::common::ParseResult<Self> {
+        use anyhow::Context;
+        let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
+        let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
+            .context("Invalid public key.")?;
         Ok(Self {
             public_key,
             phantom: PhantomData,
