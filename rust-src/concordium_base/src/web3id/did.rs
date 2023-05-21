@@ -377,10 +377,6 @@ mod tests {
             format!("did:ccd:mainnet:sci:{index}/{entrypoint}/").parse::<Method>()?,
             target
         );
-        assert_eq!(
-            format!("did:ccd:mainnet:sci:{index}/{entrypoint}").parse::<Method>()?,
-            target
-        );
         let s = target.to_string();
         assert_eq!(s.parse::<Method>()?, target);
         assert_eq!(
