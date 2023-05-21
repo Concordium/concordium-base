@@ -19,8 +19,16 @@ use concordium_contracts_common::{hashes::HashBytes, ContractAddress};
 use did::*;
 use ed25519_dalek::Verifier;
 use serde::de::DeserializeOwned;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, marker::PhantomData};
 use uuid::Uuid;
+
+/// Domain separation string used when signing the revoke transaction
+/// using the credential secret key.
+pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
+
+/// Domain separation string used when signing the linking proof using
+/// the credential secret key.
+pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 
 #[derive(
     PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -207,7 +215,7 @@ pub enum CredentialMetadata {
     },
     Web3Id {
         contract: ContractAddress,
-        owner:    CredentialOwner,
+        owner:    CredentialHolderId,
         id:       CredentialId,
     },
 }
@@ -294,7 +302,7 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// Creation timestamp of the proof.
         created:                chrono::DateTime<chrono::Utc>,
         /// Owner of the credential, a public key.
-        owner:                  CredentialOwner,
+        owner:                  CredentialHolderId,
         network:                Network,
         /// Reference to a specific smart contract instance.
         contract:               ContractAddress,
@@ -541,7 +549,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
 
                 Ok(Self::Web3Id {
                     created,
-                    owner: CredentialOwner::new(key),
+                    owner: CredentialHolderId::new(key),
                     network: issuer.network,
                     contract: address,
                     credential,
@@ -637,8 +645,104 @@ pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     credential_statements: Vec<CredentialStatement<C, AttributeType>>,
 }
 
-// TODO: Structure types in a better location.
-pub type CredentialOwner = crate::cis4_types::CredentialHolderId;
+#[repr(transparent)]
+#[doc(hidden)]
+/// An ed25519 public key tagged with a phantom type parameter based on its
+/// role, e.g., an owner of a credential or a revocation key.
+pub struct Ed25519PublicKey<Role> {
+    pub public_key: ed25519_dalek::PublicKey,
+    phantom:        PhantomData<Role>,
+}
+
+impl<Role> Ed25519PublicKey<Role> {
+    pub fn new(public_key: ed25519_dalek::PublicKey) -> Self {
+        Self {
+            public_key,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<Role> std::fmt::Debug for Ed25519PublicKey<Role> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in self.public_key.as_bytes() {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+impl<Role> std::fmt::Display for Ed25519PublicKey<Role> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in self.public_key.as_bytes() {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+// Manual trait implementations to avoid bounds on the `Role` parameter.
+impl<Role> Eq for Ed25519PublicKey<Role> {}
+
+impl<Role> PartialEq for Ed25519PublicKey<Role> {
+    fn eq(&self, other: &Self) -> bool { self.public_key.eq(&other.public_key) }
+}
+
+impl<Role> Clone for Ed25519PublicKey<Role> {
+    fn clone(&self) -> Self {
+        Self {
+            public_key: self.public_key,
+            phantom:    PhantomData,
+        }
+    }
+}
+
+impl<Role> Copy for Ed25519PublicKey<Role> {}
+
+impl<Role> crate::contracts_common::Serial for Ed25519PublicKey<Role> {
+    fn serial<W: crate::contracts_common::Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_all(self.public_key.as_bytes())
+    }
+}
+
+impl<Role> crate::contracts_common::Deserial for Ed25519PublicKey<Role> {
+    fn deserial<R: crate::contracts_common::Read>(
+        source: &mut R,
+    ) -> crate::contracts_common::ParseResult<Self> {
+        let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
+        let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
+            .map_err(|_| crate::contracts_common::ParseError {})?;
+        Ok(Self {
+            public_key,
+            phantom: PhantomData,
+        })
+    }
+}
+
+impl<Role> crate::common::Serial for Ed25519PublicKey<Role> {
+    fn serial<W: crate::common::Buffer>(&self, out: &mut W) {
+        out.write_all(self.public_key.as_bytes())
+            .expect("Writing to buffer always succeeds.");
+    }
+}
+
+impl<Role> crate::common::Deserial for Ed25519PublicKey<Role> {
+    fn deserial<R: std::io::Read>(source: &mut R) -> crate::common::ParseResult<Self> {
+        use anyhow::Context;
+        let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
+        let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
+            .context("Invalid public key.")?;
+        Ok(Self {
+            public_key,
+            phantom: PhantomData,
+        })
+    }
+}
+
+#[doc(hidden)]
+pub enum CredentialHolderIdRole {}
+
+pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 
 #[derive(serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
@@ -782,12 +886,12 @@ impl TryFrom<serde_json::Value> for LinkingProof {
 /// credential. The intention is that this is implemented by ed25519 keypairs
 /// or hardware wallets.
 pub trait Web3IdSigner {
-    fn id(&self) -> CredentialOwner;
+    fn id(&self) -> CredentialHolderId;
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature;
 }
 
 impl Web3IdSigner for ed25519_dalek::Keypair {
-    fn id(&self) -> CredentialOwner { CredentialOwner::new(self.public) }
+    fn id(&self) -> CredentialHolderId { CredentialHolderId::new(self.public) }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         ed25519_dalek::Signer::sign(self, msg.as_ref())
@@ -1054,7 +1158,7 @@ fn message_to_sign<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let mut out = sha2::Sha512::new();
     challenge.serial(&mut out);
     proofs.serial(&mut out);
-    let mut msg = b"WEB3ID:LINKING".to_vec();
+    let mut msg = LINKING_DOMAIN_STRING.to_vec();
     msg.extend_from_slice(&out.finalize());
     msg
 }
@@ -1085,8 +1189,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
             let proof = cred_statement.prove(params, &mut transcript, &mut csprng, attributes)?;
             proofs.push(proof);
         }
-        // TODO: Factor this into a helper function to make sure it matches in prover
-        // and verifier.
         let to_sign = message_to_sign(self.challenge, &proofs);
         // Linking proof
         let mut proof_value = Vec::new();

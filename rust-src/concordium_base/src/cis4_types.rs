@@ -1,9 +1,8 @@
 pub use crate::cis2_types::MetadataUrl;
 use crate::{
     contracts_common::{self, self as concordium_std},
-    web3id::CredentialId,
+    web3id::*,
 };
-use std::marker::PhantomData;
 
 /// Credential type is a string that corresponds to the value of the "name"
 /// attribute of the credential schema.
@@ -19,101 +18,6 @@ pub struct CredentialType {
 pub struct SchemaRef {
     pub schema_ref: MetadataUrl,
 }
-
-#[repr(transparent)]
-#[doc(hidden)]
-pub struct Ed25519PublicKey<Role> {
-    pub public_key: ed25519_dalek::PublicKey,
-    phantom:        PhantomData<Role>,
-}
-
-impl<Role> Ed25519PublicKey<Role> {
-    pub fn new(public_key: ed25519_dalek::PublicKey) -> Self {
-        Self {
-            public_key,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<Role> std::fmt::Debug for Ed25519PublicKey<Role> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for byte in self.public_key.as_bytes() {
-            write!(f, "{:02x}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-impl<Role> std::fmt::Display for Ed25519PublicKey<Role> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for byte in self.public_key.as_bytes() {
-            write!(f, "{:02x}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-// Manual trait implementations to avoid bounds on the `Role` parameter.
-impl<Role> Eq for Ed25519PublicKey<Role> {}
-
-impl<Role> PartialEq for Ed25519PublicKey<Role> {
-    fn eq(&self, other: &Self) -> bool { self.public_key.eq(&other.public_key) }
-}
-
-impl<Role> Clone for Ed25519PublicKey<Role> {
-    fn clone(&self) -> Self {
-        Self {
-            public_key: self.public_key,
-            phantom:    PhantomData,
-        }
-    }
-}
-
-impl<Role> Copy for Ed25519PublicKey<Role> {}
-
-impl<Role> contracts_common::Serial for Ed25519PublicKey<Role> {
-    fn serial<W: contracts_common::Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_all(self.public_key.as_bytes())
-    }
-}
-
-impl<Role> contracts_common::Deserial for Ed25519PublicKey<Role> {
-    fn deserial<R: contracts_common::Read>(source: &mut R) -> contracts_common::ParseResult<Self> {
-        let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
-        let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
-            .map_err(|_| contracts_common::ParseError {})?;
-        Ok(Self {
-            public_key,
-            phantom: PhantomData,
-        })
-    }
-}
-
-impl<Role> crate::common::Serial for Ed25519PublicKey<Role> {
-    fn serial<W: crate::common::Buffer>(&self, out: &mut W) {
-        out.write_all(self.public_key.as_bytes())
-            .expect("Writing to buffer always succeeds.");
-    }
-}
-
-impl<Role> crate::common::Deserial for Ed25519PublicKey<Role> {
-    fn deserial<R: std::io::Read>(source: &mut R) -> crate::common::ParseResult<Self> {
-        use anyhow::Context;
-        let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
-        let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
-            .context("Invalid public key.")?;
-        Ok(Self {
-            public_key,
-            phantom: PhantomData,
-        })
-    }
-}
-
-#[doc(hidden)]
-pub enum CredentialHolderIdRole {}
-
-pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 
 #[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct CredentialInfo {
@@ -275,5 +179,3 @@ pub struct Reason {
     #[concordium(size_length = 1)]
     reason: String,
 }
-
-pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
