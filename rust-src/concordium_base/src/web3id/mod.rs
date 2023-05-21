@@ -1,3 +1,9 @@
+//! Functionality related to constructing and verifying Web3ID proofs.
+//!
+//! The main entrypoints in this module are the [`verify`](Presentation::verify)
+//! function for verifying [`Presentation`]s in the context of given public
+//! data, and the [`prove`](Request::prove) function for constructing a proof.
+
 pub mod did;
 
 // TODO:
@@ -34,6 +40,7 @@ pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
     PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
 #[serde(transparent)]
+/// An identifier of a Web3Id credential inside a smart contract.
 pub struct CredentialId {
     pub id: uuid::Uuid,
 }
@@ -72,6 +79,7 @@ impl crate::contracts_common::Deserial for CredentialId {
 }
 
 impl CredentialId {
+    /// Generate a fresh credential from system randomness.
     pub fn new() -> Self {
         Self {
             id: uuid::Uuid::new_v4(),
@@ -638,7 +646,7 @@ pub type Challenge = HashBytes<Web3IdChallengeMarker>;
     serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize",
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"
 ))]
-/// A request for proof. This is the statement and challenge. The secret data
+/// A request for a proof. This is the statement and challenge. The secret data
 /// comes separately.
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     challenge:             Challenge,
@@ -742,6 +750,7 @@ impl<Role> crate::common::Deserial for Ed25519PublicKey<Role> {
 #[doc(hidden)]
 pub enum CredentialHolderIdRole {}
 
+/// The owner of a Web3Id credential.
 pub type CredentialHolderId = Ed25519PublicKey<CredentialHolderIdRole>;
 
 #[derive(serde::Deserialize)]
@@ -763,6 +772,42 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
     /// in the order they appear in the presentation.
     pub fn metadata(&self) -> impl ExactSizeIterator<Item = ProofMetadata> + '_ {
         self.verifiable_credential.iter().map(|cp| cp.metadata())
+    }
+
+    /// Verify a presentation in the context of the provided public data and
+    /// cryptographic parameters.
+    ///
+    /// **NB:** This only verifies the cryptographic consistentcy of the data.
+    /// It does not check metadata, such as expiry. This should be checked
+    /// separately by the verifier.
+    pub fn verify<'a>(
+        &self,
+        params: &GlobalContext<C>,
+        public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
+    ) -> bool {
+        let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
+        transcript.add_bytes(self.presentation_context);
+        transcript.append_message(b"ctx", &params);
+
+        // Compute the data that the linking proof signed.
+        let to_sign = message_to_sign(self.presentation_context, &self.verifiable_credential);
+
+        let mut linking_proof_iter = self.linking_proof.proof_value.iter();
+
+        for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
+            if let CredentialProof::Web3Id { owner, .. } = &cred_proof {
+                let Some(sig) = linking_proof_iter.next() else {return false};
+                if owner.public_key.verify(&to_sign, &sig.signature).is_err() {
+                    return false;
+                }
+            }
+            if !verify_single_credential(params, &mut transcript, cred_proof, cred_public) {
+                return false;
+            }
+        }
+
+        // No bogus signatures should be left.
+        linking_proof_iter.next().is_none()
     }
 }
 
@@ -826,8 +871,10 @@ struct WeakLinkingProof {
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(try_from = "serde_json::Value")]
+/// A proof that establishes that the owner of the credential has indeed created
+/// the presentation. At present this is a list of signatures.
 pub struct LinkingProof {
-    created:     chrono::DateTime<chrono::Utc>,
+    pub created: chrono::DateTime<chrono::Utc>,
     proof_value: Vec<WeakLinkingProof>,
 }
 
@@ -1208,6 +1255,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
     }
 }
 
+/// Public inputs to the verification function. These are the public commitments
+/// that are contained in the credentials.
 pub enum CredentialsInputs<C: Curve> {
     Identity {
         // All the commitments of the credential.
@@ -1218,38 +1267,6 @@ pub enum CredentialsInputs<C: Curve> {
     Web3 {
         commitment: pedersen_commitment::Commitment<C>,
     },
-}
-
-/// Verify a presentation in the context of the provided public data and
-/// cryptographic parameters.
-pub fn verify<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
-    params: &GlobalContext<C>,
-    public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
-    proof: &Presentation<C, AttributeType>,
-) -> bool {
-    let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
-    transcript.add_bytes(proof.presentation_context);
-    transcript.append_message(b"ctx", &params);
-
-    // Compute the data that the linking proof signed.
-    let to_sign = message_to_sign(proof.presentation_context, &proof.verifiable_credential);
-
-    let mut linking_proof_iter = proof.linking_proof.proof_value.iter();
-
-    for (cred_public, cred_proof) in public.zip(&proof.verifiable_credential) {
-        if let CredentialProof::Web3Id { owner, .. } = &cred_proof {
-            let Some(sig) = linking_proof_iter.next() else {return false};
-            if owner.public_key.verify(&to_sign, &sig.signature).is_err() {
-                return false;
-            }
-        }
-        if !verify_single_credential(params, &mut transcript, cred_proof, cred_public) {
-            return false;
-        }
-    }
-
-    // No bogus signatures should be left.
-    linking_proof_iter.next().is_none()
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, serde::Deserialize, Debug)]
@@ -1504,7 +1521,7 @@ mod tests {
             },
         ];
         anyhow::ensure!(
-            verify(&params, public.iter(), &proof),
+            proof.verify(&params, public.iter()),
             "Proof verification failed."
         );
 
@@ -1683,7 +1700,7 @@ mod tests {
             },
         ];
         anyhow::ensure!(
-            verify(&params, public.iter(), &proof),
+            proof.verify(&params, public.iter()),
             "Proof verification failed."
         );
 

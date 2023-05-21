@@ -66,13 +66,18 @@ pub struct CredentialEntry {
     Debug,
     derive_more::Display,
 )]
+/// The current status of a credential.
 pub enum CredentialStatus {
+    /// The credential is active.
     #[display(fmt = "Active")]
     Active,
+    /// The credential has been revoked.
     #[display(fmt = "Revoked")]
     Revoked,
+    /// The credential validity has expired.
     #[display(fmt = "Expired")]
     Expired,
+    /// The credential is not yet valid, that is, it is before the valid period.
     #[display(fmt = "NotActivated")]
     NotActivated,
 }
@@ -83,6 +88,8 @@ pub enum RevocationKeyRole {}
 pub type RevocationKey = Ed25519PublicKey<RevocationKeyRole>;
 
 #[derive(contracts_common::Serialize, Debug)]
+/// Revocation key together with a nonce that needs to be used for signing the
+/// next revocation transaction.
 pub struct RevocationKeyWithNonce {
     pub key:   RevocationKey,
     pub nonce: u64,
