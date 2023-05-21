@@ -847,7 +847,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
     global: &GlobalContext<C>,
     transcript: &mut RandomOracle,
     cred_proof: &CredentialProof<C, AttributeType>,
-    public: CredentialsInputs<C>,
+    public: &CredentialsInputs<C>,
 ) -> bool {
     match (&cred_proof, public) {
         (
@@ -888,7 +888,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
             let gis = base.take((max_base_used + 1).into()).copied().collect();
 
             let verifier = VecComEq {
-                comm: commitment,
+                comm: *commitment,
                 comms: additional_commitments.clone(),
                 gis,
                 h: rand_base,
@@ -1120,9 +1120,9 @@ pub enum CredentialsInputs<C: Curve> {
 
 /// Verify a presentation in the context of the provided public data and
 /// cryptographic parameters.
-pub fn verify<C: Curve, AttributeType: Attribute<C::Scalar>>(
+pub fn verify<'a, C: Curve, AttributeType: Attribute<C::Scalar>>(
     params: &GlobalContext<C>,
-    public: impl ExactSizeIterator<Item = CredentialsInputs<C>>,
+    public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
     proof: &Presentation<C, AttributeType>,
 ) -> bool {
     let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
@@ -1402,7 +1402,7 @@ mod tests {
             },
         ];
         anyhow::ensure!(
-            verify(&params, public.into_iter(), &proof),
+            verify(&params, public.iter(), &proof),
             "Proof verification failed."
         );
 
@@ -1581,7 +1581,7 @@ mod tests {
             },
         ];
         anyhow::ensure!(
-            verify(&params, public.into_iter(), &proof),
+            verify(&params, public.iter(), &proof),
             "Proof verification failed."
         );
 

@@ -30,6 +30,26 @@ impl std::fmt::Display for Network {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+#[error("Unsupported network: {network}")]
+pub struct NetworkFromStrError {
+    network: String,
+}
+
+impl std::str::FromStr for Network {
+    type Err = NetworkFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "testnet" => Ok(Self::Testnet),
+            "mainnet" => Ok(Self::Mainnet),
+            other => Err(NetworkFromStrError {
+                network: other.to_string(),
+            }),
+        }
+    }
+}
+
 impl crate::common::Serial for Network {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         match self {
