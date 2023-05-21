@@ -101,7 +101,6 @@ pub enum IssuerKeyRole {}
 pub type IssuerKey = Ed25519PublicKey<IssuerKeyRole>;
 
 /// Data for events of registering and updating a credential.
-/// Used by the tagged event `CredentialEvent`.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct CredentialEventData {
     /// An identifier of a credential being registered/updated.
@@ -127,7 +126,6 @@ pub enum Revoker {
 }
 
 /// An untagged revocation event.
-/// For a tagged version use `CredentialEvent`.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RevokeCredentialEvent {
     /// An identifier of a credential being revoked.
@@ -143,7 +141,6 @@ pub struct RevokeCredentialEvent {
 }
 
 /// An untagged restoration event.
-/// For a tagged version use `CredentialEvent`.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RestoreCredentialEvent {
     /// An identifier of a credential being restored.
@@ -155,6 +152,8 @@ pub struct RestoreCredentialEvent {
 }
 
 #[derive(Debug, contracts_common::Serialize, Clone)]
+/// An event emitted when the issuer metadata is set, either
+/// initially or when it is updated.
 pub struct IssuerMetadataEvent {
     /// The location of the metadata.
     pub metadata_url: MetadataUrl,
@@ -176,6 +175,32 @@ pub enum CredentialEvent {
     Restore(RestoreCredentialEvent),
     /// The issuer metadata is updated.
     Metadata(IssuerMetadataEvent),
+}
+
+/// Attempt to convert the event to a [`CredentialEvent`]. Return [`None`] in
+/// case the event is not one specified by a CIS4 standard.
+impl<'a> TryFrom<&'a crate::smart_contracts::ContractEvent> for Option<CredentialEvent> {
+    type Error = crate::contracts_common::ParseError;
+
+    fn try_from(value: &'a crate::smart_contracts::ContractEvent) -> Result<Self, Self::Error> {
+        use crate::contracts_common::{Deserial, Get};
+        let data = value.as_ref();
+        let mut cursor = crate::contracts_common::Cursor::new(data);
+        let res = match u8::deserial(&mut cursor)? {
+            0u8 => CredentialEvent::Register(cursor.get()?),
+            1u8 => CredentialEvent::Update(cursor.get()?),
+            2u8 => CredentialEvent::Revoke(cursor.get()?),
+            3u8 => CredentialEvent::Restore(cursor.get()?),
+            4u8 => CredentialEvent::Metadata(cursor.get()?),
+            _ => return Ok(None),
+        };
+        // In case of a recognized event make sure that all of the input was consumed.
+        if cursor.offset == data.len() {
+            Ok(Some(res))
+        } else {
+            Err(crate::contracts_common::ParseError {})
+        }
+    }
 }
 
 /// A short comment on a reason of revoking or restoring a credential.
