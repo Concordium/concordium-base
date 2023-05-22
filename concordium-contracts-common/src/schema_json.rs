@@ -753,6 +753,8 @@ fn write_bytes_for_length_of_size<W: Write>(
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     #[test]
@@ -887,6 +889,106 @@ mod tests {
     fn test_serial_bigint_constraint_fails() {
         let mut bytes = Vec::new();
         serial_bigint(i64::MIN.into(), 2, &mut bytes).expect_err("Deserialising should fail");
+    }
+
+    #[test]
+    fn test_serial_account() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::AccountAddress;
+        let bytes =
+            schema.serial_value(&json!(format!("{}", &account))).expect("Serializing failed");
+
+        let expected = Vec::from(account_bytes);
+        assert_eq!(expected, bytes)
+    }
+
+    #[test]
+    fn test_serial_account_wrong_address_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::AccountAddress;
+        let json = json!(format!("{}", &account).get(1..));
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(err, JsonError::FailedParsingAccountAddress))
+    }
+
+    #[test]
+    fn test_serial_account_wrong_type_fails() {
+        let schema = Type::AccountAddress;
+        let json = json!(123);
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(err, JsonError::WrongJsonType(_)))
+    }
+
+    #[test]
+    fn test_serial_list_fails_with_trace() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
+        let json = json!([format!("{}", account), 123]);
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(
+            err,
+            JsonError::TraceError {
+                field,
+                error,
+                ..
+            } if matches!(*error, JsonError::WrongJsonType(_)) && field == "1"
+        ));
+    }
+
+    #[test]
+    fn test_serial_object_fails_with_trace() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::Struct(Fields::Named(vec![
+            ("account".into(), Type::AccountAddress),
+            ("contract".into(), Type::ContractAddress),
+        ]));
+        let json = json!({ "account": format!("{}", account), "contract": {} });
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(
+            err,
+            JsonError::TraceError {
+                field,
+                error,
+                ..
+            } if matches!(*error, JsonError::FieldError(_)) && field == "\"contract\""
+        ));
+    }
+
+    #[test]
+    fn test_serial_fails_with_nested_trace() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema_object = Type::Struct(Fields::Named(vec![
+            ("account".into(), Type::AccountAddress),
+            ("contract".into(), Type::ContractAddress),
+        ]));
+        let schema = Type::List(SizeLength::U8, Box::new(schema_object));
+        let json = json!([{ "account": format!("{}", account), "contract": { "index": 0, "subindex": 0} }, { "account": format!("{}", account), "contract": {} }]);
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(
+            err,
+            JsonError::TraceError {
+                field,
+                error,
+                ..
+            } if field == "1" && matches!(
+                *error.to_owned(),
+                JsonError::TraceError {
+                    field,
+                    error,
+                    ..
+                } if field == "\"contract\"" && matches!(*error, JsonError::FieldError(_))
+            )
+        ));
     }
 
     #[test]
