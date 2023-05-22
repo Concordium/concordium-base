@@ -55,7 +55,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
-version = "6.0"
+version = "7.0"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
@@ -110,11 +110,11 @@ harness = false
 [[bench]]
 name = "verify_cdi"
 harness = false
-	
+
 [[bench]]
 name = "aggr_dlog_commit_point"
 harness = false
-	
+
 [[bench]]
 name = "compute_message"
 harness = false
