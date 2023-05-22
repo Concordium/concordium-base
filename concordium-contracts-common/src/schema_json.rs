@@ -97,16 +97,17 @@ impl<'a> JsonError<'a> {
 pub enum ToJsonError<'a> {
     #[error("Failed to format as JSON")]
     FormatError(#[from] serde_json::Error),
-    #[error("Failed to deserialize {schema:?} from position {position} of {data:x?}")]
+    #[error("Failed to deserialize {schema:?} from position {position} of {data}")]
     DeserialError {
         position: u32,
-        schema:   Type,
-        data:     &'a [u8],
+        schema:   &'a Type,
+        /// Data as hex format
+        data:     String,
     },
     #[error("{schema:?} from {position} -> {error}")]
     TraceError {
         position: u32,
-        schema:   Type,
+        schema:   &'a Type,
         error:    Box<ToJsonError<'a>>,
     },
 }
@@ -114,10 +115,10 @@ pub enum ToJsonError<'a> {
 impl<'a> ToJsonError<'a> {
     /// Wraps a [ToJsonError] in a [ToJsonError::TraceError], providing a trace
     /// to the origin of the error.
-    fn add_trace(self, position: u32, schema: &Type) -> Self {
+    fn add_trace(self, position: u32, schema: &'a Type) -> Self {
         ToJsonError::TraceError {
             position,
-            schema: *schema,
+            schema,
             error: Box::new(self),
         }
     }
@@ -1021,10 +1022,10 @@ mod tests {
 }
 
 impl Fields {
-    pub fn to_json<T: AsRef<[u8]>>(
-        &self,
+    pub fn to_json<'a, T: AsRef<[u8]>>(
+        &'a self,
         source: &mut Cursor<T>,
-    ) -> ToJsonResult<serde_json::Value> {
+    ) -> ToJsonResult<'a, serde_json::Value> {
         use serde_json::*;
 
         match self {
@@ -1053,18 +1054,21 @@ impl From<std::string::FromUtf8Error> for ParseError {
 }
 
 fn item_list_to_json<'a, T: AsRef<[u8]>>(
-    source: &'a mut Cursor<T>,
+    source: &mut Cursor<T>,
     size_len: SizeLength,
-    item_to_json: impl Fn(&mut Cursor<T>) -> ToJsonResult<serde_json::Value>,
-    schema: &Type,
+    item_to_json: impl Fn(&mut Cursor<T>) -> ToJsonResult<'a, serde_json::Value>,
+    schema: &'a Type,
 ) -> ToJsonResult<'a, Vec<serde_json::Value>> {
-    let data = source.data;
+    let data = source
+        .data
+        .as_ref()
+        .into_iter()
+        .fold(String::new(), |s, byte| format!("{}{:02x?}", s, byte));
     let position = source.cursor_position();
-
     let len = deserial_length(source, size_len).map_err(|_| ToJsonError::DeserialError {
-        data: data.as_ref(),
+        data,
         position,
-        schema: *schema,
+        schema,
     })?;
     let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
     for _ in 0..len {
@@ -1105,26 +1109,30 @@ fn deserial_string<R: Read>(source: &mut R, size_len: SizeLength) -> ParseResult
 
 impl Type {
     /// Uses the schema to deserialize bytes into pretty json
-    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> ToJsonResult<String> {
+    pub fn to_json_string_pretty<'a>(&'a self, bytes: &'a [u8]) -> ToJsonResult<'a, String> {
         let source = &mut Cursor::new(bytes);
         let js = self.to_json(source)?;
         serde_json::to_string_pretty(&js).map_err(ToJsonError::FormatError)
     }
 
     /// Uses the schema to deserialize bytes into json
-    pub fn to_json<T: AsRef<[u8]>>(
-        &self,
+    pub fn to_json<'a, T: AsRef<[u8]>>(
+        &'a self,
         source: &mut Cursor<T>,
-    ) -> ToJsonResult<serde_json::Value> {
+    ) -> ToJsonResult<'a, serde_json::Value> {
         use serde_json::*;
 
-        let data = source.data;
+        let data = source
+            .data
+            .as_ref()
+            .into_iter()
+            .fold(String::new(), |s, byte| format!("{}{:02x?}", s, byte));
         let position = source.cursor_position();
 
         let deserial_error = ToJsonError::DeserialError {
-            data: data.as_ref(),
+            data,
             position,
-            schema: *self,
+            schema: self,
         };
 
         match self {
@@ -1234,38 +1242,59 @@ impl Type {
             }
             Type::Enum(variants) => {
                 let idx = if variants.len() <= 256 {
-                    u8::deserial(source).map_err(|_| deserial_error)? as usize
+                    u8::deserial(source).map(|v| v as usize)
                 } else {
-                    u16::deserial(source).map_err(|_| deserial_error)? as usize
+                    u16::deserial(source).map(|v| v as usize)
                 };
-                let (name, fields_ty) = variants.get(idx).ok_or_else(|| deserial_error)?;
-                let fields = fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                Ok(json!({ name: fields }))
+
+                // Map all error cases into the same error.
+                if let Ok(Some((name, fields_ty))) = idx.map(|idx| variants.get(idx)) {
+                    let fields =
+                        fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                    Ok(json!({ name: fields }))
+                } else {
+                    Err(deserial_error)
+                }
             }
             Type::TaggedEnum(variants) => {
-                let idx = u8::deserial(source).map_err(|_| deserial_error)?;
+                let idx = u8::deserial(source);
 
-                let (name, fields_ty) = variants.get(&idx).ok_or_else(|| deserial_error)?;
-                let fields = fields_ty.to_json(source)?;
-                Ok(json!({ name: fields }))
+                // Map all error cases into the same error.
+                if let Ok(Some((name, fields_ty))) = idx.map(|idx| variants.get(&idx)) {
+                    let fields =
+                        fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                    Ok(json!({ name: fields }))
+                } else {
+                    Err(deserial_error)
+                }
             }
             Type::String(size_len) => {
                 let string = deserial_string(source, *size_len).map_err(|_| deserial_error)?;
                 Ok(Value::String(string))
             }
             Type::ContractName(size_len) => {
-                let name = deserial_string(source, *size_len).map_err(|_| deserial_error)?;
-                let contract_name = OwnedContractName::new(name).map_err(|_| deserial_error)?;
-                let name_without_init = contract_name.as_contract_name().contract_name();
-                Ok(json!({ "contract": name_without_init }))
+                let name = deserial_string(source, *size_len);
+
+                // Map all error cases into the same error.
+                if let Ok(Ok(contract_name)) = name.map(OwnedContractName::new) {
+                    let name_without_init = contract_name.as_contract_name().contract_name();
+                    Ok(json!({ "contract": name_without_init }))
+                } else {
+                    Err(deserial_error)
+                }
             }
             Type::ReceiveName(size_len) => {
-                let name = deserial_string(source, *size_len).map_err(|_| deserial_error)?;
-                let owned_receive_name = OwnedReceiveName::new(name).map_err(|_| deserial_error)?;
-                let receive_name = owned_receive_name.as_receive_name();
-                let contract_name = receive_name.contract_name();
-                let func_name = receive_name.entrypoint_name();
-                Ok(json!({"contract": contract_name, "func": func_name}))
+                let name = deserial_string(source, *size_len);
+
+                // Map all error cases into the same error.
+                if let Ok(Ok(owned_receive_name)) = name.map(OwnedReceiveName::new) {
+                    let receive_name = owned_receive_name.as_receive_name();
+                    let contract_name = receive_name.contract_name();
+                    let func_name = receive_name.entrypoint_name();
+                    Ok(json!({"contract": contract_name, "func": func_name}))
+                } else {
+                    Err(deserial_error)
+                }
             }
             Type::ULeb128(constraint) => {
                 let int = deserial_biguint(source, *constraint).map_err(|_| deserial_error)?;
@@ -1276,24 +1305,54 @@ impl Type {
                 Ok(Value::String(int.to_string()))
             }
             Type::ByteList(size_len) => {
-                let len = deserial_length(source, *size_len).map_err(|_| deserial_error)?;
-                let mut string =
-                    String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
-                for _ in 0..len {
-                    let byte = source.read_u8().map_err(|_| deserial_error)?;
-                    string.push_str(&format!("{:02x?}", byte));
+                let len = deserial_length(source, *size_len);
+                let bytes = len.as_ref().map(|len| {
+                    let mut bytes =
+                        Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
+
+                    for _ in 0..*len {
+                        let byte = source.read_u8();
+                        bytes.push(byte);
+                    }
+
+                    bytes.into_iter().collect::<ParseResult<Vec<u8>>>()
+                });
+
+                // Map all error cases into the same error.
+                if let (Ok(&len), Ok(Ok(bytes))) = (len.as_ref(), bytes) {
+                    let mut string =
+                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
+
+                    bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
+                    Ok(Value::String(string))
+                } else {
+                    Err(deserial_error)
                 }
-                Ok(Value::String(string))
             }
             Type::ByteArray(len) => {
-                let len = usize::try_from(*len).map_err(|_| deserial_error)?;
-                let mut string =
-                    String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
-                for _ in 0..len {
-                    let byte = source.read_u8().map_err(|_| deserial_error)?;
-                    string.push_str(&format!("{:02x?}", byte));
+                let len = usize::try_from(*len);
+                let bytes = &len.map(|len| {
+                    let mut bytes =
+                        Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
+
+                    for _ in 0..len {
+                        let byte = source.read_u8();
+                        bytes.push(byte);
+                    }
+
+                    bytes.into_iter().collect::<ParseResult<Vec<u8>>>()
+                });
+
+                // Map all error cases into the same error.
+                if let (Ok(len), Ok(Ok(bytes))) = (len, bytes) {
+                    let mut string =
+                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
+
+                    bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
+                    Ok(Value::String(string))
+                } else {
+                    Err(deserial_error)
                 }
-                Ok(Value::String(string))
             }
         }
     }
