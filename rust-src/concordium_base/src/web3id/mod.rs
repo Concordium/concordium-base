@@ -10,7 +10,6 @@ pub mod did;
 // - Documentation.
 use crate::{
     base::CredentialRegistrationID,
-    common::base16_encode_string,
     curve_arithmetic::Curve,
     id::{
         constants::{ArCurve, AttributeKind},
@@ -26,7 +25,6 @@ use did::*;
 use ed25519_dalek::Verifier;
 use serde::de::DeserializeOwned;
 use std::{collections::BTreeMap, marker::PhantomData};
-use uuid::Uuid;
 
 /// Domain separation string used when signing the revoke transaction
 /// using the credential secret key.
@@ -35,63 +33,6 @@ pub const REVOKE_DOMAIN_STRING: &[u8] = b"WEB3ID:REVOKE";
 /// Domain separation string used when signing the linking proof using
 /// the credential secret key.
 pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
-
-#[derive(
-    PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
-#[serde(transparent)]
-/// An identifier of a Web3Id credential inside a smart contract.
-pub struct CredentialId {
-    pub id: uuid::Uuid,
-}
-
-impl crate::common::Serial for CredentialId {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        out.write_all(self.id.as_bytes())
-            .expect("Writing to buffer always succeeds.");
-    }
-}
-
-impl crate::common::Deserial for CredentialId {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
-        let bytes = <[u8; 16]>::deserial(source)?;
-        Ok(Self {
-            id: uuid::Uuid::from_bytes(bytes),
-        })
-    }
-}
-
-impl crate::contracts_common::Serial for CredentialId {
-    fn serial<W: crate::contracts_common::Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_all(self.id.as_bytes())
-    }
-}
-
-impl crate::contracts_common::Deserial for CredentialId {
-    fn deserial<R: crate::contracts_common::Read>(
-        source: &mut R,
-    ) -> crate::contracts_common::ParseResult<Self> {
-        let bytes = <[u8; 16]>::deserial(source)?;
-        Ok(Self {
-            id: uuid::Uuid::from_bytes(bytes),
-        })
-    }
-}
-
-impl CredentialId {
-    /// Generate a fresh credential from system randomness.
-    pub fn new() -> Self {
-        Self {
-            id: uuid::Uuid::new_v4(),
-        }
-    }
-}
-
-impl std::fmt::Display for CredentialId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.id.simple())
-    }
-}
 
 /// A statement about a single credential, either an identity credential or a
 /// Web3 credential.
@@ -121,7 +62,7 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// credential.
         contract:   ContractAddress,
         /// Credential identifier inside the contract.
-        credential: CredentialId,
+        credential: CredentialHolderId,
         statement:  Vec<AtomicStatement<C, u8, AttributeType>>,
     },
 }
@@ -153,16 +94,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                 let statement = get_field(&mut value, "statement")?;
                 let ty = get_field(&mut value, "type")?;
                 anyhow::ensure!(entrypoint == "credentialEntry", "Invalid entrypoint.");
-                let Ok(param) = Vec::from(parameter).try_into() else {
-                    anyhow::bail!("Invalid credentialEntry parameter");
-                };
                 Ok(Self::Web3Id {
                     ty:         serde_json::from_value(ty)?,
                     network:    id.network,
                     contract:   address,
-                    credential: CredentialId {
-                        id: Uuid::from_bytes(param),
-                    },
+                    credential: CredentialHolderId::new(ed25519_dalek::PublicKey::from_bytes(
+                        parameter.as_ref(),
+                    )?),
                     statement:  serde_json::from_value(statement)?,
                 })
             }
@@ -224,7 +162,6 @@ pub enum CredentialMetadata {
     Web3Id {
         contract: ContractAddress,
         owner:    CredentialHolderId,
-        id:       CredentialId,
     },
 }
 
@@ -263,7 +200,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 owner,
                 network,
                 contract,
-                credential,
                 ty: _,
                 issuance_date,
                 additional_commitments: _,
@@ -277,7 +213,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 cred_metadata: CredentialMetadata::Web3Id {
                     contract: *contract,
                     owner:    *owner,
-                    id:       *credential,
                 },
             },
         }
@@ -314,8 +249,6 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         network:                Network,
         /// Reference to a specific smart contract instance.
         contract:               ContractAddress,
-        /// The ID of the credential inside the contract instance.
-        credential:             CredentialId,
         /// The credential type. This is chosen by the provider to provide
         /// some information about what the credential is about. The list should
         /// be considered as a "path", refining the meaning, e.g.,
@@ -380,7 +313,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 created,
                 network,
                 contract,
-                credential,
                 ty,
                 issuance_date,
                 additional_commitments,
@@ -390,12 +322,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 owner,
             } => {
                 let json = serde_json::json!({
-                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, credential),
+                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, owner),
                     "type": ty,
                     "issuer": format!("did:ccd:{network}:sci:{}:{}/issuer", contract.index, contract.subindex),
                     "issuanceDate": issuance_date,
                     "credentialSubject": {
-                        "id": format!("did:ccd:{network}:pkc:{}", base16_encode_string(&owner)),
+                        "id": format!("did:ccd:{network}:pkc:{}", owner),
                         "statement": proofs.iter().map(|x| &x.0).collect::<Vec<_>>(),
                         "proof": {
                             "type": "ConcordiumZKProofV3",
@@ -515,12 +447,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     id_entrypoint == "credentialEntry",
                     "Invalid entrypoint for credential DID."
                 );
-                let Ok(uuid) = Vec::from(parameter).try_into() else {
-                    anyhow::bail!("Invalid credentialEntry parameter");
-                };
-                let credential = CredentialId {
-                    id: Uuid::from_bytes(uuid),
-                };
 
                 let id = get_field(&mut credential_subject, "id")?;
                 let Some(Ok(id)) = id.as_str().map(parse_did) else {
@@ -530,6 +456,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     anyhow::bail!("Credential identifier must be a public key.")
                 };
                 anyhow::ensure!(issuer.network == id.1.network);
+                // TODO: Is this really necessary?
+                // Make sure that the id's point to the same credential.
+                anyhow::ensure!(
+                    parameter.as_ref() == key.as_bytes(),
+                    "Credential IDs not consistent."
+                );
                 let statement: Vec<AtomicStatement<_, _, _>> =
                     serde_json::from_value(get_field(&mut credential_subject, "statement")?)?;
 
@@ -560,7 +492,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     owner: CredentialHolderId::new(key),
                     network: issuer.network,
                     contract: address,
-                    credential,
                     issuance_date,
                     additional_commitments,
                     max_base_used,
@@ -599,7 +530,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 created,
                 network,
                 contract,
-                credential,
                 additional_commitments,
                 glueing_proof,
                 proofs,
@@ -619,7 +549,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 }
                 network.serial(out);
                 contract.serial(out);
-                credential.serial(out);
                 owner.serial(out);
                 issuance_date.timestamp_millis().serial(out);
                 additional_commitments.serial(out);
@@ -990,6 +919,8 @@ pub enum ProofError {
     UnableToProve,
     #[error("The number of commitment inputs and statements is inconsistent.")]
     CommitmentsStatementsMismatch,
+    #[error("The ID in the statement and in the provided signer do not match.")]
+    InconsistentIds,
 }
 
 /// Verify a single credential. This only checks the cryptographic parts and
@@ -1022,7 +953,6 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
             CredentialProof::Web3Id {
                 network: _proof_network,
                 contract: _proof_contract,
-                credential: _proof_credential,
                 additional_commitments,
                 glueing_proof,
                 proofs,
@@ -1114,6 +1044,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     issuance_date,
                 },
             ) => {
+                if credential != signer.id() {
+                    return Err(ProofError::InconsistentIds);
+                }
                 let (&rand_base, base_size, base) = global.vector_commitment_base();
                 // First construct individual commitments.
 
@@ -1182,11 +1115,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     proofs,
                     network,
                     contract,
-                    credential,
                     created,
                     issuance_date,
                     max_base_used: *vec_key.0,
-                    owner: signer.id(),
+                    owner: signer.id(), /* TODO: This could just be credential instead. Signal an
+                                         * error. */
                     ty,
                 })
             }
@@ -1367,6 +1300,8 @@ mod tests {
     fn test_web3_only() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::new(rng.gen());
+        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
+        let signer_2 = ed25519_dalek::Keypair::generate(&mut rng);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
                 ty:         vec![
@@ -1376,7 +1311,7 @@ mod tests {
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
-                credential: CredentialId::new(),
+                credential: CredentialHolderId::new(signer_1.public),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1409,7 +1344,7 @@ mod tests {
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1338, 0),
-                credential: CredentialId::new(),
+                credential: CredentialHolderId::new(signer_2.public),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1445,7 +1380,6 @@ mod tests {
         values_1.insert(17, Web3IdAttribute::Numeric(137));
         values_1.insert(23, Web3IdAttribute::String(AttributeKind("ff".into())));
         let randomness_1 = pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng);
-        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
         let secrets_1 = CommitmentInputs::Web3Issuer {
             issuance_date: chrono::Utc::now(),
             signer:        &signer_1,
@@ -1457,7 +1391,6 @@ mod tests {
         values_2.insert(0, Web3IdAttribute::Numeric(137));
         values_2.insert(1, Web3IdAttribute::String(AttributeKind("xkcd".into())));
         let randomness_2 = pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng);
-        let signer_2 = ed25519_dalek::Keypair::generate(&mut rng);
         let secrets_2 = CommitmentInputs::Web3Issuer {
             issuance_date: chrono::Utc::now(),
             signer:        &signer_2,
@@ -1552,6 +1485,7 @@ mod tests {
         let params = GlobalContext::generate("Test".into());
         let cred_id_exp = ArCurve::generate_scalar(&mut rng);
         let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
+        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
                 ty:         vec![
@@ -1561,7 +1495,7 @@ mod tests {
                 ],
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
-                credential: CredentialId::new(),
+                credential: CredentialHolderId::new(signer_1.public),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1623,7 +1557,6 @@ mod tests {
         values_1.insert(17, Web3IdAttribute::Numeric(137));
         values_1.insert(23, Web3IdAttribute::String(AttributeKind("ff".into())));
         let randomness_1 = pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng);
-        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
         let secrets_1 = CommitmentInputs::Web3Issuer {
             issuance_date: chrono::Utc::now(),
             signer:        &signer_1,

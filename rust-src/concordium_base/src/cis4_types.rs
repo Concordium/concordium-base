@@ -103,8 +103,6 @@ pub type IssuerKey = Ed25519PublicKey<IssuerKeyRole>;
 /// Data for events of registering and updating a credential.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct CredentialEventData {
-    /// An identifier of a credential being registered/updated.
-    credential_id:   CredentialId,
     /// A public key of the credential's holder.
     holder_id:       CredentialHolderId,
     /// A reference to the credential JSON schema.
@@ -128,27 +126,23 @@ pub enum Revoker {
 /// An untagged revocation event.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RevokeCredentialEvent {
-    /// An identifier of a credential being revoked.
-    credential_id: CredentialId,
     /// A public key of the credential's holder.
-    holder_id:     CredentialHolderId,
+    holder_id: CredentialHolderId,
     /// Who revokes the credential.
-    revoker:       Revoker,
+    revoker:   Revoker,
     /// An optional text clarifying the revocation reasons.
     /// The issuer can use this field to comment on the revocation, so the
     /// holder can observe it in the wallet.
-    reason:        Option<Reason>,
+    reason:    Option<Reason>,
 }
 
 /// An untagged restoration event.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RestoreCredentialEvent {
-    /// An identifier of a credential being restored.
-    credential_id: CredentialId,
     /// A public key of the credential's holder.
-    holder_id:     CredentialHolderId,
+    holder_id: CredentialHolderId,
     /// An optional text clarifying the restoring reasons.
-    reason:        Option<Reason>,
+    reason:    Option<Reason>,
 }
 
 #[derive(Debug, contracts_common::Serialize, Clone)]
@@ -159,44 +153,66 @@ pub struct IssuerMetadataEvent {
     pub metadata_url: MetadataUrl,
 }
 
-/// Tagged credential registry event.
-/// This version should be used for logging the events.
+/// The schema reference has been updated for the credential type.
 #[derive(contracts_common::Serialize, Debug, Clone)]
-pub enum CredentialEvent {
+struct CredentialSchemaRefEvent {
+    r#type:     CredentialType,
+    schema_ref: SchemaRef,
+}
+
+#[derive(contracts_common::Serialize)]
+struct CredentialMetadataEvent {
+    credential_id: CredentialHolderId,
+    metadata_url:  MetadataUrl,
+}
+
+/// An event specified by CIS4 standard.
+enum CredentialEvent {
     /// Credential registration event. Logged when an entry in the registry is
     /// created for the first time.
     Register(CredentialEventData),
-    /// Credential update event. Logged when updating an existing credential
-    /// entry.
-    Update(CredentialEventData),
     /// Credential revocation event.
     Revoke(RevokeCredentialEvent),
     /// Credential restoration (reversing revocation) event.
     Restore(RestoreCredentialEvent),
-    /// The issuer metadata is updated.
-    Metadata(IssuerMetadataEvent),
+    /// Issuer's metadata changes, including the contract deployment.
+    IssuerMetadata(MetadataUrl),
+    /// Credential's metadata changes.
+    CredentialMetadata(CredentialMetadataEvent),
+    /// Credential's schema changes.
+    Schema(CredentialSchemaRefEvent),
+    /// Event is not part of the CIS4 specification.
+    Unknown,
+}
+
+impl contracts_common::Deserial for CredentialEvent {
+    fn deserial<R: contracts_common::Read>(source: &mut R) -> contracts_common::ParseResult<Self> {
+        use contracts_common::Get;
+        match source.get()? {
+            255u8 => Ok(Self::Register(source.get()?)),
+            254u8 => Ok(Self::Revoke(source.get()?)),
+            253u8 => Ok(Self::Restore(source.get()?)),
+            252u8 => Ok(Self::IssuerMetadata(source.get()?)),
+            251u8 => Ok(Self::CredentialMetadata(source.get()?)),
+            250u8 => Ok(Self::Schema(source.get()?)),
+            _ => Ok(Self::Unknown),
+        }
+    }
 }
 
 /// Attempt to convert the event to a [`CredentialEvent`]. Return [`None`] in
 /// case the event is not one specified by a CIS4 standard.
-impl<'a> TryFrom<&'a crate::smart_contracts::ContractEvent> for Option<CredentialEvent> {
+impl<'a> TryFrom<&'a crate::smart_contracts::ContractEvent> for CredentialEvent {
     type Error = crate::contracts_common::ParseError;
 
     fn try_from(value: &'a crate::smart_contracts::ContractEvent) -> Result<Self, Self::Error> {
-        use crate::contracts_common::{Deserial, Get};
+        use crate::contracts_common::Get;
         let data = value.as_ref();
         let mut cursor = crate::contracts_common::Cursor::new(data);
-        let res = match u8::deserial(&mut cursor)? {
-            0u8 => CredentialEvent::Register(cursor.get()?),
-            1u8 => CredentialEvent::Update(cursor.get()?),
-            2u8 => CredentialEvent::Revoke(cursor.get()?),
-            3u8 => CredentialEvent::Restore(cursor.get()?),
-            4u8 => CredentialEvent::Metadata(cursor.get()?),
-            _ => return Ok(None),
-        };
+        let event = cursor.get()?;
         // In case of a recognized event make sure that all of the input was consumed.
-        if cursor.offset == data.len() {
-            Ok(Some(res))
+        if cursor.offset == data.len() || matches!(event, CredentialEvent::Unknown) {
+            Ok(event)
         } else {
             Err(crate::contracts_common::ParseError {})
         }
