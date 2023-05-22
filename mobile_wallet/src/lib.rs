@@ -1192,6 +1192,24 @@ fn get_account_keys_and_randomness_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
+fn get_verifiable_credential_keys_aux(input: &str) -> anyhow::Result<String> {
+    let v: Value = from_str(input)?;
+    let wallet = parse_wallet_input(&v)?;
+    let verifiable_credential_index = try_get(&v, "verifiableCredentialIndex")?;
+
+    let signing_key = wallet.get_verifiable_credential_signing_key(verifiable_credential_index)?;
+    let public_key = wallet.get_verifiable_credential_public_key(verifiable_credential_index)?;
+    let encryption_key =
+        wallet.get_verifiable_credential_encryption_key(verifiable_credential_index)?;
+
+    let response = serde_json::json!({
+        "signKey": hex::encode(signing_key),
+        "verifyKey": hex::encode(public_key),
+        "encryptionKey": hex::encode(encryption_key)
+    });
+    Ok(to_string(&response)?)
+}
+
 /// Set the flag to 0, and return a newly allocated string containing
 /// the error message. The returned string is NUL terminated.
 ///
@@ -1586,6 +1604,20 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => sign_message -> sign_message_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => get_verifiable_credential_keys -> get_verifiable_credential_keys_aux);
 
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///

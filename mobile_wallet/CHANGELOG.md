@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.25.0
+- Added a function `get_verifiable_credential_keys` for deriving the keys for a verifiable credential.
+
 ## 0.24.0
 - Changed parameter_to_json to support parameter schemas.
 
