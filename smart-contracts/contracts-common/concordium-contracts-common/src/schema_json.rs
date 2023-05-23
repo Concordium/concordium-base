@@ -88,7 +88,7 @@ impl<'a> JsonError<'a> {
                 error,
             } if verbose => {
                 let formatted_json =
-                    serde_json::to_string_pretty(json).unwrap_or(format!("{}", json));
+                    serde_json::to_string_pretty(json).unwrap_or_else(|_| format!("{}", json));
                 format!("{}\nIn {} of {}", error.print(verbose), field, formatted_json)
             }
             _ => format!("{}", self),
@@ -99,15 +99,25 @@ impl<'a> JsonError<'a> {
 /// Wrapper around a list of bytes to represent data which failed to be
 /// deserialized into schema type.
 #[derive(Debug, Clone)]
-pub struct ToJsonErrorData(Vec<u8>);
+pub struct ToJsonErrorData {
+    bytes: Vec<u8>,
+}
 
 impl From<Vec<u8>> for ToJsonErrorData {
-    fn from(value: Vec<u8>) -> Self { Self(value) }
+    fn from(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes,
+        }
+    }
+}
+
+impl From<ToJsonErrorData> for Vec<u8> {
+    fn from(value: ToJsonErrorData) -> Self { value.bytes }
 }
 
 impl Display for ToJsonErrorData {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.0.iter().try_for_each(|b| write!(f, "{:02x?}", b))
+        self.bytes.iter().try_for_each(|b| write!(f, "{:02x?}", b))
     }
 }
 
@@ -1339,7 +1349,7 @@ impl Type {
         match self {
             Type::Unit => Ok(Value::Null),
             Type::Bool => {
-                let n = bool::deserial(source).map_err(|_| deserial_error)?;
+                let Ok(n) = bool::deserial(source) else { return Err(deserial_error) };
                 Ok(Value::Bool(n))
             }
             Type::U8 => {
