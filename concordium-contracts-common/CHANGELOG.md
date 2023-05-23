@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased changes
+## concordium-contracts-common 7.0.0 (2023-05-23)
 
 - Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using `FromStr` and `Display` implementations, when feature `derive-serde` is enabled.
+- Adds new error type `ToJsonError`, which is returned when deserializing to schema type fails.
+- Adds member `JsonError::TraceError` to `JsonError`, which adds trace information to the error produced when serializing from schema type fails.
 
 ## concordium-contracts-common 6.0.0 (2023-05-08)
 
