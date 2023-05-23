@@ -1,7 +1,7 @@
 pub use super::impls::*;
-use anyhow::{bail, Context};
+use anyhow::{bail, ensure, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use concordium_contracts_common::ExchangeRate;
+use concordium_contracts_common::{Duration, ExchangeRate};
 use core::cmp;
 use sha2::Digest;
 use std::{
@@ -163,6 +163,15 @@ impl Deserial for std::num::NonZeroI128 {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let value = source.get()?;
         Self::new(value).context("Zero is not valid.")
+    }
+}
+
+impl Deserial for num::rational::Ratio<u64> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let numerator = source.get()?;
+        let denominator = source.get()?;
+        ensure!(denominator != 0, "Denominator of zero is not valid.");
+        Ok(Self::new_raw(numerator, denominator))
     }
 }
 
@@ -432,6 +441,13 @@ impl Serial for std::num::NonZeroI128 {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_i128::<BigEndian>(self.get())
             .expect("Writing to a buffer should not fail.")
+    }
+}
+
+impl Serial for num::rational::Ratio<u64> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.numer().serial(out);
+        self.denom().serial(out);
     }
 }
 
@@ -730,6 +746,17 @@ impl Deserial for ExchangeRate {
         let numerator = source.get()?;
         let denominator = source.get()?;
         Self::new(numerator, denominator).ok_or_else(|| anyhow::anyhow!("Invalid exchange rate."))
+    }
+}
+
+impl Serial for Duration {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { self.millis().serial(target); }
+}
+
+impl Deserial for Duration {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let milliseconds = source.get()?;
+        Ok(Self::from_millis(milliseconds))
     }
 }
 
