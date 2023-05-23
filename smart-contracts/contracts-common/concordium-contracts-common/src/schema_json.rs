@@ -5,7 +5,7 @@ use num_traits::Zero;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
-/// Represents errors occuring while serializing data from schema JSON format
+/// Represents errors occurring while serializing data from the schema JSON format.
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum JsonError<'a> {
     #[error("Failed writing")]
@@ -121,12 +121,12 @@ impl Display for ToJsonErrorData {
     }
 }
 
-/// Represents errors occuring while deserializing to schema JSON format
+/// Represents errors occurring while deserializing to the schema JSON format.
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum ToJsonError<'a> {
     /// JSON formatter failed to represent value.
     #[error("Failed to format as JSON")]
-    FormatError {},
+    FormatError,
     /// Failed to deserialize data to type expected from schema.
     #[error("Failed to deserialize {schema:?} from position {position} of bytes {data}")]
     DeserialError {
