@@ -107,7 +107,7 @@ impl From<Vec<u8>> for ToJsonErrorData {
 
 impl Display for ToJsonErrorData {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.0.iter().map(|b| write!(f, "{:02x?}", b)).collect()
+        self.0.iter().try_for_each(|b| write!(f, "{:02x?}", b))
     }
 }
 
@@ -358,11 +358,9 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                 let len = values.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
 
-                let mut i = 0;
-                for value in values {
+                for (i, value) in values.iter().enumerate() {
                     write_bytes_from_json_schema_type(ty, value, out)
                         .map_err(|e| e.add_trace(format!("{}", i), json))?;
-                    i += 1;
                 }
                 Ok(())
             } else {
@@ -374,11 +372,9 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                 let len = values.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
 
-                let mut i = 0;
-                for value in values {
+                for (i, value) in values.iter().enumerate() {
                     write_bytes_from_json_schema_type(ty, value, out)
                         .map_err(|e| e.add_trace(format!("{}", i), json))?;
-                    i += 1;
                 }
                 Ok(())
             } else {
@@ -390,8 +386,7 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                 let len = entries.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
 
-                let mut i = 0;
-                for entry in entries {
+                for (i, entry) in entries.iter().enumerate() {
                     if let Value::Array(pair) = entry {
                         ensure!(pair.len() == 2, MapError("Expected key-value pair".to_string()));
                         let result: Result<(), JsonError> = {
@@ -402,7 +397,6 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                             Ok(())
                         };
                         result.map_err(|e| e.add_trace(format!("{}", i), json))?;
-                        i += 1;
                     } else {
                         return Err(WrongJsonType(
                             "Expected key value pairs as JSON arrays".to_string(),
@@ -425,11 +419,9 @@ fn write_bytes_from_json_schema_type<'a, W: Write>(
                     ))
                 );
 
-                let mut i = 0;
-                for value in values {
+                for (i, value) in values.iter().enumerate() {
                     write_bytes_from_json_schema_type(ty, value, out)
                         .map_err(|e| e.add_trace(format!("{}", i), json))?;
-                    i += 1;
                 }
                 Ok(())
             } else {
