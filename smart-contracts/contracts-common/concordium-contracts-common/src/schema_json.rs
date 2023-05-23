@@ -43,7 +43,7 @@ pub enum JsonError<'a> {
     #[error("{field} -> {error}")]
     TraceError {
         field: String,
-        json: &'a serde_json::Value,
+        json:  &'a serde_json::Value,
         error: Box<JsonError<'a>>,
     },
 }
@@ -93,22 +93,22 @@ impl<'a> JsonError<'a> {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum ToJsonError<'a> {
     #[error("Failed to format as JSON")]
-    FormatError(#[from] serde_json::Error),
+    FormatError {},
     #[error("Failed to deserialize {schema:?} from position {position} of {data}")]
     DeserialError {
         position: u32,
-        schema: &'a Type,
+        schema:   &'a Type,
         /// Data as hex format
-        data: String,
+        data:     String,
     },
     #[error("{schema:?} from {position} -> {error}")]
     TraceError {
         position: u32,
-        schema: &'a Type,
-        error: Box<ToJsonError<'a>>,
+        schema:   &'a Type,
+        error:    Box<ToJsonError<'a>>,
     },
 }
 
@@ -1126,7 +1126,6 @@ mod tests {
     fn test_deserial_account_address() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let mut cursor = Cursor::new(&account_bytes);
-        // let account = AccountAddress(account_bytes.clone());
         let schema = Type::AccountAddress;
         let value = schema.to_json(&mut cursor).expect("Deserializing should not fail");
 
@@ -1137,18 +1136,15 @@ mod tests {
     #[test]
     fn test_deserial_malformed_account_address_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let mut cursor = Cursor::new(&account_bytes[..30]);
+        let mut cursor = Cursor::new(&account_bytes[..30]); // Malformed account address
         let schema = Type::AccountAddress;
         let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
 
-        assert!(matches!(
-            err,
-            ToJsonError::DeserialError {
-                position: 0,
-                schema: Type::AccountAddress,
-                ..
-            }
-        ))
+        assert!(matches!(err, ToJsonError::DeserialError {
+            position: 0,
+            schema: Type::AccountAddress,
+            ..
+        }))
     }
 
     #[test]
@@ -1156,13 +1152,11 @@ mod tests {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let mut list_bytes = vec![2, 0];
         list_bytes.extend_from_slice(&account_bytes);
-        list_bytes.extend_from_slice(&account_bytes[..30]);
+        list_bytes.extend_from_slice(&account_bytes[..30]); // Malformed account address
 
         let mut cursor = Cursor::new(list_bytes);
         let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
         let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
-
-        println!("{:#?}", err);
 
         assert!(matches!(
             err,
@@ -1170,7 +1164,55 @@ mod tests {
                 position: 0,
                 schema: Type::List(_, _),
                 error,
-            } if matches!(*error, ToJsonError::DeserialError { position: 33, schema: Type::AccountAddress, .. })
+            } if matches!(
+                *error,
+                ToJsonError::DeserialError {
+                    position: 33,
+                    schema: Type::AccountAddress, ..
+                }
+            )
+        ))
+    }
+
+    #[test]
+    fn test_deserial_malformed_nested_list_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let contract_bytes = [0u8; 16];
+        let mut list_bytes = vec![2, 0];
+        list_bytes.extend_from_slice(&account_bytes);
+        list_bytes.extend_from_slice(&contract_bytes);
+        list_bytes.extend_from_slice(&account_bytes);
+        list_bytes.extend_from_slice(&contract_bytes[..10]); // Malformed contract address.
+
+        let mut cursor = Cursor::new(list_bytes);
+        let schema_object = Type::Struct(Fields::Named(vec![
+            ("a".into(), Type::AccountAddress),
+            ("b".into(), Type::ContractAddress),
+        ]));
+        let schema = Type::List(SizeLength::U8, Box::new(schema_object));
+        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+
+        assert!(matches!(
+            err,
+            ToJsonError::TraceError {
+                position: 0,
+                schema: Type::List(_,_),
+                error,
+            } if matches!(
+                *error.to_owned(),
+                ToJsonError::TraceError {
+                    position: 49,
+                    schema: Type::Struct(_),
+                    error
+                } if matches!(
+                    *error,
+                    ToJsonError::DeserialError {
+                        position: 81,
+                        schema: Type::ContractAddress,
+                        ..
+                    }
+                )
+            )
         ))
     }
 }
@@ -1204,9 +1246,7 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self {
-        ParseError::default()
-    }
+    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
 }
 
 fn item_list_to_json<'a, T: AsRef<[u8]>>(
@@ -1268,7 +1308,7 @@ impl Type {
     pub fn to_json_string_pretty<'a>(&'a self, bytes: &'a [u8]) -> ToJsonResult<'a, String> {
         let source = &mut Cursor::new(bytes);
         let js = self.to_json(source)?;
-        serde_json::to_string_pretty(&js).map_err(ToJsonError::FormatError)
+        serde_json::to_string_pretty(&js).map_err(|_| ToJsonError::FormatError {})
     }
 
     /// Uses the schema to deserialize bytes into json
@@ -1347,7 +1387,7 @@ impl Type {
             }
             Type::ContractAddress => {
                 let address = ContractAddress::deserial(source).map_err(|_| deserial_error)?;
-                Ok(serde_json::to_value(address).map_err(ToJsonError::FormatError)?)
+                Ok(serde_json::to_value(address).map_err(|_| ToJsonError::FormatError {})?)
             }
             Type::Timestamp => {
                 let timestamp = Timestamp::deserial(source).map_err(|_| deserial_error)?;
