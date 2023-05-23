@@ -1,4 +1,5 @@
 use crate::{constants::*, schema::*, *};
+use core::fmt::Display;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::Value;
@@ -93,18 +94,30 @@ impl<'a> JsonError<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ToJsonErrorData(Vec<u8>);
+
+impl From<Vec<u8>> for ToJsonErrorData {
+    fn from(value: Vec<u8>) -> Self { Self(value) }
+}
+
+impl Display for ToJsonErrorData {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.iter().map(|b| write!(f, "{:02x?}", b)).collect()
+    }
+}
+
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum ToJsonError<'a> {
     #[error("Failed to format as JSON")]
     FormatError {},
-    #[error("Failed to deserialize {schema:?} from position {position} of {data}")]
+    #[error("Failed to deserialize {schema:?} from position {position} of bytes {data}")]
     DeserialError {
         position: u32,
         schema:   &'a Type,
-        /// Data as hex format
-        data:     String,
+        data:     ToJsonErrorData,
     },
-    #[error("{schema:?} from {position} -> {error}")]
+    #[error("{schema:?} -> {error}")]
     TraceError {
         position: u32,
         schema:   &'a Type,
@@ -1255,11 +1268,7 @@ fn item_list_to_json<'a, T: AsRef<[u8]>>(
     item_to_json: impl Fn(&mut Cursor<T>) -> ToJsonResult<'a, serde_json::Value>,
     schema: &'a Type,
 ) -> ToJsonResult<'a, Vec<serde_json::Value>> {
-    let data = source
-        .data
-        .as_ref()
-        .into_iter()
-        .fold(String::new(), |s, byte| format!("{}{:02x?}", s, byte));
+    let data = source.data.as_ref().to_owned().into();
     let position = source.cursor_position();
     let len = deserial_length(source, size_len).map_err(|_| ToJsonError::DeserialError {
         data,
@@ -1318,11 +1327,7 @@ impl Type {
     ) -> ToJsonResult<'a, serde_json::Value> {
         use serde_json::*;
 
-        let data = source
-            .data
-            .as_ref()
-            .into_iter()
-            .fold(String::new(), |s, byte| format!("{}{:02x?}", s, byte));
+        let data = source.data.as_ref().to_owned().into();
         let position = source.cursor_position();
 
         let deserial_error = ToJsonError::DeserialError {
