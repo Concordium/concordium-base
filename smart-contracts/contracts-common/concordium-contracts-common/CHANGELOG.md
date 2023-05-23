@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Unreleased changes
 
 - Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using `FromStr` and `Display` implementations, when feature `derive-serde` is enabled.
 

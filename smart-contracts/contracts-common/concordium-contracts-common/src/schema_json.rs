@@ -5,7 +5,8 @@ use num_traits::Zero;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
-/// Represents errors occurring while serializing data from the schema JSON format.
+/// Represents errors occurring while serializing data from the schema JSON
+/// format.
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum JsonError<'a> {
     #[error("Failed writing")]
@@ -65,15 +66,19 @@ impl<'a> JsonError<'a> {
     /// Gets the underlying error of a [JsonError::TraceError]. For any other
     /// variant, this simply returns the error itself.
     pub fn get_error(&self) -> &Self {
-        if let JsonError::TraceError {
-            error,
-            ..
-        } = self
-        {
-            return error.get_error();
+        let mut out = self;
+        loop {
+            if let JsonError::TraceError {
+                error,
+                ..
+            } = out
+            {
+                out = error;
+            } else {
+                break;
+            }
         }
-
-        self
+        out
     }
 
     /// Prints a formatted error message for variant. [JsonError::TraceError]
@@ -81,18 +86,38 @@ impl<'a> JsonError<'a> {
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
     pub fn print(&self, verbose: bool) -> String {
-        match self {
-            JsonError::TraceError {
-                field,
-                json,
+        if !verbose {
+            return format!("{}", self);
+        }
+
+        let mut out = String::new();
+        let mut current_error = self;
+        let mut is_initial_pass = true;
+
+        loop {
+            if let JsonError::TraceError {
                 error,
-            } if verbose => {
+                json,
+                field,
+            } = current_error
+            {
                 let formatted_json =
                     serde_json::to_string_pretty(json).unwrap_or_else(|_| format!("{}", json));
-                format!("{}\nIn {} of {}", error.print(verbose), field, formatted_json)
+                if is_initial_pass {
+                    out = format!("In {} of {}", field, formatted_json);
+                } else {
+                    out = format!("In {} of {}\n{}", field, formatted_json, out);
+                }
+
+                current_error = error;
+                is_initial_pass = false;
+            } else {
+                out = format!("{}\n{}", current_error, out);
+                break;
             }
-            _ => format!("{}", self),
         }
+
+        out
     }
 }
 
@@ -154,26 +179,62 @@ impl<'a> ToJsonError<'a> {
         }
     }
 
+    /// Gets the underlying error of a [ToJsonError::TraceError]. For any other
+    /// variant, this simply returns the error itself.
+    pub fn get_error(&self) -> &Self {
+        let mut out = self;
+        loop {
+            if let ToJsonError::TraceError {
+                error,
+                ..
+            } = out
+            {
+                out = error;
+            } else {
+                break;
+            }
+        }
+        out
+    }
+
     /// Prints a formatted error message for variant. [ToJsonError::TraceError]
     /// supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
     pub fn print(&self, verbose: bool) -> String {
-        match self {
-            ToJsonError::TraceError {
+        if !verbose {
+            return format!("{}", self);
+        }
+
+        let mut out = String::new();
+        let mut current_error = self;
+        let mut is_initial_pass = true;
+
+        loop {
+            if let ToJsonError::TraceError {
+                error,
                 position,
                 schema,
-                error,
-            } if verbose => {
-                format!(
-                    "{}\nIn deserializing position {} into type {:?}",
-                    error.print(verbose),
-                    position,
-                    schema
-                )
+            } = current_error
+            {
+                if is_initial_pass {
+                    out = format!("In deserializing position {} into type {:?}", position, schema);
+                } else {
+                    out = format!(
+                        "In deserializing position {} into type {:?}\n{}",
+                        position, schema, out
+                    );
+                }
+
+                current_error = error;
+                is_initial_pass = false;
+            } else {
+                out = format!("{}\n{}", current_error, out);
+                break;
             }
-            _ => format!("{}", self),
         }
+
+        out
     }
 }
 
@@ -1349,7 +1410,7 @@ impl Type {
         match self {
             Type::Unit => Ok(Value::Null),
             Type::Bool => {
-                let Ok(n) = bool::deserial(source) else { return Err(deserial_error) };
+                let n = bool::deserial(source).map_err(|_| deserial_error)?;
                 Ok(Value::Bool(n))
             }
             Type::U8 => {
