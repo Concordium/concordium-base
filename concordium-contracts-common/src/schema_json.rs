@@ -43,7 +43,7 @@ pub enum JsonError<'a> {
     #[error("{field} -> {error}")]
     TraceError {
         field: String,
-        json:  &'a serde_json::Value,
+        json: &'a serde_json::Value,
         error: Box<JsonError<'a>>,
     },
 }
@@ -100,15 +100,15 @@ pub enum ToJsonError<'a> {
     #[error("Failed to deserialize {schema:?} from position {position} of {data}")]
     DeserialError {
         position: u32,
-        schema:   &'a Type,
+        schema: &'a Type,
         /// Data as hex format
-        data:     String,
+        data: String,
     },
     #[error("{schema:?} from {position} -> {error}")]
     TraceError {
         position: u32,
-        schema:   &'a Type,
-        error:    Box<ToJsonError<'a>>,
+        schema: &'a Type,
+        error: Box<ToJsonError<'a>>,
     },
 }
 
@@ -892,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serial_account() {
+    fn test_serial_account_address() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let account = AccountAddress(account_bytes.clone());
         let schema = Type::AccountAddress;
@@ -904,7 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serial_account_wrong_address_fails() {
+    fn test_serial_account_address_wrong_address_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let account = AccountAddress(account_bytes.clone());
         let schema = Type::AccountAddress;
@@ -1121,6 +1121,58 @@ mod tests {
         let mut cursor = Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
         deserial_bigint(&mut cursor, 9).expect_err("Deserialising should fail");
     }
+
+    #[test]
+    fn test_deserial_account_address() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let mut cursor = Cursor::new(&account_bytes);
+        // let account = AccountAddress(account_bytes.clone());
+        let schema = Type::AccountAddress;
+        let value = schema.to_json(&mut cursor).expect("Deserializing should not fail");
+
+        let expected = json!(format!("{}", AccountAddress(account_bytes)));
+        assert_eq!(expected, value)
+    }
+
+    #[test]
+    fn test_deserial_malformed_account_address_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let mut cursor = Cursor::new(&account_bytes[..30]);
+        let schema = Type::AccountAddress;
+        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+
+        assert!(matches!(
+            err,
+            ToJsonError::DeserialError {
+                position: 0,
+                schema: Type::AccountAddress,
+                ..
+            }
+        ))
+    }
+
+    #[test]
+    fn test_deserial_malformed_list_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let mut list_bytes = vec![2, 0];
+        list_bytes.extend_from_slice(&account_bytes);
+        list_bytes.extend_from_slice(&account_bytes[..30]);
+
+        let mut cursor = Cursor::new(list_bytes);
+        let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
+        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+
+        println!("{:#?}", err);
+
+        assert!(matches!(
+            err,
+            ToJsonError::TraceError {
+                position: 0,
+                schema: Type::List(_, _),
+                error,
+            } if matches!(*error, ToJsonError::DeserialError { position: 33, schema: Type::AccountAddress, .. })
+        ))
+    }
 }
 
 impl Fields {
@@ -1152,7 +1204,9 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+    fn from(_: std::string::FromUtf8Error) -> Self {
+        ParseError::default()
+    }
 }
 
 fn item_list_to_json<'a, T: AsRef<[u8]>>(
@@ -1304,16 +1358,18 @@ impl Type {
                 Ok(Value::String(duration.to_string()))
             }
             Type::Pair(left_type, right_type) => {
-                let left = left_type.to_json(source)?;
-                let right = right_type.to_json(source)?;
+                let left = left_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                let right = right_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
                 Ok(Value::Array(vec![left, right]))
             }
             Type::List(size_len, ty) => {
-                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)?;
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
+                    .map_err(|e| e.add_trace(position, self))?;
                 Ok(Value::Array(values))
             }
             Type::Set(size_len, ty) => {
-                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)?;
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
+                    .map_err(|e| e.add_trace(position, self))?;
                 Ok(Value::Array(values))
             }
             Type::Map(size_len, key_type, value_type) => {
@@ -1321,8 +1377,9 @@ impl Type {
                     source,
                     *size_len,
                     |s| {
-                        let key = key_type.to_json(s)?;
-                        let value = value_type.to_json(s)?;
+                        let key = key_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
+                        let value =
+                            value_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
                         Ok(Value::Array(vec![key, value]))
                     },
                     self,
@@ -1376,9 +1433,11 @@ impl Type {
             }
             Type::ContractName(size_len) => {
                 let name = deserial_string(source, *size_len);
+                let owned_contract_name =
+                    name.and_then(|n| OwnedContractName::new(n).map_err(|_| ParseError {}));
 
                 // Map all error cases into the same error.
-                if let Ok(Ok(contract_name)) = name.map(OwnedContractName::new) {
+                if let Ok(contract_name) = owned_contract_name {
                     let name_without_init = contract_name.as_contract_name().contract_name();
                     Ok(json!({ "contract": name_without_init }))
                 } else {
@@ -1387,9 +1446,11 @@ impl Type {
             }
             Type::ReceiveName(size_len) => {
                 let name = deserial_string(source, *size_len);
+                let owned_receive_name =
+                    name.and_then(|n| OwnedReceiveName::new(n).map_err(|_| ParseError {}));
 
                 // Map all error cases into the same error.
-                if let Ok(Ok(owned_receive_name)) = name.map(OwnedReceiveName::new) {
+                if let Ok(owned_receive_name) = owned_receive_name {
                     let receive_name = owned_receive_name.as_receive_name();
                     let contract_name = receive_name.contract_name();
                     let func_name = receive_name.entrypoint_name();
@@ -1408,32 +1469,7 @@ impl Type {
             }
             Type::ByteList(size_len) => {
                 let len = deserial_length(source, *size_len);
-                let bytes = len.as_ref().map(|len| {
-                    let mut bytes =
-                        Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
-
-                    for _ in 0..*len {
-                        let byte = source.read_u8();
-                        bytes.push(byte);
-                    }
-
-                    bytes.into_iter().collect::<ParseResult<Vec<u8>>>()
-                });
-
-                // Map all error cases into the same error.
-                if let (Ok(&len), Ok(Ok(bytes))) = (len.as_ref(), bytes) {
-                    let mut string =
-                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
-
-                    bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
-                    Ok(Value::String(string))
-                } else {
-                    Err(deserial_error)
-                }
-            }
-            Type::ByteArray(len) => {
-                let len = usize::try_from(*len);
-                let bytes = &len.map(|len| {
+                let bytes: ParseResult<Vec<u8>> = len.and_then(|len| {
                     let mut bytes =
                         Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
 
@@ -1442,14 +1478,37 @@ impl Type {
                         bytes.push(byte);
                     }
 
-                    bytes.into_iter().collect::<ParseResult<Vec<u8>>>()
+                    bytes.into_iter().collect()
                 });
 
                 // Map all error cases into the same error.
-                if let (Ok(len), Ok(Ok(bytes))) = (len, bytes) {
+                if let (Ok(len), Ok(bytes)) = (len, bytes) {
                     let mut string =
                         String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
+                    bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
+                    Ok(Value::String(string))
+                } else {
+                    Err(deserial_error)
+                }
+            }
+            Type::ByteArray(len) => {
+                let len = usize::try_from(*len).map_err(|_| ParseError {});
+                let bytes: ParseResult<Vec<u8>> = len.and_then(|len| {
+                    let mut bytes =
+                        Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
 
+                    for _ in 0..len {
+                        let byte = source.read_u8();
+                        bytes.push(byte);
+                    }
+
+                    bytes.into_iter().collect()
+                });
+
+                // Map all error cases into the same error.
+                if let (Ok(len), Ok(bytes)) = (len, bytes) {
+                    let mut string =
+                        String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
                     bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
                     Ok(Value::String(string))
                 } else {
