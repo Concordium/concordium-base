@@ -5,6 +5,7 @@ use num_traits::Zero;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
+/// Represents errors occuring while serializing data from schema JSON format
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum JsonError<'a> {
     #[error("Failed writing")]
@@ -41,6 +42,7 @@ pub enum JsonError<'a> {
     ParseDurationError(#[from] ParseDurationError),
     #[error("{0}")]
     ParseTimestampError(#[from] ParseTimestampError),
+    /// Trace leading to the original [JsonError].
     #[error("{field} -> {error}")]
     TraceError {
         field: String,
@@ -94,6 +96,8 @@ impl<'a> JsonError<'a> {
     }
 }
 
+/// Wrapper around a list of bytes to represent data which failed to be
+/// deserialized into schema type.
 #[derive(Debug, Clone)]
 pub struct ToJsonErrorData(Vec<u8>);
 
@@ -107,16 +111,20 @@ impl Display for ToJsonErrorData {
     }
 }
 
+/// Represents errors occuring while deserializing to schema JSON format
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum ToJsonError<'a> {
+    /// JSON formatter failed to represent value.
     #[error("Failed to format as JSON")]
     FormatError {},
+    /// Failed to deserialize data to type expected from schema.
     #[error("Failed to deserialize {schema:?} from position {position} of bytes {data}")]
     DeserialError {
         position: u32,
         schema:   &'a Type,
         data:     ToJsonErrorData,
     },
+    /// Trace leading to the original [ToJsonError].
     #[error("{schema:?} -> {error}")]
     TraceError {
         position: u32,
