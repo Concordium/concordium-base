@@ -672,6 +672,29 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
 An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
 
+## get_verifiable_credential_keys
+Semantics: Deterministically derives signing key, verification key and an encryption key for a verifiable credential.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
+
+- `"verifiableCredentialIndex"` ... the index of the verifiable credential to derive keys for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"signKey"` ... the verifiable credential signing key as a hex encoded string, used to sign the encrypted verifiable credential.
+
+- `"verifyKey"` ... the verifiable credential verification key as a hex encoded string, used to identify the verifiable credential.
+
+- `"encryptionKey"` ... the verifiable credential encryption key as a hex encoded string, used to encrypt the verifiable credential.
+
+An example input to this request is in the file [get_verifiable_credential_keys-input.json](files/get_verifiable_credential_keys-input.json).
+An example output to this request is in the file [get_verifiable_credential_keys-output.json](files/get_verifiable_credential_keys-output.json).
+
 ## sign_message
 Semantics: Signs a message with the provided account keys.
 

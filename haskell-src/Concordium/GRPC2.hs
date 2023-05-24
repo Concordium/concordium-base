@@ -1613,6 +1613,7 @@ instance ToProto QueryTypes.BlockInfo where
         ProtoFields.transactionsEnergyCost .= toProto biTransactionEnergyCost
         ProtoFields.transactionsSize .= fromIntegral biTransactionsSize
         ProtoFields.stateHash .= toProto biBlockStateHash
+        ProtoFields.protocolVersion .= toProto biProtocolVersion
 
 instance ToProto QueryTypes.PoolStatus where
     type Output QueryTypes.PoolStatus = Either Proto.PoolInfoResponse Proto.PassiveDelegationInfo
@@ -2097,6 +2098,16 @@ instance ToProto BlockHashInput where
         Best -> Proto.make $ ProtoFields.best .= Proto.defMessage
         LastFinal -> Proto.make $ ProtoFields.lastFinal .= Proto.defMessage
         Given bh -> Proto.make $ ProtoFields.given .= toProto bh
+        AtHeight (Absolute{..}) -> Proto.make $ ProtoFields.absoluteHeight .= toProto aBlockHeight
+        AtHeight (Relative{..}) ->
+            Proto.make $
+                ProtoFields.relativeHeight
+                    .= Proto.make
+                        ( do
+                            ProtoFields.genesisIndex .= toProto rGenesisIndex
+                            ProtoFields.height .= toProto rBlockHeight
+                            ProtoFields.restrict .= rRestrict
+                        )
 
 instance ToProto BlockHeightInput where
     type Output BlockHeightInput = Proto.BlocksAtHeightRequest

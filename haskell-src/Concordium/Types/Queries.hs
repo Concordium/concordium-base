@@ -187,7 +187,9 @@ data BlockInfo = BlockInfo
       -- |The size of the transactions
       biTransactionsSize :: !Int,
       -- |The hash of the block state
-      biBlockStateHash :: !StateHash
+      biBlockStateHash :: !StateHash,
+      -- |Protocol version that the block belongs to.
+      biProtocolVersion :: !ProtocolVersion
     }
     deriving (Show)
 
@@ -945,8 +947,9 @@ data PeerInfo = PeerInfo
 -- just need the recent state can use @LastFinal@ or @Best@ to get the
 -- result without first establishing what the last final or best block
 -- is.
-data BlockHashInput = Best | LastFinal | Given !BlockHash
-    deriving (Read)
+data BlockHashInput = Best | LastFinal | Given !BlockHash | AtHeight !BlockHeightInput
+
+--  deriving (Read)
 
 -- |Input for @getBlocksAtHeight@.
 data BlockHeightInput

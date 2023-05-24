@@ -95,6 +95,15 @@ impl ConcordiumHdWallet {
         Ok(derivation_path)
     }
 
+    fn make_verifiable_credential_path(&self, path: &[u32]) -> Result<Vec<u32>, DeriveError> {
+        let root_path: Vec<u32> = vec![harden(1958950021), harden(self.net.net_code())];
+        let mut derivation_path = root_path;
+        for &index in path {
+            derivation_path.push(checked_harden(index)?)
+        }
+        Ok(derivation_path)
+    }
+
     /// Construct [`ConcordiumHdWallet`](Self) from a seed phrase. The intention
     /// is that the `phrase` is a single-space separated list of words.
     ///
@@ -214,6 +223,46 @@ impl ConcordiumHdWallet {
         Ok(CommitmentRandomness::new(bls_key_bytes_from_seed(
             attribute_commitment_randomness_seed,
         )))
+    }
+
+    /// Get the signing key for the verifiable credential with the given index.
+    /// The signing key is used to sign the encrypted verifiable credential,
+    /// which is necessary for it to be submitted to the storage contract.
+    pub fn get_verifiable_credential_signing_key(
+        &self,
+        verifiable_credential_index: u32,
+    ) -> Result<SecretKey, DeriveError> {
+        let path = self.make_verifiable_credential_path(&[0, verifiable_credential_index, 0])?;
+        let keys = derive_from_parsed_path(&path, &self.seed)?;
+        Ok(SecretKey::from_bytes(&keys.private_key)
+            .expect("The byte array has correct length, so this cannot fail."))
+    }
+
+    /// Get the public key for the verifiable credential with the given index.
+    /// The public key is used to identify the specific verifiable credential
+    /// within the registry contract.
+    /// Note that this is just a convenience wrapper. The same can be achieved
+    /// by using [`PublicKey::from`] on the result of
+    /// [`get_verifiable_credential_signing_key`](Self::get_verifiable_credential_signing_key)
+    pub fn get_verifiable_credential_public_key(
+        &self,
+        verifiable_credential_index: u32,
+    ) -> Result<PublicKey, DeriveError> {
+        let signing_key =
+            self.get_verifiable_credential_signing_key(verifiable_credential_index)?;
+        let public_key = PublicKey::from(&signing_key);
+        Ok(public_key)
+    }
+
+    /// Get the encryption key for the verifiable credential with the given
+    /// index. The encryption key is used as the key when encrypting the
+    /// verifiable credential before it is stored in the storage contract.
+    pub fn get_verifiable_credential_encryption_key(
+        &self,
+        verifiable_credential_index: u32,
+    ) -> Result<[u8; 32], DeriveError> {
+        let path = self.make_verifiable_credential_path(&[0, verifiable_credential_index, 1])?;
+        Ok(derive_from_parsed_path(&path, &self.seed)?.private_key)
     }
 }
 
@@ -517,5 +566,105 @@ mod tests {
                         crush open amazing screen patrol group space point ten exist slush \
                         involve unfold";
         check_seed_vector(mnemonic, "01f5bced59dec48e362f2c45b5de68b9fd6c92c6634f44d6d40aab69056506f0e35524a518034ddc1192e1dacd32c1ed3eaa3c3b131c88ed8e7e54c49a5d0998");
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_signing_key() {
+        let signing_key = create_wallet(Net::Mainnet, TEST_SEED_1)
+            .get_verifiable_credential_signing_key(1)
+            .unwrap();
+        assert_eq!(
+            hex::encode(&signing_key),
+            "875df27dc69b0ebcb3b362b00fdc95ad50353819087fa75d39ef0aa3f9a8104a"
+        );
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_public_key() {
+        let public_key = create_wallet(Net::Mainnet, TEST_SEED_1)
+            .get_verifiable_credential_public_key(341)
+            .unwrap();
+        assert_eq!(
+            hex::encode(public_key),
+            "49efcf3adcfc87864cba5095dbf669fd9fa4529bba3fcecb3b1c0c12285530c8"
+        );
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_signing_key_matches_public_key() {
+        let wallet = create_wallet(Net::Mainnet, TEST_SEED_1);
+
+        let public_key = wallet.get_verifiable_credential_public_key(0).unwrap();
+        let signing_key = wallet.get_verifiable_credential_signing_key(0).unwrap();
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+
+        let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
+        let signature = expanded_sk.sign(&data_to_sign, &public_key);
+
+        public_key.verify(&data_to_sign, &signature).expect(
+            "The public key should be able to verify the signature, otherwise the keys do not \
+             match.",
+        );
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_encryption_key() {
+        let wallet = create_wallet(Net::Mainnet, TEST_SEED_1);
+        let encryption_key = wallet.get_verifiable_credential_encryption_key(97).unwrap();
+
+        assert_eq!(
+            hex::encode(encryption_key),
+            "30be8892d89599867fca90dcd841ac62cc07ea0ea521e8708eb8ae143c093210"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_signing_key() {
+        let signing_key = create_wallet(Net::Testnet, TEST_SEED_1)
+            .get_verifiable_credential_signing_key(1)
+            .unwrap();
+        assert_eq!(
+            hex::encode(&signing_key),
+            "c53e2259d321b55637952951ea56bcae336404765b85c3ba78ca22a9d06bb40f"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_public_key() {
+        let public_key = create_wallet(Net::Testnet, TEST_SEED_1)
+            .get_verifiable_credential_public_key(341)
+            .unwrap();
+        assert_eq!(
+            hex::encode(public_key),
+            "20a5ce34364e1f1ce619fdfb12daa806e5e86ef44971f3c9cf1ec6b8b58e27d3"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_signing_key_matches_public_key() {
+        let wallet = create_wallet(Net::Testnet, TEST_SEED_1);
+
+        let public_key = wallet.get_verifiable_credential_public_key(0).unwrap();
+        let signing_key = wallet.get_verifiable_credential_signing_key(0).unwrap();
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+
+        let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
+        let signature = expanded_sk.sign(&data_to_sign, &public_key);
+
+        public_key.verify(&data_to_sign, &signature).expect(
+            "The public key should be able to verify the signature, otherwise the keys do not \
+             match.",
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_encryption_key() {
+        let wallet = create_wallet(Net::Testnet, TEST_SEED_1);
+        let encryption_key = wallet.get_verifiable_credential_encryption_key(97).unwrap();
+
+        assert_eq!(
+            hex::encode(encryption_key),
+            "f263c915c8000b5164e3fc1d84ce80a451eef2b32f9749a4d0d390844bb1673e"
+        );
     }
 }

@@ -121,9 +121,12 @@ impl PrefixesMap {
             root
         };
         for k in key {
-            let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+            let node =
+                self.nodes.get_mut(node_idx).expect("Invariant violation: node does not exist.");
             match node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
                 Ok(idx) => {
+                    // This use of get_unchecked is safe since we found the index via binary search
+                    // just now.
                     let c = unsafe { node.children.get_unchecked(idx) };
                     node_idx = c.index();
                 }
@@ -131,13 +134,15 @@ impl PrefixesMap {
                     let new_node = self.nodes.insert(InnerNode::default());
                     // look up again to not have issues with double mutable borrow.
                     // This could be improved.
+                    // This use of get_unchecked_mut is safe since we already looked up the node at
+                    // this index just above.
                     let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
                     node.children.insert(idx, KeyIndexPair::new(Chunk::new(*k), new_node));
                     node_idx = new_node;
                 }
             }
         }
-        let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+        let node = self.nodes.get_mut(node_idx).expect("Invariant violation: node does not exist.");
         if let Some(value) = node.value {
             let new_value = value.get().checked_add(1).ok_or(TooManyIterators)?;
             node.value = Some(unsafe { NonZeroU32::new_unchecked(new_value) });
@@ -157,12 +162,14 @@ impl PrefixesMap {
             return Ok(());
         };
         for k in key {
-            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            let node = self.nodes.get(node_idx).expect("Invariant violation: node does not exist.");
             // if there is a value at this node, then we have found our prefix.
             if node.value.is_some() {
                 return Err(AttemptToModifyLockedArea);
             }
             if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
+                // This use of get_unchecked is safe since we found the index via binary search
+                // just now.
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -172,7 +179,7 @@ impl PrefixesMap {
         // we found a node that either has a value, or has children, in the first case
         // the given key is a prefix of some value in the trie. In the latter it is not,
         // the entire tree is below it.
-        let node = unsafe { self.nodes.get_unchecked(node_idx) };
+        let node = self.nodes.get(node_idx).expect("Invariant violation: node does not exist.");
         if node.value.is_some() {
             Err(AttemptToModifyLockedArea)
         } else {
@@ -190,12 +197,14 @@ impl PrefixesMap {
             return false;
         };
         for k in key {
-            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            let node = self.nodes.get(node_idx).expect("Invariant violation: Node does not exist.");
             // if there is a value at this node, then we have found our prefix.
             if node.value.is_some() {
                 return true;
             }
             if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
+                // This use of get_unchecked is safe since we found the index via binary search
+                // just now.
                 let c = unsafe { node.children.get_unchecked(idx) };
                 node_idx = c.index();
             } else {
@@ -220,8 +229,10 @@ impl PrefixesMap {
         };
         let mut stack = Vec::new();
         for k in key {
-            let node = unsafe { self.nodes.get_unchecked(node_idx) };
+            let node = self.nodes.get(node_idx).expect("Invariant violation: node not found.");
             if let Ok(idx) = node.children.binary_search_by_key(&Chunk::new(*k), |x| x.key()) {
+                // This use of get_unchecked is safe since we found the index via binary search
+                // just now.
                 let c = unsafe { node.children.get_unchecked(idx) };
                 stack.push((node_idx, idx));
                 node_idx = c.index();
@@ -229,7 +240,7 @@ impl PrefixesMap {
                 return false;
             }
         }
-        let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
+        let node = self.nodes.get_mut(node_idx).expect("Invariant violation: node not found.");
         let have_removed = node.value.is_some();
         match node.value {
             Some(ref mut value) if value.get() > 1 => {
@@ -242,6 +253,8 @@ impl PrefixesMap {
         if node.children.is_empty() {
             self.nodes.remove(node_idx);
             while let Some((node_idx, child_idx)) = stack.pop() {
+                // This use of get_unchecked is safe since we already looked up these
+                // nodes on the way down before we pushed them to the stack.
                 let node = unsafe { self.nodes.get_unchecked_mut(node_idx) };
                 node.children.remove(child_idx);
                 if !node.children.is_empty() || node.value.is_some() {
@@ -437,6 +450,8 @@ impl<V> CachedRef<V> {
                 {
                     value
                 } else {
+                    // This use of unsafe is safe since we just set `self` to `Cached`
+                    // and we have exclusive access.
                     unsafe { std::hint::unreachable_unchecked() }
                 }
             }
@@ -1792,6 +1807,8 @@ fn make_owned<'a>(
     loader: &'_ mut impl BackingStoreLoad,
 ) -> (bool, usize, &'a mut tinyvec::TinyVec<[KeyIndexPair<4>; INLINE_CAPACITY]>) {
     let owned_nodes_len = owned_nodes.len();
+    // This use is safe since this function is only called when we have already
+    // looked up the node beforehand.
     let node = unsafe { owned_nodes.get_unchecked(idx) };
     let node_generation = node.generation;
     let has_value = node.value.is_some();
@@ -1839,14 +1856,15 @@ fn make_owned<'a>(
     };
     if let Some((mut to_add, children)) = res {
         owned_nodes.append(&mut to_add);
-        let node = unsafe { owned_nodes.get_unchecked_mut(idx) };
+        let node = owned_nodes.get_mut(idx).expect("Invariant violation: Node does not exist.");
         node.children = ChildrenCow::Owned {
             generation: node_generation,
             value:      children,
         };
     }
     let owned_nodes_len = owned_nodes.len();
-    match &mut unsafe { owned_nodes.get_unchecked_mut(idx) }.children {
+    match &mut owned_nodes.get_mut(idx).expect("Invariant violation: Node does not exist").children
+    {
         ChildrenCow::Borrowed(_) => unsafe { std::hint::unreachable_unchecked() },
         ChildrenCow::Owned {
             value: ref mut children,
@@ -2281,7 +2299,8 @@ impl MutableTrie {
             return Ok(None);
         };
         loop {
-            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            let node =
+                owned_nodes.get_mut(node_idx).expect("Invariant violation: Node does not exist.");
             let mut stem_iter = node.path.iter();
             match follow_stem(&mut key_iter, &mut stem_iter) {
                 FollowStem::Equal => {
@@ -2327,6 +2346,8 @@ impl MutableTrie {
                     } else {
                         return Ok(None);
                     };
+                    // This use of get_unchecked is safe since the `pair` is the index returned by
+                    // binary search, so it is guaranteed to be within bounds.
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
                 FollowStem::Diff {
@@ -2528,7 +2549,8 @@ impl MutableTrie {
         let entries = &mut self.entries;
         let mut node_idx = self.generations.last()?.root?;
         loop {
-            let node = unsafe { owned_nodes.get_unchecked(node_idx) };
+            let node =
+                owned_nodes.get(node_idx).expect("Invariant violation: Node does not exist.");
             match follow_stem(&mut key_iter, &mut node.path.iter()) {
                 FollowStem::Equal => {
                     return node.value;
@@ -2547,6 +2569,8 @@ impl MutableTrie {
                     let pair = children
                         .binary_search_by(|ck| (ck.pair & 0xf000_0000_0000_0000).cmp(&key_usize))
                         .ok()?;
+                    // This use of get_unchecked is safe since `pair` is by construction within
+                    // bounds.
                     node_idx = unsafe { children.get_unchecked(pair) }.index();
                 }
                 FollowStem::Diff {
@@ -2585,7 +2609,7 @@ impl MutableTrie {
         };
         generation.iterator_roots.check_has_no_prefix(key)?;
         loop {
-            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            let node = owned_nodes.get_mut(node_idx).expect("Invariant violation: node not found.");
             match follow_stem(&mut key_iter, &mut node.path.iter()) {
                 FollowStem::Equal => {
                     // we found it, delete the value first and save it for returning.
@@ -2622,6 +2646,8 @@ impl MutableTrie {
                                 // the only thing that needs to be transferred from the node to the
                                 // child is (potentially) the stem of the node.
                                 let father_node: &mut MutableNode =
+                                    // This use of get_unchecked is safe since `father_idx` is set on the way
+                                    // down to the index of the node we passed. So we know it exists.
                                     unsafe { owned_nodes.get_unchecked_mut(father_idx) };
                                 if let Some((_, children)) = father_node.children.get_owned_mut() {
                                     let child_place: &mut KeyIndexPair<4> =
@@ -2648,6 +2674,8 @@ impl MutableTrie {
                             {
                                 // the node will have a child removed, mark it as modified.
                                 let father_node: &mut MutableNode =
+                                    // This use of get_unchecked is safe since `father_idx` is set on the way
+                                    // down to the index of the node we passed. So we know it exists.
                                     unsafe { owned_nodes.get_unchecked_mut(father_idx) };
                                 father_node.origin = None;
                             }
@@ -2679,6 +2707,10 @@ impl MutableTrie {
                                         // the only thing that needs to be transferred from the node
                                         // to the child is (potentially) the stem of the node.
                                         let grandfather_node: &mut MutableNode = unsafe {
+                                            // This use of get_unchecked is safe since
+                                            // `grandfather_idx` is set on the way
+                                            // down to the index of the node we passed. So we know
+                                            // it exists.
                                             owned_nodes.get_unchecked_mut(grandfather_idx)
                                         };
                                         // the node was modified
@@ -2721,6 +2753,8 @@ impl MutableTrie {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
+                        // This use of get_unchecked is safe since `binary_search` returned the
+                        // index.
                         let pair = unsafe { children.get_unchecked(c_idx) };
                         grandfather = std::mem::replace(&mut father, Some((c_idx, node_idx)));
                         node_idx = pair.index();
@@ -2769,7 +2803,8 @@ impl MutableTrie {
             return Ok(Err(AttemptToModifyLockedArea));
         }
         loop {
-            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            let node =
+                owned_nodes.get_mut(node_idx).expect("Invariant violation: Node does not exist.");
             match follow_stem(&mut key_iter, &mut node.path.iter()) {
                 FollowStem::StemIsPrefix {
                     key_step,
@@ -2777,6 +2812,7 @@ impl MutableTrie {
                     let (_, _, children) =
                         make_owned(node_idx, borrowed_values, owned_nodes, entries, loader);
                     if let Ok(c_idx) = children.binary_search_by(|ck| ck.key().cmp(&key_step)) {
+                        // This use of unsafe is safe since we just found the index.
                         let pair = unsafe { children.get_unchecked(c_idx) };
                         grandparent_idx =
                             std::mem::replace(&mut parent_idx, Some((c_idx, node_idx)));
@@ -2829,6 +2865,9 @@ impl MutableTrie {
                     if let Some((child_idx, parent_idx)) = parent_idx {
                         {
                             // mark the parent as modified since we remove one if its children
+                            // This use of get_unchecked is safe since `parent_idx` is set on the
+                            // way down to the index of the node we
+                            // passed. So we know it exists.
                             let parent_node: &mut MutableNode =
                                 unsafe { owned_nodes.get_unchecked_mut(parent_idx) };
                             parent_node.origin = None;
@@ -2855,6 +2894,10 @@ impl MutableTrie {
                                     // to the child is (potentially) the stem of the node.
                                     // All other values in the node are empty.
                                     let grandparent_node: &mut MutableNode =
+                                        // This use of get_unchecked is safe since
+                                        // `grandparent_idx` is set on the way
+                                        // down to the index of the node we passed. So we know
+                                        // it exists.
                                         unsafe { owned_nodes.get_unchecked_mut(grandparent_idx) };
                                     // grandparent was modified
                                     grandparent_node.origin = None;
@@ -2937,7 +2980,8 @@ impl MutableTrie {
         let mut key_iter = StemIter::new(key);
         loop {
             let owned_nodes_len = owned_nodes.len();
-            let node = unsafe { owned_nodes.get_unchecked_mut(node_idx) };
+            let node =
+                owned_nodes.get_mut(node_idx).expect("Invariant violation: Node does not exist.");
             node.origin = None; // the node is on the modified path
             let mut stem_iter = node.path.iter();
             let checkpoint = key_iter.pos;
@@ -2977,6 +3021,9 @@ impl MutableTrie {
 
                     // Update the parents children index with the new child
                     if let Some((parent_node_idx, child_idx)) = parent_node_idxs {
+                        // This use of get_unchecked is safe since `parent_node_idx` is set on the
+                        // way down to the index of the node we passed. So
+                        // we know it exists.
                         let parent_node = unsafe { owned_nodes.get_unchecked_mut(parent_node_idx) };
                         if let Some((_, children)) = parent_node.children.get_owned_mut() {
                             if let Some(key_and_index) = children.get_mut(child_idx) {
@@ -3013,6 +3060,8 @@ impl MutableTrie {
                     match idx {
                         Ok(idx) => {
                             parent_node_idxs = Some((node_idx, idx));
+                            // This use of get_unchecked is safe since it is an index returned by
+                            // binary search.
                             node_idx = unsafe { children.get_unchecked(idx).index() };
                         }
                         Err(place) => {
@@ -3106,6 +3155,9 @@ impl MutableTrie {
 
                     // Update the parents children index with the new child
                     if let Some((parent_node_idx, child_idx)) = parent_node_idxs {
+                        // This use of get_unchecked is safe since `parent_node_idx` is set on the
+                        // way down to the index of the node we passed. So
+                        // we know it exists.
                         let parent_node = unsafe { owned_nodes.get_unchecked_mut(parent_node_idx) };
                         if let Some((_, children)) = parent_node.children.get_owned_mut() {
                             if let Some(key_and_index) = children.get_mut(child_idx) {
