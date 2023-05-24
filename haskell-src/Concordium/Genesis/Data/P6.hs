@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -13,6 +14,34 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
+import qualified Concordium.Types.Parameters as Parameters
+
+-- |Parameters data type for the 'P5' to 'P6' protocol update.
+-- This is provided as a parameter to the protocol update chain update instruction.
+data ProtocolUpdateData = ProtocolUpdateData
+    { -- |The consensus parameters that the protocol should be instantiated with.
+      updateConsensusParameters :: !(Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1),
+      -- |The 'FinalizationCommitteeParameters' that the protocol should
+      -- be instantiated with.
+      updateFinalizationCommitteeParameters :: !Parameters.FinalizationCommitteeParameters
+    }
+    deriving (Eq, Show)
+
+instance Serialize ProtocolUpdateData where
+    put ProtocolUpdateData{..} = do
+        put updateConsensusParameters
+        put updateFinalizationCommitteeParameters
+    get = do
+        updateConsensusParameters <- get
+        updateFinalizationCommitteeParameters <- get
+        return ProtocolUpdateData{..}
+
+-- |Parameters used to migrate state from 'P5' to 'P6'.
+newtype StateMigrationData = StateMigrationData
+    { migrationProtocolUpdateData :: ProtocolUpdateData
+    }
+    deriving newtype (Eq, Show)
+    deriving (Serialize) via ProtocolUpdateData
 
 -- |Initial genesis data for the P6 protocol version.
 data GenesisDataP6 = GDP6Initial
@@ -30,7 +59,15 @@ data GenesisDataP6 = GDP6Initial
 -- The relationship between the new state and the state of the
 -- terminal block of the old chain should be defined by the
 -- chain update mechanism used.
-newtype RegenesisP6 = GDP6Regenesis {genesisRegenesis :: BaseV1.RegenesisDataV1}
+--
+-- There are two variants, one when migrating from 'P5' to 'P6'and
+-- one from 'P6' to 'P6'.
+data RegenesisP6
+    = GDP6RegenesisFromP5
+        { genesisRegenesis :: BaseV1.RegenesisDataV1,
+          genesisMigration :: StateMigrationData
+        }
+    | GDP6Regenesis {genesisRegenesis :: BaseV1.RegenesisDataV1}
     deriving (Eq, Show)
 
 -- |Deserialize genesis data in the V8 format.
@@ -47,6 +84,10 @@ getRegenesisData :: Get RegenesisP6
 getRegenesisData =
     getWord8 >>= \case
         1 -> do
+            genesisRegenesis <- get
+            genesisMigration <- get
+            return GDP6RegenesisFromP5{..}
+        2 -> do
             genesisRegenesis <- get
             return GDP6Regenesis{..}
         _ -> fail "Unrecognized P6 regenesis data type."
