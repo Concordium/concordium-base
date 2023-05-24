@@ -6,9 +6,12 @@ use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
 trait TraceError {
+    /// Returns an error message layer associated with this error, along with a
+    /// reference to the error this error wraps. If this error is not a
+    /// wrapping layer, None is expected to be returned.
     fn print_layer(&self, verbose: bool) -> (String, Option<&Self>);
 
-    /// Prints a formatted error message for a [TraceError].
+    /// Returns a formatted error message for a [TraceError].
     /// It supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
@@ -40,6 +43,8 @@ trait TraceError {
         out
     }
 
+    /// Gets a reference to the error this error wraps. If this error is not a
+    /// wrapping layer, None is expected to be returned.
     fn get_inner_error(&self) -> Option<&Self>;
 
     /// Gets the innermost error of a [TraceError].
