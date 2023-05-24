@@ -5,6 +5,57 @@ use num_traits::Zero;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
+trait TraceError {
+    fn print_layer(&self, verbose: bool) -> (String, Option<&Self>);
+
+    /// Prints a formatted error message for a [TraceError].
+    /// It supports printing a verbose form including a more detailed
+    /// description of the error stack, which is returned if `verbose` is
+    /// set to true.
+    fn print_nested(&self, verbose: bool) -> String {
+        let mut out = String::new();
+        let mut current_error = self;
+        let mut is_initial_pass = true;
+
+        loop {
+            let (string, next_error) = current_error.print_layer(verbose);
+            out = if is_initial_pass {
+                is_initial_pass = false;
+                string
+            } else {
+                if verbose {
+                    format!("{}\n{}", string, out)
+                } else {
+                    format!("{} -> {}", out, string)
+                }
+            };
+
+            if let Some(next) = next_error {
+                current_error = next;
+            } else {
+                break;
+            }
+        }
+
+        out
+    }
+
+    fn get_inner_error(&self) -> Option<&Self>;
+
+    /// Gets the innermost error of a [TraceError].
+    fn get_innermost_error(&self) -> &Self {
+        let mut out = self;
+        loop {
+            if let Some(error) = self.get_inner_error() {
+                out = error;
+            } else {
+                break;
+            }
+        }
+        out
+    }
+}
+
 /// Represents errors occurring while serializing data from the schema JSON
 /// format.
 #[derive(Debug, thiserror::Error, Clone)]
@@ -52,6 +103,41 @@ pub enum JsonError {
     },
 }
 
+impl TraceError for JsonError {
+    fn print_layer(&self, verbose: bool) -> (String, Option<&Self>) {
+        if let JsonError::TraceError {
+            error,
+            json,
+            field,
+        } = self
+        {
+            let formatted_json =
+                serde_json::to_string_pretty(json).unwrap_or_else(|_| format!("{}", json));
+            let message = if verbose {
+                format!("In {} of {}", field, formatted_json)
+            } else {
+                field.to_owned()
+            };
+            return (message, Some(error));
+        }
+
+        let message = format!("{}", self);
+        (message, None)
+    }
+
+    fn get_inner_error(&self) -> Option<&Self> {
+        if let JsonError::TraceError {
+            error,
+            ..
+        } = self
+        {
+            return Some(error);
+        }
+
+        None
+    }
+}
+
 impl JsonError {
     /// Wraps a [JsonError] in a [JsonError::TraceError], providing a trace to
     /// the origin of the error.
@@ -63,62 +149,15 @@ impl JsonError {
         }
     }
 
-    /// Gets the underlying error of a [JsonError::TraceError]. For any other
-    /// variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self {
-        let mut out = self;
-        loop {
-            if let JsonError::TraceError {
-                error,
-                ..
-            } = out
-            {
-                out = error;
-            } else {
-                break;
-            }
-        }
-        out
-    }
-
     /// Prints a formatted error message for variant. [JsonError::TraceError]
     /// supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
-    pub fn print(&self, verbose: bool) -> String {
-        if !verbose {
-            return format!("{}", self);
-        }
+    pub fn print(&self, verbose: bool) -> String { self.print_nested(verbose) }
 
-        let mut out = String::new();
-        let mut current_error = self;
-        let mut is_initial_pass = true;
-
-        loop {
-            if let JsonError::TraceError {
-                error,
-                json,
-                field,
-            } = current_error
-            {
-                let formatted_json =
-                    serde_json::to_string_pretty(json).unwrap_or_else(|_| format!("{}", json));
-                if is_initial_pass {
-                    out = format!("In {} of {}", field, formatted_json);
-                } else {
-                    out = format!("In {} of {}\n{}", field, formatted_json, out);
-                }
-
-                current_error = error;
-                is_initial_pass = false;
-            } else {
-                out = format!("{}\n{}", current_error, out);
-                break;
-            }
-        }
-
-        out
-    }
+    /// Gets the underlying error of a [JsonError::TraceError]. For any other
+    /// variant, this simply returns the error itself.
+    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
 }
 
 /// Wrapper around a list of bytes to represent data which failed to be
@@ -172,7 +211,41 @@ pub enum ToJsonError {
     },
 }
 
-impl<'a> ToJsonError {
+impl TraceError for ToJsonError {
+    fn print_layer(&self, verbose: bool) -> (String, Option<&Self>) {
+        if let ToJsonError::TraceError {
+            error,
+            position,
+            schema,
+        } = self
+        {
+            let message = if verbose {
+                format!("In deserializing position {} into type {:?}", position, schema)
+            } else {
+                format!("{:?}", schema)
+            };
+
+            return (message, Some(error));
+        }
+
+        let message = format!("{}", self);
+        (message, None)
+    }
+
+    fn get_inner_error(&self) -> Option<&Self> {
+        if let ToJsonError::TraceError {
+            error,
+            ..
+        } = self
+        {
+            return Some(error);
+        }
+
+        None
+    }
+}
+
+impl ToJsonError {
     /// Wraps a [ToJsonError] in a [ToJsonError::TraceError], providing a trace
     /// to the origin of the error.
     fn add_trace(self, position: u32, schema: &Type) -> Self {
@@ -183,63 +256,15 @@ impl<'a> ToJsonError {
         }
     }
 
-    /// Gets the underlying error of a [ToJsonError::TraceError]. For any other
-    /// variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self {
-        let mut out = self;
-        loop {
-            if let ToJsonError::TraceError {
-                error,
-                ..
-            } = out
-            {
-                out = error;
-            } else {
-                break;
-            }
-        }
-        out
-    }
-
     /// Prints a formatted error message for variant. [ToJsonError::TraceError]
     /// supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
-    pub fn print(&self, verbose: bool) -> String {
-        if !verbose {
-            return format!("{}", self);
-        }
+    pub fn print(&self, verbose: bool) -> String { self.print_nested(verbose) }
 
-        let mut out = String::new();
-        let mut current_error = self;
-        let mut is_initial_pass = true;
-
-        loop {
-            if let ToJsonError::TraceError {
-                error,
-                position,
-                schema,
-            } = current_error
-            {
-                if is_initial_pass {
-                    out = format!("In deserializing position {} into type {:?}", position, schema);
-                } else {
-                    out = format!(
-                        "In deserializing position {} into type {:?}\n{}",
-                        position, schema, out
-                    );
-                }
-
-                current_error = error;
-                is_initial_pass = false;
-            } else {
-                out = format!("{}\n{}", current_error, out);
-                break;
-            }
-        }
-
-        out
-    }
+    /// Gets the underlying error of a [ToJsonError::TraceError]. For any other
+    /// variant, this simply returns the error itself.
+    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
 }
 
 pub type ToJsonResult<A> = Result<A, ToJsonError>;
