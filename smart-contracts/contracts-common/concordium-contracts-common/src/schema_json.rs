@@ -8,7 +8,7 @@ use std::convert::{TryFrom, TryInto};
 /// Represents errors occurring while serializing data from the schema JSON
 /// format.
 #[derive(Debug, thiserror::Error, Clone)]
-pub enum JsonError<'a> {
+pub enum JsonError {
     #[error("Failed writing")]
     FailedWriting,
     #[error("Unsigned integer required")]
@@ -47,18 +47,18 @@ pub enum JsonError<'a> {
     #[error("{field} -> {error}")]
     TraceError {
         field: String,
-        json:  &'a serde_json::Value,
-        error: Box<JsonError<'a>>,
+        json:  serde_json::Value,
+        error: Box<JsonError>,
     },
 }
 
-impl<'a> JsonError<'a> {
+impl JsonError {
     /// Wraps a [JsonError] in a [JsonError::TraceError], providing a trace to
     /// the origin of the error.
-    fn add_trace(self, field: String, json: &'a serde_json::Value) -> Self {
+    fn add_trace(self, field: String, json: &serde_json::Value) -> Self {
         JsonError::TraceError {
             field,
-            json,
+            json: json.to_owned(),
             error: Box::new(self),
         }
     }
@@ -148,7 +148,7 @@ impl Display for ToJsonErrorData {
 
 /// Represents errors occurring while deserializing to the schema JSON format.
 #[derive(thiserror::Error, Debug, Clone)]
-pub enum ToJsonError<'a> {
+pub enum ToJsonError {
     /// JSON formatter failed to represent value.
     #[error("Failed to format as JSON")]
     FormatError,
@@ -156,25 +156,25 @@ pub enum ToJsonError<'a> {
     #[error("Failed to deserialize {schema:?} from position {position} of bytes {data}")]
     DeserialError {
         position: u32,
-        schema:   &'a Type,
+        schema:   Type,
         data:     ToJsonErrorData,
     },
     /// Trace leading to the original [ToJsonError].
     #[error("{schema:?} -> {error}")]
     TraceError {
         position: u32,
-        schema:   &'a Type,
-        error:    Box<ToJsonError<'a>>,
+        schema:   Type,
+        error:    Box<ToJsonError>,
     },
 }
 
-impl<'a> ToJsonError<'a> {
+impl<'a> ToJsonError {
     /// Wraps a [ToJsonError] in a [ToJsonError::TraceError], providing a trace
     /// to the origin of the error.
-    fn add_trace(self, position: u32, schema: &'a Type) -> Self {
+    fn add_trace(self, position: u32, schema: &Type) -> Self {
         ToJsonError::TraceError {
             position,
-            schema,
+            schema: schema.to_owned(),
             error: Box::new(self),
         }
     }
@@ -238,7 +238,7 @@ impl<'a> ToJsonError<'a> {
     }
 }
 
-pub type ToJsonResult<'a, A> = Result<A, ToJsonError<'a>>;
+pub type ToJsonResult<A> = Result<A, ToJsonError>;
 
 // Serializes a value to the provided output buffer
 macro_rules! serial {
@@ -259,11 +259,11 @@ macro_rules! ensure {
 
 /// Uses the schema to parse JSON into bytes
 /// It is assumed the array of values for Map and Set are already ordered.
-fn write_bytes_from_json_schema_type<'a, W: Write>(
+fn write_bytes_from_json_schema_type<W: Write>(
     schema: &Type,
-    json: &'a serde_json::Value,
+    json: &serde_json::Value,
     out: &mut W,
-) -> Result<(), JsonError<'a>> {
+) -> Result<(), JsonError> {
     use JsonError::*;
 
     match schema {
@@ -688,7 +688,7 @@ impl Type {
     /// Serialize the given JSON value into the binary format represented by the
     /// schema. If the JSON value does not match the schema an error will be
     /// returned.
-    pub fn serial_value<'a>(&self, json: &'a serde_json::Value) -> Result<Vec<u8>, JsonError<'a>> {
+    pub fn serial_value(&self, json: &serde_json::Value) -> Result<Vec<u8>, JsonError> {
         let mut out = Vec::new();
         self.serial_value_into(json, &mut out)?;
         Ok(out)
@@ -697,11 +697,11 @@ impl Type {
     /// Serialize the given JSON value into the binary format represented by the
     /// schema. The resulting byte array is written into the provided sink.
     /// If the JSON value does not match the schema an error will be returned.
-    pub fn serial_value_into<'a>(
+    pub fn serial_value_into(
         &self,
-        json: &'a serde_json::Value,
+        json: &serde_json::Value,
         out: &mut impl Write,
-    ) -> Result<(), JsonError<'a>> {
+    ) -> Result<(), JsonError> {
         write_bytes_from_json_schema_type(self, json, out)
     }
 
@@ -711,11 +711,11 @@ impl Type {
         since = "5.2.0",
         note = "Use the more ergonomic [`serial_value_into`](Self::serial_value_into) instead."
     )]
-    pub fn write_bytes_from_json_schema_type<'a, W: Write>(
+    pub fn write_bytes_from_json_schema_type<W: Write>(
         schema: &Type,
-        json: &'a serde_json::Value,
+        json: &serde_json::Value,
         out: &mut W,
-    ) -> Result<(), JsonError<'a>> {
+    ) -> Result<(), JsonError> {
         write_bytes_from_json_schema_type(schema, json, out)
     }
 }
@@ -761,11 +761,11 @@ fn serial_bigint<W: Write>(bigint: BigInt, constraint: u32, out: &mut W) -> Resu
     Err(W::Err::default())
 }
 
-fn write_bytes_from_json_schema_fields<'a, W: Write>(
+fn write_bytes_from_json_schema_fields<W: Write>(
     fields: &Fields,
-    json: &'a serde_json::Value,
+    json: &serde_json::Value,
     out: &mut W,
-) -> Result<(), JsonError<'a>> {
+) -> Result<(), JsonError> {
     use JsonError::*;
 
     match fields {
@@ -814,7 +814,7 @@ fn write_bytes_for_length_of_size<W: Write>(
     len: usize,
     size_len: &SizeLength,
     out: &mut W,
-) -> Result<(), JsonError<'static>> {
+) -> Result<(), JsonError> {
     match size_len {
         SizeLength::U8 => {
             let len: u8 = len.try_into()?;
@@ -1302,10 +1302,10 @@ mod tests {
 }
 
 impl Fields {
-    pub fn to_json<'a, T: AsRef<[u8]>>(
-        &'a self,
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
         source: &mut Cursor<T>,
-    ) -> ToJsonResult<'a, serde_json::Value> {
+    ) -> ToJsonResult<serde_json::Value> {
         use serde_json::*;
 
         match self {
@@ -1333,18 +1333,18 @@ impl From<std::string::FromUtf8Error> for ParseError {
     fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
 }
 
-fn item_list_to_json<'a, T: AsRef<[u8]>>(
+fn item_list_to_json<T: AsRef<[u8]>>(
     source: &mut Cursor<T>,
     size_len: SizeLength,
-    item_to_json: impl Fn(&mut Cursor<T>) -> ToJsonResult<'a, serde_json::Value>,
-    schema: &'a Type,
-) -> ToJsonResult<'a, Vec<serde_json::Value>> {
+    item_to_json: impl Fn(&mut Cursor<T>) -> ToJsonResult<serde_json::Value>,
+    schema: &Type,
+) -> ToJsonResult<Vec<serde_json::Value>> {
     let data = source.data.as_ref().to_owned().into();
     let position = source.cursor_position();
     let len = deserial_length(source, size_len).map_err(|_| ToJsonError::DeserialError {
         data,
         position,
-        schema,
+        schema: schema.to_owned(),
     })?;
     let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
     for _ in 0..len {
@@ -1385,92 +1385,92 @@ fn deserial_string<R: Read>(source: &mut R, size_len: SizeLength) -> ParseResult
 
 impl Type {
     /// Uses the schema to deserialize bytes into pretty json
-    pub fn to_json_string_pretty<'a>(&'a self, bytes: &'a [u8]) -> ToJsonResult<'a, String> {
+    pub fn to_json_string_pretty<'a>(&'a self, bytes: &'a [u8]) -> ToJsonResult<String> {
         let source = &mut Cursor::new(bytes);
         let js = self.to_json(source)?;
         serde_json::to_string_pretty(&js).map_err(|_| ToJsonError::FormatError {})
     }
 
     /// Uses the schema to deserialize bytes into json
-    pub fn to_json<'a, T: AsRef<[u8]>>(
-        &'a self,
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
         source: &mut Cursor<T>,
-    ) -> ToJsonResult<'a, serde_json::Value> {
+    ) -> ToJsonResult<serde_json::Value> {
         use serde_json::*;
 
         let data = source.data.as_ref().to_owned().into();
         let position = source.cursor_position();
 
-        let deserial_error = ToJsonError::DeserialError {
+        let deserial_error = || ToJsonError::DeserialError {
             data,
             position,
-            schema: self,
+            schema: self.to_owned(),
         };
 
         match self {
             Type::Unit => Ok(Value::Null),
             Type::Bool => {
-                let n = bool::deserial(source).map_err(|_| deserial_error)?;
+                let n = bool::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Bool(n))
             }
             Type::U8 => {
-                let n = u8::deserial(source).map_err(|_| deserial_error)?;
+                let n = u8::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::U16 => {
-                let n = u16::deserial(source).map_err(|_| deserial_error)?;
+                let n = u16::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::U32 => {
-                let n = u32::deserial(source).map_err(|_| deserial_error)?;
+                let n = u32::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::U64 => {
-                let n = u64::deserial(source).map_err(|_| deserial_error)?;
+                let n = u64::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::U128 => {
-                let n = u128::deserial(source).map_err(|_| deserial_error)?;
+                let n = u128::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::String(n.to_string()))
             }
             Type::I8 => {
-                let n = i8::deserial(source).map_err(|_| deserial_error)?;
+                let n = i8::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::I16 => {
-                let n = i16::deserial(source).map_err(|_| deserial_error)?;
+                let n = i16::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::I32 => {
-                let n = i32::deserial(source).map_err(|_| deserial_error)?;
+                let n = i32::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::I64 => {
-                let n = i64::deserial(source).map_err(|_| deserial_error)?;
+                let n = i64::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::Number(n.into()))
             }
             Type::I128 => {
-                let n = i128::deserial(source).map_err(|_| deserial_error)?;
+                let n = i128::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::String(n.to_string()))
             }
             Type::Amount => {
-                let n = Amount::deserial(source).map_err(|_| deserial_error)?;
+                let n = Amount::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::String(n.micro_ccd().to_string()))
             }
             Type::AccountAddress => {
-                let address = AccountAddress::deserial(source).map_err(|_| deserial_error)?;
+                let address = AccountAddress::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::String(address.to_string()))
             }
             Type::ContractAddress => {
-                let address = ContractAddress::deserial(source).map_err(|_| deserial_error)?;
+                let address = ContractAddress::deserial(source).map_err(|_| deserial_error())?;
                 Ok(serde_json::to_value(address).map_err(|_| ToJsonError::FormatError {})?)
             }
             Type::Timestamp => {
-                let timestamp = Timestamp::deserial(source).map_err(|_| deserial_error)?;
+                let timestamp = Timestamp::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::String(timestamp.to_string()))
             }
             Type::Duration => {
-                let duration = Duration::deserial(source).map_err(|_| deserial_error)?;
+                let duration = Duration::deserial(source).map_err(|_| deserial_error())?;
                 Ok(Value::String(duration.to_string()))
             }
             Type::Pair(left_type, right_type) => {
@@ -1503,7 +1503,7 @@ impl Type {
                 Ok(Value::Array(values))
             }
             Type::Array(len, ty) => {
-                let len: usize = (*len).try_into().map_err(|_| deserial_error)?;
+                let len: usize = (*len).try_into().map_err(|_| deserial_error())?;
                 let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
                 for _ in 0..len {
                     let value = ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
@@ -1528,7 +1528,7 @@ impl Type {
                         fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
                     Ok(json!({ name: fields }))
                 } else {
-                    Err(deserial_error)
+                    Err(deserial_error())
                 }
             }
             Type::TaggedEnum(variants) => {
@@ -1540,11 +1540,11 @@ impl Type {
                         fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
                     Ok(json!({ name: fields }))
                 } else {
-                    Err(deserial_error)
+                    Err(deserial_error())
                 }
             }
             Type::String(size_len) => {
-                let string = deserial_string(source, *size_len).map_err(|_| deserial_error)?;
+                let string = deserial_string(source, *size_len).map_err(|_| deserial_error())?;
                 Ok(Value::String(string))
             }
             Type::ContractName(size_len) => {
@@ -1557,7 +1557,7 @@ impl Type {
                     let name_without_init = contract_name.as_contract_name().contract_name();
                     Ok(json!({ "contract": name_without_init }))
                 } else {
-                    Err(deserial_error)
+                    Err(deserial_error())
                 }
             }
             Type::ReceiveName(size_len) => {
@@ -1572,15 +1572,15 @@ impl Type {
                     let func_name = receive_name.entrypoint_name();
                     Ok(json!({"contract": contract_name, "func": func_name}))
                 } else {
-                    Err(deserial_error)
+                    Err(deserial_error())
                 }
             }
             Type::ULeb128(constraint) => {
-                let int = deserial_biguint(source, *constraint).map_err(|_| deserial_error)?;
+                let int = deserial_biguint(source, *constraint).map_err(|_| deserial_error())?;
                 Ok(Value::String(int.to_string()))
             }
             Type::ILeb128(constraint) => {
-                let int = deserial_bigint(source, *constraint).map_err(|_| deserial_error)?;
+                let int = deserial_bigint(source, *constraint).map_err(|_| deserial_error())?;
                 Ok(Value::String(int.to_string()))
             }
             Type::ByteList(size_len) => {
@@ -1604,7 +1604,7 @@ impl Type {
                     bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
                     Ok(Value::String(string))
                 } else {
-                    Err(deserial_error)
+                    Err(deserial_error())
                 }
             }
             Type::ByteArray(len) => {
@@ -1628,7 +1628,7 @@ impl Type {
                     bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
                     Ok(Value::String(string))
                 } else {
-                    Err(deserial_error)
+                    Err(deserial_error())
                 }
             }
         }
