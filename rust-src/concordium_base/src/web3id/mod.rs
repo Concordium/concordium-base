@@ -591,6 +591,48 @@ pub struct Ed25519PublicKey<Role> {
     phantom:        PhantomData<Role>,
 }
 
+impl<Role> serde::Serialize for Ed25519PublicKey<Role> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer, {
+        let s = self.to_string();
+        s.serialize(serializer)
+    }
+}
+
+impl<'de, Role> serde::Deserialize<'de> for Ed25519PublicKey<Role> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>, {
+        use serde::de::Error;
+        let s: String = String::deserialize(deserializer)?;
+        s.try_into().map_err(|e| D::Error::custom(e))
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Ed25519PublicKeyFromStrError {
+    #[error("Not a valid hex string: {0}")]
+    InvalidHex(#[from] hex::FromHexError),
+    #[error("Not a valid representation of a public key: {0}")]
+    InvalidBytes(#[from] ed25519_dalek::SignatureError),
+}
+
+impl<Role> TryFrom<String> for Ed25519PublicKey<Role> {
+    type Error = Ed25519PublicKeyFromStrError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> { Self::try_from(value.as_str()) }
+}
+
+impl<Role> TryFrom<&str> for Ed25519PublicKey<Role> {
+    type Error = Ed25519PublicKeyFromStrError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let bytes = hex::decode(value)?;
+        Ok(Self::new(ed25519_dalek::PublicKey::from_bytes(&bytes)?))
+    }
+}
+
 impl<Role> Ed25519PublicKey<Role> {
     pub fn new(public_key: ed25519_dalek::PublicKey) -> Self {
         Self {
