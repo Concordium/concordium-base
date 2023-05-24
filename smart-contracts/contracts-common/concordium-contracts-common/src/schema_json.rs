@@ -1006,6 +1006,8 @@ mod tests {
         assert!(matches!(err, JsonError::FailedParsingAccountAddress))
     }
 
+    /// Tests that attempting to serialize a non-[AccountAddress] value with
+    /// [Type::AccountAddress] schema results in error of expected type.
     #[test]
     fn test_serial_account_wrong_type_fails() {
         let schema = Type::AccountAddress;
@@ -1015,6 +1017,9 @@ mod tests {
         assert!(matches!(err, JsonError::WrongJsonType(_)))
     }
 
+    /// Tests that attempting to serialize a malformed value wrapped in a
+    /// [Type::List] results in a nested error with trace information in the
+    /// wrapping layer.
     #[test]
     fn test_serial_list_fails_with_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1033,6 +1038,9 @@ mod tests {
         ));
     }
 
+    /// Tests that attempting to serialize a malformed value wrapped in a
+    /// [Type::Struct] results in a nested error with trace information in the
+    /// wrapping layer.
     #[test]
     fn test_serial_object_fails_with_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1054,6 +1062,9 @@ mod tests {
         ));
     }
 
+    /// Tests that attempting to serialize a malformed value wrapped in multiple
+    /// layers results in a nested error with trace information in the
+    /// wrapping layers.
     #[test]
     fn test_serial_fails_with_nested_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1225,6 +1236,8 @@ mod tests {
         assert_eq!(expected, value)
     }
 
+    /// Tests that attempting to deserialize a non-[AccountAddress] value with
+    /// [Type::AccountAddress] schema results in an error of expected format.
     #[test]
     fn test_deserial_malformed_account_address_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1239,6 +1252,8 @@ mod tests {
         }))
     }
 
+    /// Tests that attempting to deserialize a malformed value wrapped in a
+    /// [Type::List] fails with a nested error.
     #[test]
     fn test_deserial_malformed_list_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1266,6 +1281,9 @@ mod tests {
         ))
     }
 
+    /// Tests that attempting to deserialize a malformed value wrapped in
+    /// multiple layers fails with a nested error with wrapping layers
+    /// corresponding to the layers wrapping the malformed value.
     #[test]
     fn test_deserial_malformed_nested_list_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1341,6 +1359,8 @@ impl From<std::string::FromUtf8Error> for ParseError {
     fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
 }
 
+/// Deserialize a list of values corresponding to the `item_to_json` function
+/// from `source`
 fn item_list_to_json<T: AsRef<[u8]>>(
     source: &mut Cursor<T>,
     size_len: SizeLength,
@@ -1363,6 +1383,7 @@ fn item_list_to_json<T: AsRef<[u8]>>(
     Ok(values)
 }
 
+/// Deserialize a [String] of variable length from `source`.
 fn deserial_string<R: Read>(
     source: &mut R,
     size_len: SizeLength,
@@ -1743,6 +1764,7 @@ impl Type {
     }
 }
 
+/// Deserialize a uleb128 encoded [BigUint] from `source`.
 fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
     let mut result = BigUint::zero();
     let mut shift = 0;
@@ -1759,6 +1781,7 @@ fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<Big
     Err(ParseError {})
 }
 
+/// Deserialize a ileb128 encoded [BigInt] from `source`.
 fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
     let mut result = BigInt::zero();
     let mut shift = 0;
