@@ -63,12 +63,12 @@ data GenesisDataP6 = GDP6Initial
 -- There are two variants, one when migrating from 'P5' to 'P6'and
 -- one from 'P6' to 'P6'.
 data RegenesisP6
-    = GDP6RegenesisFromP5
+    = GDP6Regenesis {genesisRegenesis :: BaseV1.RegenesisDataV1}
+    | GDP6RegenesisFromP5
         { genesisRegenesis :: BaseV1.RegenesisDataV1,
           genesisMigration :: StateMigrationData
         }
-    | GDP6Regenesis {genesisRegenesis :: BaseV1.RegenesisDataV1}
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 -- |Deserialize genesis data in the V8 format.
 getGenesisDataV8 :: Get GenesisDataP6
@@ -85,11 +85,11 @@ getRegenesisData =
     getWord8 >>= \case
         1 -> do
             genesisRegenesis <- get
-            genesisMigration <- get
-            return GDP6RegenesisFromP5{..}
+            return GDP6Regenesis{..}
         2 -> do
             genesisRegenesis <- get
-            return GDP6Regenesis{..}
+            genesisMigration <- get
+            return GDP6RegenesisFromP5{..}
         _ -> fail "Unrecognized P6 regenesis data type."
 
 -- |Serialize genesis data in the V8 format.
@@ -143,10 +143,21 @@ regenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} 
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
+regenesisBlockHash GDP6RegenesisFromP5{genesisRegenesis = BaseV1.RegenesisDataV1{..}, ..} = BlockHash . Hash.hashLazy . runPutLazy $ do
+    put genesisSlot
+    put P6
+    putWord8 1 -- regenesis variant
+    put genesisCore
+    put genesisFirstGenesis
+    put genesisPreviousGenesis
+    put genesisTerminalBlock
+    put genesisStateHash
+    put genesisMigration
 
 -- |The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP6 -> BlockHash
 firstGenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP6RegenesisFromP5{genesisRegenesis = BaseV1.RegenesisDataV1{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP6 -> Word8
@@ -158,3 +169,4 @@ genesisVariantTag GDP6Initial{} = 0
 -- the data is.
 regenesisVariantTag :: RegenesisP6 -> Word8
 regenesisVariantTag GDP6Regenesis{} = 1
+regenesisVariantTag GDP6RegenesisFromP5{} = 2

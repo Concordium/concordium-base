@@ -141,7 +141,7 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
         }
   where
     RewardParameters{..} = _cpRewardParameters
-    P6.ProtocolUpdateData{..} = P6.migrationProtocolUpdateData migration
+    P6.ProtocolUpdateData{} = P6.migrationProtocolUpdateData migration
     finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
 
 -- |Apply a state migration to an 'AccountStake' structure.
