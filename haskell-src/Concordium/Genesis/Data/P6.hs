@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 -- |This module defines the genesis data format for the 'P6' protocol version.
 module Concordium.Genesis.Data.P6 where
@@ -14,18 +14,18 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
-import qualified Concordium.Types.Parameters as Parameters
+import Concordium.Types.Parameters
 
 -- |Parameters data type for the 'P5' to 'P6' protocol update.
 -- This is provided as a parameter to the protocol update chain update instruction.
 data ProtocolUpdateData = ProtocolUpdateData
     { -- |The consensus parameters that the protocol should be instantiated with.
-      updateConsensusParameters :: !(Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1),
+      updateConsensusParameters :: !(ConsensusParameters 'ChainParametersV2),
       -- |The 'FinalizationCommitteeParameters' that the protocol should
       -- be instantiated with.
-      updateFinalizationCommitteeParameters :: !Parameters.FinalizationCommitteeParameters
+      updateFinalizationCommitteeParameters :: !FinalizationCommitteeParameters
     }
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Serialize ProtocolUpdateData where
     put ProtocolUpdateData{..} = do
@@ -40,8 +40,8 @@ instance Serialize ProtocolUpdateData where
 newtype StateMigrationData = StateMigrationData
     { migrationProtocolUpdateData :: ProtocolUpdateData
     }
-    deriving newtype (Eq, Show)
-    deriving (Serialize) via ProtocolUpdateData
+    deriving stock (Eq, Show)
+    deriving newtype Serialize
 
 -- |Initial genesis data for the P6 protocol version.
 data GenesisDataP6 = GDP6Initial
