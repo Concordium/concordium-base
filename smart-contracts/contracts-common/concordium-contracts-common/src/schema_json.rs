@@ -25,12 +25,10 @@ trait TraceError {
             out = if is_initial_pass {
                 is_initial_pass = false;
                 string
+            } else if verbose {
+                format!("{}\n{}", string, out)
             } else {
-                if verbose {
-                    format!("{}\n{}", string, out)
-                } else {
-                    format!("{} -> {}", out, string)
-                }
+                format!("{} -> {}", out, string)
             };
 
             if let Some(next) = next_error {
@@ -50,12 +48,8 @@ trait TraceError {
     /// Gets the innermost error of a [TraceError].
     fn get_innermost_error(&self) -> &Self {
         let mut out = self;
-        loop {
-            if let Some(error) = self.get_inner_error() {
-                out = error;
-            } else {
-                break;
-            }
+        while let Some(error) = self.get_inner_error() {
+            out = error;
         }
         out
     }
@@ -65,47 +59,56 @@ trait TraceError {
 /// format.
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum JsonError {
-    #[error("Failed writing")]
     FailedWriting,
-    #[error("Unsigned integer required")]
     UnsignedIntRequired,
-    #[error("Signed integer required")]
     SignedIntRequired,
-    #[error("Failed parsing account address")]
     FailedParsingAccountAddress,
-    #[error("{0}")]
     WrongJsonType(String),
-    #[error("{0}")]
     FieldError(String),
-    #[error("{0}")]
     EnumError(String),
-    #[error("{0}")]
     MapError(String),
-    #[error("{0}")]
     PairError(String),
-    #[error("{0}")]
     ArrayError(String),
-    #[error("{0}")]
     ParseError(String),
-    #[error("{0}")]
     ByteArrayError(String),
-    #[error("{0}")]
     FromHexError(#[from] hex::FromHexError),
-    #[error("{0}")]
     TryFromIntError(#[from] core::num::TryFromIntError),
-    #[error("{0}")]
     ParseIntError(#[from] std::num::ParseIntError),
-    #[error("{0}")]
     ParseDurationError(#[from] ParseDurationError),
-    #[error("{0}")]
     ParseTimestampError(#[from] ParseTimestampError),
     /// Trace leading to the original [JsonError].
-    #[error("{field} -> {error}")]
     TraceError {
         field: String,
         json:  serde_json::Value,
         error: Box<JsonError>,
     },
+}
+
+impl Display for JsonError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            JsonError::FailedWriting => write!(f, "Failed writing"),
+            JsonError::UnsignedIntRequired => write!(f, "Unsigned integer required"),
+            JsonError::SignedIntRequired => write!(f, "Signed integer required"),
+            JsonError::FailedParsingAccountAddress => write!(f, "Failed parsing account address"),
+            JsonError::WrongJsonType(s) => write!(f, "{}", s),
+            JsonError::FieldError(s) => write!(f, "{}", s),
+            JsonError::EnumError(s) => write!(f, "{}", s),
+            JsonError::MapError(s) => write!(f, "{}", s),
+            JsonError::PairError(s) => write!(f, "{}", s),
+            JsonError::ArrayError(s) => write!(f, "{}", s),
+            JsonError::ParseError(s) => write!(f, "{}", s),
+            JsonError::ByteArrayError(s) => write!(f, "{}", s),
+            JsonError::FromHexError(e) => write!(f, "{}", e),
+            JsonError::TryFromIntError(e) => write!(f, "{}", e),
+            JsonError::ParseIntError(e) => write!(f, "{}", e),
+            JsonError::ParseDurationError(e) => write!(f, "{}", e),
+            JsonError::ParseTimestampError(e) => write!(f, "{}", e),
+            JsonError::TraceError {
+                ..
+            } => write!(f, "{}", self.print(false)),
+        }
+    }
 }
 
 impl TraceError for JsonError {
@@ -169,7 +172,7 @@ impl JsonError {
 /// deserialized into schema type.
 #[derive(Debug, Clone)]
 pub struct ToJsonErrorData {
-    bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 impl From<Vec<u8>> for ToJsonErrorData {
@@ -194,13 +197,8 @@ impl Display for ToJsonErrorData {
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum ToJsonError {
     /// JSON formatter failed to represent value.
-    #[error("Failed to format as JSON")]
     FormatError,
     /// Failed to deserialize data to type expected from schema.
-    #[error(
-        "Failed to deserialize {schema:?} due to: {reason} - from position {position} of bytes \
-         {data}"
-    )]
     DeserialError {
         position: u32,
         schema:   Type,
@@ -208,12 +206,32 @@ pub enum ToJsonError {
         data:     ToJsonErrorData,
     },
     /// Trace leading to the original [ToJsonError].
-    #[error("{schema:?} -> {error}")]
     TraceError {
         position: u32,
         schema:   Type,
         error:    Box<ToJsonError>,
     },
+}
+
+impl Display for ToJsonError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ToJsonError::FormatError => write!(f, "Failed to format as JSON"),
+            ToJsonError::DeserialError {
+                position,
+                schema,
+                reason,
+                data,
+            } => write!(
+                f,
+                "Failed to deserialize {:?} due to: {} - from position {} of bytes {}",
+                schema, reason, position, data
+            ),
+            ToJsonError::TraceError {
+                ..
+            } => write!(f, "{}", self.print(false)),
+        }
+    }
 }
 
 impl TraceError for ToJsonError {
