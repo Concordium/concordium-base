@@ -24,7 +24,10 @@ use concordium_contracts_common::{hashes::HashBytes, ContractAddress};
 use did::*;
 use ed25519_dalek::Verifier;
 use serde::de::DeserializeOwned;
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    marker::PhantomData,
+};
 
 /// Domain separation string used when signing the revoke transaction
 /// using the credential secret key.
@@ -53,10 +56,8 @@ pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// contract.
     Web3Id {
         /// The credential type. This is chosen by the provider to provide
-        /// some information about what the credential is about. The list should
-        /// be considered as a "path", refining the meaning, e.g.,
-        /// "VerifiableCredential", "ConcordiumVerifiableCredential".
-        ty:         Vec<String>,
+        /// some information about what the credential is about.
+        ty:         BTreeSet<String>,
         network:    Network,
         /// Reference to a specific smart contract instance that issued the
         /// credential.
@@ -253,10 +254,8 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// Reference to a specific smart contract instance.
         contract:               ContractAddress,
         /// The credential type. This is chosen by the provider to provide
-        /// some information about what the credential is about. The list should
-        /// be considered as a "path", refining the meaning, e.g.,
-        /// "VerifiableCredential", "ConcordiumVerifiableCredential".
-        ty:                     Vec<String>,
+        /// some information about what the credential is about.
+        ty:                     BTreeSet<String>,
         /// Issuance date of the credential that the proof is about.
         /// This is an unfortunate name to conform to the standard, but the
         /// meaning here really is `validFrom` for the credential.
@@ -368,11 +367,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
     fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
         use anyhow::Context;
         let issuer: String = serde_json::from_value(get_field(&mut value, "issuer")?)?;
-        let ty: Vec<String> = serde_json::from_value(get_field(&mut value, "type")?)?;
-        anyhow::ensure!(ty.starts_with(&[
-            "VerifiableCredential".into(),
-            "ConcordiumVerifiableCredential".into()
-        ]),);
+        let ty: BTreeSet<String> = serde_json::from_value(get_field(&mut value, "type")?)?;
+        anyhow::ensure!(
+            ty.contains("VerifiableCredential") && ty.contains("ConcordiumVerifiableCredential")
+        );
         let id: String = serde_json::from_value(get_field(&mut value, "id")?)?;
         let issuance_date = serde_json::from_value::<chrono::DateTime<chrono::Utc>>(
             value
