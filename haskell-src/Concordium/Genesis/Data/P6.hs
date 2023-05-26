@@ -76,10 +76,10 @@ data GenesisDataP6 = GDP6Initial
 -- There are two variants, one when migrating from 'P5' to 'P6'and
 -- one from 'P6' to 'P6'.
 data RegenesisP6
-    = GDP6Regenesis {genesisRegenesis :: BaseV1.RegenesisDataV1}
+    = GDP6Regenesis {genesisRegenesis :: !BaseV1.RegenesisDataV1}
     | GDP6RegenesisFromP5
-        { genesisRegenesis :: BaseV1.RegenesisDataV1,
-          genesisMigration :: StateMigrationData
+        { genesisRegenesis :: !BaseV1.RegenesisDataV1,
+          genesisMigration :: !StateMigrationData
         }
     deriving stock (Eq, Show)
 
@@ -159,7 +159,7 @@ regenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} 
 regenesisBlockHash GDP6RegenesisFromP5{genesisRegenesis = BaseV1.RegenesisDataV1{..}, ..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P6
-    putWord8 1 -- regenesis variant
+    putWord8 2 -- regenesis variant
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
