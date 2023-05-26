@@ -37,11 +37,24 @@ instance Serialize ProtocolUpdateData where
         return ProtocolUpdateData{..}
 
 -- |Parameters used to migrate state from 'P5' to 'P6'.
-newtype StateMigrationData = StateMigrationData
-    { migrationProtocolUpdateData :: ProtocolUpdateData
+data StateMigrationData = StateMigrationData
+    { -- |Data provided by the protocol update to be used
+      -- in the migration.
+      migrationProtocolUpdateData :: !ProtocolUpdateData,
+      -- |The time of the trigger block that caused
+      -- this protocol update.
+      migrationTriggerBlockTime :: !Timestamp
     }
     deriving stock (Eq, Show)
-    deriving newtype Serialize
+
+instance Serialize StateMigrationData where
+    put StateMigrationData{..} = do
+        put migrationProtocolUpdateData
+        put migrationTriggerBlockTime
+    get = do
+        migrationProtocolUpdateData <- get
+        migrationTriggerBlockTime <- get
+        return StateMigrationData{..}
 
 -- |Initial genesis data for the P6 protocol version.
 data GenesisDataP6 = GDP6Initial

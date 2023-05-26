@@ -136,12 +136,13 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
                                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
           _cpFinalizationCommitteeParameters = SomeParam finalizationCommitteeParameters,
+          -- We unwrap and wrap here in order to associate the correct cpv
+          -- with the time parameters.
           _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
           ..
         }
   where
     RewardParameters{..} = _cpRewardParameters
-    P6.ProtocolUpdateData{} = P6.migrationProtocolUpdateData migration
     finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
 
 -- |Apply a state migration to an 'AccountStake' structure.
