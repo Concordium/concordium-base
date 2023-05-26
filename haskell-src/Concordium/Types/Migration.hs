@@ -125,15 +125,15 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
     RewardParameters{..} = _cpRewardParameters
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
 migrateChainParameters StateMigrationParametersP4ToP5 cps = cps
-migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParameters{..} =    
+migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParameters{..} =
     ChainParameters
         { _cpConsensusParameters = P6.updateConsensusParameters $ P6.migrationProtocolUpdateData migration,
-          _cpRewardParameters = RewardParameters
-                                {
-                                  _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
-                                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
-                                  ..
-                                },
+          _cpRewardParameters =
+            RewardParameters
+                { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                  ..
+                },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
           _cpFinalizationCommitteeParameters = SomeParam finalizationCommitteeParameters,
           -- We unwrap and wrap here in order to associate the correct cpv
