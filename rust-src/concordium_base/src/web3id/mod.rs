@@ -44,7 +44,7 @@ pub const LINKING_DOMAIN_STRING: &[u8] = b"WEB3ID:LINKING";
 pub enum CredentialStatement<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Statement about a credential derived from an identity issued by an
     /// identity provider.
-    Identity {
+    Account {
         network:   Network,
         cred_id:   CredentialRegistrationID,
         statement: Vec<AtomicStatement<C, u8, AttributeType>>,
@@ -80,7 +80,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
         match id.ty {
             IdentifierType::Credential { cred_id } => {
                 let statement = get_field(&mut value, "statement")?;
-                Ok(Self::Identity {
+                Ok(Self::Account {
                     network: id.network,
                     cred_id,
                     statement: serde_json::from_value(statement)?,
@@ -118,7 +118,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     where
         S: serde::Serializer, {
         match self {
-            CredentialStatement::Identity {
+            CredentialStatement::Account {
                 network,
                 cred_id,
                 statement,
@@ -155,10 +155,13 @@ pub type StatementWithProof<C, AttributeType> = (
 
 /// Metadata of a single credential.
 pub enum CredentialMetadata {
-    Identity {
+    /// Metadata of an account credential, i.e., a credential derived from an
+    /// identity object.
+    Account {
         issuer:  IpIdentity,
         cred_id: CredentialRegistrationID,
     },
+    /// Metadata of a Web3Id credential.
     Web3Id {
         contract: ContractAddress,
         owner:    CredentialHolderId,
@@ -179,7 +182,7 @@ pub struct ProofMetadata {
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, AttributeType> {
     pub fn metadata(&self) -> ProofMetadata {
         match self {
-            CredentialProof::Identity {
+            CredentialProof::Account {
                 created,
                 network,
                 cred_id,
@@ -190,7 +193,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 created:       *created,
                 issuance_date: *issuance_date,
                 network:       *network,
-                cred_metadata: CredentialMetadata::Identity {
+                cred_metadata: CredentialMetadata::Account {
                     issuer:  *issuer,
                     cred_id: *cred_id,
                 },
@@ -226,7 +229,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
 /// statement and the metadata. The only data missing to verify the
 /// cryptographic proof are the public commitments.
 pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    Identity {
+    Account {
         /// Creation timestamp of the proof.
         created:       chrono::DateTime<chrono::Utc>,
         network:       Network,
@@ -284,7 +287,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
     where
         S: serde::Serializer, {
         match self {
-            CredentialProof::Identity {
+            CredentialProof::Account {
                 created,
                 network,
                 cred_id,
@@ -409,7 +412,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
 
                 anyhow::ensure!(proof_value.len() == statement.len());
                 let proofs = statement.into_iter().zip(proof_value.into_iter()).collect();
-                Ok(Self::Identity {
+                Ok(Self::Account {
                     created,
                     network: issuer.network,
                     cred_id,
@@ -510,7 +513,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
 {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         match self {
-            CredentialProof::Identity {
+            CredentialProof::Account {
                 created,
                 network,
                 cred_id,
@@ -920,7 +923,7 @@ impl Web3IdSigner for ed25519_dalek::Keypair {
 /// produce a [`Presentation`].
 pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
     /// Inputs are for an identity credential issued by an identity provider.
-    Identity {
+    Account {
         /// Issuance date of the credential that the proof is about.
         /// This is an unfortunate name to conform to the standard, but the
         /// meaning here really is `validFrom` for the credential.
@@ -975,7 +978,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
 ) -> bool {
     match (&cred_proof, public) {
         (
-            CredentialProof::Identity {
+            CredentialProof::Account {
                 network: _,
                 cred_id: _,
                 proofs,
@@ -983,7 +986,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
                 issuer: _,
                 issuance_date: _,
             },
-            CredentialsInputs::Identity { commitments },
+            CredentialsInputs::Account { commitments },
         ) => {
             for (statement, proof) in proofs.iter() {
                 if !statement.verify(global, transcript, &commitments, proof) {
@@ -1043,12 +1046,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
         let mut proofs = Vec::new();
         match (self, input) {
             (
-                CredentialStatement::Identity {
+                CredentialStatement::Account {
                     network,
                     cred_id,
                     statement,
                 },
-                CommitmentInputs::Identity {
+                CommitmentInputs::Account {
                     values,
                     randomness,
                     issuance_date,
@@ -1062,7 +1065,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     proofs.push((statement, proof));
                 }
                 let created = chrono::Utc::now();
-                Ok(CredentialProof::Identity {
+                Ok(CredentialProof::Account {
                     cred_id,
                     proofs,
                     network,
@@ -1233,7 +1236,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
 /// Public inputs to the verification function. These are the public commitments
 /// that are contained in the credentials.
 pub enum CredentialsInputs<C: Curve> {
-    Identity {
+    Account {
         // All the commitments of the credential.
         // In principle we only ever need to borrow this, but it is simpler to
         // have the owned map instead of a reference to it.
@@ -1562,7 +1565,7 @@ mod tests {
                     },
                 ],
             },
-            CredentialStatement::Identity {
+            CredentialStatement::Account {
                 network: Network::Testnet,
                 cred_id,
                 statement: vec![
@@ -1616,7 +1619,7 @@ mod tests {
                 pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
             );
         }
-        let secrets_2 = CommitmentInputs::Identity {
+        let secrets_2 = CommitmentInputs::Account {
             issuance_date: chrono::Utc::now(),
             values:        &values_2,
             randomness:    &randomness_2,
@@ -1670,7 +1673,7 @@ mod tests {
             CredentialsInputs::Web3 {
                 commitment: commitment_1,
             },
-            CredentialsInputs::Identity {
+            CredentialsInputs::Account {
                 commitments: commitments_2,
             },
         ];
