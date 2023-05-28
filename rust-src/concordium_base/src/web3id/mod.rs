@@ -579,8 +579,8 @@ pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 /// A request for a proof. This is the statement and challenge. The secret data
 /// comes separately.
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    challenge:             Challenge,
-    credential_statements: Vec<CredentialStatement<C, AttributeType>>,
+    pub challenge:             Challenge,
+    pub credential_statements: Vec<CredentialStatement<C, AttributeType>>,
 }
 
 #[repr(transparent)]
@@ -590,6 +590,10 @@ pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
 pub struct Ed25519PublicKey<Role> {
     pub public_key: ed25519_dalek::PublicKey,
     phantom:        PhantomData<Role>,
+}
+
+impl<Role> From<ed25519_dalek::PublicKey> for Ed25519PublicKey<Role> {
+    fn from(value: ed25519_dalek::PublicKey) -> Self { Self::new(value) }
 }
 
 impl<Role> serde::Serialize for Ed25519PublicKey<Role> {
