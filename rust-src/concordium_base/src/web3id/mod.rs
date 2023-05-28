@@ -921,6 +921,15 @@ impl Web3IdSigner for ed25519_dalek::Keypair {
     }
 }
 
+impl Web3IdSigner for ed25519_dalek::SecretKey {
+    fn id(&self) -> CredentialHolderId { CredentialHolderId::new(self.into()) }
+
+    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
+        let expanded: ed25519_dalek::ExpandedSecretKey = self.into();
+        expanded.sign(msg.as_ref(), &self.into())
+    }
+}
+
 /// The additional inputs, additional to the [`Request`] that are needed to
 /// produce a [`Presentation`].
 pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
