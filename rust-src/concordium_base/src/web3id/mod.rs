@@ -221,6 +221,36 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
             },
         }
     }
+
+    /// Extract the statement from the proof.
+    pub fn statement(&self) -> CredentialStatement<C, AttributeType> {
+        match self {
+            CredentialProof::Account {
+                network,
+                cred_id,
+                proofs,
+                ..
+            } => CredentialStatement::Account {
+                network:   *network,
+                cred_id:   *cred_id,
+                statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
+            },
+            CredentialProof::Web3Id {
+                owner,
+                network,
+                contract,
+                ty,
+                proofs,
+                ..
+            } => CredentialStatement::Web3Id {
+                ty:         ty.clone(),
+                network:    *network,
+                contract:   *contract,
+                credential: *owner,
+                statement:  proofs.iter().map(|(x, _)| x.clone()).collect(),
+            },
+        }
+    }
 }
 
 #[derive(Clone, serde::Deserialize)]
@@ -743,6 +773,21 @@ pub struct Presentation<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub linking_proof:         LinkingProof,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum PresentationVerificationError {
+    #[error("The linking proof was incomplete.")]
+    MissingLinkingProof,
+    #[error("The linking proof had extra signatures.")]
+    ExcessiveLinkingProof,
+    #[error("The linking proof was not valid.")]
+    InvalidLinkinProof,
+    #[error("The public data did not match the credentials.")]
+    InconsistentPublicData,
+    #[error("The credential was not valid.")]
+    InvalidCredential,
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeType> {
     /// Get an iterator over the metadata for each of the verifiable credentials
     /// in the order they appear in the presentation.
@@ -753,6 +798,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
     /// Verify a presentation in the context of the provided public data and
     /// cryptographic parameters.
     ///
+    /// In case of success returns the [`Request`] for which the presentation
+    /// verifies.
+    ///
     /// **NB:** This only verifies the cryptographic consistentcy of the data.
     /// It does not check metadata, such as expiry. This should be checked
     /// separately by the verifier.
@@ -760,30 +808,44 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         &self,
         params: &GlobalContext<C>,
         public: impl ExactSizeIterator<Item = &'a CredentialsInputs<C>>,
-    ) -> bool {
+    ) -> Result<Request<C, AttributeType>, PresentationVerificationError> {
         let mut transcript = RandomOracle::domain("ConcordiumWeb3ID");
         transcript.add_bytes(self.presentation_context);
         transcript.append_message(b"ctx", &params);
+
+        let mut request = Request {
+            challenge:             self.presentation_context,
+            credential_statements: Vec::new(),
+        };
 
         // Compute the data that the linking proof signed.
         let to_sign = message_to_sign(self.presentation_context, &self.verifiable_credential);
 
         let mut linking_proof_iter = self.linking_proof.proof_value.iter();
 
+        if public.len() != self.verifiable_credential.len() {
+            return Err(PresentationVerificationError::InconsistentPublicData);
+        }
+
         for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
+            request.credential_statements.push(cred_proof.statement());
             if let CredentialProof::Web3Id { owner, .. } = &cred_proof {
-                let Some(sig) = linking_proof_iter.next() else {return false};
+                let Some(sig) = linking_proof_iter.next() else {return Err(PresentationVerificationError::MissingLinkingProof)};
                 if owner.public_key.verify(&to_sign, &sig.signature).is_err() {
-                    return false;
+                    return Err(PresentationVerificationError::InvalidLinkinProof);
                 }
             }
             if !verify_single_credential(params, &mut transcript, cred_proof, cred_public) {
-                return false;
+                return Err(PresentationVerificationError::InvalidCredential);
             }
         }
 
         // No bogus signatures should be left.
-        linking_proof_iter.next().is_none()
+        if linking_proof_iter.next().is_none() {
+            Ok(request)
+        } else {
+            Err(PresentationVerificationError::ExcessiveLinkingProof)
+        }
     }
 }
 
@@ -1360,11 +1422,13 @@ mod tests {
         let signer_2 = ed25519_dalek::Keypair::generate(&mut rng);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
-                ty:         vec![
+                ty:         [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
                     "TestCredential".into(),
-                ],
+                ]
+                .into_iter()
+                .collect(),
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
                 credential: CredentialHolderId::new(signer_1.public),
@@ -1393,11 +1457,13 @@ mod tests {
                 ],
             },
             CredentialStatement::Web3Id {
-                ty:         vec![
+                ty:         [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
                     "TestCredential".into(),
-                ],
+                ]
+                .into_iter()
+                .collect(),
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1338, 0),
                 credential: CredentialHolderId::new(signer_2.public),
@@ -1510,7 +1576,7 @@ mod tests {
             },
         ];
         anyhow::ensure!(
-            proof.verify(&params, public.iter()),
+            proof.verify(&params, public.iter())? == request,
             "Proof verification failed."
         );
 
@@ -1544,11 +1610,13 @@ mod tests {
         let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
-                ty:         vec![
+                ty:         [
                     "VerifiableCredential".into(),
                     "ConcordiumVerifiableCredential".into(),
                     "TestCredential".into(),
-                ],
+                ]
+                .into_iter()
+                .collect(),
                 network:    Network::Testnet,
                 contract:   ContractAddress::new(1337, 42),
                 credential: CredentialHolderId::new(signer_1.public),
@@ -1689,7 +1757,10 @@ mod tests {
             },
         ];
         anyhow::ensure!(
-            proof.verify(&params, public.iter()),
+            proof
+                .verify(&params, public.iter())
+                .context("Verification of mixed presentation failed.")?
+                == request,
             "Proof verification failed."
         );
 
