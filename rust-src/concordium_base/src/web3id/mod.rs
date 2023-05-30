@@ -414,7 +414,17 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
             .1;
         match issuer.ty {
             IdentifierType::Idp { idp_identity } => {
-                // TODO: Check the `id` parsed above here.
+                let Ok((rest, method)) = parse_did(&id) else {
+                    anyhow::bail!("credential identifier must be a valid Concordium DID");
+                };
+                anyhow::ensure!(
+                    rest.is_empty(),
+                    "Leftover DID data for credential identifier."
+                );
+                let IdentifierType::Credential { cred_id: credential_id } = method.ty
+                else {
+                    anyhow::bail!("Unexpected identifier. Issuer is an IDP, but credential is not an Account credential.");
+                };
                 let id = get_field(&mut credential_subject, "id")?;
                 let Some(Ok(id)) = id.as_str().map(parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
@@ -422,7 +432,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 let IdentifierType::Credential { cred_id } = id.1.ty else {
                     anyhow::bail!("Credential identifier must be a public key.")
                 };
+                anyhow::ensure!(
+                    cred_id == credential_id,
+                    "Credential id and subject id do not match."
+                );
                 anyhow::ensure!(issuer.network == id.1.network);
+                anyhow::ensure!(issuer.network == method.network);
                 let statement: Vec<AtomicStatement<_, _, _>> =
                     serde_json::from_value(get_field(&mut credential_subject, "statement")?)?;
 
@@ -487,7 +502,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     anyhow::bail!("Credential identifier must be a public key.")
                 };
                 anyhow::ensure!(issuer.network == id.1.network);
-                // TODO: Is this really necessary?
                 // Make sure that the id's point to the same credential.
                 anyhow::ensure!(
                     parameter.as_ref() == key.as_bytes(),
