@@ -1,7 +1,10 @@
 -- |Common types for genesis data for consensus version 1.
 module Concordium.Genesis.Data.BaseV1 where
 
+import Control.Monad
+import Data.Ratio
 import Data.Serialize
+import Data.Word
 
 import Concordium.Types
 
@@ -12,7 +15,10 @@ data CoreGenesisParametersV1 = CoreGenesisParametersV1
     { -- |The nominal time of the genesis block.
       genesisTime :: !Timestamp,
       -- |Duration of an epoch.
-      genesisEpochDuration :: !Duration
+      genesisEpochDuration :: !Duration,
+      -- |Fractional weight of signatures required for a quorum certificate or timeout
+      -- certificate. This must be in the range [2/3, 1], and should generally be set to 2/3.
+      genesisSignatureThreshold :: !(Ratio Word64)
     }
     deriving (Eq, Show)
 
@@ -20,9 +26,22 @@ instance Serialize CoreGenesisParametersV1 where
     put CoreGenesisParametersV1{..} = do
         put genesisTime
         put genesisEpochDuration
-    get = do
+        putWord64be (numerator genesisSignatureThreshold)
+        putWord64be (denominator genesisSignatureThreshold)
+    get = label "CoreGenesisParametersV1" $ do
         genesisTime <- get
         genesisEpochDuration <- get
+        gstNumerator <- getWord64be
+        gstDenominator <- getWord64be
+        when (gstDenominator == 0) $ fail "genesisSignatureThreshold: zero denominator"
+        when (gstNumerator > gstDenominator) $ fail "genesisSignatureThreshold > 1"
+        -- Ratios of fixed size (unsigned) integers can be subject to arithmetic overflow on basic
+        -- operations. This >=2/3 check is implemented so as to avoid overflow.
+        unless (gstNumerator >= gstDenominator - gstDenominator `div` 3) $
+            fail "genesisSignatureThreshold < 2/3"
+        unless (gcd gstNumerator gstDenominator == 1) $
+            fail "genesisSignatureThreshold: numerator and denominator must be coprime"
+        let genesisSignatureThreshold = gstNumerator % gstDenominator
         return CoreGenesisParametersV1{..}
 
 -- |Common data in the "regenesis" block, which is the first block of the chain after

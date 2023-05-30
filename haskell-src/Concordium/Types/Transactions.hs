@@ -897,7 +897,7 @@ emptyTransactionOutcomesHashV1 :: TransactionOutcomesHash
 emptyTransactionOutcomesHashV1 =
     TransactionOutcomesHash $
         H.hashShort
-            ( "TransactionOutcomesV1"
+            ( "TransactionOutcomesHashV1"
                 <> H.hashToShortByteString (H.hash "EmptyLFMBTree")
                 <> H.hashToShortByteString (H.hash "EmptyLFMBTree")
             )

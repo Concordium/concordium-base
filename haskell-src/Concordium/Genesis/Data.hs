@@ -4,6 +4,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+-- We suppress redundant constraint warnings since GHC does not detect when a constraint is used
+-- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |
 --    This module defines the protocol versioned variants of genesis and regenesis
@@ -35,6 +38,7 @@ import Data.Word
 import Concordium.Common.Version
 import Concordium.Genesis.Account
 import Concordium.Genesis.Data.Base
+import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
@@ -367,3 +371,12 @@ regenesisConfiguration regenData =
           _gcFirstGenesis = firstGenesisBlockHash regenData,
           _gcCurrentHash = regenesisBlockHash regenData
         }
+
+-- |Extract the V1 core genesis parameters from the genesis data.
+genesisCoreParametersV1 ::
+    forall pv.
+    (IsProtocolVersion pv, IsConsensusV1 pv) =>
+    GenesisData pv ->
+    BaseV1.CoreGenesisParametersV1
+genesisCoreParametersV1 = case protocolVersion @pv of
+    SP6 -> \(GDP6 genData) -> P6.genesisCore genData
