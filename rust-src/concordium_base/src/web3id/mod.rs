@@ -325,7 +325,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 proofs,
             } => {
                 let json = serde_json::json!({
-                    "id": format!("did:ccd:{network}:cred:{cred_id}"),
                     "type": ["VerifiableCredential", "ConcordiumVerifiableCredential"],
                     "issuer": format!("did:ccd:{network}:idp:{issuer}"),
                     "issuanceDate": issuance_date,
@@ -354,7 +353,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 owner,
             } => {
                 let json = serde_json::json!({
-                    "id": format!("did:ccd:{network}:sci:{}:{}/credentialEntry/{}", contract.index, contract.subindex, owner),
                     "type": ty,
                     "issuer": format!("did:ccd:{network}:sci:{}:{}/issuer", contract.index, contract.subindex),
                     "issuanceDate": issuance_date,
@@ -401,7 +399,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
         anyhow::ensure!(
             ty.contains("VerifiableCredential") && ty.contains("ConcordiumVerifiableCredential")
         );
-        let id: String = serde_json::from_value(get_field(&mut value, "id")?)?;
         let issuance_date = serde_json::from_value::<chrono::DateTime<chrono::Utc>>(
             value
                 .get_mut("issuanceDate")
@@ -414,17 +411,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
             .1;
         match issuer.ty {
             IdentifierType::Idp { idp_identity } => {
-                let Ok((rest, method)) = parse_did(&id) else {
-                    anyhow::bail!("credential identifier must be a valid Concordium DID");
-                };
-                anyhow::ensure!(
-                    rest.is_empty(),
-                    "Leftover DID data for credential identifier."
-                );
-                let IdentifierType::Credential { cred_id: credential_id } = method.ty
-                else {
-                    anyhow::bail!("Unexpected identifier. Issuer is an IDP, but credential is not an Account credential.");
-                };
                 let id = get_field(&mut credential_subject, "id")?;
                 let Some(Ok(id)) = id.as_str().map(parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
@@ -432,12 +418,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 let IdentifierType::Credential { cred_id } = id.1.ty else {
                     anyhow::bail!("Credential identifier must be a public key.")
                 };
-                anyhow::ensure!(
-                    cred_id == credential_id,
-                    "Credential id and subject id do not match."
-                );
                 anyhow::ensure!(issuer.network == id.1.network);
-                anyhow::ensure!(issuer.network == method.network);
                 let statement: Vec<AtomicStatement<_, _, _>> =
                     serde_json::from_value(get_field(&mut credential_subject, "statement")?)?;
 
@@ -474,26 +455,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     parameter.as_ref().is_empty(),
                     "Issuer must have an empty parameter."
                 );
-                let Ok((rest, method)) = parse_did(&id) else {
-                    anyhow::bail!("credential identifier must be a valid Concordium DID");
-                };
-                anyhow::ensure!(
-                    rest.is_empty(),
-                    "Leftover DID data for credential identifier."
-                );
-                let IdentifierType::ContractData { address: id_address, entrypoint: id_entrypoint, parameter } = method.ty
-                else {
-                    anyhow::bail!("Unexpected identifier. Issuer is a contract, but credential is not a Web3ID credential.");
-                };
-                anyhow::ensure!(
-                    address == id_address,
-                    "Issuer address is not the same as credential address."
-                );
-                anyhow::ensure!(
-                    id_entrypoint == "credentialEntry",
-                    "Invalid entrypoint for credential DID."
-                );
-
                 let id = get_field(&mut credential_subject, "id")?;
                 let Some(Ok(id)) = id.as_str().map(parse_did) else {
                     anyhow::bail!("Credential ID invalid.")
@@ -503,10 +464,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                 };
                 anyhow::ensure!(issuer.network == id.1.network);
                 // Make sure that the id's point to the same credential.
-                anyhow::ensure!(
-                    parameter.as_ref() == key.as_bytes(),
-                    "Credential IDs not consistent."
-                );
                 let statement: Vec<AtomicStatement<_, _, _>> =
                     serde_json::from_value(get_field(&mut credential_subject, "statement")?)?;
 
