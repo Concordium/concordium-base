@@ -5,23 +5,26 @@ use num_traits::Zero;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
+/// Trait which includes implementations for unwrapping recursive error
+/// structures. Requires that the implementor supplies implementations for
+/// accessing data for individual layers of the nested structure.
 trait TraceError {
     /// Returns an error message layer associated with this error, along with a
     /// reference to the error this error wraps. If this error is not a
     /// wrapping layer, None is expected to be returned.
-    fn print_layer(&self, verbose: bool) -> (String, Option<&Self>);
+    fn display_layer(&self, verbose: bool) -> (String, Option<&Self>);
 
-    /// Returns a formatted error message for a [TraceError].
+    /// Returns a formatted error message for a [`TraceError`].
     /// It supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
-    fn print_nested(&self, verbose: bool) -> String {
+    fn display_nested(&self, verbose: bool) -> String {
         let mut out = String::new();
         let mut current_error = self;
         let mut is_initial_pass = true;
 
         loop {
-            let (string, next_error) = current_error.print_layer(verbose);
+            let (string, next_error) = current_error.display_layer(verbose);
             out = if is_initial_pass {
                 is_initial_pass = false;
                 string
@@ -45,7 +48,7 @@ trait TraceError {
     /// wrapping layer, None is expected to be returned.
     fn get_inner_error(&self) -> Option<&Self>;
 
-    /// Gets the innermost error of a [TraceError].
+    /// Gets the innermost error of a [`TraceError`].
     fn get_innermost_error(&self) -> &Self {
         let mut out = self;
         while let Some(error) = self.get_inner_error() {
@@ -106,13 +109,13 @@ impl Display for JsonError {
             JsonError::ParseTimestampError(e) => write!(f, "{}", e),
             JsonError::TraceError {
                 ..
-            } => write!(f, "{}", self.print(false)),
+            } => write!(f, "{}", self.display(false)),
         }
     }
 }
 
 impl TraceError for JsonError {
-    fn print_layer(&self, verbose: bool) -> (String, Option<&Self>) {
+    fn display_layer(&self, verbose: bool) -> (String, Option<&Self>) {
         if let JsonError::TraceError {
             error,
             json,
@@ -124,7 +127,7 @@ impl TraceError for JsonError {
             let message = if verbose {
                 format!("In {} of {}", field, formatted_json)
             } else {
-                field.to_owned()
+                field.clone()
             };
             return (message, Some(error));
         }
@@ -147,23 +150,23 @@ impl TraceError for JsonError {
 }
 
 impl JsonError {
-    /// Wraps a [`JsonError`] in a [`JsonError::TraceError`], providing a trace to
-    /// the origin of the error.
+    /// Wraps a [`JsonError`] in a [`JsonError::TraceError`], providing a trace
+    /// to the origin of the error.
     fn add_trace(self, field: String, json: &serde_json::Value) -> Self {
         JsonError::TraceError {
             field,
-            json: json.to_owned(),
+            json: json.clone(),
             error: Box::new(self),
         }
     }
 
-    /// Prints a formatted error message for variant. [`JsonError::TraceError`]
+    /// Returns a formatted error message for variant. [`JsonError::TraceError`]
     /// supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
-    pub fn print(&self, verbose: bool) -> String { self.print_nested(verbose) }
+    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
 
-    /// Gets the underlying error of a [JsonError::TraceError]. For any other
+    /// Gets the underlying error of a [`JsonError::TraceError`]. For any other
     /// variant, this simply returns the error itself.
     pub fn get_error(&self) -> &Self { self.get_innermost_error() }
 }
@@ -235,7 +238,7 @@ impl Display for ToJsonError {
 }
 
 impl TraceError for ToJsonError {
-    fn print_layer(&self, verbose: bool) -> (String, Option<&Self>) {
+    fn display_layer(&self, verbose: bool) -> (String, Option<&Self>) {
         if let ToJsonError::TraceError {
             error,
             position,
@@ -269,29 +272,31 @@ impl TraceError for ToJsonError {
 }
 
 impl ToJsonError {
-    /// Wraps a [ToJsonError] in a [ToJsonError::TraceError], providing a trace
-    /// to the origin of the error.
+    /// Wraps a [`ToJsonError`] in a [`ToJsonError::TraceError`], providing a
+    /// trace to the origin of the error.
     fn add_trace(self, position: u32, schema: &Type) -> Self {
         ToJsonError::TraceError {
             position,
-            schema: schema.to_owned(),
+            schema: schema.clone(),
             error: Box::new(self),
         }
     }
 
-    /// Prints a formatted error message for variant. [ToJsonError::TraceError]
-    /// supports printing a verbose form including a more detailed
-    /// description of the error stack, which is returned if `verbose` is
-    /// set to true.
-    pub fn print(&self, verbose: bool) -> String { self.print_nested(verbose) }
+    /// Returns a formatted error message for variant.
+    /// [`ToJsonError::TraceError`] supports printing a verbose form
+    /// including a more detailed description of the error stack, which is
+    /// returned if `verbose` is set to true.
+    pub fn print(&self, verbose: bool) -> String { self.display_nested(verbose) }
 
-    /// Gets the underlying error of a [ToJsonError::TraceError]. For any other
-    /// variant, this simply returns the error itself.
+    /// Gets the underlying error of a [`ToJsonError::TraceError`]. For any
+    /// other variant, this simply returns the error itself.
     pub fn get_error(&self) -> &Self { self.get_innermost_error() }
 }
 
+/// Result with error type [`ToJsonError`]
 pub type ToJsonResult<A> = Result<A, ToJsonError>;
 
+/// Error with the sole purpose of adding some context to [`ParseError`].
 #[derive(thiserror::Error, Debug, Clone)]
 #[error("{0}")]
 struct ParseErrorWithReason(String);
@@ -1031,6 +1036,8 @@ mod tests {
         serial_bigint(i64::MIN.into(), 2, &mut bytes).expect_err("Deserialising should fail");
     }
 
+    /// Tests that attempting to serialize a valid byte sequence as
+    /// [`Type::AccountAddress`] succeeds.
     #[test]
     fn test_serial_account_address() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1043,6 +1050,8 @@ mod tests {
         assert_eq!(expected, bytes)
     }
 
+    /// Tests that attempting to serialize an invalid byte sequence as
+    /// [`Type::AccountAddress`] fails with expected error type.
     #[test]
     fn test_serial_account_address_wrong_address_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1054,8 +1063,8 @@ mod tests {
         assert!(matches!(err, JsonError::FailedParsingAccountAddress))
     }
 
-    /// Tests that attempting to serialize a non-[AccountAddress] value with
-    /// [Type::AccountAddress] schema results in error of expected type.
+    /// Tests that attempting to serialize a non-[`AccountAddress`] value with
+    /// [`Type::AccountAddress`] schema results in error of expected type.
     #[test]
     fn test_serial_account_wrong_type_fails() {
         let schema = Type::AccountAddress;
@@ -1066,7 +1075,7 @@ mod tests {
     }
 
     /// Tests that attempting to serialize a malformed value wrapped in a
-    /// [Type::List] results in a nested error with trace information in the
+    /// [`Type::List`] results in a nested error with trace information in the
     /// wrapping layer.
     #[test]
     fn test_serial_list_fails_with_trace() {
@@ -1087,7 +1096,7 @@ mod tests {
     }
 
     /// Tests that attempting to serialize a malformed value wrapped in a
-    /// [Type::Struct] results in a nested error with trace information in the
+    /// [`Type::Struct`] results in a nested error with trace information in the
     /// wrapping layer.
     #[test]
     fn test_serial_object_fails_with_trace() {
@@ -1132,7 +1141,7 @@ mod tests {
                 error,
                 ..
             } if field == "1" && matches!(
-                *error.to_owned(),
+                *error.clone(),
                 JsonError::TraceError {
                     field,
                     error,
@@ -1273,6 +1282,9 @@ mod tests {
         deserial_bigint(&mut cursor, 9).expect_err("Deserialising should fail");
     }
 
+    /// Tests that attempting to deserialize a valid byte sequence using
+    /// [`Type::AccountAddress`] succeeds and results in the expected JSON
+    /// format.
     #[test]
     fn test_deserial_account_address() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1284,8 +1296,8 @@ mod tests {
         assert_eq!(expected, value)
     }
 
-    /// Tests that attempting to deserialize a non-[AccountAddress] value with
-    /// [Type::AccountAddress] schema results in an error of expected format.
+    /// Tests that attempting to deserialize a non-[`AccountAddress`] value with
+    /// [`Type::AccountAddress`] schema results in an error of expected format.
     #[test]
     fn test_deserial_malformed_account_address_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1301,7 +1313,7 @@ mod tests {
     }
 
     /// Tests that attempting to deserialize a malformed value wrapped in a
-    /// [Type::List] fails with a nested error.
+    /// [`Type::List`] fails with a nested error.
     #[test]
     fn test_deserial_malformed_list_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -1357,7 +1369,7 @@ mod tests {
                 schema: Type::List(_,_),
                 error,
             } if matches!(
-                *error.to_owned(),
+                *error.clone(),
                 ToJsonError::TraceError {
                     position: 49,
                     schema: Type::Struct(_),
@@ -1421,7 +1433,7 @@ fn item_list_to_json<T: AsRef<[u8]>>(
         data,
         position,
         reason: "Could not deserialize length of list".into(),
-        schema: schema.to_owned(),
+        schema: schema.clone(),
     })?;
     let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
     for _ in 0..len {
@@ -1506,91 +1518,161 @@ impl Type {
             data,
             position,
             reason,
-            schema: self.to_owned(),
+            schema: self.clone(),
         };
 
         match self {
             Type::Unit => Ok(Value::Null),
             Type::Bool => {
-                let n = bool::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse bool from value".into()))?;
+                let n = bool::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse bool from value, expected a byte containing the value 0 \
+                         or 1"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Bool(n))
             }
             Type::U8 => {
-                let n = u8::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse u8 from value".into()))?;
+                let n = u8::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u8 from value as not enough data was available (1 byte)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U16 => {
-                let n = u16::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse u16 from value".into()))?;
+                let n = u16::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u16 from value as not enough data was available (2 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U32 => {
-                let n = u32::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse u32 from value".into()))?;
+                let n = u32::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u32 from value as not enough data was available (4 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U64 => {
-                let n = u64::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse u64 from value".into()))?;
+                let n = u64::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u64 from value as not enough data was available (8 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U128 => {
-                let n = u128::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse u128 from value".into()))?;
+                let n = u128::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u128 from value as not enough data was available (16 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(n.to_string()))
             }
             Type::I8 => {
-                let n = i8::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse i8 from value".into()))?;
+                let n = i8::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i8 from value as not enough data was available (1 byte)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I16 => {
-                let n = i16::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse i16 from value".into()))?;
+                let n = i16::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i16 from value as not enough data was available (2 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I32 => {
-                let n = i32::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse i32 from value".into()))?;
+                let n = i32::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i32 from value as not enough data was available (4 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I64 => {
-                let n = i64::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse i64 from value".into()))?;
+                let n = i64::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i64 from value as not enough data was available (8 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I128 => {
-                let n = i128::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse i128 from value".into()))?;
+                let n = i128::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i128 from value as not enough data was available (16 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(n.to_string()))
             }
             Type::Amount => {
-                let n = Amount::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse Amount from value".into()))?;
+                let n = Amount::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Amount from value as not enough data was available (8 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(n.micro_ccd().to_string()))
             }
             Type::AccountAddress => {
                 let address = AccountAddress::deserial(source).map_err(|_| {
-                    deserial_error("Could not parse AccountAddress from value".into())
+                    deserial_error(
+                        "Could not parse AccountAddress from value as not enough data was \
+                         available (32 bytes)"
+                            .into(),
+                    )
                 })?;
                 Ok(Value::String(address.to_string()))
             }
             Type::ContractAddress => {
                 let address = ContractAddress::deserial(source).map_err(|_| {
-                    deserial_error("Could not parse ContractAddress from value".into())
+                    deserial_error(
+                        "Could not parse ContractAddress from value as not enough data was \
+                         available (16 bytes)"
+                            .into(),
+                    )
                 })?;
                 Ok(serde_json::to_value(address).map_err(|_| ToJsonError::FormatError {})?)
             }
             Type::Timestamp => {
-                let timestamp = Timestamp::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse Timestamp from value".into()))?;
+                let timestamp = Timestamp::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Timestamp from value as not enough data was available (8 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(timestamp.to_string()))
             }
             Type::Duration => {
-                let duration = Duration::deserial(source)
-                    .map_err(|_| deserial_error("Could not parse Duration from value".into()))?;
+                let duration = Duration::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Duration from value as not enough data was available (8 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(duration.to_string()))
             }
             Type::Pair(left_type, right_type) => {
@@ -1640,11 +1722,15 @@ impl Type {
             Type::Enum(variants) => {
                 let idx = if variants.len() <= 256 {
                     u8::deserial(source).map(|v| v as usize).map_err(|_| {
-                        ParseErrorWithReason("Could not parse Enum id as u8 from value".into())
+                        ParseErrorWithReason(
+                            "Could not parse Enum id as u8 from value (needs 1 byte)".into(),
+                        )
                     })
                 } else {
                     u16::deserial(source).map(|v| v as usize).map_err(|_| {
-                        ParseErrorWithReason("Could not parse Enum id as u16 from value".into())
+                        ParseErrorWithReason(
+                            "Could not parse Enum id as u16 from value (needs 2 bytes)".into(),
+                        )
                     })
                 };
                 let variant = idx.and_then(|idx| {
@@ -1665,7 +1751,9 @@ impl Type {
             }
             Type::TaggedEnum(variants) => {
                 let idx = u8::deserial(source).map_err(|_| {
-                    ParseErrorWithReason("Could not parse TaggedEnum id from value".into())
+                    ParseErrorWithReason(
+                        "Could not parse TaggedEnum id from value (needs 1 byte)".into(),
+                    )
                 });
                 let variant = idx.and_then(|idx| {
                     variants.get(&idx).ok_or_else(|| {
@@ -1728,13 +1816,13 @@ impl Type {
             }
             Type::ULeb128(constraint) => {
                 let int = deserial_biguint(source, *constraint).map_err(|_| {
-                    deserial_error("Could not parse unsigned integer from value".into())
+                    deserial_error("Could not parse unsigned integer (uleb128) from value".into())
                 })?;
                 Ok(Value::String(int.to_string()))
             }
             Type::ILeb128(constraint) => {
                 let int = deserial_bigint(source, *constraint).map_err(|_| {
-                    deserial_error("Could not parse signed integer from value".into())
+                    deserial_error("Could not parse signed integer (leb128) from value".into())
                 })?;
                 Ok(Value::String(int.to_string()))
             }
@@ -1743,7 +1831,7 @@ impl Type {
                     ParseErrorWithReason("Could not parse ByteList length from value".into())
                 });
                 let bytes: core::result::Result<Vec<_>, _> =
-                    len.as_ref().map_err(|e| e.to_owned()).and_then(|len| {
+                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
                         let mut bytes =
                             Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
 
@@ -1766,7 +1854,7 @@ impl Type {
                             MAX_PREALLOCATED_CAPACITY,
                             2 * len,
                         ));
-                        bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
+                        string.push_str(&hex::encode(bytes));
                         Ok(Value::String(string))
                     }
                     (Err(e), _) => Err(deserial_error(e.0)),
@@ -1778,7 +1866,7 @@ impl Type {
                     ParseErrorWithReason("Could not parse ByteArray length from value".into())
                 });
                 let bytes: core::result::Result<Vec<_>, _> =
-                    len.as_ref().map_err(|e| e.to_owned()).and_then(|len| {
+                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
                         let mut bytes =
                             Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
 
@@ -1801,7 +1889,7 @@ impl Type {
                             MAX_PREALLOCATED_CAPACITY,
                             2 * len,
                         ));
-                        bytes.into_iter().for_each(|b| string.push_str(&format!("{:02x?}", b)));
+                        string.push_str(&hex::encode(bytes));
                         Ok(Value::String(string))
                     }
                     (Err(e), _) => Err(deserial_error(e.0)),
