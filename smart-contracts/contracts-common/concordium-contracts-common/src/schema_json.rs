@@ -76,7 +76,7 @@ pub enum JsonError {
     ParseIntError(#[from] std::num::ParseIntError),
     ParseDurationError(#[from] ParseDurationError),
     ParseTimestampError(#[from] ParseTimestampError),
-    /// Trace leading to the original [JsonError].
+    /// Trace leading to the original [`JsonError`].
     TraceError {
         field: String,
         json:  serde_json::Value,
@@ -147,7 +147,7 @@ impl TraceError for JsonError {
 }
 
 impl JsonError {
-    /// Wraps a [JsonError] in a [JsonError::TraceError], providing a trace to
+    /// Wraps a [`JsonError`] in a [`JsonError::TraceError`], providing a trace to
     /// the origin of the error.
     fn add_trace(self, field: String, json: &serde_json::Value) -> Self {
         JsonError::TraceError {
@@ -157,7 +157,7 @@ impl JsonError {
         }
     }
 
-    /// Prints a formatted error message for variant. [JsonError::TraceError]
+    /// Prints a formatted error message for variant. [`JsonError::TraceError`]
     /// supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
@@ -1431,7 +1431,7 @@ fn item_list_to_json<T: AsRef<[u8]>>(
     Ok(values)
 }
 
-/// Deserialize a [String] of variable length from `source`.
+/// Deserialize a [`String`] of variable length from `source`.
 fn deserial_string<R: Read>(
     source: &mut R,
     size_len: SizeLength,
@@ -1812,7 +1812,7 @@ impl Type {
     }
 }
 
-/// Deserialize a uleb128 encoded [BigUint] from `source`.
+/// Deserialize a uleb128 encoded [`BigUint`] from `source`.
 fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
     let mut result = BigUint::zero();
     let mut shift = 0;
@@ -1829,7 +1829,7 @@ fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<Big
     Err(ParseError {})
 }
 
-/// Deserialize a ileb128 encoded [BigInt] from `source`.
+/// Deserialize a ileb128 encoded [`BigInt`] from `source`.
 fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
     let mut result = BigInt::zero();
     let mut shift = 0;
