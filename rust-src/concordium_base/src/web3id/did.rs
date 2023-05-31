@@ -1,3 +1,5 @@
+//! Definition of Concordium DIDs and their parser.
+
 use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, OwnedEntrypointName, OwnedParameter,
@@ -14,6 +16,7 @@ use nom::{
 #[derive(
     Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord,
 )]
+/// Supported networks for Concordium DIDs.
 pub enum Network {
     #[serde(rename = "testnet")]
     Testnet,
@@ -26,6 +29,27 @@ impl std::fmt::Display for Network {
         match self {
             Network::Testnet => f.write_str("testnet"),
             Network::Mainnet => f.write_str("mainnet"),
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("Unsupported network: {network}")]
+/// An error that can occur when converting a string to a network.
+pub struct NetworkFromStrError {
+    network: String,
+}
+
+impl std::str::FromStr for Network {
+    type Err = NetworkFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "testnet" => Ok(Self::Testnet),
+            "mainnet" => Ok(Self::Mainnet),
+            other => Err(NetworkFromStrError {
+                network: other.to_string(),
+            }),
         }
     }
 }
@@ -70,12 +94,17 @@ pub enum IdentifierType {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
+/// A DID method.
 pub struct Method {
+    /// The network part of the method.
     pub network: Network,
+    /// The remaining identifier.
     pub ty:      IdentifierType,
 }
 
 #[derive(Debug, thiserror::Error)]
+/// An error that can occur when attempting to parse a string as a DID
+/// [`Method`].
 pub enum MethodFromStrError {
     #[error("Unable to parse DID: {0}")]
     Parse(#[from] nom::Err<nom::error::Error<String>>),
