@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Set minimum Rust version to 1.65.
+
 ## concordium-contracts-common-derive 2.0.0 (2023-05-08)
 
 - Set minimum Rust version to 1.60.
