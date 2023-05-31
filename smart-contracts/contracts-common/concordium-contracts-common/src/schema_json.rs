@@ -1,46 +1,490 @@
 use crate::{constants::*, schema::*, *};
+use core::fmt::Display;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
 
+/// Trait which includes implementations for unwrapping recursive error
+/// structures. Requires that the implementor supplies implementations for
+/// accessing data for individual layers of the nested structure.
+///
+/// This is intended to be private to the module, as it merely serves the
+/// purpose of code de-duplication.
+trait TraceError {
+    /// Returns an error message layer associated with this error, along with a
+    /// reference to the error this error wraps. If this error is not a
+    /// wrapping layer, None is expected to be returned.
+    fn display_layer(&self, verbose: bool) -> (String, Option<&Self>);
+
+    /// Returns a formatted error message for a [`TraceError`].
+    /// It supports printing a verbose form including a more detailed
+    /// description of the error stack, which is returned if `verbose` is
+    /// set to true.
+    fn display_nested(&self, verbose: bool) -> String {
+        let mut out = String::new();
+        let mut current_error = self;
+        let mut is_initial_pass = true;
+
+        loop {
+            let (string, next_error) = current_error.display_layer(verbose);
+            out = if is_initial_pass {
+                is_initial_pass = false;
+                string
+            } else if verbose {
+                format!("{}\n{}", string, out)
+            } else {
+                format!("{} -> {}", out, string)
+            };
+
+            if let Some(next) = next_error {
+                current_error = next;
+            } else {
+                break;
+            }
+        }
+
+        out
+    }
+
+    /// Gets a reference to the error this error wraps. If this error is not a
+    /// wrapping layer, None is expected to be returned.
+    fn get_inner_error(&self) -> Option<&Self>;
+
+    /// Gets the innermost error of a [`TraceError`].
+    fn get_innermost_error(&self) -> &Self {
+        let mut out = self;
+        while let Some(error) = self.get_inner_error() {
+            out = error;
+        }
+        out
+    }
+}
+
+/// Represents errors occurring while serializing data from the schema JSON
+/// format.
+///
+/// # Examples
+///
+/// ## Simple type from invalid JSON value
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let account = AccountAddress(account_bytes.clone());
+/// let schema = Type::AccountAddress;
+///
+/// // Malformed JSON value due to incorrect account address
+/// let json = json!(format!("{}", &account).get(1..));
+/// let err = schema.serial_value(&json).expect_err("Serializing should fail");
+///
+/// assert!(matches!(err, JsonError::FailedParsingAccountAddress))
+/// ```
+///
+/// ## Complex type from invalid JSON value
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let account = AccountAddress(account_bytes.clone());
+/// let schema = Type::Struct(Fields::Named(vec![
+///    ("account".into(), Type::AccountAddress),
+///    ("contract".into(), Type::ContractAddress),
+/// ]));
+///
+/// // Malformed JSON value due to incorrect value for "contract" field
+/// let json = json!({ "account": format!("{}", account), "contract": {} });
+/// let err = schema.serial_value(&json).expect_err("Serializing should fail");
+///
+/// assert!(matches!(
+///    err,
+///    JsonError::TraceError {
+///        field,
+///        error,
+///        ..
+///    } if matches!(*error, JsonError::FieldError(_)) && field == "\"contract\""
+/// ));
+/// ```
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum JsonError {
-    #[error("Failed writing")]
     FailedWriting,
-    #[error("Unsigned integer required")]
     UnsignedIntRequired,
-    #[error("Signed integer required")]
     SignedIntRequired,
-    #[error("Failed parsing account address")]
     FailedParsingAccountAddress,
-    #[error("{0}")]
     WrongJsonType(String),
-    #[error("{0}")]
     FieldError(String),
-    #[error("{0}")]
     EnumError(String),
-    #[error("{0}")]
     MapError(String),
-    #[error("{0}")]
     PairError(String),
-    #[error("{0}")]
     ArrayError(String),
-    #[error("{0}")]
     ParseError(String),
-    #[error("{0}")]
     ByteArrayError(String),
-    #[error("{0}")]
     FromHexError(#[from] hex::FromHexError),
-    #[error("{0}")]
     TryFromIntError(#[from] core::num::TryFromIntError),
-    #[error("{0}")]
     ParseIntError(#[from] std::num::ParseIntError),
-    #[error("{0}")]
     ParseDurationError(#[from] ParseDurationError),
-    #[error("{0}")]
     ParseTimestampError(#[from] ParseTimestampError),
+    /// Trace leading to the original [`JsonError`].
+    TraceError {
+        field: String,
+        json:  serde_json::Value,
+        error: Box<JsonError>,
+    },
 }
+
+impl Display for JsonError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            JsonError::FailedWriting => write!(f, "Failed writing"),
+            JsonError::UnsignedIntRequired => write!(f, "Unsigned integer required"),
+            JsonError::SignedIntRequired => write!(f, "Signed integer required"),
+            JsonError::FailedParsingAccountAddress => write!(f, "Failed parsing account address"),
+            JsonError::WrongJsonType(s) => write!(f, "{}", s),
+            JsonError::FieldError(s) => write!(f, "{}", s),
+            JsonError::EnumError(s) => write!(f, "{}", s),
+            JsonError::MapError(s) => write!(f, "{}", s),
+            JsonError::PairError(s) => write!(f, "{}", s),
+            JsonError::ArrayError(s) => write!(f, "{}", s),
+            JsonError::ParseError(s) => write!(f, "{}", s),
+            JsonError::ByteArrayError(s) => write!(f, "{}", s),
+            JsonError::FromHexError(e) => write!(f, "{}", e),
+            JsonError::TryFromIntError(e) => write!(f, "{}", e),
+            JsonError::ParseIntError(e) => write!(f, "{}", e),
+            JsonError::ParseDurationError(e) => write!(f, "{}", e),
+            JsonError::ParseTimestampError(e) => write!(f, "{}", e),
+            JsonError::TraceError {
+                ..
+            } => write!(f, "{}", self.display(false)),
+        }
+    }
+}
+
+impl TraceError for JsonError {
+    fn display_layer(&self, verbose: bool) -> (String, Option<&Self>) {
+        if let JsonError::TraceError {
+            error,
+            json,
+            field,
+        } = self
+        {
+            let formatted_json =
+                serde_json::to_string_pretty(json).unwrap_or_else(|_| format!("{}", json));
+            let message = if verbose {
+                format!("In {} of {}", field, formatted_json)
+            } else {
+                field.clone()
+            };
+            return (message, Some(error));
+        }
+
+        let message = format!("{}", self);
+        (message, None)
+    }
+
+    fn get_inner_error(&self) -> Option<&Self> {
+        if let JsonError::TraceError {
+            error,
+            ..
+        } = self
+        {
+            return Some(error);
+        }
+
+        None
+    }
+}
+
+impl JsonError {
+    /// Wraps a [`JsonError`] in a [`JsonError::TraceError`], providing a trace
+    /// to the origin of the error.
+    fn add_trace(self, field: String, json: &serde_json::Value) -> Self {
+        JsonError::TraceError {
+            field,
+            json: json.clone(),
+            error: Box::new(self),
+        }
+    }
+
+    /// Returns a formatted error message for variant. [`JsonError::TraceError`]
+    /// supports printing a verbose form including a more detailed
+    /// description of the error stack, which is returned if `verbose` is
+    /// set to true.
+    ///
+    /// # Examples
+    ///
+    /// ## Display error from list of objects
+    ///
+    /// ```
+    /// # use serde_json::json;
+    /// # use concordium_contracts_common::schema_json::*;
+    /// # use concordium_contracts_common::schema::*;
+    /// # use concordium_contracts_common::*;
+    /// #
+    /// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+    /// let account = AccountAddress(account_bytes);
+    /// let object_schema = Type::Struct(Fields::Named(vec![
+    ///    ("account".into(), Type::AccountAddress),
+    ///    ("contract".into(), Type::ContractAddress),
+    /// ]));
+    /// let schema = Type::List(SizeLength::U8, Box::new(object_schema));
+    ///
+    /// // Malformed JSON value due to incorrect value for "contract" field
+    /// let json = json!([{ "account": format!("{}", account), "contract": {} }]);
+    /// let err = schema.serial_value(&json).expect_err("Serializing should fail");
+    ///
+    /// // The error format points to the cause of the error from the root of the JSON.
+    /// # #[rustfmt::skip]
+    /// let expected = r#"0 -> "contract" -> 'index' is required in a Contract address"#.to_string();
+    /// assert_eq!(expected, err.display(false));
+    ///
+    /// // Or if verbose, includes a stacktrace-like format.
+    /// # #[rustfmt::skip]
+    /// let expected_verbose = r#"'index' is required in a Contract address
+    /// In "contract" of {
+    ///   "account": "2wkBET2rRgE8pahuaczxKbmv7ciehqsne57F9gtzf1PVdr2VP3",
+    ///   "contract": {}
+    /// }
+    /// In 0 of [
+    ///   {
+    ///     "account": "2wkBET2rRgE8pahuaczxKbmv7ciehqsne57F9gtzf1PVdr2VP3",
+    ///     "contract": {}
+    ///   }
+    /// ]"#.to_string();
+    /// assert_eq!(expected_verbose, err.display(true));
+    /// ```
+    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
+
+    /// Gets the underlying error of a [`JsonError::TraceError`]. For any other
+    /// variant, this simply returns the error itself.
+    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
+}
+
+/// Wrapper around a list of bytes to represent data which failed to be
+/// deserialized into schema type.
+#[derive(Debug, Clone)]
+pub struct ToJsonErrorData {
+    pub bytes: Vec<u8>,
+}
+
+impl From<Vec<u8>> for ToJsonErrorData {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes,
+        }
+    }
+}
+
+impl From<ToJsonErrorData> for Vec<u8> {
+    fn from(value: ToJsonErrorData) -> Self { value.bytes }
+}
+
+impl Display for ToJsonErrorData {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.bytes.iter().try_for_each(|b| write!(f, "{:02x?}", b))
+    }
+}
+
+/// Represents errors occurring while deserializing to the schema JSON format.
+///
+/// # Examples
+///
+/// ## Simple type from invalid byte sequence
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let mut cursor = Cursor::new(&account_bytes[..30]); // Malformed account address
+/// let schema = Type::AccountAddress;
+/// let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+///
+/// assert!(matches!(err, ToJsonError::DeserialError {
+///     position: 0,
+///     schema: Type::AccountAddress,
+///     ..
+/// }))
+/// ```
+///
+/// ## Complex type from invalid byte sequence
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let mut list_bytes = vec![2, 0]; // 2 items in the list
+/// list_bytes.extend_from_slice(&account_bytes); // Correct account address
+/// list_bytes.extend_from_slice(&account_bytes[..30]); // Malformed account address
+///
+/// let mut cursor = Cursor::new(list_bytes);
+/// let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
+/// let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+///
+/// assert!(matches!(
+///    err,
+///    ToJsonError::TraceError {
+///        position: 0,
+///        schema: Type::List(_, _),
+///        error,
+///    } if matches!(
+///        *error,
+///        ToJsonError::DeserialError {
+///            position: 33,
+///            schema: Type::AccountAddress, ..
+///        }
+///    )
+/// ))
+/// ```
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum ToJsonError {
+    /// JSON formatter failed to represent value.
+    FormatError,
+    /// Failed to deserialize data to type expected from schema.
+    DeserialError {
+        position: u32,
+        schema:   Type,
+        reason:   String,
+        data:     ToJsonErrorData,
+    },
+    /// Trace leading to the original [ToJsonError].
+    TraceError {
+        position: u32,
+        schema:   Type,
+        error:    Box<ToJsonError>,
+    },
+}
+
+impl Display for ToJsonError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ToJsonError::FormatError => write!(f, "Failed to format as JSON"),
+            ToJsonError::DeserialError {
+                position,
+                schema,
+                reason,
+                data,
+            } => write!(
+                f,
+                "Failed to deserialize {:?} due to: {} - from position {} of bytes {}",
+                schema, reason, position, data
+            ),
+            ToJsonError::TraceError {
+                ..
+            } => write!(f, "{}", self.display(false)),
+        }
+    }
+}
+
+impl TraceError for ToJsonError {
+    fn display_layer(&self, verbose: bool) -> (String, Option<&Self>) {
+        if let ToJsonError::TraceError {
+            error,
+            position,
+            schema,
+        } = self
+        {
+            let message = if verbose {
+                format!("In deserializing position {} into type {:?}", position, schema)
+            } else {
+                format!("{:?}", schema)
+            };
+
+            return (message, Some(error));
+        }
+
+        let message = format!("{}", self);
+        (message, None)
+    }
+
+    fn get_inner_error(&self) -> Option<&Self> {
+        if let ToJsonError::TraceError {
+            error,
+            ..
+        } = self
+        {
+            return Some(error);
+        }
+
+        None
+    }
+}
+
+impl ToJsonError {
+    /// Wraps a [`ToJsonError`] in a [`ToJsonError::TraceError`], providing a
+    /// trace to the origin of the error.
+    fn add_trace(self, position: u32, schema: &Type) -> Self {
+        ToJsonError::TraceError {
+            position,
+            schema: schema.clone(),
+            error: Box::new(self),
+        }
+    }
+
+    /// Returns a formatted error message for variant.
+    /// [`ToJsonError::TraceError`] supports printing a verbose form
+    /// including a more detailed description of the error stack, which is
+    /// returned if `verbose` is set to true.
+    ///
+    /// # Examples
+    ///
+    /// ## Display error from failing to deserialize to list of objects
+    ///
+    /// ```
+    /// # use serde_json::json;
+    /// # use concordium_contracts_common::schema_json::*;
+    /// # use concordium_contracts_common::schema::*;
+    /// # use concordium_contracts_common::*;
+    /// #
+    /// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+    /// let contract_bytes = [0u8; 16];
+    /// let mut list_bytes = vec![2, 0];
+    /// list_bytes.extend_from_slice(&account_bytes);
+    /// list_bytes.extend_from_slice(&contract_bytes);
+    /// // r#"<error-message>
+    /// // In deserializing position <cursor-position> into type Struct(...)
+    /// // In deserializing position <cursor-position> into type List(...)"#;
+    /// list_bytes.extend_from_slice(&account_bytes);
+    /// list_bytes.extend_from_slice(&contract_bytes[..10]); // Malformed contract address.
+
+    /// let mut cursor = Cursor::new(list_bytes.clone());
+    /// let schema_object = Type::Struct(Fields::Named(vec![
+    ///     ("a".into(), Type::AccountAddress),
+    ///     ("b".into(), Type::ContractAddress),
+    /// ]));
+    /// let schema = Type::List(SizeLength::U8, Box::new(schema_object));
+    /// let err = schema.to_json(&mut cursor)
+    ///                 .expect_err("Deserializing should fail");
+    ///
+    /// // The error format points to the position in the byte sequence that
+    /// // failed to deserialize:
+    /// err.display(false); // "List(...) -> Struct(...) -> <error-message>");
+    ///
+    /// // Or if verbose, includes a stacktrace-like format, similar to:
+    /// // r#"<error-message>
+    /// // In deserializing position <cursor-position> into type Struct(...)
+    /// // In deserializing position <cursor-position> into type List(...)"#;
+    /// err.display(true);
+    /// ```
+    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
+
+    /// Gets the underlying error of a [`ToJsonError::TraceError`]. For any
+    /// other variant, this simply returns the error itself.
+    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
+}
+
+/// Error with the sole purpose of adding some context to [`ParseError`].
+#[derive(thiserror::Error, Debug, Clone)]
+#[error("{0}")]
+struct ParseErrorWithReason(String);
 
 // Serializes a value to the provided output buffer
 macro_rules! serial {
@@ -218,8 +662,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
                     values.len() == 2,
                     PairError("Only pairs of two are supported".to_string())
                 );
-                write_bytes_from_json_schema_type(left_type, &values[0], out)?;
+                write_bytes_from_json_schema_type(left_type, &values[0], out)
+                    .map_err(|e| e.add_trace("0".to_string(), json))?;
                 write_bytes_from_json_schema_type(right_type, &values[1], out)
+                    .map_err(|e| e.add_trace("1".to_string(), json))
             } else {
                 Err(WrongJsonType("JSON Array required for a pair".to_string()))
             }
@@ -228,8 +674,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Array(values) = json {
                 let len = values.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
-                for value in values {
-                    write_bytes_from_json_schema_type(ty, value, out)?;
+
+                for (i, value) in values.iter().enumerate() {
+                    write_bytes_from_json_schema_type(ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                 }
                 Ok(())
             } else {
@@ -240,8 +688,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Array(values) = json {
                 let len = values.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
-                for value in values {
-                    write_bytes_from_json_schema_type(ty, value, out)?;
+
+                for (i, value) in values.iter().enumerate() {
+                    write_bytes_from_json_schema_type(ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                 }
                 Ok(())
             } else {
@@ -252,11 +702,18 @@ fn write_bytes_from_json_schema_type<W: Write>(
             if let Value::Array(entries) = json {
                 let len = entries.len();
                 write_bytes_for_length_of_size(len, size_len, out)?;
-                for entry in entries {
+
+                for (i, entry) in entries.iter().enumerate() {
                     if let Value::Array(pair) = entry {
                         ensure!(pair.len() == 2, MapError("Expected key-value pair".to_string()));
-                        write_bytes_from_json_schema_type(key_ty, &pair[0], out)?;
-                        write_bytes_from_json_schema_type(val_ty, &pair[1], out)?;
+                        let result: Result<(), JsonError> = {
+                            write_bytes_from_json_schema_type(key_ty, &pair[0], out)
+                                .map_err(|e| e.add_trace("0".to_string(), entry))?;
+                            write_bytes_from_json_schema_type(val_ty, &pair[1], out)
+                                .map_err(|e| e.add_trace("1".to_string(), entry))?;
+                            Ok(())
+                        };
+                        result.map_err(|e| e.add_trace(format!("{}", i), json))?;
                     } else {
                         return Err(WrongJsonType(
                             "Expected key value pairs as JSON arrays".to_string(),
@@ -278,8 +735,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         values.len()
                     ))
                 );
-                for value in values {
-                    write_bytes_from_json_schema_type(ty, value, out)?;
+
+                for (i, value) in values.iter().enumerate() {
+                    write_bytes_from_json_schema_type(ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                 }
                 Ok(())
             } else {
@@ -306,6 +765,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         ));
                     };
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
+                        .map_err(|e| e.add_trace(format!("\"{}\"", variant_name), json))
                 } else {
                     // Non-existing variant
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
@@ -324,6 +784,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                 if let Some((&i, (_, variant_fields))) = schema_fields_opt {
                     out.write_u8(i).or(Err(JsonError::FailedWriting))?;
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
+                        .map_err(|e| e.add_trace(format!("'{}'", variant_name), json))
                 } else {
                     // Non-existing variant
                     Err(EnumError(format!("Unknown variant: {}", variant_name)))
@@ -344,7 +805,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
         Type::ContractName(size_len) => {
             if let Value::Object(fields) = json {
                 let contract = fields.get("contract").ok_or_else(|| {
-                    FieldError("Missing field 'contract' of type JSON String.".to_string())
+                    FieldError("Missing field \"contract\" of type JSON String.".to_string())
                 })?;
                 ensure!(
                     fields.len() == 1,
@@ -360,7 +821,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
                     serial_vector_no_length(contract_name.as_bytes(), out)
                         .or(Err(JsonError::FailedWriting))
                 } else {
-                    Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
+                    Err(WrongJsonType("JSON String required for field \"contract\".".to_string()))
                 }
             } else {
                 Err(WrongJsonType("JSON Object required for contract name.".to_string()))
@@ -369,10 +830,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
         Type::ReceiveName(size_len) => {
             if let Value::Object(fields) = json {
                 let contract = fields.get("contract").ok_or_else(|| {
-                    FieldError("Missing field 'contract' of type JSON String.".to_string())
+                    FieldError("Missing field \"contract\" of type JSON String.".to_string())
                 })?;
                 let func = fields.get("func").ok_or_else(|| {
-                    WrongJsonType("Missing field 'func' of type JSON String.".to_string())
+                    WrongJsonType("Missing field \"func\" of type JSON String.".to_string())
                 })?;
                 ensure!(
                     fields.len() == 2,
@@ -389,10 +850,10 @@ fn write_bytes_from_json_schema_type<W: Write>(
                         serial_vector_no_length(receive_name.as_bytes(), out)
                             .or(Err(JsonError::FailedWriting))
                     } else {
-                        Err(WrongJsonType("JSON String required for field 'func'.".to_string()))
+                        Err(WrongJsonType("JSON String required for field \"func\".".to_string()))
                     }
                 } else {
-                    Err(WrongJsonType("JSON String required for field 'contract'.".to_string()))
+                    Err(WrongJsonType("JSON String required for field \"contract\".".to_string()))
                 }
             } else {
                 Err(WrongJsonType("JSON Object required for contract name.".to_string()))
@@ -563,7 +1024,8 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                 for (field_name, field_ty) in fields {
                     let field_value_opt = map.get(field_name);
                     if let Some(field_value) = field_value_opt {
-                        write_bytes_from_json_schema_type(field_ty, field_value, out)?;
+                        write_bytes_from_json_schema_type(field_ty, field_value, out)
+                            .map_err(|e| e.add_trace(format!("\"{}\"", field_name), json))?;
                     } else {
                         return Err(FieldError(format!("Missing field: {}", field_name)));
                     }
@@ -579,8 +1041,9 @@ fn write_bytes_from_json_schema_fields<W: Write>(
                     fields.len() == values.len(),
                     FieldError(format!("Expected {} unnamed fields", fields.len()))
                 );
-                for (field_ty, value) in fields.iter().zip(values.iter()) {
-                    write_bytes_from_json_schema_type(field_ty, value, out)?;
+                for (i, (field_ty, value)) in fields.iter().zip(values.iter()).enumerate() {
+                    write_bytes_from_json_schema_type(field_ty, value, out)
+                        .map_err(|e| e.add_trace(format!("{}", i), json))?;
                 }
                 Ok(())
             } else {
@@ -620,6 +1083,8 @@ fn write_bytes_for_length_of_size<W: Write>(
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     #[test]
@@ -756,6 +1221,121 @@ mod tests {
         serial_bigint(i64::MIN.into(), 2, &mut bytes).expect_err("Deserialising should fail");
     }
 
+    /// Tests that attempting to serialize a valid byte sequence as
+    /// [`Type::AccountAddress`] succeeds.
+    #[test]
+    fn test_serial_account_address() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::AccountAddress;
+        let bytes =
+            schema.serial_value(&json!(format!("{}", &account))).expect("Serializing failed");
+
+        let expected = Vec::from(account_bytes);
+        assert_eq!(expected, bytes)
+    }
+
+    /// Tests that attempting to serialize an invalid byte sequence as
+    /// [`Type::AccountAddress`] fails with expected error type.
+    #[test]
+    fn test_serial_account_address_wrong_address_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::AccountAddress;
+        let json = json!(format!("{}", &account).get(1..));
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(err, JsonError::FailedParsingAccountAddress))
+    }
+
+    /// Tests that attempting to serialize a non-[`AccountAddress`] value with
+    /// [`Type::AccountAddress`] schema results in error of expected type.
+    #[test]
+    fn test_serial_account_wrong_type_fails() {
+        let schema = Type::AccountAddress;
+        let json = json!(123);
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(err, JsonError::WrongJsonType(_)))
+    }
+
+    /// Tests that attempting to serialize a malformed value wrapped in a
+    /// [`Type::List`] results in a nested error with trace information in the
+    /// wrapping layer.
+    #[test]
+    fn test_serial_list_fails_with_trace() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
+        let json = json!([format!("{}", account), 123]);
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(
+            err,
+            JsonError::TraceError {
+                field,
+                error,
+                ..
+            } if matches!(*error, JsonError::WrongJsonType(_)) && field == "1"
+        ));
+    }
+
+    /// Tests that attempting to serialize a malformed value wrapped in a
+    /// [`Type::Struct`] results in a nested error with trace information in the
+    /// wrapping layer.
+    #[test]
+    fn test_serial_object_fails_with_trace() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema = Type::Struct(Fields::Named(vec![
+            ("account".into(), Type::AccountAddress),
+            ("contract".into(), Type::ContractAddress),
+        ]));
+        let json = json!({ "account": format!("{}", account), "contract": {} });
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(
+            err,
+            JsonError::TraceError {
+                field,
+                error,
+                ..
+            } if matches!(*error, JsonError::FieldError(_)) && field == "\"contract\""
+        ));
+    }
+
+    /// Tests that attempting to serialize a malformed value wrapped in multiple
+    /// layers results in a nested error with trace information in the
+    /// wrapping layers.
+    #[test]
+    fn test_serial_fails_with_nested_trace() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let account = AccountAddress(account_bytes.clone());
+        let schema_object = Type::Struct(Fields::Named(vec![
+            ("account".into(), Type::AccountAddress),
+            ("contract".into(), Type::ContractAddress),
+        ]));
+        let schema = Type::List(SizeLength::U8, Box::new(schema_object));
+        let json = json!([{ "account": format!("{}", account), "contract": { "index": 0, "subindex": 0} }, { "account": format!("{}", account), "contract": {} }]);
+        let err = schema.serial_value(&json).expect_err("Serializing should fail");
+
+        assert!(matches!(
+            err,
+            JsonError::TraceError {
+                field,
+                error,
+                ..
+            } if field == "1" && matches!(
+                *error.clone(),
+                JsonError::TraceError {
+                    field,
+                    error,
+                    ..
+                } if field == "\"contract\"" && matches!(*error, JsonError::FieldError(_))
+            )
+        ));
+    }
+
     #[test]
     fn test_deserial_biguint_0() {
         let mut cursor = Cursor::new([0]);
@@ -886,10 +1466,117 @@ mod tests {
         let mut cursor = Cursor::new([128, 128, 128, 128, 128, 128, 128, 128, 128, 0b0111_1111]);
         deserial_bigint(&mut cursor, 9).expect_err("Deserialising should fail");
     }
+
+    /// Tests that attempting to deserialize a valid byte sequence using
+    /// [`Type::AccountAddress`] succeeds and results in the expected JSON
+    /// format.
+    #[test]
+    fn test_deserial_account_address() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let mut cursor = Cursor::new(&account_bytes);
+        let schema = Type::AccountAddress;
+        let value = schema.to_json(&mut cursor).expect("Deserializing should not fail");
+
+        let expected = json!(format!("{}", AccountAddress(account_bytes)));
+        assert_eq!(expected, value)
+    }
+
+    /// Tests that attempting to deserialize a non-[`AccountAddress`] value with
+    /// [`Type::AccountAddress`] schema results in an error of expected format.
+    #[test]
+    fn test_deserial_malformed_account_address_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let mut cursor = Cursor::new(&account_bytes[..30]); // Malformed account address
+        let schema = Type::AccountAddress;
+        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+
+        assert!(matches!(err, ToJsonError::DeserialError {
+            position: 0,
+            schema: Type::AccountAddress,
+            ..
+        }))
+    }
+
+    /// Tests that attempting to deserialize a malformed value wrapped in a
+    /// [`Type::List`] fails with a nested error.
+    #[test]
+    fn test_deserial_malformed_list_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let mut list_bytes = vec![2, 0];
+        list_bytes.extend_from_slice(&account_bytes);
+        list_bytes.extend_from_slice(&account_bytes[..30]); // Malformed account address
+
+        let mut cursor = Cursor::new(list_bytes);
+        let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
+        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+
+        assert!(matches!(
+            err,
+            ToJsonError::TraceError {
+                position: 0,
+                schema: Type::List(_, _),
+                error,
+            } if matches!(
+                *error,
+                ToJsonError::DeserialError {
+                    position: 33,
+                    schema: Type::AccountAddress, ..
+                }
+            )
+        ))
+    }
+
+    /// Tests that attempting to deserialize a malformed value wrapped in
+    /// multiple layers fails with a nested error with wrapping layers
+    /// corresponding to the layers wrapping the malformed value.
+    #[test]
+    fn test_deserial_malformed_nested_list_fails() {
+        let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let contract_bytes = [0u8; 16];
+        let mut list_bytes = vec![2, 0];
+        list_bytes.extend_from_slice(&account_bytes);
+        list_bytes.extend_from_slice(&contract_bytes);
+        list_bytes.extend_from_slice(&account_bytes);
+        list_bytes.extend_from_slice(&contract_bytes[..10]); // Malformed contract address.
+
+        let mut cursor = Cursor::new(list_bytes);
+        let schema_object = Type::Struct(Fields::Named(vec![
+            ("a".into(), Type::AccountAddress),
+            ("b".into(), Type::ContractAddress),
+        ]));
+        let schema = Type::List(SizeLength::U8, Box::new(schema_object));
+        let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+
+        assert!(matches!(
+            err,
+            ToJsonError::TraceError {
+                position: 0,
+                schema: Type::List(_,_),
+                error,
+            } if matches!(
+                *error.clone(),
+                ToJsonError::TraceError {
+                    position: 49,
+                    schema: Type::Struct(_),
+                    error
+                } if matches!(
+                    *error,
+                    ToJsonError::DeserialError {
+                        position: 81,
+                        schema: Type::ContractAddress,
+                        ..
+                    }
+                )
+            )
+        ))
+    }
 }
 
 impl Fields {
-    pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
+        source: &mut Cursor<T>,
+    ) -> Result<serde_json::Value, ToJsonError> {
         use serde_json::*;
 
         match self {
@@ -917,12 +1604,22 @@ impl From<std::string::FromUtf8Error> for ParseError {
     fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
 }
 
-fn item_list_to_json<R: Read>(
-    source: &mut R,
+/// Deserialize a list of values corresponding to the `item_to_json` function
+/// from `source`
+fn item_list_to_json<T: AsRef<[u8]>>(
+    source: &mut Cursor<T>,
     size_len: SizeLength,
-    item_to_json: impl Fn(&mut R) -> ParseResult<serde_json::Value>,
-) -> ParseResult<Vec<serde_json::Value>> {
-    let len = deserial_length(source, size_len)?;
+    item_to_json: impl Fn(&mut Cursor<T>) -> Result<serde_json::Value, ToJsonError>,
+    schema: &Type,
+) -> Result<Vec<serde_json::Value>, ToJsonError> {
+    let data = source.data.as_ref().to_owned().into();
+    let position = source.cursor_position();
+    let len = deserial_length(source, size_len).map_err(|_| ToJsonError::DeserialError {
+        data,
+        position,
+        reason: "Could not deserialize length of list".into(),
+        schema: schema.clone(),
+    })?;
     let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
     for _ in 0..len {
         let value = item_to_json(source)?;
@@ -931,20 +1628,39 @@ fn item_list_to_json<R: Read>(
     Ok(values)
 }
 
-fn deserial_string<R: Read>(source: &mut R, size_len: SizeLength) -> ParseResult<String> {
-    let len = deserial_length(source, size_len)?;
+/// Deserialize a [`String`] of variable length from `source`.
+fn deserial_string<R: Read>(
+    source: &mut R,
+    size_len: SizeLength,
+) -> Result<String, ParseErrorWithReason> {
+    let len = deserial_length(source, size_len)
+        .map_err(|_| ParseErrorWithReason("Could not parse String length".into()))?;
     // we are doing this case analysis so that we have a fast path for safe,
     // most common, lengths, and a slower one longer ones.
     if len <= MAX_PREALLOCATED_CAPACITY {
         let mut bytes = vec![0u8; len];
-        source.read_exact(&mut bytes)?;
-        Ok(String::from_utf8(bytes)?)
+        source.read_exact(&mut bytes).map_err(|_| {
+            ParseErrorWithReason(format!(
+                "Parsed length {} for String value, but failed to read {} bytes from value",
+                len, len
+            ))
+        })?;
+        Ok(String::from_utf8(bytes)
+            .map_err(|_| ParseErrorWithReason("Failed to deserialize String from value".into()))?)
     } else {
         let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
         let mut buf = [0u8; 64];
         let mut read = 0;
         while read < len {
-            let new = source.read(&mut buf)?;
+            let new = source.read(&mut buf).map_err(|_| {
+                let end = std::cmp::min(len - read, 64);
+                ParseErrorWithReason(format!(
+                    "Parsed length {} for String value, but failed to read bytes {}..{} from value",
+                    len,
+                    read,
+                    read + end
+                ))
+            })?;
             if new == 0 {
                 break;
             } else {
@@ -953,192 +1669,431 @@ fn deserial_string<R: Read>(source: &mut R, size_len: SizeLength) -> ParseResult
             }
         }
         if read == len {
-            Ok(String::from_utf8(bytes)?)
+            Ok(String::from_utf8(bytes).map_err(|_| {
+                ParseErrorWithReason("Failed to deserialize String from value".into())
+            })?)
         } else {
-            Err(ParseError {})
+            Err(ParseErrorWithReason(format!(
+                "Parsed length {} for String value, but unexpectedly read {} bytes",
+                len, read
+            )))
         }
     }
 }
 
 impl Type {
     /// Uses the schema to deserialize bytes into pretty json
-    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> ParseResult<String> {
+    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> Result<String, ToJsonError> {
         let source = &mut Cursor::new(bytes);
         let js = self.to_json(source)?;
-        serde_json::to_string_pretty(&js).map_err(|_| ParseError::default())
+        serde_json::to_string_pretty(&js).map_err(|_| ToJsonError::FormatError {})
     }
 
     /// Uses the schema to deserialize bytes into json
-    pub fn to_json<R: Read>(&self, source: &mut R) -> ParseResult<serde_json::Value> {
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
+        source: &mut Cursor<T>,
+    ) -> Result<serde_json::Value, ToJsonError> {
         use serde_json::*;
+
+        let data = source.data.as_ref().to_owned().into();
+        let position = source.cursor_position();
+
+        let deserial_error = |reason: String| ToJsonError::DeserialError {
+            data,
+            position,
+            reason,
+            schema: self.clone(),
+        };
 
         match self {
             Type::Unit => Ok(Value::Null),
             Type::Bool => {
-                let n = bool::deserial(source)?;
+                let n = bool::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse bool from value, expected a byte containing the value 0 \
+                         or 1"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Bool(n))
             }
             Type::U8 => {
-                let n = u8::deserial(source)?;
+                let n = u8::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u8 from value as not enough data was available (needs 1 \
+                         byte)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U16 => {
-                let n = u16::deserial(source)?;
+                let n = u16::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u16 from value as not enough data was available (needs 2 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U32 => {
-                let n = u32::deserial(source)?;
+                let n = u32::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u32 from value as not enough data was available (needs 4 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U64 => {
-                let n = u64::deserial(source)?;
+                let n = u64::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u64 from value as not enough data was available (needs 8 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::U128 => {
-                let n = u128::deserial(source)?;
+                let n = u128::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u128 from value as not enough data was available (needs \
+                         16 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(n.to_string()))
             }
             Type::I8 => {
-                let n = i8::deserial(source)?;
+                let n = i8::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i8 from value as not enough data was available (needs 1 \
+                         byte)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I16 => {
-                let n = i16::deserial(source)?;
+                let n = i16::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i16 from value as not enough data was available (needs 2 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I32 => {
-                let n = i32::deserial(source)?;
+                let n = i32::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i32 from value as not enough data was available (needs 4 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I64 => {
-                let n = i64::deserial(source)?;
+                let n = i64::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i64 from value as not enough data was available (needs 8 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::Number(n.into()))
             }
             Type::I128 => {
-                let n = i128::deserial(source)?;
+                let n = i128::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i128 from value as not enough data was available (needs \
+                         16 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(n.to_string()))
             }
             Type::Amount => {
-                let n = Amount::deserial(source)?;
+                let n = Amount::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Amount from value as not enough data was available \
+                         (needs 8 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(n.micro_ccd().to_string()))
             }
             Type::AccountAddress => {
-                let address = AccountAddress::deserial(source)?;
+                let address = AccountAddress::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse AccountAddress from value as not enough data was \
+                         available (needs 32 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(address.to_string()))
             }
             Type::ContractAddress => {
-                let address = ContractAddress::deserial(source)?;
-                Ok(serde_json::to_value(address).map_err(|_| ParseError {})?)
+                let address = ContractAddress::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse ContractAddress from value as not enough data was \
+                         available (needs 16 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(serde_json::to_value(address).map_err(|_| ToJsonError::FormatError {})?)
             }
             Type::Timestamp => {
-                let timestamp = Timestamp::deserial(source)?;
+                let timestamp = Timestamp::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Timestamp from value as not enough data was available \
+                         (needs 8 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(timestamp.to_string()))
             }
             Type::Duration => {
-                let duration = Duration::deserial(source)?;
+                let duration = Duration::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Duration from value as not enough data was available \
+                         (needs 8 bytes)"
+                            .into(),
+                    )
+                })?;
                 Ok(Value::String(duration.to_string()))
             }
             Type::Pair(left_type, right_type) => {
-                let left = left_type.to_json(source)?;
-                let right = right_type.to_json(source)?;
+                let left = left_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                let right = right_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
                 Ok(Value::Array(vec![left, right]))
             }
             Type::List(size_len, ty) => {
-                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
+                    .map_err(|e| e.add_trace(position, self))?;
                 Ok(Value::Array(values))
             }
             Type::Set(size_len, ty) => {
-                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s))?;
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
+                    .map_err(|e| e.add_trace(position, self))?;
                 Ok(Value::Array(values))
             }
             Type::Map(size_len, key_type, value_type) => {
-                let values = item_list_to_json(source, *size_len, |s| {
-                    let key = key_type.to_json(s)?;
-                    let value = value_type.to_json(s)?;
-                    Ok(Value::Array(vec![key, value]))
-                })?;
+                let values = item_list_to_json(
+                    source,
+                    *size_len,
+                    |s| {
+                        let key = key_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
+                        let value =
+                            value_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
+                        Ok(Value::Array(vec![key, value]))
+                    },
+                    self,
+                )?;
                 Ok(Value::Array(values))
             }
             Type::Array(len, ty) => {
-                let len: usize = (*len).try_into()?;
+                let len: usize = (*len).try_into().map_err(|_| {
+                    deserial_error("Could not parse Array length from value".into())
+                })?;
                 let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
                 for _ in 0..len {
-                    let value = ty.to_json(source)?;
+                    let value = ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
                     values.push(value);
                 }
                 Ok(Value::Array(values))
             }
             Type::Struct(fields_ty) => {
-                let fields = fields_ty.to_json(source)?;
+                let fields = fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
                 Ok(fields)
             }
             Type::Enum(variants) => {
                 let idx = if variants.len() <= 256 {
-                    u8::deserial(source)? as usize
+                    u8::deserial(source).map(|v| v as usize).map_err(|_| {
+                        ParseErrorWithReason(
+                            "Could not parse Enum id as u8 from value (needs 1 byte)".into(),
+                        )
+                    })
                 } else {
-                    u16::deserial(source)? as usize
+                    u16::deserial(source).map(|v| v as usize).map_err(|_| {
+                        ParseErrorWithReason(
+                            "Could not parse Enum id as u16 from value (needs 2 bytes)".into(),
+                        )
+                    })
                 };
-                let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
-                let fields = fields_ty.to_json(source)?;
-                Ok(json!({ name: fields }))
+                let variant = idx.and_then(|idx| {
+                    variants.get(idx).ok_or_else(|| {
+                        ParseErrorWithReason(format!("Could not find Enum variant with id {}", idx))
+                    })
+                });
+
+                // Map all error cases into the same error.
+                match variant {
+                    Ok((name, fields_ty)) => {
+                        let fields =
+                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                        Ok(json!({ name: fields }))
+                    }
+                    Err(e) => Err(deserial_error(e.0)),
+                }
             }
             Type::TaggedEnum(variants) => {
-                let idx = u8::deserial(source)?;
+                let idx = u8::deserial(source).map_err(|_| {
+                    ParseErrorWithReason(
+                        "Could not parse TaggedEnum id from value (needs 1 byte)".into(),
+                    )
+                });
+                let variant = idx.and_then(|idx| {
+                    variants.get(&idx).ok_or_else(|| {
+                        ParseErrorWithReason(format!(
+                            "Could not find TaggedEnum variant with id {}",
+                            idx
+                        ))
+                    })
+                });
 
-                let (name, fields_ty) = variants.get(&idx).ok_or_else(ParseError::default)?;
-                let fields = fields_ty.to_json(source)?;
-                Ok(json!({ name: fields }))
+                match variant {
+                    Ok((name, fields_ty)) => {
+                        let fields =
+                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                        Ok(json!({ name: fields }))
+                    }
+                    Err(e) => Err(deserial_error(e.0)),
+                }
             }
             Type::String(size_len) => {
-                let string = deserial_string(source, *size_len)?;
+                let string = deserial_string(source, *size_len).map_err(|e| deserial_error(e.0))?;
                 Ok(Value::String(string))
             }
             Type::ContractName(size_len) => {
-                let contract_name = OwnedContractName::new(deserial_string(source, *size_len)?)
-                    .map_err(|_| ParseError::default())?;
-                let name_without_init = contract_name.as_contract_name().contract_name();
-                Ok(json!({ "contract": name_without_init }))
+                let name = deserial_string(source, *size_len).map_err(|e| {
+                    ParseErrorWithReason(format!(
+                        "Could not parse contract name from value ({})",
+                        e
+                    ))
+                });
+                let owned_contract_name = name.and_then(|n| {
+                    OwnedContractName::new(n)
+                        .map_err(|e| ParseErrorWithReason(format!("Invalid contract name ({})", e)))
+                });
+
+                owned_contract_name
+                    .map(|ocn| {
+                        let name_without_init = ocn.as_contract_name().contract_name();
+                        json!({ "contract": name_without_init })
+                    })
+                    .map_err(|e| deserial_error(e.0))
             }
             Type::ReceiveName(size_len) => {
-                let owned_receive_name = OwnedReceiveName::new(deserial_string(source, *size_len)?)
-                    .map_err(|_| ParseError::default())?;
-                let receive_name = owned_receive_name.as_receive_name();
-                let contract_name = receive_name.contract_name();
-                let func_name = receive_name.entrypoint_name();
-                Ok(json!({"contract": contract_name, "func": func_name}))
+                let name = deserial_string(source, *size_len).map_err(|e| {
+                    ParseErrorWithReason(format!("Could not parse receive name from value ({})", e))
+                });
+                let owned_receive_name = name.and_then(|n| {
+                    OwnedReceiveName::new(n)
+                        .map_err(|e| ParseErrorWithReason(format!("Invalid receive name ({})", e)))
+                });
+
+                owned_receive_name
+                    .map(|orn| {
+                        let receive_name = orn.as_receive_name();
+                        let contract_name = receive_name.contract_name();
+                        let func_name = receive_name.entrypoint_name();
+                        json!({"contract": contract_name, "func": func_name})
+                    })
+                    .map_err(|e| deserial_error(e.0))
             }
             Type::ULeb128(constraint) => {
-                let int = deserial_biguint(source, *constraint)?;
+                let int = deserial_biguint(source, *constraint).map_err(|_| {
+                    deserial_error("Could not parse unsigned integer (uleb128) from value".into())
+                })?;
                 Ok(Value::String(int.to_string()))
             }
             Type::ILeb128(constraint) => {
-                let int = deserial_bigint(source, *constraint)?;
+                let int = deserial_bigint(source, *constraint).map_err(|_| {
+                    deserial_error("Could not parse signed integer (leb128) from value".into())
+                })?;
                 Ok(Value::String(int.to_string()))
             }
             Type::ByteList(size_len) => {
-                let len = deserial_length(source, *size_len)?;
-                let mut string =
-                    String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
-                for _ in 0..len {
-                    let byte = source.read_u8()?;
-                    string.push_str(&format!("{:02x?}", byte));
+                let len = deserial_length(source, *size_len).map_err(|_| {
+                    ParseErrorWithReason("Could not parse ByteList length from value".into())
+                });
+                let bytes: core::result::Result<Vec<_>, _> =
+                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
+                        let mut bytes =
+                            Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
+
+                        for i in 0..*len {
+                            let byte = source.read_u8().map_err(|_| {
+                                ParseErrorWithReason(format!(
+                                    "Failed to read byte {} of ByteList value",
+                                    i
+                                ))
+                            });
+                            bytes.push(byte);
+                        }
+
+                        bytes.into_iter().collect()
+                    });
+
+                match (len, bytes) {
+                    (Ok(len), Ok(bytes)) => {
+                        let mut string = String::with_capacity(std::cmp::min(
+                            MAX_PREALLOCATED_CAPACITY,
+                            2 * len,
+                        ));
+                        string.push_str(&hex::encode(bytes));
+                        Ok(Value::String(string))
+                    }
+                    (Err(e), _) => Err(deserial_error(e.0)),
+                    (_, Err(e)) => Err(deserial_error(e.0)),
                 }
-                Ok(Value::String(string))
             }
             Type::ByteArray(len) => {
-                let len = usize::try_from(*len)?;
-                let mut string =
-                    String::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, 2 * len));
-                for _ in 0..len {
-                    let byte = source.read_u8()?;
-                    string.push_str(&format!("{:02x?}", byte));
+                let len = usize::try_from(*len).map_err(|_| {
+                    ParseErrorWithReason("Could not parse ByteArray length from value".into())
+                });
+                let bytes: core::result::Result<Vec<_>, _> =
+                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
+                        let mut bytes =
+                            Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
+
+                        for i in 0..*len {
+                            let byte = source.read_u8().map_err(|_| {
+                                ParseErrorWithReason(format!(
+                                    "Failed to read byte {} of ByteArray value",
+                                    i
+                                ))
+                            });
+                            bytes.push(byte);
+                        }
+
+                        bytes.into_iter().collect()
+                    });
+
+                match (len, bytes) {
+                    (Ok(len), Ok(bytes)) => {
+                        let mut string = String::with_capacity(std::cmp::min(
+                            MAX_PREALLOCATED_CAPACITY,
+                            2 * len,
+                        ));
+                        string.push_str(&hex::encode(bytes));
+                        Ok(Value::String(string))
+                    }
+                    (Err(e), _) => Err(deserial_error(e.0)),
+                    (_, Err(e)) => Err(deserial_error(e.0)),
                 }
-                Ok(Value::String(string))
             }
         }
     }
 }
 
+/// Deserialize a uleb128 encoded [`BigUint`] from `source`.
 fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
     let mut result = BigUint::zero();
     let mut shift = 0;
@@ -1155,6 +2110,7 @@ fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<Big
     Err(ParseError {})
 }
 
+/// Deserialize a ileb128 encoded [`BigInt`] from `source`.
 fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
     let mut result = BigInt::zero();
     let mut shift = 0;
