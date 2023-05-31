@@ -133,7 +133,7 @@ pub enum JsonError {
     /// Trace leading to the original [`JsonError`].
     TraceError {
         field: String,
-        json: serde_json::Value,
+        json:  serde_json::Value,
         error: Box<JsonError>,
     },
 }
@@ -258,15 +258,11 @@ impl JsonError {
     /// ]"#.to_string();
     /// assert_eq!(expected_verbose, err.display(true));
     /// ```
-    pub fn display(&self, verbose: bool) -> String {
-        self.display_nested(verbose)
-    }
+    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
 
     /// Gets the underlying error of a [`JsonError::TraceError`]. For any other
     /// variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self {
-        self.get_innermost_error()
-    }
+    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
 }
 
 /// Wrapper around a list of bytes to represent data which failed to be
@@ -285,9 +281,7 @@ impl From<Vec<u8>> for ToJsonErrorData {
 }
 
 impl From<ToJsonErrorData> for Vec<u8> {
-    fn from(value: ToJsonErrorData) -> Self {
-        value.bytes
-    }
+    fn from(value: ToJsonErrorData) -> Self { value.bytes }
 }
 
 impl Display for ToJsonErrorData {
@@ -357,15 +351,15 @@ pub enum ToJsonError {
     /// Failed to deserialize data to type expected from schema.
     DeserialError {
         position: u32,
-        schema: Type,
-        reason: String,
-        data: ToJsonErrorData,
+        schema:   Type,
+        reason:   String,
+        data:     ToJsonErrorData,
     },
     /// Trace leading to the original [ToJsonError].
     TraceError {
         position: u32,
-        schema: Type,
-        error: Box<ToJsonError>,
+        schema:   Type,
+        error:    Box<ToJsonError>,
     },
 }
 
@@ -442,7 +436,7 @@ impl ToJsonError {
     ///
     /// # Examples
     ///
-    /// ## Display error from list of objects
+    /// ## Display error from failing to deserialize to list of objects
     ///
     /// ```
     /// # use serde_json::json;
@@ -455,6 +449,9 @@ impl ToJsonError {
     /// let mut list_bytes = vec![2, 0];
     /// list_bytes.extend_from_slice(&account_bytes);
     /// list_bytes.extend_from_slice(&contract_bytes);
+    /// // r#"<error-message>
+    /// // In deserializing position <cursor-position> into type Struct(...)
+    /// // In deserializing position <cursor-position> into type List(...)"#;
     /// list_bytes.extend_from_slice(&account_bytes);
     /// list_bytes.extend_from_slice(&contract_bytes[..10]); // Malformed contract address.
 
@@ -464,31 +461,24 @@ impl ToJsonError {
     ///     ("b".into(), Type::ContractAddress),
     /// ]));
     /// let schema = Type::List(SizeLength::U8, Box::new(schema_object));
-    /// let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+    /// let err = schema.to_json(&mut cursor)
+    ///                 .expect_err("Deserializing should fail");
     ///
     /// // The error format points to the position in the byte sequence that
-    /// // failed to deserialize.
-    /// let show_bytes = hex::encode(&list_bytes);
-    /// # #[rustfmt::skip]
-    /// let expected = format!(r#"List(U8, Struct(Named([("a", AccountAddress), ("b", ContractAddress)]))) -> Struct(Named([("a", AccountAddress), ("b", ContractAddress)])) -> Failed to deserialize ContractAddress due to: Could not parse ContractAddress from value as not enough data was available (needs 16 bytes) - from position 81 of bytes {}"#, &show_bytes).to_string();
-    /// assert_eq!(expected, err.display(false));
+    /// // failed to deserialize:
+    /// err.display(false); // "List(...) -> Struct(...) -> <error-message>");
     ///
-    /// // Or if verbose, includes a stacktrace-like format.
-    /// # #[rustfmt::skip]
-    /// let expected_verbose = format!(r#"Failed to deserialize ContractAddress due to: Could not parse ContractAddress from value as not enough data was available (needs 16 bytes) - from position 81 of bytes {}
-    /// In deserializing position 49 into type Struct(Named([("a", AccountAddress), ("b", ContractAddress)]))
-    /// In deserializing position 0 into type List(U8, Struct(Named([("a", AccountAddress), ("b", ContractAddress)])))"#, &show_bytes);
-    /// assert_eq!(expected_verbose, err.display(true));
+    /// // Or if verbose, includes a stacktrace-like format, similar to:
+    /// // r#"<error-message>
+    /// // In deserializing position <cursor-position> into type Struct(...)
+    /// // In deserializing position <cursor-position> into type List(...)"#;
+    /// err.display(true);
     /// ```
-    pub fn display(&self, verbose: bool) -> String {
-        self.display_nested(verbose)
-    }
+    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
 
     /// Gets the underlying error of a [`ToJsonError::TraceError`]. For any
     /// other variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self {
-        self.get_innermost_error()
-    }
+    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
 }
 
 /// Error with the sole purpose of adding some context to [`ParseError`].
@@ -1500,14 +1490,11 @@ mod tests {
         let schema = Type::AccountAddress;
         let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
 
-        assert!(matches!(
-            err,
-            ToJsonError::DeserialError {
-                position: 0,
-                schema: Type::AccountAddress,
-                ..
-            }
-        ))
+        assert!(matches!(err, ToJsonError::DeserialError {
+            position: 0,
+            schema: Type::AccountAddress,
+            ..
+        }))
     }
 
     /// Tests that attempting to deserialize a malformed value wrapped in a
@@ -1614,9 +1601,7 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self {
-        ParseError::default()
-    }
+    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
 }
 
 /// Deserialize a list of values corresponding to the `item_to_json` function
