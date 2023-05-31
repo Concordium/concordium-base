@@ -8,6 +8,9 @@ use std::convert::{TryFrom, TryInto};
 /// Trait which includes implementations for unwrapping recursive error
 /// structures. Requires that the implementor supplies implementations for
 /// accessing data for individual layers of the nested structure.
+///
+/// This is intended to be private to the module, as it merely serves the
+/// purpose of code de-duplication.
 trait TraceError {
     /// Returns an error message layer associated with this error, along with a
     /// reference to the error this error wraps. If this error is not a
@@ -60,6 +63,54 @@ trait TraceError {
 
 /// Represents errors occurring while serializing data from the schema JSON
 /// format.
+///
+/// # Examples
+///
+/// ## Simple type from invalid JSON value
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let account = AccountAddress(account_bytes.clone());
+/// let schema = Type::AccountAddress;
+///
+/// // Malformed JSON value due to incorrect account address
+/// let json = json!(format!("{}", &account).get(1..));
+/// let err = schema.serial_value(&json).expect_err("Serializing should fail");
+///
+/// assert!(matches!(err, JsonError::FailedParsingAccountAddress))
+/// ```
+///
+/// ## Complex type from invalid JSON value
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let account = AccountAddress(account_bytes.clone());
+/// let schema = Type::Struct(Fields::Named(vec![
+///    ("account".into(), Type::AccountAddress),
+///    ("contract".into(), Type::ContractAddress),
+/// ]));
+///
+/// // Malformed JSON value due to incorrect value for "contract" field
+/// let json = json!({ "account": format!("{}", account), "contract": {} });
+/// let err = schema.serial_value(&json).expect_err("Serializing should fail");
+///
+/// assert!(matches!(
+///    err,
+///    JsonError::TraceError {
+///        field,
+///        error,
+///        ..
+///    } if matches!(*error, JsonError::FieldError(_)) && field == "\"contract\""
+/// ));
+/// ```
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum JsonError {
     FailedWriting,
@@ -197,6 +248,59 @@ impl Display for ToJsonErrorData {
 }
 
 /// Represents errors occurring while deserializing to the schema JSON format.
+///
+/// # Examples
+///
+/// ## Simple type from invalid byte sequence
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let mut cursor = Cursor::new(&account_bytes[..30]); // Malformed account address
+/// let schema = Type::AccountAddress;
+/// let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+///
+/// assert!(matches!(err, ToJsonError::DeserialError {
+///     position: 0,
+///     schema: Type::AccountAddress,
+///     ..
+/// }))
+/// ```
+///
+/// ## Complex type from invalid byte sequence
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// #
+/// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+/// let mut list_bytes = vec![2, 0]; // 2 items in the list
+/// list_bytes.extend_from_slice(&account_bytes); // Correct account address
+/// list_bytes.extend_from_slice(&account_bytes[..30]); // Malformed account address
+///
+/// let mut cursor = Cursor::new(list_bytes);
+/// let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
+/// let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+///
+/// assert!(matches!(
+///    err,
+///    ToJsonError::TraceError {
+///        position: 0,
+///        schema: Type::List(_, _),
+///        error,
+///    } if matches!(
+///        *error,
+///        ToJsonError::DeserialError {
+///            position: 33,
+///            schema: Type::AccountAddress, ..
+///        }
+///    )
+/// ))
+/// ```
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum ToJsonError {
     /// JSON formatter failed to represent value.
