@@ -491,9 +491,6 @@ impl ToJsonError {
     }
 }
 
-/// Result with error type [`ToJsonError`]
-pub type ToJsonResult<A> = Result<A, ToJsonError>;
-
 /// Error with the sole purpose of adding some context to [`ParseError`].
 #[derive(thiserror::Error, Debug, Clone)]
 #[error("{0}")]
@@ -1592,7 +1589,7 @@ impl Fields {
     pub fn to_json<T: AsRef<[u8]>>(
         &self,
         source: &mut Cursor<T>,
-    ) -> ToJsonResult<serde_json::Value> {
+    ) -> Result<serde_json::Value, ToJsonError> {
         use serde_json::*;
 
         match self {
@@ -1627,9 +1624,9 @@ impl From<std::string::FromUtf8Error> for ParseError {
 fn item_list_to_json<T: AsRef<[u8]>>(
     source: &mut Cursor<T>,
     size_len: SizeLength,
-    item_to_json: impl Fn(&mut Cursor<T>) -> ToJsonResult<serde_json::Value>,
+    item_to_json: impl Fn(&mut Cursor<T>) -> Result<serde_json::Value, ToJsonError>,
     schema: &Type,
-) -> ToJsonResult<Vec<serde_json::Value>> {
+) -> Result<Vec<serde_json::Value>, ToJsonError> {
     let data = source.data.as_ref().to_owned().into();
     let position = source.cursor_position();
     let len = deserial_length(source, size_len).map_err(|_| ToJsonError::DeserialError {
@@ -1701,7 +1698,7 @@ fn deserial_string<R: Read>(
 
 impl Type {
     /// Uses the schema to deserialize bytes into pretty json
-    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> ToJsonResult<String> {
+    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> Result<String, ToJsonError> {
         let source = &mut Cursor::new(bytes);
         let js = self.to_json(source)?;
         serde_json::to_string_pretty(&js).map_err(|_| ToJsonError::FormatError {})
@@ -1711,7 +1708,7 @@ impl Type {
     pub fn to_json<T: AsRef<[u8]>>(
         &self,
         source: &mut Cursor<T>,
-    ) -> ToJsonResult<serde_json::Value> {
+    ) -> Result<serde_json::Value, ToJsonError> {
         use serde_json::*;
 
         let data = source.data.as_ref().to_owned().into();
