@@ -133,7 +133,7 @@ pub enum JsonError {
     /// Trace leading to the original [`JsonError`].
     TraceError {
         field: String,
-        json:  serde_json::Value,
+        json: serde_json::Value,
         error: Box<JsonError>,
     },
 }
@@ -215,11 +215,58 @@ impl JsonError {
     /// supports printing a verbose form including a more detailed
     /// description of the error stack, which is returned if `verbose` is
     /// set to true.
-    pub fn display(&self, verbose: bool) -> String { self.display_nested(verbose) }
+    ///
+    /// # Examples
+    ///
+    /// ## Display error from list of objects
+    ///
+    /// ```
+    /// # use serde_json::json;
+    /// # use concordium_contracts_common::schema_json::*;
+    /// # use concordium_contracts_common::schema::*;
+    /// # use concordium_contracts_common::*;
+    /// #
+    /// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+    /// let account = AccountAddress(account_bytes);
+    /// let object_schema = Type::Struct(Fields::Named(vec![
+    ///    ("account".into(), Type::AccountAddress),
+    ///    ("contract".into(), Type::ContractAddress),
+    /// ]));
+    /// let schema = Type::List(SizeLength::U8, Box::new(object_schema));
+    ///
+    /// // Malformed JSON value due to incorrect value for "contract" field
+    /// let json = json!([{ "account": format!("{}", account), "contract": {} }]);
+    /// let err = schema.serial_value(&json).expect_err("Serializing should fail");
+    ///
+    /// // The error format points to the cause of the error from the root of the JSON.
+    /// # #[rustfmt::skip]
+    /// let expected = r#"0 -> "contract" -> 'index' is required in a Contract address"#.to_string();
+    /// assert_eq!(expected, err.display(false));
+    ///
+    /// // Or if verbose, includes a stacktrace-like format.
+    /// # #[rustfmt::skip]
+    /// let expected_verbose = r#"'index' is required in a Contract address
+    /// In "contract" of {
+    ///   "account": "2wkBET2rRgE8pahuaczxKbmv7ciehqsne57F9gtzf1PVdr2VP3",
+    ///   "contract": {}
+    /// }
+    /// In 0 of [
+    ///   {
+    ///     "account": "2wkBET2rRgE8pahuaczxKbmv7ciehqsne57F9gtzf1PVdr2VP3",
+    ///     "contract": {}
+    ///   }
+    /// ]"#.to_string();
+    /// assert_eq!(expected_verbose, err.display(true));
+    /// ```
+    pub fn display(&self, verbose: bool) -> String {
+        self.display_nested(verbose)
+    }
 
     /// Gets the underlying error of a [`JsonError::TraceError`]. For any other
     /// variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
+    pub fn get_error(&self) -> &Self {
+        self.get_innermost_error()
+    }
 }
 
 /// Wrapper around a list of bytes to represent data which failed to be
@@ -238,7 +285,9 @@ impl From<Vec<u8>> for ToJsonErrorData {
 }
 
 impl From<ToJsonErrorData> for Vec<u8> {
-    fn from(value: ToJsonErrorData) -> Self { value.bytes }
+    fn from(value: ToJsonErrorData) -> Self {
+        value.bytes
+    }
 }
 
 impl Display for ToJsonErrorData {
@@ -308,15 +357,15 @@ pub enum ToJsonError {
     /// Failed to deserialize data to type expected from schema.
     DeserialError {
         position: u32,
-        schema:   Type,
-        reason:   String,
-        data:     ToJsonErrorData,
+        schema: Type,
+        reason: String,
+        data: ToJsonErrorData,
     },
     /// Trace leading to the original [ToJsonError].
     TraceError {
         position: u32,
-        schema:   Type,
-        error:    Box<ToJsonError>,
+        schema: Type,
+        error: Box<ToJsonError>,
     },
 }
 
@@ -336,7 +385,7 @@ impl Display for ToJsonError {
             ),
             ToJsonError::TraceError {
                 ..
-            } => write!(f, "{}", self.print(false)),
+            } => write!(f, "{}", self.display(false)),
         }
     }
 }
@@ -390,11 +439,56 @@ impl ToJsonError {
     /// [`ToJsonError::TraceError`] supports printing a verbose form
     /// including a more detailed description of the error stack, which is
     /// returned if `verbose` is set to true.
-    pub fn print(&self, verbose: bool) -> String { self.display_nested(verbose) }
+    ///
+    /// # Examples
+    ///
+    /// ## Display error from list of objects
+    ///
+    /// ```
+    /// # use serde_json::json;
+    /// # use concordium_contracts_common::schema_json::*;
+    /// # use concordium_contracts_common::schema::*;
+    /// # use concordium_contracts_common::*;
+    /// #
+    /// let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+    /// let contract_bytes = [0u8; 16];
+    /// let mut list_bytes = vec![2, 0];
+    /// list_bytes.extend_from_slice(&account_bytes);
+    /// list_bytes.extend_from_slice(&contract_bytes);
+    /// list_bytes.extend_from_slice(&account_bytes);
+    /// list_bytes.extend_from_slice(&contract_bytes[..10]); // Malformed contract address.
+
+    /// let mut cursor = Cursor::new(list_bytes.clone());
+    /// let schema_object = Type::Struct(Fields::Named(vec![
+    ///     ("a".into(), Type::AccountAddress),
+    ///     ("b".into(), Type::ContractAddress),
+    /// ]));
+    /// let schema = Type::List(SizeLength::U8, Box::new(schema_object));
+    /// let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
+    ///
+    /// // The error format points to the position in the byte sequence that
+    /// // failed to deserialize.
+    /// let show_bytes = hex::encode(&list_bytes);
+    /// # #[rustfmt::skip]
+    /// let expected = format!(r#"List(U8, Struct(Named([("a", AccountAddress), ("b", ContractAddress)]))) -> Struct(Named([("a", AccountAddress), ("b", ContractAddress)])) -> Failed to deserialize ContractAddress due to: Could not parse ContractAddress from value as not enough data was available (needs 16 bytes) - from position 81 of bytes {}"#, &show_bytes).to_string();
+    /// assert_eq!(expected, err.display(false));
+    ///
+    /// // Or if verbose, includes a stacktrace-like format.
+    /// # #[rustfmt::skip]
+    /// let expected_verbose = format!(r#"Failed to deserialize ContractAddress due to: Could not parse ContractAddress from value as not enough data was available (needs 16 bytes) - from position 81 of bytes {}
+    /// In deserializing position 49 into type Struct(Named([("a", AccountAddress), ("b", ContractAddress)]))
+    /// In deserializing position 0 into type List(U8, Struct(Named([("a", AccountAddress), ("b", ContractAddress)])))"#, &show_bytes);
+    /// assert_eq!(expected_verbose, err.display(true));
+    /// ```
+    pub fn display(&self, verbose: bool) -> String {
+        self.display_nested(verbose)
+    }
 
     /// Gets the underlying error of a [`ToJsonError::TraceError`]. For any
     /// other variant, this simply returns the error itself.
-    pub fn get_error(&self) -> &Self { self.get_innermost_error() }
+    pub fn get_error(&self) -> &Self {
+        self.get_innermost_error()
+    }
 }
 
 /// Result with error type [`ToJsonError`]
@@ -1409,11 +1503,14 @@ mod tests {
         let schema = Type::AccountAddress;
         let err = schema.to_json(&mut cursor).expect_err("Deserializing should fail");
 
-        assert!(matches!(err, ToJsonError::DeserialError {
-            position: 0,
-            schema: Type::AccountAddress,
-            ..
-        }))
+        assert!(matches!(
+            err,
+            ToJsonError::DeserialError {
+                position: 0,
+                schema: Type::AccountAddress,
+                ..
+            }
+        ))
     }
 
     /// Tests that attempting to deserialize a malformed value wrapped in a
@@ -1520,7 +1617,9 @@ impl Fields {
 }
 
 impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+    fn from(_: std::string::FromUtf8Error) -> Self {
+        ParseError::default()
+    }
 }
 
 /// Deserialize a list of values corresponding to the `item_to_json` function
@@ -1640,7 +1739,8 @@ impl Type {
             Type::U8 => {
                 let n = u8::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse u8 from value as not enough data was available (1 byte)"
+                        "Could not parse u8 from value as not enough data was available (needs 1 \
+                         byte)"
                             .into(),
                     )
                 })?;
@@ -1649,7 +1749,8 @@ impl Type {
             Type::U16 => {
                 let n = u16::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse u16 from value as not enough data was available (2 bytes)"
+                        "Could not parse u16 from value as not enough data was available (needs 2 \
+                         bytes)"
                             .into(),
                     )
                 })?;
@@ -1658,7 +1759,8 @@ impl Type {
             Type::U32 => {
                 let n = u32::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse u32 from value as not enough data was available (4 bytes)"
+                        "Could not parse u32 from value as not enough data was available (needs 4 \
+                         bytes)"
                             .into(),
                     )
                 })?;
@@ -1667,7 +1769,8 @@ impl Type {
             Type::U64 => {
                 let n = u64::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse u64 from value as not enough data was available (8 bytes)"
+                        "Could not parse u64 from value as not enough data was available (needs 8 \
+                         bytes)"
                             .into(),
                     )
                 })?;
@@ -1676,8 +1779,8 @@ impl Type {
             Type::U128 => {
                 let n = u128::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse u128 from value as not enough data was available (16 \
-                         bytes)"
+                        "Could not parse u128 from value as not enough data was available (needs \
+                         16 bytes)"
                             .into(),
                     )
                 })?;
@@ -1686,7 +1789,8 @@ impl Type {
             Type::I8 => {
                 let n = i8::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse i8 from value as not enough data was available (1 byte)"
+                        "Could not parse i8 from value as not enough data was available (needs 1 \
+                         byte)"
                             .into(),
                     )
                 })?;
@@ -1695,7 +1799,8 @@ impl Type {
             Type::I16 => {
                 let n = i16::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse i16 from value as not enough data was available (2 bytes)"
+                        "Could not parse i16 from value as not enough data was available (needs 2 \
+                         bytes)"
                             .into(),
                     )
                 })?;
@@ -1704,7 +1809,8 @@ impl Type {
             Type::I32 => {
                 let n = i32::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse i32 from value as not enough data was available (4 bytes)"
+                        "Could not parse i32 from value as not enough data was available (needs 4 \
+                         bytes)"
                             .into(),
                     )
                 })?;
@@ -1713,7 +1819,8 @@ impl Type {
             Type::I64 => {
                 let n = i64::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse i64 from value as not enough data was available (8 bytes)"
+                        "Could not parse i64 from value as not enough data was available (needs 8 \
+                         bytes)"
                             .into(),
                     )
                 })?;
@@ -1722,8 +1829,8 @@ impl Type {
             Type::I128 => {
                 let n = i128::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse i128 from value as not enough data was available (16 \
-                         bytes)"
+                        "Could not parse i128 from value as not enough data was available (needs \
+                         16 bytes)"
                             .into(),
                     )
                 })?;
@@ -1732,8 +1839,8 @@ impl Type {
             Type::Amount => {
                 let n = Amount::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse Amount from value as not enough data was available (8 \
-                         bytes)"
+                        "Could not parse Amount from value as not enough data was available \
+                         (needs 8 bytes)"
                             .into(),
                     )
                 })?;
@@ -1743,7 +1850,7 @@ impl Type {
                 let address = AccountAddress::deserial(source).map_err(|_| {
                     deserial_error(
                         "Could not parse AccountAddress from value as not enough data was \
-                         available (32 bytes)"
+                         available (needs 32 bytes)"
                             .into(),
                     )
                 })?;
@@ -1753,7 +1860,7 @@ impl Type {
                 let address = ContractAddress::deserial(source).map_err(|_| {
                     deserial_error(
                         "Could not parse ContractAddress from value as not enough data was \
-                         available (16 bytes)"
+                         available (needs 16 bytes)"
                             .into(),
                     )
                 })?;
@@ -1762,8 +1869,8 @@ impl Type {
             Type::Timestamp => {
                 let timestamp = Timestamp::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse Timestamp from value as not enough data was available (8 \
-                         bytes)"
+                        "Could not parse Timestamp from value as not enough data was available \
+                         (needs 8 bytes)"
                             .into(),
                     )
                 })?;
@@ -1772,8 +1879,8 @@ impl Type {
             Type::Duration => {
                 let duration = Duration::deserial(source).map_err(|_| {
                     deserial_error(
-                        "Could not parse Duration from value as not enough data was available (8 \
-                         bytes)"
+                        "Could not parse Duration from value as not enough data was available \
+                         (needs 8 bytes)"
                             .into(),
                     )
                 })?;
