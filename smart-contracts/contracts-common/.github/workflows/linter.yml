@@ -11,7 +11,7 @@ on:
 name: Clippy & fmt
 
 env:
-  RUST_VERSION: "1.60"
+  RUST_VERSION: "1.65"
   RUST_FMT: "nightly-2023-04-01"
 
 jobs:

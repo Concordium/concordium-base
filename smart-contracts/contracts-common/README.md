@@ -21,7 +21,7 @@ The functionality in this library is re-exported via the [concordium-std](https:
 
 ## MSRV
 
-The minimum supported rust version is 1.60.
+The minimum supported rust version is specified in `Cargo.toml` manifest.
 
 ## Links
 
