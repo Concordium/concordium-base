@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Set minimum Rust version to 1.65.
 - Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using `FromStr` and `Display` implementations, when feature `derive-serde` is enabled.
 
 ## concordium-contracts-common 6.0.0 (2023-05-08)
