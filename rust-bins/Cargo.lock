@@ -378,7 +378,6 @@ dependencies = [
  "sha3",
  "subtle",
  "thiserror",
- "uuid",
  "zeroize",
 ]
 
@@ -2376,16 +2375,6 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
-]
-
-[[package]]
-name = "uuid"
-version = "1.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dad5567ad0cf5b760e5665964bec1b47dfd077ba8a2544b513f3556d3d239a2"
-dependencies = [
- "getrandom 0.2.9",
- "serde",
 ]
 
 [[package]]
