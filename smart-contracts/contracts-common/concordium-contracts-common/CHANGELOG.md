@@ -8,6 +8,7 @@
 - Implement Serialize any `HashBytes<Purpose>` over any `Purpose`.
 - Add `TryFrom` implementation to convert `Timestamp` to `chrono::DateTime`.
 - Add a `Serial` implementation for any `&A` if `A: Serial`.
+- Set minimum Rust version to 1.65.
 
 ## concordium-contracts-common 6.0.0 (2023-05-08)
 
