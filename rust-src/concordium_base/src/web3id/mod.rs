@@ -1207,8 +1207,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     created,
                     issuance_date,
                     max_base_used: *vec_key.0,
-                    owner: signer.id(), /* TODO: This could just be credential instead. Signal an
-                                         * error. */
+                    owner: signer.id(),
                     ty,
                 })
             }
