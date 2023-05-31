@@ -5,6 +5,10 @@
 - Set minimum Rust version to 1.65.
 - Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using `FromStr` and `Display` implementations, when feature `derive-serde` is enabled.
 
+### Breaking changes
+- Add a new error type `ToJsonError`, which is returned when deserializing a schema type fails.
+- Add the member `JsonError::TraceError` to `JsonError`, which has trace information for the error produced when serializing a schema type fails.
+
 ## concordium-contracts-common 6.0.0 (2023-05-08)
 
 - Remove the `Copy` requirement for deserialization of BTreeMap and BTreeSet.
