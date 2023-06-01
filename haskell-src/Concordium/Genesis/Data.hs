@@ -382,3 +382,12 @@ genesisCoreParametersV1 ::
     BaseV1.CoreGenesisParametersV1
 genesisCoreParametersV1 = case protocolVersion @pv of
     SP6 -> \(GDP6 genData) -> P6.genesisCore genData
+
+-- |Extract the V1 core genesis parameters from the regenesis data.
+regenesisCoreParametersV1 ::
+    forall pv.
+    (IsProtocolVersion pv, IsConsensusV1 pv) =>
+    Regenesis pv ->
+    BaseV1.CoreGenesisParametersV1
+regenesisCoreParametersV1 = case protocolVersion @pv of
+    SP6 -> \(RGDP6 genData) -> BaseV1.genesisCore $ P6.genesisRegenesis genData
