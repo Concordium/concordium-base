@@ -2,8 +2,13 @@
 
 ## Unreleased changes
 
+- Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using
+  `FromStr` and `Display` implementations, when feature `derive-serde` is
+  enabled.
+- Implement Serialize any `HashBytes<Purpose>` over any `Purpose`.
+- Add `TryFrom` implementation to convert `Timestamp` to `chrono::DateTime`.
+- Add a `Serial` implementation for any `&A` if `A: Serial`.
 - Set minimum Rust version to 1.65.
-- Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using `FromStr` and `Display` implementations, when feature `derive-serde` is enabled.
 
 ### Breaking changes
 - Add a new error type `ToJsonError`, which is returned when deserializing a schema type fails.

@@ -55,6 +55,19 @@ impl<Purpose> Clone for HashBytes<Purpose> {
     }
 }
 
+impl<Purpose> crate::Serial for HashBytes<Purpose> {
+    fn serial<W: crate::Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_all(self.as_ref())
+    }
+}
+
+impl<Purpose> crate::Deserial for HashBytes<Purpose> {
+    fn deserial<R: crate::Read>(source: &mut R) -> crate::ParseResult<Self> {
+        let bytes: [u8; 32] = <[u8; 32]>::deserial(source)?;
+        Ok(bytes.into())
+    }
+}
+
 #[doc(hidden)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 /// Used as a phantom type to indicate a hash is a block hash.
