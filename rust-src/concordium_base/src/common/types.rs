@@ -442,6 +442,10 @@ pub struct Timestamp {
     pub millis: u64,
 }
 
+impl Timestamp {
+    pub fn now() -> Self { (chrono::Utc::now().timestamp_millis() as u64).into() }
+}
+
 impl From<u64> for Timestamp {
     fn from(millis: u64) -> Self { Self { millis } }
 }

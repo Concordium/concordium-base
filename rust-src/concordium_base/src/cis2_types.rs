@@ -5,8 +5,9 @@ use crate::{
     hashes::Hash,
     smart_contracts::{
         concordium_contracts_common::{
-            deserial_vector_no_length, serial_vector_no_length, AccountAddress, Address,
-            ContractAddress, Deserial, OwnedReceiveName, ParseError, Read, Serial, Write,
+            self as concordium_std, deserial_vector_no_length, serial_vector_no_length,
+            AccountAddress, Address, ContractAddress, Deserial, OwnedReceiveName, ParseError, Read,
+            Serial, Serialize, Write,
         },
         ContractEvent,
     },
@@ -918,9 +919,10 @@ impl Deserial for TokenMetadataQueryResponse {
 }
 
 /// A URL for the metadata.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct MetadataUrl {
     /// The url encoded according to CIS2.
+    #[concordium(size_length = 2)]
     url:  String,
     /// An optional checksum of the content found at the URL.
     hash: Option<Hash>,
@@ -951,20 +953,6 @@ impl MetadataUrl {
 
     /// Get the metadata content hash.
     pub fn hash(&self) -> Option<Hash> { self.hash }
-}
-
-/// Deserialization for MetadataUrl according to the CIS2 specification.
-impl Deserial for MetadataUrl {
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, ParseError> {
-        let len = source.read_u16()?;
-        let mut bytes = Vec::with_capacity(len.into());
-        for _ in 0..len {
-            bytes.push(source.read_u8()?)
-        }
-        let url = String::from_utf8(bytes)?;
-        let hash = Option::<[u8; 32]>::deserial(source)?.map(|b| b.into());
-        Ok(MetadataUrl::new_unchecked(url, hash))
-    }
 }
 
 /// Smart contract logged event, part of the CIS2 specification.
