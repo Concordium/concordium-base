@@ -942,12 +942,12 @@ impl TryFrom<serde_json::Value> for LinkingProof {
 /// credential. The intention is that this is implemented by ed25519 keypairs
 /// or hardware wallets.
 pub trait Web3IdSigner {
-    fn id(&self) -> CredentialHolderId;
+    fn id(&self) -> ed25519_dalek::PublicKey;
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature;
 }
 
 impl Web3IdSigner for ed25519_dalek::Keypair {
-    fn id(&self) -> CredentialHolderId { CredentialHolderId::new(self.public) }
+    fn id(&self) -> ed25519_dalek::PublicKey { self.public }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         ed25519_dalek::Signer::sign(self, msg.as_ref())
@@ -955,7 +955,7 @@ impl Web3IdSigner for ed25519_dalek::Keypair {
 }
 
 impl Web3IdSigner for ed25519_dalek::SecretKey {
-    fn id(&self) -> CredentialHolderId { CredentialHolderId::new(self.into()) }
+    fn id(&self) -> ed25519_dalek::PublicKey { self.into() }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         let expanded: ed25519_dalek::ExpandedSecretKey = self.into();
@@ -1133,7 +1133,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     issuance_date,
                 },
             ) => {
-                if credential != signer.id() {
+                if credential != signer.id().into() {
                     return Err(ProofError::InconsistentIds);
                 }
                 let (&rand_base, base_size, base) = global.vector_commitment_base();
@@ -1207,7 +1207,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     created,
                     issuance_date,
                     max_base_used: *vec_key.0,
-                    owner: signer.id(),
+                    owner: signer.id().into(),
                     ty,
                 })
             }
