@@ -1,3 +1,5 @@
+//! This module contain the main logic for the attribute macros.
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::ToTokens;

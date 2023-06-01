@@ -7,8 +7,8 @@ extern crate quote;
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
+mod attribute;
 mod derive;
-mod smart_contract;
 
 /// A helper to report meaningful compilation errors
 /// - If applied to an Ok value they simply return the underlying value.
@@ -356,7 +356,7 @@ pub fn state_clone_derive(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
-    unwrap_or_report(smart_contract::init_worker(attr, item))
+    unwrap_or_report(attribute::init_worker(attr, item))
 }
 
 /// Derive the appropriate export for an annotated receive function.
@@ -556,14 +556,14 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
-    unwrap_or_report(smart_contract::receive_worker(attr, item))
+    unwrap_or_report(attribute::receive_worker(attr, item))
 }
 
 #[proc_macro_attribute]
 /// Derive the appropriate export for an annotated test function, when feature
 /// "wasm-test" is enabled, otherwise behaves like `#[test]`.
 pub fn concordium_test(attr: TokenStream, item: TokenStream) -> TokenStream {
-    unwrap_or_report(smart_contract::concordium_test_worker(attr, item))
+    unwrap_or_report(attribute::concordium_test_worker(attr, item))
 }
 
 /// Sets the cfg for testing targeting either Wasm and native.
@@ -635,7 +635,7 @@ pub fn concordium_quickcheck(attr: TokenStream, input: TokenStream) -> TokenStre
         .parse2(input)
         .and_then(|item| match item {
             syn::Item::Fn(mut item_fn) => {
-                smart_contract::quickcheck::wrap_quickcheck_test(attr, &mut item_fn)
+                attribute::quickcheck::wrap_quickcheck_test(attr, &mut item_fn)
             }
             _ => Err(syn::Error::new(
                 span,
