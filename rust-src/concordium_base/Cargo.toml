@@ -110,11 +110,11 @@ harness = false
 [[bench]]
 name = "verify_cdi"
 harness = false
-	
+
 [[bench]]
 name = "aggr_dlog_commit_point"
 harness = false
-	
+
 [[bench]]
 name = "compute_message"
 harness = false
