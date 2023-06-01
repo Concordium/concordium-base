@@ -1,6 +1,8 @@
 //! This module exposes functions for verifying various proofs of statements
 //! about a credential on accounts.
 
+use std::{borrow::Borrow, collections::BTreeMap};
+
 use super::{types::*, utils};
 use crate::bulletproofs::{
     range_proof::{verify_efficient, RangeProof, VerificationError},
@@ -132,6 +134,129 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     }
 }
 
+impl<
+        C: Curve,
+        TagType: std::cmp::Ord + crate::common::Serialize,
+        AttributeType: Attribute<C::Scalar>,
+    > AtomicStatement<C, TagType, AttributeType>
+{
+    pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
+        &self,
+        global: &GlobalContext<C>,
+        transcript: &mut RandomOracle,
+        cmm_attributes: &BTreeMap<Q, Commitment<C>>,
+        proof: &AtomicProof<C, AttributeType>,
+    ) -> bool {
+        match (self, proof) {
+            (
+                AtomicStatement::RevealAttribute {
+                    statement: RevealAttributeStatement { attribute_tag },
+                },
+                AtomicProof::RevealAttribute { attribute, proof },
+            ) => {
+                let maybe_com = cmm_attributes.get(attribute_tag);
+                if let Some(com) = maybe_com {
+                    // There is a commitment to the relevant attribute. We can then check the
+                    // proof.
+                    let x = attribute.to_field_element();
+                    transcript.add_bytes(b"RevealAttributeDlogProof");
+                    // x is known to the verifier and should go into the transcript
+                    transcript.append_message(b"x", &x);
+                    let mut minus_x = x;
+                    minus_x.negate();
+                    let g_minus_x = global.on_chain_commitment_key.g.mul_by_scalar(&minus_x);
+                    let public = com.plus_point(&g_minus_x);
+                    let verifier = Dlog {
+                        public,                                  // C g^-x = h^r
+                        coeff: global.on_chain_commitment_key.h, // h
+                    };
+                    if !sigma_verify(transcript, &verifier, proof) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            (
+                AtomicStatement::AttributeInRange { statement },
+                AtomicProof::AttributeInRange { proof },
+            ) => {
+                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
+                if let Some(com) = maybe_com {
+                    // There is a commitment to the relevant attribute. We can then check the
+                    // proof.
+                    if super::id_verifier::verify_attribute_range(
+                        &global.on_chain_commitment_key,
+                        global.bulletproof_generators(),
+                        &statement.lower,
+                        &statement.upper,
+                        com,
+                        proof,
+                    )
+                    .is_err()
+                    {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            (
+                AtomicStatement::AttributeInSet { statement },
+                AtomicProof::AttributeInSet { proof },
+            ) => {
+                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
+                if let Some(com) = maybe_com {
+                    let attribute_vec: Vec<_> =
+                        statement.set.iter().map(|x| x.to_field_element()).collect();
+                    if verify_set_membership(
+                        transcript,
+                        &attribute_vec,
+                        com,
+                        proof,
+                        global.bulletproof_generators(),
+                        &global.on_chain_commitment_key,
+                    )
+                    .is_err()
+                    {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            (
+                AtomicStatement::AttributeNotInSet { statement },
+                AtomicProof::AttributeNotInSet { proof },
+            ) => {
+                let maybe_com = cmm_attributes.get(&statement.attribute_tag);
+                if let Some(com) = maybe_com {
+                    let attribute_vec: Vec<_> =
+                        statement.set.iter().map(|x| x.to_field_element()).collect();
+                    if verify_set_non_membership(
+                        transcript,
+                        &attribute_vec,
+                        com,
+                        proof,
+                        global.bulletproof_generators(),
+                        &global.on_chain_commitment_key,
+                    )
+                    .is_err()
+                    {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            _ => {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> {
     /// Function for verifying a proof of a statement.
     /// The arguments are
@@ -158,111 +283,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
             return false;
         }
         for (statement, proof) in self.statements.iter().zip(proofs.proofs.iter()) {
-            match (statement, proof) {
-                (
-                    AtomicStatement::RevealAttribute {
-                        statement: RevealAttributeStatement { attribute_tag },
-                    },
-                    AtomicProof::RevealAttribute { attribute, proof },
-                ) => {
-                    let maybe_com = commitments.cmm_attributes.get(attribute_tag);
-                    if let Some(com) = maybe_com {
-                        // There is a commitment to the relevant attribute. We can then check the
-                        // proof.
-                        let x = attribute.to_field_element();
-                        transcript.add_bytes(b"RevealAttributeDlogProof");
-                        // x is known to the verifier and should go into the transcript
-                        transcript.append_message(b"x", &x);
-                        let mut minus_x = x;
-                        minus_x.negate();
-                        let g_minus_x = global.on_chain_commitment_key.g.mul_by_scalar(&minus_x);
-                        let public = com.plus_point(&g_minus_x);
-                        let verifier = Dlog {
-                            public,                                  // C g^-x = h^r
-                            coeff: global.on_chain_commitment_key.h, // h
-                        };
-                        if !sigma_verify(&mut transcript, &verifier, proof) {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-                (
-                    AtomicStatement::AttributeInRange { statement },
-                    AtomicProof::AttributeInRange { proof },
-                ) => {
-                    let maybe_com = commitments.cmm_attributes.get(&statement.attribute_tag);
-                    if let Some(com) = maybe_com {
-                        // There is a commitment to the relevant attribute. We can then check the
-                        // proof.
-                        if super::id_verifier::verify_attribute_range(
-                            &global.on_chain_commitment_key,
-                            global.bulletproof_generators(),
-                            &statement.lower,
-                            &statement.upper,
-                            com,
-                            proof,
-                        )
-                        .is_err()
-                        {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-                (
-                    AtomicStatement::AttributeInSet { statement },
-                    AtomicProof::AttributeInSet { proof },
-                ) => {
-                    let maybe_com = commitments.cmm_attributes.get(&statement.attribute_tag);
-                    if let Some(com) = maybe_com {
-                        let attribute_vec: Vec<_> =
-                            statement.set.iter().map(|x| x.to_field_element()).collect();
-                        if verify_set_membership(
-                            &mut transcript,
-                            &attribute_vec,
-                            com,
-                            proof,
-                            global.bulletproof_generators(),
-                            &global.on_chain_commitment_key,
-                        )
-                        .is_err()
-                        {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-                (
-                    AtomicStatement::AttributeNotInSet { statement },
-                    AtomicProof::AttributeNotInSet { proof },
-                ) => {
-                    let maybe_com = commitments.cmm_attributes.get(&statement.attribute_tag);
-                    if let Some(com) = maybe_com {
-                        let attribute_vec: Vec<_> =
-                            statement.set.iter().map(|x| x.to_field_element()).collect();
-                        if verify_set_non_membership(
-                            &mut transcript,
-                            &attribute_vec,
-                            com,
-                            proof,
-                            global.bulletproof_generators(),
-                            &global.on_chain_commitment_key,
-                        )
-                        .is_err()
-                        {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-                _ => {
-                    return false;
-                }
+            if !statement.verify(global, &mut transcript, &commitments.cmm_attributes, proof) {
+                return false;
             }
         }
         true
@@ -399,7 +421,7 @@ mod tests {
         let uk = AttributeKind(String::from("UK"));
         let set = BTreeSet::from([dk, no, se, de.clone(), uk.clone()]);
         let set2 = BTreeSet::from([de, uk]);
-        let set_statement = AttributeInSetStatement::<G1, AttributeKind> {
+        let set_statement = AttributeInSetStatement::<G1, _, AttributeKind> {
             attribute_tag: AttributeTag::from(4u8),
             _phantom:      PhantomData::default(),
             set:           set.clone(),

@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 pub mod base;
 pub mod cis2_types;
+pub mod cis4_types;
 pub mod constants;
 pub mod hashes;
 mod internal;
@@ -22,6 +23,8 @@ pub mod elgamal;
 pub mod encrypted_transfers;
 pub mod id;
 pub mod random_oracle;
+
+pub mod web3id;
 
 pub mod pedersen_commitment;
 pub mod ps_sig;

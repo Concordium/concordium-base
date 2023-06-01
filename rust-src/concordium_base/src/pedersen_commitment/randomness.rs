@@ -15,9 +15,17 @@ use std::rc::Rc;
 /// Randomness used in the commitment.
 /// Secret by default.
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 pub struct Randomness<C: Curve> {
     pub randomness: Rc<Secret<C::Scalar>>,
+}
+
+impl<C: Curve> Clone for Randomness<C> {
+    fn clone(&self) -> Self {
+        Self {
+            randomness: self.randomness.clone(),
+        }
+    }
 }
 
 /// This trait allows automatic conversion of `&Randomness<C>` to `&C::Scalar`.

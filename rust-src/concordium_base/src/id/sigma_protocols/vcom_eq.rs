@@ -6,22 +6,27 @@ use super::common::*;
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve},
+    pedersen_commitment::{Commitment, Value},
     random_oracle::{Challenge, RandomOracle},
 };
 use ff::Field;
 use itertools::izip;
-use std::{collections::BTreeMap, rc::Rc};
+use std::collections::BTreeMap;
 
 type IndexType = u8;
 
 /// The public information known to both the prover and the verifier.
+#[derive(Debug, Clone, Serialize)]
 pub struct VecComEq<C: Curve> {
     /// The commitment C
-    pub comm:  C,
+    pub comm:  Commitment<C>,
     /// The commitments C_i for i in I
-    pub comms: BTreeMap<IndexType, C>,
-    /// The points g_i references in the module description, in the given order.
-    /// It is assumed that this is non-empty.
+    #[map_size_length = 2]
+    pub comms: BTreeMap<IndexType, Commitment<C>>,
+    /// The points `g_i` references in the module description, in the given
+    /// order. It is assumed that this is non-empty.
+    /// TODO: It would be better if this gis was also an indexed map.
+    #[size_length = 2]
     pub gis:   Vec<C>,
     /// The generator h
     pub h:     C,
@@ -32,12 +37,12 @@ pub struct VecComEq<C: Curve> {
 }
 
 /// `VecComEq` witness. We deliberately make it opaque.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Witness<C: Curve> {
-    #[size_length = 4]
+    #[size_length = 2]
     sis: Vec<C::Scalar>,
     t:   C::Scalar,
-    #[map_size_length = 4]
+    #[map_size_length = 2]
     tis: BTreeMap<IndexType, C::Scalar>,
 }
 
@@ -49,11 +54,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<C::Scalar>, C::Scalar, BTreeMap<IndexType, C::Scalar>);
     type ProverWitness = Witness<C>;
-    type SecretData = (
-        Vec<Rc<C::Scalar>>,
-        Rc<C::Scalar>,
-        BTreeMap<IndexType, Rc<C::Scalar>>,
-    );
+    type SecretData = (Vec<C::Scalar>, Value<C>, BTreeMap<IndexType, Value<C>>);
 
     fn public(&self, ro: &mut RandomOracle) {
         ro.append_message(b"C", &self.comm);
@@ -158,7 +159,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         scalars.push(*challenge);
         let mut bases = self.gis.clone();
         bases.push(self.h);
-        bases.push(self.comm);
+        bases.push(self.comm.0);
 
         let point = multiexp(&bases, &scalars); //  h^t C^challenge \prod g_i^(s_i)
 
@@ -166,7 +167,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
             let i = i_usize.try_into().ok()?;
             if let (Some(comm_i), Some(ti)) = (self.comms.get(&i), tis.get(&i)) {
                 let ai_scalars = vec![*si, *ti, *challenge];
-                let ai_bases = vec![self.g_bar, self.h_bar, *comm_i];
+                let ai_bases = vec![self.g_bar, self.h_bar, comm_i.0];
                 let ai = multiexp(&ai_bases, &ai_scalars); // g_bar^{s_i}h_bar^{t_i} C_i^challenge
                 points.push(ai);
             }
@@ -187,7 +188,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         let h = C::generate(csprng);
         let g_bar = C::generate(csprng);
         let h_bar = C::generate(csprng);
-        let r = Rc::new(C::generate_scalar(csprng));
+        let r = Value::new(C::generate_scalar(csprng));
         let mut comm = h.mul_by_scalar(&r);
         let mut i = 0;
         for _ in 0..data_size {
@@ -195,17 +196,17 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
             let ri = C::generate_scalar(csprng);
             let gi = C::generate(csprng);
             comm = comm.plus_point(&gi.mul_by_scalar(&xi));
-            xis.push(Rc::new(xi));
-            ris.insert(i, Rc::new(ri));
+            xis.push(xi);
+            ris.insert(i, Value::new(ri));
             gis.push(gi);
             let comm_i = g_bar
                 .mul_by_scalar(&xi)
                 .plus_point(&h_bar.mul_by_scalar(&ri));
-            comms.insert(i, comm_i);
+            comms.insert(i, Commitment(comm_i));
             i += 1;
         }
         let agg = VecComEq {
-            comm,
+            comm: Commitment(comm),
             comms,
             h,
             g_bar,
@@ -248,26 +249,26 @@ mod tests {
         let h = G1::generate(csprng);
         let g_bar = G1::generate(csprng);
         let h_bar = G1::generate(csprng);
-        let r = Rc::new(G1::generate_scalar(csprng));
+        let r = Value::new(G1::generate_scalar(csprng));
         let mut comm = h.mul_by_scalar(&r);
         for i in 0..data_size {
             let xi = G1::generate_scalar(csprng);
             let gi = G1::generate(csprng);
             comm = comm.plus_point(&gi.mul_by_scalar(&xi));
-            xis.push(Rc::new(xi));
+            xis.push(xi);
             gis.push(gi);
             if i >= 5 && i <= 10 {
                 let i_u8 = i.try_into().unwrap(); // This if fine since `i` is small.
                 let ri = G1::generate_scalar(csprng);
-                ris.insert(i_u8, Rc::new(ri));
+                ris.insert(i_u8, Value::new(ri));
                 let comm_i = g_bar
                     .mul_by_scalar(&xi)
                     .plus_point(&h_bar.mul_by_scalar(&ri));
-                comms.insert(i_u8, comm_i);
+                comms.insert(i_u8, Commitment(comm_i));
             }
         }
         let agg = VecComEq {
-            comm,
+            comm: Commitment(comm),
             comms,
             h,
             g_bar,
@@ -292,32 +293,34 @@ mod tests {
         let h = G1::generate(csprng);
         let g_bar = G1::generate(csprng);
         let h_bar = G1::generate(csprng);
-        let r = Rc::new(G1::generate_scalar(csprng));
+        let r = Value::new(G1::generate_scalar(csprng));
         let mut comm = h.mul_by_scalar(&r);
         let mut i = 0;
         for _ in 0..data_size {
             let xi = G1::generate_scalar(csprng);
             let gi = G1::generate(csprng);
             comm = comm.plus_point(&gi.mul_by_scalar(&xi));
-            xis.push(Rc::new(xi));
+            xis.push(xi);
             gis.push(gi);
             if i <= 5 {
                 let ri = G1::generate_scalar(csprng);
-                ris.insert(i, Rc::new(ri));
+                ris.insert(i, Value::new(ri));
                 let comm_i = g_bar
                     .mul_by_scalar(&xi)
                     .plus_point(&h_bar.mul_by_scalar(&ri));
-                comms.insert(i, comm_i);
+                comms.insert(i, Commitment(comm_i));
             }
             i += 1;
         }
-        let wrong_comm = G1::generate(csprng);
+        let wrong_comm = Commitment::generate(csprng);
         let index_wrong_comm: IndexType = csprng.gen_range(0, 6);
         let index_wrong_gi: usize = csprng.gen_range(0, 10);
         let mut wrong_comms = comms.clone();
         wrong_comms.insert(index_wrong_comm, wrong_comm);
         let mut wrong_gis = gis.clone();
-        wrong_gis[index_wrong_gi] = wrong_comm;
+        wrong_gis[index_wrong_gi] = wrong_comm.0;
+
+        let comm = Commitment(comm);
 
         let vcom_wrong_comm = VecComEq {
             comm: wrong_comm,
@@ -376,18 +379,18 @@ mod tests {
         let x1 = G1::generate_scalar(csprng);
         let x2 = G1::generate_scalar(csprng);
         let x3 = G1::generate_scalar(csprng);
-        let xis = vec![Rc::new(x0), Rc::new(x1), Rc::new(x2), Rc::new(x3)];
+        let xis = vec![x0, x1, x2, x3];
 
-        let r1 = Rc::new(G1::generate_scalar(csprng));
-        let r2 = Rc::new(G1::generate_scalar(csprng));
+        let r1 = Value::new(G1::generate_scalar(csprng));
+        let r2 = Value::new(G1::generate_scalar(csprng));
         let mut ris = BTreeMap::new();
 
         let mut comms = BTreeMap::new();
         let h = G1::generate(csprng);
         let g_bar = G1::generate(csprng);
         let h_bar = G1::generate(csprng);
-        let r = Rc::new(G1::generate_scalar(csprng));
-        let comm = multiexp(&[g0, g1, g2, g3, h], &[x0, x1, x2, x3, *r]);
+        let r = Value::new(G1::generate_scalar(csprng));
+        let comm = Commitment(multiexp(&[g0, g1, g2, g3, h], &[x0, x1, x2, x3, *r]));
 
         let comm1 = g_bar
             .mul_by_scalar(&x1)
@@ -395,8 +398,8 @@ mod tests {
         let comm2 = g_bar
             .mul_by_scalar(&x2)
             .plus_point(&h_bar.mul_by_scalar(&r2));
-        comms.insert(1, comm1);
-        comms.insert(2, comm2);
+        comms.insert(1, Commitment(comm1));
+        comms.insert(2, Commitment(comm2));
         ris.insert(1, r1);
         ris.insert(2, r2);
         let agg = VecComEq {

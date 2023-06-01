@@ -210,6 +210,7 @@ impl AccountOwnershipProof {
     Serialize,
     SerdeSerialize,
     SerdeDeserialize,
+    FromStr,
 )]
 #[repr(transparent)]
 #[serde(transparent)]
@@ -297,7 +298,7 @@ impl ArIdentity {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Into)]
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(try_from = "AttributeStringTag", into = "AttributeStringTag")]
@@ -308,6 +309,10 @@ impl ArIdentity {
 /// The JSON instances for this type are via the [AttributeStringTag] type
 /// defined below.
 pub struct AttributeTag(pub u8);
+
+impl std::borrow::Borrow<u8> for AttributeTag {
+    fn borrow(&self) -> &u8 { &self.0 }
+}
 
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
@@ -624,7 +629,7 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub _phantom:     std::marker::PhantomData<F>,
 }
 
-impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeType>
+impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeTag, AttributeType>
     for AttributeList<F, AttributeType>
 {
     fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType> {
@@ -1960,6 +1965,21 @@ impl<C: Curve> GlobalContext<C> {
     /// The generator used as the base for elgamal public keys.
     pub fn elgamal_generator(&self) -> &C { &self.on_chain_commitment_key.g }
 
+    /// Get the commitment key for the vector Pedersen commitment.
+    /// The return value is a triple of the base for randomness, the number of
+    /// group elements, and the iterator over them.
+    ///
+    /// The group elements are all distinct from `g` that is part of the
+    /// [`on_chain_commitment_key`](Self::on_chain_commitment_key).
+    ///
+    /// The base for randomness is the same as that in
+    /// [`on_chain_commitment_key`](Self::on_chain_commitment_key).
+    pub fn vector_commitment_base(&self) -> (&C, usize, impl Iterator<Item = &C>) {
+        let base_size = self.bulletproof_generators.G_H.len();
+        let iter = self.bulletproof_generators.G_H.iter().map(|x| &x.0);
+        (&self.on_chain_commitment_key.h, base_size, iter)
+    }
+
     /// A wrapper function to support changes in internal structure of the
     /// context in the future, e.g., lazy generation of generators.
     pub fn bulletproof_generators(&self) -> &Generators<C> { &self.bulletproof_generators }
@@ -2418,17 +2438,65 @@ pub enum AccountCredentialValues<C: Curve, AttributeType: Attribute<C::Scalar>> 
     },
 }
 
-pub trait HasAttributeRandomness<C: Curve> {
+pub trait HasAttributeRandomness<C: Curve, TagType = AttributeTag> {
     type ErrorType: 'static + Send + Sync + std::error::Error;
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: AttributeTag,
+        attribute_tag: TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
 }
 
-pub trait HasAttributeValues<F: Field, AttributeType: Attribute<F>> {
-    fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType>;
+#[derive(thiserror::Error, Debug)]
+#[error("The randomness for attribute {tag} is missing.")]
+pub struct MissingAttributeRandomnessError {
+    tag: u8,
+}
+
+impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
+    for BTreeMap<TagType, PedersenRandomness<C>>
+{
+    type ErrorType = MissingAttributeRandomnessError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: TagType,
+    ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
+        self.get(&attribute_tag)
+            .cloned()
+            .ok_or(MissingAttributeRandomnessError {
+                tag: attribute_tag.into(),
+            })
+    }
+}
+
+impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
+    for BTreeMap<TagType, Value<C>>
+{
+    type ErrorType = MissingAttributeRandomnessError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: TagType,
+    ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
+        self.get(&attribute_tag)
+            .map(PedersenRandomness::from_value)
+            .ok_or(MissingAttributeRandomnessError {
+                tag: attribute_tag.into(),
+            })
+    }
+}
+
+pub trait HasAttributeValues<F: Field, TagType, AttributeType: Attribute<F>> {
+    fn get_attribute_value(&self, attribute_tag: TagType) -> Option<&AttributeType>;
+}
+
+impl<F: Field, TagType: Serialize + std::cmp::Ord, AttributeType: Attribute<F>>
+    HasAttributeValues<F, TagType, AttributeType> for BTreeMap<TagType, AttributeType>
+{
+    fn get_attribute_value(&self, attribute_tag: TagType) -> Option<&AttributeType> {
+        self.get(&attribute_tag)
+    }
 }
 
 /// The empty type, here used as an impossible error in the implemention of

@@ -98,10 +98,15 @@ impl<C: Curve> VecCommitmentKey<C> {
         values: &[C::Scalar],
         randomness: &C::Scalar,
     ) -> Option<Commitment<C>> {
-        if values.len() != self.gs.len() {
+        if values.len() > self.gs.len() {
             return None;
         }
-        let mut bases = self.gs.clone();
+        let mut bases = self
+            .gs
+            .iter()
+            .take(values.len())
+            .copied()
+            .collect::<Vec<_>>();
         bases.push(self.h);
         let mut scalars = values.to_vec();
         scalars.push(*randomness);
