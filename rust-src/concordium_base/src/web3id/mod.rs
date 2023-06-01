@@ -612,7 +612,7 @@ impl<'de, Role> serde::Deserialize<'de> for Ed25519PublicKey<Role> {
         D: serde::Deserializer<'de>, {
         use serde::de::Error;
         let s: String = String::deserialize(deserializer)?;
-        s.try_into().map_err(|e| D::Error::custom(e))
+        s.try_into().map_err(D::Error::custom)
     }
 }
 
@@ -1033,7 +1033,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
             CredentialsInputs::Account { commitments },
         ) => {
             for (statement, proof) in proofs.iter() {
-                if !statement.verify(global, transcript, &commitments, proof) {
+                if !statement.verify(global, transcript, commitments, proof) {
                     return false;
                 }
             }
