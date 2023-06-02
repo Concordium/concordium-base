@@ -9,6 +9,8 @@
 - Add `TryFrom` implementation to convert `Timestamp` to `chrono::DateTime`.
 - Add a `Serial` implementation for any `&A` if `A: Serial`.
 - Set minimum Rust version to 1.65.
+- Add `smart-contract` feature to enable the macros which are only suitable for smart contract development using `concordium-std`. The feature is not enabled by default.
+- Add macros `Reject`, `DeserialWithState`, `SchemaType`, `StateClone` and `Deletable`, `init`, `receive`, `concordium_test`, `concordium_cfg_test`, `concordium_cfg_not_test` and `concordium_quickcheck` from `concordium_std_derive` with their related features `wasm-test`, `build-schema` and `concordium-quickcheck`.
 
 ### Breaking changes
 - Add a new error type `ToJsonError`, which is returned when deserializing a schema type fails.

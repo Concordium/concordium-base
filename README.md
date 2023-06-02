@@ -18,6 +18,7 @@ The functionality in this library is re-exported via the [concordium-std](https:
 - `std` (enabled by default): Enables functionality that depends on the standard library.
 - `derive-serde`: Enable serialization and deserialization via `serde`. Enables `std` as well.
 - `fuzz`: Enable fuzzing via `arbitrary`. Enables `derive-serde` as well.
+- `smart-contract`: Enable functionality for smart contract development with `concordium-std`.
 
 ## MSRV
 

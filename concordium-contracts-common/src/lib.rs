@@ -94,7 +94,11 @@ pub mod schema;
 pub mod schema_json;
 mod types;
 
+#[cfg(feature = "smart-contract")]
 pub use concordium_contracts_common_derive::*;
+#[cfg(not(feature = "smart-contract"))]
+pub use concordium_contracts_common_derive::{Deserial, Serial, Serialize};
+
 pub use impls::*;
 pub use traits::*;
 pub use types::*;
