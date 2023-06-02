@@ -46,6 +46,9 @@ jobs:
           - "std"
           - "derive-serde"
           - "fuzz"
+          - "smart-contract"
+          - "wasm-test"
+          - "build-schema"
           - "concordium-quickcheck"
         target:
           - wasm32-unknown-unknown
@@ -74,6 +77,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        features:
+          - ""
+          - "wasm-test"
+          - "build-schema"
+          - "concordium-quickcheck"
         target:
           - wasm32-unknown-unknown
           - x86_64-unknown-linux-gnu
