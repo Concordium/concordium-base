@@ -660,7 +660,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         let state_parameter_ident = container_attributes
             .state_parameter
             .as_ref()
-            .and_then(|type_path| type_path.path.get_ident());
+            .and_then(|type_path| type_path.path.segments.first());
         // Extend where clauses with Serial predicate of each generic.
         let where_clause_serial: proc_macro2::TokenStream = ast
             .generics
@@ -668,7 +668,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             .filter_map(|type_param| {
                 match state_parameter_ident {
                     // Skip adding the predicate for the state_parameter.
-                    Some(state_parameter) if state_parameter == &type_param.ident => None,
+                    Some(state_parameter) if state_parameter.ident == type_param.ident => None,
                     _ => {
                         let type_param_ident = &type_param.ident;
                         Some(quote! (#type_param_ident: #root::Serial,))
@@ -850,34 +850,35 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
-    let where_clauses_tokens =
-        if let Some(attribute_bounds) = container_attributes.deserial_bounds() {
-            attribute_bounds.into_token_stream()
-        } else {
-            let state_parameter_ident = state_parameter.path.get_ident();
-            // Extend where clauses with Deserial predicate of each generic.
-            let where_clause_deserial: proc_macro2::TokenStream = ast
+    let where_clauses_tokens = if let Some(attribute_bounds) =
+        container_attributes.deserial_bounds()
+    {
+        attribute_bounds.into_token_stream()
+    } else {
+        let state_parameter_ident = state_parameter.path.segments.first();
+        // Extend where clauses with Deserial predicate of each generic.
+        let where_clause_deserial: proc_macro2::TokenStream = ast
                 .generics
                 .type_params()
                 .filter_map(|type_param| {
                     match state_parameter_ident {
                         // Skip adding the predicate for the state_parameter.
-                        Some(state_parameter) if state_parameter == &type_param.ident => None,
+                        Some(state_parameter) if state_parameter.ident == type_param.ident => None,
                         _ => {
                             let type_param_ident = &type_param.ident;
-                            Some(quote! (#type_param_ident: concordium_std::DeserialWithState,))
+                            Some(quote! (#type_param_ident: concordium_std::DeserialWithState<#state_parameter>,))
                         }
                     }
                 })
                 .collect();
 
-            if let Some(where_clauses) = where_clauses {
-                let predicates = &where_clauses.predicates;
-                quote!(#predicates, where_clause_deserial)
-            } else {
-                where_clause_deserial
-            }
-        };
+        if let Some(where_clauses) = where_clauses {
+            let predicates = &where_clauses.predicates;
+            quote!(#predicates, where_clause_deserial)
+        } else {
+            where_clause_deserial
+        }
+    };
 
     let gen = quote! {
         #[automatically_derived]
