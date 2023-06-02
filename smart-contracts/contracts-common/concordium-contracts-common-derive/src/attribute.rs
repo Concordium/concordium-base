@@ -1,4 +1,4 @@
-//! This module contain the main logic for the attribute macros.
+//! This module contains the main logic for the attribute macros.
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
@@ -69,8 +69,8 @@ struct ParsedAttributes {
 }
 
 impl ParsedAttributes {
-    /// Remove an attribute and return its value (i.e., right hand side of ident
-    /// = value), if present. The key must be a valid Rust identifier,
+    /// Remove an attribute and return its value (i.e., right hand side of
+    /// `ident = value`), if present. The key must be a valid Rust identifier,
     /// otherwise this function will panic.
     pub(crate) fn extract_value(&mut self, key: &str) -> Option<syn::LitStr> {
         self.extract_ident_and_value(key).map(|x| x.1)
@@ -102,8 +102,7 @@ impl ParsedAttributes {
     /// If there are any remaining attributes signal an error. Otherwise return
     /// Ok(())
     pub(crate) fn report_all_attributes(self) -> syn::Result<()> {
-        // TODO: Replace into_iter + map with into_keys when only supporting rust 1.54+
-        let mut iter = self.flags.into_iter().chain(self.values.into_iter().map(|(k, _)| k));
+        let mut iter = self.flags.into_iter().chain(self.values.into_keys());
         if let Some(ident) = iter.next() {
             let mut err =
                 syn::Error::new(ident.span(), format!("Unrecognized attribute {}.", ident));
@@ -192,11 +191,10 @@ fn parse_attributes<'a>(iter: impl IntoIterator<Item = &'a Meta>) -> syn::Result
             }
         }
     }
-    // TODO: Replace with into_values when least rust version becomes 1.54.
     let mut iter = errors
         .into_iter()
-        .chain(duplicate_values.into_iter().map(|(_, v)| v))
-        .chain(duplicate_flags.into_iter().map(|(_, v)| v));
+        .chain(duplicate_values.into_values())
+        .chain(duplicate_flags.into_values());
     // If there are any errors we combine them.
     if let Some(err) = iter.next() {
         let mut err = err;

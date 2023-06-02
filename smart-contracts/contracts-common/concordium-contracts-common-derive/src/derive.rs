@@ -1,4 +1,4 @@
-//! This module contain the main logic for the derive macros.
+//! This module contains the main logic for the derive macros.
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
@@ -19,7 +19,7 @@ const VALID_CONCORDIUM_ATTRIBUTES: [&str; 1] = ["state_parameter"];
 
 fn get_root() -> proc_macro2::TokenStream { quote!(concordium_std) }
 
-/// Return whether a attribute item is present.
+/// Return whether an attribute item is present.
 fn contains_attribute<'a, I: IntoIterator<Item = &'a Meta>>(iter: I, name: &str) -> bool {
     iter.into_iter().any(|attr| attr.path().is_ident(name))
 }
