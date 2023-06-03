@@ -27,6 +27,7 @@ use serde::de::DeserializeOwned;
 use std::{
     collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
+    str::FromStr,
 };
 
 /// Domain separation string used when signing the revoke transaction
@@ -628,6 +629,12 @@ impl<Role> TryFrom<String> for Ed25519PublicKey<Role> {
     type Error = Ed25519PublicKeyFromStrError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> { Self::try_from(value.as_str()) }
+}
+
+impl<Role> FromStr for Ed25519PublicKey<Role> {
+    type Err = Ed25519PublicKeyFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
 
 impl<Role> TryFrom<&str> for Ed25519PublicKey<Role> {
