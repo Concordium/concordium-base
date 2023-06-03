@@ -198,12 +198,12 @@ impl contracts_common::Deserial for CredentialEvent {
     fn deserial<R: contracts_common::Read>(source: &mut R) -> contracts_common::ParseResult<Self> {
         use contracts_common::Get;
         match source.get()? {
-            255u8 => Ok(Self::Register(source.get()?)),
-            254u8 => Ok(Self::Revoke(source.get()?)),
-            253u8 => Ok(Self::Restore(source.get()?)),
-            252u8 => Ok(Self::IssuerMetadata(source.get()?)),
-            251u8 => Ok(Self::CredentialMetadata(source.get()?)),
-            250u8 => Ok(Self::Schema(source.get()?)),
+            249u8 => Ok(Self::Register(source.get()?)),
+            248u8 => Ok(Self::Revoke(source.get()?)),
+            247u8 => Ok(Self::Restore(source.get()?)),
+            246u8 => Ok(Self::IssuerMetadata(source.get()?)),
+            245u8 => Ok(Self::CredentialMetadata(source.get()?)),
+            244u8 => Ok(Self::Schema(source.get()?)),
             _ => Ok(Self::Unknown),
         }
     }
