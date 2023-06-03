@@ -6,7 +6,10 @@ use crate::{
 
 /// Credential type is a string that corresponds to the value of the "name"
 /// attribute of the credential schema.
-#[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(
+    contracts_common::Serialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
 pub struct CredentialType {
     #[concordium(size_length = 1)]
     pub credential_type: String,
@@ -14,12 +17,17 @@ pub struct CredentialType {
 
 /// A schema reference is a schema URL or DID address pointing to the JSON
 /// schema for a verifiable credential.
-#[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(
+    contracts_common::Serialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
 pub struct SchemaRef {
     pub schema_ref: MetadataUrl,
 }
 
-#[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(
+    serde::Serialize, serde::Deserialize, contracts_common::Serialize, PartialEq, Eq, Clone, Debug,
+)]
 pub struct CredentialInfo {
     /// The holder's identifier.
     pub holder_id:        CredentialHolderId,
@@ -28,6 +36,7 @@ pub struct CredentialInfo {
     /// A vector Pedersen commitment to the attributes of the verifiable
     /// credential.
     #[concordium(size_length = 2)]
+    #[serde(with = "crate::internal::byte_array_hex")]
     pub commitment:       Vec<u8>,
     /// The date from which the credential is considered valid.
     pub valid_from:       contracts_common::Timestamp,
