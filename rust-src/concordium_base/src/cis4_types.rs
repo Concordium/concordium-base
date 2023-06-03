@@ -118,6 +118,8 @@ pub struct CredentialEventData {
     schema_ref:      SchemaRef,
     /// Type of the credential.
     credential_type: CredentialType,
+    /// The metadata URL of the newly registered credential.
+    metadata_url:    MetadataUrl,
 }
 
 /// A type for specifying who is revoking a credential, when registering a
