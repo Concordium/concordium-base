@@ -164,19 +164,20 @@ pub struct IssuerMetadataEvent {
 
 /// The schema reference has been updated for the credential type.
 #[derive(contracts_common::Serialize, Debug, Clone)]
-struct CredentialSchemaRefEvent {
+pub struct CredentialSchemaRefEvent {
     r#type:     CredentialType,
     schema_ref: SchemaRef,
 }
 
-#[derive(contracts_common::Serialize)]
-struct CredentialMetadataEvent {
+#[derive(Debug, Clone, contracts_common::Serialize)]
+pub struct CredentialMetadataEvent {
     credential_id: CredentialHolderId,
     metadata_url:  MetadataUrl,
 }
 
 /// An event specified by CIS4 standard.
-enum CredentialEvent {
+#[derive(Debug, Clone)]
+pub enum CredentialEvent {
     /// Credential registration event. Logged when an entry in the registry is
     /// created for the first time.
     Register(CredentialEventData),
