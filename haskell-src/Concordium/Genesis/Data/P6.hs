@@ -25,7 +25,7 @@ data ProtocolUpdateData = ProtocolUpdateData
       -- be instantiated with.
       updateFinalizationCommitteeParameters :: !FinalizationCommitteeParameters
     }
-    deriving stock (Eq, Show)
+    deriving (Eq, Show)
 
 instance Serialize ProtocolUpdateData where
     put ProtocolUpdateData{..} = do
@@ -45,7 +45,7 @@ data StateMigrationData = StateMigrationData
       -- this protocol update.
       migrationTriggerBlockTime :: !Timestamp
     }
-    deriving stock (Eq, Show)
+    deriving (Eq, Show)
 
 instance Serialize StateMigrationData where
     put StateMigrationData{..} = do
@@ -159,7 +159,7 @@ regenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} 
 regenesisBlockHash GDP6RegenesisFromP5{genesisRegenesis = BaseV1.RegenesisDataV1{..}, ..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P6
-    putWord8 2 -- regenesis variant
+    putWord8 2 -- migration from P5 variant
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis
