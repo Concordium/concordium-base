@@ -15,7 +15,7 @@ pub struct CredentialType {
     pub credential_type: String,
 }
 
-/// A schema reference is a schema URL or DID address pointing to the JSON
+/// A schema reference is a schema URL pointing to the JSON
 /// schema for a verifiable credential.
 #[derive(
     contracts_common::Serialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize,
