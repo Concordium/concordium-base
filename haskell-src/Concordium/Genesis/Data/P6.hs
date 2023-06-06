@@ -43,6 +43,8 @@ data StateMigrationData = StateMigrationData
       migrationProtocolUpdateData :: !ProtocolUpdateData,
       -- |The time of the trigger block that caused
       -- this protocol update.
+      -- This is used for calculating the new 'SeedState' during
+      -- the migration P5->P6.
       migrationTriggerBlockTime :: !Timestamp
     }
     deriving (Eq, Show)
