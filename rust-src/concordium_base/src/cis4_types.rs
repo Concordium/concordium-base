@@ -177,6 +177,23 @@ pub struct CredentialMetadataEvent {
     metadata_url:  MetadataUrl,
 }
 
+#[derive(contracts_common::Serialize, Debug, Clone)]
+pub enum RevocationKeyAction {
+    Register,
+    Remove,
+}
+
+/// An untagged revocation key event.
+/// Emitted when keys are registered and removed.
+/// For a tagged version use `CredentialEvent`.
+#[derive(contracts_common::Serialize, Debug, Clone)]
+pub struct RevocationKeyEvent {
+    /// The public key that is registered/removed
+    key:    RevocationKey,
+    /// A register/remove action.
+    action: RevocationKeyAction,
+}
+
 /// An event specified by CIS4 standard.
 #[derive(Debug, Clone)]
 pub enum CredentialEvent {
@@ -185,14 +202,14 @@ pub enum CredentialEvent {
     Register(CredentialEventData),
     /// Credential revocation event.
     Revoke(RevokeCredentialEvent),
-    /// Credential restoration (reversing revocation) event.
-    Restore(RestoreCredentialEvent),
     /// Issuer's metadata changes, including the contract deployment.
     IssuerMetadata(MetadataUrl),
     /// Credential's metadata changes.
     CredentialMetadata(CredentialMetadataEvent),
     /// Credential's schema changes.
     Schema(CredentialSchemaRefEvent),
+    /// Revocation key changes
+    RevocationKey(RevocationKeyEvent),
     /// Event is not part of the CIS4 specification.
     Unknown,
 }
@@ -203,10 +220,10 @@ impl contracts_common::Deserial for CredentialEvent {
         match source.get()? {
             249u8 => Ok(Self::Register(source.get()?)),
             248u8 => Ok(Self::Revoke(source.get()?)),
-            247u8 => Ok(Self::Restore(source.get()?)),
-            246u8 => Ok(Self::IssuerMetadata(source.get()?)),
-            245u8 => Ok(Self::CredentialMetadata(source.get()?)),
-            244u8 => Ok(Self::Schema(source.get()?)),
+            247u8 => Ok(Self::IssuerMetadata(source.get()?)),
+            246u8 => Ok(Self::CredentialMetadata(source.get()?)),
+            245u8 => Ok(Self::Schema(source.get()?)),
+            244u8 => Ok(Self::RevocationKey(source.get()?)),
             _ => Ok(Self::Unknown),
         }
     }
