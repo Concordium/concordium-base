@@ -919,7 +919,7 @@ impl Deserial for TokenMetadataQueryResponse {
 }
 
 /// A URL for the metadata.
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct MetadataUrl {
     /// The url encoded according to CIS2.
     #[concordium(size_length = 2)]

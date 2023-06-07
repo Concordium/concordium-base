@@ -6,20 +6,28 @@ use crate::{
 
 /// Credential type is a string that corresponds to the value of the "name"
 /// attribute of the credential schema.
-#[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(
+    contracts_common::Serialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
 pub struct CredentialType {
     #[concordium(size_length = 1)]
     pub credential_type: String,
 }
 
-/// A schema reference is a schema URL or DID address pointing to the JSON
+/// A schema reference is a schema URL pointing to the JSON
 /// schema for a verifiable credential.
-#[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(
+    contracts_common::Serialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
 pub struct SchemaRef {
     pub schema_ref: MetadataUrl,
 }
 
-#[derive(contracts_common::Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(
+    serde::Serialize, serde::Deserialize, contracts_common::Serialize, PartialEq, Eq, Clone, Debug,
+)]
 pub struct CredentialInfo {
     /// The holder's identifier.
     pub holder_id:        CredentialHolderId,
@@ -28,6 +36,7 @@ pub struct CredentialInfo {
     /// A vector Pedersen commitment to the attributes of the verifiable
     /// credential.
     #[concordium(size_length = 2)]
+    #[serde(with = "crate::internal::byte_array_hex")]
     pub commitment:       Vec<u8>,
     /// The date from which the credential is considered valid.
     pub valid_from:       contracts_common::Timestamp,
@@ -109,6 +118,8 @@ pub struct CredentialEventData {
     schema_ref:      SchemaRef,
     /// Type of the credential.
     credential_type: CredentialType,
+    /// The metadata URL of the newly registered credential.
+    metadata_url:    MetadataUrl,
 }
 
 /// A type for specifying who is revoking a credential, when registering a
@@ -155,32 +166,50 @@ pub struct IssuerMetadataEvent {
 
 /// The schema reference has been updated for the credential type.
 #[derive(contracts_common::Serialize, Debug, Clone)]
-struct CredentialSchemaRefEvent {
+pub struct CredentialSchemaRefEvent {
     r#type:     CredentialType,
     schema_ref: SchemaRef,
 }
 
-#[derive(contracts_common::Serialize)]
-struct CredentialMetadataEvent {
+#[derive(Debug, Clone, contracts_common::Serialize)]
+pub struct CredentialMetadataEvent {
     credential_id: CredentialHolderId,
     metadata_url:  MetadataUrl,
 }
 
+#[derive(contracts_common::Serialize, Debug, Clone)]
+pub enum RevocationKeyAction {
+    Register,
+    Remove,
+}
+
+/// An untagged revocation key event.
+/// Emitted when keys are registered and removed.
+/// For a tagged version use `CredentialEvent`.
+#[derive(contracts_common::Serialize, Debug, Clone)]
+pub struct RevocationKeyEvent {
+    /// The public key that is registered/removed
+    key:    RevocationKey,
+    /// A register/remove action.
+    action: RevocationKeyAction,
+}
+
 /// An event specified by CIS4 standard.
-enum CredentialEvent {
+#[derive(Debug, Clone)]
+pub enum CredentialEvent {
     /// Credential registration event. Logged when an entry in the registry is
     /// created for the first time.
     Register(CredentialEventData),
     /// Credential revocation event.
     Revoke(RevokeCredentialEvent),
-    /// Credential restoration (reversing revocation) event.
-    Restore(RestoreCredentialEvent),
     /// Issuer's metadata changes, including the contract deployment.
     IssuerMetadata(MetadataUrl),
     /// Credential's metadata changes.
     CredentialMetadata(CredentialMetadataEvent),
     /// Credential's schema changes.
     Schema(CredentialSchemaRefEvent),
+    /// Revocation key changes
+    RevocationKey(RevocationKeyEvent),
     /// Event is not part of the CIS4 specification.
     Unknown,
 }
@@ -189,12 +218,12 @@ impl contracts_common::Deserial for CredentialEvent {
     fn deserial<R: contracts_common::Read>(source: &mut R) -> contracts_common::ParseResult<Self> {
         use contracts_common::Get;
         match source.get()? {
-            255u8 => Ok(Self::Register(source.get()?)),
-            254u8 => Ok(Self::Revoke(source.get()?)),
-            253u8 => Ok(Self::Restore(source.get()?)),
-            252u8 => Ok(Self::IssuerMetadata(source.get()?)),
-            251u8 => Ok(Self::CredentialMetadata(source.get()?)),
-            250u8 => Ok(Self::Schema(source.get()?)),
+            249u8 => Ok(Self::Register(source.get()?)),
+            248u8 => Ok(Self::Revoke(source.get()?)),
+            247u8 => Ok(Self::IssuerMetadata(source.get()?)),
+            246u8 => Ok(Self::CredentialMetadata(source.get()?)),
+            245u8 => Ok(Self::Schema(source.get()?)),
+            244u8 => Ok(Self::RevocationKey(source.get()?)),
             _ => Ok(Self::Unknown),
         }
     }
