@@ -63,15 +63,22 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 /// By default a trait bound is added on each generic type for implementing
 /// [`Serial`]. However, if this is not desirable, the bound can be put
 /// explicitly using the `bound` attribute on the type overriding the default
-/// behavior.
+/// behavior by adding the provided bound for the implementation.
+///
+/// Bounds present in the type declaration will still be present in
+/// the implementation, even when a bound is provided:
 ///
 /// ### Example
+///
 /// ```ignore
 /// #[derive(Serial)]
 /// #[concordium(bound(serial = "A: SomeOtherTrait"))]
-/// struct Foo<A> {
+/// struct Foo<A: SomeTrait> {
 ///     bar: A,
 /// }
+///
+/// // Derived implementation:
+/// impl <A: SomeTrait> Serial for Foo<A> where A: SomeOtherTrait { .. }
 /// ```
 ///
 /// ## Collections
@@ -82,7 +89,7 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 /// can be annotated with `size_length`.
 ///
 /// The value of this field is the number of bytes that will be used for
-/// encoding the number of elements. Supported values are `1,` `2,` `4,` `8`.
+/// encoding the number of elements. Supported values are `1`, `2`, `4`, `8`.
 ///
 /// For BTreeMap and BTreeSet the serialize method will serialize values in
 /// increasing order of keys.

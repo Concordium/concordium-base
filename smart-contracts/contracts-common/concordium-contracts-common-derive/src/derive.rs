@@ -292,8 +292,8 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
 
         for item in items {
             let syn::NestedMeta::Meta(nested_meta) = item else {
-                        return Err(syn::Error::new(item.span(), "bound attribute list can only contain name value pairs"));
-                    };
+                return Err(syn::Error::new(item.span(), "bound attribute list can only contain name value pairs"));
+            };
             let syn::Meta::NameValue(name_value) = nested_meta else {
                 return Err(syn::Error::new(nested_meta.span(), "bound attribute list must contain named values"))
             };
@@ -309,8 +309,8 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                 };
             } else if name_value.path.is_ident("deserial") {
                 let syn::Lit::Str(lit_str) = &name_value.lit else {
-                            return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
-                        };
+                    return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
+                };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(deserial_value) = deserial.as_mut() {
                     deserial_value.extend(value)
@@ -319,8 +319,8 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                 };
             } else if name_value.path.is_ident("schema_type") {
                 let syn::Lit::Str(lit_str) = &name_value.lit else {
-                            return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
-                        };
+                    return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
+                };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(schema_type_value) = schema_type.as_mut() {
                     schema_type_value.extend(value)
@@ -330,7 +330,8 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
             } else {
                 return Err(syn::Error::new(
                     item.span(),
-                    "bound attribute list only allow the keys 'serial' and 'deserial'",
+                    "bound attribute list only allow the keys 'serial', 'deserial' and \
+                     'schema_type'",
                 ));
             }
         }
@@ -359,9 +360,11 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 Ok(BoundAttribute::Shared(value))
             }
-            syn::Meta::Path(_) => {
-                Err(syn::Error::new(meta.span(), "bound attribute value is invalid"))
-            }
+            syn::Meta::Path(_) => Err(syn::Error::new(
+                meta.span(),
+                "bound attribute value can either be provided as 'bound = \"...\"' or as \
+                 'bound(serial = \"...\", deserial = \"...\", schema_type = \"...\")'",
+            )),
         }
     }
 }
@@ -1469,7 +1472,9 @@ mod test {
     fn test_parse_shared_bounds() {
         let ast: syn::ItemStruct = syn::parse_quote! {
             #[concordium(bound = "T: B")]
-            struct MyStruct{}
+            struct MyStruct<T>{
+                field: T
+            }
         };
 
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
@@ -1486,7 +1491,9 @@ mod test {
     fn test_parse_deserial_explicit_bounds() {
         let ast: syn::ItemStruct = syn::parse_quote! {
             #[concordium(bound(deserial  = "T: B"))]
-            struct MyStruct{}
+            struct MyStruct<T>{
+                field: T
+            }
         };
 
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
@@ -1502,7 +1509,9 @@ mod test {
     fn test_parse_serial_explicit_bounds() {
         let ast: syn::ItemStruct = syn::parse_quote! {
             #[concordium(bound(serial  = "T: B"))]
-            struct MyStruct{}
+            struct MyStruct<T>{
+                field: T
+            }
         };
 
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
@@ -1519,7 +1528,9 @@ mod test {
     fn test_parse_schema_type_explicit_bounds() {
         let ast: syn::ItemStruct = syn::parse_quote! {
             #[concordium(bound(schema_type  = "T: B"))]
-            struct MyStruct{}
+            struct MyStruct<T>{
+                field: T
+            }
         };
 
         let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
