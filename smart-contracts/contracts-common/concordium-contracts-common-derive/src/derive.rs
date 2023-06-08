@@ -13,7 +13,7 @@ const CONCORDIUM_ATTRIBUTE: &str = "concordium";
 const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 3] = ["size_length", "ensure_ordered", "rename"];
 
 /// A list of valid concordium attributes
-const VALID_CONCORDIUM_ATTRIBUTES: [&str; 2] = ["state_parameter", "bound"];
+const VALID_CONCORDIUM_ATTRIBUTES: [&str; 3] = ["state_parameter", "bound", "transparent"];
 
 fn get_root() -> proc_macro2::TokenStream { quote!(concordium_std) }
 
@@ -239,6 +239,8 @@ struct ContainerAttributes {
     bounds:          Vec<BoundAttribute>,
     /// The state parameter attribute. `state_parameter = ".."`
     state_parameter: Option<syn::TypePath>,
+    /// Transparent attribute. 'transparent'
+    transparent:     bool,
 }
 
 impl ContainerAttributes {
@@ -287,6 +289,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
         // Collect and combine all errors if any.
         let mut error_option: Option<syn::Error> = None;
         let mut bounds = Vec::new();
+        let mut transparent = false;
         for meta in metas.iter() {
             if meta.path().is_ident("bound") {
                 match BoundAttribute::try_from(meta) {
@@ -295,6 +298,19 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
                         None => error_option = Some(new_err),
                     },
                     Ok(bound) => bounds.push(bound),
+                }
+            } else if meta.path().is_ident("transparent") {
+                if let syn::Meta::Path(_) = meta {
+                    transparent = true
+                } else {
+                    let new_err = syn::Error::new(
+                        meta.span(),
+                        "transparent attribute cannot be a list or hold a value",
+                    );
+                    match error_option.as_mut() {
+                        Some(error) => error.combine(new_err),
+                        None => error_option = Some(new_err),
+                    }
                 }
             }
         }
@@ -305,6 +321,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
             Ok(ContainerAttributes {
                 bounds,
                 state_parameter: find_state_parameter_attribute(attributes)?,
+                transparent,
             })
         }
     }
@@ -1337,15 +1354,35 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
     let ast: syn::DeriveInput = syn::parse(input)?;
 
     let data_name = &ast.ident;
+    let container_attributes = ContainerAttributes::try_from(ast.attrs.as_slice())?;
 
     let body = match ast.data {
         syn::Data::Struct(ref data) => {
-            let fields_tokens = schema_type_fields(&data.fields)?;
-            quote! {
-                concordium_std::schema::Type::Struct(#fields_tokens)
+            if container_attributes.transparent {
+                if data.fields.len() != 1 {
+                    return Err(syn::Error::new(
+                        ast.span(),
+                        "'transparent' attribute can only be used on a struct with a single field",
+                    ));
+                }
+
+                // Safe to unwrap below since we already checked then length is one.
+                let field = data.fields.iter().next().unwrap();
+                schema_type_field_type(field)?
+            } else {
+                let fields_tokens = schema_type_fields(&data.fields)?;
+                quote! {
+                    concordium_std::schema::Type::Struct(#fields_tokens)
+                }
             }
         }
         syn::Data::Enum(ref data) => {
+            if container_attributes.transparent {
+                return Err(syn::Error::new(
+                    ast.span(),
+                    "'transparent' attribute can only be used on a struct",
+                ));
+            }
             let mut used_variant_names = HashMap::new();
             let variant_tokens: Vec<_> = data
                 .variants
@@ -1373,10 +1410,9 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                 concordium_std::schema::Type::Enum(concordium_std::Vec::from([ #(#variant_tokens),* ]))
             }
         }
-        _ => syn::Error::new(ast.span(), "Union is not supported").to_compile_error(),
+        _ => return Err(syn::Error::new(ast.span(), "Union is not supported")),
     };
 
-    let container_attributes = ContainerAttributes::try_from(ast.attrs.as_slice())?;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
     let where_clauses_tokens =
@@ -1571,5 +1607,21 @@ mod test {
         assert!(parsed.deserial_bounds().is_none(), "Unexpected bound added for Deserial");
         assert!(parsed.serial_bounds().is_none(), "Unexpected bound added for Serial");
         assert!(parsed.schema_type_bounds().is_some(), "Failed to add explicit bound");
+    }
+
+    /// Test parsing for transparent attribute.
+    #[test]
+    fn test_parse_attribute_transparent() {
+        let ast: syn::ItemStruct = syn::parse_quote! {
+            #[concordium(transparent)]
+            struct MyStruct{
+                field: u32
+            }
+        };
+
+        let parsed = ContainerAttributes::try_from(ast.attrs.as_slice())
+            .expect("Failed to parse container attributes");
+
+        assert!(parsed.transparent, "Failed to parse attribute");
     }
 }
