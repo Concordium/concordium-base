@@ -224,7 +224,6 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 ///     bar: u32,
 /// }
 /// ```
-
 #[proc_macro_derive(SchemaType, attributes(concordium))]
 pub fn schema_type_derive(input: TokenStream) -> TokenStream {
     unwrap_or_report(derive::schema_type_derive_worker(input))

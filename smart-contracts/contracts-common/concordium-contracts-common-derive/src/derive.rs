@@ -305,7 +305,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
                 } else {
                     let new_err = syn::Error::new(
                         meta.span(),
-                        "transparent attribute cannot be a list or hold a value",
+                        "'transparent' attribute cannot be a list or hold a value",
                     );
                     match error_option.as_mut() {
                         Some(error) => error.combine(new_err),
