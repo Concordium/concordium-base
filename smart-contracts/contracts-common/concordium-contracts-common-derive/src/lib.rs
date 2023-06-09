@@ -155,9 +155,76 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
     unwrap_or_report(derive::impl_deserial_with_state(&ast))
 }
 
-/// Derive the `SchemaType` trait for a type.
-/// If the feature `build-schema` is not enabled this is a no-op, i.e., it does
-/// not produce any code.
+/// Derive the [`SchemaType`] trait for a type matching the implementation when
+/// deriving [`Serial`].
+///
+/// Can be used for enums and structs.
+/// If the type is a struct all fields must implement the [`SchemaType`] trait.
+/// If the type is an enum then all fields of each of the enums must implement
+/// the [`SchemaType`] trait.
+///
+/// ## Generic type bounds
+///
+/// By default a trait bound is added on each generic type for implementing
+/// [`SchemaType`]. However, if this is not desirable, the bound can be put
+/// explicitly using the `bound` attribute on the type overriding the default
+/// behavior by adding the provided bound for the implementation.
+///
+/// Bounds present in the type declaration will still be present in
+/// the implementation, even when a bound is provided:
+///
+/// ### Example
+///
+/// ```ignore
+/// #[derive(SchemaType)]
+/// #[concordium(bound(schema_type = "A: SomeOtherTrait"))]
+/// struct Foo<A: SomeTrait> {
+///     bar: A,
+/// }
+///
+/// // Derived implementation:
+/// impl <A: SomeTrait> SchemaType for Foo<A> where A: SomeOtherTrait { .. }
+/// ```
+///
+/// ## Collections
+///
+/// Collections (Vec, BTreeMap, BTreeSet) and strings (String, str) can be
+/// annotated with `size_length` which is the number of bytes used for encoding
+/// the number of elements, see derive macro ['Serial'] for more on this.
+///
+/// The value of this field is the number of bytes that will be used for
+/// encoding the number of elements. Supported values are `1`, `2`, `4`, `8`.
+///
+/// ### Example
+/// ```ignore
+/// #[derive(SchemaType)]
+/// struct Foo {
+///     #[concordium(size_length = 1)]
+///     bar: BTreeSet<u8>,
+/// }
+/// ```
+///
+/// ## Transparent
+///
+/// Deriving [`SchemaType`] for structs using the newtype design pattern exposes
+/// the wrapping struct which is often not desirable. The attribute
+/// `#[concordium(transparent)]` can be added above the struct which changes the
+/// implementation of [`SchemaType`] to schema type of the inner field.
+///
+/// The attribute can `#[concordium(transparent)]` attribute can only be used
+/// for structs with a single field, and the type of this field must implement
+/// `SchemaType`.
+///
+/// ### Example
+///
+/// ```ignore
+/// #[derive(SchemaType)]
+/// #[concordium(transparent)]
+/// struct Foo {
+///     bar: u32,
+/// }
+/// ```
+
 #[proc_macro_derive(SchemaType, attributes(concordium))]
 pub fn schema_type_derive(input: TokenStream) -> TokenStream {
     unwrap_or_report(derive::schema_type_derive_worker(input))
