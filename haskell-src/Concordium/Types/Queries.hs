@@ -689,6 +689,9 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
     }
     deriving (Show, Eq)
 
+-- Derive JSON format by removing the `_nusn` prefix and lowercasing the initial letter of field names.
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop (length ("_nusn" :: String))} ''NextUpdateSequenceNumbers)
+
 -- | Build the struct containing all of the next available sequence numbers for updating any of the
 -- chain parameters
 updateQueuesNextSequenceNumbers :: UQ.PendingUpdates cpv -> NextUpdateSequenceNumbers
