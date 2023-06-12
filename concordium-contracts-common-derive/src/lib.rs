@@ -209,7 +209,7 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 /// Deriving [`SchemaType`] for structs using the newtype design pattern exposes
 /// the wrapping struct which is often not desirable. The attribute
 /// `#[concordium(transparent)]` can be added above the struct which changes the
-/// implementation of [`SchemaType`] to schema type of the inner field.
+/// implementation of [`SchemaType`] to schema type of the field.
 ///
 /// The attribute can `#[concordium(transparent)]` attribute can only be used
 /// for structs with a single field, and the type of this field must implement
@@ -222,6 +222,19 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 /// #[concordium(transparent)]
 /// struct Foo {
 ///     bar: u32,
+/// }
+/// ```
+///
+/// ### Exmaple
+///
+/// The 'transparent' attribute will still take account for field attributes
+/// such as `size_length` for collections.
+/// ```ignore
+/// #[derive(SchemaType)]
+/// #[concordium(transparent)]
+/// struct Foo {
+///     #[concordium(size_length = 1)]
+///     bar: Vec<u32>,
 /// }
 /// ```
 #[proc_macro_derive(SchemaType, attributes(concordium))]
