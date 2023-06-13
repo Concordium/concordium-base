@@ -8,6 +8,7 @@
 - Deriving `Serial`, `Deserial`, `DeserialWithState` and `SchemaType` now produces an implementation which adds a bound to each of the type parameters to implement the relevant trait.
   Note that `Serial` and `DeserialWithState` skips this bound for `state_parameter` when/if this is provided. This is not the behavior of `Deserial` and `SchemaType` since they are incompatible with `DeserialWithState` and therefore `state_parameter` is never present in these cases.
 - Deriving `SchemaType` will now produce an implementation even without the `build-schema` feature being enabled.
+- Support adding attribute `#[concordium(transparent)]` to newtype structs causing a derived `SchemaType` to use the implementation of the single field and thereby hiding the newtype struct in the schema.
 
 ## concordium-contracts-common-derive 2.0.0 (2023-05-08)
 
