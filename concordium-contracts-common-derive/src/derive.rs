@@ -440,7 +440,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                             field,
                             &field_ident,
                             &source_ident,
-                        ));
+                        )?);
                         names.extend(quote!(#field_ident,))
                     }
                     quote!(Ok(#data_name{#names}))
@@ -448,7 +448,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 syn::Fields::Unnamed(_) => {
                     for (i, f) in data.fields.iter().enumerate() {
                         let field_ident = format_ident!("x_{}", i);
-                        field_tokens.extend(impl_deserial_field(f, &field_ident, &source_ident));
+                        field_tokens.extend(impl_deserial_field(f, &field_ident, &source_ident)?);
                         names.extend(quote!(#field_ident,))
                     }
                     quote!(Ok(#data_name(#names)))
@@ -806,7 +806,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                             &field_ident,
                             &source_ident,
                             state_parameter,
-                        ));
+                        )?);
                         names.extend(quote!(#field_ident,))
                     }
                     quote!(Ok(#data_name{#names}))
@@ -820,7 +820,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                             &field_ident,
                             &source_ident,
                             state_parameter,
-                        ));
+                        )?);
                         names.extend(quote!(#field_ident,))
                     }
                     quote!(Ok(#data_name(#names)))
