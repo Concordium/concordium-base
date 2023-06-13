@@ -1366,7 +1366,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                     ));
                 }
 
-                // Safe to unwrap below since we already checked then length is one.
+                // Safe to unwrap below since we already checked the length is one.
                 let field = data.fields.iter().next().unwrap();
                 schema_type_field_type(field)?
             } else {
