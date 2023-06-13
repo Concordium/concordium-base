@@ -44,23 +44,11 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
     unwrap_or_report(derive::impl_deserial(&ast))
 }
 
-/// Derive the Serial trait for the type.
+/// Derive the [`Serial`] trait for the type.
 ///
-/// If the type is a struct all fields must implement the Serial trait. If the
-/// type is an enum then all fields of each of the enums must implement the
-/// Serial trait.
-///
-///
-/// Collections (Vec, BTreeMap, BTreeSet) and strings (String, str) are by
-/// default serialized by prepending the number of elements as 4 bytes
-/// little-endian. If this is too much or too little, fields of the above types
-/// can be annotated with `size_length`.
-///
-/// The value of this field is the number of bytes that will be used for
-/// encoding the number of elements. Supported values are 1, 2, 4, 8.
-///
-/// For BTreeMap and BTreeSet the serialize method will serialize values in
-/// increasing order of keys.
+/// If the type is a struct all fields must implement the [`Serial`] trait. If
+/// the type is an enum then all fields of each of the enums must implement the
+/// [`Serial`] trait.
 ///
 /// Fields of structs are serialized in the order they appear in the code.
 ///
@@ -70,7 +58,43 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 /// single byte is used to encode it. Otherwise two bytes are used for the tag,
 /// encoded in little endian.
 ///
-/// # Example
+/// ## Generic type bounds
+///
+/// By default a trait bound is added on each generic type for implementing
+/// [`Serial`]. However, if this is not desirable, the bound can be put
+/// explicitly using the `bound` attribute on the type overriding the default
+/// behavior by adding the provided bound for the implementation.
+///
+/// Bounds present in the type declaration will still be present in
+/// the implementation, even when a bound is provided:
+///
+/// ### Example
+///
+/// ```ignore
+/// #[derive(Serial)]
+/// #[concordium(bound(serial = "A: SomeOtherTrait"))]
+/// struct Foo<A: SomeTrait> {
+///     bar: A,
+/// }
+///
+/// // Derived implementation:
+/// impl <A: SomeTrait> Serial for Foo<A> where A: SomeOtherTrait { .. }
+/// ```
+///
+/// ## Collections
+///
+/// Collections (Vec, BTreeMap, BTreeSet) and strings (String, str) are by
+/// default serialized by prepending the number of elements as 4 bytes
+/// little-endian. If this is too much or too little, fields of the above types
+/// can be annotated with `size_length`.
+///
+/// The value of this field is the number of bytes that will be used for
+/// encoding the number of elements. Supported values are `1`, `2`, `4`, `8`.
+///
+/// For BTreeMap and BTreeSet the serialize method will serialize values in
+/// increasing order of keys.
+///
+/// ### Example
 /// ```ignore
 /// #[derive(Serial)]
 /// struct Foo {

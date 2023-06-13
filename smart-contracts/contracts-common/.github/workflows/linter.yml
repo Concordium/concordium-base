@@ -105,7 +105,7 @@ jobs:
           args: --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
 
   test:
-    name: x86_64 tests on concordium-contracts-common
+    name: x86_64 tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -122,4 +122,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=concordium-contracts-common/Cargo.toml
+          args: --workspace
