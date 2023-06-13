@@ -5,6 +5,9 @@
 - Set minimum Rust version to 1.65.
 - Add derive macros for `Reject`, `DeserialWithState`, `SchemaType`, `StateClone` and `Deletable` from `concordium_std_derive`.
 - Add attribute macros `init`, `receive`, `concordium_test`, `concordium_cfg_test`, `concordium_cfg_not_test` and `concordium_quickcheck` from `concordium_std_derive` with their related features `wasm-test`, `build-schema` and `concordium-quickcheck`.
+- Deriving `Serial`, `Deserial`, `DeserialWithState` and `SchemaType` now produces an implementation which adds a bound to each of the type parameters to implement the relevant trait.
+  Note that `Serial` and `DeserialWithState` skips this bound for `state_parameter` when/if this is provided. This is not the behavior of `Deserial` and `SchemaType` since they are incompatible with `DeserialWithState` and therefore `state_parameter` is never present in these cases.
+- Deriving `SchemaType` will now produce an implementation even without the `build-schema` feature being enabled.
 
 ## concordium-contracts-common-derive 2.0.0 (2023-05-08)
 
