@@ -35,7 +35,7 @@ fn find_attribute_value(
     target_attr: &str,
 ) -> syn::Result<Option<syn::Lit>> {
     let target_attr = format_ident!("{}", target_attr);
-    let attr_values: Vec<_> = get_concordium_attributes(attributes, for_field)?
+    let attr_values: Vec<_> = get_valid_concordium_attributes(attributes, for_field)?
         .into_iter()
         .filter_map(|nested_meta| match nested_meta {
             syn::Meta::NameValue(value) if value.path.is_ident(&target_attr) => Some(value.lit),
@@ -90,22 +90,12 @@ fn find_length_attribute(attributes: &[syn::Attribute]) -> syn::Result<Option<u3
     }
 }
 
-/// Finds concordium field attributes.
+/// Finds concordium field attributes, ensuring these are supported.
 fn get_concordium_field_attributes(attributes: &[syn::Attribute]) -> syn::Result<Vec<syn::Meta>> {
-    get_concordium_attributes(attributes, true)
+    get_valid_concordium_attributes(attributes, true)
 }
 
-/// Finds concordium attributes, either field or general attributes.
-fn get_concordium_attributes(
-    attributes: &[syn::Attribute],
-    for_field: bool,
-) -> syn::Result<Vec<syn::Meta>> {
-    let (valid_attributes, attribute_type) = if for_field {
-        (&VALID_CONCORDIUM_FIELD_ATTRIBUTES[..], "concordium field attribute")
-    } else {
-        (&VALID_CONCORDIUM_ATTRIBUTES[..], "concordium attribute")
-    };
-
+fn get_concordium_attributes(attributes: &[syn::Attribute]) -> syn::Result<Vec<syn::Meta>> {
     attributes
         .iter()
         // Keep only concordium attributes
@@ -118,19 +108,39 @@ fn get_concordium_attributes(
         // Ensure only valid attributes and unwrap NestedMeta
         .map(|nested| match nested {
             syn::NestedMeta::Meta(meta) => {
-                let path = meta.path();
-                if valid_attributes.iter().any(|&attr| path.is_ident(attr)) {
-                    Ok(meta)
-                } else {
-                    Err(syn::Error::new(meta.span(),
-                        format!("The attribute '{}' is not supported as a {}.",
-                        path.to_token_stream(), attribute_type)
-                    ))
-                }
+                Ok(meta)
             }
-            lit => Err(syn::Error::new(lit.span(), format!("Literals are not supported in a {}.", attribute_type))),
+            lit => Err(syn::Error::new(lit.span(), "Literals are not supported in a 'concordium' attribute.")),
         })
         .collect()
+}
+
+/// Finds concordium attributes, either field or general attributes.
+fn get_valid_concordium_attributes(
+    attributes: &[syn::Attribute],
+    for_field: bool,
+) -> syn::Result<Vec<syn::Meta>> {
+    let (valid_attributes, attribute_type) = if for_field {
+        (&VALID_CONCORDIUM_FIELD_ATTRIBUTES[..], "concordium field attribute")
+    } else {
+        (&VALID_CONCORDIUM_ATTRIBUTES[..], "concordium attribute")
+    };
+
+    let concordium_attributes = get_concordium_attributes(attributes)?;
+    for meta in &concordium_attributes {
+        let path = meta.path();
+        if !valid_attributes.iter().any(|&attr| path.is_ident(attr)) {
+            return Err(syn::Error::new(
+                meta.span(),
+                format!(
+                    "The attribute '{}' is not supported as a {}.",
+                    path.to_token_stream(),
+                    attribute_type
+                ),
+            ));
+        }
+    }
+    Ok(concordium_attributes)
 }
 
 /// Find a 'state_parameter' attribute and return it as an identifier.
@@ -152,6 +162,14 @@ fn find_state_parameter_attribute(
             value.span(),
             "state_parameter attribute value must be a string which describes valid type path",
         )),
+    }
+}
+
+/// Set an optional error if None, otherwise combines combines the errors.
+fn push_error(collection: &mut Option<syn::Error>, new_error: syn::Error) {
+    match collection {
+        Some(error) => error.combine(new_error),
+        None => *collection = Some(new_error),
     }
 }
 
@@ -285,7 +303,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
     type Error = syn::Error;
 
     fn try_from(attributes: &[syn::Attribute]) -> Result<Self, Self::Error> {
-        let metas = get_concordium_attributes(attributes, false)?;
+        let metas = get_valid_concordium_attributes(attributes, false)?;
         // Collect and combine all errors if any.
         let mut error_option: Option<syn::Error> = None;
         let mut bounds = Vec::new();
@@ -293,10 +311,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
         for meta in metas.iter() {
             if meta.path().is_ident("bound") {
                 match BoundAttribute::try_from(meta) {
-                    Err(new_err) => match error_option.as_mut() {
-                        Some(error) => error.combine(new_err),
-                        None => error_option = Some(new_err),
-                    },
+                    Err(new_err) => push_error(&mut error_option, new_err),
                     Ok(bound) => bounds.push(bound),
                 }
             } else if meta.path().is_ident("transparent") {
@@ -307,10 +322,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
                         meta.span(),
                         "'transparent' attribute cannot be a list or hold a value",
                     );
-                    match error_option.as_mut() {
-                        Some(error) => error.combine(new_err),
-                        None => error_option = Some(new_err),
-                    }
+                    push_error(&mut error_option, new_err)
                 }
             }
         }
@@ -418,6 +430,87 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
     }
 }
 
+#[derive(Debug)]
+struct VariantAttributes {
+    tag: Option<TagAttribute>,
+}
+
+#[derive(Debug)]
+struct TagAttribute {
+    value: syn::LitInt,
+    span:  proc_macro2::Span,
+}
+
+impl TryFrom<&[syn::Attribute]> for VariantAttributes {
+    type Error = syn::Error;
+
+    fn try_from(attributes: &[syn::Attribute]) -> Result<Self, Self::Error> {
+        let metas = get_concordium_attributes(attributes)?;
+        // Collect and combine all errors if any.
+        let mut error_option: Option<syn::Error> = None;
+        let mut tag_option: Option<TagAttribute> = None;
+        for meta in metas.iter() {
+            if meta.path().is_ident("tag") {
+                if let Some(tag_attribute) = &tag_option {
+                    let new_error = syn::Error::new(
+                        meta.span(),
+                        "Attribute 'tag' should only be specified once per field.",
+                    );
+                    error_option.get_or_insert_with(|| {
+                        syn::Error::new(
+                            tag_attribute.span,
+                            "Attribute 'tag' should only be specified once per field.",
+                        )
+                    });
+                    push_error(&mut error_option, new_error)
+                } else {
+                    match TagAttribute::try_from(meta) {
+                        Ok(tag) => tag_option = Some(tag),
+                        Err(err) => push_error(&mut error_option, err),
+                    }
+                }
+            } else {
+                let err = syn::Error::new(
+                    meta.span(),
+                    format!(
+                        "The attribute '{}' is not supported as an attribute for variants.",
+                        meta.path().to_token_stream(),
+                    ),
+                );
+                push_error(&mut error_option, err)
+            }
+        }
+        if let Some(err) = error_option {
+            Err(err)
+        } else {
+            Ok(VariantAttributes {
+                tag: tag_option,
+            })
+        }
+    }
+}
+
+impl TryFrom<&syn::Meta> for TagAttribute {
+    type Error = syn::Error;
+
+    fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
+        if let syn::Meta::NameValue(name_value) = meta {
+            let syn::Lit::Int(value) = &name_value.lit else {
+                    return Err(syn::Error::new(name_value.lit.span(), "'tag' attribute must be an integer."))
+                };
+            Ok(TagAttribute {
+                value: value.clone(),
+                span:  meta.span(),
+            })
+        } else {
+            Err(syn::Error::new(
+                meta.span(),
+                "'tag' attribute value can only be provided as 'tag = ...'.",
+            ))
+        }
+    }
+}
+
 pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let data_name = &ast.ident;
 
@@ -428,10 +521,11 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let source_ident = Ident::new("________________source", Span::call_site());
     let root = get_root();
 
-    let body_tokens = match ast.data {
-        syn::Data::Struct(ref data) => {
+    let body_tokens = match &ast.data {
+        syn::Data::Struct(data) => {
             let mut names = proc_macro2::TokenStream::new();
             let mut field_tokens = proc_macro2::TokenStream::new();
+
             let return_tokens = match data.fields {
                 syn::Fields::Named(_) => {
                     for field in data.fields.iter() {
@@ -460,7 +554,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 #return_tokens
             }
         }
-        syn::Data::Enum(ref data) => {
+        syn::Data::Enum(data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
             let source = Ident::new("________________source", Span::call_site());
             let size = if data.variants.len() <= 256 {
@@ -473,7 +567,11 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     "[derive(Deserial)]: Too many variants. Maximum 65536 are supported.",
                 ));
             };
+            let mut tags: HashMap<syn::LitInt, proc_macro2::Span> = HashMap::new();
+
             for (i, variant) in data.variants.iter().enumerate() {
+                let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
+
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
                         let field_names: Vec<_> = variant
@@ -500,10 +598,29 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     .zip(variant.fields.iter())
                     .map(|(name, field)| impl_deserial_field(field, name, &source))
                     .collect::<syn::Result<proc_macro2::TokenStream>>()?;
-                let idx_lit = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
+
+                let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
+                    || (syn::LitInt::new(i.to_string().as_str(), variant.span()), variant.span()),
+                    |tag| (tag.value, tag.span),
+                );
+
+                if let Some(clasing_tag_span) = tags.insert(tag_lit.clone(), tag_span) {
+                    let mut err = syn::Error::new(
+                        tag_span,
+                        "'tag' attribute is not unique and collide with the tag of another \
+                         variant.",
+                    );
+                    err.combine(syn::Error::new(
+                        clasing_tag_span,
+                        "'tag' attribute is not unique and collide with the tag of another \
+                         variant.",
+                    ));
+                    return Err(err);
+                }
+
                 let variant_ident = &variant.ident;
                 matches_tokens.extend(quote! {
-                    #idx_lit => {
+                    #tag_lit => {
                         #field_tokens
                         Ok(#data_name::#variant_ident #pattern)
                     },
