@@ -167,7 +167,54 @@ enum BoundAttribute {
     /// Represents bounds explicitly set for each derived trait.
     /// E.g. the attribute: `bound(serial = "A : Serial", deserial = "A :
     /// Deserial")`
-    Separate(SeparateBoundValue),
+    Separated(SeparateBoundValue),
+}
+
+impl BoundAttribute {
+    /// Return bounds set for the implementation of `Deserial`. `None` meaning
+    /// no bound attribute for this trait.
+    fn deserial_bound(&self) -> Option<&BoundAttributeValue> {
+        if let BoundAttribute::Shared(bound)
+        | BoundAttribute::Separated(SeparateBoundValue {
+            deserial: Some(bound),
+            ..
+        }) = self
+        {
+            Some(bound)
+        } else {
+            None
+        }
+    }
+
+    /// Return bounds set for the implementation of `Serial`. `None` meaning
+    /// no bound attribute for this trait.
+    fn serial_bound(&self) -> Option<&BoundAttributeValue> {
+        if let BoundAttribute::Shared(bound)
+        | BoundAttribute::Separated(SeparateBoundValue {
+            serial: Some(bound),
+            ..
+        }) = self
+        {
+            Some(bound)
+        } else {
+            None
+        }
+    }
+
+    /// Return bounds set for the implementation of `SchemaType`. `None` meaning
+    /// no bound attribute for this trait.
+    fn schema_type_bound(&self) -> Option<&BoundAttributeValue> {
+        if let BoundAttribute::Shared(bound)
+        | BoundAttribute::Separated(SeparateBoundValue {
+            schema_type: Some(bound),
+            ..
+        }) = self
+        {
+            Some(bound)
+        } else {
+            None
+        }
+    }
 }
 
 /// Represents bounds explicitly set for each derived trait.
@@ -200,12 +247,7 @@ impl ContainerAttributes {
     fn deserial_bounds(&self) -> Option<BoundAttributeValue> {
         let mut bounds: Option<BoundAttributeValue> = None;
         for attribute in self.bounds.iter() {
-            if let BoundAttribute::Shared(bound)
-            | BoundAttribute::Separate(SeparateBoundValue {
-                deserial: Some(bound),
-                ..
-            }) = attribute
-            {
+            if let Some(bound) = attribute.deserial_bound() {
                 bounds.get_or_insert(BoundAttributeValue::new()).extend(bound.clone());
             }
         }
@@ -217,12 +259,7 @@ impl ContainerAttributes {
     fn serial_bounds(&self) -> Option<BoundAttributeValue> {
         let mut bounds: Option<BoundAttributeValue> = None;
         for attribute in self.bounds.iter() {
-            if let BoundAttribute::Shared(bound)
-            | BoundAttribute::Separate(SeparateBoundValue {
-                serial: Some(bound),
-                ..
-            }) = attribute
-            {
+            if let Some(bound) = attribute.serial_bound() {
                 bounds.get_or_insert(BoundAttributeValue::new()).extend(bound.clone());
             }
         }
@@ -234,12 +271,7 @@ impl ContainerAttributes {
     fn schema_type_bounds(&self) -> Option<BoundAttributeValue> {
         let mut bounds: Option<BoundAttributeValue> = None;
         for attribute in self.bounds.iter() {
-            if let BoundAttribute::Shared(bound)
-            | BoundAttribute::Separate(SeparateBoundValue {
-                schema_type: Some(bound),
-                ..
-            }) = attribute
-            {
+            if let Some(bound) = attribute.schema_type_bound() {
                 bounds.get_or_insert(BoundAttributeValue::new()).extend(bound.clone());
             }
         }
@@ -350,7 +382,7 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         match meta {
             syn::Meta::List(list) => {
-                Ok(BoundAttribute::Separate(SeparateBoundValue::try_from(list)?))
+                Ok(BoundAttribute::Separated(SeparateBoundValue::try_from(list)?))
             }
             syn::Meta::NameValue(name_value) => {
                 let syn::Lit::Str(ref lit_str) = name_value.lit else {
