@@ -47,8 +47,8 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 /// Derive the [`Serial`] trait for the type.
 ///
 /// If the type is a struct all fields must implement the [`Serial`] trait. If
-/// the type is an enum then all fields of each of the enums must implement the
-/// [`Serial`] trait.
+/// the type is an enum then all fields of each of the variants must implement
+/// the [`Serial`] trait.
 ///
 /// Fields of structs are serialized in the order they appear in the code.
 ///
@@ -61,9 +61,9 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 /// ## Generic type bounds
 ///
 /// By default a trait bound is added on each generic type for implementing
-/// [`Serial`]. However, if this is not desirable, the bound can be put
-/// explicitly using the `bound` attribute on the type overriding the default
-/// behavior by adding the provided bound for the implementation.
+/// [`Serial`]. However, if this is not desirable, the default bound can be
+/// replaced by using the `bound` attribute on the type and providing the
+/// replacement.
 ///
 /// Bounds present in the type declaration will still be present in
 /// the implementation, even when a bound is provided:
@@ -155,20 +155,20 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
     unwrap_or_report(derive::impl_deserial_with_state(&ast))
 }
 
-/// Derive the [`SchemaType`] trait for a type matching the implementation when
-/// deriving [`Serial`].
+/// Derive the [`SchemaType`] trait for a type with a `schema::Type` matching
+/// the implementation when deriving [`Serial`].
 ///
 /// Can be used for enums and structs.
 /// If the type is a struct all fields must implement the [`SchemaType`] trait.
-/// If the type is an enum then all fields of each of the enums must implement
-/// the [`SchemaType`] trait.
+/// If the type is an enum then all fields of each of the variants must
+/// implement the [`SchemaType`] trait.
 ///
 /// ## Generic type bounds
 ///
 /// By default a trait bound is added on each generic type for implementing
-/// [`SchemaType`]. However, if this is not desirable, the bound can be put
-/// explicitly using the `bound` attribute on the type overriding the default
-/// behavior by adding the provided bound for the implementation.
+/// [`SchemaType`]. However, if this is not desirable, the default bound can be
+/// replaced by using the `bound` attribute on the type and providing the
+/// replacement.
 ///
 /// Bounds present in the type declaration will still be present in
 /// the implementation, even when a bound is provided:
@@ -211,9 +211,8 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 /// `#[concordium(transparent)]` can be added above the struct which changes the
 /// implementation of [`SchemaType`] to schema type of the field.
 ///
-/// The attribute can `#[concordium(transparent)]` attribute can only be used
-/// for structs with a single field, and the type of this field must implement
-/// `SchemaType`.
+/// The `#[concordium(transparent)]` attribute can only be used for structs with
+/// a single field, and the type of this field must implement `SchemaType`.
 ///
 /// ### Example
 ///
@@ -225,7 +224,7 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// ### Exmaple
+/// ### Example
 ///
 /// The 'transparent' attribute will still take account for field attributes
 /// such as `size_length` for collections.
