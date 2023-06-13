@@ -496,8 +496,8 @@ impl TryFrom<&syn::Meta> for TagAttribute {
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         if let syn::Meta::NameValue(name_value) = meta {
             let syn::Lit::Int(value) = &name_value.lit else {
-                    return Err(syn::Error::new(name_value.lit.span(), "'tag' attribute must be an integer."))
-                };
+                return Err(syn::Error::new(name_value.lit.span(), "'tag' attribute must be an integer."))
+            };
             Ok(TagAttribute {
                 value: value.clone(),
                 span:  meta.span(),
@@ -507,6 +507,48 @@ impl TryFrom<&syn::Meta> for TagAttribute {
                 meta.span(),
                 "'tag' attribute value can only be provided as 'tag = ...'.",
             ))
+        }
+    }
+}
+
+#[derive(Debug)]
+struct TagChecker<'a> {
+    tags_in_use: HashMap<syn::LitInt, (proc_macro2::Span, &'a syn::Ident)>,
+}
+
+impl<'a> TagChecker<'a> {
+    fn new() -> Self {
+        Self {
+            tags_in_use: HashMap::new(),
+        }
+    }
+
+    fn add_and_check(
+        &mut self,
+        tag_lit: syn::LitInt,
+        tag_span: proc_macro2::Span,
+        variant_ident: &'a syn::Ident,
+    ) -> syn::Result<()> {
+        if let Some((clasing_tag_span, clasing_variant_ident)) =
+            self.tags_in_use.insert(tag_lit, (tag_span, variant_ident))
+        {
+            let mut err = syn::Error::new(
+                tag_span,
+                format!(
+                    "The tag of '{}' collides with the tag of '{}'.",
+                    variant_ident, clasing_variant_ident
+                ),
+            );
+            err.combine(syn::Error::new(
+                clasing_tag_span,
+                format!(
+                    "The tag of '{}' collides with the tag of '{}'.",
+                    clasing_variant_ident, variant_ident
+                ),
+            ));
+            Err(err)
+        } else {
+            Ok(())
         }
     }
 }
@@ -567,7 +609,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     "[derive(Deserial)]: Too many variants. Maximum 65536 are supported.",
                 ));
             };
-            let mut tags: HashMap<syn::LitInt, proc_macro2::Span> = HashMap::new();
+            let mut tag_checker = TagChecker::new();
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
@@ -600,23 +642,14 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     .collect::<syn::Result<proc_macro2::TokenStream>>()?;
 
                 let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
-                    || (syn::LitInt::new(i.to_string().as_str(), variant.span()), variant.span()),
+                    || {
+                        (
+                            syn::LitInt::new(i.to_string().as_str(), variant.span()),
+                            variant.ident.span(),
+                        )
+                    },
                     |tag| (tag.value, tag.span),
                 );
-
-                if let Some(clasing_tag_span) = tags.insert(tag_lit.clone(), tag_span) {
-                    let mut err = syn::Error::new(
-                        tag_span,
-                        "'tag' attribute is not unique and collide with the tag of another \
-                         variant.",
-                    );
-                    err.combine(syn::Error::new(
-                        clasing_tag_span,
-                        "'tag' attribute is not unique and collide with the tag of another \
-                         variant.",
-                    ));
-                    return Err(err);
-                }
 
                 let variant_ident = &variant.ident;
                 matches_tokens.extend(quote! {
@@ -624,7 +657,9 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                         #field_tokens
                         Ok(#data_name::#variant_ident #pattern)
                     },
-                })
+                });
+
+                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
             }
             quote! {
                 let idx = <#size as #root::Deserial>::deserial(#source)?;
@@ -770,8 +805,11 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     "[derive(Serial)]: Enums with more than 65536 variants are not supported."
                 );
             };
+            let mut tag_checker = TagChecker::new();
 
             for (i, variant) in data.variants.iter().enumerate() {
+                let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
+
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
                         let field_names: Vec<_> = variant
@@ -798,16 +836,30 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     .map(|(name, field)| impl_serial_field(field, &quote!(#name), &out_ident))
                     .collect::<syn::Result<_>>()?;
 
-                let idx_lit =
-                    syn::LitInt::new(format!("{}{}", i, size).as_str(), Span::call_site());
+                let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
+                    || {
+                        (
+                            syn::LitInt::new(i.to_string().as_str(), variant.span()),
+                            variant.ident.span(),
+                        )
+                    },
+                    |tag| (tag.value, tag.span),
+                );
+
                 let variant_ident = &variant.ident;
+                let tag_lit_size = syn::LitInt::new(
+                    format!("{tag_lit}{size}").to_string().as_str(),
+                    variant.span(),
+                );
 
                 matches_tokens.extend(quote! {
                     #data_name::#variant_ident #pattern => {
-                        #root::Serial::serial(&#idx_lit, #out_ident)?;
+                        #root::Serial::serial(&#tag_lit_size, #out_ident)?;
                         #field_tokens
                     },
-                })
+                });
+
+                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
             }
             quote! {
                 match self {
@@ -963,7 +1015,11 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                 ));
             };
             let state_ident = Ident::new("_______________________________state", Span::call_site());
+            let mut tag_checker = TagChecker::new();
+
             for (i, variant) in data.variants.iter().enumerate() {
+                let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
+
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
                         let field_names: Vec<_> = variant
@@ -997,17 +1053,29 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                         )
                     })
                     .collect::<syn::Result<proc_macro2::TokenStream>>()?;
-                let idx_lit = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
+
+                let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
+                    || {
+                        (
+                            syn::LitInt::new(i.to_string().as_str(), variant.span()),
+                            variant.ident.span(),
+                        )
+                    },
+                    |tag| (tag.value, tag.span),
+                );
+
                 let variant_ident = &variant.ident;
                 matches_tokens.extend(quote! {
-                    #idx_lit => {
+                    #tag_lit => {
                         #field_tokens
                         Ok(#data_name::#variant_ident #pattern)
                     },
-                })
+                });
+
+                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
             }
             quote! {
-                let idx = #size::deserial(#source)?;
+                let idx = <#size as concordium_std::Deserial>::deserial(#source)?;
                 match idx {
                     #matches_tokens
                     _ => Err(Default::default())
