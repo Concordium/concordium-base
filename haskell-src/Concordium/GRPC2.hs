@@ -279,7 +279,7 @@ instance ToProto QueryTypes.ConsensusStatus where
         ProtoFields.bestBlock .= toProto csBestBlock
         ProtoFields.genesisBlock .= toProto csGenesisBlock
         ProtoFields.genesisTime .= toProto csGenesisTime
-        ProtoFields.slotDuration .= toProto csSlotDuration
+        ProtoFields.maybe'slotDuration .= fmap toProto csSlotDuration
         ProtoFields.epochDuration .= toProto csEpochDuration
         ProtoFields.lastFinalizedBlock .= toProto csLastFinalizedBlock
         ProtoFields.bestBlockHeight .= toProto csBestBlockHeight
@@ -306,6 +306,10 @@ instance ToProto QueryTypes.ConsensusStatus where
         ProtoFields.genesisIndex .= toProto csGenesisIndex
         ProtoFields.currentEraGenesisBlock .= toProto csCurrentEraGenesisBlock
         ProtoFields.currentEraGenesisTime .= toProto csCurrentEraGenesisTime
+        ProtoFields.maybe'currentTimeoutDuration .= fmap toProto csCurrentTimeoutDuration
+        ProtoFields.maybe'currentRound .= csCurrentRound
+        ProtoFields.maybe'currentEpoch .= csCurrentEpoch
+        ProtoFields.maybe'triggerBlockTime .= fmap toProto csTriggerBlockTime
 
 instance ToProto AccountThreshold where
     type Output AccountThreshold = Proto.AccountThreshold
@@ -1605,7 +1609,7 @@ instance ToProto QueryTypes.BlockInfo where
         ProtoFields.eraBlockHeight .= toProto biEraBlockHeight
         ProtoFields.receiveTime .= toProto biBlockReceiveTime
         ProtoFields.arriveTime .= toProto biBlockArriveTime
-        ProtoFields.slotNumber .= toProto biBlockSlot
+        ProtoFields.maybe'slotNumber .= fmap toProto biBlockSlot
         ProtoFields.slotTime .= toProto biBlockSlotTime
         ProtoFields.maybe'baker .= fmap toProto biBlockBaker
         ProtoFields.finalized .= biFinalized
@@ -1614,6 +1618,8 @@ instance ToProto QueryTypes.BlockInfo where
         ProtoFields.transactionsSize .= fromIntegral biTransactionsSize
         ProtoFields.stateHash .= toProto biBlockStateHash
         ProtoFields.protocolVersion .= toProto biProtocolVersion
+        ProtoFields.maybe'round .= biRound
+        ProtoFields.maybe'epoch .= biEpoch
 
 instance ToProto QueryTypes.PoolStatus where
     type Output QueryTypes.PoolStatus = Either Proto.PoolInfoResponse Proto.PassiveDelegationInfo
@@ -1721,7 +1727,7 @@ instance ToProto QueryTypes.BlockBirkParameters where
     toProto QueryTypes.BlockBirkParameters{..} = do
         bakerElectionInfo <- mapM toProto (Vec.toList bbpBakers)
         Just $ Proto.make $ do
-            ProtoFields.electionDifficulty .= toProto bbpElectionDifficulty
+            ProtoFields.maybe'electionDifficulty .= fmap toProto bbpElectionDifficulty
             ProtoFields.electionNonce .= mkSerialize bbpElectionNonce
             ProtoFields.bakerElectionInfo .= bakerElectionInfo
 

@@ -63,7 +63,7 @@ data ConsensusStatus = ConsensusStatus
       -- |Time of the (original) genesis block
       csGenesisTime :: !UTCTime,
       -- |(Current) slot duration in milliseconds
-      csSlotDuration :: !Duration,
+      csSlotDuration :: !(Maybe Duration),
       -- |(Current) epoch duration in milliseconds
       csEpochDuration :: !Duration,
       -- |Hash of the last finalized block
@@ -119,7 +119,15 @@ data ConsensusStatus = ConsensusStatus
       -- Initially this is equal to 'csGenesisBlock'.
       csCurrentEraGenesisBlock :: !BlockHash,
       -- |Time when the current era started.
-      csCurrentEraGenesisTime :: !UTCTime
+      csCurrentEraGenesisTime :: !UTCTime,
+      -- |The current duration to wait before a round times out.
+      csCurrentTimeoutDuration :: !(Maybe Duration),
+      -- |The current round.
+      csCurrentRound :: !(Maybe Word64),
+      -- |The current epoch.
+      csCurrentEpoch :: !(Maybe Epoch),
+      -- |The trigger block time of the seedstate of the last finalized block.
+      csTriggerBlockTime :: !(Maybe Timestamp)
     }
     deriving (Show)
 
@@ -172,7 +180,7 @@ data BlockInfo = BlockInfo
       -- |The time the block was verified
       biBlockArriveTime :: !UTCTime,
       -- |The slot number in which the block was baked
-      biBlockSlot :: !Slot,
+      biBlockSlot :: !(Maybe Slot),
       -- |The time of the slot in which the block was baked
       biBlockSlotTime :: !UTCTime,
       -- |The identifier of the block baker, or @Nothing@ for a
@@ -189,7 +197,11 @@ data BlockInfo = BlockInfo
       -- |The hash of the block state
       biBlockStateHash :: !StateHash,
       -- |Protocol version that the block belongs to.
-      biProtocolVersion :: !ProtocolVersion
+      biProtocolVersion :: !ProtocolVersion,
+      -- |The round of the block
+      biRound :: !(Maybe Word64),
+      -- |The epoch of the block
+      biEpoch :: !(Maybe Epoch)
     }
     deriving (Show)
 
@@ -390,7 +402,7 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 -- |Summary of the birk parameters applicable to a particular block.
 data BlockBirkParameters = BlockBirkParameters
     { -- |Baking lottery election difficulty
-      bbpElectionDifficulty :: !ElectionDifficulty,
+      bbpElectionDifficulty :: !(Maybe ElectionDifficulty),
       -- |Current leadership election nonce for the lottery
       bbpElectionNonce :: !LeadershipElectionNonce,
       -- |List of the currently eligible bakers
