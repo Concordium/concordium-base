@@ -6,6 +6,7 @@ world scenario the attributes will be derived from the identity verification pro
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
 
   <style>
    input[type=text], input[type=number], input[type=month], select {
@@ -51,7 +52,7 @@ world scenario the attributes will be derived from the identity verification pro
 <body>
   <div>
     <h1>Concordium Identity Verification</h1>
-    <form action="/api/submit" method="post">
+    <form action="/api/submit" method="post" accept-charset="utf-8">
 
         <input type="hidden" id="idcredpub" name="id_cred_pub" value="$id_cred_pub$">
         <input type="hidden" id="endpointversion" name="endpoint_version" value="$endpoint_version$">
