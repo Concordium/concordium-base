@@ -432,12 +432,19 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
 
 #[derive(Debug)]
 struct VariantAttributes {
-    tag: Option<TagAttribute>,
+    tag:    Option<TagAttribute>,
+    rename: Option<RenameAttribute>,
 }
 
 #[derive(Debug)]
 struct TagAttribute {
     value: syn::LitInt,
+    span:  proc_macro2::Span,
+}
+
+#[derive(Debug)]
+struct RenameAttribute {
+    value: String,
     span:  proc_macro2::Span,
 }
 
@@ -449,6 +456,8 @@ impl TryFrom<&[syn::Attribute]> for VariantAttributes {
         // Collect and combine all errors if any.
         let mut error_option: Option<syn::Error> = None;
         let mut tag_option: Option<TagAttribute> = None;
+        let mut rename_option: Option<RenameAttribute> = None;
+
         for meta in metas.iter() {
             if meta.path().is_ident("tag") {
                 if let Some(tag_attribute) = &tag_option {
@@ -469,6 +478,25 @@ impl TryFrom<&[syn::Attribute]> for VariantAttributes {
                         Err(err) => push_error(&mut error_option, err),
                     }
                 }
+            } else if meta.path().is_ident("rename") {
+                if let Some(rename_attribute) = &rename_option {
+                    let new_error = syn::Error::new(
+                        meta.span(),
+                        "Attribute 'rename' should only be specified once per field.",
+                    );
+                    error_option.get_or_insert_with(|| {
+                        syn::Error::new(
+                            rename_attribute.span,
+                            "Attribute 'rename' should only be specified once per field.",
+                        )
+                    });
+                    push_error(&mut error_option, new_error)
+                } else {
+                    match RenameAttribute::try_from(meta) {
+                        Ok(rename) => rename_option = Some(rename),
+                        Err(err) => push_error(&mut error_option, err),
+                    }
+                }
             } else {
                 let err = syn::Error::new(
                     meta.span(),
@@ -484,7 +512,8 @@ impl TryFrom<&[syn::Attribute]> for VariantAttributes {
             Err(err)
         } else {
             Ok(VariantAttributes {
-                tag: tag_option,
+                tag:    tag_option,
+                rename: rename_option,
             })
         }
     }
@@ -494,20 +523,42 @@ impl TryFrom<&syn::Meta> for TagAttribute {
     type Error = syn::Error;
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
-        if let syn::Meta::NameValue(name_value) = meta {
-            let syn::Lit::Int(value) = &name_value.lit else {
-                return Err(syn::Error::new(name_value.lit.span(), "'tag' attribute must be an integer."))
-            };
-            Ok(TagAttribute {
-                value: value.clone(),
-                span:  meta.span(),
-            })
-        } else {
-            Err(syn::Error::new(
+        let syn::Meta::NameValue(name_value) = meta else {
+            return Err(syn::Error::new(
                 meta.span(),
                 "'tag' attribute value can only be provided as 'tag = ...'.",
             ))
-        }
+        };
+        let syn::Lit::Int(value) = &name_value.lit else {
+            return Err(syn::Error::new(name_value.lit.span(), "'tag' attribute must be an integer."))
+        };
+        Ok(TagAttribute {
+            value: value.clone(),
+            span:  meta.span(),
+        })
+    }
+}
+
+impl TryFrom<&syn::Meta> for RenameAttribute {
+    type Error = syn::Error;
+
+    fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
+        let syn::Meta::NameValue(name_value) = meta else {
+            return Err(syn::Error::new(
+                meta.span(),
+                "'rename' attribute value can only be provided as 'rename = ...'.",
+            ))
+        };
+        let syn::Lit::Str(lit_str) = &name_value.lit else {
+            return Err(syn::Error::new(
+                name_value.lit.span(),
+                "'rename' attribute must be a string."
+            ))
+        };
+        Ok(Self {
+            value: lit_str.value(),
+            span:  meta.span(),
+        })
     }
 }
 
@@ -1569,14 +1620,18 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                 ));
             }
             let mut used_variant_names = HashMap::new();
-            let variant_tokens: Vec<_> = data
+            let mut tag_checker = TagChecker::new();
+            let mut use_tagged_enum = false;
+
+            let variant_data: Vec<_> = data
                 .variants
                 .iter()
-                .map(|variant| {
+                .enumerate()
+                .map(|(i, variant)| {
+                    let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
                     // Handle the 'rename' attribute.
-                    let (variant_name, variant_span) = match find_rename_attribute(&variant.attrs)?
-                    {
-                        Some(name_and_span) => name_and_span,
+                    let (variant_name, variant_span) = match variant_attributes.rename {
+                        Some(rename_attribute) => (rename_attribute.value, rename_attribute.span),
                         None => (variant.ident.to_string(), variant.ident.span()),
                     };
                     check_for_name_collisions(
@@ -1585,14 +1640,39 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                         variant_span,
                     )?;
 
+                    use_tagged_enum = use_tagged_enum || variant_attributes.tag.is_some();
+
+                    let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
+                        || {
+                            (
+                                syn::LitInt::new(i.to_string().as_str(), variant.span()),
+                                variant.ident.span(),
+                            )
+                        },
+                        |tag| (tag.value, tag.span),
+                    );
+
+                    tag_checker.add_and_check(tag_lit.clone(), tag_span, &variant.ident)?;
+
                     let fields_tokens = schema_type_fields(&variant.fields)?;
-                    Ok(quote! {
-                        (concordium_std::String::from(#variant_name), #fields_tokens)
-                    })
+
+                    Ok((tag_lit, quote! {
+                         (concordium_std::String::from(#variant_name), #fields_tokens)
+                    }))
                 })
                 .collect::<syn::Result<_>>()?;
-            quote! {
-                concordium_std::schema::Type::Enum(concordium_std::Vec::from([ #(#variant_tokens),* ]))
+            if use_tagged_enum {
+                let variant_tokens = variant_data
+                    .iter()
+                    .map(|(tag_lit, variant_tokens)| quote!((#tag_lit, #variant_tokens)));
+                quote! {
+                    concordium_std::schema::Type::TaggedEnum(concordium_std::collections::BTreeMap::from([ #(#variant_tokens),* ]))
+                }
+            } else {
+                let variant_tokens = variant_data.iter().map(|(_, variant_tokens)| variant_tokens);
+                quote! {
+                    concordium_std::schema::Type::Enum(Vec::from([ #(#variant_tokens),* ]))
+                }
             }
         }
         _ => return Err(syn::Error::new(ast.span(), "Union is not supported")),
