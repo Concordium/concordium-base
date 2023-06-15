@@ -307,8 +307,8 @@ instance ToProto QueryTypes.ConsensusStatus where
         ProtoFields.currentEraGenesisBlock .= toProto csCurrentEraGenesisBlock
         ProtoFields.currentEraGenesisTime .= toProto csCurrentEraGenesisTime
         ProtoFields.maybe'currentTimeoutDuration .= fmap toProto csCurrentTimeoutDuration
-        ProtoFields.maybe'currentRound .= csCurrentRound
-        ProtoFields.maybe'currentEpoch .= csCurrentEpoch
+        ProtoFields.maybe'currentRound .= fmap toProto csCurrentRound
+        ProtoFields.maybe'currentEpoch .= fmap toProto csCurrentEpoch
         ProtoFields.maybe'triggerBlockTime .= fmap toProto csTriggerBlockTime
 
 instance ToProto AccountThreshold where
@@ -1618,8 +1618,8 @@ instance ToProto QueryTypes.BlockInfo where
         ProtoFields.transactionsSize .= fromIntegral biTransactionsSize
         ProtoFields.stateHash .= toProto biBlockStateHash
         ProtoFields.protocolVersion .= toProto biProtocolVersion
-        ProtoFields.maybe'round .= biRound
-        ProtoFields.maybe'epoch .= biEpoch
+        ProtoFields.maybe'round .= fmap toProto biRound
+        ProtoFields.maybe'epoch .= fmap toProto biEpoch
 
 instance ToProto QueryTypes.PoolStatus where
     type Output QueryTypes.PoolStatus = Either Proto.PoolInfoResponse Proto.PassiveDelegationInfo
@@ -1973,6 +1973,10 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
     toProto = mkWord64
+
+instance ToProto Round where
+    type Output Round = Proto.Round
+    toProto (Round r) = mkWord64 r
 
 instance ToProto CredentialsPerBlockLimit where
     type Output CredentialsPerBlockLimit = Proto.CredentialsPerBlockLimit

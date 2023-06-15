@@ -126,6 +126,7 @@ module Concordium.Types (
     BlockHash (..),
     BlockHeight (..),
     Slot (..),
+    Round (..),
     EpochLength,
     Epoch,
     RewardPeriodLength (..),

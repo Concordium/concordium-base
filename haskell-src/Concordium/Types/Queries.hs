@@ -62,7 +62,7 @@ data ConsensusStatus = ConsensusStatus
       csGenesisBlock :: !BlockHash,
       -- |Time of the (original) genesis block
       csGenesisTime :: !UTCTime,
-      -- |(Current) slot duration in milliseconds
+      -- |(Current) slot duration in milliseconds. Only present in protocol versions 1-5.
       csSlotDuration :: !(Maybe Duration),
       -- |(Current) epoch duration in milliseconds
       csEpochDuration :: !Duration,
@@ -120,15 +120,15 @@ data ConsensusStatus = ConsensusStatus
       csCurrentEraGenesisBlock :: !BlockHash,
       -- |Time when the current era started.
       csCurrentEraGenesisTime :: !UTCTime,
-      -- |The current duration to wait before a round times out.
+      -- |The current duration to wait before a round times out. Present from protocol version 6.
       csCurrentTimeoutDuration :: !(Maybe Duration),
-      -- |The current round.
-      csCurrentRound :: !(Maybe Word64),
-      -- |The current epoch.
+      -- |The current round. Present from protocol version 6.
+      csCurrentRound :: !(Maybe Round),
+      -- |The current epoch. Present from protocol version 6.
       csCurrentEpoch :: !(Maybe Epoch),
       -- |The trigger block time of the seedstate of the last finalized block. The first block in
       -- the epoch with timestamp at least this is considered to be the trigger block for the epoch
-      -- transition.
+      -- transition. Present from protocol version 6.
       csTriggerBlockTime :: !(Maybe Timestamp)
     }
     deriving (Show)
@@ -181,7 +181,7 @@ data BlockInfo = BlockInfo
       biBlockReceiveTime :: !UTCTime,
       -- |The time the block was verified
       biBlockArriveTime :: !UTCTime,
-      -- |The slot number in which the block was baked
+      -- |The slot number in which the block was baked. Only present in protocol versions 1-5.
       biBlockSlot :: !(Maybe Slot),
       -- |The time of the slot in which the block was baked
       biBlockSlotTime :: !UTCTime,
@@ -200,9 +200,9 @@ data BlockInfo = BlockInfo
       biBlockStateHash :: !StateHash,
       -- |Protocol version that the block belongs to.
       biProtocolVersion :: !ProtocolVersion,
-      -- |The round of the block
-      biRound :: !(Maybe Word64),
-      -- |The epoch of the block
+      -- |The round of the block. Present from protocol version 6.
+      biRound :: !(Maybe Round),
+      -- |The epoch of the block. Present from protocol version 6.
       biEpoch :: !(Maybe Epoch)
     }
     deriving (Show)
@@ -403,7 +403,7 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 
 -- |Summary of the birk parameters applicable to a particular block.
 data BlockBirkParameters = BlockBirkParameters
-    { -- |Baking lottery election difficulty
+    { -- |Baking lottery election difficulty. Only present in protocol versions 1-5.
       bbpElectionDifficulty :: !(Maybe ElectionDifficulty),
       -- |Current leadership election nonce for the lottery
       bbpElectionNonce :: !LeadershipElectionNonce,
