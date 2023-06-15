@@ -126,7 +126,9 @@ data ConsensusStatus = ConsensusStatus
       csCurrentRound :: !(Maybe Word64),
       -- |The current epoch.
       csCurrentEpoch :: !(Maybe Epoch),
-      -- |The trigger block time of the seedstate of the last finalized block.
+      -- |The trigger block time of the seedstate of the last finalized block. The first block in
+      -- the epoch with timestamp at least this is considered to be the trigger block for the epoch
+      -- transition.
       csTriggerBlockTime :: !(Maybe Timestamp)
     }
     deriving (Show)
