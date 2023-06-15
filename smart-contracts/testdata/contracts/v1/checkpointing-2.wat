@@ -168,6 +168,39 @@
        ;; Fail with error code -1.
        (i32.const -1))
 
+;; Receive method 'e'.
+(func $receive_e (export "test.e") (param i64) (result i32)
+    (local $entrypoint i32)
+    (local $entry i64)
+    ;; Get the parameter, which is 1 byte, indicating which receive function to call below.
+    ;; And check that one byte was read.
+    (call $assert_eq
+        (call $host_get_parameter_section
+            (i32.const 0) ;; parameter index
+            (i32.const 0) ;; pointer in wasm memory
+            (i32.const 1) ;; length
+            (i32.const 0)) ;; offset
+        (i32.const 1))
+    ;; Save the parameter to $entrypoint.
+    (local.set $entrypoint (i32.load8_u (i32.const 0)))
+
+    ;; Get the id for the entry at [].
+    (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 0)))
+    ;; Read to memory position 0.
+    (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
+    (drop)
+    ;; Call the $entrypoint and make sure the state was not modified
+    (call $assert_eq_64
+          (call $invoke_self_receive (local.get $entrypoint))
+          (i64.const 1099511627776)) ;; Corresponds to 0b10000000000 indicating the state has not changed, and there is a return value.
+     ;; and check that the entry we read above is still alive.
+    (call $assert_eq
+        (call $state_entry_read (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
+        (i32.const 8)
+    )
+    (i32.const 0)
+)
+
  ;; Does nothing and returns success.
  (func $receive_d (export "test.d") (param i64) (result i32)
        ;; Return success.
