@@ -184,11 +184,6 @@
     ;; Save the parameter to $entrypoint.
     (local.set $entrypoint (i32.load8_u (i32.const 0)))
 
-    ;; Get the id for the entry at [].
-    (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 0)))
-    ;; Read to memory position 0.
-    (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
-    (drop)
     ;; Call the $entrypoint and make sure the state was not modified
     (call $assert_eq_64
           (call $invoke_self_receive (local.get $entrypoint))
@@ -200,6 +195,25 @@
     )
     (i32.const 0)
 )
+
+;; TODO: We need nesting at level 3
+;; at top level A makes some changes
+;; then calls itself
+;; then it makes no changes but calls itself again
+;; and the inner call makes changes
+;; and then we fail in the middle call
+
+;; Write a state entry.
+(func $receive_f (export "test.f") (param i64) (result i32)
+   (local $entry i64)
+   ;; Get the id for the entry at [].
+   (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 0)))
+   ;; Read to memory position 0.
+   (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
+   (drop)
+   ;; Return success.
+   (i32.const 0))
+
 
  ;; Does nothing and returns success.
  (func $receive_d (export "test.d") (param i64) (result i32)
