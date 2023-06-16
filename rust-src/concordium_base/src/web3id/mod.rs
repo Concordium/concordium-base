@@ -1040,9 +1040,9 @@ impl<'a, C: Curve, AttributeType, Web3IdSigner>
                 randomness,
             } => CommitmentInputs::Account {
                 issuance_date: *issuance_date,
-                issuer:        *issuer,
-                values:        &values,
-                randomness:    &randomness,
+                issuer: *issuer,
+                values,
+                randomness,
             },
             OwnedCommitmentInputs::Web3Issuer {
                 issuance_date,
@@ -1051,9 +1051,9 @@ impl<'a, C: Curve, AttributeType, Web3IdSigner>
                 randomness,
             } => CommitmentInputs::Web3Issuer {
                 issuance_date: *issuance_date,
-                signer:        &signer,
-                values:        &values,
-                randomness:    randomness.clone(),
+                signer,
+                values,
+                randomness: randomness.clone(),
             },
         }
     }
