@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common-derive 3.0.0 (2023-06-16)
+
 - Set minimum Rust version to 1.65.
 - Add derive macros for `Reject`, `DeserialWithState`, `SchemaType`, `StateClone` and `Deletable` from `concordium_std_derive`.
 - Add attribute macros `init`, `receive`, `concordium_test`, `concordium_cfg_test`, `concordium_cfg_not_test` and `concordium_quickcheck` from `concordium_std_derive` with their related features `wasm-test`, `build-schema` and `concordium-quickcheck`.
