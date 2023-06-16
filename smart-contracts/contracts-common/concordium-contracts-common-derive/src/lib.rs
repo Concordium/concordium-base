@@ -52,11 +52,53 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 ///
 /// Fields of structs are serialized in the order they appear in the code.
 ///
+/// ## Enums
+///
 /// Enums can have no more than 65536 variants. They are serialized by using a
-/// tag to indicate the variant, enumerating them in the order they are written
-/// in source code. If the number of variants is less than or equal 256 then a
-/// single byte is used to encode it. Otherwise two bytes are used for the tag,
-/// encoded in little endian.
+/// tag to indicate the variant, and by default they are enumerated in the order
+/// they are written in source code. If the number of variants is less than or
+/// equal 256 then a single byte is used to encode it. Otherwise two bytes are
+/// used for the tag, encoded in little endian.
+///
+/// ### Specifying the tag byte size using `#[concordium(repr(..))]`
+///
+/// Optionally an enum type can be annotated with a `#[concordium(repr(x))]`
+/// attribute, where `x` is either `u8` or `u16`. This specifies the number of
+/// bytes to use when serializing the tag in little endian.
+///
+/// #### Example
+///
+/// Example of an enum which uses two bytes for encoding the tag.
+///
+/// ```ignore
+/// #[derive(Serial)]
+/// #[concordium(repr(u16))]
+/// enum MyEnum {
+///     Zero,
+///     One
+/// }
+/// ```
+///
+/// ### Specifying the tag value for a variant using `#[concordium(tag = ..)]`
+///
+/// For each enum variant the tag can be explicitly set using `#[concordium(tag
+/// = n)]` where `n` is the integer literal to use for the tag.
+/// When using the 'tag' attribute it is required to have the
+/// #[concordium(repr(..))] set as well.
+///
+/// #### Example
+///
+/// Example of enum specifying the tag of the variant `Zero` to the value `42`.
+///
+/// ```ignore
+/// #[derive(Serial)]
+/// #[concordium(repr(u8))]
+/// enum MyEnum {
+///     #[concordium(tag = 42)]
+///     Zero,
+///     One
+/// }
+/// ```
 ///
 /// ## Generic type bounds
 ///
