@@ -6,6 +6,34 @@ use quote::ToTokens;
 use std::{collections::HashMap, convert::TryFrom, ops::Neg};
 use syn::{spanned::Spanned, DataEnum, Ident, Meta};
 
+macro_rules! ensure {
+    ($condition: expr, $span: expr, $message: expr) => {
+        if !$condition {
+            bail!($span, $message);
+        }
+    };
+    ($condition: expr, $span: expr, $message: expr, $($arg:tt)*) => {
+        if !$condition {
+            bail!($span, $message, $($arg)*);
+        }
+    };
+}
+
+macro_rules! bail {
+    ($span: expr, $message: expr) => {
+        return Err(syn::Error::new(
+            $span,
+            format!($message),
+        ));
+    };
+    ($span: expr, $message: expr, $($arg:tt)*) => {
+        return Err(syn::Error::new(
+            $span,
+            format!($message, $($arg)*),
+        ));
+    };
+}
+
 /// The prefix used in field attributes: `#[concordium(attr = "something")]`
 const CONCORDIUM_ATTRIBUTE: &str = "concordium";
 
@@ -13,7 +41,7 @@ const CONCORDIUM_ATTRIBUTE: &str = "concordium";
 const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 3] = ["size_length", "ensure_ordered", "rename"];
 
 /// A list of valid concordium attributes
-const VALID_CONCORDIUM_ATTRIBUTES: [&str; 3] = ["state_parameter", "bound", "transparent"];
+const VALID_CONCORDIUM_ATTRIBUTES: [&str; 4] = ["state_parameter", "bound", "transparent", "repr"];
 
 fn get_root() -> proc_macro2::TokenStream { quote!(concordium_std) }
 
@@ -95,6 +123,7 @@ fn get_concordium_field_attributes(attributes: &[syn::Attribute]) -> syn::Result
     get_valid_concordium_attributes(attributes, true)
 }
 
+/// Finds concordium attributes without checking the path in the meta.
 fn get_concordium_attributes(attributes: &[syn::Attribute]) -> syn::Result<Vec<syn::Meta>> {
     attributes
         .iter()
@@ -116,6 +145,7 @@ fn get_concordium_attributes(attributes: &[syn::Attribute]) -> syn::Result<Vec<s
 }
 
 /// Finds concordium attributes, either field or general attributes.
+/// Ensures the path in the meta is a valid attribute name.
 fn get_valid_concordium_attributes(
     attributes: &[syn::Attribute],
     for_field: bool,
@@ -129,16 +159,13 @@ fn get_valid_concordium_attributes(
     let concordium_attributes = get_concordium_attributes(attributes)?;
     for meta in &concordium_attributes {
         let path = meta.path();
-        if !valid_attributes.iter().any(|&attr| path.is_ident(attr)) {
-            return Err(syn::Error::new(
-                meta.span(),
-                format!(
-                    "The attribute '{}' is not supported as a {}.",
-                    path.to_token_stream(),
-                    attribute_type
-                ),
-            ));
-        }
+        ensure!(
+            valid_attributes.iter().any(|&attr| path.is_ident(attr)),
+            meta.span(),
+            "The attribute '{}' is not supported as a {}.",
+            path.to_token_stream(),
+            attribute_type
+        );
     }
     Ok(concordium_attributes)
 }
@@ -257,8 +284,10 @@ struct ContainerAttributes {
     bounds:          Vec<BoundAttribute>,
     /// The state parameter attribute. `state_parameter = ".."`
     state_parameter: Option<syn::TypePath>,
-    /// Transparent attribute. 'transparent'
+    /// The 'transparent' attribute. Is false when not present.
     transparent:     bool,
+    /// The 'repr(..)' attribute.
+    repr:            Option<ReprAttribute>,
 }
 
 impl ContainerAttributes {
@@ -297,6 +326,129 @@ impl ContainerAttributes {
         }
         bounds
     }
+
+    /// Get the repr attribute if set otherwise the smallest size length which
+    /// can represent the number of variants.
+    fn tag_repr(&self, variants_len: usize) -> syn::Result<syn::Ident> {
+        if let Some(repr_attribute) = &self.repr {
+            let max = repr_attribute.max_variant_length();
+            let ident = repr_attribute.ident();
+            ensure!(
+                max >= variants_len,
+                Span::call_site(),
+                "Too many variants. Maximum {max} are supported with 'repr({ident})'",
+            );
+            Ok(ident)
+        } else if variants_len <= usize::from(u8::MAX) + 1 {
+            Ok(format_ident!("u8"))
+        } else if variants_len <= usize::from(u16::MAX) + 1 {
+            Ok(format_ident!("u16"))
+        } else {
+            bail!(
+                Span::call_site(),
+                "[derive(Deserial)]: Too many variants. Maximum 65536 are supported.",
+            );
+        }
+    }
+
+    /// Ensure that when tag attribute is used, a repr attribute is set and this
+    /// repr is large enough to represent the tag.
+    fn check_tag_with_repr(&self, tag_attribute: &Option<TagAttribute>) -> syn::Result<()> {
+        if let Some(tag) = tag_attribute {
+            let Some(repr) = &self.repr else {
+                bail!(
+                    Span::call_site(),
+                    "'repr(..)' attribute must be set on the type when using 'tag' attribute",
+                );
+            };
+            let value: usize = tag.value.base10_parse()?;
+            ensure!(
+                value <= repr.max_tag_value(),
+                tag.span,
+                "'tag' attribute value of {} cannot be represented by the type {1} set in \
+                 'repr({1})'",
+                tag.value,
+                repr.ident()
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Valid values for the 'repr(..)' attribute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReprAttributeValue {
+    U8,
+    U16,
+}
+
+/// 'repr(..)' attribute, used to specify the size length used for enum tags.
+#[derive(Debug)]
+struct ReprAttribute {
+    /// The size length to use.
+    value: ReprAttributeValue,
+    /// The span of the attribute.
+    span:  proc_macro2::Span,
+}
+
+impl ReprAttribute {
+    /// Construct a ['syn::Ident'] from the value using the attribute span.
+    fn ident(&self) -> syn::Ident {
+        use ReprAttributeValue::*;
+        match self.value {
+            U8 => format_ident!("u8", span = self.span),
+            U16 => format_ident!("u16", span = self.span),
+        }
+    }
+
+    /// Maximum tag value with the value of the 'repr' attribute.
+    fn max_tag_value(&self) -> usize {
+        use ReprAttributeValue::*;
+        match self.value {
+            U8 => u8::MAX.into(),
+            U16 => u16::MAX.into(),
+        }
+    }
+
+    /// Maximum number of variants distiguishable with the value of the 'repr'
+    /// attribute
+    fn max_variant_length(&self) -> usize { self.max_tag_value() + 1 }
+}
+
+impl TryFrom<&syn::Meta> for ReprAttribute {
+    type Error = syn::Error;
+
+    fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
+        let syn::Meta::List(list) = meta else {
+            bail!(
+                meta.span(),
+                "repr attribute value can only be provided as 'repr(...)'",
+            );
+        };
+        ensure!(
+            list.nested.len() == 1,
+            list.nested.span(),
+            "'repr(..)' must be provided a single value",
+        );
+        // Safe to unwrap below because we already checked the length to be 1.
+        let syn::NestedMeta::Meta(syn::Meta::Path(path)) = list.nested.first().unwrap() else {
+            bail!(list.nested.span(), "'repr(..)' only supports the value of 'u8' or 'u16'");
+        };
+        let Some(ident) = path.get_ident() else {
+            bail!(path.span(), "'repr(..)' only supports the value of 'u8' or 'u16'");
+        };
+        let value = if ident == "u8" {
+            ReprAttributeValue::U8
+        } else if ident == "u16" {
+            ReprAttributeValue::U16
+        } else {
+            bail!(ident.span(), "'repr(..)' only supports the value of 'u8' or 'u16'",);
+        };
+        Ok(Self {
+            value,
+            span: meta.span(),
+        })
+    }
 }
 
 impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
@@ -308,6 +460,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
         let mut error_option: Option<syn::Error> = None;
         let mut bounds = Vec::new();
         let mut transparent = false;
+        let mut repr_option: Option<ReprAttribute> = None;
         for meta in metas.iter() {
             if meta.path().is_ident("bound") {
                 match BoundAttribute::try_from(meta) {
@@ -324,6 +477,25 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
                     );
                     push_error(&mut error_option, new_err)
                 }
+            } else if meta.path().is_ident("repr") {
+                if let Some(repr_attribute) = &repr_option {
+                    let new_error = syn::Error::new(
+                        meta.span(),
+                        "Attribute 'repr' should only be specified once per type.",
+                    );
+                    error_option.get_or_insert_with(|| {
+                        syn::Error::new(
+                            repr_attribute.span,
+                            "Attribute 'repr' should only be specified once per type.",
+                        )
+                    });
+                    push_error(&mut error_option, new_error)
+                } else {
+                    match ReprAttribute::try_from(meta) {
+                        Ok(repr) => repr_option = Some(repr),
+                        Err(err) => push_error(&mut error_option, err),
+                    }
+                }
             }
         }
 
@@ -334,6 +506,7 @@ impl TryFrom<&[syn::Attribute]> for ContainerAttributes {
                 bounds,
                 state_parameter: find_state_parameter_attribute(attributes)?,
                 transparent,
+                repr: repr_option,
             })
         }
     }
@@ -344,23 +517,22 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
 
     fn try_from(list: &syn::MetaList) -> Result<Self, Self::Error> {
         let items = &list.nested;
-        if items.is_empty() {
-            return Err(syn::Error::new(list.span(), "bound attribute cannot be empty"));
-        }
+        ensure!(!items.is_empty(), list.span(), "bound attribute cannot be empty");
+
         let mut deserial: Option<BoundAttributeValue> = None;
         let mut serial: Option<BoundAttributeValue> = None;
         let mut schema_type: Option<BoundAttributeValue> = None;
 
         for item in items {
             let syn::NestedMeta::Meta(nested_meta) = item else {
-                return Err(syn::Error::new(item.span(), "bound attribute list can only contain name value pairs"));
+                bail!(item.span(), "bound attribute list can only contain name value pairs");
             };
             let syn::Meta::NameValue(name_value) = nested_meta else {
-                return Err(syn::Error::new(nested_meta.span(), "bound attribute list must contain named values"))
+                bail!(nested_meta.span(), "bound attribute list must contain named values");
             };
             if name_value.path.is_ident("serial") {
                 let syn::Lit::Str(lit_str) = &name_value.lit else {
-                    return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
+                    bail!(name_value.lit.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(serial_value) = serial.as_mut() {
@@ -370,7 +542,7 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                 };
             } else if name_value.path.is_ident("deserial") {
                 let syn::Lit::Str(lit_str) = &name_value.lit else {
-                    return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
+                    bail!(name_value.lit.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(deserial_value) = deserial.as_mut() {
@@ -380,7 +552,7 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                 };
             } else if name_value.path.is_ident("schema_type") {
                 let syn::Lit::Str(lit_str) = &name_value.lit else {
-                    return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
+                    bail!(name_value.lit.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(schema_type_value) = schema_type.as_mut() {
@@ -389,11 +561,11 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                     schema_type = Some(value);
                 };
             } else {
-                return Err(syn::Error::new(
+                bail!(
                     item.span(),
                     "bound attribute list only allow the keys 'serial', 'deserial' and \
                      'schema_type'",
-                ));
+                );
             }
         }
 
@@ -415,7 +587,7 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
             }
             syn::Meta::NameValue(name_value) => {
                 let syn::Lit::Str(ref lit_str) = name_value.lit else {
-                    return Err(syn::Error::new(name_value.lit.span(), "bound attribute must be a string literal"))
+                    bail!(name_value.lit.span(), "bound attribute must be a string literal");
                 };
 
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
@@ -430,21 +602,31 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
     }
 }
 
+/// Concordium attributes supported on enum variants.
 #[derive(Debug)]
 struct VariantAttributes {
+    /// Override tag to use for (de)serializing this variant e.g. 'tag = 42'
     tag:    Option<TagAttribute>,
+    /// Override variant name in the derived 'SchemaType'.
     rename: Option<RenameAttribute>,
 }
 
+/// Attribute 'tag' for providing the tag used when serializing an enum variant.
 #[derive(Debug)]
 struct TagAttribute {
+    /// The literal to use as the tag.
     value: syn::LitInt,
+    /// The span of the attribute.
     span:  proc_macro2::Span,
 }
 
+/// Attribute 'rename' for providing a name to use in the schema instead of the
+/// inferred from variant or field name.
 #[derive(Debug)]
 struct RenameAttribute {
+    /// The string to use as the name.
     value: String,
+    /// The span of the attribute.
     span:  proc_macro2::Span,
 }
 
@@ -524,13 +706,13 @@ impl TryFrom<&syn::Meta> for TagAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::NameValue(name_value) = meta else {
-            return Err(syn::Error::new(
+            bail!(
                 meta.span(),
                 "'tag' attribute value can only be provided as 'tag = ...'.",
-            ))
+            );
         };
         let syn::Lit::Int(value) = &name_value.lit else {
-            return Err(syn::Error::new(name_value.lit.span(), "'tag' attribute must be an integer."))
+            bail!(name_value.lit.span(), "'tag' attribute must be an integer.");
         };
         Ok(TagAttribute {
             value: value.clone(),
@@ -544,16 +726,16 @@ impl TryFrom<&syn::Meta> for RenameAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::NameValue(name_value) = meta else {
-            return Err(syn::Error::new(
+            bail!(
                 meta.span(),
                 "'rename' attribute value can only be provided as 'rename = ...'.",
-            ))
+            );
         };
         let syn::Lit::Str(lit_str) = &name_value.lit else {
-            return Err(syn::Error::new(
+            bail!(
                 name_value.lit.span(),
                 "'rename' attribute must be a string."
-            ))
+            );
         };
         Ok(Self {
             value: lit_str.value(),
@@ -562,18 +744,15 @@ impl TryFrom<&syn::Meta> for RenameAttribute {
     }
 }
 
-#[derive(Debug)]
+/// Collect variant tags and check for collision.
+#[derive(Debug, Default)]
 struct TagChecker<'a> {
     tags_in_use: HashMap<syn::LitInt, (proc_macro2::Span, &'a syn::Ident)>,
 }
 
 impl<'a> TagChecker<'a> {
-    fn new() -> Self {
-        Self {
-            tags_in_use: HashMap::new(),
-        }
-    }
-
+    /// Add a tag to a collection of used tags and provide an error if already
+    /// used.
     fn add_and_check(
         &mut self,
         tag_lit: syn::LitInt,
@@ -613,11 +792,17 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
     let source_ident = Ident::new("________________source", Span::call_site());
     let root = get_root();
+    let container_attributes = ContainerAttributes::try_from(ast.attrs.as_slice())?;
 
     let body_tokens = match &ast.data {
         syn::Data::Struct(data) => {
             let mut names = proc_macro2::TokenStream::new();
             let mut field_tokens = proc_macro2::TokenStream::new();
+            ensure!(
+                container_attributes.repr.is_none(),
+                ast.span(),
+                "'repr(..)' attribute can only be used on an enum"
+            );
 
             let return_tokens = match data.fields {
                 syn::Fields::Named(_) => {
@@ -650,20 +835,13 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         syn::Data::Enum(data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
             let source = Ident::new("________________source", Span::call_site());
-            let size = if data.variants.len() <= 256 {
-                format_ident!("u8")
-            } else if data.variants.len() <= 256 * 256 {
-                format_ident!("u16")
-            } else {
-                return Err(syn::Error::new(
-                    ast.span(),
-                    "[derive(Deserial)]: Too many variants. Maximum 65536 are supported.",
-                ));
-            };
-            let mut tag_checker = TagChecker::new();
+
+            let repr = container_attributes.tag_repr(data.variants.len())?;
+            let mut tag_checker = TagChecker::default();
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
+                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -692,6 +870,8 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     .map(|(name, field)| impl_deserial_field(field, name, &source))
                     .collect::<syn::Result<proc_macro2::TokenStream>>()?;
 
+                // Get the literal for the tag either from a 'tag' attribute of the index of the
+                // variant.
                 let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
                     || {
                         (
@@ -713,7 +893,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
             }
             quote! {
-                let idx = <#size as #root::Deserial>::deserial(#source)?;
+                let idx = <#repr as #root::Deserial>::deserial(#source)?;
                 match idx {
                     #matches_tokens
                     _ => Err(Default::default())
@@ -723,7 +903,6 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         _ => unimplemented!("#[derive(Deserial)] is not implemented for union."),
     };
 
-    let container_attributes = ContainerAttributes::try_from(ast.attrs.as_slice())?;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
     let where_clauses_tokens =
@@ -813,9 +992,16 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
     let out_ident = format_ident!("out");
     let root = get_root();
+    let container_attributes = ContainerAttributes::try_from(ast.attrs.as_slice())?;
 
     let body = match ast.data {
         syn::Data::Struct(ref data) => {
+            ensure!(
+                container_attributes.repr.is_none(),
+                ast.span(),
+                "'repr(..)' attribute can only be used on an enum",
+            );
+
             let fields_tokens = match data.fields {
                 syn::Fields::Named(_) => {
                     data.fields
@@ -847,19 +1033,12 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         syn::Data::Enum(ref data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
 
-            let size = if data.variants.len() <= 256 {
-                format_ident!("u8")
-            } else if data.variants.len() <= 256 * 256 {
-                format_ident!("u16")
-            } else {
-                unimplemented!(
-                    "[derive(Serial)]: Enums with more than 65536 variants are not supported."
-                );
-            };
-            let mut tag_checker = TagChecker::new();
+            let repr = container_attributes.tag_repr(data.variants.len())?;
+            let mut tag_checker = TagChecker::default();
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
+                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -887,6 +1066,8 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     .map(|(name, field)| impl_serial_field(field, &quote!(#name), &out_ident))
                     .collect::<syn::Result<_>>()?;
 
+                // Get the literal for the tag either from a 'tag' attribute of the index of the
+                // variant.
                 let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
                     || {
                         (
@@ -899,7 +1080,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
                 let variant_ident = &variant.ident;
                 let tag_lit_size = syn::LitInt::new(
-                    format!("{tag_lit}{size}").to_string().as_str(),
+                    format!("{tag_lit}{repr}").to_string().as_str(),
                     variant.span(),
                 );
 
@@ -922,7 +1103,6 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         _ => unimplemented!("#[derive(Serial)] is not implemented for union."),
     };
 
-    let container_attributes = ContainerAttributes::try_from(ast.attrs.as_slice())?;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
     let where_clauses_tokens = if let Some(attribute_bounds) = container_attributes.serial_bounds()
@@ -1002,11 +1182,11 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
     let state_parameter = match container_attributes.state_parameter {
         Some(ref state_parameter) => state_parameter,
         None => {
-            return Err(syn::Error::new(
+            bail!(
                 Span::call_site(),
                 "DeriveWithState requires the attribute #[concordium(state_parameter = \"S\")], \
                  where \"S\" should be the generic parameter satisfying `HasStateApi`.",
-            ))
+            );
         }
     };
 
@@ -1016,6 +1196,13 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
         syn::Data::Struct(ref data) => {
             let mut names = proc_macro2::TokenStream::new();
             let mut field_tokens = proc_macro2::TokenStream::new();
+
+            ensure!(
+                container_attributes.repr.is_none(),
+                ast.span(),
+                "'repr(..)' attribute can only be used on an enum",
+            );
+
             let return_tokens = match data.fields {
                 syn::Fields::Named(_) => {
                     for field in data.fields.iter() {
@@ -1055,21 +1242,14 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
         syn::Data::Enum(ref data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
             let source = Ident::new("________________source", Span::call_site());
-            let size = if data.variants.len() <= 256 {
-                format_ident!("u8")
-            } else if data.variants.len() <= 256 * 256 {
-                format_ident!("u16")
-            } else {
-                return Err(syn::Error::new(
-                    ast.span(),
-                    "[derive(DeserialWithState)]: Too many variants. Maximum 65536 are supported.",
-                ));
-            };
+
+            let repr = container_attributes.tag_repr(data.variants.len())?;
             let state_ident = Ident::new("_______________________________state", Span::call_site());
-            let mut tag_checker = TagChecker::new();
+            let mut tag_checker = TagChecker::default();
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
+                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -1105,6 +1285,8 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                     })
                     .collect::<syn::Result<proc_macro2::TokenStream>>()?;
 
+                // Get the literal for the tag either from a 'tag' attribute of the index of the
+                // variant.
                 let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
                     || {
                         (
@@ -1126,7 +1308,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                 tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
             }
             quote! {
-                let idx = <#size as concordium_std::Deserial>::deserial(#source)?;
+                let idx = <#repr as concordium_std::Deserial>::deserial(#source)?;
                 match idx {
                     #matches_tokens
                     _ => Err(Default::default())
@@ -1295,10 +1477,7 @@ fn generate_variant_error_conversions(
             // but the general case of this requires evaluating constant expressions,
             // which is not easily supported at the moment.
             if let Some((_, discriminant)) = variant.discriminant.as_ref() {
-                return Err(syn::Error::new(
-                    discriminant.span(),
-                    "Explicit discriminants are not yet supported.",
-                ));
+                bail!(discriminant.span(), "Explicit discriminants are not yet supported.",);
             }
             let variant_attributes = variant.attrs.iter();
             variant_attributes
@@ -1485,11 +1664,11 @@ pub fn impl_state_clone(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let state_parameter = match find_state_parameter_attribute(&ast.attrs)? {
         Some(state_param) => state_param,
         None => {
-            return Err(syn::Error::new(
+            bail!(
                 Span::call_site(),
                 "StateClone requires the attribute #[concordium(state_parameter = \"S\")], where \
                  \"S\" should be the HasStateApi generic parameter.",
-            ))
+            );
         }
     };
 
@@ -1594,13 +1773,17 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
 
     let body = match ast.data {
         syn::Data::Struct(ref data) => {
+            ensure!(
+                container_attributes.repr.is_none(),
+                ast.span(),
+                "'repr(..)' attribute can only be used on an enum",
+            );
             if container_attributes.transparent {
-                if data.fields.len() != 1 {
-                    return Err(syn::Error::new(
-                        ast.span(),
-                        "'transparent' attribute can only be used on a struct with a single field",
-                    ));
-                }
+                ensure!(
+                    data.fields.len() == 1,
+                    ast.span(),
+                    "'transparent' attribute can only be used on a struct with a single field",
+                );
 
                 // Safe to unwrap below since we already checked the length is one.
                 let field = data.fields.iter().next().unwrap();
@@ -1613,14 +1796,13 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
             }
         }
         syn::Data::Enum(ref data) => {
-            if container_attributes.transparent {
-                return Err(syn::Error::new(
-                    ast.span(),
-                    "'transparent' attribute can only be used on a struct",
-                ));
-            }
+            ensure!(
+                !container_attributes.transparent,
+                ast.span(),
+                "'transparent' attribute can only be used on a struct",
+            );
             let mut used_variant_names = HashMap::new();
-            let mut tag_checker = TagChecker::new();
+            let mut tag_checker = TagChecker::default();
             let mut use_tagged_enum = false;
 
             let variant_data: Vec<_> = data
@@ -1629,6 +1811,8 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                 .enumerate()
                 .map(|(i, variant)| {
                     let variant_attributes = VariantAttributes::try_from(variant.attrs.as_slice())?;
+                    container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+
                     // Handle the 'rename' attribute.
                     let (variant_name, variant_span) = match variant_attributes.rename {
                         Some(rename_attribute) => (rename_attribute.value, rename_attribute.span),
@@ -1642,6 +1826,8 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
 
                     use_tagged_enum = use_tagged_enum || variant_attributes.tag.is_some();
 
+                    // Get the literal for the tag either from a 'tag' attribute of the index of the
+                    // variant.
                     let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
                         || {
                             (
@@ -1662,6 +1848,15 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                 })
                 .collect::<syn::Result<_>>()?;
             if use_tagged_enum {
+                // Ensure tagged enum is only used with repr(u8).
+                if let Some(repr) = &container_attributes.repr {
+                    ensure!(
+                        repr.value == ReprAttributeValue::U8,
+                        repr.span,
+                        "SchemaType only supports 'repr(u8)' when using 'tag' attribute."
+                    );
+                }
+
                 let variant_tokens = variant_data
                     .iter()
                     .map(|(tag_lit, variant_tokens)| quote!((#tag_lit, #variant_tokens)));
@@ -1675,7 +1870,9 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                 }
             }
         }
-        _ => return Err(syn::Error::new(ast.span(), "Union is not supported")),
+        _ => {
+            bail!(ast.span(), "Union is not supported");
+        }
     };
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
