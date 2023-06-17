@@ -27,6 +27,8 @@
  (import "concordium" "invoke" (func $host_invoke (param $tag i32) (param $start i32) (param $length i32) (result i64)))
 
  (import "concordium" "state_lookup_entry" (func $state_lookup_entry (param $key_start i32) (param $key_length i32) (result i64)))
+ (import "concordium" "state_iterate_prefix" (func $state_iterate_prefix (param $key_start i32) (param $key_length i32) (result i64)))
+ (import "concordium" "state_iterator_next" (func $state_iterator_next (param $iterator i64) (result i64)))
  (import "concordium" "state_create_entry" (func $state_create_entry (param $key_start i32) (param $key_length i32) (result i64)))
  (import "concordium" "state_entry_read" (func $state_entry_read (param $entry i64) (param $write_location i32) (param $length i32) (param $offset i32) (result i32)))
  (import "concordium" "state_entry_write" (func $state_entry_write (param $entry i64) (param $read_location i32) (param $length i32) (param $offset i32) (result i32)))
@@ -170,8 +172,8 @@
 
 ;; Receive method 'e'.
 (func $receive_e (export "test.e") (param i64) (result i32)
-    (local $entrypoint i32)
     (local $entry i64)
+    (local $entrypoint i32)
     ;; Get the parameter, which is 1 byte, indicating which receive function to call below.
     ;; And check that one byte was read.
     (call $assert_eq
@@ -184,36 +186,56 @@
     ;; Save the parameter to $entrypoint.
     (local.set $entrypoint (i32.load8_u (i32.const 0)))
 
-    ;; Call the $entrypoint and make sure the state was not modified
-    (call $assert_eq_64
+   ;; Create entry 0.
+   (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 0)))
+   ;; Write to memory position 0.
+   (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
+   (drop)
+
+    ;; Call the $entrypoint and make sure the state was not modified.
+   (call $assert_eq_64
           (call $invoke_self_receive (local.get $entrypoint))
-          (i64.const 1099511627776)) ;; Corresponds to 0b10000000000 indicating the state has not changed, and there is a return value.
+          ;; Corresponds to 0b0000000000000000000000001000000000000000000000000000000000000000
+          ;; indicating the state has not changed, and there is a return value at index 1.
+          (i64.const 1099511627776))
      ;; and check that the entry we read above is still alive.
     (call $assert_eq
         (call $state_entry_read (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
         (i32.const 8)
-    )
+   )
+
     (i32.const 0)
 )
 
-;; TODO: We need nesting at level 3
-;; at top level A makes some changes
-;; then calls itself
-;; then it makes no changes but calls itself again
-;; and the inner call makes changes
-;; and then we fail in the middle call
-
-;; Write a state entry.
+;; Lookup an entry and iterator, then do a self-call.
+;; Afterwards make sure that the iterator 
 (func $receive_f (export "test.f") (param i64) (result i32)
+   (local $entrypoint i32)
    (local $entry i64)
+   (local $iterator i64)
    ;; Get the id for the entry at [].
    (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 0)))
-   ;; Read to memory position 0.
-   (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
-   (drop)
+
+   (local.set $iterator (call $state_iterate_prefix (i32.const 0) (i32.const 0)))
+   
+   (call $assert_eq_64
+          (call $invoke_self_receive (i32.const 100)) ;; 100 is ascii code for 'd'
+          ;; Corresponds to 0b0000000000000000000000001000000000000000000000000000000000000000
+          ;; indicating the state has not changed, and there is a return value at index 1.
+          (i64.const 1099511627776)) 
+     ;; and check that the entry we read above is still alive.
+   (call $assert_eq
+        (call $state_entry_read (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
+        (i32.const 8)
+   )
+
+   (call $assert_eq_64
+      (call $state_iterator_next (local.get $iterator))
+      (i64.const 1)
+   )
+
    ;; Return success.
    (i32.const 0))
-
 
  ;; Does nothing and returns success.
  (func $receive_d (export "test.d") (param i64) (result i32)
