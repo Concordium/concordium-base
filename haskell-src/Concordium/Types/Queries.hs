@@ -62,8 +62,8 @@ data ConsensusStatus = ConsensusStatus
       csGenesisBlock :: !BlockHash,
       -- |Time of the (original) genesis block
       csGenesisTime :: !UTCTime,
-      -- |(Current) slot duration in milliseconds
-      csSlotDuration :: !Duration,
+      -- |(Current) slot duration in milliseconds. Only present in protocol versions 1-5.
+      csSlotDuration :: !(Maybe Duration),
       -- |(Current) epoch duration in milliseconds
       csEpochDuration :: !Duration,
       -- |Hash of the last finalized block
@@ -119,9 +119,29 @@ data ConsensusStatus = ConsensusStatus
       -- Initially this is equal to 'csGenesisBlock'.
       csCurrentEraGenesisBlock :: !BlockHash,
       -- |Time when the current era started.
-      csCurrentEraGenesisTime :: !UTCTime
+      csCurrentEraGenesisTime :: !UTCTime,
+      -- |Parameters that pertain only to the consensus protocol effective at protocol 6 and onward.
+      csConcordiumBFTStatus :: !(Maybe ConcordiumBFTStatus)
     }
     deriving (Show)
+
+-- |Part of 'ConsensusStatus' that pertains only to the Concordium BFT
+-- consensus and is only present when protocol 6 or later is in effect.
+data ConcordiumBFTStatus = ConcordiumBFTStatus
+    { -- |The current duration to wait before a round times out.
+      cbftsCurrentTimeoutDuration :: !Duration,
+      -- |The current round.
+      cbftsCurrentRound :: !Round,
+      -- |The current epoch.
+      cbftsCurrentEpoch :: !Epoch,
+      -- |The trigger block time of the seedstate of the last finalized block. The first block in
+      -- the epoch with timestamp at least this is considered to be the trigger block for the epoch
+      -- transition.
+      cbftsTriggerBlockTime :: !UTCTime
+    }
+    deriving (Show)
+
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''ConcordiumBFTStatus)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''ConsensusStatus)
 
@@ -171,8 +191,8 @@ data BlockInfo = BlockInfo
       biBlockReceiveTime :: !UTCTime,
       -- |The time the block was verified
       biBlockArriveTime :: !UTCTime,
-      -- |The slot number in which the block was baked
-      biBlockSlot :: !Slot,
+      -- |The slot number in which the block was baked. Only present in protocol versions 1-5.
+      biBlockSlot :: !(Maybe Slot),
       -- |The time of the slot in which the block was baked
       biBlockSlotTime :: !UTCTime,
       -- |The identifier of the block baker, or @Nothing@ for a
@@ -189,7 +209,11 @@ data BlockInfo = BlockInfo
       -- |The hash of the block state
       biBlockStateHash :: !StateHash,
       -- |Protocol version that the block belongs to.
-      biProtocolVersion :: !ProtocolVersion
+      biProtocolVersion :: !ProtocolVersion,
+      -- |The round of the block. Present from protocol version 6.
+      biRound :: !(Maybe Round),
+      -- |The epoch of the block. Present from protocol version 6.
+      biEpoch :: !(Maybe Epoch)
     }
     deriving (Show)
 
@@ -389,8 +413,8 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 
 -- |Summary of the birk parameters applicable to a particular block.
 data BlockBirkParameters = BlockBirkParameters
-    { -- |Baking lottery election difficulty
-      bbpElectionDifficulty :: !ElectionDifficulty,
+    { -- |Baking lottery election difficulty. Only present in protocol versions 1-5.
+      bbpElectionDifficulty :: !(Maybe ElectionDifficulty),
       -- |Current leadership election nonce for the lottery
       bbpElectionNonce :: !LeadershipElectionNonce,
       -- |List of the currently eligible bakers
