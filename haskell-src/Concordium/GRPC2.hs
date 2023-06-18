@@ -306,10 +306,10 @@ instance ToProto QueryTypes.ConsensusStatus where
         ProtoFields.genesisIndex .= toProto csGenesisIndex
         ProtoFields.currentEraGenesisBlock .= toProto csCurrentEraGenesisBlock
         ProtoFields.currentEraGenesisTime .= toProto csCurrentEraGenesisTime
-        ProtoFields.maybe'currentTimeoutDuration .= fmap toProto csCurrentTimeoutDuration
-        ProtoFields.maybe'currentRound .= fmap toProto csCurrentRound
-        ProtoFields.maybe'currentEpoch .= fmap toProto csCurrentEpoch
-        ProtoFields.maybe'triggerBlockTime .= fmap toProto csTriggerBlockTime
+        ProtoFields.maybe'currentTimeoutDuration .= fmap (toProto . cbftsCurrentTimeoutDuration) csConcordiumBFTStatus
+        ProtoFields.maybe'currentRound .= fmap (toProto . cbftsCurrentRound) csConcordiumBFTStatus
+        ProtoFields.maybe'currentEpoch .= fmap (toProto . cbftsCurrentEpoch) csConcordiumBFTStatus
+        ProtoFields.maybe'triggerBlockTime .= fmap (toProto . cbftsTriggerBlockTime) csConcordiumBFTStatus
 
 instance ToProto AccountThreshold where
     type Output AccountThreshold = Proto.AccountThreshold

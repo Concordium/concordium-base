@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 2.0.0 (2023-06-16)
+
 - Extend types `UpdatePayload` and `UpdateType` with variants introduced in protocol version 6.
 - Implement `Serial` and `Deserial` for `num::rational::Ratio<u64>` and `Duration`.
 - Introduce types for protocol version 6: `Ratio`, `ChainParameterVersion2`, `GASRewardsCPV1`, `TimeoutParameters` and `FinalizationCommitteeParameters`.
