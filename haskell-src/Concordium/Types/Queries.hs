@@ -120,18 +120,28 @@ data ConsensusStatus = ConsensusStatus
       csCurrentEraGenesisBlock :: !BlockHash,
       -- |Time when the current era started.
       csCurrentEraGenesisTime :: !UTCTime,
-      -- |The current duration to wait before a round times out. Present from protocol version 6.
-      csCurrentTimeoutDuration :: !(Maybe Duration),
-      -- |The current round. Present from protocol version 6.
-      csCurrentRound :: !(Maybe Round),
-      -- |The current epoch. Present from protocol version 6.
-      csCurrentEpoch :: !(Maybe Epoch),
-      -- |The trigger block time of the seedstate of the last finalized block. The first block in
-      -- the epoch with timestamp at least this is considered to be the trigger block for the epoch
-      -- transition. Present from protocol version 6.
-      csTriggerBlockTime :: !(Maybe Timestamp)
+      -- |Parameters that pertain only to the consensus protocol effective at protocol 6 and onward.
+      csConcordiumBFTStatus :: !(Maybe ConcordiumBFTStatus)
     }
     deriving (Show)
+
+-- |Part of 'ConsensusStatus' that pertains only to the Concordium BFT
+-- consensus and is only present when protocol 6 or later is in effect.
+data ConcordiumBFTStatus = ConcordiumBFTStatus
+    { -- |The current duration to wait before a round times out.
+      cbftsCurrentTimeoutDuration :: !Duration,
+      -- |The current round.
+      cbftsCurrentRound :: !Round,
+      -- |The current epoch.
+      cbftsCurrentEpoch :: !Epoch,
+      -- |The trigger block time of the seedstate of the last finalized block. The first block in
+      -- the epoch with timestamp at least this is considered to be the trigger block for the epoch
+      -- transition.
+      cbftsTriggerBlockTime :: !UTCTime
+    }
+    deriving (Show)
+
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''ConcordiumBFTStatus)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''ConsensusStatus)
 
