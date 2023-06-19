@@ -319,6 +319,90 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+/// Reasons for failing to compute the message from the attribute list and identity provider's public key.
+pub enum ComputeMessageError {
+    #[error("Inconsistent anonymity revocation parameters.")]
+    WrongArParameters,
+    #[error("Illegal attributes.")]
+    IllegalAttributeRequirements,
+    #[error("Too many attributes for the given public key.")]
+    TooManyAttributes
+}
+
+pub fn compute_message_parts<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
+    threshold: Threshold,
+    ar_list: &BTreeSet<ArIdentity>,
+    att_list: &AttributeList<P::ScalarField, AttributeType>,
+    ps_public_key: &crate::ps_sig::PublicKey<P>,
+) -> Result<(Vec<P::G1>, Vec<P::ScalarField>), ComputeMessageError> {
+    let max_accounts = P::G1::scalar_from_u64(att_list.max_accounts.into());
+
+    let tags = {
+        match encode_tags(att_list.alist.keys()) {
+            Ok(f) => f,
+            Err(_) => return Err(ComputeMessageError::IllegalAttributeRequirements),
+        }
+    };
+
+    // the list to be signed consists of (in that order)
+    // - commitment to idcredsec
+    // - commitment to prf key
+    // - created_at and valid_to dates of the attribute list
+    // - encoding of anonymity revokers.
+    // - tags of the attribute list
+    // - attribute list elements
+
+    let ar_encoded = match encode_ars(ar_list) {
+        Some(x) => x,
+        None => return Err(ComputeMessageError::WrongArParameters),
+    };
+
+    let att_vec = &att_list.alist;
+    let m = ar_encoded.len();
+    let n = att_vec.len();
+    let key_vec = &ps_public_key.ys;
+
+    if key_vec.len() < n + m + 5 {
+        return Err(ComputeMessageError::TooManyAttributes);
+    }
+
+    let mut gs = Vec::with_capacity(1 + m + 2 + n);
+    let mut exps = Vec::with_capacity(1 + m + 2 + n);
+
+    // The error here should never happen, but it is safe to just propagate it if it
+    // does by any chance.
+    let public_params =
+        encode_public_credential_values(att_list.created_at, att_list.valid_to, threshold)
+            .map_err(|_| ComputeMessageError::IllegalAttributeRequirements)?;
+
+    // add valid_to, created_at, threshold.
+    gs.push(key_vec[2]);
+    exps.push(public_params);
+
+    // and add all anonymity revocation
+    for i in 3..(m + 3) {
+        let ar_handle = ar_encoded[i - 3];
+        gs.push(key_vec[i]);
+        exps.push(ar_handle);
+    }
+
+    gs.push(key_vec[m + 3]);
+    exps.push(tags);
+
+    gs.push(key_vec[m + 3 + 1]);
+    exps.push(max_accounts);
+
+    // NB: It is crucial that att_vec is an ordered map and that .values iterator
+    // returns messages in order of tags.
+    for (&k, v) in key_vec.iter().skip(m + 5).zip(att_vec.values()) {
+        let att = v.to_field_element();
+        gs.push(k);
+        exps.push(att);
+    }
+    Ok((gs, exps))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

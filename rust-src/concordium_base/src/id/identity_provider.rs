@@ -4,7 +4,7 @@ use super::{
     secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
     types::*,
-    utils,
+    utils::{self, ComputeMessageError},
 };
 use crate::{
     bulletproofs::range_proof::verify_efficient,
@@ -23,31 +23,21 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Reason for rejecting an identity object request.
 /// This is for cryptographic reasons only, real-world identity verification is
 /// not handled in this library.
+#[derive(thiserror::Error)]
 pub enum Reason {
+    #[error("Cannot verify knowledge of idCredSec.")]
     FailedToVerifyKnowledgeOfIdCredSec,
+    #[error("Cannot verify consistency of idCredSec.")]
     FailedToVerifyIdCredSecEquality,
+    #[error("Inconsistent anonymity revocation parameters.")]
     FailedToVerifyPrfData,
-    WrongArParameters,
-    IllegalAttributeRequirements,
-    TooManyAttributes,
+    #[error("Cannot compute message: {0}")]
+    MessageError(
+        #[from]
+        utils::ComputeMessageError
+    ),
+    #[error("Zero knowledge proof does not verify.")]
     IncorrectProof,
-}
-
-impl std::fmt::Display for Reason {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Reason::*;
-        match *self {
-            FailedToVerifyKnowledgeOfIdCredSec => {
-                write!(f, "Cannot verify knowledge of idCredSec.")
-            }
-            FailedToVerifyIdCredSecEquality => write!(f, "Cannot verify consistency of idCredSec."),
-            FailedToVerifyPrfData => write!(f, "Cannot verify consistency of PRF data."),
-            WrongArParameters => write!(f, "Inconsistent anonymity revocation parameters."),
-            IllegalAttributeRequirements => write!(f, "Illegal attributes."),
-            TooManyAttributes => write!(f, "Too many attributes for the given public key."),
-            IncorrectProof => write!(f, "Zero knowledge proof does not verify."),
-        }
-    }
 }
 
 /// The validation of the two versions of identity object requests are very
@@ -232,7 +222,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // it does not hurt.
     let rt_usize: usize = revocation_threshold.into();
     if number_of_ars == 0 || rt_usize > number_of_ars {
-        return Err(Reason::WrongArParameters);
+        return Err(ComputeMessageError::WrongArParameters.into());
     }
 
     // Check that the set of ArIdentities and the encryptions in ip_ar_data are
@@ -241,7 +231,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // instead have to check that the set is equal to some other given set.
     // Later on we check whether all the listed ARs actually exist in the context.
     if number_of_ars != common_fields.ip_ar_data.len() {
-        return Err(Reason::WrongArParameters);
+        return Err(ComputeMessageError::WrongArParameters.into());
     }
     if common_fields
         .ip_ar_data
@@ -249,14 +239,14 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .zip(common_fields.choice_ar_parameters.ar_identities.iter())
         .any(|(k1, k2)| k1 != k2)
     {
-        return Err(Reason::WrongArParameters);
+        return Err(ComputeMessageError::WrongArParameters.into());
     }
 
     // We also need to check that the threshold is actually equal to
     // the number of coefficients in the sharing polynomial
     // (corresponding to the degree+1)
     if rt_usize != common_fields.cmm_prf_sharing_coeff.len() {
-        return Err(Reason::WrongArParameters);
+        return Err(ComputeMessageError::WrongArParameters.into());
     }
 
     // ar commitment key
@@ -266,7 +256,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // must have at least one value.
     // FIXME: Rework the choice of data-structure so that this is implicit.
     if common_fields.cmm_prf_sharing_coeff.is_empty() {
-        return Err(Reason::WrongArParameters);
+        return Err(ComputeMessageError::WrongArParameters.into());
     }
 
     // Verify that the two commitments to the PRF key are the same.
@@ -291,7 +281,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     );
     let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
         Some(v) => v,
-        None => return Err(Reason::WrongArParameters),
+        None => return Err(ComputeMessageError::WrongArParameters.into()),
     };
 
     let verifier = AndAdapter {
@@ -576,70 +566,7 @@ pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &crate::ps_sig::PublicKey<P>,
 ) -> Result<crate::ps_sig::UnknownMessage<P>, Reason> {
-    let max_accounts = P::G1::scalar_from_u64(att_list.max_accounts.into());
-
-    let tags = {
-        match utils::encode_tags(att_list.alist.keys()) {
-            Ok(f) => f,
-            Err(_) => return Err(Reason::IllegalAttributeRequirements),
-        }
-    };
-
-    // the list to be signed consists of (in that order)
-    // - commitment to idcredsec
-    // - commitment to prf key
-    // - created_at and valid_to dates of the attribute list
-    // - encoding of anonymity revokers.
-    // - tags of the attribute list
-    // - attribute list elements
-
-    let ar_encoded = match utils::encode_ars(ar_list) {
-        Some(x) => x,
-        None => return Err(Reason::WrongArParameters),
-    };
-
-    let att_vec = &att_list.alist;
-    let m = ar_encoded.len();
-    let n = att_vec.len();
-    let key_vec = &ps_public_key.ys;
-
-    if key_vec.len() < n + m + 5 {
-        return Err(Reason::TooManyAttributes);
-    }
-
-    let mut gs = Vec::with_capacity(1 + m + 2 + n);
-    let mut exps = Vec::with_capacity(1 + m + 2 + n);
-
-    // The error here should never happen, but it is safe to just propagate it if it
-    // does by any chance.
-    let public_params =
-        utils::encode_public_credential_values(att_list.created_at, att_list.valid_to, threshold)
-            .map_err(|_| Reason::IllegalAttributeRequirements)?;
-
-    // add valid_to, created_at, threshold.
-    gs.push(key_vec[2]);
-    exps.push(public_params);
-
-    // and add all anonymity revocation
-    for i in 3..(m + 3) {
-        let ar_handle = ar_encoded[i - 3];
-        gs.push(key_vec[i]);
-        exps.push(ar_handle);
-    }
-
-    gs.push(key_vec[m + 3]);
-    exps.push(tags);
-
-    gs.push(key_vec[m + 3 + 1]);
-    exps.push(max_accounts);
-
-    // NB: It is crucial that att_vec is an ordered map and that .values iterator
-    // returns messages in order of tags.
-    for (&k, v) in key_vec.iter().skip(m + 5).zip(att_vec.values()) {
-        let att = v.to_field_element();
-        gs.push(k);
-        exps.push(att);
-    }
+    let (gs, exps) = utils::compute_message_parts(threshold, ar_list, att_list, ps_public_key)?;
     let msg = crate::ps_sig::UnknownMessage(
         multiexp(&gs, &exps).plus_point(&cmm_sc.0.plus_point(&cmm_prf.0)),
     );
