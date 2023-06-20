@@ -1512,12 +1512,14 @@ instance Serialize TimeoutParameters where
         -- Get the timeout increase ratio.
         tiNum <- get
         tiDen <- get
+        when (tiDen == 0) $ fail "timeoutIncrease denominator must be non zero."
         let _tpTimeoutIncrease = tiNum % tiDen
         unless (_tpTimeoutIncrease > 1) $ fail "timeoutIncrease must be greater than 1."
         unless (gcd tiNum tiDen == 1) $ fail "timeoutIncrease numerator and denominator are not coprime."
         -- Get the timeout decrease ratio.
         tdNum <- get
         tdDen <- get
+        when (tdDen == 0) $ fail "timeoutDecrease denominator must be non zero."
         let _tpTimeoutDecrease = tdNum % tdDen
         unless (_tpTimeoutDecrease > 0) $ fail "timeoutDecrease must be greater than 0."
         unless (_tpTimeoutDecrease < 1) $ fail "timeoutDecrease must be less than 1."

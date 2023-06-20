@@ -19,6 +19,11 @@ import Test.QuickCheck
 
 newtype Slot = Slot {theSlot :: Word64} deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize, FromJSON, ToJSON, Arbitrary)
 
+-- |A round number for consensus. Introduced in consensus version 1.
+newtype Round = Round {theRound :: Word64}
+    deriving (Eq, Ord, S.Serialize, Num, Integral, Real, Enum, Bounded)
+    deriving newtype (FromJSON, ToJSON, Show)
+
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
 genesisSlot = 0

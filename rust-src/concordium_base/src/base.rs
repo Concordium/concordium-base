@@ -297,6 +297,15 @@ pub struct Epoch {
     pub epoch: u64,
 }
 
+/// Round number. Applies to protocol 6 and onward.
+#[repr(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[serde(transparent)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+pub struct Round {
+    pub round: u64,
+}
+
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
