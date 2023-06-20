@@ -32,7 +32,7 @@ sha2 = "0.10"
 
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "1"
+version = "*"
 
 [dev-dependencies]
 tokio-test = "0.4"
