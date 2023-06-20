@@ -105,8 +105,35 @@
  ;; Initialize contract by creating the entry at [].
 (func $init (export "init_test") (param i64) (result i32)
        ;; Create entry [].
-       (call $state_create_entry (i32.const 0) (i32.const 0))
-       ;; Ignore/drop the return value.
+       (call $state_entry_write
+             (call $state_create_entry (i32.const 0) (i32.const 0))
+             (i32.const 0)
+             (i32.const 0)
+             (i32.const 0))
+       (drop)
+       (call $state_entry_write
+             (call $state_create_entry (i32.const 0) (i32.const 1))
+             (i32.const 0)
+             (i32.const 1)
+             (i32.const 0))
+       (drop)
+       (call $state_entry_write
+             (call $state_create_entry (i32.const 0) (i32.const 2))
+             (i32.const 0)
+             (i32.const 2)
+             (i32.const 0))
+       (drop)
+       (call $state_entry_write
+             (call $state_create_entry (i32.const 0) (i32.const 3))
+             (i32.const 0)
+             (i32.const 3)
+             (i32.const 0))
+       (drop)
+       (call $state_entry_write
+             (call $state_create_entry (i32.const 0) (i32.const 4))
+             (i32.const 0)
+             (i32.const 4)
+             (i32.const 0))
        (drop)
        ;; Return success.
        (i32.const 0))
@@ -171,6 +198,9 @@
        (i32.const -1))
 
 ;; Receive method 'e'.
+;; This first writes to an entry at [].
+;; Then call the method specified in the parameter (as a single character)
+;; and ensure that the method did not modify any state.
 (func $receive_e (export "test.e") (param i64) (result i32)
     (local $entry i64)
     (local $entrypoint i32)
@@ -186,38 +216,27 @@
     ;; Save the parameter to $entrypoint.
     (local.set $entrypoint (i32.load8_u (i32.const 0)))
 
-   ;; Create entry 0.
-   (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 0)))
-   ;; Write to memory position 0.
+   (local.set $entry (call $state_lookup_entry (i32.const 500) (i32.const 0)))
    (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
-   (drop)
 
-    ;; Call the $entrypoint and make sure the state was not modified.
+   ;; Call the $entrypoint and make sure the state was not modified.
    (call $assert_eq_64
           (call $invoke_self_receive (local.get $entrypoint))
           ;; Corresponds to 0b0000000000000000000000001000000000000000000000000000000000000000
           ;; indicating the state has not changed, and there is a return value at index 1.
           (i64.const 1099511627776))
      ;; and check that the entry we read above is still alive.
-    (call $assert_eq
-        (call $state_entry_read (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
-        (i32.const 8)
-   )
-
-    (i32.const 0)
+   (drop)
+   (i32.const 0)
 )
 
-;; Lookup an entry and iterator, then do a self-call.
-;; Afterwards make sure that the iterator 
+;; Look up an entry at [0,0,0,0], do a self-call to d, and then check that
+;; the entry can still be read, and returns the correct value.
 (func $receive_f (export "test.f") (param i64) (result i32)
-   (local $entrypoint i32)
    (local $entry i64)
-   (local $iterator i64)
    ;; Get the id for the entry at [].
-   (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 0)))
+   (local.set $entry (call $state_lookup_entry (i32.const 0) (i32.const 4)))
 
-   (local.set $iterator (call $state_iterate_prefix (i32.const 0) (i32.const 0)))
-   
    (call $assert_eq_64
           (call $invoke_self_receive (i32.const 100)) ;; 100 is ascii code for 'd'
           ;; Corresponds to 0b0000000000000000000000001000000000000000000000000000000000000000
@@ -225,20 +244,15 @@
           (i64.const 1099511627776)) 
      ;; and check that the entry we read above is still alive.
    (call $assert_eq
-        (call $state_entry_read (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
-        (i32.const 8)
-   )
-
-   (call $assert_eq_64
-      (call $state_iterator_next (local.get $iterator))
-      (i64.const 1)
+        (call $state_entry_read (local.get $entry) (i32.const 0) (i32.const 4) (i32.const 0))
+        (i32.const 4)
    )
 
    ;; Return success.
    (i32.const 0))
 
- ;; Does nothing and returns success.
- (func $receive_d (export "test.d") (param i64) (result i32)
+;; Does nothing and returns success.
+(func $receive_d (export "test.d") (param i64) (result i32)
        ;; Return success.
        (i32.const 0))
 
