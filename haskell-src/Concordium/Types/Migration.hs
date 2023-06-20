@@ -80,6 +80,9 @@ migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 
 -- |Apply a state migration to a 'GASRewards' structure.
+--
+-- This does nothing except for the P5->P6 protocol update,
+-- which removes the finalization proof reward.
 migrateGASRewards ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->

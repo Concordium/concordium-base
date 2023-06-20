@@ -87,7 +87,7 @@ data RegenesisP6
         { genesisRegenesis :: !BaseV1.RegenesisDataV1,
           genesisMigration :: !StateMigrationData
         }
-    deriving stock (Eq, Show)
+    deriving (Eq, Show)
 
 -- |Deserialize genesis data in the V8 format.
 getGenesisDataV8 :: Get GenesisDataP6
