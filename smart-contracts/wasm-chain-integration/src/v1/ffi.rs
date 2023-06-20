@@ -228,6 +228,8 @@ unsafe extern "C" fn call_receive_v1(
     output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedStateV1,
     output_len: *mut size_t,
+    // This is set to 1 if and only if the stage has changed before the end of execution,
+    // in case execution terminated normally, without a runtime exception.
     output_state_changed: *mut u8,
     support_queries_tag: u8, // non-zero to enable support of chain queries.
 ) -> *mut u8 {
