@@ -23,7 +23,9 @@ data ProtocolUpdateData = ProtocolUpdateData
       updateConsensusParameters :: !(ConsensusParameters 'ChainParametersV2),
       -- |The 'FinalizationCommitteeParameters' that the protocol should
       -- be instantiated with.
-      updateFinalizationCommitteeParameters :: !FinalizationCommitteeParameters
+      updateFinalizationCommitteeParameters :: !FinalizationCommitteeParameters,
+      -- |Duration of the epoch after the protocol update.
+      updateGenesisEpochDuration :: !Duration
     }
     deriving (Eq, Show)
 
@@ -31,9 +33,11 @@ instance Serialize ProtocolUpdateData where
     put ProtocolUpdateData{..} = do
         put updateConsensusParameters
         put updateFinalizationCommitteeParameters
+        put updateGenesisEpochDuration
     get = do
         updateConsensusParameters <- get
         updateFinalizationCommitteeParameters <- get
+        updateGenesisEpochDuration <- get
         return ProtocolUpdateData{..}
 
 -- |Parameters used to migrate state from 'P5' to 'P6'.
