@@ -1000,6 +1000,65 @@ pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
     },
 }
 
+#[serde_with::serde_as]
+#[derive(serde::Deserialize)]
+#[serde(bound(deserialize = "AttributeType: DeserializeOwned, Web3IdSigner: DeserializeOwned"))]
+#[serde(rename_all = "camelCase", tag = "type")]
+/// An owned version of [`CommitmentInputs`] that can be deserialized.
+pub enum OwnedCommitmentInputs<C: Curve, AttributeType, Web3IdSigner> {
+    #[serde(rename_all = "camelCase")]
+    Account {
+        issuance_date: chrono::DateTime<chrono::Utc>,
+        issuer:        IpIdentity,
+        #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
+        values:        BTreeMap<u8, AttributeType>,
+        #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
+        randomness:    BTreeMap<u8, pedersen_commitment::Randomness<C>>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Web3Issuer {
+        issuance_date: chrono::DateTime<chrono::Utc>,
+        signer:        Web3IdSigner,
+        #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
+        values:        BTreeMap<u8, AttributeType>,
+        randomness:    pedersen_commitment::Randomness<C>,
+    },
+}
+
+impl<'a, C: Curve, AttributeType, Web3IdSigner>
+    From<&'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>>
+    for CommitmentInputs<'a, C, AttributeType, Web3IdSigner>
+{
+    fn from(
+        owned: &'a OwnedCommitmentInputs<C, AttributeType, Web3IdSigner>,
+    ) -> CommitmentInputs<'a, C, AttributeType, Web3IdSigner> {
+        match owned {
+            OwnedCommitmentInputs::Account {
+                issuance_date,
+                issuer,
+                values,
+                randomness,
+            } => CommitmentInputs::Account {
+                issuance_date: *issuance_date,
+                issuer: *issuer,
+                values,
+                randomness,
+            },
+            OwnedCommitmentInputs::Web3Issuer {
+                issuance_date,
+                signer,
+                values,
+                randomness,
+            } => CommitmentInputs::Web3Issuer {
+                issuance_date: *issuance_date,
+                signer,
+                values,
+                randomness: randomness.clone(),
+            },
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 /// An error that can occurr when attempting to produce a proof.
 pub enum ProofError {

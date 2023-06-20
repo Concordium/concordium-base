@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -13,6 +14,53 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
+import Concordium.Types.Parameters
+
+-- |Parameters data type for the 'P5' to 'P6' protocol update.
+-- This is provided as a parameter to the protocol update chain update instruction.
+data ProtocolUpdateData = ProtocolUpdateData
+    { -- |The consensus parameters that the protocol should be instantiated with.
+      updateConsensusParameters :: !(ConsensusParameters 'ChainParametersV2),
+      -- |The 'FinalizationCommitteeParameters' that the protocol should
+      -- be instantiated with.
+      updateFinalizationCommitteeParameters :: !FinalizationCommitteeParameters,
+      -- |Duration of the epoch after the protocol update.
+      updateGenesisEpochDuration :: !Duration
+    }
+    deriving (Eq, Show)
+
+instance Serialize ProtocolUpdateData where
+    put ProtocolUpdateData{..} = do
+        put updateConsensusParameters
+        put updateFinalizationCommitteeParameters
+        put updateGenesisEpochDuration
+    get = do
+        updateConsensusParameters <- get
+        updateFinalizationCommitteeParameters <- get
+        updateGenesisEpochDuration <- get
+        return ProtocolUpdateData{..}
+
+-- |Parameters used to migrate state from 'P5' to 'P6'.
+data StateMigrationData = StateMigrationData
+    { -- |Data provided by the protocol update to be used
+      -- in the migration.
+      migrationProtocolUpdateData :: !ProtocolUpdateData,
+      -- |The time of the trigger block that caused
+      -- this protocol update.
+      -- This is used for calculating the new 'SeedState' during
+      -- the migration P5->P6.
+      migrationTriggerBlockTime :: !Timestamp
+    }
+    deriving (Eq, Show)
+
+instance Serialize StateMigrationData where
+    put StateMigrationData{..} = do
+        put migrationProtocolUpdateData
+        put migrationTriggerBlockTime
+    get = do
+        migrationProtocolUpdateData <- get
+        migrationTriggerBlockTime <- get
+        return StateMigrationData{..}
 
 -- |Initial genesis data for the P6 protocol version.
 data GenesisDataP6 = GDP6Initial
@@ -30,7 +78,15 @@ data GenesisDataP6 = GDP6Initial
 -- The relationship between the new state and the state of the
 -- terminal block of the old chain should be defined by the
 -- chain update mechanism used.
-newtype RegenesisP6 = GDP6Regenesis {genesisRegenesis :: BaseV1.RegenesisDataV1}
+--
+-- There are two variants, one when migrating from 'P5' to 'P6'and
+-- one from 'P6' to 'P6'.
+data RegenesisP6
+    = GDP6Regenesis {genesisRegenesis :: !BaseV1.RegenesisDataV1}
+    | GDP6RegenesisFromP5
+        { genesisRegenesis :: !BaseV1.RegenesisDataV1,
+          genesisMigration :: !StateMigrationData
+        }
     deriving (Eq, Show)
 
 -- |Deserialize genesis data in the V8 format.
@@ -49,6 +105,10 @@ getRegenesisData =
         1 -> do
             genesisRegenesis <- get
             return GDP6Regenesis{..}
+        2 -> do
+            genesisRegenesis <- get
+            genesisMigration <- get
+            return GDP6RegenesisFromP5{..}
         _ -> fail "Unrecognized P6 regenesis data type."
 
 -- |Serialize genesis data in the V8 format.
@@ -102,10 +162,21 @@ regenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} 
     put genesisPreviousGenesis
     put genesisTerminalBlock
     put genesisStateHash
+regenesisBlockHash GDP6RegenesisFromP5{genesisRegenesis = BaseV1.RegenesisDataV1{..}, ..} = BlockHash . Hash.hashLazy . runPutLazy $ do
+    put genesisSlot
+    put P6
+    putWord8 2 -- migration from P5 variant
+    put genesisCore
+    put genesisFirstGenesis
+    put genesisPreviousGenesis
+    put genesisTerminalBlock
+    put genesisStateHash
+    put genesisMigration
 
 -- |The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP6 -> BlockHash
 firstGenesisBlockHash GDP6Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} = genesisFirstGenesis
+firstGenesisBlockHash GDP6RegenesisFromP5{genesisRegenesis = BaseV1.RegenesisDataV1{..}} = genesisFirstGenesis
 
 -- |Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP6 -> Word8
@@ -117,3 +188,4 @@ genesisVariantTag GDP6Initial{} = 0
 -- the data is.
 regenesisVariantTag :: RegenesisP6 -> Word8
 regenesisVariantTag GDP6Regenesis{} = 1
+regenesisVariantTag GDP6RegenesisFromP5{} = 2
