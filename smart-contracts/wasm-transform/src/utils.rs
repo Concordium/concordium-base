@@ -4,7 +4,7 @@
 use crate::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, TryFromImport},
     parse::{parse_skeleton, GetParseable, Parseable, Skeleton},
-    validate::{validate_module, ValidateImportExport},
+    validate::{validate_module, ValidateImportExport, ValidationConfig},
 };
 
 /// Strip the custom sections from the module Wasm module.
@@ -12,19 +12,21 @@ pub fn strip(skeleton: &mut Skeleton<'_>) { skeleton.custom = Vec::new(); }
 
 /// Parse a Wasm module, validate, and compile to a runnable artifact.
 pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
+    config: ValidationConfig,
     imp: &VI,
     bytes: &[u8],
 ) -> anyhow::Result<Artifact<I, CompiledFunction>> {
-    validate_module(imp, &parse_skeleton(bytes)?)?.compile()
+    validate_module(config, imp, &parse_skeleton(bytes)?)?.compile()
 }
 
 /// Parse a Wasm module, validate, inject metering, and compile to a runnable
 /// artifact.
 pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
+    config: ValidationConfig,
     imp: &VI,
     bytes: &[u8],
 ) -> anyhow::Result<Artifact<I, CompiledFunction>> {
-    let mut module = validate_module(imp, &parse_skeleton(bytes)?)?;
+    let mut module = validate_module(config, imp, &parse_skeleton(bytes)?)?;
     module.inject_metering()?;
     module.compile()
 }

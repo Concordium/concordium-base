@@ -24,6 +24,7 @@ use concordium_wasm::{
     artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,
     utils::parse_artifact,
+    validate::ValidationConfig,
 };
 
 use crate::v0::ffi::slice_from_c_bytes;
@@ -372,6 +373,8 @@ unsafe extern "C" fn call_receive_v1(
 unsafe extern "C" fn validate_and_process_v1(
     // Whether the current protocol version supports smart contract upgrades.
     support_upgrade: u8,
+    // Allow globals in initialization expressions for data and element sections.
+    allow_globals_in_init: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     // this is the total length of the output byte array
@@ -384,6 +387,9 @@ unsafe extern "C" fn validate_and_process_v1(
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
     match utils::instantiate_with_metering::<ProcessedImports, _>(
+        ValidationConfig {
+            allow_globals_in_init: allow_globals_in_init != 0,
+        },
         &ConcordiumAllowedImports {
             support_upgrade: support_upgrade == 1,
         },

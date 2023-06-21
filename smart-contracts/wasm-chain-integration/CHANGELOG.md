@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- TODO
+
 ## concordium-smart-contract-engine 2.0.0 (2023-06-16)
 
 - Bump concordium-contracts-common to version 7.

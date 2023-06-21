@@ -858,9 +858,32 @@ pub trait ValidateImportExport {
     fn validate_export_function(&self, item_name: &Name, ty: &FunctionType) -> bool;
 }
 
+/// Configuration for module validation.
+/// This determines the features of Wasm we support, and similar behaviour.
+#[derive(Copy, Clone, Debug)]
+pub struct ValidationConfig {
+    /// Allow locally defined globals in constant expressions when initializing
+    /// data and element sections. In protocols 1-5 this was allowed, but we
+    /// need to disallow in following protocols since the Wasm spec has been
+    /// updated to not allow this anymore. See [issue](https://github.com/WebAssembly/spec/issues/1522) on the Wasm spec repository.
+    pub allow_globals_in_init: bool,
+}
+
+impl ValidationConfig {
+    /// Validation configuration valid in protocols 1-5.
+    pub const V0: Self = Self {
+        allow_globals_in_init: true,
+    };
+    /// Validation configuration valid in protocol 6 and onward.
+    pub const V1: Self = Self {
+        allow_globals_in_init: false,
+    };
+}
+
 /// Validate the module. This function parses and validates the module at the
 /// same time, failing at the first encountered error.
 pub fn validate_module(
+    config: ValidationConfig,
     imp: &impl ValidateImportExport,
     skeleton: &Skeleton<'_>,
 ) -> ValidateResult<Module> {
@@ -1031,7 +1054,14 @@ pub fn validate_module(
     // the offset expression is of the correct type and constant.
     // We additionally need to check that all the functions referred
     // to in the table are defined.
-    let element: ElementSection = parse_sec_with_default(&global, &skeleton.element)?;
+    let element: ElementSection = parse_sec_with_default(
+        if config.allow_globals_in_init {
+            Some(&global)
+        } else {
+            None
+        },
+        &skeleton.element,
+    )?;
     ensure!(
         element.elements.is_empty() || table.table_type.is_some(),
         "There is an elements section, but no table."
@@ -1071,7 +1101,14 @@ pub fn validate_module(
     // the offset expression is of the correct type and constant.
     // We additionally need to check that all the locations referred
     // to in the table are defined.
-    let data: DataSection = parse_sec_with_default(&global, &skeleton.data)?;
+    let data: DataSection = parse_sec_with_default(
+        if config.allow_globals_in_init {
+            Some(&global)
+        } else {
+            None
+        },
+        &skeleton.data,
+    )?;
     // Make sure that if there are any data segments then a memory exists.
     // By parsing we already ensure that all the references are to a single memory
     // and that the initial memory is limited by MAX_INIT_MEMORY_SIZE.
