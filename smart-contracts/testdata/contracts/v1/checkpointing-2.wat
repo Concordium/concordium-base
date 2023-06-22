@@ -216,18 +216,24 @@
     ;; Save the parameter to $entrypoint.
     (local.set $entrypoint (i32.load8_u (i32.const 0)))
 
-   (local.set $entry (call $state_lookup_entry (i32.const 500) (i32.const 0)))
-   (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
+    ;; Lookup the entry at [].
+    (local.set $entry (call $state_lookup_entry (i32.const 500) (i32.const 0)))
+    ;; And write 8 bytes to it, does not matter what exactly.
+    (call $state_entry_write (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
 
-   ;; Call the $entrypoint and make sure the state was not modified.
-   (call $assert_eq_64
+    ;; Call the $entrypoint and make sure the state was not modified.
+    (call $assert_eq_64
           (call $invoke_self_receive (local.get $entrypoint))
           ;; Corresponds to 0b0000000000000000000000001000000000000000000000000000000000000000
           ;; indicating the state has not changed, and there is a return value at index 1.
           (i64.const 1099511627776))
-     ;; and check that the entry we read above is still alive.
-   (drop)
-   (i32.const 0)
+     ;; and check that the entry we read above is still alive and of same size.
+    (call $assert_eq
+       (call $state_entry_read (local.get $entry) (i32.const 0) (i32.const 8) (i32.const 0))
+       (i32.const 8)
+    )
+    (drop)
+    (i32.const 0)
 )
 
 ;; Look up an entry at [0,0,0,0], do a self-call to d, and then check that
