@@ -2,7 +2,7 @@ use crate::{constants::*, schema::*, *};
 use core::fmt::Display;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use std::convert::{TryFrom, TryInto};
 
 /// Trait which includes implementations for unwrapping recursive error
@@ -963,6 +963,80 @@ impl Type {
         out: &mut W,
     ) -> Result<(), JsonError> {
         write_bytes_from_json_schema_type(schema, json, out)
+    }
+
+    // impl Display for Type {
+    //     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    //         write!(f, "{}",
+    // serde_json::to_string_pretty(&self.to_json2()).unwrap())     }
+    // }
+    // List _ typ -> toJsonArray [AE.toJSON typ]
+    // Set _ typ -> toJsonArray [AE.toJSON typ]
+    // Map _ typK typV -> toJsonArray [toJsonArray [AE.toJSON typK, AE.toJSON typV]]
+    // Array _ typ -> toJsonArray [AE.toJSON typ]
+    // Struct fields -> AE.toJSON fields
+    // Enum variants -> AE.object ["Enum" .= (toJsonArray . map (\(k, v) ->
+    // AE.object [AE.fromText k .= v]) $ variants)] String _ -> AE.String "<String>"
+    // UInt128 -> AE.String "<UInt128>"
+    // Int128 -> AE.String "<Int128>"
+    // ContractName _ -> AE.object [ "contract" .= AE.String "<String>" ]
+    // ReceiveName _ -> AE.object [ "contract" .= AE.String "<String>", "func" .=
+    // AE.String "<String>" ] ULeb128 _ -> AE.String "<String with unsigned
+    // integer>" ILeb128 _ -> AE.String "<String with signed integer>"
+    // ByteList _ -> AE.String "<String with lowercase hex>"
+    // ByteArray _ -> AE.String "<String with lowercase hex>"
+    // TaggedEnum taggedVariants ->
+    //   let
+    //     variants = first (pack . show) <$> Map.toList taggedVariants
+    //   in
+    //     AE.object ["TaggedEnum" .= (toJsonArray . map (\(_k, (name, value)) ->
+    // AE.object [AE.fromText name .= value]) $ variants)] where toJsonArray =
+    // AE.Array . V.fromList
+
+    pub fn schema_to_json(&self) -> serde_json::Value {
+        match self {
+            Self::Unit => serde_json::Value::Array(Vec::new()),
+            Self::Bool => serde_json::Value::String("<Bool>".to_string()),
+            Self::U8 => serde_json::Value::String("<UInt8>".to_string()),
+            Self::U16 => serde_json::Value::String("<UInt16>".to_string()),
+            Self::U32 => serde_json::Value::String("<UInt32>".to_string()),
+            Self::U64 => serde_json::Value::String("<UInt64>".to_string()),
+            Self::U128 => serde_json::Value::String("<UInt128>".to_string()),
+            Self::I8 => serde_json::Value::String("<Int8>".to_string()),
+            Self::I16 => serde_json::Value::String("<Int16>".to_string()),
+            Self::I32 => serde_json::Value::String("<Int32>".to_string()),
+            Self::I64 => serde_json::Value::String("<Int64>".to_string()),
+            Self::I128 => serde_json::Value::String("<Int128>".to_string()),
+            Self::Amount => serde_json::Value::String("<Amount>".to_string()),
+            Self::AccountAddress => serde_json::Value::String("<AccountAddress>".to_string()),
+            Self::ContractAddress => {
+                let mut contract_address = Map::new();
+                contract_address.insert("index".to_string(), Type::U64.schema_to_json());
+                contract_address.insert("subindex".to_string(), Type::U64.schema_to_json());
+                serde_json::Value::Object(contract_address)
+            }
+            Self::Timestamp => serde_json::Value::String("<Timestamp>".to_string()),
+            Self::Duration => serde_json::Value::String("<Duration>".to_string()),
+            Self::Pair(a, b) => {
+                serde_json::Value::Array(vec![a.schema_to_json(), b.schema_to_json()])
+            }
+            Self::List(size, element) => serde_json::Value::Array(vec![element.schema_to_json()]),
+            Self::Set(size, element) => serde_json::Value::Array(vec![element.schema_to_json()]),
+            Self::Map(size, key, value) => serde_json::Value::Array(vec![
+                serde_json::Value::Array(vec![key.schema_to_json(), value.schema_to_json()]),
+            ]),
+            Self::Array(_, _) => serde_json::Value::String("<Bool>".to_string()),
+            Self::Struct(test) => serde_json::Value::String("<Bool>".to_string()),
+            Self::Enum(test) => serde_json::Value::String("<Bool>".to_string()),
+            Self::String(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::ContractName(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::ReceiveName(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::ULeb128(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::ILeb128(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::ByteList(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::ByteArray(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::TaggedEnum(_) => serde_json::Value::String("<Bool>".to_string()),
+        }
     }
 }
 

@@ -33,7 +33,7 @@ use std::{
 pub struct HashBytes<Purpose> {
     pub bytes: [u8; SHA256],
     #[cfg_attr(feature = "derive-serde", serde(skip))] // use default when deserializing
-    _phantom: PhantomData<Purpose>,
+    _phantom:  PhantomData<Purpose>,
 }
 
 impl<Purpose> PartialEq for HashBytes<Purpose> {
