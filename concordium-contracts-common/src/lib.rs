@@ -89,7 +89,6 @@ mod traits;
 mod impls;
 pub mod constants;
 pub mod hashes;
-#[cfg(feature = "derive-serde")]
 pub mod schema;
 #[cfg(feature = "derive-serde")]
 pub mod schema_json;

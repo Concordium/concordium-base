@@ -930,6 +930,12 @@ fn write_bytes_from_json_schema_type<W: Write>(
     }
 }
 
+impl Display for Type {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", serde_json::to_string_pretty(&self.schema_to_json()).unwrap())
+    }
+}
+
 impl Type {
     /// Serialize the given JSON value into the binary format represented by the
     /// schema. If the JSON value does not match the schema an error will be
@@ -1020,14 +1026,14 @@ impl Type {
             Self::Pair(a, b) => {
                 serde_json::Value::Array(vec![a.schema_to_json(), b.schema_to_json()])
             }
-            Self::List(size, element) => serde_json::Value::Array(vec![element.schema_to_json()]),
-            Self::Set(size, element) => serde_json::Value::Array(vec![element.schema_to_json()]),
-            Self::Map(size, key, value) => serde_json::Value::Array(vec![
+            Self::List(_size, element) => serde_json::Value::Array(vec![element.schema_to_json()]),
+            Self::Set(_size, element) => serde_json::Value::Array(vec![element.schema_to_json()]),
+            Self::Map(_size, key, value) => serde_json::Value::Array(vec![
                 serde_json::Value::Array(vec![key.schema_to_json(), value.schema_to_json()]),
             ]),
             Self::Array(_, _) => serde_json::Value::String("<Bool>".to_string()),
-            Self::Struct(test) => serde_json::Value::String("<Bool>".to_string()),
-            Self::Enum(test) => serde_json::Value::String("<Bool>".to_string()),
+            Self::Struct(_test) => serde_json::Value::String("<Bool>".to_string()),
+            Self::Enum(_test) => serde_json::Value::String("<Bool>".to_string()),
             Self::String(_) => serde_json::Value::String("<Bool>".to_string()),
             Self::ContractName(_) => serde_json::Value::String("<Bool>".to_string()),
             Self::ReceiveName(_) => serde_json::Value::String("<Bool>".to_string()),
