@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Add `Display` trait to `SchemaType`
+
 ## concordium-contracts-common 7.0.0 (2023-06-16)
 
 - Implement `serde::Serialize` and `serde::Deserialize` for `Duration` using
