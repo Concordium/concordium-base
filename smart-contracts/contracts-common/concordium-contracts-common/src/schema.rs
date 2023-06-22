@@ -9,15 +9,11 @@ use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::{collections, string::String, vec::Vec};
 use collections::{BTreeMap, BTreeSet};
-use serde_json::{json, Map, Value};
-
 #[cfg(not(feature = "std"))]
 use core::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
-use std::fmt::Display;
-
 /// Contract schema related types
 #[cfg(feature = "std")]
 use std::{
@@ -191,7 +187,7 @@ impl FunctionV2 {
 }
 
 /// Schema for the fields of a struct or some enum variant.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum Fields {
     /// Named fields, e.g., `struct Foo {x: u64, y: u32}`.
@@ -206,7 +202,7 @@ pub enum Fields {
 }
 
 /// Type of the variable used to encode the length of Sets, List, Maps
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum SizeLength {
     U8,
@@ -217,7 +213,7 @@ pub enum SizeLength {
 
 /// Schema type used to describe the different types in a smart contract, their
 /// serialization and how to represent the types in JSON.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum Type {
     /// A type with no serialization.
@@ -310,12 +306,6 @@ impl Type {
             Type::ByteList(_) => Type::ByteList(size_len),
             t => t,
         }
-    }
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", serde_json::to_string_pretty(&self.schema_to_json()).unwrap())
     }
 }
 
