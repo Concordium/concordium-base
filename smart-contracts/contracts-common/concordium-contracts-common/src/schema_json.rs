@@ -1000,35 +1000,36 @@ impl Type {
         write_bytes_from_json_schema_type(schema, json, out)
     }
 
-    // List _ typ -> toJsonArray [AE.toJSON typ]
-    // Array _ typ -> toJsonArray [AE.toJSON typ]
-    // Set _ typ -> toJsonArray [AE.toJSON typ]
-    // Map _ typK typV -> toJsonArray [toJsonArray [AE.toJSON typK, AE.toJSON typV]]
-    // UInt128 -> AE.String "<UInt128>"
-    // Int128 -> AE.String "<Int128>"
-    // AE.String "<String>" ] ULeb128 _ -> AE.String "<String with unsigned
-    // integer>" ILeb128 _ -> AE.String "<String with signed integer>"
-    // ContractName _ -> AE.object [ "contract" .= AE.String "<String>" ]
-    // ReceiveName _ -> AE.object [ "contract" .= AE.String "<String>", "func" .=
-    // ByteList _ -> AE.String "<String with lowercase hex>"
-    // ByteArray _ -> AE.String "<String with lowercase hex>"
-    // Struct fields -> AE.toJSON fields
-
-    // Enum variants -> AE.object ["Enum" .= (toJsonArray . map (\(k, v) ->
-    // AE.object [AE.fromText k .= v]) $ variants)] String _ -> AE.String "<String>"
-    // TaggedEnum taggedVariants ->
-    //   let
-    //     variants = first (pack . show) <$> Map.toList taggedVariants
-    //   in
-    //     AE.object ["TaggedEnum" .= (toJsonArray . map (\(_k, (name, value)) ->
-    // AE.object [AE.fromText name .= value]) $ variants)] where toJsonArray =
-    // AE.Array . V.fromList
-
     pub fn schema_type_to_json(&self) -> serde_json::Value {
         match self {
-            Self::Enum(_test) => serde_json::Value::String("<Bool>".to_string()),
-            Self::TaggedEnum(_) => serde_json::Value::String("<Bool>".to_string()),
+            Self::Enum(enum_type) => {
+                let mut outer_map = Map::new();
 
+                let mut vector = Vec::new();
+
+                for (name, field) in enum_type.iter() {
+                    let mut inner_map = Map::new();
+                    inner_map.insert(name.to_string(), field.field_to_json());
+                    vector.push(serde_json::Value::Object(inner_map))
+                }
+                outer_map.insert("Enum".to_string(), serde_json::Value::Array(vector));
+
+                serde_json::Value::Object(outer_map)
+            }
+            Self::TaggedEnum(tagged_enum) => {
+                let mut outer_map = Map::new();
+
+                let mut vector = Vec::new();
+
+                for (_tag, (name, field)) in tagged_enum.iter() {
+                    let mut inner_map = Map::new();
+                    inner_map.insert(name.to_string(), field.field_to_json());
+                    vector.push(serde_json::Value::Object(inner_map))
+                }
+                outer_map.insert("Enum".to_string(), serde_json::Value::Array(vector));
+
+                serde_json::Value::Object(outer_map)
+            }
             Self::Struct(field) => field.field_to_json(),
             Self::ByteList(_) => {
                 serde_json::Value::String("<String with lowercase hex>".to_string())
