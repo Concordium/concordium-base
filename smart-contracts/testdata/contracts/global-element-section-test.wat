@@ -1,6 +1,6 @@
 (module
 
-  ;; This module is used to be valid, but has then been
+  ;; This module used to be valid, but has then been
   ;; made invalid by stricter rules for appearance of globals
   ;; in element sections.
   ;; 
@@ -17,6 +17,7 @@
   )
 
   (table 1 funcref)
+  ;; This is the invalid part. Globals cannot be used for offsets in the element section.
   (elem (offset (global.get $g0)) $init)
 
   (memory 1)

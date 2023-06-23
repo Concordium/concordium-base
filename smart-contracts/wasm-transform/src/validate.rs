@@ -859,12 +859,17 @@ pub trait ValidateImportExport {
 }
 
 /// Configuration for module validation.
-/// This determines the features of Wasm we support.
+/// This determines the features of Wasm we support or not depending on the
+/// protocol version.
+///
+/// Some Wasm features are not supported in any protocol versions, so are not
+/// part of this configuration. These include imported globals, floating point
+/// types, floating point operations, etc.
 #[derive(Copy, Clone, Debug)]
 pub struct ValidationConfig {
     /// Allow locally defined globals in constant expressions when initializing
     /// data and element sections. In protocols 1-5 this was allowed, but we
-    /// need to disallow in following protocols since the Wasm spec has been
+    /// need to disallow it in following protocols since the Wasm spec has been
     /// updated to not allow this anymore. See [issue](https://github.com/WebAssembly/spec/issues/1522) on the Wasm spec repository.
     pub allow_globals_in_init: bool,
 }

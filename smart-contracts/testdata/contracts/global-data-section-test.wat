@@ -1,6 +1,6 @@
 (module
 
-  ;; This module is used to be valid, but has then been
+  ;; This module used to be valid, but has then been
   ;; made invalid by stricter rules for appearance of globals
   ;; in data sections.
   ;; 
@@ -16,6 +16,7 @@
     (i32.const 0) ;; success
   )
 
+  ;; This is the invalid part. Globals cannot be used for offsets in the data section.
   (data (offset (global.get $g0)) "Hello, ")
 
   (memory 1)

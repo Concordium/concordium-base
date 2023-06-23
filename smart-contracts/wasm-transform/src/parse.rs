@@ -794,7 +794,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Local {
 
 /// The Wasm spec has a typo in the published document, [see](https://github.com/WebAssembly/spec/issues/1522)
 /// The original implementation active in protocols 1-5 on Concordium adhered to
-/// the published version. In protocol 6 and up disallow referring to locally
+/// the published version. In protocol 6 and up we disallow referring to locally
 /// defined globals in data and element sections. Since imported globals are
 /// disallowed already in our execution environment, this means we disallow
 /// globals in total.
