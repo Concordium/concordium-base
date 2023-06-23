@@ -63,7 +63,7 @@ fn init_data_with_global_offset() {
         },
         &contract,
     );
-    assert!(res.is_err(), "Globals can be used in V1 data section validation.");
+    assert!(res.is_err(), "Globals cannot be used in V1 data section validation.");
 }
 
 #[test]
@@ -87,5 +87,5 @@ fn init_element_with_global_offset() {
         },
         &contract,
     );
-    assert!(res.is_err(), "Globals can be used in V1 element section validation.");
+    assert!(res.is_err(), "Globals cannot be used in V1 element section validation.");
 }

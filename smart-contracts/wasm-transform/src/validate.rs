@@ -859,7 +859,7 @@ pub trait ValidateImportExport {
 }
 
 /// Configuration for module validation.
-/// This determines the features of Wasm we support, and similar behaviour.
+/// This determines the features of Wasm we support.
 #[derive(Copy, Clone, Debug)]
 pub struct ValidationConfig {
     /// Allow locally defined globals in constant expressions when initializing
