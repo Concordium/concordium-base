@@ -1,7 +1,5 @@
 use anyhow::{bail, ensure};
 use clap::AppSettings;
-use std::{collections::BTreeMap, fs, path::PathBuf};
-use structopt::StructOpt;
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, CompiledFunction},
     machine::{ExecutionOutcome, Host, NoInterrupt, RunResult, RuntimeError, RuntimeStack, Value},
@@ -9,6 +7,8 @@ use concordium_wasm::{
     types::{FunctionType, Module, Name},
     validate::ValidationError,
 };
+use std::{collections::BTreeMap, fs, path::PathBuf};
+use structopt::StructOpt;
 use wast::{parser, AssertExpression, Expression, Span, Wast, WastExecute};
 
 #[derive(Debug, StructOpt)]
@@ -102,7 +102,11 @@ fn validate(source: &[u8]) -> anyhow::Result<Module> {
     }
 
     let skel = concordium_wasm::parse::parse_skeleton(source)?;
-    concordium_wasm::validate::validate_module(&AllowAll, &skel)
+    concordium_wasm::validate::validate_module(
+        concordium_wasm::validate::ValidationConfig::V0,
+        &AllowAll,
+        &skel,
+    )
 }
 
 macro_rules! fail_test {
