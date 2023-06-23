@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+- Support adding `#[concordium(repr(u))]` for enum types, where `u` is either `u8` or `u16`. Setting this changes the integer serialization used for the variant tags in derive macros such as  `Serial`, `Deserial`, `DeserialWithState` and `SchemaType`.
+- Support adding `#[concordium(tag = n)]` for enum variants, where `n` is some unsigned integer literal. Setting this attribute on a variant overrides the tag used in derive macros such as `Serial`, `Deserial`, `DeserialWithState` and `SchemaType`. Note that setting `#[concordium(repr(u*))]` is required when using this attribute.
+
 ## concordium-contracts-common-derive 3.0.0 (2023-06-16)
 
 - Set minimum Rust version to 1.65.
