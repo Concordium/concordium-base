@@ -218,11 +218,11 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 ///
 /// When deriving `Serial`, `Deserial` and `DeserialWithState` the
 /// discriminating tag can be set explicitly using `#[concordium(tag = n)]`
-/// where `n` is a unsigned integer literal and annotating the enum with
-/// `#[concordium(repr(..))]`, see [`Serial`] for more on this attribute. The
-/// current version of the contract schema cannot express tags encoded with more
-/// than one byte, meaning only the annotation of `#[concordium(repr(u8))]` can
-/// be used, when deriving the `SchemaType`.
+/// where `n` is a unsigned integer literal. This require annotating the enum
+/// with `#[concordium(repr(..))]`, see [`Serial`] for more on this attribute.
+/// The current version of the contract schema cannot express tags encoded with
+/// more than one byte, meaning only the annotation of `#[concordium(repr(u8))]`
+/// can be used, when deriving the `SchemaType`.
 ///
 /// ## Generic type bounds
 ///
