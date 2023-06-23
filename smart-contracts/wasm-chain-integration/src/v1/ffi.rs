@@ -206,6 +206,10 @@ unsafe extern "C" fn call_init_v1(
 ///   leaked.
 /// In case of execution failure, a panic, or failure to parse a null pointer is
 /// returned.
+///
+/// Note that if the `state_ptr_ptr` contains a non-null pointer it is the
+/// responsibility of the **caller** to dispose of it, or use it to call the
+/// `resume_receive_v1`.
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
     loader: LoadCallback,
@@ -228,6 +232,9 @@ unsafe extern "C" fn call_receive_v1(
     output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedStateV1,
     output_len: *mut size_t,
+    // This is set to 1 if and only if the state has changed before the end of execution,
+    // in case execution terminated normally. Normally here means without a runtime exception.
+    output_state_changed: *mut u8,
     support_queries_tag: u8, // non-zero to enable support of chain queries.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
@@ -315,10 +322,14 @@ unsafe extern "C" fn call_receive_v1(
                         } else {
                             *output_return_value = std::ptr::null_mut();
                         }
-                        if state_changed {
-                            let new_state = Box::into_raw(Box::new(state));
-                            *state_ptr_ptr = new_state;
-                        }
+                        let new_state = Box::into_raw(Box::new(state));
+                        // NB: We have to make sure to drop the state in Haskell for P5 or earlier.
+                        *state_ptr_ptr = new_state;
+                        *output_state_changed = if state_changed {
+                            1
+                        } else {
+                            0
+                        };
                         ptr
                     }
                     Err(_trap) => std::ptr::null_mut(),
