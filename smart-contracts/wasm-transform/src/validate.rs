@@ -859,7 +859,7 @@ pub trait ValidateImportExport {
 }
 
 /// Configuration for module validation.
-/// This determines the features of Wasm we support or not depending on the
+/// This determines the features of Wasm we support or not, depending on the
 /// protocol version.
 ///
 /// Some Wasm features are not supported in any protocol versions, so are not
