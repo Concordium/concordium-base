@@ -584,4 +584,12 @@ pub enum OpCode {
     I32WrapI64,
     I64ExtendI32S,
     I64ExtendI32U,
+
+    // Sign extension instructions. Optionally supported
+    // depending on the protocol version.
+    I32Extend8S,
+    I32Extend16S,
+    I64Extend8S,
+    I64Extend16S,
+    I64Extend32S,
 }

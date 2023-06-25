@@ -379,6 +379,8 @@ unsafe extern "C" fn validate_and_process_v1(
     support_upgrade: u8,
     // Allow globals in initialization expressions for data and element sections.
     allow_globals_in_init: u8,
+    // Allow sign extension instructions.
+    allow_sign_extension_instr: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     // this is the total length of the output byte array
@@ -392,7 +394,8 @@ unsafe extern "C" fn validate_and_process_v1(
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
     match utils::instantiate_with_metering::<ProcessedImports, _>(
         ValidationConfig {
-            allow_globals_in_init: allow_globals_in_init != 0,
+            allow_globals_in_init:      allow_globals_in_init != 0,
+            allow_sign_extension_instr: allow_sign_extension_instr != 0,
         },
         &ConcordiumAllowedImports {
             support_upgrade: support_upgrade == 1,

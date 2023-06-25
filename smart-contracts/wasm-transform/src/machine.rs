@@ -1209,6 +1209,11 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // and then extend, making it so that it is extended with 0's.
                     top.long = unsafe { top.short } as u32 as i64;
                 }
+                InternalOpcode::I32Extend8S => unary_i32(&mut stack, |x| x as i8 as i32),
+                InternalOpcode::I32Extend16S => unary_i32(&mut stack, |x| x as i16 as i32),
+                InternalOpcode::I64Extend8S => unary_i64(&mut stack, |x| x as i8 as i64),
+                InternalOpcode::I64Extend16S => unary_i64(&mut stack, |x| x as i16 as i64),
+                InternalOpcode::I64Extend32S => unary_i64(&mut stack, |x| x as i32 as i64),
             }
         }
 

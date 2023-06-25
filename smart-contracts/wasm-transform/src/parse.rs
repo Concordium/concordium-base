@@ -14,7 +14,7 @@
 //! such as pruning and embedding additional metadata into the module.
 //!
 //! In the second stage each section can be parsed into a proper structure.
-use crate::{constants::*, types::*};
+use crate::{constants::*, types::*, validate::ValidationConfig};
 use anyhow::{bail, ensure};
 use std::{
     convert::TryFrom,
@@ -555,6 +555,24 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionSection {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+/// Internal (to the library) helper to provide as context
+/// when parsing instructions and sections where we need to distinguish
+/// between the different versions of the Wasm spec we support.
+///
+/// Note that this is analogous to
+/// [`ValidationConfig`](crate::validate::ValidationConfig), but instead of just
+/// listing which things are allowed, it provides additional context needed
+/// during parsing.
+/// Currently this context is just a list of globals.
+pub(crate) struct InstructionValidationContext<'a> {
+    /// If globals are allowed, then this is a parsed global section, otherwise
+    /// it is [`None`].
+    pub(crate) globals_allowed:            Option<&'a GlobalSection>,
+    /// Whether to allow the instructions listed in the sign extension proposal.
+    pub(crate) allow_sign_extension_instr: bool,
+}
+
 /// Attempt to read a constant expression of given type (see section 3.3.7.2).
 /// The `ty` argument specifies the expected type of the expression.
 /// For the version of the standard we use this is always a single value type,
@@ -574,9 +592,13 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for FunctionSection {
 fn read_constant_expr(
     cursor: &mut Cursor<&'_ [u8]>,
     ty: ValueType,
-    globals_allowed: Option<&GlobalSection>,
+    ctx: InstructionValidationContext,
 ) -> ParseResult<GlobalInit> {
-    let instr = decode_opcode(cursor)?;
+    // In principle it does not matter whether we allow or do not allow sign
+    // extension instructions since they are not constant. However the failure/error
+    // will be slightly different. It is more consistent to parse the instruction as
+    // allowed, and then reject as non-constant, as opposed to not-allow at all.
+    let instr = decode_opcode(ctx.allow_sign_extension_instr, cursor)?;
     let res = match instr {
         OpCode::I32Const(n) => {
             ensure!(ty == ValueType::I32, "Constant instruction of type I64, but I32 expected.");
@@ -586,7 +608,7 @@ fn read_constant_expr(
             ensure!(ty == ValueType::I64, "Constant instruction of type I32, but I64 expected.");
             GlobalInit::I64(n)
         }
-        OpCode::GlobalGet(idx) => match globals_allowed {
+        OpCode::GlobalGet(idx) => match ctx.globals_allowed {
             None => bail!("GlobalGet not allowed in this constant expression."),
             Some(globals) => {
                 let global = globals.get(idx).ok_or_else(|| {
@@ -702,8 +724,11 @@ impl<'a, Ctx> Parseable<'a, Ctx> for StartSection {
     }
 }
 
-impl<'a> Parseable<'a, Option<&GlobalSection>> for Element {
-    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, InstructionValidationContext<'_>> for Element {
+    fn parse(
+        ctx: InstructionValidationContext,
+        cursor: &mut Cursor<&'a [u8]>,
+    ) -> ParseResult<Self> {
         let table_index = TableIndex::parse(ctx, cursor)?;
         ensure!(table_index == 0, "Only table index 0 is supported.");
         let offset = read_constant_expr(cursor, ValueType::I32, ctx)?;
@@ -719,8 +744,11 @@ impl<'a> Parseable<'a, Option<&GlobalSection>> for Element {
     }
 }
 
-impl<'a> Parseable<'a, Option<&GlobalSection>> for ElementSection {
-    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, InstructionValidationContext<'_>> for ElementSection {
+    fn parse(
+        ctx: InstructionValidationContext<'_>,
+        cursor: &mut Cursor<&'a [u8]>,
+    ) -> ParseResult<Self> {
         let elements = cursor.next(ctx)?;
         Ok(ElementSection {
             elements,
@@ -728,8 +756,8 @@ impl<'a> Parseable<'a, Option<&GlobalSection>> for ElementSection {
     }
 }
 
-impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Global {
-    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, ValidationConfig> for Global {
+    fn parse(ctx: ValidationConfig, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let ty = cursor.next(ctx)?;
         let mutable = match Byte::parse(ctx, cursor)? {
             0x00 => false,
@@ -737,7 +765,10 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Global {
             flag => bail!("Unsupported mutability flag {:#04x}", flag),
         };
         // Globals initialization expressions cannot refer to other (in-module) globals.
-        let init = read_constant_expr(cursor, ty, None)?;
+        let init = read_constant_expr(cursor, ty, InstructionValidationContext {
+            globals_allowed:            None,
+            allow_sign_extension_instr: ctx.allow_sign_extension_instr,
+        })?;
         Ok(Global {
             init,
             mutable,
@@ -745,8 +776,8 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Global {
     }
 }
 
-impl<'a, Ctx: Copy> Parseable<'a, Ctx> for GlobalSection {
-    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, ValidationConfig> for GlobalSection {
+    fn parse(ctx: ValidationConfig, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let globals = cursor.next(ctx)?;
         Ok(GlobalSection {
             globals,
@@ -798,8 +829,11 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Local {
 /// defined globals in data and element sections. Since imported globals are
 /// disallowed already in our execution environment, this means we disallow
 /// globals in total.
-impl<'a> Parseable<'a, Option<&GlobalSection>> for Data {
-    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, InstructionValidationContext<'_>> for Data {
+    fn parse(
+        ctx: InstructionValidationContext,
+        cursor: &mut Cursor<&'a [u8]>,
+    ) -> ParseResult<Self> {
         let index = u32::parse(ctx, cursor)?;
         ensure!(index == 0, "Only memory index 0 is supported.");
         let offset = read_constant_expr(cursor, ValueType::I32, ctx)?;
@@ -815,8 +849,11 @@ impl<'a> Parseable<'a, Option<&GlobalSection>> for Data {
     }
 }
 
-impl<'a> Parseable<'a, Option<&GlobalSection>> for DataSection {
-    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, InstructionValidationContext<'_>> for DataSection {
+    fn parse(
+        ctx: InstructionValidationContext,
+        cursor: &mut Cursor<&'a [u8]>,
+    ) -> ParseResult<Self> {
         let sections = cursor.next(ctx)?;
         Ok(DataSection {
             sections,
@@ -881,7 +918,10 @@ impl std::fmt::Display for ParseError {
 }
 
 /// Decode the next opcode directly from the cursor.
-pub(crate) fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
+pub(crate) fn decode_opcode(
+    allow_sign_extension_instr: bool,
+    cursor: &mut Cursor<&[u8]>,
+) -> ParseResult<OpCode> {
     match Byte::parse(EMPTY_CTX, cursor)? {
         END => Ok(OpCode::End),
         0x00 => Ok(OpCode::Unreachable),
@@ -1112,6 +1152,11 @@ pub(crate) fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
 
         0xAC => Ok(OpCode::I64ExtendI32S),
         0xAD => Ok(OpCode::I64ExtendI32U),
+        0xC0 if allow_sign_extension_instr => Ok(OpCode::I32Extend8S),
+        0xC1 if allow_sign_extension_instr => Ok(OpCode::I32Extend16S),
+        0xC2 if allow_sign_extension_instr => Ok(OpCode::I64Extend8S),
+        0xC3 if allow_sign_extension_instr => Ok(OpCode::I64Extend16S),
+        0xC4 if allow_sign_extension_instr => Ok(OpCode::I64Extend32S),
         byte => bail!(ParseError::UnsupportedInstruction {
             opcode: byte,
         }),
@@ -1119,13 +1164,15 @@ pub(crate) fn decode_opcode(cursor: &mut Cursor<&[u8]>) -> ParseResult<OpCode> {
 }
 
 pub(crate) struct OpCodeIterator<'a> {
+    allow_sign_extension_instr: bool,
     state: Cursor<&'a [u8]>,
 }
 
 impl<'a> OpCodeIterator<'a> {
-    pub fn new(bytes: &'a [u8]) -> Self {
+    pub fn new(allow_sign_extension_instr: bool, bytes: &'a [u8]) -> Self {
         Self {
             state: Cursor::new(bytes),
+            allow_sign_extension_instr,
         }
     }
 }
@@ -1137,7 +1184,7 @@ impl<'a> Iterator for OpCodeIterator<'a> {
         if self.state.position() == self.state.get_ref().len() as u64 {
             None
         } else {
-            Some(decode_opcode(&mut self.state))
+            Some(decode_opcode(self.allow_sign_extension_instr, &mut self.state))
         }
     }
 }
