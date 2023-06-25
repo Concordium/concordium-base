@@ -24,4 +24,5 @@ pub mod validate;
 
 #[cfg(test)]
 mod metering_transformation_test;
+#[cfg(test)]
 mod tests;
