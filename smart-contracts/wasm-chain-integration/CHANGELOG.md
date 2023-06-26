@@ -2,6 +2,12 @@
 
 ## Unreleased changes
 
+- Functions that process V1 smart contract modules
+  (`invoke_receive_*_from_source` and `invoke_init_*_from_source`) are now
+  parameterized by a `ValidationConfig` which determines which Wasm features are
+  allowed.
+
+
 ## concordium-smart-contract-engine 2.0.0 (2023-06-16)
 
 - Bump concordium-contracts-common to version 7.

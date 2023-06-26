@@ -45,6 +45,7 @@ use concordium_wasm::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
+    validate::ValidationConfig,
 };
 use machine::Value;
 use sha3::Digest;
@@ -1556,9 +1557,11 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
+    validation_config: ValidationConfig,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },
@@ -1586,9 +1589,11 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
+    validation_config: ValidationConfig,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },
@@ -1905,6 +1910,7 @@ pub fn invoke_receive_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
+    validation_config: ValidationConfig,
     ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
@@ -1912,6 +1918,7 @@ pub fn invoke_receive_from_source<
     params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },
@@ -1939,6 +1946,7 @@ pub fn invoke_receive_with_metering_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
+    validation_config: ValidationConfig,
     ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
@@ -1946,6 +1954,7 @@ pub fn invoke_receive_with_metering_from_source<
     params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },

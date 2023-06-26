@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+- `validate_module` is now parameterized by `ValidationConfig` which determines
+  which Wasm features should be allowed.
+
 ## concordium-wasm 2.0.0 (2023-06-16)
 
 - Bump concordium-contracts-common to version 7.

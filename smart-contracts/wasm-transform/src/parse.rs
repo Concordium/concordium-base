@@ -702,11 +702,11 @@ impl<'a, Ctx> Parseable<'a, Ctx> for StartSection {
     }
 }
 
-impl<'a> Parseable<'a, &GlobalSection> for Element {
-    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, Option<&GlobalSection>> for Element {
+    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let table_index = TableIndex::parse(ctx, cursor)?;
         ensure!(table_index == 0, "Only table index 0 is supported.");
-        let offset = read_constant_expr(cursor, ValueType::I32, Some(ctx))?;
+        let offset = read_constant_expr(cursor, ValueType::I32, ctx)?;
         let inits = cursor.next(ctx)?;
         if let GlobalInit::I32(offset) = offset {
             Ok(Element {
@@ -719,8 +719,8 @@ impl<'a> Parseable<'a, &GlobalSection> for Element {
     }
 }
 
-impl<'a> Parseable<'a, &GlobalSection> for ElementSection {
-    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, Option<&GlobalSection>> for ElementSection {
+    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let elements = cursor.next(ctx)?;
         Ok(ElementSection {
             elements,
@@ -792,11 +792,17 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for Local {
     }
 }
 
-impl<'a> Parseable<'a, &GlobalSection> for Data {
-    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+/// The Wasm spec has a typo in the published document, [see](https://github.com/WebAssembly/spec/issues/1522)
+/// The original implementation active in protocols 1-5 on Concordium adhered to
+/// the published version. In protocol 6 and up we disallow referring to locally
+/// defined globals in data and element sections. Since imported globals are
+/// disallowed already in our execution environment, this means we disallow
+/// globals in total.
+impl<'a> Parseable<'a, Option<&GlobalSection>> for Data {
+    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let index = u32::parse(ctx, cursor)?;
         ensure!(index == 0, "Only memory index 0 is supported.");
-        let offset = read_constant_expr(cursor, ValueType::I32, Some(ctx))?;
+        let offset = read_constant_expr(cursor, ValueType::I32, ctx)?;
         let init = cursor.next(ctx)?;
         if let GlobalInit::I32(offset) = offset {
             Ok(Data {
@@ -809,8 +815,8 @@ impl<'a> Parseable<'a, &GlobalSection> for Data {
     }
 }
 
-impl<'a> Parseable<'a, &GlobalSection> for DataSection {
-    fn parse(ctx: &GlobalSection, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+impl<'a> Parseable<'a, Option<&GlobalSection>> for DataSection {
+    fn parse(ctx: Option<&GlobalSection>, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let sections = cursor.next(ctx)?;
         Ok(DataSection {
             sections,

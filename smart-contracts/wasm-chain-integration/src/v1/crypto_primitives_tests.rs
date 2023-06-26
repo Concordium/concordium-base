@@ -19,7 +19,8 @@ use concordium_wasm::{
     artifact::{Artifact, CompiledFunctionBytes},
     machine,
     output::Output,
-    parse, utils, validate,
+    parse, utils,
+    validate::{self, ValidationConfig},
 };
 use sha2::Digest;
 
@@ -56,6 +57,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
     let skeleton = parse::parse_skeleton(CONTRACT_BYTES).unwrap();
     let module = {
         let mut module = validate::validate_module(
+            ValidationConfig::V1,
             &ConcordiumAllowedImports {
                 support_upgrade: true,
             },

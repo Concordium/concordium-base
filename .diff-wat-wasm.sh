@@ -20,7 +20,11 @@ NO_CHECK_FILES=(
     './mut-global-offset-test.wat',
 
     # This module is invalid because it tries to initialize a global value with the reference of another global value.
-    './init-global-with-ref-test.wat'
+    './init-global-with-ref-test.wat',
+
+    # Valid according to protocols P1-P5, not valid in P6 with stricter validation.
+    './global-data-section-test.wat',
+    './global-element-section-test.wat'
     )
 
 RET=0
