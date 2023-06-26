@@ -129,7 +129,11 @@ fn parse_attributes<'a>(iter: impl IntoIterator<Item = &'a Meta>) -> syn::Result
         match attr {
             Meta::NameValue(mnv) => {
                 if let Some(ident) = mnv.path.get_ident() {
-                    if let syn::Lit::Str(ls) = &mnv.lit {
+                    if let syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(ls),
+                        ..
+                    }) = &mnv.value
+                    {
                         if let Some((existing_ident, _)) = ret.values.get_key_value(ident) {
                             let v = duplicate_values.entry(ident).or_insert_with(|| {
                                 syn::Error::new(
@@ -911,7 +915,7 @@ pub fn concordium_test_worker(_attr: TokenStream, item: TokenStream) -> syn::Res
 #[cfg(feature = "concordium-quickcheck")]
 pub mod quickcheck {
     use super::*;
-    use syn::{parse_quote, FnArg, Lit, NestedMeta, PatType};
+    use syn::{parse_quote, FnArg, PatType};
 
     const QUICKCHECK_NUM_TESTS: &str = "num_tests";
 
@@ -925,18 +929,21 @@ pub mod quickcheck {
     /// Look up the `tests` identifier in `NestedMeta` and return the value
     /// associated with it. If no `num_tests` is found or parsing the value has
     /// failed, return a error
-    fn get_quickcheck_tests_count(meta: &NestedMeta) -> Result<u64, syn::Error> {
+    fn get_quickcheck_tests_count(meta: &syn::Meta) -> syn::Result<u64> {
         match meta {
-            NestedMeta::Meta(Meta::NameValue(v)) => {
+            Meta::NameValue(v) => {
                 if v.path.is_ident(QUICKCHECK_NUM_TESTS) {
-                    match &v.lit {
-                        Lit::Int(i) => {
+                    match &v.value {
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Int(i),
+                            ..
+                        }) => {
                             let num_tests = i
                                 .base10_parse::<u64>()
-                                .map_err(|e| syn::Error::new(i.span(), e.to_string()))?;
+                                .map_err(|e| syn::Error::new_spanned(i, e.to_string()))?;
                             if num_tests > QUICKCHECK_MAX_PASSED_TESTS {
-                                Err(syn::Error::new(
-                                    v.lit.span(),
+                                Err(syn::Error::new_spanned(
+                                    i,
                                     format!(
                                         "max number of tests is {}",
                                         QUICKCHECK_MAX_PASSED_TESTS
@@ -946,8 +953,8 @@ pub mod quickcheck {
                                 Ok(num_tests)
                             }
                         }
-                        l => Err(syn::Error::new(
-                            l.span(),
+                        l => Err(syn::Error::new_spanned(
+                            l,
                             "unexpected attribute value, expected a non-negative integer",
                         )),
                     }
@@ -961,17 +968,10 @@ pub mod quickcheck {
                     ))
                 }
             }
-            NestedMeta::Meta(_) => Err(syn::Error::new_spanned(
+            _ => Err(syn::Error::new_spanned(
                 meta,
                 format!(
                     "unexpected attribute, expected a single `{} = <number>` attribute",
-                    QUICKCHECK_NUM_TESTS
-                ),
-            )),
-            NestedMeta::Lit(_) => Err(syn::Error::new_spanned(
-                meta,
-                format!(
-                    "expected a named attribute, supported attributes: `{} = <number>`",
                     QUICKCHECK_NUM_TESTS
                 ),
             )),
@@ -981,7 +981,7 @@ pub mod quickcheck {
     /// Parse the arguments and return a value associated with the `num_tests`
     /// identifier, if successfull.
     fn parse_quickcheck_num_tests(attr: TokenStream) -> syn::Result<u64> {
-        let parsed_attr = syn::parse_macro_input::parse::<syn::AttributeArgs>(attr)?;
+        let parsed_attr = Punctuated::<Meta, Token![,]>::parse_terminated.parse(attr)?;
         let mut err_opt: Option<syn::Error> = None;
         let mut v = None;
         for attr in parsed_attr {
