@@ -880,7 +880,7 @@ pub struct ValidationConfig {
     /// need to disallow it in following protocols since the Wasm spec has been
     /// updated to not allow this anymore. See [issue](https://github.com/WebAssembly/spec/issues/1522) on the Wasm spec repository.
     pub allow_globals_in_init:      bool,
-    /// Allow sign extension instructions.
+    /// Allow sign extension instructions. See [proposal](https://github.com/WebAssembly/sign-extension-ops/blob/master/proposals/sign-extension-ops/Overview.md).
     pub allow_sign_extension_instr: bool,
 }
 
