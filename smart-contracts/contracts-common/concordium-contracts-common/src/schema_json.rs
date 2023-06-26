@@ -3,6 +3,8 @@ use core::fmt::Display;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::{json, Map, Value};
+#[allow(unused_imports)] // BTreeMap is used in the unit tests.
+use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 
 /// Trait which includes implementations for unwrapping recursive error
@@ -930,9 +932,9 @@ fn write_bytes_from_json_schema_type<W: Write>(
     }
 }
 
-/// Displays a template of the JSON to be used for the Fields.
-/// It should match the output of `concordium-client`.
 impl Fields {
+    /// Displays a template of the JSON to be used for the Fields.
+    /// It should match the output of `concordium-client`.
     pub fn to_json_template(&self) -> serde_json::Value {
         match self {
             Fields::Named(vec) => {
@@ -1226,12 +1228,12 @@ mod tests {
     /// Tests schema template display in JSON of an Enum
     #[test]
     fn test_schema_template_enum() {
-        let schema = Type::Enum(Vec::from([
-            (String::from("Accounts"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
-            (String::from("Accounts"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
-        ]));
+        let schema = Type::Enum(Vec::from([(
+            String::from("Accounts"),
+            Fields::Unnamed(Vec::from([Type::AccountAddress])),
+        )]));
         assert_eq!(
-            json!({"Enum": [{"Accounts": ["<AccountAddress>"]},{"Accounts": ["<AccountAddress>"]}]}),
+            json!({"Enum": [{"Accounts": ["<AccountAddress>"]}]}),
             schema.to_json_template()
         );
     }
