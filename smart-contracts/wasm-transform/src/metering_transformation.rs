@@ -322,6 +322,11 @@ pub(crate) mod cost {
             I32WrapI64 => SIMPLE_UNOP,
             I64ExtendI32S => SIMPLE_UNOP,
             I64ExtendI32U => SIMPLE_UNOP,
+            I32Extend8S => SIMPLE_UNOP,
+            I32Extend16S => SIMPLE_UNOP,
+            I64Extend8S => SIMPLE_UNOP,
+            I64Extend16S => SIMPLE_UNOP,
+            I64Extend32S => SIMPLE_UNOP,
         };
         Ok(res)
     }

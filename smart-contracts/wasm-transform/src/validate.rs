@@ -12,8 +12,8 @@
 use crate::{
     constants::*,
     parse::{
-        parse_custom, parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult,
-        Skeleton, EMPTY_CTX,
+        parse_custom, parse_sec_with_default, CodeSkeletonSection, InstructionValidationContext,
+        OpCodeIterator, ParseResult, Skeleton, EMPTY_CTX,
     },
     types::*,
 };
@@ -831,6 +831,14 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
+            OpCode::I32Extend8S | OpCode::I32Extend16S => {
+                state.pop_expect_opd(Known(ValueType::I32))?;
+                state.push_opd(Known(ValueType::I32));
+            }
+            OpCode::I64Extend8S | OpCode::I64Extend16S | OpCode::I64Extend32S => {
+                state.pop_expect_opd(Known(ValueType::I64))?;
+                state.push_opd(Known(ValueType::I64));
+            }
         }
         handler.handle_opcode(&state, old_stack_height, next_opcode)?;
     }
@@ -871,17 +879,21 @@ pub struct ValidationConfig {
     /// data and element sections. In protocols 1-5 this was allowed, but we
     /// need to disallow it in following protocols since the Wasm spec has been
     /// updated to not allow this anymore. See [issue](https://github.com/WebAssembly/spec/issues/1522) on the Wasm spec repository.
-    pub allow_globals_in_init: bool,
+    pub allow_globals_in_init:      bool,
+    /// Allow sign extension instructions. See [proposal](https://github.com/WebAssembly/sign-extension-ops/blob/master/proposals/sign-extension-ops/Overview.md).
+    pub allow_sign_extension_instr: bool,
 }
 
 impl ValidationConfig {
     /// Validation configuration valid in protocols 1-5.
     pub const V0: Self = Self {
-        allow_globals_in_init: true,
+        allow_globals_in_init:      true,
+        allow_sign_extension_instr: false,
     };
     /// Validation configuration valid in protocol 6 and onward.
     pub const V1: Self = Self {
-        allow_globals_in_init: false,
+        allow_globals_in_init:      false,
+        allow_sign_extension_instr: true,
     };
 }
 
@@ -934,7 +946,7 @@ pub fn validate_module(
     // The global section is valid as long as it's well-formed.
     // We already check that all the globals are initialized with
     // correct expressions.
-    let global: GlobalSection = parse_sec_with_default(EMPTY_CTX, &skeleton.global)?;
+    let global: GlobalSection = parse_sec_with_default(config, &skeleton.global)?;
     ensure!(
         global.globals.len() <= MAX_NUM_GLOBALS,
         "The number of globals must not exceed {}.",
@@ -991,8 +1003,11 @@ pub fn validate_module(
                     memory: memory.memory_type.is_some(),
                     table: table.table_type.is_some(),
                 };
-                let (opcodes, max_height) =
-                    validate(&ctx, &mut OpCodeIterator::new(c.expr_bytes), Vec::new())?;
+                let (opcodes, max_height) = validate(
+                    &ctx,
+                    &mut OpCodeIterator::new(config.allow_sign_extension_instr, c.expr_bytes),
+                    Vec::new(),
+                )?;
                 ensure!(
                     num_locals as usize + max_height <= MAX_ALLOWED_STACK_HEIGHT,
                     "Stack height would exceed allowed limits."
@@ -1059,14 +1074,15 @@ pub fn validate_module(
     // the offset expression is of the correct type and constant.
     // We additionally need to check that all the functions referred
     // to in the table are defined.
-    let element: ElementSection = parse_sec_with_default(
-        if config.allow_globals_in_init {
+    let instr_validation_ctx = InstructionValidationContext {
+        globals_allowed:            if config.allow_globals_in_init {
             Some(&global)
         } else {
             None
         },
-        &skeleton.element,
-    )?;
+        allow_sign_extension_instr: config.allow_sign_extension_instr,
+    };
+    let element: ElementSection = parse_sec_with_default(instr_validation_ctx, &skeleton.element)?;
     ensure!(
         element.elements.is_empty() || table.table_type.is_some(),
         "There is an elements section, but no table."
@@ -1106,14 +1122,7 @@ pub fn validate_module(
     // the offset expression is of the correct type and constant.
     // We additionally need to check that all the locations referred
     // to in the table are defined.
-    let data: DataSection = parse_sec_with_default(
-        if config.allow_globals_in_init {
-            Some(&global)
-        } else {
-            None
-        },
-        &skeleton.data,
-    )?;
+    let data: DataSection = parse_sec_with_default(instr_validation_ctx, &skeleton.data)?;
     // Make sure that if there are any data segments then a memory exists.
     // By parsing we already ensure that all the references are to a single memory
     // and that the initial memory is limited by MAX_INIT_MEMORY_SIZE.

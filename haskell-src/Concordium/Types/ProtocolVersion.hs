@@ -166,6 +166,8 @@ module Concordium.Types.ProtocolVersion (
     supportsChainQueryContracts,
     supportsAccountAliases,
     supportsDelegationPV,
+    supportsSignExtensionInstructions,
+    supportsGlobalsInInitSections,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -500,3 +502,25 @@ supportsChainQueryContracts spv = case spv of
     SP4 -> False
     SP5 -> True
     SP6 -> True
+
+-- |Whether the protocol version supports sign extension instructions for V1
+-- contracts. (Supported in 'P6' and onwards)
+supportsSignExtensionInstructions :: SProtocolVersion pv -> Bool
+supportsSignExtensionInstructions spv = case spv of
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> True
+
+-- |Whether the protocol version allows globals in data and element sections of
+-- Wasm modules for V1 contracts. (Supported before 'P6')
+supportsGlobalsInInitSections :: SProtocolVersion pv -> Bool
+supportsGlobalsInInitSections spv = case spv of
+    SP1 -> True
+    SP2 -> True
+    SP3 -> True
+    SP4 -> True
+    SP5 -> True
+    SP6 -> False

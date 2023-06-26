@@ -536,6 +536,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         exec("i64.rem_s", &[]);
         exec("i64.rem_u", &[]);
         exec("i32.wrap_i64", &[]);
+        exec("i32.extend8_s", &[]);
+        exec("i32.extend16_s", &[]);
+        exec("i64.extend8_s", &[]);
+        exec("i64.extend16_s", &[]);
+        exec("i64.extend32_s", &[]);
         group.finish();
     }
 
