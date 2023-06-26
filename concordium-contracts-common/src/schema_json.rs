@@ -3,7 +3,10 @@ use core::fmt::Display;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::{json, Map, Value};
-use std::convert::{TryFrom, TryInto};
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+};
 
 /// Trait which includes implementations for unwrapping recursive error
 /// structures. Requires that the implementor supplies implementations for
@@ -930,6 +933,8 @@ fn write_bytes_from_json_schema_type<W: Write>(
     }
 }
 
+/// Displays a template of the JSON to be used for the Fields.
+/// It should match the output of `concordium-client`.
 impl Fields {
     pub fn field_to_json(&self) -> serde_json::Value {
         match self {
@@ -943,22 +948,20 @@ impl Fields {
                 serde_json::Value::Object(map)
             }
             Fields::Unnamed(vec) => {
-                let mut new_vector: Vec<Value> = vec![];
+                let mut new_vector = Vec::new();
                 for element in vec.iter() {
                     new_vector.push(element.schema_type_to_json())
                 }
 
                 serde_json::Value::Array(new_vector)
             }
-            Fields::None => {
-                let mut map = Map::new();
-                map.insert("None".to_string(), serde_json::Value::Array(Vec::new()));
-                serde_json::Value::Object(map)
-            }
+            Fields::None => serde_json::Value::Array(Vec::new()),
         }
     }
 }
 
+/// Displays a pretty-printed JSON-template of the schema.
+/// It should match the output of `concordium-client`.
 impl Display for Type {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", serde_json::to_string_pretty(&self.schema_type_to_json()).unwrap())
@@ -1000,6 +1003,8 @@ impl Type {
         write_bytes_from_json_schema_type(schema, json, out)
     }
 
+    /// Displays a template of the JSON to be used for the Schema.
+    /// It should match the output of `concordium-client`.
     pub fn schema_type_to_json(&self) -> serde_json::Value {
         match self {
             Self::Enum(enum_type) => {
@@ -1224,6 +1229,133 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    /// Tests schema template display in JSON of an Enum
+    #[test]
+    fn test_schema_template_enum() {
+        let schema = Type::Enum(Vec::from([
+            (String::from("Accounts"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
+            (String::from("Accounts"), Fields::Unnamed(Vec::from([Type::AccountAddress]))),
+        ]));
+        assert_eq!(
+            json!({"Enum": [{"Accounts": ["<AccountAddress>"]},{"Accounts": ["<AccountAddress>"]}]}),
+            schema.schema_type_to_json()
+        );
+    }
+
+    /// Tests schema template display in JSON of an TaggedEnum
+    #[test]
+    fn test_schema_template_tagged_enum() {
+        let mut map = BTreeMap::new();
+        map.insert(
+            8,
+            (
+                String::from("Accounts"),
+                Fields::Named(Vec::from([(String::from("Account"), Type::AccountAddress)])),
+            ),
+        );
+
+        let schema = Type::TaggedEnum(map);
+        assert_eq!(
+            json!({"Enum": [{"Accounts":{"Account":"<AccountAddress>"}}]}),
+            schema.schema_type_to_json()
+        );
+    }
+
+    /// Tests schema template display in JSON of an AccountAddress
+    #[test]
+    fn test_schema_template_account_address() {
+        let schema = Type::AccountAddress;
+        assert_eq!(json!("<AccountAddress>"), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of an Struct with Field `None`
+    #[test]
+    fn test_schema_template_struct_with_none_field() {
+        let schema = Type::Struct(Fields::None);
+        assert_eq!(json!([]), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of an Struct with named Fields
+    #[test]
+    fn test_schema_template_struct_with_named_fields() {
+        let schema = Type::Struct(Fields::Named(Vec::from([(
+            String::from("Account"),
+            Type::AccountAddress,
+        )])));
+        assert_eq!(json!({"Account":"<AccountAddress>"}), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of a ContractName
+    #[test]
+    fn test_schema_template_contract_name() {
+        let schema = Type::ContractName(schema_json::SizeLength::U8);
+        assert_eq!(json!({"contract":"<String>"}), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of a ReceiveName
+    #[test]
+    fn test_schema_template_receive_name() {
+        let schema = Type::ReceiveName(schema_json::SizeLength::U8);
+        assert_eq!(json!({"contract":"<String>","func":"<String>"}), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of a Map
+    #[test]
+    fn test_schema_template_map() {
+        let schema = Type::Map(
+            schema_json::SizeLength::U8,
+            Box::new(Type::U8),
+            Box::new(Type::AccountAddress),
+        );
+        assert_eq!(json!([["<UInt8>", "<AccountAddress>"]]), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of a Set
+    #[test]
+    fn test_schema_template_set() {
+        let schema = Type::Set(schema_json::SizeLength::U8, Box::new(Type::U8));
+        assert_eq!(json!(["<UInt8>"]), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of a List
+    #[test]
+    fn test_schema_template_list() {
+        let schema = Type::List(schema_json::SizeLength::U8, Box::new(Type::U8));
+        assert_eq!(json!(["<UInt8>"]), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of an Array
+    #[test]
+    fn test_schema_template_array() {
+        let schema = Type::Array(4, Box::new(Type::U8));
+        assert_eq!(json!(["<UInt8>"]), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of a Pair
+    #[test]
+    fn test_schema_template_pair() {
+        let schema = Type::Pair(Box::new(Type::AccountAddress), Box::new(Type::U8));
+        assert_eq!(json!(("<AccountAddress>", "<UInt8>")), schema.schema_type_to_json());
+    }
+
+    /// Tests schema template display in JSON of an ContractAddress
+    #[test]
+    fn test_schema_template_contract_address() {
+        let schema = Type::ContractAddress;
+        assert_eq!(
+            json!({"index":"<UInt64>",
+            "subindex":"<UInt64>"}),
+            schema.schema_type_to_json()
+        );
+    }
+
+    /// Tests schema template display in JSON of a Unit
+    #[test]
+    fn test_schema_template_unit() {
+        let schema = Type::Unit;
+        assert_eq!(json!([]), schema.schema_type_to_json());
+    }
 
     #[test]
     fn test_serial_biguint_0() {
@@ -1733,7 +1865,7 @@ impl Fields {
                 }
                 Ok(Value::Array(values))
             }
-            Fields::None => Ok(Value::Array(vec![])),
+            Fields::None => Ok(Value::Array(Vec::new())),
         }
     }
 }
