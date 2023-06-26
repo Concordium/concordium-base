@@ -55,7 +55,8 @@ impl<I> Host<I> for TestHost {
 fn test_sign_extension() -> anyhow::Result<()> {
     let source = include_bytes!("../testdata/sign-ext-instructions.wasm");
 
-    let artifact = instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &TestHost, source)?;
+    let artifact =
+        instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &TestHost, source)?.artifact;
     // Make sure there is no assertion violation, which would be a runtime error,
     // leading to an Err result below.
     artifact.run(&mut TestHost, "check_sign_extend_instructions", &[])?;

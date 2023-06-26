@@ -1566,7 +1566,8 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_init(
         artifact,
         init_ctx,
@@ -1598,7 +1599,8 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_init(
         artifact,
         init_ctx,
@@ -1923,7 +1925,8 @@ pub fn invoke_receive_from_source<
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_receive(
         Arc::new(artifact),
         receive_ctx,
@@ -1959,7 +1962,8 @@ pub fn invoke_receive_with_metering_from_source<
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_receive(
         Arc::new(artifact),
         receive_ctx,
