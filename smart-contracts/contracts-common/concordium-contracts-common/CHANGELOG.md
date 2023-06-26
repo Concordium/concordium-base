@@ -2,7 +2,7 @@
 
 ## Unreleased changes
 
-- Add `Display` trait to `SchemaType`
+- Add `Display` trait to `SchemaType` to display the `SchemaType` as a JSON template
 
 ## concordium-contracts-common 7.0.0 (2023-06-16)
 

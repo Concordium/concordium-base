@@ -3,10 +3,7 @@ use core::fmt::Display;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::{json, Map, Value};
-use std::{
-    collections::BTreeMap,
-    convert::{TryFrom, TryInto},
-};
+use std::convert::{TryFrom, TryInto};
 
 /// Trait which includes implementations for unwrapping recursive error
 /// structures. Requires that the implementor supplies implementations for
@@ -936,24 +933,24 @@ fn write_bytes_from_json_schema_type<W: Write>(
 /// Displays a template of the JSON to be used for the Fields.
 /// It should match the output of `concordium-client`.
 impl Fields {
-    pub fn field_to_json(&self) -> serde_json::Value {
+    pub fn to_json_template(&self) -> serde_json::Value {
         match self {
             Fields::Named(vec) => {
                 let mut map = Map::new();
 
                 for (name, field) in vec.iter() {
-                    map.insert(name.to_string(), field.schema_type_to_json());
+                    map.insert(name.to_string(), field.to_json_template());
                 }
 
-                serde_json::Value::Object(map)
+                json!(map)
             }
             Fields::Unnamed(vec) => {
                 let mut new_vector = Vec::new();
                 for element in vec.iter() {
-                    new_vector.push(element.schema_type_to_json())
+                    new_vector.push(element.to_json_template())
                 }
 
-                serde_json::Value::Array(new_vector)
+                json!(new_vector)
             }
             Fields::None => serde_json::Value::Array(Vec::new()),
         }
@@ -964,7 +961,7 @@ impl Fields {
 /// It should match the output of `concordium-client`.
 impl Display for Type {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", serde_json::to_string_pretty(&self.schema_type_to_json()).unwrap())
+        write!(f, "{}", serde_json::to_string_pretty(&self.to_json_template()).unwrap())
     }
 }
 
@@ -1003,9 +1000,9 @@ impl Type {
         write_bytes_from_json_schema_type(schema, json, out)
     }
 
-    /// Displays a template of the JSON to be used for the Schema.
+    /// Displays a template of the JSON to be used for the schemaType.
     /// It should match the output of `concordium-client`.
-    pub fn schema_type_to_json(&self) -> serde_json::Value {
+    pub fn to_json_template(&self) -> serde_json::Value {
         match self {
             Self::Enum(enum_type) => {
                 let mut outer_map = Map::new();
@@ -1014,12 +1011,12 @@ impl Type {
 
                 for (name, field) in enum_type.iter() {
                     let mut inner_map = Map::new();
-                    inner_map.insert(name.to_string(), field.field_to_json());
-                    vector.push(serde_json::Value::Object(inner_map))
+                    inner_map.insert(name.to_string(), field.to_json_template());
+                    vector.push(json!(inner_map))
                 }
-                outer_map.insert("Enum".to_string(), serde_json::Value::Array(vector));
+                outer_map.insert("Enum".to_string(), json!(vector));
 
-                serde_json::Value::Object(outer_map)
+                json!(outer_map)
             }
             Self::TaggedEnum(tagged_enum) => {
                 let mut outer_map = Map::new();
@@ -1028,82 +1025,78 @@ impl Type {
 
                 for (_tag, (name, field)) in tagged_enum.iter() {
                     let mut inner_map = Map::new();
-                    inner_map.insert(name.to_string(), field.field_to_json());
-                    vector.push(serde_json::Value::Object(inner_map))
+                    inner_map.insert(name.to_string(), field.to_json_template());
+                    vector.push(json!(inner_map))
                 }
-                outer_map.insert("Enum".to_string(), serde_json::Value::Array(vector));
+                outer_map.insert("Enum".to_string(), json!(vector));
 
-                serde_json::Value::Object(outer_map)
+                json!(outer_map)
             }
-            Self::Struct(field) => field.field_to_json(),
+            Self::Struct(field) => field.to_json_template(),
             Self::ByteList(_) => {
-                serde_json::Value::String("<String with lowercase hex>".to_string())
+                json!("<String with lowercase hex>".to_string())
             }
-            Self::ByteArray(_) => {
-                serde_json::Value::String("<String with lowercase hex>".to_string())
+            Self::ByteArray(size) => {
+                json!(format!("{}{:?}{}", "<String of size ", size, " with lowercase hex>"))
             }
-            Self::String(_) => serde_json::Value::String("<String>".to_string()),
+            Self::String(_) => json!("<String>".to_string()),
             Self::Unit => serde_json::Value::Array(Vec::new()),
-            Self::Bool => serde_json::Value::String("<Bool>".to_string()),
-            Self::U8 => serde_json::Value::String("<UInt8>".to_string()),
-            Self::U16 => serde_json::Value::String("<UInt16>".to_string()),
-            Self::U32 => serde_json::Value::String("<UInt32>".to_string()),
-            Self::U64 => serde_json::Value::String("<UInt64>".to_string()),
-            Self::U128 => serde_json::Value::String("<UInt128>".to_string()),
-            Self::I8 => serde_json::Value::String("<Int8>".to_string()),
-            Self::I16 => serde_json::Value::String("<Int16>".to_string()),
-            Self::I32 => serde_json::Value::String("<Int32>".to_string()),
-            Self::I64 => serde_json::Value::String("<Int64>".to_string()),
-            Self::I128 => serde_json::Value::String("<Int128>".to_string()),
-            Self::ILeb128(_) => {
-                serde_json::Value::String("<String with signed integer>".to_string())
+            Self::Bool => json!("<Bool>".to_string()),
+            Self::U8 => json!("<UInt8>".to_string()),
+            Self::U16 => json!("<UInt16>".to_string()),
+            Self::U32 => json!("<UInt32>".to_string()),
+            Self::U64 => json!("<UInt64>".to_string()),
+            Self::U128 => json!("<UInt128>".to_string()),
+            Self::I8 => json!("<Int8>".to_string()),
+            Self::I16 => json!("<Int16>".to_string()),
+            Self::I32 => json!("<Int32>".to_string()),
+            Self::I64 => json!("<Int64>".to_string()),
+            Self::I128 => json!("<Int128>".to_string()),
+            Self::ILeb128(size) => {
+                json!(format!("{}{:?}{}", "<String of size ", size, " with signed integer>"))
             }
-            Self::ULeb128(_) => {
-                serde_json::Value::String("<String with unsigned integer>".to_string())
+            Self::ULeb128(size) => {
+                json!(format!("{}{:?}{}", "<String of size ", size, " with unsigned integer>"))
             }
-            Self::Amount => serde_json::Value::String("<Amount>".to_string()),
-            Self::AccountAddress => serde_json::Value::String("<AccountAddress>".to_string()),
+            Self::Amount => json!("<Amount in microCCD>".to_string()),
+            Self::AccountAddress => json!("<AccountAddress>".to_string()),
             Self::ContractAddress => {
                 let mut contract_address = Map::new();
-                contract_address.insert("index".to_string(), Type::U64.schema_type_to_json());
-                contract_address.insert("subindex".to_string(), Type::U64.schema_type_to_json());
-                serde_json::Value::Object(contract_address)
+                contract_address.insert("index".to_string(), Type::U64.to_json_template());
+                contract_address.insert("subindex".to_string(), Type::U64.to_json_template());
+                json!(contract_address)
             }
-            Self::Timestamp => serde_json::Value::String("<Timestamp>".to_string()),
-            Self::Duration => serde_json::Value::String("<Duration>".to_string()),
+            Self::Timestamp => {
+                json!("<Timestamp (e.g. `2000-01-01T12:00:00Z`)>".to_string())
+            }
+            Self::Duration => json!("<Duration (e.g. `10d 1h 42s`)>".to_string()),
             Self::Pair(a, b) => {
-                serde_json::Value::Array(vec![a.schema_type_to_json(), b.schema_type_to_json()])
+                json!(vec![a.to_json_template(), b.to_json_template()])
             }
-            Self::List(_, element) => serde_json::Value::Array(vec![element.schema_type_to_json()]),
-            Self::Array(_, element) => {
-                serde_json::Value::Array(vec![element.schema_type_to_json()])
+            Self::List(_, element) => json!(vec![element.to_json_template()]),
+            Self::Array(size, element) => {
+                let mut vec = Vec::new();
+                for _i in 0..*size {
+                    vec.push(element.to_json_template())
+                }
+                json!(vec)
             }
-            Self::Set(_size, element) => {
-                serde_json::Value::Array(vec![element.schema_type_to_json()])
+            Self::Set(_, element) => {
+                json!(vec![element.to_json_template()])
             }
-            Self::Map(_size, key, value) => {
-                serde_json::Value::Array(vec![serde_json::Value::Array(vec![
-                    key.schema_type_to_json(),
-                    value.schema_type_to_json(),
-                ])])
+            Self::Map(_, key, value) => {
+                json!(vec![json!(vec![key.to_json_template(), value.to_json_template(),])])
             }
             Self::ContractName(_) => {
                 let mut contract_name = Map::new();
-                contract_name.insert(
-                    "contract".to_string(),
-                    serde_json::Value::String("<String>".to_string()),
-                );
-                serde_json::Value::Object(contract_name)
+                contract_name.insert("contract".to_string(), json!("<String>".to_string()));
+                json!(contract_name)
             }
             Self::ReceiveName(_) => {
                 let mut receive_name = Map::new();
-                receive_name.insert(
-                    "contract".to_string(),
-                    serde_json::Value::String("<String>".to_string()),
-                );
-                receive_name
-                    .insert("func".to_string(), serde_json::Value::String("<String>".to_string()));
-                serde_json::Value::Object(receive_name)
+                receive_name.insert("contract".to_string(), json!("<String>".to_string()));
+                receive_name.insert("func".to_string(), json!("<String>".to_string()));
+                json!(receive_name)
             }
         }
     }
@@ -1239,7 +1232,7 @@ mod tests {
         ]));
         assert_eq!(
             json!({"Enum": [{"Accounts": ["<AccountAddress>"]},{"Accounts": ["<AccountAddress>"]}]}),
-            schema.schema_type_to_json()
+            schema.to_json_template()
         );
     }
 
@@ -1258,22 +1251,29 @@ mod tests {
         let schema = Type::TaggedEnum(map);
         assert_eq!(
             json!({"Enum": [{"Accounts":{"Account":"<AccountAddress>"}}]}),
-            schema.schema_type_to_json()
+            schema.to_json_template()
         );
     }
 
-    /// Tests schema template display in JSON of an AccountAddress
+    /// Tests schema template display in JSON of a Duration
     #[test]
-    fn test_schema_template_account_address() {
-        let schema = Type::AccountAddress;
-        assert_eq!(json!("<AccountAddress>"), schema.schema_type_to_json());
+    fn test_schema_template_duration() {
+        let schema = Type::Duration;
+        assert_eq!(json!("<Duration (e.g. `10d 1h 42s`)>"), schema.to_json_template());
+    }
+
+    /// Tests schema template display in JSON of a Timestamp
+    #[test]
+    fn test_schema_template_timestamp() {
+        let schema = Type::Timestamp;
+        assert_eq!(json!("<Timestamp (e.g. `2000-01-01T12:00:00Z`)>"), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Struct with Field `None`
     #[test]
     fn test_schema_template_struct_with_none_field() {
         let schema = Type::Struct(Fields::None);
-        assert_eq!(json!([]), schema.schema_type_to_json());
+        assert_eq!(json!([]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Struct with named Fields
@@ -1283,21 +1283,21 @@ mod tests {
             String::from("Account"),
             Type::AccountAddress,
         )])));
-        assert_eq!(json!({"Account":"<AccountAddress>"}), schema.schema_type_to_json());
+        assert_eq!(json!({"Account":"<AccountAddress>"}), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a ContractName
     #[test]
     fn test_schema_template_contract_name() {
         let schema = Type::ContractName(schema_json::SizeLength::U8);
-        assert_eq!(json!({"contract":"<String>"}), schema.schema_type_to_json());
+        assert_eq!(json!({"contract":"<String>"}), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a ReceiveName
     #[test]
     fn test_schema_template_receive_name() {
         let schema = Type::ReceiveName(schema_json::SizeLength::U8);
-        assert_eq!(json!({"contract":"<String>","func":"<String>"}), schema.schema_type_to_json());
+        assert_eq!(json!({"contract":"<String>","func":"<String>"}), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Map
@@ -1308,35 +1308,35 @@ mod tests {
             Box::new(Type::U8),
             Box::new(Type::AccountAddress),
         );
-        assert_eq!(json!([["<UInt8>", "<AccountAddress>"]]), schema.schema_type_to_json());
+        assert_eq!(json!([["<UInt8>", "<AccountAddress>"]]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Set
     #[test]
     fn test_schema_template_set() {
         let schema = Type::Set(schema_json::SizeLength::U8, Box::new(Type::U8));
-        assert_eq!(json!(["<UInt8>"]), schema.schema_type_to_json());
+        assert_eq!(json!(["<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a List
     #[test]
     fn test_schema_template_list() {
         let schema = Type::List(schema_json::SizeLength::U8, Box::new(Type::U8));
-        assert_eq!(json!(["<UInt8>"]), schema.schema_type_to_json());
+        assert_eq!(json!(["<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Array
     #[test]
     fn test_schema_template_array() {
         let schema = Type::Array(4, Box::new(Type::U8));
-        assert_eq!(json!(["<UInt8>"]), schema.schema_type_to_json());
+        assert_eq!(json!(["<UInt8>", "<UInt8>", "<UInt8>", "<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Pair
     #[test]
     fn test_schema_template_pair() {
         let schema = Type::Pair(Box::new(Type::AccountAddress), Box::new(Type::U8));
-        assert_eq!(json!(("<AccountAddress>", "<UInt8>")), schema.schema_type_to_json());
+        assert_eq!(json!(("<AccountAddress>", "<UInt8>")), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an ContractAddress
@@ -1346,7 +1346,7 @@ mod tests {
         assert_eq!(
             json!({"index":"<UInt64>",
             "subindex":"<UInt64>"}),
-            schema.schema_type_to_json()
+            schema.to_json_template()
         );
     }
 
@@ -1354,7 +1354,7 @@ mod tests {
     #[test]
     fn test_schema_template_unit() {
         let schema = Type::Unit;
-        assert_eq!(json!([]), schema.schema_type_to_json());
+        assert_eq!(json!([]), schema.to_json_template());
     }
 
     #[test]
