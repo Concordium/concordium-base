@@ -963,6 +963,25 @@ impl Display for Type {
     }
 }
 
+/// Displays the type value indented.
+/// It should match the output of `concordium-client`.
+fn display_type_schema_indented(
+    mut out: String,
+    type_schema: &Type,
+    type_schema_name: &str,
+    indent: usize,
+) -> String {
+    out = format!("{}{:>3$}{}:\n", out, "", type_schema_name, indent);
+    out = format!(
+        "{}{:>3$}{}\n",
+        out,
+        "",
+        type_schema.to_string().replace('\n', "\n        "),
+        indent + 2
+    );
+    out
+}
+
 /// Displays a pretty-printed JSON-template of the schema.
 /// It should match the output of `concordium-client`.
 impl Display for VersionedModuleSchema {
@@ -972,29 +991,39 @@ impl Display for VersionedModuleSchema {
             VersionedModuleSchema::V0(module_v0) => {
                 for (contract_name, contract_schema) in module_v0.contracts.iter() {
                     out = format!("Contract: {:>30}\n", contract_name);
+                    // State
+                    if let Some(type_schema) = &contract_schema.state {
+                        out = format!("{}{:>2}State:\n", out, "");
+                        out = format!(
+                            "{}{:>4}{}\n",
+                            out,
+                            "",
+                            type_schema.to_string().replace('\n', "\n        ")
+                        );
+                    }
                     // Init Function
-                    if let Some(type_value) = &contract_schema.init {
+                    if let Some(type_schema) = &contract_schema.init {
                         out = format!("{}{:>2}Init:\n", out, "");
                         out = format!(
                             "{}{:>4}{}\n",
                             out,
                             "",
-                            type_value.to_string().replace('\n', "\n        ")
+                            type_schema.to_string().replace('\n', "\n        ")
                         );
                     }
                     // Receive Functions
                     let receive_functions_map = &contract_schema.receive;
-                    if receive_functions_map.len() > 0 {
+                    if !receive_functions_map.is_empty() {
                         out = format!("{}{:>2}Methods:\n", out, "");
                     }
 
-                    for (function_name, type_value) in receive_functions_map.iter() {
+                    for (function_name, type_schema) in receive_functions_map.iter() {
                         out = format!("{}{:>4}- {:?}\n", out, "", function_name);
                         out = format!(
                             "{}{:>6}{}\n",
                             out,
                             "",
-                            type_value.to_string().replace('\n', "\n        ")
+                            type_schema.to_string().replace('\n', "\n        ")
                         );
                     }
                 }
@@ -1006,52 +1035,28 @@ impl Display for VersionedModuleSchema {
                     if let Some(schema) = &contract_schema.init {
                         out = format!("{}{:>2}Init:\n", out, "");
 
-                        if let Some(type_value) = schema.parameter() {
-                            out = format!("{}{:>4}Parameter:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = schema.parameter() {
+                            out = display_type_schema_indented(out, type_schema, "Parameter", 4)
                         }
-                        if let Some(type_value) = schema.return_value() {
-                            out = format!("{}{:>4}Return value:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = schema.return_value() {
+                            out = display_type_schema_indented(out, type_schema, "Return value", 4)
                         }
                     }
 
                     // Receive Functions
                     let receive_functions_map = &contract_schema.receive;
-                    if receive_functions_map.len() > 0 {
+                    if !receive_functions_map.is_empty() {
                         out = format!("{}{:>2}Methods:\n", out, "");
                     }
 
                     for (function_name, schema) in receive_functions_map.iter() {
                         out = format!("{}{:>4}- {:?}\n", out, "", function_name);
 
-                        if let Some(type_value) = schema.parameter() {
-                            out = format!("{}{:>4}Parameter:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = schema.parameter() {
+                            out = display_type_schema_indented(out, type_schema, "Parameter", 6)
                         }
-                        if let Some(type_value) = schema.return_value() {
-                            out = format!("{}{:>4}Return value:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = schema.return_value() {
+                            out = display_type_schema_indented(out, type_schema, "Return value", 6)
                         }
                     }
                 }
@@ -1068,39 +1073,21 @@ impl Display for VersionedModuleSchema {
                     {
                         out = format!("{}{:>2}Init:\n", out, "");
 
-                        if let Some(type_value) = parameter {
-                            out = format!("{}{:>4}Parameter:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = parameter {
+                            out = display_type_schema_indented(out, type_schema, "Parameter", 4)
                         }
 
-                        if let Some(type_value) = error {
-                            out = format!("{}{:>4}Error:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = error {
+                            out = display_type_schema_indented(out, type_schema, "Error", 4)
                         }
 
-                        if let Some(type_value) = return_value {
-                            out = format!("{}{:>4}Return value:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = return_value {
+                            out = display_type_schema_indented(out, type_schema, "Return value", 4)
                         }
                     }
                     // Receive Functions
                     let receive_functions_map = &contract_schema.receive;
-                    if receive_functions_map.len() > 0 {
+                    if !receive_functions_map.is_empty() {
                         out = format!("{}{:>2}Methods:\n", out, "");
                     }
 
@@ -1113,34 +1100,16 @@ impl Display for VersionedModuleSchema {
                             error,
                         } = schema;
 
-                        if let Some(type_value) = parameter {
-                            out = format!("{}{:>6}Parameter:\n", out, "");
-                            out = format!(
-                                "{}{:>8}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = parameter {
+                            out = display_type_schema_indented(out, type_schema, "Parameter", 6)
                         }
 
-                        if let Some(type_value) = error {
-                            out = format!("{}{:>6}Error:\n", out, "");
-                            out = format!(
-                                "{}{:>8}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = error {
+                            out = display_type_schema_indented(out, type_schema, "Error", 6)
                         }
 
-                        if let Some(type_value) = return_value {
-                            out = format!("{}{:>6}Return value:\n", out, "");
-                            out = format!(
-                                "{}{:>8}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = return_value {
+                            out = display_type_schema_indented(out, type_schema, "Return value", 6)
                         }
                     }
                 }
@@ -1158,41 +1127,23 @@ impl Display for VersionedModuleSchema {
                     {
                         out = format!("{}{:>2}Init:\n", out, "");
 
-                        if let Some(type_value) = parameter {
-                            out = format!("{}{:>4}Parameter:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = parameter {
+                            out = display_type_schema_indented(out, type_schema, "Parameter", 4)
                         }
 
-                        if let Some(type_value) = error {
-                            out = format!("{}{:>4}Error:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = error {
+                            out = display_type_schema_indented(out, type_schema, "Error", 4)
                         }
 
-                        if let Some(type_value) = return_value {
-                            out = format!("{}{:>4}Return value:\n", out, "");
-                            out = format!(
-                                "{}{:>6}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = return_value {
+                            out = display_type_schema_indented(out, type_schema, "Return value", 4)
                         }
                     }
 
                     // Receive Functions
                     let receive_functions_map = &contract_schema.receive;
 
-                    if receive_functions_map.len() > 0 {
+                    if !receive_functions_map.is_empty() {
                         out = format!("{}{:>2}Methods:\n", out, "");
                     }
 
@@ -1205,46 +1156,22 @@ impl Display for VersionedModuleSchema {
                             error,
                         } = schema;
 
-                        if let Some(type_value) = parameter {
-                            out = format!("{}{:>6}Parameter:\n", out, "");
-                            out = format!(
-                                "{}{:>8}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = parameter {
+                            out = display_type_schema_indented(out, type_schema, "Parameter", 6)
                         }
 
-                        if let Some(type_value) = error {
-                            out = format!("{}{:>6}Error:\n", out, "");
-                            out = format!(
-                                "{}{:>8}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = error {
+                            out = display_type_schema_indented(out, type_schema, "Error", 6)
                         }
 
-                        if let Some(type_value) = return_value {
-                            out = format!("{}{:>6}Return value:\n", out, "");
-                            out = format!(
-                                "{}{:>8}{}\n",
-                                out,
-                                "",
-                                type_value.to_string().replace('\n', "\n        ")
-                            );
+                        if let Some(type_schema) = return_value {
+                            out = display_type_schema_indented(out, type_schema, "Return value", 6)
                         }
                     }
 
                     // Event
-                    if let Some(type_value) = &contract_schema.event {
-                        out = format!("{}{:>6}Event:\n", out, "");
-                        out = format!(
-                            "{}{:>8}{}\n",
-                            out,
-                            "",
-                            type_value.to_string().replace('\n', "\n        ")
-                        );
+                    if let Some(type_schema) = &contract_schema.event {
+                        out = display_type_schema_indented(out, type_schema, "Event", 4)
                     }
                 }
             }
