@@ -963,6 +963,296 @@ impl Display for Type {
     }
 }
 
+/// Displays a pretty-printed JSON-template of the schema.
+/// It should match the output of `concordium-client`.
+impl Display for VersionedModuleSchema {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut out = String::new();
+        match self {
+            VersionedModuleSchema::V0(module_v0) => {
+                for (contract_name, contract_schema) in module_v0.contracts.iter() {
+                    out = format!("Contract: {:>30}\n", contract_name);
+                    // Init Function
+                    if let Some(type_value) = &contract_schema.init {
+                        out = format!("{}{:>2}Init:\n", out, "");
+                        out = format!(
+                            "{}{:>4}{}\n",
+                            out,
+                            "",
+                            type_value.to_string().replace('\n', "\n        ")
+                        );
+                    }
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+                    if receive_functions_map.len() > 0 {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, type_value) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+                        out = format!(
+                            "{}{:>6}{}\n",
+                            out,
+                            "",
+                            type_value.to_string().replace('\n', "\n        ")
+                        );
+                    }
+                }
+            }
+            VersionedModuleSchema::V1(module_v1) => {
+                for (contract_name, contract_schema) in module_v1.contracts.iter() {
+                    out = format!("Contract: {:>30}\n", contract_name);
+                    // Init Function
+                    if let Some(schema) = &contract_schema.init {
+                        out = format!("{}{:>2}Init:\n", out, "");
+
+                        if let Some(type_value) = schema.parameter() {
+                            out = format!("{}{:>4}Parameter:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                        if let Some(type_value) = schema.return_value() {
+                            out = format!("{}{:>4}Return value:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                    }
+
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+                    if receive_functions_map.len() > 0 {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, schema) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+
+                        if let Some(type_value) = schema.parameter() {
+                            out = format!("{}{:>4}Parameter:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                        if let Some(type_value) = schema.return_value() {
+                            out = format!("{}{:>4}Return value:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                    }
+                }
+            }
+            VersionedModuleSchema::V2(module_v2) => {
+                for (contract_name, contract_schema) in module_v2.contracts.iter() {
+                    out = format!("Contract: {:>30}\n", contract_name);
+                    // Init Function
+                    if let Some(FunctionV2 {
+                        parameter,
+                        return_value,
+                        error,
+                    }) = &contract_schema.init
+                    {
+                        out = format!("{}{:>2}Init:\n", out, "");
+
+                        if let Some(type_value) = parameter {
+                            out = format!("{}{:>4}Parameter:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = error {
+                            out = format!("{}{:>4}Error:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = return_value {
+                            out = format!("{}{:>4}Return value:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                    }
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+                    if receive_functions_map.len() > 0 {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, schema) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+
+                        let FunctionV2 {
+                            parameter,
+                            return_value,
+                            error,
+                        } = schema;
+
+                        if let Some(type_value) = parameter {
+                            out = format!("{}{:>6}Parameter:\n", out, "");
+                            out = format!(
+                                "{}{:>8}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = error {
+                            out = format!("{}{:>6}Error:\n", out, "");
+                            out = format!(
+                                "{}{:>8}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = return_value {
+                            out = format!("{}{:>6}Return value:\n", out, "");
+                            out = format!(
+                                "{}{:>8}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                    }
+                }
+            }
+            VersionedModuleSchema::V3(module_v3) => {
+                for (contract_name, contract_schema) in module_v3.contracts.iter() {
+                    out = format!("Contract: {:>30}\n", contract_name);
+
+                    // Init Function
+                    if let Some(FunctionV2 {
+                        parameter,
+                        return_value,
+                        error,
+                    }) = &contract_schema.init
+                    {
+                        out = format!("{}{:>2}Init:\n", out, "");
+
+                        if let Some(type_value) = parameter {
+                            out = format!("{}{:>4}Parameter:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = error {
+                            out = format!("{}{:>4}Error:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = return_value {
+                            out = format!("{}{:>4}Return value:\n", out, "");
+                            out = format!(
+                                "{}{:>6}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                    }
+
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+
+                    if receive_functions_map.len() > 0 {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, schema) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+
+                        let FunctionV2 {
+                            parameter,
+                            return_value,
+                            error,
+                        } = schema;
+
+                        if let Some(type_value) = parameter {
+                            out = format!("{}{:>6}Parameter:\n", out, "");
+                            out = format!(
+                                "{}{:>8}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = error {
+                            out = format!("{}{:>6}Error:\n", out, "");
+                            out = format!(
+                                "{}{:>8}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+
+                        if let Some(type_value) = return_value {
+                            out = format!("{}{:>6}Return value:\n", out, "");
+                            out = format!(
+                                "{}{:>8}{}\n",
+                                out,
+                                "",
+                                type_value.to_string().replace('\n', "\n        ")
+                            );
+                        }
+                    }
+
+                    // Event
+                    if let Some(type_value) = &contract_schema.event {
+                        out = format!("{}{:>6}Event:\n", out, "");
+                        out = format!(
+                            "{}{:>8}{}\n",
+                            out,
+                            "",
+                            type_value.to_string().replace('\n', "\n        ")
+                        );
+                    }
+                }
+            }
+        }
+        write!(f, "{}", out)
+    }
+}
+
 impl Type {
     /// Serialize the given JSON value into the binary format represented by the
     /// schema. If the JSON value does not match the schema an error will be
