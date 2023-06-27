@@ -1171,7 +1171,7 @@ impl Display for VersionedModuleSchema {
 
                     // Event
                     if let Some(type_schema) = &contract_schema.event {
-                        out = display_type_schema_indented(out, type_schema, "Event", 4)
+                        out = display_type_schema_indented(out, type_schema, "Event", 2)
                     }
                 }
             }
@@ -1430,9 +1430,171 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
+    /// Tests schema template display of `VersionedModuleSchema::V3`
+    #[test]
+    fn test_schema_template_display_module_version_v3() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
+            parameter:    Some(Type::AccountAddress),
+            error:        Some(Type::AccountAddress),
+            return_value: Some(Type::AccountAddress),
+        });
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV3 {
+            init:    Some(FunctionV2 {
+                parameter:    Some(Type::AccountAddress),
+                error:        Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            }),
+            receive: receive_function_map,
+            event:   Some(Type::AccountAddress),
+        });
+
+        let schema = VersionedModuleSchema::V3(ModuleV3 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Error:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Error:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"
+  Event:
+    \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
+    /// Tests schema template display of `VersionedModuleSchema::V2`
+    #[test]
+    fn test_schema_template_display_module_version_v2() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
+            parameter:    Some(Type::AccountAddress),
+            error:        Some(Type::AccountAddress),
+            return_value: Some(Type::AccountAddress),
+        });
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV2 {
+            init:    Some(FunctionV2 {
+                parameter:    Some(Type::AccountAddress),
+                error:        Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            }),
+            receive: receive_function_map,
+        });
+
+        let schema = VersionedModuleSchema::V2(ModuleV2 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Error:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Error:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
+    /// Tests schema template display of `VersionedModuleSchema::V1`
+    #[test]
+    fn test_schema_template_display_module_version_v1() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), FunctionV1::Both {
+            parameter:    Type::AccountAddress,
+            return_value: Type::AccountAddress,
+        });
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV1 {
+            init:    Some(FunctionV1::Both {
+                parameter:    Type::AccountAddress,
+                return_value: Type::AccountAddress,
+            }),
+            receive: receive_function_map,
+        });
+
+        let schema = VersionedModuleSchema::V1(ModuleV1 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
+    /// Tests schema template display of `VersionedModuleSchema::V0`
+    #[test]
+    fn test_schema_template_display_module_version_v0() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), Type::AccountAddress);
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV0 {
+            state:   Some(Type::AccountAddress),
+            init:    Some(Type::AccountAddress),
+            receive: receive_function_map,
+        });
+
+        let schema = VersionedModuleSchema::V0(ModuleV0 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  State:
+    \"<AccountAddress>\"
+  Init:
+    \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
     /// Tests schema template display in JSON of an Enum
     #[test]
-    fn test_schema_template_enum() {
+    fn test_schema_template_display_enum() {
         let schema = Type::Enum(Vec::from([(
             String::from("Accounts"),
             Fields::Unnamed(Vec::from([Type::AccountAddress])),
@@ -1445,7 +1607,7 @@ mod tests {
 
     /// Tests schema template display in JSON of an TaggedEnum
     #[test]
-    fn test_schema_template_tagged_enum() {
+    fn test_schema_template_display_tagged_enum() {
         let mut map = BTreeMap::new();
         map.insert(
             8,
@@ -1464,28 +1626,28 @@ mod tests {
 
     /// Tests schema template display in JSON of a Duration
     #[test]
-    fn test_schema_template_duration() {
+    fn test_schema_template_display_duration() {
         let schema = Type::Duration;
         assert_eq!(json!("<Duration (e.g. `10d 1h 42s`)>"), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Timestamp
     #[test]
-    fn test_schema_template_timestamp() {
+    fn test_schema_template_display_timestamp() {
         let schema = Type::Timestamp;
         assert_eq!(json!("<Timestamp (e.g. `2000-01-01T12:00:00Z`)>"), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Struct with Field `None`
     #[test]
-    fn test_schema_template_struct_with_none_field() {
+    fn test_schema_template_display_struct_with_none_field() {
         let schema = Type::Struct(Fields::None);
         assert_eq!(json!([]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Struct with named Fields
     #[test]
-    fn test_schema_template_struct_with_named_fields() {
+    fn test_schema_template_display_struct_with_named_fields() {
         let schema = Type::Struct(Fields::Named(Vec::from([(
             String::from("Account"),
             Type::AccountAddress,
@@ -1495,21 +1657,21 @@ mod tests {
 
     /// Tests schema template display in JSON of a ContractName
     #[test]
-    fn test_schema_template_contract_name() {
+    fn test_schema_template_display_contract_name() {
         let schema = Type::ContractName(schema_json::SizeLength::U8);
         assert_eq!(json!({"contract":"<String>"}), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a ReceiveName
     #[test]
-    fn test_schema_template_receive_name() {
+    fn test_schema_template_display_receive_name() {
         let schema = Type::ReceiveName(schema_json::SizeLength::U8);
         assert_eq!(json!({"contract":"<String>","func":"<String>"}), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Map
     #[test]
-    fn test_schema_template_map() {
+    fn test_schema_template_display_map() {
         let schema = Type::Map(
             schema_json::SizeLength::U8,
             Box::new(Type::U8),
@@ -1520,35 +1682,35 @@ mod tests {
 
     /// Tests schema template display in JSON of a Set
     #[test]
-    fn test_schema_template_set() {
+    fn test_schema_template_display_set() {
         let schema = Type::Set(schema_json::SizeLength::U8, Box::new(Type::U8));
         assert_eq!(json!(["<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a List
     #[test]
-    fn test_schema_template_list() {
+    fn test_schema_template_display_list() {
         let schema = Type::List(schema_json::SizeLength::U8, Box::new(Type::U8));
         assert_eq!(json!(["<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Array
     #[test]
-    fn test_schema_template_array() {
+    fn test_schema_template_display_array() {
         let schema = Type::Array(4, Box::new(Type::U8));
         assert_eq!(json!(["<UInt8>", "<UInt8>", "<UInt8>", "<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Pair
     #[test]
-    fn test_schema_template_pair() {
+    fn test_schema_template_display_pair() {
         let schema = Type::Pair(Box::new(Type::AccountAddress), Box::new(Type::U8));
         assert_eq!(json!(("<AccountAddress>", "<UInt8>")), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an ContractAddress
     #[test]
-    fn test_schema_template_contract_address() {
+    fn test_schema_template_display_contract_address() {
         let schema = Type::ContractAddress;
         assert_eq!(
             json!({"index":"<UInt64>",
@@ -1559,7 +1721,7 @@ mod tests {
 
     /// Tests schema template display in JSON of a Unit
     #[test]
-    fn test_schema_template_unit() {
+    fn test_schema_template_display_unit() {
         let schema = Type::Unit;
         assert_eq!(json!([]), schema.to_json_template());
     }
