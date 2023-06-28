@@ -237,6 +237,8 @@ unsafe extern "C" fn call_receive_v1(
     // in case execution terminated normally. Normally here means without a runtime exception.
     output_state_changed: *mut u8,
     support_queries_tag: u8, // non-zero to enable support of chain queries.
+    support_account_signature_checks: u8, /* non-zero to enable support for queryin account keys
+                                           * and checking signatures */
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -281,11 +283,13 @@ unsafe extern "C" fn call_receive_v1(
                 };
 
                 let support_queries = support_queries_tag != 0;
+                let support_account_signature_checks = support_account_signature_checks != 0;
 
                 let params = ReceiveParams {
                     max_parameter_size,
                     limit_logs_and_return_values,
                     support_queries,
+                    support_account_signature_checks,
                 };
 
                 let res = invoke_receive(

@@ -84,6 +84,14 @@ pub enum Interrupt {
     },
     /// Query the CCD/EUR and EUR/NRG exchange rates.
     QueryExchangeRates,
+    /// Check signatures on the provided data.
+    CheckAccountSignature {
+        payload: Vec<u8>,
+    },
+    /// Query account keys.
+    QueryAccountKeys {
+        address: AccountAddress,
+    },
 }
 
 impl Interrupt {
@@ -114,6 +122,12 @@ impl Interrupt {
                 ..
             } => false,
             Interrupt::QueryExchangeRates => false,
+            Interrupt::CheckAccountSignature {
+                ..
+            } => false,
+            Interrupt::QueryAccountKeys {
+                ..
+            } => false,
         }
     }
 }
@@ -171,6 +185,21 @@ impl Interrupt {
             }
             Interrupt::QueryExchangeRates => {
                 out.push(5u8);
+                Ok(())
+            }
+            Interrupt::CheckAccountSignature {
+                payload,
+            } => {
+                out.push(6u8);
+                out.write_all(&(payload.len() as u64).to_be_bytes())?;
+                out.write_all(payload)?;
+                Ok(())
+            }
+            Interrupt::QueryAccountKeys {
+                address,
+            } => {
+                out.push(7u8);
+                out.write_all(address.as_ref())?;
                 Ok(())
             }
         }
@@ -303,6 +332,8 @@ mod host {
     const QUERY_ACCOUNT_BALANCE_TAG: u32 = 2;
     const QUERY_CONTRACT_BALANCE_TAG: u32 = 3;
     const QUERY_EXCHANGE_RATE_TAG: u32 = 4;
+    const CHECK_ACCOUNT_SIGNATURE_TAG: u32 = 5;
+    const QUERY_ACCOUNT_KEYS_TAG: u32 = 6;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -397,13 +428,15 @@ mod host {
     /// Handle the `invoke` host function.
     pub(crate) fn invoke(
         support_queries: bool,
+        support_account_signature_checks: bool,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         max_parameter_size: usize,
     ) -> machine::RunResult<Option<Interrupt>> {
         energy.tick_energy(constants::INVOKE_BASE_COST)?;
-        let length = unsafe { stack.pop_u32() } as usize; // length of the instruction payload in memory
+        let length_u32 = unsafe { stack.pop_u32() }; // length of the instruction payload in memory
+        let length = length_u32 as usize;
         let start = unsafe { stack.pop_u32() } as usize; // start of the instruction payload in memory
         let tag = unsafe { stack.pop_u32() }; // tag of the instruction
         match tag {
@@ -485,6 +518,33 @@ mod host {
                     length
                 );
                 Ok(Interrupt::QueryExchangeRates.into())
+            }
+            CHECK_ACCOUNT_SIGNATURE_TAG if support_account_signature_checks => {
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                if energy.tick_energy(constants::copy_parameter_cost(length_u32)).is_err() {
+                    bail!(OutOfEnergy);
+                }
+                let payload = memory[start..start + length].to_vec();
+                Ok(Interrupt::CheckAccountSignature {
+                    payload,
+                }
+                .into())
+            }
+            QUERY_ACCOUNT_KEYS_TAG if support_account_signature_checks => {
+                ensure!(
+                    length == ACCOUNT_ADDRESS_SIZE,
+                    "Account balance queries must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+                addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
+                let address = AccountAddress(addr_bytes);
+                Ok(Interrupt::QueryAccountKeys {
+                    address,
+                }
+                .into())
             }
             c => bail!("Illegal instruction code {}.", c),
         }
@@ -1221,6 +1281,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                 ReceiveOnlyFunc::Invoke => {
                     return host::invoke(
                         self.stateless.params.support_queries,
+                        self.stateless.params.support_account_signature_checks,
                         memory,
                         stack,
                         &mut self.energy,
@@ -1708,31 +1769,46 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct ReceiveParams {
     /// Maximum size of a parameter that an `invoke` operation can have.
-    pub max_parameter_size:           usize,
+    pub max_parameter_size:               usize,
     /// Whether the amount of logs a contract may produce, and the size of the
     /// logs, is limited.
-    pub limit_logs_and_return_values: bool,
+    pub limit_logs_and_return_values:     bool,
     /// Whether queries should be supported or not. Queries were introduced in
     /// protocol 5.
-    pub support_queries:              bool,
+    pub support_queries:                  bool,
+    /// Whether querying account public keys checking account signatures is
+    /// supported.
+    pub support_account_signature_checks: bool,
 }
 
 impl ReceiveParams {
     /// Parameters that are in effect in protocol version 4.
     pub fn new_p4() -> Self {
         Self {
-            max_parameter_size:           1024,
-            limit_logs_and_return_values: true,
-            support_queries:              false,
+            max_parameter_size:               1024,
+            limit_logs_and_return_values:     true,
+            support_queries:                  false,
+            support_account_signature_checks: false,
         }
     }
 
     /// Parameters that are in effect in protocol version 5 and up.
     pub fn new_p5() -> Self {
         Self {
-            max_parameter_size:           u16::MAX.into(),
-            limit_logs_and_return_values: false,
-            support_queries:              true,
+            max_parameter_size:               u16::MAX.into(),
+            limit_logs_and_return_values:     false,
+            support_queries:                  true,
+            support_account_signature_checks: false,
+        }
+    }
+
+    /// Parameters that are in effect in protocol version 6 and up.
+    pub fn new_p6() -> Self {
+        Self {
+            max_parameter_size:               u16::MAX.into(),
+            limit_logs_and_return_values:     false,
+            support_queries:                  true,
+            support_account_signature_checks: true,
         }
     }
 }
