@@ -23,7 +23,7 @@ use concordium_contracts_common::OwnedReceiveName;
 use concordium_wasm::{
     artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,
-    utils::parse_artifact,
+    utils::{parse_artifact, InstantiatedModule},
     validate::ValidationConfig,
 };
 
@@ -402,7 +402,10 @@ unsafe extern "C" fn validate_and_process_v1(
         },
         wasm_bytes,
     ) {
-        Ok(artifact) => {
+        Ok(InstantiatedModule {
+            artifact,
+            custom_sections_size,
+        }) => {
             let mut out_buf = Vec::new();
             let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
             out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
@@ -411,7 +414,7 @@ unsafe extern "C" fn validate_and_process_v1(
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
-
+            out_buf.extend_from_slice(&custom_sections_size.to_be_bytes());
             out_buf.shrink_to_fit();
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();

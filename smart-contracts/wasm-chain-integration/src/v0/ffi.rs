@@ -1,6 +1,8 @@
 use crate::v0::*;
 use concordium_wasm::{
-    artifact::CompiledFunctionBytes, output::Output, utils::parse_artifact,
+    artifact::CompiledFunctionBytes,
+    output::Output,
+    utils::{parse_artifact, InstantiatedModule},
     validate::ValidationConfig,
 };
 use libc::size_t;
@@ -195,7 +197,10 @@ unsafe extern "C" fn validate_and_process_v0(
         &ConcordiumAllowedImports,
         wasm_bytes,
     ) {
-        Ok(artifact) => {
+        Ok(InstantiatedModule {
+            custom_sections_size: _,
+            artifact,
+        }) => {
             let mut out_buf = Vec::new();
             let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
             out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());

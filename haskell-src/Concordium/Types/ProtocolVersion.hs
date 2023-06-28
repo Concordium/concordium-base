@@ -168,6 +168,7 @@ module Concordium.Types.ProtocolVersion (
     supportsDelegationPV,
     supportsSignExtensionInstructions,
     supportsGlobalsInInitSections,
+    omitCustomSectionFromSize,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -524,3 +525,8 @@ supportsGlobalsInInitSections spv = case spv of
     SP4 -> True
     SP5 -> True
     SP6 -> False
+
+-- |Whether the protocol version specifies that custom section should not be
+-- counted towards module size when executing V1 contracts.
+omitCustomSectionFromSize :: SProtocolVersion pv -> Bool
+omitCustomSectionFromSize = supportsSignExtensionInstructions

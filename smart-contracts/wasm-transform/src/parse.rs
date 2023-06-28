@@ -31,8 +31,12 @@ pub type Byte = u8;
 /// the length. The lifetime is the lifetime of the original byte array this
 /// section was carved from.
 pub struct UnparsedSection<'a> {
-    pub section_id: SectionId,
-    pub bytes:      &'a [u8],
+    pub(crate) section_id: SectionId,
+    pub(crate) bytes:      &'a [u8],
+    /// The size of the section as it appears in the original module.
+    /// This includes the section id, the length header, and the actual
+    /// contents.
+    len:                   u64,
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Debug)]
@@ -80,6 +84,15 @@ pub struct Skeleton<'a> {
     pub data:    Option<UnparsedSection<'a>>,
     /// A list of custom sections in the order they appeared in the input.
     pub custom:  Vec<UnparsedSection<'a>>,
+}
+
+impl<'a> Skeleton<'a> {
+    /// Get the total size of all custom sections.
+    pub fn custom_sections_size(&self) -> u64 {
+        // Since this is on a parsed skeleton, it is not possible
+        // to have an overflow, seeing that the sections comes from a real module.
+        self.custom.iter().map(|x| x.len).sum()
+    }
 }
 
 /// Auxiliary type alias used by all the parsing functions.
@@ -270,11 +283,15 @@ impl<'a, Ctx> Parseable<'a, Ctx> for &'a [ValueType] {
 /// and recording the boundaries of it.
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for UnparsedSection<'a> {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let start = cursor.position();
         let section_id = cursor.next(ctx)?;
         let bytes = cursor.next(ctx)?;
+        let end = cursor.position();
+        let len = end - start;
         Ok(UnparsedSection {
             section_id,
             bytes,
+            len,
         })
     }
 }
