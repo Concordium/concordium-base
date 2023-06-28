@@ -931,7 +931,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
 }
 
 impl Fields {
-    /// Displays a template of the JSON to be used for the Fields.
+    /// Displays a template of the JSON to be used for the [`Fields`].
     pub fn to_json_template(&self) -> serde_json::Value {
         match self {
             Fields::Named(vec) => {
@@ -956,16 +956,15 @@ impl Fields {
     }
 }
 
-/// Displays a pretty-printed JSON-template of the schema.
+/// Displays a pretty-printed JSON-template of the [`SchemaType`].
 impl Display for Type {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", serde_json::to_string_pretty(&self.to_json_template()).unwrap())
     }
 }
 
-/// Displays the type value indented.
-/// It should match the output of `concordium-client`.
-fn display_type_schema_indented(
+/// Displays the json template of the type indented.
+fn display_json_template_indented(
     mut out: String,
     type_schema: &Type,
     type_schema_name: &str,
@@ -982,8 +981,7 @@ fn display_type_schema_indented(
     out
 }
 
-/// Displays a pretty-printed JSON-template of the schema.
-/// It should match the output of `concordium-client`.
+/// Displays a pretty-printed template of the [`VersionedModuleSchema`].
 impl Display for VersionedModuleSchema {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut out = String::new();
@@ -1036,10 +1034,11 @@ impl Display for VersionedModuleSchema {
                         out = format!("{}{:>2}Init:\n", out, "");
 
                         if let Some(type_schema) = schema.parameter() {
-                            out = display_type_schema_indented(out, type_schema, "Parameter", 4)
+                            out = display_json_template_indented(out, type_schema, "Parameter", 4)
                         }
                         if let Some(type_schema) = schema.return_value() {
-                            out = display_type_schema_indented(out, type_schema, "Return value", 4)
+                            out =
+                                display_json_template_indented(out, type_schema, "Return value", 4)
                         }
                     }
 
@@ -1053,10 +1052,11 @@ impl Display for VersionedModuleSchema {
                         out = format!("{}{:>4}- {:?}\n", out, "", function_name);
 
                         if let Some(type_schema) = schema.parameter() {
-                            out = display_type_schema_indented(out, type_schema, "Parameter", 6)
+                            out = display_json_template_indented(out, type_schema, "Parameter", 6)
                         }
                         if let Some(type_schema) = schema.return_value() {
-                            out = display_type_schema_indented(out, type_schema, "Return value", 6)
+                            out =
+                                display_json_template_indented(out, type_schema, "Return value", 6)
                         }
                     }
                 }
@@ -1074,15 +1074,16 @@ impl Display for VersionedModuleSchema {
                         out = format!("{}{:>2}Init:\n", out, "");
 
                         if let Some(type_schema) = parameter {
-                            out = display_type_schema_indented(out, type_schema, "Parameter", 4)
+                            out = display_json_template_indented(out, type_schema, "Parameter", 4)
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_type_schema_indented(out, type_schema, "Error", 4)
+                            out = display_json_template_indented(out, type_schema, "Error", 4)
                         }
 
                         if let Some(type_schema) = return_value {
-                            out = display_type_schema_indented(out, type_schema, "Return value", 4)
+                            out =
+                                display_json_template_indented(out, type_schema, "Return value", 4)
                         }
                     }
                     // Receive Functions
@@ -1101,15 +1102,16 @@ impl Display for VersionedModuleSchema {
                         } = schema;
 
                         if let Some(type_schema) = parameter {
-                            out = display_type_schema_indented(out, type_schema, "Parameter", 6)
+                            out = display_json_template_indented(out, type_schema, "Parameter", 6)
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_type_schema_indented(out, type_schema, "Error", 6)
+                            out = display_json_template_indented(out, type_schema, "Error", 6)
                         }
 
                         if let Some(type_schema) = return_value {
-                            out = display_type_schema_indented(out, type_schema, "Return value", 6)
+                            out =
+                                display_json_template_indented(out, type_schema, "Return value", 6)
                         }
                     }
                 }
@@ -1128,15 +1130,16 @@ impl Display for VersionedModuleSchema {
                         out = format!("{}{:>2}Init:\n", out, "");
 
                         if let Some(type_schema) = parameter {
-                            out = display_type_schema_indented(out, type_schema, "Parameter", 4)
+                            out = display_json_template_indented(out, type_schema, "Parameter", 4)
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_type_schema_indented(out, type_schema, "Error", 4)
+                            out = display_json_template_indented(out, type_schema, "Error", 4)
                         }
 
                         if let Some(type_schema) = return_value {
-                            out = display_type_schema_indented(out, type_schema, "Return value", 4)
+                            out =
+                                display_json_template_indented(out, type_schema, "Return value", 4)
                         }
                     }
 
@@ -1157,21 +1160,22 @@ impl Display for VersionedModuleSchema {
                         } = schema;
 
                         if let Some(type_schema) = parameter {
-                            out = display_type_schema_indented(out, type_schema, "Parameter", 6)
+                            out = display_json_template_indented(out, type_schema, "Parameter", 6)
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_type_schema_indented(out, type_schema, "Error", 6)
+                            out = display_json_template_indented(out, type_schema, "Error", 6)
                         }
 
                         if let Some(type_schema) = return_value {
-                            out = display_type_schema_indented(out, type_schema, "Return value", 6)
+                            out =
+                                display_json_template_indented(out, type_schema, "Return value", 6)
                         }
                     }
 
                     // Event
                     if let Some(type_schema) = &contract_schema.event {
-                        out = display_type_schema_indented(out, type_schema, "Event", 2)
+                        out = display_json_template_indented(out, type_schema, "Event", 2)
                     }
                 }
             }
@@ -1249,7 +1253,7 @@ impl Type {
             Self::Struct(field) => field.to_json_template(),
             Self::ByteList(_) => "<String with lowercase hex>".into(),
             Self::ByteArray(size) => {
-                format!("String of size {size} containing lowercase hex characters.").into()
+                format!("<String of size {size} containing lowercase hex characters.>").into()
             }
             Self::String(_) => "<String>".into(),
             Self::Unit => serde_json::Value::Array(Vec::new()),
@@ -1265,10 +1269,10 @@ impl Type {
             Self::I64 => "<Int64>".into(),
             Self::I128 => "<Int128>".into(),
             Self::ILeb128(size) => {
-                format!("String of size at most {size} containing a signed integer.").into()
+                format!("<String of size at most {size} containing a signed integer.>").into()
             }
             Self::ULeb128(size) => {
-                format!("String of size at most {size} containing an unsigned integer.").into()
+                format!("<String of size at most {size} containing an unsigned integer.>").into()
             }
             Self::Amount => "<Amount in microCCD>".into(),
             Self::AccountAddress => "<AccountAddress>".into(),
