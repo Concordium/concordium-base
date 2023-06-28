@@ -23,7 +23,8 @@ use concordium_contracts_common::OwnedReceiveName;
 use concordium_wasm::{
     artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,
-    utils::parse_artifact,
+    utils::{parse_artifact, InstantiatedModule},
+    validate::ValidationConfig,
 };
 
 use crate::v0::ffi::slice_from_c_bytes;
@@ -206,6 +207,10 @@ unsafe extern "C" fn call_init_v1(
 ///   leaked.
 /// In case of execution failure, a panic, or failure to parse a null pointer is
 /// returned.
+///
+/// Note that if the `state_ptr_ptr` contains a non-null pointer it is the
+/// responsibility of the **caller** to dispose of it, or use it to call the
+/// `resume_receive_v1`.
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
     loader: LoadCallback,
@@ -228,6 +233,9 @@ unsafe extern "C" fn call_receive_v1(
     output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedStateV1,
     output_len: *mut size_t,
+    // This is set to 1 if and only if the state has changed before the end of execution,
+    // in case execution terminated normally. Normally here means without a runtime exception.
+    output_state_changed: *mut u8,
     support_queries_tag: u8, // non-zero to enable support of chain queries.
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
@@ -315,10 +323,14 @@ unsafe extern "C" fn call_receive_v1(
                         } else {
                             *output_return_value = std::ptr::null_mut();
                         }
-                        if state_changed {
-                            let new_state = Box::into_raw(Box::new(state));
-                            *state_ptr_ptr = new_state;
-                        }
+                        let new_state = Box::into_raw(Box::new(state));
+                        // NB: We have to make sure to drop the state in Haskell for P5 or earlier.
+                        *state_ptr_ptr = new_state;
+                        *output_state_changed = if state_changed {
+                            1
+                        } else {
+                            0
+                        };
                         ptr
                     }
                     Err(_trap) => std::ptr::null_mut(),
@@ -365,6 +377,10 @@ unsafe extern "C" fn call_receive_v1(
 unsafe extern "C" fn validate_and_process_v1(
     // Whether the current protocol version supports smart contract upgrades.
     support_upgrade: u8,
+    // Allow globals in initialization expressions for data and element sections.
+    allow_globals_in_init: u8,
+    // Allow sign extension instructions.
+    allow_sign_extension_instr: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     // this is the total length of the output byte array
@@ -377,12 +393,19 @@ unsafe extern "C" fn validate_and_process_v1(
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
     match utils::instantiate_with_metering::<ProcessedImports, _>(
+        ValidationConfig {
+            allow_globals_in_init:      allow_globals_in_init != 0,
+            allow_sign_extension_instr: allow_sign_extension_instr != 0,
+        },
         &ConcordiumAllowedImports {
             support_upgrade: support_upgrade == 1,
         },
         wasm_bytes,
     ) {
-        Ok(artifact) => {
+        Ok(InstantiatedModule {
+            artifact,
+            custom_sections_size,
+        }) => {
             let mut out_buf = Vec::new();
             let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
             out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
@@ -391,7 +414,7 @@ unsafe extern "C" fn validate_and_process_v1(
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
-
+            out_buf.extend_from_slice(&custom_sections_size.to_be_bytes());
             out_buf.shrink_to_fit();
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();

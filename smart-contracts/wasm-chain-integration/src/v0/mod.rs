@@ -32,6 +32,7 @@ use concordium_wasm::{
     artifact::{Artifact, RunnableCode},
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
+    validate::ValidationConfig,
 };
 use machine::Value;
 use std::{collections::LinkedList, convert::TryInto, io::Write};
@@ -1061,7 +1062,8 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact =
+        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
     invoke_init(
         &artifact,
         init_ctx,
@@ -1087,7 +1089,12 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(
+        ValidationConfig::V0,
+        &ConcordiumAllowedImports,
+        source_bytes,
+    )?
+    .artifact;
     invoke_init(
         &artifact,
         init_ctx,
@@ -1226,7 +1233,8 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<ReceiveResult> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact =
+        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
     invoke_receive(
         &artifact,
         receive_ctx,
@@ -1248,7 +1256,12 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<ReceiveResult> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(
+        ValidationConfig::V0,
+        &ConcordiumAllowedImports,
+        source_bytes,
+    )?
+    .artifact;
     invoke_receive(
         &artifact,
         receive_ctx,

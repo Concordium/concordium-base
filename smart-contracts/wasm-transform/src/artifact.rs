@@ -576,6 +576,13 @@ pub enum InternalOpcode {
     I32WrapI64,
     I64ExtendI32S,
     I64ExtendI32U,
+
+    // Sign extension instructions, optionally supported depending on the protocol version.
+    I32Extend8S,
+    I32Extend16S,
+    I64Extend8S,
+    I64Extend16S,
+    I64Extend32S,
 }
 
 /// Result of compilation. Either Ok(_) or an error indicating the reason.
@@ -1146,6 +1153,21 @@ impl Handler<&OpCode> for BackPatch {
             }
             OpCode::I64ExtendI32U => {
                 self.out.push(I64ExtendI32U);
+            }
+            OpCode::I32Extend8S => {
+                self.out.push(I32Extend8S);
+            }
+            OpCode::I32Extend16S => {
+                self.out.push(I32Extend16S);
+            }
+            OpCode::I64Extend8S => {
+                self.out.push(I64Extend8S);
+            }
+            OpCode::I64Extend16S => {
+                self.out.push(I64Extend16S);
+            }
+            OpCode::I64Extend32S => {
+                self.out.push(I64Extend32S);
             }
         }
         Ok(())

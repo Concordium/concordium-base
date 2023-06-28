@@ -8,7 +8,8 @@ use concordium_wasm::{
     machine::{self, NoInterrupt, Value},
     parse::{parse_custom, parse_skeleton},
     types::{ExportDescription, Module, Name},
-    utils, validate,
+    utils,
+    validate::{self, ValidationConfig},
 };
 use rand::{prelude::*, RngCore};
 use std::{collections::BTreeMap, default::Default};
@@ -221,7 +222,9 @@ type TestResult = (String, Option<(ReportError, bool)>);
 /// The return value is a list of test results.
 pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestResult>> {
     let host = TestHost::new(SmallRng::seed_from_u64(seed));
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
+    let artifact =
+        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
+            .artifact;
     let mut out = Vec::with_capacity(artifact.export.len());
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
@@ -257,7 +260,9 @@ pub fn generate_contract_schema_v0(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
+    let artifact =
+        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V0, &host, module_bytes)?
+            .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -311,7 +316,9 @@ pub fn generate_contract_schema_v1(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
+    let artifact =
+        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
+            .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -355,7 +362,9 @@ pub fn generate_contract_schema_v2(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
+    let artifact =
+        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
+            .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -399,7 +408,9 @@ pub fn generate_contract_schema_v3(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
     let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&host, module_bytes)?;
+    let artifact =
+        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
+            .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 
