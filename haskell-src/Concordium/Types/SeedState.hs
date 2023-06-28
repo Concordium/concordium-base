@@ -82,6 +82,8 @@ data SeedState (ssv :: SeedStateVersion) where
           -- chain).
           ss1EpochTransitionTriggered :: !Bool,
           -- |Flag indicating that a protocol update has become effective.
+          -- Note that the protocol update will not actually take effect until at
+          -- the end of the current epoch.
           ss1ShutdownTriggered :: !Bool
         } ->
         SeedState 'SeedStateVersion1
