@@ -554,22 +554,34 @@ verifyCredentialSignatures bodyHash sigs keys =
         check = foldr (\(idx, sig) b -> maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys) && b) True (Map.toList sigs)
     in  numSigs <= 255 && (fromIntegral numSigs >= credThreshold keys) && check
 
+-- |Verify a given message was signed by the given account information.
+-- Concretely this means
+--
+-- - enough credential holders signed the message
+-- - each of the credential signatures has the required number of signatures, see 'verifyCredentialSignatures'
+-- - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
+verifyAccountSignature :: BS.ByteString -> Map.Map CredentialIndex (Map.Map KeyIndex Signature) -> AccountInformation -> Bool
+verifyAccountSignature msg maps ai =
+    let
+        -- foldr is the right function to use here because the body is lazy in the second argument.
+        -- This does rely on the specific order of arguments since && is strict in the first argument, but not the second.
+        keysCheck = foldr (\(idx, sigmap) b -> maybe False (verifyCredentialSignatures msg sigmap) (getCredentialKeys idx ai) && b) True (Map.toList maps)
+        numSigs = length maps
+        threshold = aiThreshold ai
+    in
+        numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
+
 -- |Verify that the given transaction was signed by the required number of keys.
 -- Concretely this means
 --
 -- - enough credential holders signed the transaction
--- - each of the credential signres has the required number of signatures, see 'verifyCredentialSignatures'
+-- - each of the credential signatures has the required number of signatures, see 'verifyCredentialSignatures'
 -- - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
 verifyTransaction :: TransactionData msg => AccountInformation -> msg -> Bool
-verifyTransaction ai tx =
-    let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
-        TransactionSignature maps = transactionSignature tx
-        -- foldr is the right function to use here because the body is lazy in the second argument.
-        -- This does rely on the specific order of arguments since && is strict in the first argument, but not the second.
-        keysCheck = foldr (\(idx, sigmap) b -> maybe False (verifyCredentialSignatures bodyHash sigmap) (getCredentialKeys idx ai) && b) True (Map.toList maps)
-        numSigs = length maps
-        threshold = aiThreshold ai
-    in  numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
+verifyTransaction ai tx = verifyAccountSignature bodyHash maps ai
+  where
+    bodyHash = transactionSignHashToByteString (transactionSignHash tx)
+    TransactionSignature maps = transactionSignature tx
 
 -----------------------------------
 
