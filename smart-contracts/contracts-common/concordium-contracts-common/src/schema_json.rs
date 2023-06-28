@@ -3,8 +3,6 @@ use core::fmt::Display;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Zero;
 use serde_json::{json, Map, Value};
-#[allow(unused_imports)] // BTreeMap is used in the unit tests.
-use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 
 /// Trait which includes implementations for unwrapping recursive error
@@ -934,7 +932,6 @@ fn write_bytes_from_json_schema_type<W: Write>(
 
 impl Fields {
     /// Displays a template of the JSON to be used for the Fields.
-    /// It should match the output of `concordium-client`.
     pub fn to_json_template(&self) -> serde_json::Value {
         match self {
             Fields::Named(vec) => {
@@ -944,7 +941,7 @@ impl Fields {
                     map.insert(name.to_string(), field.to_json_template());
                 }
 
-                json!(map)
+                map.into()
             }
             Fields::Unnamed(vec) => {
                 let mut new_vector = Vec::new();
@@ -952,7 +949,7 @@ impl Fields {
                     new_vector.push(element.to_json_template())
                 }
 
-                json!(new_vector)
+                new_vector.into()
             }
             Fields::None => serde_json::Value::Array(Vec::new()),
         }
@@ -960,7 +957,6 @@ impl Fields {
 }
 
 /// Displays a pretty-printed JSON-template of the schema.
-/// It should match the output of `concordium-client`.
 impl Display for Type {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", serde_json::to_string_pretty(&self.to_json_template()).unwrap())
@@ -1002,8 +998,7 @@ impl Type {
         write_bytes_from_json_schema_type(schema, json, out)
     }
 
-    /// Displays a template of the JSON to be used for the schemaType.
-    /// It should match the output of `concordium-client`.
+    /// Displays a template of the JSON to be used for the [`SchemaType`].
     pub fn to_json_template(&self) -> serde_json::Value {
         match self {
             Self::Enum(enum_type) => {
@@ -1018,7 +1013,7 @@ impl Type {
                 }
                 outer_map.insert("Enum".to_string(), json!(vector));
 
-                json!(outer_map)
+                outer_map.into()
             }
             Self::TaggedEnum(tagged_enum) => {
                 let mut outer_map = Map::new();
@@ -1032,73 +1027,65 @@ impl Type {
                 }
                 outer_map.insert("Enum".to_string(), json!(vector));
 
-                json!(outer_map)
+                outer_map.into()
             }
             Self::Struct(field) => field.to_json_template(),
-            Self::ByteList(_) => {
-                json!("<String with lowercase hex>".to_string())
-            }
+            Self::ByteList(_) => "<String with lowercase hex>".into(),
             Self::ByteArray(size) => {
-                json!(format!("{}{:?}{}", "<String of size ", size, " with lowercase hex>"))
+                format!("String of size {size} containing lowercase hex characters.").into()
             }
-            Self::String(_) => json!("<String>".to_string()),
+            Self::String(_) => "<String>".into(),
             Self::Unit => serde_json::Value::Array(Vec::new()),
-            Self::Bool => json!("<Bool>".to_string()),
-            Self::U8 => json!("<UInt8>".to_string()),
-            Self::U16 => json!("<UInt16>".to_string()),
-            Self::U32 => json!("<UInt32>".to_string()),
-            Self::U64 => json!("<UInt64>".to_string()),
-            Self::U128 => json!("<UInt128>".to_string()),
-            Self::I8 => json!("<Int8>".to_string()),
-            Self::I16 => json!("<Int16>".to_string()),
-            Self::I32 => json!("<Int32>".to_string()),
-            Self::I64 => json!("<Int64>".to_string()),
-            Self::I128 => json!("<Int128>".to_string()),
+            Self::Bool => "<Bool>".into(),
+            Self::U8 => "<UInt8>".into(),
+            Self::U16 => "<UInt16>".into(),
+            Self::U32 => "<UInt32>".into(),
+            Self::U64 => "<UInt64>".into(),
+            Self::U128 => "<UInt128>".into(),
+            Self::I8 => "<Int8>".into(),
+            Self::I16 => "<Int16>".into(),
+            Self::I32 => "<Int32>".into(),
+            Self::I64 => "<Int64>".into(),
+            Self::I128 => "<Int128>".into(),
             Self::ILeb128(size) => {
-                json!(format!("{}{:?}{}", "<String of size ", size, " with signed integer>"))
+                format!("String of size at most {size} containing a signed integer.").into()
             }
             Self::ULeb128(size) => {
-                json!(format!("{}{:?}{}", "<String of size ", size, " with unsigned integer>"))
+                format!("String of size at most {size} containing an unsigned integer.").into()
             }
-            Self::Amount => json!("<Amount in microCCD>".to_string()),
-            Self::AccountAddress => json!("<AccountAddress>".to_string()),
+            Self::Amount => "<Amount in microCCD>".into(),
+            Self::AccountAddress => "<AccountAddress>".into(),
             Self::ContractAddress => {
                 let mut contract_address = Map::new();
                 contract_address.insert("index".to_string(), Type::U64.to_json_template());
                 contract_address.insert("subindex".to_string(), Type::U64.to_json_template());
-                json!(contract_address)
+                contract_address.into()
             }
-            Self::Timestamp => {
-                json!("<Timestamp (e.g. `2000-01-01T12:00:00Z`)>".to_string())
-            }
-            Self::Duration => json!("<Duration (e.g. `10d 1h 42s`)>".to_string()),
-            Self::Pair(a, b) => {
-                json!(vec![a.to_json_template(), b.to_json_template()])
-            }
-            Self::List(_, element) => json!(vec![element.to_json_template()]),
+            Self::Timestamp => "<Timestamp (e.g. `2000-01-01T12:00:00Z`)>".into(),
+            Self::Duration => "<Duration (e.g. `10d 1h 42s`)>".into(),
+            Self::Pair(a, b) => vec![a.to_json_template(), b.to_json_template()].into(),
+            Self::List(_, element) => vec![element.to_json_template()].into(),
             Self::Array(size, element) => {
                 let mut vec = Vec::new();
                 for _i in 0..*size {
                     vec.push(element.to_json_template())
                 }
-                json!(vec)
+                vec.into()
             }
-            Self::Set(_, element) => {
-                json!(vec![element.to_json_template()])
-            }
+            Self::Set(_, element) => vec![element.to_json_template()].into(),
             Self::Map(_, key, value) => {
-                json!(vec![json!(vec![key.to_json_template(), value.to_json_template(),])])
+                vec![json!(vec![key.to_json_template(), value.to_json_template(),])].into()
             }
             Self::ContractName(_) => {
                 let mut contract_name = Map::new();
-                contract_name.insert("contract".to_string(), json!("<String>".to_string()));
-                json!(contract_name)
+                contract_name.insert("contract".to_string(), "<String>".into());
+                contract_name.into()
             }
             Self::ReceiveName(_) => {
                 let mut receive_name = Map::new();
-                receive_name.insert("contract".to_string(), json!("<String>".to_string()));
-                receive_name.insert("func".to_string(), json!("<String>".to_string()));
-                json!(receive_name)
+                receive_name.insert("contract".to_string(), "<String>".into());
+                receive_name.insert("func".to_string(), "<String>".into());
+                receive_name.into()
             }
         }
     }
@@ -1224,6 +1211,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use std::collections::BTreeMap;
 
     /// Tests schema template display in JSON of an Enum
     #[test]
