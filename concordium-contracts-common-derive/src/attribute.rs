@@ -930,51 +930,42 @@ pub mod quickcheck {
     /// associated with it. If no `num_tests` is found or parsing the value has
     /// failed, return a error
     fn get_quickcheck_tests_count(meta: &syn::Meta) -> syn::Result<u64> {
-        match meta {
-            Meta::NameValue(v) => {
-                if v.path.is_ident(QUICKCHECK_NUM_TESTS) {
-                    match &v.value {
-                        syn::Expr::Lit(syn::ExprLit {
-                            lit: syn::Lit::Int(i),
-                            ..
-                        }) => {
-                            let num_tests = i
-                                .base10_parse::<u64>()
-                                .map_err(|e| syn::Error::new_spanned(i, e.to_string()))?;
-                            if num_tests > QUICKCHECK_MAX_PASSED_TESTS {
-                                Err(syn::Error::new_spanned(
-                                    i,
-                                    format!(
-                                        "max number of tests is {}",
-                                        QUICKCHECK_MAX_PASSED_TESTS
-                                    ),
-                                ))
-                            } else {
-                                Ok(num_tests)
-                            }
-                        }
-                        l => Err(syn::Error::new_spanned(
-                            l,
-                            "unexpected attribute value, expected a non-negative integer",
-                        )),
-                    }
-                } else {
-                    Err(syn::Error::new_spanned(
-                        meta,
-                        format!(
-                            "unexpected attribute, expected a single `{} = <number>` attribute",
-                            QUICKCHECK_NUM_TESTS
-                        ),
-                    ))
-                }
-            }
-            _ => Err(syn::Error::new_spanned(
+        let Meta::NameValue(v) = meta else {
+            return Err(syn::Error::new_spanned(
                 meta,
                 format!(
                     "unexpected attribute, expected a single `{} = <number>` attribute",
                     QUICKCHECK_NUM_TESTS
                 ),
-            )),
+            ));
+        };
+        if !v.path.is_ident(QUICKCHECK_NUM_TESTS) {
+            return Err(syn::Error::new_spanned(
+                meta,
+                format!(
+                    "unexpected attribute, expected a single `{} = <number>` attribute",
+                    QUICKCHECK_NUM_TESTS
+                ),
+            ));
+        }
+        let syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(i),
+            ..
+        }) = &v.value else {
+            return Err(syn::Error::new_spanned(
+                &v.value,
+                "unexpected attribute value, expected a non-negative integer",
+            ));
+        };
+        let num_tests =
+            i.base10_parse::<u64>().map_err(|e| syn::Error::new_spanned(i, e.to_string()))?;
+        if num_tests > QUICKCHECK_MAX_PASSED_TESTS {
+            Err(syn::Error::new_spanned(
+                i,
+                format!("max number of tests is {}", QUICKCHECK_MAX_PASSED_TESTS),
+            ))
+        } else {
+            Ok(num_tests)
         }
     }
 
