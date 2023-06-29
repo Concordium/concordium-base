@@ -956,7 +956,7 @@ impl Fields {
     }
 }
 
-/// Displays a pretty-printed JSON-template of the [`SchemaType`].
+/// Displays a pretty-printed JSON-template of the [`Type`].
 impl Display for Type {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", serde_json::to_string_pretty(&self.to_json_template()).unwrap())
@@ -964,6 +964,12 @@ impl Display for Type {
 }
 
 /// Displays the json template of the type indented.
+/// The `type_schema_name` is indented by `indent` and the associated
+/// `type_schema` is indented by `indent + 2` because the `type_schema` is
+/// one level deeper than the `type_schema_name` and therefore indented by `+
+/// 2`. '\n' is replaced by "\n        " because the `VersionedModuleSchema`
+/// template has several higher level outputs (e.g. `contractNames`,
+/// `functionNames`, ...).
 fn display_json_template_indented(
     mut out: String,
     type_schema: &Type,
@@ -982,6 +988,62 @@ fn display_json_template_indented(
 }
 
 /// Displays a pretty-printed template of the [`VersionedModuleSchema`].
+///
+/// # Examples
+///
+/// ## Display a template of the `VersionedModuleSchema`
+///
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// # use std::collections::BTreeMap;
+/// #
+/// let mut receive_function_map = BTreeMap::new();
+/// receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
+///     parameter:    Some(Type::AccountAddress),
+///     error:        Some(Type::AccountAddress),
+///     return_value: Some(Type::AccountAddress),
+/// });
+///
+/// let mut map = BTreeMap::new();
+///
+/// map.insert(String::from("MyContract"), ContractV3 {
+///     init:    Some(FunctionV2 {
+///         parameter:    Some(Type::AccountAddress),
+///         error:        Some(Type::AccountAddress),
+///         return_value: Some(Type::AccountAddress),
+///     }),
+///     receive: receive_function_map,
+///     event:   Some(Type::AccountAddress),
+/// });
+///
+/// let schema = VersionedModuleSchema::V3(ModuleV3 {
+///     contracts: map,
+/// });
+///
+/// let display = "Contract:                     MyContract
+///   Init:
+///     Parameter:
+///       \"<AccountAddress>\"
+///     Error:
+///       \"<AccountAddress>\"
+///     Return value:
+///       \"<AccountAddress>\"
+///   Methods:
+///     - \"MyFunction\"
+///       Parameter:
+///         \"<AccountAddress>\"
+///       Error:
+///         \"<AccountAddress>\"
+///       Return value:
+///         \"<AccountAddress>\"
+///   Event:
+///     \"<AccountAddress>\"\n";
+///
+/// assert_eq!(display, format!("{}", schema));
+/// ```
 impl Display for VersionedModuleSchema {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut out = String::new();
@@ -1253,7 +1315,9 @@ impl Type {
             Self::Struct(field) => field.to_json_template(),
             Self::ByteList(_) => "<String with lowercase hex>".into(),
             Self::ByteArray(size) => {
-                format!("<String of size {size} containing lowercase hex characters.>").into()
+                let string_size = 2 * size;
+                format!("<String of size {string_size} containing lowercase hex characters.>")
+                    .into()
             }
             Self::String(_) => "<String>".into(),
             Self::Unit => serde_json::Value::Array(Vec::new()),
@@ -1269,10 +1333,14 @@ impl Type {
             Self::I64 => "<Int64>".into(),
             Self::I128 => "<Int128>".into(),
             Self::ILeb128(size) => {
-                format!("<String of size at most {size} containing a signed integer.>").into()
+                let string_size = 2 * size;
+                format!("<String of size at most {string_size} containing a signed integer.>")
+                    .into()
             }
             Self::ULeb128(size) => {
-                format!("<String of size at most {size} containing an unsigned integer.>").into()
+                let string_size = 2 * size;
+                format!("<String of size at most {string_size} containing an unsigned integer.>")
+                    .into()
             }
             Self::Amount => "<Amount in microCCD>".into(),
             Self::AccountAddress => "<AccountAddress>".into(),
