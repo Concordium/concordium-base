@@ -1237,7 +1237,13 @@ impl Display for VersionedModuleSchema {
 
                     // Event
                     if let Some(type_schema) = &contract_schema.event {
-                        out = display_json_template_indented(out, type_schema, "Event", 2)
+                        out = format!("{}{:>2}Event:\n", out, "");
+                        out = format!(
+                            "{}{:>4}{}\n",
+                            out,
+                            "",
+                            type_schema.to_string().replace('\n', "\n    ")
+                        );
                     }
                 }
             }
