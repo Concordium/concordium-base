@@ -1468,6 +1468,10 @@ pub enum InvokeFailure {
     UpgradeInvalidContractName,
     /// Attempt to upgrade a V1 contract to a V0 contract.
     UpgradeInvalidVersion,
+    /// Could not parse the signature and message
+    SignatureDataMalformed,
+    /// Invalid signature on the provided message.
+    SignatureCheckFailed,
 }
 
 impl InvokeFailure {
@@ -1496,6 +1500,8 @@ impl InvokeFailure {
             InvokeFailure::UpgradeInvalidModuleRef => 0x07_0000_0000,
             InvokeFailure::UpgradeInvalidContractName => 0x08_0000_0000,
             InvokeFailure::UpgradeInvalidVersion => 0x09_0000_0000,
+            InvokeFailure::SignatureDataMalformed => 0x0a_0000_0000,
+            InvokeFailure::SignatureCheckFailed => 0x0b_0000_0000,
         })
     }
 }
@@ -1553,6 +1559,8 @@ impl InvokeResponse {
                 0x0000_0007_0000_0000 => InvokeFailure::UpgradeInvalidModuleRef,
                 0x0000_0008_0000_0000 => InvokeFailure::UpgradeInvalidContractName,
                 0x0000_0009_0000_0000 => InvokeFailure::UpgradeInvalidVersion,
+                0x0000_000a_0000_0000 => InvokeFailure::SignatureDataMalformed,
+                0x0000_000b_0000_0000 => InvokeFailure::SignatureCheckFailed,
                 x => bail!("Unrecognized error code: {}", x),
             };
             InvokeResponse::Failure {
