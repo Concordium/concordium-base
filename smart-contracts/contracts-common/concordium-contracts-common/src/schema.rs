@@ -8,6 +8,7 @@ use crate::{impls::*, traits::*, types::*};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::{collections, string::String, vec::Vec};
+use base64::{engine::general_purpose, Engine};
 use collections::{BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
 use core::{
@@ -1119,6 +1120,16 @@ mod impls {
                 },
             };
             Ok(versioned_module_schema)
+        }
+
+        /// Get a versioned module schema from a base64 string.
+        pub fn from_base64_str(s: &str) -> Result<Self, VersionedSchemaError> {
+            let bytes: Vec<u8> = general_purpose::STANDARD_NO_PAD
+                .decode(s)
+                .map_err(|_| VersionedSchemaError::ParseError)?;
+            let mut cursor = Cursor::new(bytes);
+            let schema = VersionedModuleSchema::deserial(&mut cursor)?;
+            Ok(schema)
         }
 
         /// Returns a receive function's parameter schema from a versioned
