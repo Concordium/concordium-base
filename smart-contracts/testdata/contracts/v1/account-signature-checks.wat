@@ -43,7 +43,7 @@
       ;; get the entire parameter.
       (call $get_parameter_section (i32.const 0) (i32.const 0) (call $get_parameter_size (i32.const 0)) (i32.const 0))
       ;; check signature, tag of the operation is 5
-      (call $invoke (i32.const 5) (i32.const 0) (call $get_parameter_size (i32.const 0)))
+      (local.set $res (call $invoke (i32.const 5) (i32.const 0) (call $get_parameter_size (i32.const 0))))
       (i64.store (i32.const 0) (local.get $res))
       ;; Output the return value from the invoke call as a return value of this entrypoint.
       (call $write_output (i32.const 0) (i32.const 8) (i32.const 0))
