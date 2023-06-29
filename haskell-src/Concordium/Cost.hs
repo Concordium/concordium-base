@@ -264,3 +264,24 @@ contractInstanceQueryContractBalanceCost = 200
 -- |Cost of querying the current exchange rates from a within smart contract instance.
 contractInstanceQueryExchangeRatesCost :: Energy
 contractInstanceQueryExchangeRatesCost = 100
+
+-- |Base cost of querying the account keys from a within smart contract instance.
+-- In addition to this there is the cost based on the amount of keys that are returned.
+contractInstanceQueryAccountKeysBaseCost :: Energy
+contractInstanceQueryAccountKeysBaseCost = 200
+
+-- |Cost of returning the account keys, based on the number of keys.
+-- Each key is 32 bytes, and there is a bit of administrative overhead.
+contractInstanceQueryAccountKeysReturnCost :: Int -> Energy
+contractInstanceQueryAccountKeysReturnCost numKeys = fromIntegral (numKeys * 3)
+
+-- |The cost of signature checks. This cost is the same as the cost
+-- `verify_ed25519_cost` in `constants.rs` in
+-- `concordium-smart-contract-engine`.
+contractInstanceCheckAccountSignatureCost ::
+    -- | The size of the data in bytes.
+    Word64 ->
+    -- | The number of signatures.
+    Int ->
+    Energy
+contractInstanceCheckAccountSignatureCost size numSigs = fromIntegral numSigs * fromIntegral (100 + size `div` 10)

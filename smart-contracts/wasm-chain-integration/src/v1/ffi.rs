@@ -238,7 +238,7 @@ unsafe extern "C" fn call_receive_v1(
     output_state_changed: *mut u8,
     support_queries_tag: u8, // non-zero to enable support of chain queries.
     support_account_signature_checks: u8, /* non-zero to enable support for queryin account keys
-                                           * and checking signatures */
+                              * and checking signatures */
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)

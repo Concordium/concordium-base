@@ -86,6 +86,7 @@ pub enum Interrupt {
     QueryExchangeRates,
     /// Check signatures on the provided data.
     CheckAccountSignature {
+        address: AccountAddress,
         payload: Vec<u8>,
     },
     /// Query account keys.
@@ -188,9 +189,11 @@ impl Interrupt {
                 Ok(())
             }
             Interrupt::CheckAccountSignature {
+                address,
                 payload,
             } => {
                 out.push(6u8);
+                out.write_all(address.as_ref())?;
                 out.write_all(&(payload.len() as u64).to_be_bytes())?;
                 out.write_all(payload)?;
                 Ok(())
@@ -520,12 +523,22 @@ mod host {
                 Ok(Interrupt::QueryExchangeRates.into())
             }
             CHECK_ACCOUNT_SIGNATURE_TAG if support_account_signature_checks => {
+                ensure!(
+                    length >= ACCOUNT_ADDRESS_SIZE,
+                    "Account balance queries must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+                addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
+                let address = AccountAddress(addr_bytes);
                 if energy.tick_energy(constants::copy_parameter_cost(length_u32)).is_err() {
                     bail!(OutOfEnergy);
                 }
-                let payload = memory[start..start + length].to_vec();
+                let payload = memory[start + ACCOUNT_ADDRESS_SIZE..start + length].to_vec();
                 Ok(Interrupt::CheckAccountSignature {
+                    address,
                     payload,
                 }
                 .into())
