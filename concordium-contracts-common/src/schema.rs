@@ -8,6 +8,7 @@ use crate::{impls::*, traits::*, types::*};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::{collections, string::String, vec::Vec};
+#[allow(unused_imports)]
 use base64::{engine::general_purpose, Engine};
 use collections::{BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
