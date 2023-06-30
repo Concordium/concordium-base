@@ -8,8 +8,6 @@ use crate::{impls::*, traits::*, types::*};
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::{collections, string::String, vec::Vec};
-#[allow(unused_imports)]
-use base64::{engine::general_purpose, Engine};
 use collections::{BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
 use core::{
@@ -1014,6 +1012,7 @@ pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseRes
 #[cfg(feature = "derive-serde")]
 mod impls {
     use crate::{from_bytes, schema::*};
+    use base64::{engine::general_purpose, Engine};
 
     /// Useful for get_versioned_contract_schema(), but it's not currently used
     /// as input or output to any function, so it isn't public.
