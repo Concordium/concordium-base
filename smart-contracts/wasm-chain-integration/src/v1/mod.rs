@@ -525,7 +525,8 @@ mod host {
             CHECK_ACCOUNT_SIGNATURE_TAG if support_account_signature_checks => {
                 ensure!(
                     length >= ACCOUNT_ADDRESS_SIZE,
-                    "Account signature check queries must have at least the 32 bytes for an account address, but was {}",
+                    "Account signature check queries must have at least the 32 bytes for an \
+                     account address, but was {}",
                     length
                 );
                 // Overflow is not possible in the next line on 64-bit machines.
