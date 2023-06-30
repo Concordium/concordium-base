@@ -6,6 +6,12 @@
   (`invoke_receive_*_from_source` and `invoke_init_*_from_source`) are now
   parameterized by a `ValidationConfig` which determines which Wasm features are
   allowed.
+- `ReceiveParams` is extended with `support_account_signature_checks` flag, that
+  enables or disables two new operations that can be `invoke`d. Querying account
+  public keys and checking account signatures.
+- `InvokeFailure` is extended with two new variants 
+  `SignatureDataMalformed` and `SignatureCheckFailed` that can be triggered as a
+  result of checking a signature.
 
 
 ## concordium-smart-contract-engine 2.0.0 (2023-06-16)
