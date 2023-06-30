@@ -265,7 +265,7 @@ contractInstanceQueryContractBalanceCost = 200
 contractInstanceQueryExchangeRatesCost :: Energy
 contractInstanceQueryExchangeRatesCost = 100
 
--- |Base cost of querying the account keys from a within smart contract instance.
+-- |Base cost of querying the account keys from within smart contract instance.
 -- In addition to this there is the cost based on the amount of keys that are returned.
 contractInstanceQueryAccountKeysBaseCost :: Energy
 contractInstanceQueryAccountKeysBaseCost = 200

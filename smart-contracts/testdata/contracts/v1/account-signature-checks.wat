@@ -25,7 +25,7 @@
  (func $init (export "init_contract") (param i64) (result i32)
        (return (i32.const 0))) ;; Successful init
 
- ;; Retrieve the parameter and get the account keys for the parameter
+ ;; Retrieve the parameter (an account address) and get the account keys for the parameter. Then return the keys.
  (func $receive_name (export "contract.get_keys") (param i64) (result i32)
       ;; Assume the parameter is an account address. 
       (call $get_parameter_section (i32.const 0) (i32.const 0) (i32.const 32) (i32.const 0))
@@ -37,7 +37,7 @@
       (call $write_output (i32.const 0) (call $get_parameter_size (i32.const 1)) (i32.const 0))
       (return (i32.const 0)))
 
- ;; Get the signature and data from the parameter, and invoke the check signature operation.
+ ;; Get the signature and data from the parameter, and invoke the check signature operation. Then return the signature check result.
  (func $receive_upgrade (export "contract.check_signature") (param $amount i64) (result i32)
       (local $res i64)
       ;; get the entire parameter.

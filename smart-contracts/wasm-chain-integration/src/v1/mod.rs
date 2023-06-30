@@ -525,7 +525,7 @@ mod host {
             CHECK_ACCOUNT_SIGNATURE_TAG if support_account_signature_checks => {
                 ensure!(
                     length >= ACCOUNT_ADDRESS_SIZE,
-                    "Account balance queries must have exactly 32 bytes of payload, but was {}",
+                    "Account signature check queries must have at least the 32 bytes for an account address, but was {}",
                     length
                 );
                 // Overflow is not possible in the next line on 64-bit machines.
@@ -546,7 +546,7 @@ mod host {
             QUERY_ACCOUNT_KEYS_TAG if support_account_signature_checks => {
                 ensure!(
                     length == ACCOUNT_ADDRESS_SIZE,
-                    "Account balance queries must have exactly 32 bytes of payload, but was {}",
+                    "Account keys queries must have exactly 32 bytes of payload, but was {}",
                     length
                 );
                 // Overflow is not possible in the next line on 64-bit machines.
@@ -1468,7 +1468,7 @@ pub enum InvokeFailure {
     UpgradeInvalidContractName,
     /// Attempt to upgrade a V1 contract to a V0 contract.
     UpgradeInvalidVersion,
-    /// Could not parse the signature and message
+    /// Could not parse the signature and message.
     SignatureDataMalformed,
     /// Invalid signature on the provided message.
     SignatureCheckFailed,
@@ -1797,7 +1797,7 @@ pub struct ReceiveParams {
     /// Whether queries should be supported or not. Queries were introduced in
     /// protocol 5.
     pub support_queries:                  bool,
-    /// Whether querying account public keys checking account signatures is
+    /// Whether querying account public keys and checking account signatures is
     /// supported.
     pub support_account_signature_checks: bool,
 }
