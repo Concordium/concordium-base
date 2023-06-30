@@ -1597,6 +1597,43 @@ pub struct Cursor<T> {
     pub data:   T,
 }
 
+/// Adapter to chain together two readers.
+///
+/// This struct is generally created by calling [`chain`] on a reader.
+/// Please see the documentation of [`chain`] for more details.
+///
+/// [`chain`]: Read::chain
+#[derive(Debug)]
+pub struct Chain<T, U> {
+    pub(crate) first:      T,
+    pub(crate) second:     U,
+    pub(crate) done_first: bool,
+}
+
+impl<T, U> Chain<T, U> {
+    /// Construct a reader by chaining to readers together.
+    pub fn new(first: T, second: U) -> Self {
+        Self {
+            first,
+            second,
+            done_first: false,
+        }
+    }
+
+    /// Consumes the `Chain`, returning the wrapped readers.
+    pub fn into_inner(self) -> (T, U) { (self.first, self.second) }
+
+    /// Gets references to the underlying readers in this `Chain`.
+    pub fn get_ref(&self) -> (&T, &U) { (&self.first, &self.second) }
+
+    /// Gets mutable references to the underlying readers in this `Chain`.
+    ///
+    /// Care should be taken to avoid modifying the internal I/O state of the
+    /// underlying readers as doing so may corrupt the internal state of this
+    /// `Chain`.
+    pub fn get_mut(&mut self) -> (&mut T, &mut U) { (&mut self.first, &mut self.second) }
+}
+
 #[cfg(feature = "std")]
 impl std::error::Error for NewAttributeValueError {}
 
