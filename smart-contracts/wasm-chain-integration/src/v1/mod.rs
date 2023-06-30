@@ -530,12 +530,12 @@ mod host {
                 );
                 // Overflow is not possible in the next line on 64-bit machines.
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
+                if energy.tick_energy(constants::copy_to_host_cost(length_u32)).is_err() {
+                    bail!(OutOfEnergy);
+                }
                 let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
                 addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
                 let address = AccountAddress(addr_bytes);
-                if energy.tick_energy(constants::copy_parameter_cost(length_u32)).is_err() {
-                    bail!(OutOfEnergy);
-                }
                 let payload = memory[start + ACCOUNT_ADDRESS_SIZE..start + length].to_vec();
                 Ok(Interrupt::CheckAccountSignature {
                     address,
