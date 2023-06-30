@@ -1012,6 +1012,7 @@ pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseRes
 #[cfg(feature = "derive-serde")]
 mod impls {
     use crate::{from_bytes, schema::*};
+    use base64::{engine::general_purpose, Engine};
 
     /// Useful for get_versioned_contract_schema(), but it's not currently used
     /// as input or output to any function, so it isn't public.
@@ -1119,6 +1120,16 @@ mod impls {
                 },
             };
             Ok(versioned_module_schema)
+        }
+
+        /// Get a versioned module schema from a base64 string.
+        pub fn from_base64_str(s: &str) -> Result<Self, VersionedSchemaError> {
+            let bytes: Vec<u8> = general_purpose::STANDARD_NO_PAD
+                .decode(s)
+                .map_err(|_| VersionedSchemaError::ParseError)?;
+            let mut cursor = Cursor::new(bytes);
+            let schema = VersionedModuleSchema::deserial(&mut cursor)?;
+            Ok(schema)
         }
 
         /// Returns a receive function's parameter schema from a versioned
