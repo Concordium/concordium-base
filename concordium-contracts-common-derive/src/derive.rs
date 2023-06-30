@@ -1275,6 +1275,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
                 container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+                container_attributes.check_forwards_with_repr(&variant_attributes.forwards)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -1320,14 +1321,33 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 let tag_lit_size =
                     syn::LitInt::new(format!("{tag_lit}{repr_ident}").as_str(), variant.span());
 
+                let serial_tag_tokens = if variant_attributes.forwards.is_empty() {
+                    quote! {#root::Serial::serial(&#tag_lit_size, #out_ident)?;}
+                } else {
+                    check!(
+                        variant.fields.len() == 1,
+                        variant.span(),
+                        "Only enum variants containing a single field can be used with the \
+                         'forward' attribute"
+                    );
+
+                    proc_macro2::TokenStream::new()
+                };
+
                 matches_tokens.extend(quote! {
                     #data_name::#variant_ident #pattern => {
-                        #root::Serial::serial(&#tag_lit_size, #out_ident)?;
+                        #serial_tag_tokens
                         #field_tokens
                     },
                 });
 
                 tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                for forward_attribute in variant_attributes.forwards {
+                    for tag_lit in forward_attribute.values {
+                        let span = tag_lit.span();
+                        tag_checker.add_and_check(tag_lit, span, variant_ident)?;
+                    }
+                }
             }
             quote! {
                 match self {
