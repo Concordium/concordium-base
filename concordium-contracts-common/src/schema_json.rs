@@ -976,6 +976,9 @@ fn display_json_template_indented(
     type_schema_name: &str,
     indent: usize,
 ) -> String {
+    // `{:>3$}` right-alignes the "" value in the column. The column width is
+    // defined by the last argument (`3$` == `indent`). This creates the
+    // correct tabs/whitespace. https://doc.rust-lang.org/std/fmt/#fillalignment
     out = format!("{}{:>3$}{}:\n", out, "", type_schema_name, indent);
     out = format!(
         "{}{:>3$}{}\n",
