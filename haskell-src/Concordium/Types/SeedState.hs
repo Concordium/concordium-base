@@ -80,7 +80,11 @@ data SeedState (ssv :: SeedStateVersion) where
           ss1TriggerBlockTime :: !Timestamp,
           -- |Flag indicating that a trigger block has been produced in the current epoch (on this
           -- chain).
-          ss1EpochTransitionTriggered :: !Bool
+          ss1EpochTransitionTriggered :: !Bool,
+          -- |Flag indicating that a protocol update has become effective.
+          -- Note that the protocol update will not actually take effect until at
+          -- the end of the current epoch.
+          ss1ShutdownTriggered :: !Bool
         } ->
         SeedState 'SeedStateVersion1
 
@@ -130,11 +134,17 @@ epochTransitionTriggered f SeedStateV1{..} =
     (\newETT -> SeedStateV1{ss1EpochTransitionTriggered = newETT, ..})
         <$> f ss1EpochTransitionTriggered
 
+-- |Lens for the flag that indicates if a trigger block has been produced in the current epoch.
+shutdownTriggered :: Lens' (SeedState 'SeedStateVersion1) Bool
+shutdownTriggered f SeedStateV1{..} =
+    (\newST -> SeedStateV1{ss1ShutdownTriggered = newST, ..})
+        <$> f ss1ShutdownTriggered
+
 instance Eq (SeedState ssv) where
     (SeedStateV0 el1 e1 clen1 un1) == (SeedStateV0 el2 e2 clen2 un2) =
         el1 == el2 && e1 == e2 && clen1 == clen2 && un1 == un2
-    (SeedStateV1 e1 clen1 un1 tbt1 ett1) == (SeedStateV1 e2 clen2 un2 tbt2 ett2) =
-        e1 == e2 && clen1 == clen2 && un1 == un2 && tbt1 == tbt2 && ett1 == ett2
+    (SeedStateV1 e1 clen1 un1 tbt1 ett1 st1) == (SeedStateV1 e2 clen2 un2 tbt2 ett2 st2) =
+        e1 == e2 && clen1 == clen2 && un1 == un2 && tbt1 == tbt2 && ett1 == ett2 && st1 == st2
 
 instance Show (SeedState ssv) where
     show SeedStateV0{..} =
@@ -173,6 +183,7 @@ serializeSeedState SeedStateV1{..} = do
     put ss1UpdatedNonce
     put ss1TriggerBlockTime
     put ss1EpochTransitionTriggered
+    put ss1ShutdownTriggered
 
 -- |Deserialize a 'SeedState' of a given version.
 deserializeSeedState :: SSeedStateVersion ssv -> Get (SeedState ssv)
@@ -188,6 +199,7 @@ deserializeSeedState SSeedStateVersion1 = do
     ss1UpdatedNonce <- get
     ss1TriggerBlockTime <- get
     ss1EpochTransitionTriggered <- get
+    ss1ShutdownTriggered <- get
     return SeedStateV1{..}
 
 instance IsSeedStateVersion ssv => Serialize (SeedState ssv) where
@@ -213,5 +225,6 @@ initialSeedStateV1 nonce triggerTime =
           ss1CurrentLeadershipElectionNonce = nonce,
           ss1UpdatedNonce = nonce,
           ss1TriggerBlockTime = triggerTime,
-          ss1EpochTransitionTriggered = False
+          ss1EpochTransitionTriggered = False,
+          ss1ShutdownTriggered = False
         }
