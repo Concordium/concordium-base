@@ -10,6 +10,7 @@ pub mod com_mult;
 pub mod common;
 pub mod dlog;
 pub mod vcom_eq;
+pub mod com_ineq;
 
 #[cfg(test)]
 pub mod sigma_test;
