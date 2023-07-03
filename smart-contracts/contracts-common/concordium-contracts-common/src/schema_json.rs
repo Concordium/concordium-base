@@ -967,14 +967,15 @@ impl Display for Type {
 /// The `type_schema_name` is indented by `indent` and the associated
 /// `type_schema` is indented by `indent + 2` because the `type_schema` is
 /// one level deeper than the `type_schema_name` and therefore indented by `+
-/// 2`. '\n' is replaced by "\n        " because the `VersionedModuleSchema`
-/// template has several higher level outputs (e.g. `contractNames`,
-/// `functionNames`, ...).
+/// 2`. '\n' is replaced by `replace_new_line` (e.g. "\n        ") because the
+/// `VersionedModuleSchema` template has several higher level outputs (e.g.
+/// `contractNames`, `functionNames`, ...).
 fn display_json_template_indented(
     mut out: String,
     type_schema: &Type,
     type_schema_name: &str,
     indent: usize,
+    replace_new_line: &str,
 ) -> String {
     // `{:>3$}` right-alignes the "" value in the column. The column width is
     // defined by the last argument (`3$` == `indent`). This creates the
@@ -984,7 +985,7 @@ fn display_json_template_indented(
         "{}{:>3$}{}\n",
         out,
         "",
-        type_schema.to_string().replace('\n', "\n        "),
+        type_schema.to_string().replace('\n', replace_new_line),
         indent + 2
     );
     out
@@ -1053,7 +1054,7 @@ impl Display for VersionedModuleSchema {
         match self {
             VersionedModuleSchema::V0(module_v0) => {
                 for (contract_name, contract_schema) in module_v0.contracts.iter() {
-                    out = format!("Contract: {:>30}\n", contract_name);
+                    out = format!("Contract: {:>11}\n", contract_name);
                     // State
                     if let Some(type_schema) = &contract_schema.state {
                         out = format!("{}{:>2}State:\n", out, "");
@@ -1061,7 +1062,7 @@ impl Display for VersionedModuleSchema {
                             "{}{:>4}{}\n",
                             out,
                             "",
-                            type_schema.to_string().replace('\n', "\n        ")
+                            type_schema.to_string().replace('\n', "\n    ")
                         );
                     }
                     // Init Function
@@ -1071,7 +1072,7 @@ impl Display for VersionedModuleSchema {
                             "{}{:>4}{}\n",
                             out,
                             "",
-                            type_schema.to_string().replace('\n', "\n        ")
+                            type_schema.to_string().replace('\n', "\n      ")
                         );
                     }
                     // Receive Functions
@@ -1086,24 +1087,35 @@ impl Display for VersionedModuleSchema {
                             "{}{:>6}{}\n",
                             out,
                             "",
-                            type_schema.to_string().replace('\n', "\n        ")
+                            type_schema.to_string().replace('\n', "\n      ")
                         );
                     }
                 }
             }
             VersionedModuleSchema::V1(module_v1) => {
                 for (contract_name, contract_schema) in module_v1.contracts.iter() {
-                    out = format!("Contract: {:>30}\n", contract_name);
+                    out = format!("Contract: {:>11}\n", contract_name);
                     // Init Function
                     if let Some(schema) = &contract_schema.init {
                         out = format!("{}{:>2}Init:\n", out, "");
 
                         if let Some(type_schema) = schema.parameter() {
-                            out = display_json_template_indented(out, type_schema, "Parameter", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                4,
+                                "\n      ",
+                            )
                         }
                         if let Some(type_schema) = schema.return_value() {
-                            out =
-                                display_json_template_indented(out, type_schema, "Return value", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                4,
+                                "\n      ",
+                            )
                         }
                     }
 
@@ -1117,18 +1129,29 @@ impl Display for VersionedModuleSchema {
                         out = format!("{}{:>4}- {:?}\n", out, "", function_name);
 
                         if let Some(type_schema) = schema.parameter() {
-                            out = display_json_template_indented(out, type_schema, "Parameter", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                6,
+                                "\n        ",
+                            )
                         }
                         if let Some(type_schema) = schema.return_value() {
-                            out =
-                                display_json_template_indented(out, type_schema, "Return value", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                6,
+                                "\n        ",
+                            )
                         }
                     }
                 }
             }
             VersionedModuleSchema::V2(module_v2) => {
                 for (contract_name, contract_schema) in module_v2.contracts.iter() {
-                    out = format!("Contract: {:>30}\n", contract_name);
+                    out = format!("Contract: {:>11}\n", contract_name);
                     // Init Function
                     if let Some(FunctionV2 {
                         parameter,
@@ -1139,16 +1162,33 @@ impl Display for VersionedModuleSchema {
                         out = format!("{}{:>2}Init:\n", out, "");
 
                         if let Some(type_schema) = parameter {
-                            out = display_json_template_indented(out, type_schema, "Parameter", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                4,
+                                "\n      ",
+                            )
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_json_template_indented(out, type_schema, "Error", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                4,
+                                "\n      ",
+                            )
                         }
 
                         if let Some(type_schema) = return_value {
-                            out =
-                                display_json_template_indented(out, type_schema, "Return value", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                4,
+                                "\n      ",
+                            )
                         }
                     }
                     // Receive Functions
@@ -1167,23 +1207,40 @@ impl Display for VersionedModuleSchema {
                         } = schema;
 
                         if let Some(type_schema) = parameter {
-                            out = display_json_template_indented(out, type_schema, "Parameter", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                6,
+                                "\n        ",
+                            )
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_json_template_indented(out, type_schema, "Error", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                6,
+                                "\n        ",
+                            )
                         }
 
                         if let Some(type_schema) = return_value {
-                            out =
-                                display_json_template_indented(out, type_schema, "Return value", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                6,
+                                "\n        ",
+                            )
                         }
                     }
                 }
             }
             VersionedModuleSchema::V3(module_v3) => {
                 for (contract_name, contract_schema) in module_v3.contracts.iter() {
-                    out = format!("Contract: {:>30}\n", contract_name);
+                    out = format!("Contract: {:>11}\n", contract_name);
 
                     // Init Function
                     if let Some(FunctionV2 {
@@ -1195,16 +1252,33 @@ impl Display for VersionedModuleSchema {
                         out = format!("{}{:>2}Init:\n", out, "");
 
                         if let Some(type_schema) = parameter {
-                            out = display_json_template_indented(out, type_schema, "Parameter", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                4,
+                                "\n      ",
+                            )
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_json_template_indented(out, type_schema, "Error", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                4,
+                                "\n      ",
+                            )
                         }
 
                         if let Some(type_schema) = return_value {
-                            out =
-                                display_json_template_indented(out, type_schema, "Return value", 4)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                4,
+                                "\n      ",
+                            )
                         }
                     }
 
@@ -1225,16 +1299,33 @@ impl Display for VersionedModuleSchema {
                         } = schema;
 
                         if let Some(type_schema) = parameter {
-                            out = display_json_template_indented(out, type_schema, "Parameter", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                6,
+                                "\n        ",
+                            )
                         }
 
                         if let Some(type_schema) = error {
-                            out = display_json_template_indented(out, type_schema, "Error", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                6,
+                                "\n        ",
+                            )
                         }
 
                         if let Some(type_schema) = return_value {
-                            out =
-                                display_json_template_indented(out, type_schema, "Return value", 6)
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                6,
+                                "\n        ",
+                            )
                         }
                     }
 
