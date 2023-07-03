@@ -931,7 +931,7 @@ fn write_bytes_from_json_schema_type<W: Write>(
 }
 
 impl Fields {
-    /// Displays a template of the JSON to be used for the Fields.
+    /// Displays a template of the JSON to be used for the [`Fields`].
     pub fn to_json_template(&self) -> serde_json::Value {
         match self {
             Fields::Named(vec) => {
@@ -956,10 +956,393 @@ impl Fields {
     }
 }
 
-/// Displays a pretty-printed JSON-template of the schema.
+/// Displays a pretty-printed JSON-template of the [`Type`].
 impl Display for Type {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", serde_json::to_string_pretty(&self.to_json_template()).unwrap())
+    }
+}
+
+/// Displays the json template of the type indented.
+/// The `type_schema_name` is indented by `indent` and the associated
+/// `type_schema` is indented by `indent + 2` because the `type_schema` is
+/// one level deeper than the `type_schema_name` and therefore indented by `+
+/// 2`. '\n' is replaced by `replace_new_line` (e.g. "\n        ") because the
+/// `VersionedModuleSchema` template has several higher level outputs (e.g.
+/// `contractNames`, `functionNames`, ...).
+fn display_json_template_indented(
+    mut out: String,
+    type_schema: &Type,
+    type_schema_name: &str,
+    indent: usize,
+    replace_new_line: &str,
+) -> String {
+    // `{:>3$}` right-alignes the "" value in the column. The column width is
+    // defined by the last argument (`3$` == `indent`). This creates the
+    // correct tabs/whitespace. https://doc.rust-lang.org/std/fmt/#fillalignment
+    out = format!("{}{:>3$}{}:\n", out, "", type_schema_name, indent);
+    out = format!(
+        "{}{:>3$}{}\n",
+        out,
+        "",
+        type_schema.to_string().replace('\n', replace_new_line),
+        indent + 2
+    );
+    out
+}
+
+/// Displays a pretty-printed template of the [`VersionedModuleSchema`].
+///
+/// # Examples
+///
+/// ## Display a template of the `VersionedModuleSchema`
+///
+/// ```
+/// # use serde_json::json;
+/// # use concordium_contracts_common::schema_json::*;
+/// # use concordium_contracts_common::schema::*;
+/// # use concordium_contracts_common::*;
+/// # use std::collections::BTreeMap;
+/// #
+/// let mut receive_function_map = BTreeMap::new();
+/// receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
+///     parameter:    Some(Type::AccountAddress),
+///     error:        Some(Type::AccountAddress),
+///     return_value: Some(Type::AccountAddress),
+/// });
+///
+/// let mut map = BTreeMap::new();
+///
+/// map.insert(String::from("MyContract"), ContractV3 {
+///     init:    Some(FunctionV2 {
+///         parameter:    Some(Type::AccountAddress),
+///         error:        Some(Type::AccountAddress),
+///         return_value: Some(Type::AccountAddress),
+///     }),
+///     receive: receive_function_map,
+///     event:   Some(Type::AccountAddress),
+/// });
+///
+/// let schema = VersionedModuleSchema::V3(ModuleV3 {
+///     contracts: map,
+/// });
+///
+/// let display = "Contract:                     MyContract
+///   Init:
+///     Parameter:
+///       \"<AccountAddress>\"
+///     Error:
+///       \"<AccountAddress>\"
+///     Return value:
+///       \"<AccountAddress>\"
+///   Methods:
+///     - \"MyFunction\"
+///       Parameter:
+///         \"<AccountAddress>\"
+///       Error:
+///         \"<AccountAddress>\"
+///       Return value:
+///         \"<AccountAddress>\"
+///   Event:
+///     \"<AccountAddress>\"\n";
+///
+/// assert_eq!(display, format!("{}", schema));
+/// ```
+impl Display for VersionedModuleSchema {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut out = String::new();
+        match self {
+            VersionedModuleSchema::V0(module_v0) => {
+                for (contract_name, contract_schema) in module_v0.contracts.iter() {
+                    out = format!("Contract: {:>11}\n", contract_name);
+                    // State
+                    if let Some(type_schema) = &contract_schema.state {
+                        out = format!("{}{:>2}State:\n", out, "");
+                        out = format!(
+                            "{}{:>4}{}\n",
+                            out,
+                            "",
+                            type_schema.to_string().replace('\n', "\n    ")
+                        );
+                    }
+                    // Init Function
+                    if let Some(type_schema) = &contract_schema.init {
+                        out = format!("{}{:>2}Init:\n", out, "");
+                        out = format!(
+                            "{}{:>4}{}\n",
+                            out,
+                            "",
+                            type_schema.to_string().replace('\n', "\n      ")
+                        );
+                    }
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+                    if !receive_functions_map.is_empty() {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, type_schema) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+                        out = format!(
+                            "{}{:>6}{}\n",
+                            out,
+                            "",
+                            type_schema.to_string().replace('\n', "\n      ")
+                        );
+                    }
+                }
+            }
+            VersionedModuleSchema::V1(module_v1) => {
+                for (contract_name, contract_schema) in module_v1.contracts.iter() {
+                    out = format!("Contract: {:>11}\n", contract_name);
+                    // Init Function
+                    if let Some(schema) = &contract_schema.init {
+                        out = format!("{}{:>2}Init:\n", out, "");
+
+                        if let Some(type_schema) = schema.parameter() {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                4,
+                                "\n      ",
+                            )
+                        }
+                        if let Some(type_schema) = schema.return_value() {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                4,
+                                "\n      ",
+                            )
+                        }
+                    }
+
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+                    if !receive_functions_map.is_empty() {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, schema) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+
+                        if let Some(type_schema) = schema.parameter() {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                6,
+                                "\n        ",
+                            )
+                        }
+                        if let Some(type_schema) = schema.return_value() {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                6,
+                                "\n        ",
+                            )
+                        }
+                    }
+                }
+            }
+            VersionedModuleSchema::V2(module_v2) => {
+                for (contract_name, contract_schema) in module_v2.contracts.iter() {
+                    out = format!("Contract: {:>11}\n", contract_name);
+                    // Init Function
+                    if let Some(FunctionV2 {
+                        parameter,
+                        return_value,
+                        error,
+                    }) = &contract_schema.init
+                    {
+                        out = format!("{}{:>2}Init:\n", out, "");
+
+                        if let Some(type_schema) = parameter {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                4,
+                                "\n      ",
+                            )
+                        }
+
+                        if let Some(type_schema) = error {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                4,
+                                "\n      ",
+                            )
+                        }
+
+                        if let Some(type_schema) = return_value {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                4,
+                                "\n      ",
+                            )
+                        }
+                    }
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+                    if !receive_functions_map.is_empty() {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, schema) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+
+                        let FunctionV2 {
+                            parameter,
+                            return_value,
+                            error,
+                        } = schema;
+
+                        if let Some(type_schema) = parameter {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                6,
+                                "\n        ",
+                            )
+                        }
+
+                        if let Some(type_schema) = error {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                6,
+                                "\n        ",
+                            )
+                        }
+
+                        if let Some(type_schema) = return_value {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                6,
+                                "\n        ",
+                            )
+                        }
+                    }
+                }
+            }
+            VersionedModuleSchema::V3(module_v3) => {
+                for (contract_name, contract_schema) in module_v3.contracts.iter() {
+                    out = format!("Contract: {:>11}\n", contract_name);
+
+                    // Init Function
+                    if let Some(FunctionV2 {
+                        parameter,
+                        return_value,
+                        error,
+                    }) = &contract_schema.init
+                    {
+                        out = format!("{}{:>2}Init:\n", out, "");
+
+                        if let Some(type_schema) = parameter {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                4,
+                                "\n      ",
+                            )
+                        }
+
+                        if let Some(type_schema) = error {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                4,
+                                "\n      ",
+                            )
+                        }
+
+                        if let Some(type_schema) = return_value {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                4,
+                                "\n      ",
+                            )
+                        }
+                    }
+
+                    // Receive Functions
+                    let receive_functions_map = &contract_schema.receive;
+
+                    if !receive_functions_map.is_empty() {
+                        out = format!("{}{:>2}Methods:\n", out, "");
+                    }
+
+                    for (function_name, schema) in receive_functions_map.iter() {
+                        out = format!("{}{:>4}- {:?}\n", out, "", function_name);
+
+                        let FunctionV2 {
+                            parameter,
+                            return_value,
+                            error,
+                        } = schema;
+
+                        if let Some(type_schema) = parameter {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Parameter",
+                                6,
+                                "\n        ",
+                            )
+                        }
+
+                        if let Some(type_schema) = error {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Error",
+                                6,
+                                "\n        ",
+                            )
+                        }
+
+                        if let Some(type_schema) = return_value {
+                            out = display_json_template_indented(
+                                out,
+                                type_schema,
+                                "Return value",
+                                6,
+                                "\n        ",
+                            )
+                        }
+                    }
+
+                    // Event
+                    if let Some(type_schema) = &contract_schema.event {
+                        out = format!("{}{:>2}Event:\n", out, "");
+                        out = format!(
+                            "{}{:>4}{}\n",
+                            out,
+                            "",
+                            type_schema.to_string().replace('\n', "\n    ")
+                        );
+                    }
+                }
+            }
+        }
+        write!(f, "{}", out)
     }
 }
 
@@ -1032,7 +1415,9 @@ impl Type {
             Self::Struct(field) => field.to_json_template(),
             Self::ByteList(_) => "<String with lowercase hex>".into(),
             Self::ByteArray(size) => {
-                format!("String of size {size} containing lowercase hex characters.").into()
+                let string_size = 2 * size;
+                format!("<String of size {string_size} containing lowercase hex characters.>")
+                    .into()
             }
             Self::String(_) => "<String>".into(),
             Self::Unit => serde_json::Value::Array(Vec::new()),
@@ -1048,10 +1433,14 @@ impl Type {
             Self::I64 => "<Int64>".into(),
             Self::I128 => "<Int128>".into(),
             Self::ILeb128(size) => {
-                format!("String of size at most {size} containing a signed integer.").into()
+                let string_size = 2 * size;
+                format!("<String of size at most {string_size} containing a signed integer.>")
+                    .into()
             }
             Self::ULeb128(size) => {
-                format!("String of size at most {size} containing an unsigned integer.").into()
+                let string_size = 2 * size;
+                format!("<String of size at most {string_size} containing an unsigned integer.>")
+                    .into()
             }
             Self::Amount => "<Amount in microCCD>".into(),
             Self::AccountAddress => "<AccountAddress>".into(),
@@ -1213,9 +1602,171 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
+    /// Tests schema template display of `VersionedModuleSchema::V3`
+    #[test]
+    fn test_schema_template_display_module_version_v3() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
+            parameter:    Some(Type::AccountAddress),
+            error:        Some(Type::AccountAddress),
+            return_value: Some(Type::AccountAddress),
+        });
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV3 {
+            init:    Some(FunctionV2 {
+                parameter:    Some(Type::AccountAddress),
+                error:        Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            }),
+            receive: receive_function_map,
+            event:   Some(Type::AccountAddress),
+        });
+
+        let schema = VersionedModuleSchema::V3(ModuleV3 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Error:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Error:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"
+  Event:
+    \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
+    /// Tests schema template display of `VersionedModuleSchema::V2`
+    #[test]
+    fn test_schema_template_display_module_version_v2() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
+            parameter:    Some(Type::AccountAddress),
+            error:        Some(Type::AccountAddress),
+            return_value: Some(Type::AccountAddress),
+        });
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV2 {
+            init:    Some(FunctionV2 {
+                parameter:    Some(Type::AccountAddress),
+                error:        Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            }),
+            receive: receive_function_map,
+        });
+
+        let schema = VersionedModuleSchema::V2(ModuleV2 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Error:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Error:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
+    /// Tests schema template display of `VersionedModuleSchema::V1`
+    #[test]
+    fn test_schema_template_display_module_version_v1() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), FunctionV1::Both {
+            parameter:    Type::AccountAddress,
+            return_value: Type::AccountAddress,
+        });
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV1 {
+            init:    Some(FunctionV1::Both {
+                parameter:    Type::AccountAddress,
+                return_value: Type::AccountAddress,
+            }),
+            receive: receive_function_map,
+        });
+
+        let schema = VersionedModuleSchema::V1(ModuleV1 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
+    /// Tests schema template display of `VersionedModuleSchema::V0`
+    #[test]
+    fn test_schema_template_display_module_version_v0() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), Type::AccountAddress);
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV0 {
+            state:   Some(Type::AccountAddress),
+            init:    Some(Type::AccountAddress),
+            receive: receive_function_map,
+        });
+
+        let schema = VersionedModuleSchema::V0(ModuleV0 {
+            contracts: map,
+        });
+
+        let display = "Contract:                     MyContract
+  State:
+    \"<AccountAddress>\"
+  Init:
+    \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      \"<AccountAddress>\"\n";
+
+        assert_eq!(display, format!("{}", schema));
+    }
+
     /// Tests schema template display in JSON of an Enum
     #[test]
-    fn test_schema_template_enum() {
+    fn test_schema_template_display_enum() {
         let schema = Type::Enum(Vec::from([(
             String::from("Accounts"),
             Fields::Unnamed(Vec::from([Type::AccountAddress])),
@@ -1228,7 +1779,7 @@ mod tests {
 
     /// Tests schema template display in JSON of an TaggedEnum
     #[test]
-    fn test_schema_template_tagged_enum() {
+    fn test_schema_template_display_tagged_enum() {
         let mut map = BTreeMap::new();
         map.insert(
             8,
@@ -1247,28 +1798,28 @@ mod tests {
 
     /// Tests schema template display in JSON of a Duration
     #[test]
-    fn test_schema_template_duration() {
+    fn test_schema_template_display_duration() {
         let schema = Type::Duration;
         assert_eq!(json!("<Duration (e.g. `10d 1h 42s`)>"), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Timestamp
     #[test]
-    fn test_schema_template_timestamp() {
+    fn test_schema_template_display_timestamp() {
         let schema = Type::Timestamp;
         assert_eq!(json!("<Timestamp (e.g. `2000-01-01T12:00:00Z`)>"), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Struct with Field `None`
     #[test]
-    fn test_schema_template_struct_with_none_field() {
+    fn test_schema_template_display_struct_with_none_field() {
         let schema = Type::Struct(Fields::None);
         assert_eq!(json!([]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Struct with named Fields
     #[test]
-    fn test_schema_template_struct_with_named_fields() {
+    fn test_schema_template_display_struct_with_named_fields() {
         let schema = Type::Struct(Fields::Named(Vec::from([(
             String::from("Account"),
             Type::AccountAddress,
@@ -1278,21 +1829,21 @@ mod tests {
 
     /// Tests schema template display in JSON of a ContractName
     #[test]
-    fn test_schema_template_contract_name() {
+    fn test_schema_template_display_contract_name() {
         let schema = Type::ContractName(schema_json::SizeLength::U8);
         assert_eq!(json!({"contract":"<String>"}), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a ReceiveName
     #[test]
-    fn test_schema_template_receive_name() {
+    fn test_schema_template_display_receive_name() {
         let schema = Type::ReceiveName(schema_json::SizeLength::U8);
         assert_eq!(json!({"contract":"<String>","func":"<String>"}), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Map
     #[test]
-    fn test_schema_template_map() {
+    fn test_schema_template_display_map() {
         let schema = Type::Map(
             schema_json::SizeLength::U8,
             Box::new(Type::U8),
@@ -1303,35 +1854,35 @@ mod tests {
 
     /// Tests schema template display in JSON of a Set
     #[test]
-    fn test_schema_template_set() {
+    fn test_schema_template_display_set() {
         let schema = Type::Set(schema_json::SizeLength::U8, Box::new(Type::U8));
         assert_eq!(json!(["<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a List
     #[test]
-    fn test_schema_template_list() {
+    fn test_schema_template_display_list() {
         let schema = Type::List(schema_json::SizeLength::U8, Box::new(Type::U8));
         assert_eq!(json!(["<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an Array
     #[test]
-    fn test_schema_template_array() {
+    fn test_schema_template_display_array() {
         let schema = Type::Array(4, Box::new(Type::U8));
         assert_eq!(json!(["<UInt8>", "<UInt8>", "<UInt8>", "<UInt8>"]), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of a Pair
     #[test]
-    fn test_schema_template_pair() {
+    fn test_schema_template_display_pair() {
         let schema = Type::Pair(Box::new(Type::AccountAddress), Box::new(Type::U8));
         assert_eq!(json!(("<AccountAddress>", "<UInt8>")), schema.to_json_template());
     }
 
     /// Tests schema template display in JSON of an ContractAddress
     #[test]
-    fn test_schema_template_contract_address() {
+    fn test_schema_template_display_contract_address() {
         let schema = Type::ContractAddress;
         assert_eq!(
             json!({"index":"<UInt64>",
@@ -1342,7 +1893,7 @@ mod tests {
 
     /// Tests schema template display in JSON of a Unit
     #[test]
-    fn test_schema_template_unit() {
+    fn test_schema_template_display_unit() {
         let schema = Type::Unit;
         assert_eq!(json!([]), schema.to_json_template());
     }
