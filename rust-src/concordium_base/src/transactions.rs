@@ -8,6 +8,7 @@ use crate::{
         CredentialRegistrationID, DelegationTarget, Energy, Nonce, OpenStatus, UrlText,
     },
     common::{
+        self,
         types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial, Serialize,
@@ -1441,6 +1442,35 @@ impl HasAccountAccessStructure for AccountAccessStructure {
     fn credential_keys(&self, idx: CredentialIndex) -> Option<&CredentialPublicKeys> {
         self.keys.get(&idx)
     }
+}
+
+// The serial and deserial implementations must match the serialization of
+// `AccountInformation` in Haskell.
+impl Serial for AccountAccessStructure {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.keys.len() as u8).serial(out);
+        for (k, v) in self.keys.iter() {
+            k.serial(out);
+            v.serial(out);
+        }
+        self.threshold.serial(out)
+    }
+}
+
+// The serial and deserial implementations must match the serialization of
+// `AccountInformation` in Haskell.
+impl Deserial for AccountAccessStructure {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len = u8::deserial(source)?;
+        let keys = common::deserial_map_no_length(source, len.into())?;
+        let threshold = source.get()?;
+        Ok(Self { threshold, keys })
+    }
+}
+
+impl AccountAccessStructure {
+    /// Return the total number of keys present in the access structure.
+    pub fn num_keys(&self) -> u32 { self.keys.values().map(|m| m.keys.len() as u32).sum() }
 }
 
 /// Verify a signature on the transaction sign hash. This is a low-level
