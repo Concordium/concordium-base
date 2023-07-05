@@ -1648,7 +1648,7 @@ pub struct AttributeValue {
 }
 
 #[cfg(feature = "fuzz")]
-impl arbitrary::Arbitrary for AttributeValue {
+impl arbitrary::Arbitrary<'_> for AttributeValue {
     fn arbitrary(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Self> {
         let size = u.int_in_range(0..=31)?;
         let mut inner: [u8; 32] = [0u8; 32];
