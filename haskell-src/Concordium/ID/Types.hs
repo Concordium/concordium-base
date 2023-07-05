@@ -23,6 +23,7 @@ import qualified Data.ByteString.Short as BSS
 import Data.Data (Data, Typeable)
 import Data.Function
 import Data.Hashable
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Serialize as S
@@ -174,6 +175,10 @@ data AccountInformation = AccountInformation
 -- Currently the computed hash is used to short circuit the signature verification check of transactions.
 instance HashableTo SHA256.Hash AccountInformation where
     getHash = SHA256.hash . encode
+
+-- |Get the number of keys that are part of the 'AccountInformation'
+getAccountInformationNumKeys :: AccountInformation -> Int
+getAccountInformationNumKeys AccountInformation{..} = List.foldl' (\acc cpi -> acc + credNumKeys cpi) 0 aiCredentials
 
 -- |Check that the account information matches the given SHA256 hash.
 -- Note. See above for more information.

@@ -23,7 +23,7 @@ use concordium_contracts_common::OwnedReceiveName;
 use concordium_wasm::{
     artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,
-    utils::parse_artifact,
+    utils::{parse_artifact, InstantiatedModule},
     validate::ValidationConfig,
 };
 
@@ -237,6 +237,8 @@ unsafe extern "C" fn call_receive_v1(
     // in case execution terminated normally. Normally here means without a runtime exception.
     output_state_changed: *mut u8,
     support_queries_tag: u8, // non-zero to enable support of chain queries.
+    support_account_signature_checks: u8, /* non-zero to enable support for querying account keys
+                              * and checking signatures */
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -281,11 +283,13 @@ unsafe extern "C" fn call_receive_v1(
                 };
 
                 let support_queries = support_queries_tag != 0;
+                let support_account_signature_checks = support_account_signature_checks != 0;
 
                 let params = ReceiveParams {
                     max_parameter_size,
                     limit_logs_and_return_values,
                     support_queries,
+                    support_account_signature_checks,
                 };
 
                 let res = invoke_receive(
@@ -402,7 +406,10 @@ unsafe extern "C" fn validate_and_process_v1(
         },
         wasm_bytes,
     ) {
-        Ok(artifact) => {
+        Ok(InstantiatedModule {
+            artifact,
+            custom_sections_size,
+        }) => {
             let mut out_buf = Vec::new();
             let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
             out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
@@ -411,7 +418,7 @@ unsafe extern "C" fn validate_and_process_v1(
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
-
+            out_buf.extend_from_slice(&custom_sections_size.to_be_bytes());
             out_buf.shrink_to_fit();
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();

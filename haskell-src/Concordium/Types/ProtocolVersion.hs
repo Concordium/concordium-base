@@ -168,6 +168,8 @@ module Concordium.Types.ProtocolVersion (
     supportsDelegationPV,
     supportsSignExtensionInstructions,
     supportsGlobalsInInitSections,
+    omitCustomSectionFromSize,
+    supportsAccountSignatureChecks,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -524,3 +526,20 @@ supportsGlobalsInInitSections spv = case spv of
     SP4 -> True
     SP5 -> True
     SP6 -> False
+
+-- |Whether the protocol version specifies that custom section should not be
+-- counted towards module size when executing V1 contracts.
+omitCustomSectionFromSize :: SProtocolVersion pv -> Bool
+omitCustomSectionFromSize = supportsSignExtensionInstructions
+
+-- |Whether the protocol version supports account signature checks and account key queries
+-- from smart contracts.
+-- (Supported in 'P6' and onwards)
+supportsAccountSignatureChecks :: SProtocolVersion pv -> Bool
+supportsAccountSignatureChecks spv = case spv of
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> True

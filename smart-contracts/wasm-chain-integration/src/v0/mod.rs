@@ -1063,7 +1063,7 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact =
-        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?;
+        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
     invoke_init(
         &artifact,
         init_ctx,
@@ -1093,7 +1093,8 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
         ValidationConfig::V0,
         &ConcordiumAllowedImports,
         source_bytes,
-    )?;
+    )?
+    .artifact;
     invoke_init(
         &artifact,
         init_ctx,
@@ -1233,7 +1234,7 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     limit_logs_and_return_values: bool,
 ) -> ExecResult<ReceiveResult> {
     let artifact =
-        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?;
+        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
     invoke_receive(
         &artifact,
         receive_ctx,
@@ -1259,7 +1260,8 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
         ValidationConfig::V0,
         &ConcordiumAllowedImports,
         source_bytes,
-    )?;
+    )?
+    .artifact;
     invoke_receive(
         &artifact,
         receive_ctx,
