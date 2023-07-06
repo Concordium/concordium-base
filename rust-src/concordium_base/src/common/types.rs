@@ -340,7 +340,7 @@ impl AsRef<[u8]> for Signature {
 }
 
 /// Transaction signature structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug)]
+#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
 #[serde(transparent)]
 pub struct TransactionSignature {
     pub signatures: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,

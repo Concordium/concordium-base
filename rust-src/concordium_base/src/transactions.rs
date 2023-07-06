@@ -1480,18 +1480,32 @@ pub fn verify_signature_transaction_sign_hash(
     hash: &hashes::TransactionSignHash,
     signature: &TransactionSignature,
 ) -> bool {
-    if usize::from(u8::from(keys.threshold())) > signature.signatures.len() {
+    verify_data_signature(keys, hash, &signature.signatures)
+}
+
+/// Verify a signature on the provided data with respect to the account access
+/// structure.
+///
+/// This is not the same as verifying a signature on a serialized transaction.
+/// Transaction signature verification is a different protocol that first
+/// involves hashing the message.
+pub fn verify_data_signature<T: ?Sized + AsRef<[u8]>>(
+    keys: &impl HasAccountAccessStructure,
+    data: &T,
+    signatures: &BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
+) -> bool {
+    if usize::from(u8::from(keys.threshold())) > signatures.len() {
         return false;
     }
     // There are enough signatures.
-    for (&ci, cred_sigs) in signature.signatures.iter() {
+    for (&ci, cred_sigs) in signatures.iter() {
         if let Some(cred_keys) = keys.credential_keys(ci) {
             if usize::from(u8::from(cred_keys.threshold)) > cred_sigs.len() {
                 return false;
             }
             for (&ki, sig) in cred_sigs {
                 if let Some(pk) = cred_keys.get(ki) {
-                    if !pk.verify(hash, sig) {
+                    if !pk.verify(data, sig) {
                         return false;
                     }
                 } else {
