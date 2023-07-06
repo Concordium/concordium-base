@@ -47,7 +47,7 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     // compute value - pub_value
     let mut diff = pub_value;
     diff.negate();
-    diff.add_assign(&value);
+    diff.add_assign(value);
 
     // compute the inverse of (value - pub_value)
     let diff_inv = diff.inverse()?;
@@ -108,7 +108,7 @@ pub fn verify_com_ineq<C: Curve>(
         cmms:    [Commitment(cmm_1), *aux_com, cmm_3],
         cmm_key: *com_key,
     };
-    sigma_verify(&mut transcript, &com_mult, &com_mult_witness)
+    sigma_verify(&mut transcript, &com_mult, com_mult_witness)
 }
 
 #[cfg(test)]
