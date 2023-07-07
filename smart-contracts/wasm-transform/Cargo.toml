@@ -16,7 +16,7 @@ fuzz-coverage = []
 [dependencies]
 leb128 = "0.2"
 anyhow = "1.0"
-num_enum = "0.5"
+num_enum = "0.6"
 derive_more = "0.99"
 
 
