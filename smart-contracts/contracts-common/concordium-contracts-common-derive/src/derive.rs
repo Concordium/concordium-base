@@ -364,6 +364,18 @@ impl ContainerAttributes {
         }
     }
 
+    /// Run checks on variant attributes against the container attributes.
+    /// More specifically checking `tag` and `forward` attributes against the
+    /// `repr` attribute.
+    fn check_variant_attributes(
+        &self,
+        variant_attributes: &EnumVariantAttributes,
+    ) -> syn::Result<()> {
+        self.check_tag_with_repr(&variant_attributes.tag)?;
+        self.check_forwards_with_repr(&variant_attributes.forwards)?;
+        Ok(())
+    }
+
     /// Ensure that when a `tag` attribute is used, a `repr` attribute is set
     /// and this `repr(u*)` is large enough to represent the tag.
     fn check_tag_with_repr(&self, tag_attribute: &Option<TagAttribute>) -> syn::Result<()> {
@@ -1016,12 +1028,11 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             // Flag which is updated when iterating the variants signalling whether any of
             // the variants have a 'forward' attribute.
             let mut some_variant_is_forwarded = false;
-
             let tag_bytes_ident = format_ident!("tag_bytes");
+
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
-                container_attributes.check_forwards_with_repr(&variant_attributes.forwards)?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -1274,8 +1285,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
-                container_attributes.check_forwards_with_repr(&variant_attributes.forwards)?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -1502,10 +1512,14 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
             let repr = container_attributes.tag_repr(data.variants.len())?;
             let state_ident = Ident::new("_______________________________state", Span::call_site());
             let mut tag_checker = TagChecker::default();
+            // Flag which is updated when iterating the variants signalling whether any of
+            // the variants have a 'forward' attribute.
+            let mut some_variant_is_forwarded = false;
+            let tag_bytes_ident = format_ident!("tag_bytes");
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -1527,49 +1541,104 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                     }
                     syn::Fields::Unit => (Vec::new(), proc_macro2::TokenStream::new()),
                 };
-                let field_tokens: proc_macro2::TokenStream = field_names
-                    .iter()
-                    .zip(variant.fields.iter())
-                    .map(|(name, field)| {
-                        impl_deserial_with_state_field(
-                            field,
-                            &state_ident,
-                            name,
-                            &source,
-                            state_parameter,
-                        )
-                    })
-                    .collect::<syn::Result<proc_macro2::TokenStream>>()?;
-
-                // Get the literal for the tag either from a 'tag' attribute of the index of the
-                // variant. To avoid cloning, the collision checking of tags are done further
-                // down.
-                let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
-                    || {
-                        (
-                            syn::LitInt::new(i.to_string().as_str(), variant.span()),
-                            variant.ident.span(),
-                        )
-                    },
-                    |tag| (tag.value, tag.span),
-                );
 
                 let variant_ident = &variant.ident;
-                matches_tokens.extend(quote! {
-                    #tag_lit => {
-                        #field_tokens
-                        Ok(#data_name::#variant_ident #pattern)
-                    },
-                });
+                if variant_attributes.forwards.is_empty() {
+                    let field_tokens: proc_macro2::TokenStream = field_names
+                        .iter()
+                        .zip(variant.fields.iter())
+                        .map(|(name, field)| {
+                            impl_deserial_with_state_field(
+                                field,
+                                &state_ident,
+                                name,
+                                &source,
+                                state_parameter,
+                            )
+                        })
+                        .collect::<syn::Result<proc_macro2::TokenStream>>()?;
 
-                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                    // Get the literal for the tag either from a 'tag' attribute of the index of the
+                    // variant. To avoid cloning, the collision checking of tags are done further
+                    // down.
+                    let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
+                        || {
+                            (
+                                syn::LitInt::new(i.to_string().as_str(), variant.span()),
+                                variant_ident.span(),
+                            )
+                        },
+                        |tag| (tag.value, tag.span),
+                    );
+
+                    matches_tokens.extend(quote! {
+                        #tag_lit => {
+                            #field_tokens
+                            Ok(#data_name::#variant_ident #pattern)
+                        },
+                    });
+
+                    tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                } else {
+                    some_variant_is_forwarded = true;
+                    check!(
+                        variant.fields.len() == 1,
+                        variant.span(),
+                        "Only enum variants containing a single field can be used with the \
+                         'forward' attribute"
+                    );
+                    let chained_source = format_ident!("___chained_source");
+
+                    let field_tokens: proc_macro2::TokenStream = field_names
+                        .iter()
+                        .zip(variant.fields.iter())
+                        .map(|(name, field)| impl_deserial_field(field, name, &chained_source))
+                        .collect::<syn::Result<proc_macro2::TokenStream>>()?;
+
+                    let mut tags = Vec::new();
+                    for forward_attribute in variant_attributes.forwards {
+                        for tag_lit in forward_attribute.values {
+                            tag_checker.add_and_check(
+                                tag_lit.clone(),
+                                forward_attribute.span,
+                                variant_ident,
+                            )?;
+                            tags.push(tag_lit);
+                        }
+                    }
+                    matches_tokens.extend(quote! {
+                        #(#tags)|* => {
+                            let mut tag_cursor = Cursor::new(&#tag_bytes_ident);
+                            let mut chained_source = concordium_std::Chain::new(&mut tag_cursor, #source_ident);
+                            let #chained_source = &mut chained_source;
+                            #field_tokens
+                            Ok(#data_name::#variant_ident #pattern)
+                        },
+                    });
+                }
             }
             let repr_ident = repr.ident();
-            quote! {
-                let idx = <#repr_ident as concordium_std::Deserial>::deserial(#source)?;
-                match idx {
-                    #matches_tokens
-                    _ => Err(Default::default())
+            if some_variant_is_forwarded {
+                let tag_byte_type_tokens = match repr {
+                    ReprAttributeValue::U8 => quote! {[u8; 1]},
+                    ReprAttributeValue::U16 => quote! {[u8; 2]},
+                };
+
+                quote! {
+                    let #tag_bytes_ident = <#tag_byte_type_tokens as concordium_std::Deserial>::deserial(#source_ident)?;
+                    let tag = #repr_ident::from_le_bytes(#tag_bytes_ident);
+                    match tag {
+                        #matches_tokens
+                        _ => Err(Default::default())
+                    }
+                }
+            } else {
+                quote! {
+                    let idx = <#repr_ident as concordium_std::Deserial>::deserial(#source)?;
+                    match idx {
+                        #matches_tokens
+                        _ => Err(Default::default())
+                    }
                 }
             }
         }
@@ -2070,7 +2139,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                 .map(|(i, variant)| {
                     let variant_attributes =
                         EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                    container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+                    container_attributes.check_variant_attributes(&variant_attributes)?;
 
                     // Handle the 'rename' attribute.
                     let (variant_name, variant_span) = match variant_attributes.rename {
