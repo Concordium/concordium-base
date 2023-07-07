@@ -2130,30 +2130,26 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
             );
             let mut used_variant_names = HashMap::new();
             let mut tag_checker = TagChecker::default();
-            let mut use_tagged_enum = false;
+            let mut some_variant_is_tagged = false;
+            let mut some_variant_is_forwarded = false;
 
-            let variant_data: Vec<_> = data
-                .variants
-                .iter()
-                .enumerate()
-                .map(|(i, variant)| {
-                    let variant_attributes =
-                        EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                    container_attributes.check_variant_attributes(&variant_attributes)?;
+            let mut variant_data = Vec::new();
+            for (i, variant) in data.variants.iter().enumerate() {
+                let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
-                    // Handle the 'rename' attribute.
-                    let (variant_name, variant_span) = match variant_attributes.rename {
-                        Some(rename_attribute) => (rename_attribute.value, rename_attribute.span),
-                        None => (variant.ident.to_string(), variant.ident.span()),
-                    };
-                    check_for_name_collisions(
-                        &mut used_variant_names,
-                        &variant_name,
-                        variant_span,
-                    )?;
+                // Handle the 'rename' attribute.
+                let (variant_name, variant_span) = match variant_attributes.rename {
+                    Some(rename_attribute) => (rename_attribute.value, rename_attribute.span),
+                    None => (variant.ident.to_string(), variant.ident.span()),
+                };
+                check_for_name_collisions(&mut used_variant_names, &variant_name, variant_span)?;
 
-                    use_tagged_enum = use_tagged_enum || variant_attributes.tag.is_some();
+                some_variant_is_tagged = some_variant_is_tagged || variant_attributes.tag.is_some();
+                some_variant_is_forwarded =
+                    some_variant_is_forwarded || !variant_attributes.forwards.is_empty();
 
+                let data = if variant_attributes.forwards.is_empty() {
                     // Get the literal for the tag either from a 'tag' attribute of the index of the
                     // variant.
                     let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
@@ -2170,12 +2166,39 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
 
                     let fields_tokens = schema_type_fields(&variant.fields)?;
 
-                    Ok((tag_lit, quote! {
-                         (concordium_std::String::from(#variant_name), #fields_tokens)
-                    }))
-                })
-                .collect::<syn::Result<_>>()?;
-            if use_tagged_enum {
+                    SchemaTypeVariantData::Tagged {
+                        tag_lit,
+                        variant_tokens: quote! {
+                            (concordium_std::String::from(#variant_name), #fields_tokens)
+                        },
+                    }
+                } else {
+                    check!(
+                        variant.fields.len() == 1,
+                        variant.span(),
+                        "Only enum variants containing a single field can be used with the \
+                         'forward' attribute"
+                    );
+
+                    for forward_attribute in variant_attributes.forwards {
+                        for tag_lit in forward_attribute.values {
+                            tag_checker.add_and_check(
+                                tag_lit.clone(),
+                                tag_lit.span(),
+                                &variant.ident,
+                            )?;
+                        }
+                    }
+
+                    let inner_field = variant.fields.iter().next().unwrap().clone(); // Safe to unwrap because of the above check of the length.
+                    SchemaTypeVariantData::Forwards {
+                        inner_field,
+                    }
+                };
+                variant_data.push(data);
+            }
+
+            if some_variant_is_tagged || some_variant_is_forwarded {
                 // Ensure tagged enum is only used with repr(u8).
                 if let Some(repr) = &container_attributes.repr {
                     check!(
@@ -2184,15 +2207,54 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                         "SchemaType only supports 'repr(u8)' when using 'tag' attribute."
                     );
                 }
-
-                let variant_tokens = variant_data
-                    .iter()
-                    .map(|(tag_lit, variant_tokens)| quote!((#tag_lit, #variant_tokens)));
+                let variant_map_ident = format_ident!("variant_map");
+                let insert_variant_data_tokens: Vec<_> =
+                    variant_data.iter().map(|data| {
+                        match data {
+                            SchemaTypeVariantData::Tagged { tag_lit, variant_tokens } => Ok(quote! {
+                                #variant_map_ident.insert(#tag_lit, #variant_tokens);
+                            }),
+                            SchemaTypeVariantData::Forwards { inner_field } => {
+                                let field_schema_type_tokens = schema_type_field_type(inner_field)?;
+                                Ok(quote!{
+                                    let mut inner_map_option = match #field_schema_type_tokens {
+                                        concordium_std::schema::Type::TaggedEnum(map) => map,
+                                        concordium_std::schema::Type::Enum(vec) => {
+                                            concordium_std::collections::BTreeMap::from_iter(
+                                                vec.into_iter().enumerate().map(|(i, variant)| (i as u8, variant)),
+                                            )
+                                        },
+                                        _ => panic!("Using 'forward' attribute for deriving SchemaType is only supported, when the inner type is an enum"),
+                                    };
+                                    #variant_map_ident.append(&mut inner_map_option);
+                                })
+                            }
+                        }
+                    }).collect::<syn::Result<_>>()?;
                 quote! {
-                    concordium_std::schema::Type::TaggedEnum(concordium_std::collections::BTreeMap::from([ #(#variant_tokens),* ]))
+                    let mut #variant_map_ident = concordium_std::collections::BTreeMap::default();
+                    #(#insert_variant_data_tokens)*
+                    concordium_std::schema::Type::TaggedEnum(#variant_map_ident)
                 }
             } else {
-                let variant_tokens = variant_data.iter().map(|(_, variant_tokens)| variant_tokens);
+                let variant_tokens: Vec<_> = variant_data
+                    .iter()
+                    .map(|data| match data {
+                        SchemaTypeVariantData::Tagged {
+                            variant_tokens,
+                            ..
+                        } => Ok(variant_tokens),
+                        SchemaTypeVariantData::Forwards {
+                            ..
+                        } => {
+                            abort!(
+                                ast.span(),
+                                "Invariant violated for deriving SchemaType: Forwarding data is \
+                                 unexpected here"
+                            );
+                        }
+                    })
+                    .collect::<syn::Result<_>>()?;
                 quote! {
                     concordium_std::schema::Type::Enum(Vec::from([ #(#variant_tokens),* ]))
                 }
@@ -2236,6 +2298,23 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
         }
     };
     Ok(out.into())
+}
+
+/// Data tracked per variant when generating the SchemaType implementation.
+enum SchemaTypeVariantData {
+    /// A tagged variant, either implicitly or explicit.
+    Tagged {
+        /// The integer literal to used for this variant.
+        tag_lit:        syn::LitInt,
+        /// Tokens of a string of the variant name paired with the tokens to
+        /// implement fields
+        variant_tokens: proc_macro2::TokenStream,
+    },
+    /// A variant forwarding to its inner field.
+    Forwards {
+        /// The inner field being forwarded to.
+        inner_field: syn::Field,
+    },
 }
 
 /// Find a 'rename' attribute and return its value and span.
