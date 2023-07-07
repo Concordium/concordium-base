@@ -70,7 +70,13 @@ fn find_attribute_value(
     let attr_values: Vec<_> = get_valid_concordium_attributes(attributes, for_field)?
         .into_iter()
         .filter_map(|nested_meta| match nested_meta {
-            syn::Meta::NameValue(value) if value.path.is_ident(&target_attr) => Some(value.lit),
+            syn::Meta::NameValue(name_value) if name_value.path.is_ident(&target_attr) => {
+                if let syn::Expr::Lit(expr_lit) = name_value.value {
+                    Some(expr_lit.lit)
+                } else {
+                    None
+                }
+            }
             _ => None,
         })
         .collect();
@@ -131,23 +137,23 @@ fn get_concordium_field_attributes(attributes: &[syn::Attribute]) -> syn::Result
 /// no validation on the meta itself as oppose to
 /// `get_valid_concordium_attributes`.
 fn get_concordium_attributes(attributes: &[syn::Attribute]) -> syn::Result<Vec<syn::Meta>> {
-    attributes
-        .iter()
+    let mut metas = Vec::new();
+    for attr in attributes {
         // Keep only concordium attributes
-        .flat_map(|attr| match attr.parse_meta() {
-            Ok(syn::Meta::List(list)) if list.path.is_ident(CONCORDIUM_ATTRIBUTE) => {
-                list.nested
-            }
-            _ => syn::punctuated::Punctuated::new(),
-        })
-        // Ensure only valid attributes and unwrap NestedMeta
-        .map(|nested| match nested {
-            syn::NestedMeta::Meta(meta) => {
-                Ok(meta)
-            }
-            lit => Err(syn::Error::new(lit.span(), "Literals are not supported in a 'concordium' attribute.")),
-        })
-        .collect()
+        if !attr.meta.path().is_ident(CONCORDIUM_ATTRIBUTE) {
+            continue;
+        }
+        // Ensure only list attributes and parse the nested meta.
+        let syn::Meta::List(list) = &attr.meta else {
+            abort!(attr.meta.span(), "A 'concordium' attribute must be provided as 'concordium(..)'");
+        };
+        // Parse list args tokens as syn::Meta.
+        let nested = list.parse_args_with(
+            syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+        )?;
+        metas.extend(nested);
+    }
+    Ok(metas)
 }
 
 /// Find and parses concordium attributes into a list of `syn::Meta`. Checking
@@ -432,14 +438,13 @@ impl TryFrom<&syn::Meta> for ReprAttribute {
                 "repr attribute value can only be provided as 'repr(...)'",
             );
         };
-        check!(
-            list.nested.len() == 1,
-            list.nested.span(),
-            "'repr(..)' must be provided a single value",
-        );
+        let nested = list.parse_args_with(
+            syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+        )?;
+        check!(nested.len() == 1, nested.span(), "'repr(..)' must be provided a single value",);
         // Safe to unwrap below because we already checked the length to be 1.
-        let syn::NestedMeta::Meta(syn::Meta::Path(path)) = list.nested.first().unwrap() else {
-            abort!(list.nested.span(), "'repr(..)' only supports the values 'u8' or 'u16'");
+        let syn::Meta::Path(path) = nested.first().unwrap() else {
+            abort!(nested.span(), "'repr(..)' only supports the values 'u8' or 'u16'");
         };
         let Some(ident) = path.get_ident() else {
             abort!(path.span(), "'repr(..)' only supports the values 'u8' or 'u16'");
@@ -523,23 +528,26 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
     type Error = syn::Error;
 
     fn try_from(list: &syn::MetaList) -> Result<Self, Self::Error> {
-        let items = &list.nested;
+        let items = list.parse_args_with(
+            syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+        )?;
+
         check!(!items.is_empty(), list.span(), "bound attribute cannot be empty");
 
         let mut deserial: Option<BoundAttributeValue> = None;
         let mut serial: Option<BoundAttributeValue> = None;
         let mut schema_type: Option<BoundAttributeValue> = None;
 
-        for item in items {
-            let syn::NestedMeta::Meta(nested_meta) = item else {
-                abort!(item.span(), "bound attribute list can only contain name value pairs");
-            };
-            let syn::Meta::NameValue(name_value) = nested_meta else {
-                abort!(nested_meta.span(), "bound attribute list must contain named values");
+        for item in &items {
+            let syn::Meta::NameValue(name_value) = item else {
+                abort!(item.span(), "bound attribute list must contain named values");
             };
             if name_value.path.is_ident("serial") {
-                let syn::Lit::Str(lit_str) = &name_value.lit else {
-                    abort!(name_value.lit.span(), "bound attribute must be a string literal");
+                let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &name_value.value else {
+                    abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(serial_value) = serial.as_mut() {
@@ -548,8 +556,11 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                     serial = Some(value);
                 };
             } else if name_value.path.is_ident("deserial") {
-                let syn::Lit::Str(lit_str) = &name_value.lit else {
-                    abort!(name_value.lit.span(), "bound attribute must be a string literal");
+                let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &name_value.value else {
+                    abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(deserial_value) = deserial.as_mut() {
@@ -558,8 +569,11 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                     deserial = Some(value);
                 };
             } else if name_value.path.is_ident("schema_type") {
-                let syn::Lit::Str(lit_str) = &name_value.lit else {
-                    abort!(name_value.lit.span(), "bound attribute must be a string literal");
+                let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &name_value.value else {
+                    abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 if let Some(schema_type_value) = schema_type.as_mut() {
@@ -593,10 +607,12 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
                 Ok(BoundAttribute::Separated(SeparateBoundValue::try_from(list)?))
             }
             syn::Meta::NameValue(name_value) => {
-                let syn::Lit::Str(ref lit_str) = name_value.lit else {
-                    abort!(name_value.lit.span(), "bound attribute must be a string literal");
+                let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &name_value.value else {
+                    abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
-
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
                 Ok(BoundAttribute::Shared(value))
             }
@@ -718,8 +734,11 @@ impl TryFrom<&syn::Meta> for TagAttribute {
                 "'tag' attribute value can only be provided as 'tag = ...'.",
             );
         };
-        let syn::Lit::Int(value) = &name_value.lit else {
-            abort!(name_value.lit.span(), "'tag' attribute must be an integer.");
+        let syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(value),
+            ..
+        }) = &name_value.value else {
+            abort!(name_value.value.span(), "'tag' attribute must be an integer.");
         };
         Ok(TagAttribute {
             value: value.clone(),
@@ -738,9 +757,12 @@ impl TryFrom<&syn::Meta> for RenameAttribute {
                 "'rename' attribute value can only be provided as 'rename = ...'.",
             );
         };
-        let syn::Lit::Str(lit_str) = &name_value.lit else {
+        let syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(lit_str),
+            ..
+        }) = &name_value.value else {
             abort!(
-                name_value.lit.span(),
+                name_value.value.span(),
                 "'rename' attribute must be a string."
             );
         };
@@ -1515,24 +1537,24 @@ fn parse_attr_and_gen_error_conversions(
             "The `from` attribute expects a list of error types, e.g.: #[from(ParseError)].",
         )
     };
-    match attr.parse_meta() {
-        Ok(syn::Meta::List(list)) if list.path.is_ident("from") => {
+    match &attr.meta {
+        syn::Meta::List(list) if list.path.is_ident("from") => {
             let mut from_error_names = vec![];
-            for nested in list.nested.iter() {
+            let nested_metas = list.parse_args_with(
+                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+            )?;
+            for nested in &nested_metas {
                 // check that all items in the list are paths
                 match nested {
-                    syn::NestedMeta::Meta(meta) => match meta {
-                        Meta::Path(from_error) => {
-                            from_error_names.push(from_error);
-                        }
-                        other => return Err(wrong_from_usage(&other)),
-                    },
-                    syn::NestedMeta::Lit(l) => return Err(wrong_from_usage(&l)),
+                    Meta::Path(from_error) => {
+                        from_error_names.push(from_error);
+                    }
+                    other => return Err(wrong_from_usage(&other)),
                 }
             }
             Ok(from_error_token_stream(&from_error_names, enum_name, variant_name).collect())
         }
-        Ok(syn::Meta::NameValue(mnv)) if mnv.path.is_ident("from") => Err(wrong_from_usage(&mnv)),
+        syn::Meta::NameValue(mnv) if mnv.path.is_ident("from") => Err(wrong_from_usage(&mnv)),
         _ => Ok(vec![]),
     }
 }
