@@ -358,6 +358,19 @@ impl<Kind> Hash for Threshold<Kind> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) { self.threshold.hash(state) }
 }
 
+impl<Kind> Threshold<Kind> {
+    /// Threshold of 1.
+    pub const ONE: Self = Self {
+        threshold: 1,
+        kind:      marker::PhantomData,
+    };
+    /// Threshold of 2.
+    pub const TWO: Self = Self {
+        threshold: 2,
+        kind:      marker::PhantomData,
+    };
+}
+
 impl Serial for ExchangeRate {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         out.write_u64(self.numerator())?;
