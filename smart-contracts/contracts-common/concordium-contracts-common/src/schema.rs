@@ -429,6 +429,12 @@ impl<A: SchemaType, const N: usize> SchemaType for [A; N] {
     fn get_type() -> Type { Type::Array(N.try_into().unwrap(), Box::new(A::get_type())) }
 }
 
+impl<Kind> SchemaType for Threshold<Kind> {
+    // This is not entirely ideal since it won't check if the threshold is 0, but
+    // at present we do not have a type that is better suited.
+    fn get_type() -> Type { u8::get_type() }
+}
+
 impl Serial for Fields {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         match self {
