@@ -4,6 +4,7 @@ use crate::{constants::*, schema, traits::*, types::*};
 use alloc::{boxed::Box, collections, string::String, vec::Vec};
 use collections::{BTreeMap, BTreeSet};
 use convert::TryFrom;
+use core::cmp::Ordering;
 #[cfg(not(feature = "std"))]
 use core::{
     convert, hash, marker,
@@ -279,6 +280,82 @@ impl Deserial for AccountBalance {
         let locked = Amount::from_micro_ccd(u64::from_le_bytes(chunks[2]));
         Self::new(total, staked, locked).ok_or_else(ParseError::default)
     }
+}
+
+impl<Kind> Serial for Threshold<Kind> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.threshold.serial(out) }
+}
+
+impl<Kind> Deserial for Threshold<Kind> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let threshold: u8 = u8::deserial(source)?;
+        if threshold == 0 {
+            Err(ParseError {})
+        } else {
+            Ok(Self {
+                threshold,
+                kind: marker::PhantomData,
+            })
+        }
+    }
+}
+
+impl<Kind> TryFrom<u8> for Threshold<Kind> {
+    type Error = ZeroSignatureThreshold;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value == 0 {
+            Err(ZeroSignatureThreshold)
+        } else {
+            Ok(Threshold {
+                threshold: value,
+                kind:      marker::PhantomData,
+            })
+        }
+    }
+}
+
+impl<Kind> Clone for Threshold<Kind> {
+    fn clone(&self) -> Self {
+        Self {
+            threshold: self.threshold,
+            kind:      marker::PhantomData,
+        }
+    }
+}
+
+impl<Kind> Copy for Threshold<Kind> {}
+
+impl<Kind> From<Threshold<Kind>> for u8 {
+    #[inline(always)]
+    fn from(value: Threshold<Kind>) -> Self { value.threshold }
+}
+
+impl<Kind> PartialEq for Threshold<Kind> {
+    fn eq(&self, other: &Self) -> bool { self.threshold == other.threshold }
+}
+
+impl<Kind> PartialOrd for Threshold<Kind> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.threshold.partial_cmp(&other.threshold)
+    }
+}
+
+impl<Kind> Ord for Threshold<Kind> {
+    fn cmp(&self, other: &Self) -> Ordering { self.threshold.cmp(&other.threshold) }
+}
+impl<Kind> PartialOrd<u8> for Threshold<Kind> {
+    fn partial_cmp(&self, other: &u8) -> Option<Ordering> { self.threshold.partial_cmp(other) }
+}
+
+impl<Kind> PartialEq<u8> for Threshold<Kind> {
+    fn eq(&self, other: &u8) -> bool { self.threshold == *other }
+}
+
+impl<Kind> Eq for Threshold<Kind> {}
+
+impl<Kind> Hash for Threshold<Kind> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) { self.threshold.hash(state) }
 }
 
 impl Serial for ExchangeRate {

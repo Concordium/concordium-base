@@ -7,6 +7,7 @@ use alloc::{boxed::Box, collections::BTreeMap};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
+use core::marker::PhantomData;
 #[cfg(not(feature = "std"))]
 use core::{cmp, convert, fmt, hash, iter, ops, str};
 use hash::Hash;
@@ -391,6 +392,43 @@ impl AccountBalance {
     /// staked or locked in releases by scheduled transfers.
     pub fn available(&self) -> Amount { self.total - cmp::max(self.locked, self.staked) }
 }
+
+#[derive(Debug)]
+pub enum AccountKind {}
+
+/// The minimum number of credentials that need to sign any transaction coming
+/// from an associated account.
+pub type AccountThreshold = Threshold<AccountKind>;
+
+#[derive(Debug)]
+pub enum SignatureKind {}
+
+/// The minimum number of signatures on a credential that need to sign any
+/// transaction coming from an associated account.
+pub type SignatureThreshold = Threshold<SignatureKind>;
+
+#[repr(transparent)]
+#[cfg_attr(feature = "derive-serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "derive-serde",
+    serde(
+        bound(serialize = "Kind: Sized", deserialize = "Kind: Sized"),
+        try_from = "u8",
+        into = "u8"
+    )
+)]
+#[derive(Debug)]
+pub struct Threshold<Kind> {
+    pub(crate) threshold: u8,
+    pub(crate) kind:      PhantomData<Kind>,
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "derive-serde", derive(thiserror::Error))]
+#[cfg_attr(feature = "derive-serde", error("Signature threshold cannot be 0."))]
+/// An error type that indicates that a 0 attempted to be used as a signature
+/// threshold.
+pub struct ZeroSignatureThreshold;
 
 /// Timestamp represented as milliseconds since unix epoch.
 ///
