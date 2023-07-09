@@ -661,7 +661,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
 
     let initial_acc_data = InitialAccountData {
         keys,
-        threshold: SignatureThreshold(1),
+        threshold: SignatureThreshold::ONE,
     };
     let (pio, _) = {
         match account_holder::generate_pio(&context, threshold, &id_use_data, &initial_acc_data) {
@@ -800,7 +800,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
 
         CredentialData {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     };
 
@@ -919,7 +919,7 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
 
         CredentialData {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     };
 

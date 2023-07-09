@@ -1074,7 +1074,7 @@ fn handle_create_credential(cc: CreateCredential) {
 
                 CredentialData {
                     keys,
-                    threshold: SignatureThreshold(2),
+                    threshold: SignatureThreshold::TWO,
                 }
             };
             (id_use_data, acc_data, None)
@@ -1149,7 +1149,7 @@ fn handle_create_credential(cc: CreateCredential) {
 
                 CredentialData {
                     keys,
-                    threshold: SignatureThreshold(1),
+                    threshold: SignatureThreshold::ONE,
                 }
             };
             let context = CredentialContext {
@@ -1939,7 +1939,7 @@ fn handle_start_ip(sip: StartIp) {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
     let id_use_data = IdObjectUseData { aci, randomness };

@@ -137,7 +137,7 @@ fn main() {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     // Threshold is all anonymity revokers.
 
@@ -192,7 +192,7 @@ fn main() {
 
         let acc_data = CredentialData {
             keys,
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
 
         let (cdi_1, _) = create_credential(
@@ -215,7 +215,7 @@ fn main() {
         keys_2.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
         let acc_data_2 = CredentialData {
             keys:      acc_data.keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         };
 
         let addr = account_address_from_registration_id(&cdi_1.values.cred_id);
@@ -342,7 +342,7 @@ fn main() {
 
             CredentialData {
                 keys,
-                threshold: SignatureThreshold(2),
+                threshold: SignatureThreshold::TWO,
             }
         };
 
@@ -422,7 +422,7 @@ fn main() {
 
             InitialAccountData {
                 keys,
-                threshold: SignatureThreshold(2),
+                threshold: SignatureThreshold::TWO,
             }
         };
         let ah_info = CredentialHolderInfo::<ArCurve> {

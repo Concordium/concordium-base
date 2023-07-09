@@ -3100,7 +3100,8 @@ mod tests {
         let pub_keys = keys
             .iter()
             .map(|(&ci, keys)| {
-                let threshold = SignatureThreshold(rng.gen_range(1, keys.len() + 1) as u8);
+                let threshold =
+                    SignatureThreshold::try_from(rng.gen_range(1, keys.len() + 1) as u8).unwrap();
                 let keys = keys
                     .iter()
                     .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))

@@ -1405,7 +1405,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
         let global_ctx = GlobalContext::<ExampleCurve>::generate(String::from("genesis_string"));
 
@@ -1452,7 +1452,7 @@ mod tests {
         keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
         keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
         keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
-        let sigthres = SignatureThreshold(2);
+        let sigthres = SignatureThreshold::TWO;
         let acc_data = CredentialData {
             keys,
             threshold: sigthres,

@@ -188,13 +188,13 @@ fn main() -> std::io::Result<()> {
             );
         }
 
-        let initial_threshold = SignatureThreshold(
+        let initial_threshold = SignatureThreshold::try_from(
             if common.num_keys == 1 {
                 1
             } else {
                 common.num_keys as u8 - 1
             },
-        );
+        ).unwrap();
 
         let initial_acc_data = InitialAccountData {
             keys:      initial_keys,

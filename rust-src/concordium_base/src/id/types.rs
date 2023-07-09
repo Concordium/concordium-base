@@ -26,6 +26,8 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
+pub use concordium_contracts_common::SignatureThreshold;
+use concordium_contracts_common::ZeroSignatureThreshold;
 use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
@@ -63,66 +65,6 @@ pub fn account_address_from_registration_id(reg_id: &impl Curve) -> AccountAddre
     let mut hasher = Sha256::new();
     reg_id.serial(&mut hasher);
     AccountAddress(hasher.finalize().into())
-}
-
-/// Threshold for the number of signatures required.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial, Into)]
-#[repr(transparent)]
-/// The values of this type must maintain the property that they are not 0.
-#[derive(SerdeSerialize)]
-#[serde(transparent)]
-pub struct SignatureThreshold(pub u8);
-
-impl Deserial for SignatureThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let w = source.get()?;
-        if w > 0 {
-            Ok(SignatureThreshold(w))
-        } else {
-            bail!("0 is not a valid signature threshold.")
-        }
-    }
-}
-
-// Need to manually implement deserialize to maintain the property that it is
-// non-zero.
-impl<'de> SerdeDeserialize<'de> for SignatureThreshold {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        struct SignatureThresholdVisitor;
-
-        impl<'de> Visitor<'de> for SignatureThresholdVisitor {
-            type Value = SignatureThreshold;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                write!(formatter, "A non-zero u8.")
-            }
-
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                if v > 0 && v <= 255 {
-                    Ok(SignatureThreshold(v as u8))
-                } else {
-                    Err(de::Error::custom(format!(
-                        "Signature threshold out of range {}",
-                        v
-                    )))
-                }
-            }
-
-            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-            where
-                E: de::Error, {
-                if v > 0 {
-                    self.visit_u64(v as u64)
-                } else {
-                    Err(de::Error::custom(format!(
-                        "Signature threshold out of range {}",
-                        v
-                    )))
-                }
-            }
-        }
-        des.deserialize_u64(SignatureThresholdVisitor)
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
@@ -193,8 +135,10 @@ impl Deserial for AccountOwnershipProof {
 impl AccountOwnershipProof {
     /// Number of individual signatures in this proof.
     /// NB: This method relies on the invariant that signatures should not
-    /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
+    /// have more than 255 elements, and has at least one signature.
+    pub fn num_proofs(&self) -> Result<SignatureThreshold, ZeroSignatureThreshold> {
+        SignatureThreshold::try_from(self.sigs.len() as u8)
+    }
 }
 
 #[derive(
@@ -2092,7 +2036,7 @@ impl From<(CredentialIndex, CredentialData)> for AccountKeys {
         keys.insert(ki, cd);
         Self {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     }
 }
@@ -2107,7 +2051,7 @@ impl From<InitialAccountData> for AccountKeys {
         });
         Self {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     }
 }

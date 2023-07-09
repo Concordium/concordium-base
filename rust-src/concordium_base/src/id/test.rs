@@ -203,7 +203,7 @@ pub fn test_pipeline() {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     let (context, pio, _) = test_create_pio(
         &id_use_data,
@@ -266,7 +266,7 @@ pub fn test_pipeline() {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     let (cdi, _) = create_credential(
         context,
@@ -430,7 +430,7 @@ pub fn test_pipeline_v1() {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     let (cdi, _) = create_credential(
         context,
