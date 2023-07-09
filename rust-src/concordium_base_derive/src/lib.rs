@@ -30,7 +30,7 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
 
     // There is an additional lifetime parameter for deserialization.
     let mut deserial_generics = ast.generics;
-    let lifetime = syn::LifetimeDef::new(syn::Lifetime::new("'de", span));
+    let lifetime = syn::LifetimeParam::new(syn::Lifetime::new("'de", span));
     deserial_generics
         .params
         .push(syn::GenericParam::Lifetime(lifetime.clone()));
@@ -75,7 +75,7 @@ pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenS
 
     // There is an additional lifetime parameter for deserialization.
     let mut deserial_generics = ast.generics;
-    let lifetime = syn::LifetimeDef::new(syn::Lifetime::new("'de", span));
+    let lifetime = syn::LifetimeParam::new(syn::Lifetime::new("'de", span));
     deserial_generics
         .params
         .push(syn::GenericParam::Lifetime(lifetime.clone()));
@@ -116,9 +116,13 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 fn find_length_attribute(l: &[syn::Attribute], attr: &str) -> Option<u32> {
     let length = format_ident!("{}", attr);
     for attr in l.iter() {
-        if let Ok(syn::Meta::NameValue(mn)) = attr.parse_meta() {
+        if let syn::Meta::NameValue(mn) = &attr.meta {
             if mn.path.is_ident(&length) {
-                if let syn::Lit::Int(int) = mn.lit {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Int(int),
+                    ..
+                }) = &mn.value
+                {
                     if let Ok(v) = int.base10_parse() {
                         if v == 1 || v == 2 || v == 4 || v == 8 {
                             return Some(v);
@@ -129,7 +133,7 @@ fn find_length_attribute(l: &[syn::Attribute], attr: &str) -> Option<u32> {
                         panic!("Unknown attribute value {}.", int);
                     }
                 } else {
-                    panic!("Unknown attribute value {:?}.", mn.lit);
+                    panic!("Unknown attribute value {:?}.", mn.value);
                 }
             }
         }
