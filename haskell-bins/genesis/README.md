@@ -82,13 +82,6 @@ be generated using the [id-client](../../rust-bins/src/bin/client.rs) tool.
 Alternatively, identity providers and anonymity revokers may be created using
 the [keygen tool](../../rust-bins/src/bin/keygen.rs) and then combined manually.
 
-After these files are available `initial-accounts.json` may be generated using
-another [genesis-tool](../../rust-bins/src/bin/genesis_tool.rs).
-
-The update authorizations contain public keys for performing chain updates. For
-testing purposes they may be generated using the
-[generate-update-keys](../generate-update-keys/Main.hs) tool.
-
 ### Supported protocol versions
 
 - If `--gdver=3` then the tool will output initial genesis for protocol version 1.
