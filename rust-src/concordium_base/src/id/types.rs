@@ -26,6 +26,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
+use concordium_contracts_common as concordium_std;
 pub use concordium_contracts_common::SignatureThreshold;
 use concordium_contracts_common::{AccountThreshold, ZeroSignatureThreshold};
 use derive_more::*;
@@ -1383,6 +1384,32 @@ pub enum VerifyKey {
     Ed25519VerifyKey(ed25519::PublicKey),
 }
 
+impl concordium_std::Serial for VerifyKey {
+    fn serial<W: concordium_std::Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        match self {
+            VerifyKey::Ed25519VerifyKey(key) => {
+                concordium_std::Serial::serial(&0u8, out)?;
+                concordium_std::Serial::serial(&key.as_bytes(), out)
+            }
+        }
+    }
+}
+
+impl concordium_std::Deserial for VerifyKey {
+    fn deserial<R: concordium_std::Read>(source: &mut R) -> concordium_std::ParseResult<Self> {
+        let tag: u8 = concordium_std::Deserial::deserial(source)?;
+        if tag == 0 {
+            let bytes: [u8; ed25519::PUBLIC_KEY_LENGTH] =
+                concordium_std::Deserial::deserial(source)?;
+            let pk = ed25519::PublicKey::from_bytes(&bytes)
+                .map_err(|_| concordium_std::ParseError {})?;
+            Ok(Self::Ed25519VerifyKey(pk))
+        } else {
+            Err(concordium_std::ParseError {})
+        }
+    }
+}
+
 impl SerdeSerialize for VerifyKey {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         let mut map = ser.serialize_map(Some(2))?;
@@ -2196,9 +2223,12 @@ impl InitialAccountDataWithSigning for InitialAccountData {
 
 /// Public credential keys currently on the account, together with the threshold
 /// needed for a valid signature on a transaction.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(
+    Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone, concordium_std::Serialize,
+)]
 pub struct CredentialPublicKeys {
     #[serde(rename = "keys")]
+    #[concordium(size_length = 1)]
     pub keys:      BTreeMap<KeyIndex, VerifyKey>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,

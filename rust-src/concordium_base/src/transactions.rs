@@ -23,6 +23,7 @@ use crate::{
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
+use concordium_contracts_common as concordium_std;
 use derive_more::*;
 use rand::{CryptoRng, Rng};
 use sha2::Digest;
@@ -1426,14 +1427,15 @@ pub trait HasAccountAccessStructure {
     fn credential_keys(&self, idx: CredentialIndex) -> Option<&CredentialPublicKeys>;
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, concordium_std::Serialize)]
 /// The most straighforward account access structure is a map of public keys
 /// with the account threshold.
 pub struct AccountAccessStructure {
+    /// Keys indexed by credential.
+    #[concordium(size_length = 1)]
+    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
     /// The number of credentials that needed to sign a transaction.
     pub threshold: AccountThreshold,
-    /// Keys indexed by credential.
-    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
 }
 
 impl From<&AccountKeys> for AccountAccessStructure {
