@@ -12,7 +12,7 @@ pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crate::{
     bulletproofs::{range_proof::RangeProof, utils::Generators},
     common::{
-        types::{CredentialIndex, KeyIndex, KeyPair},
+        types::{CredentialIndex, KeyIndex, KeyPair, Signature},
         *,
     },
     curve_arithmetic::*,
@@ -2053,6 +2053,26 @@ impl From<InitialAccountData> for AccountKeys {
             keys,
             threshold: AccountThreshold::ONE,
         }
+    }
+}
+
+impl AccountKeys {
+    /// Sign the provided data with all of the keys in [`AccountKeys`].
+    /// The thresholds are ignored.
+    pub fn sign_data(
+        &self,
+        msg: &[u8],
+    ) -> BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>> {
+        let mut signatures = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, _>>::new();
+        for (ci, cred_keys) in self.keys.iter() {
+            let cred_sigs = cred_keys
+                .keys
+                .iter()
+                .map(|(ki, kp)| (*ki, kp.sign(msg)))
+                .collect::<BTreeMap<_, _>>();
+            signatures.insert(*ci, cred_sigs);
+        }
+        signatures
     }
 }
 
