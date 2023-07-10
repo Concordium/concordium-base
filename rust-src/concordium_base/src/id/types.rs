@@ -1371,7 +1371,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, Attri
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, concordium_std::Serialize)]
 /// Which signature scheme is being used. Currently only one is supported.
 pub enum SchemeId {
     Ed25519,
