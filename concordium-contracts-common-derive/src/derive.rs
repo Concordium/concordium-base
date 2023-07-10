@@ -1105,7 +1105,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                         for tag_lit in forward_attribute.values {
                             tag_checker.add_and_check(
                                 tag_lit.clone(),
-                                forward_attribute.span,
+                                tag_lit.span(),
                                 variant_ident,
                             )?;
                             tags.push(tag_lit);
@@ -1600,7 +1600,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                         for tag_lit in forward_attribute.values {
                             tag_checker.add_and_check(
                                 tag_lit.clone(),
-                                forward_attribute.span,
+                                tag_lit.span(),
                                 variant_ident,
                             )?;
                             tags.push(tag_lit);
