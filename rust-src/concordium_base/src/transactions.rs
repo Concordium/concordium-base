@@ -18,7 +18,7 @@ use crate::{
     hashes,
     id::types::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
-        CredentialPublicKeys,
+        CredentialPublicKeys, VerifyKey,
     },
     random_oracle::RandomOracle,
     smart_contracts, updates,
@@ -1426,7 +1426,7 @@ pub trait HasAccountAccessStructure {
     fn credential_keys(&self, idx: CredentialIndex) -> Option<&CredentialPublicKeys>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// The most straighforward account access structure is a map of public keys
 /// with the account threshold.
 pub struct AccountAccessStructure {
@@ -1434,6 +1434,28 @@ pub struct AccountAccessStructure {
     pub threshold: AccountThreshold,
     /// Keys indexed by credential.
     pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
+}
+
+impl From<&AccountKeys> for AccountAccessStructure {
+    fn from(value: &AccountKeys) -> Self {
+        Self {
+            threshold: value.threshold,
+            keys:      value
+                .keys
+                .iter()
+                .map(|(k, v)| {
+                    (*k, CredentialPublicKeys {
+                        keys:      v
+                            .keys
+                            .iter()
+                            .map(|(ki, kp)| (*ki, VerifyKey::Ed25519VerifyKey(kp.public)))
+                            .collect(),
+                        threshold: v.threshold,
+                    })
+                })
+                .collect(),
+        }
+    }
 }
 
 impl HasAccountAccessStructure for AccountAccessStructure {

@@ -27,7 +27,7 @@ use crate::{
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
 pub use concordium_contracts_common::SignatureThreshold;
-use concordium_contracts_common::ZeroSignatureThreshold;
+use concordium_contracts_common::{AccountThreshold, ZeroSignatureThreshold};
 use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
@@ -2021,7 +2021,7 @@ pub struct AccountKeys {
     pub keys:      BTreeMap<CredentialIndex, CredentialData>,
     /// The account threshold.
     #[serde(rename = "threshold")]
-    pub threshold: SignatureThreshold,
+    pub threshold: AccountThreshold,
 }
 
 /// Create account keys with a single credential at index 0
@@ -2036,7 +2036,7 @@ impl From<(CredentialIndex, CredentialData)> for AccountKeys {
         keys.insert(ki, cd);
         Self {
             keys,
-            threshold: SignatureThreshold::ONE,
+            threshold: AccountThreshold::ONE,
         }
     }
 }
@@ -2051,8 +2051,46 @@ impl From<InitialAccountData> for AccountKeys {
         });
         Self {
             keys,
-            threshold: SignatureThreshold::ONE,
+            threshold: AccountThreshold::ONE,
         }
+    }
+}
+
+impl AccountKeys {
+    /// Generate new [`AccountKeys`] for the thresholds and key indices
+    /// specified in the input. If there are duplicate indices then later
+    /// ones override the previous ones.
+    ///
+    /// The keys sampled from the supplied random number generator in the order
+    /// of key indices supplied, using [`KeyPair::generate`](KeyPair::generate).
+    pub fn generate<R: rand::CryptoRng + rand::Rng>(
+        account_threshold: AccountThreshold,
+        indices: &[(CredentialIndex, SignatureThreshold, &[KeyIndex])],
+        csprng: &mut R,
+    ) -> Self {
+        let keys = indices.iter().map(|(ci, threshold, kis)| {
+            (*ci, CredentialData {
+                keys:      kis
+                    .iter()
+                    .map(|ki| (*ki, KeyPair::generate(csprng)))
+                    .collect(),
+                threshold: *threshold,
+            })
+        });
+        Self {
+            keys:      keys.collect(),
+            threshold: account_threshold,
+        }
+    }
+
+    /// Generate account keys with a single credential and key, at credential
+    /// and key indices 0.
+    pub fn singleton<R: rand::CryptoRng + rand::Rng>(csprng: &mut R) -> Self {
+        Self::generate(
+            AccountThreshold::ONE,
+            &[(0.into(), SignatureThreshold::ONE, &[0.into()])],
+            csprng,
+        )
     }
 }
 
