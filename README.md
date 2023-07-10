@@ -84,8 +84,6 @@ See documentation for
   providers and anonymity revokers
 - [keygen genesis](./rust-bins/docs/keygen-genesis.md) (this uses a different
   key generation procedure that allows key recovery from a seed phrase)
-- [genesis tool](./rust-bins/docs/genesis-tool.md) tool to generate data for
-  test genesis blocks, allows creation of accounts and bakers
 
 # Build requirements.
 
