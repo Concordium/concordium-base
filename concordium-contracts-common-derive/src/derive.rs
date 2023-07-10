@@ -416,16 +416,18 @@ impl ContainerAttributes {
         };
 
         for forward in forward_attributes {
-            for tag in &forward.values {
-                let value: usize = tag.base10_parse()?;
-                check!(
-                    value <= repr.max_tag_value(),
-                    tag.span(),
-                    "'forward' attribute tag value of {} cannot be represented by the type {1} \
-                     set in 'repr({1})'",
-                    tag,
-                    repr.ident()
-                );
+            for value in &forward.values {
+                for tag in value.get_literals() {
+                    let value: usize = tag.base10_parse()?;
+                    check!(
+                        value <= repr.max_tag_value(),
+                        tag.span(),
+                        "'forward' attribute tag value of {} cannot be represented by the type \
+                         {1} set in 'repr({1})'",
+                        tag,
+                        repr.ident()
+                    );
+                }
             }
         }
         Ok(())
@@ -705,12 +707,68 @@ struct RenameAttribute {
     span:  proc_macro2::Span,
 }
 
+/// Predefined set of `forward` values and span.
+#[derive(Debug)]
+struct PredefinedForwardSpannedValue {
+    /// The predefined set of forwarded values.
+    value: PredefinedForwardValue,
+    /// Span of the provided value.
+    span:  Span,
+}
+
+/// Value supported by the `forward` attribute.
+#[derive(Debug)]
+enum ForwardAttributeValue {
+    /// Unsigned integer literal.
+    Literal(syn::LitInt),
+    /// Predefined set of unsigned integers.
+    Predefined(PredefinedForwardSpannedValue),
+}
+
+impl ForwardAttributeValue {
+    /// Get the list of integers to forward for this value.
+    fn get_literals(&self) -> Vec<syn::LitInt> {
+        use ForwardAttributeValue::*;
+        match self {
+            Literal(lit) => vec![lit.clone()],
+            Predefined(predefined) => predefined
+                .value
+                .get_literals_str()
+                .into_iter()
+                .map(|lit| syn::LitInt::new(lit, predefined.span))
+                .collect(),
+        }
+    }
+}
+
+/// Predefined set of `forward` values
+#[derive(Debug)]
+enum PredefinedForwardValue {
+    /// Events from CIS-2.
+    Cis2Events,
+    /// Events from CIS-3.
+    Cis3Events,
+    /// Events from CIS-4.
+    Cis4Events,
+}
+
+impl PredefinedForwardValue {
+    fn get_literals_str(&self) -> Vec<&'static str> {
+        use PredefinedForwardValue::*;
+        match self {
+            Cis2Events => vec!["255", "254", "253", "252", "251"],
+            Cis3Events => vec!["250"],
+            Cis4Events => vec!["249", "248", "247", "246", "245", "244"],
+        }
+    }
+}
+
 /// Attribute 'forward' for specifying a list of tag values for which to forward
 /// (de)serialization to nested type.
 #[derive(Debug)]
 struct ForwardAttribute {
     /// The tag values to forward.
-    values: Vec<syn::LitInt>,
+    values: Vec<ForwardAttributeValue>,
     /// The span of the attribute.
     span:   proc_macro2::Span,
 }
@@ -886,7 +944,7 @@ impl TryFrom<&syn::Meta> for ForwardAttribute {
         match &name_value.value {
             syn::Expr::Lit(expr_lit) => {
                 if let syn::Lit::Int(value) = &expr_lit.lit {
-                    values.push(value.clone());
+                    values.push(ForwardAttributeValue::Literal(value.clone()));
                 } else {
                     abort!(
                         expr_lit.lit.span(),
@@ -901,19 +959,29 @@ impl TryFrom<&syn::Meta> for ForwardAttribute {
                     "'forward' attribute must be non-empty when specified as array of integers"
                 );
                 for elem in &expr_array.elems {
-                    if let syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Int(value),
-                        ..
-                    }) = elem
-                    {
-                        values.push(value.clone());
-                    } else {
-                        abort!(
-                            elem.span(),
-                            "'forward' attribute must be an integer or an array of integers."
-                        );
+                    match elem {
+                        syn::Expr::Path(expr_path) => {
+                            let value = PredefinedForwardSpannedValue::try_from(expr_path)?;
+                            values.push(ForwardAttributeValue::Predefined(value));
+                        }
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Int(value),
+                            ..
+                        }) => {
+                            values.push(ForwardAttributeValue::Literal(value.clone()));
+                        }
+                        _ => {
+                            abort!(
+                                elem.span(),
+                                "'forward' attribute must be an integer or an array of integers."
+                            );
+                        }
                     }
                 }
+            }
+            syn::Expr::Path(expr_path) => {
+                let value = PredefinedForwardSpannedValue::try_from(expr_path)?;
+                values.push(ForwardAttributeValue::Predefined(value));
             }
             _ => {
                 abort!(
@@ -927,6 +995,31 @@ impl TryFrom<&syn::Meta> for ForwardAttribute {
         Ok(ForwardAttribute {
             values,
             span: meta.span(),
+        })
+    }
+}
+
+impl TryFrom<&syn::ExprPath> for PredefinedForwardSpannedValue {
+    type Error = syn::Error;
+
+    fn try_from(expr_path: &syn::ExprPath) -> Result<Self, Self::Error> {
+        let value = if expr_path.path.is_ident("cis2_events") {
+            PredefinedForwardValue::Cis2Events
+        } else if expr_path.path.is_ident("cis3_events") {
+            PredefinedForwardValue::Cis3Events
+        } else if expr_path.path.is_ident("cis4_events") {
+            PredefinedForwardValue::Cis4Events
+        } else {
+            abort!(
+                expr_path.span(),
+                "Invalid value provided to forward attribute, use either a signed integer literal \
+                 or 'cis2_events', cis3_events' or 'cis4_events'"
+            );
+        };
+
+        Ok(Self {
+            value,
+            span: expr_path.span(),
         })
     }
 }
@@ -1102,13 +1195,15 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
                     let mut tags = Vec::new();
                     for forward_attribute in variant_attributes.forwards {
-                        for tag_lit in forward_attribute.values {
-                            tag_checker.add_and_check(
-                                tag_lit.clone(),
-                                tag_lit.span(),
-                                variant_ident,
-                            )?;
-                            tags.push(tag_lit);
+                        for value in forward_attribute.values {
+                            for tag_lit in value.get_literals() {
+                                tag_checker.add_and_check(
+                                    tag_lit.clone(),
+                                    tag_lit.span(),
+                                    variant_ident,
+                                )?;
+                                tags.push(tag_lit);
+                            }
                         }
                     }
                     matches_tokens.extend(quote! {
@@ -1353,9 +1448,14 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
                 tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
                 for forward_attribute in variant_attributes.forwards {
-                    for tag_lit in forward_attribute.values {
-                        let span = tag_lit.span();
-                        tag_checker.add_and_check(tag_lit, span, variant_ident)?;
+                    for value in forward_attribute.values {
+                        for tag_lit in value.get_literals() {
+                            tag_checker.add_and_check(
+                                tag_lit.clone(),
+                                tag_lit.span(),
+                                variant_ident,
+                            )?;
+                        }
                     }
                 }
             }
@@ -1597,13 +1697,15 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
 
                     let mut tags = Vec::new();
                     for forward_attribute in variant_attributes.forwards {
-                        for tag_lit in forward_attribute.values {
-                            tag_checker.add_and_check(
-                                tag_lit.clone(),
-                                tag_lit.span(),
-                                variant_ident,
-                            )?;
-                            tags.push(tag_lit);
+                        for value in forward_attribute.values {
+                            for tag_lit in value.get_literals() {
+                                tag_checker.add_and_check(
+                                    tag_lit.clone(),
+                                    tag_lit.span(),
+                                    variant_ident,
+                                )?;
+                                tags.push(tag_lit);
+                            }
                         }
                     }
                     matches_tokens.extend(quote! {
@@ -2181,12 +2283,14 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                     );
 
                     for forward_attribute in variant_attributes.forwards {
-                        for tag_lit in forward_attribute.values {
-                            tag_checker.add_and_check(
-                                tag_lit.clone(),
-                                tag_lit.span(),
-                                &variant.ident,
-                            )?;
+                        for value in forward_attribute.values {
+                            for tag_lit in value.get_literals() {
+                                tag_checker.add_and_check(
+                                    tag_lit.clone(),
+                                    tag_lit.span(),
+                                    &variant.ident,
+                                )?;
+                            }
                         }
                     }
 
