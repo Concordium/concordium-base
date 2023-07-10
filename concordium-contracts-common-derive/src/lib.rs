@@ -94,6 +94,41 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 /// <i>Note that `SchemaType` currently only supports using a single byte
 /// `#([concordium(repr(u8))]`) when using `#[concordium(tag = ..)]`.</i>
 ///
+/// ### Nesting enums with a flat serialization using `#[concordium(forward = ...)]`
+///
+/// Often it is desired to have a single type representing a parameter or the
+/// events. A general pattern for enums is to nest them, however deriving
+/// serialization for a nested enum introduces an additional tag for the variant
+/// of the top-level enum. The solution is to use the attribute
+/// `#[concordium(forward = ...)]` on the variant with a nested enum.
+/// This attribute takes a tag or a list of tags which changes the serialization
+/// to skip the variant tag and deserialization to match the variant with these
+/// tags and forward the deserialization to the nested enum.
+///
+/// ```ignore
+/// #[derive(Serial, Deserial)]
+/// #[concordium(repr(u8))]
+/// enum Event {
+///     SomeEvent(MyEvent),
+///     #[concordium(forward = [42, 43, 44, 45])]
+///     OtherEvent(NestedEvent),
+/// }
+/// ```
+///
+/// For convenience the attribute also supports the values `cis2_events`,
+/// `cis3_events` and `cis4_events` which are unfolded to the list of tags used
+/// for events in CIS-2, CIS-3 and CIS-4 respectively.
+///
+/// ```ignore
+/// #[derive(Serial, Deserial)]
+/// #[concordium(repr(u8))]
+/// enum Event {
+///     SomeEvent(MyEvent),
+///     #[concordium(forward = cis2_events)]
+///     Cis2(Cis2Event),
+/// }
+/// ```
+///
 /// #### Example
 ///
 /// Example of enum specifying the tag of the variant `A` to the value `42u8`.
@@ -223,6 +258,43 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 /// The current version of the contract schema cannot express tags encoded with
 /// more than one byte, meaning only the annotation of `#[concordium(repr(u8))]`
 /// can be used, when deriving the `SchemaType`.
+///
+/// ### Nesting enums with a flat serialization using `#[concordium(forward = ...)]`
+///
+/// Often it is desired to have a single type representing a parameter or the
+/// events. A general pattern for enums is to nest them, however deriving
+/// the schema type for enums with nested enums exposes this. The solution is to
+/// use the attribute `#[concordium(forward = ...)]` on the variant with a
+/// nested enum. This attribute takes a tag or a list of tags and changes the
+/// (de)serialization to hide the nesting. The `SchemaType` produced is a
+/// flatten enum hiding the nested enum.
+/// Note that the schema can only be build when the nested type is an enum
+/// implementing `SchemaType` and the compiler is unable to catch this sort of
+/// mistakes until attempting to build the schema from a smart contract.
+///
+/// ```ignore
+/// #[derive(SchemaType)]
+/// #[concordium(repr(u8))]
+/// enum Event {
+///     SomeEvent(MyEvent),
+///     #[concordium(forward = [42, 43, 44, 45])]
+///     OtherEvent(NestedEvent),
+/// }
+/// ```
+///
+/// For convenience the attribute also supports the values `cis2_events`,
+/// `cis3_events` and `cis4_events` which are unfolded to the list of tags used
+/// for events in CIS-2, CIS-3 and CIS-4 respectively.
+///
+/// ```ignore
+/// #[derive(SchemaType)]
+/// #[concordium(repr(u8))]
+/// enum Event {
+///     SomeEvent(MyEvent),
+///     #[concordium(forward = cis2_events)]
+///     Cis2(Cis2Event),
+/// }
+/// ```
 ///
 /// ## Generic type bounds
 ///

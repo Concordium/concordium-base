@@ -745,20 +745,20 @@ impl ForwardAttributeValue {
 #[derive(Debug)]
 enum PredefinedForwardValue {
     /// Events from CIS-2.
-    Cis2Events,
+    Cis2,
     /// Events from CIS-3.
-    Cis3Events,
+    Cis3,
     /// Events from CIS-4.
-    Cis4Events,
+    Cis4,
 }
 
 impl PredefinedForwardValue {
     fn get_literals_str(&self) -> Vec<&'static str> {
         use PredefinedForwardValue::*;
         match self {
-            Cis2Events => vec!["255", "254", "253", "252", "251"],
-            Cis3Events => vec!["250"],
-            Cis4Events => vec!["249", "248", "247", "246", "245", "244"],
+            Cis2 => vec!["255", "254", "253", "252", "251"],
+            Cis3 => vec!["250"],
+            Cis4 => vec!["249", "248", "247", "246", "245", "244"],
         }
     }
 }
@@ -1004,11 +1004,11 @@ impl TryFrom<&syn::ExprPath> for PredefinedForwardSpannedValue {
 
     fn try_from(expr_path: &syn::ExprPath) -> Result<Self, Self::Error> {
         let value = if expr_path.path.is_ident("cis2_events") {
-            PredefinedForwardValue::Cis2Events
+            PredefinedForwardValue::Cis2
         } else if expr_path.path.is_ident("cis3_events") {
-            PredefinedForwardValue::Cis3Events
+            PredefinedForwardValue::Cis3
         } else if expr_path.path.is_ident("cis4_events") {
-            PredefinedForwardValue::Cis4Events
+            PredefinedForwardValue::Cis4
         } else {
             abort!(
                 expr_path.span(),
