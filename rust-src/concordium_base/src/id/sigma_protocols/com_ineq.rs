@@ -39,7 +39,7 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
 ) -> Option<Witness<C>> {
     let mut transcript = RandomOracle::domain(b"InequalityProof");
 
-    let c = com_key.hide(&value, &value_tilde);
+    let c = com_key.hide(&value, value_tilde);
     transcript.append_message(b"g", &com_key.g);
     transcript.append_message(b"h", &com_key.h);
     transcript.append_message(b"public commitment", &c);
@@ -58,7 +58,7 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     // c=g^{value} h^{value_tilde} for com_key=(g, h).
     let diff_val = Value::new(diff);
     let diff_inv_val = Value::new(diff_inv);
-    let cmm_1 = com_key.hide(&diff_val, &value_tilde);
+    let cmm_1 = com_key.hide(&diff_val, value_tilde);
     let (cmm_2, r_2) = com_key.commit(&diff_inv_val, csprng);
     //  This is a commitment to 1 with randomness 0. Alternatively, one could use
     // cmm_3 = com_key.hide(one, zero).
