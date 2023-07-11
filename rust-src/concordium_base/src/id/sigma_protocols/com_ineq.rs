@@ -1,7 +1,7 @@
 //! The module provides the implementation of the sigma protocol for "proof of
 //! inequality for committed value and public value". This protocol enables one
-//! to prove that a committed value is not equal to a public, without revealing
-//! the value.
+//! to prove that a committed value is not equal to a public one , without
+//! revealing the value.
 
 use super::{
     com_mult::{ComMult, ComMultSecret, Witness as ComMultWitness},
@@ -25,18 +25,19 @@ pub struct Witness<C: Curve> {
 /// Function for proving that a committed value `value` is different from
 ///  `pub_value`. The parameters are
 /// - `com_key` - the commitment key used to commit to the value
-/// - `value` - the value claimed to be inside the commitment
+/// - `value` - the value inside the commitment
 /// - `value_tilde` - the randomness used to commit
 /// - `pub_value` - the public value claimed to be different from `value`
+/// - `csprng` - a cryptographically secure random number generator
 
 pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     com_key: &CommitmentKey<C>,
     value: &Value<C>,
-    value_tilde: Randomness<C>,
+    value_tilde: &Randomness<C>,
     pub_value: C::Scalar,
     csprng: &mut R,
 ) -> Option<Witness<C>> {
-    let mut transcript = RandomOracle::domain(b"NonEqualityProof");
+    let mut transcript = RandomOracle::domain(b"InequalityProof");
 
     let c = com_key.hide(&value, &value_tilde);
     transcript.append_message(b"g", &com_key.g);
@@ -44,26 +45,28 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     transcript.append_message(b"public commitment", &c);
     transcript.append_message(b"public value", &pub_value);
 
-    // compute value - pub_value
+    // Compute value - pub_value
     let mut diff = pub_value;
     diff.negate();
     diff.add_assign(value);
 
-    // compute the inverse of (value - pub_value)
+    // Compute the inverse of (value - pub_value)
     let diff_inv = diff.inverse()?;
 
-    // generate commitment cmm_1 to `diff` using the given randomness `value_tilde`;
-    // this allows the verifier to compute cmm_1 from public commitment
+    // Generate commitment cmm_1 to `diff` using the given randomness `value_tilde`.
+    // This allows the verifier to compute cmm_1 from public commitment
     // c=g^{value} h^{value_tilde} for com_key=(g, h).
     let diff_val = Value::new(diff);
     let diff_inv_val = Value::new(diff_inv);
     let cmm_1 = com_key.hide(&diff_val, &value_tilde);
     let (cmm_2, r_2) = com_key.commit(&diff_inv_val, csprng);
-    //  Compute a commitment to 1. Alternatively, one could use cmm_3 =
-    // com_key.hide(one, zero).
+    //  This is a commitment to 1 with randomness 0. Alternatively, one could use
+    // cmm_3 = com_key.hide(one, zero).
     let cmm_3 = Commitment(com_key.g);
 
-    // This is the com-mult proof in section 9.2.10 from the Bluepaper.
+    // This is the com-mult proof in section 9.2.10 from the Bluepaper. It proves
+    // that the product of the values in the first two commitments equals the one in
+    // the last commitment.
     let prover = ComMult {
         cmms:    [cmm_1, cmm_2, cmm_3],
         cmm_key: *com_key,
@@ -71,11 +74,10 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
 
     let secret = ComMultSecret {
         values: [diff_val, diff_inv_val],
-        rands:  [value_tilde, r_2, Randomness::<C>::zero()],
+        rands:  [value_tilde.clone(), r_2, Randomness::<C>::zero()],
     };
 
-    let partial_proof = sigma_prove(&mut transcript, &prover, secret, csprng);
-    let partial_proof = partial_proof.unwrap();
+    let partial_proof = sigma_prove(&mut transcript, &prover, secret, csprng)?;
     Some(Witness {
         com_mult_witness: partial_proof,
         aux_com:          cmm_2,
@@ -92,11 +94,13 @@ pub fn verify_com_ineq<C: Curve>(
         com_mult_witness,
         aux_com,
     } = proof;
-    let mut transcript = RandomOracle::domain(b"NonEqualityProof");
+    let mut transcript = RandomOracle::domain(b"InequalityProof");
     transcript.append_message(b"g", &com_key.g);
     transcript.append_message(b"h", &com_key.h);
     transcript.append_message(b"public commitment", &c);
     transcript.append_message(b"public value", &pub_value);
+
+    // Compute commitment cmm_1 to the committed value - pub_value from public input
     let mut minus_pub_value = pub_value;
     minus_pub_value.negate();
     let g_minus_pub_value = com_key.g.mul_by_scalar(&minus_pub_value);
@@ -127,7 +131,7 @@ mod tests {
 
         let (cmm_1, value_tilde) = com_key.commit(&value, &mut csprng);
 
-        let proof = prove_com_ineq(&com_key, &value, value_tilde, pub_value, &mut csprng)
+        let proof = prove_com_ineq(&com_key, &value, &value_tilde, pub_value, &mut csprng)
             .expect("Proving should succeed.");
         assert!(
             verify_com_ineq(&com_key, &cmm_1, pub_value, &proof),
@@ -144,7 +148,7 @@ mod tests {
         let value = Value::<G1>::new(Fr::from_str("20000102").unwrap());
         let pub_value = Fr::from_str("20000103").unwrap();
         let (cmm_1, value_tilde) = com_key.commit(&value, &mut csprng);
-        let proof = prove_com_ineq(&com_key, &value, value_tilde, pub_value, &mut csprng)
+        let proof = prove_com_ineq(&com_key, &value, &value_tilde, pub_value, &mut csprng)
             .expect("Proving should succeed.");
 
         // Make the proof invalid by changing parameters
@@ -159,5 +163,12 @@ mod tests {
         assert!(!verify_com_ineq(&wrong_com_key, &cmm_1, pub_value, &proof));
         assert!(!verify_com_ineq(&com_key, &cmm_1, wrong_pub_value, &proof));
         assert!(!verify_com_ineq(&com_key, &cmm_1, pub_value, &wrong_proof));
+
+        // Proof generation should fail as committed value and public value are
+        // identical.
+        assert_eq!(
+            prove_com_ineq(&com_key, &value, &value_tilde, wrong_pub_value, &mut csprng),
+            None
+        );
     }
 }
