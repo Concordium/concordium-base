@@ -41,10 +41,8 @@ data StateMigrationData = StateMigrationData
     { -- |Data provided by the protocol update to be used
       -- in the migration.
       migrationProtocolUpdateData :: !ProtocolUpdateData,
-      -- |The time of the trigger block that caused
-      -- this protocol update.
-      -- This is used for calculating the new 'SeedState' during
-      -- the migration P5->P6.
+      -- |The timestamp for the first trigger block in the new consensus.
+      -- This should be set to one epoch past the regenesis time.
       migrationTriggerBlockTime :: !Timestamp
     }
     deriving (Eq, Show)
