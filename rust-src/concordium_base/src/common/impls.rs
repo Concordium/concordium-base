@@ -1,7 +1,7 @@
 use anyhow::bail;
 use byteorder::ReadBytesExt;
 
-use concordium_contracts_common::{constants::SHA256, hashes::HashBytes, Threshold};
+use concordium_contracts_common::{constants::SHA256, hashes::HashBytes, NonZeroThresholdU8};
 use ff::PrimeField;
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::bls12_381::{
@@ -207,7 +207,7 @@ impl Serial for Signature {
     }
 }
 
-impl<Kind> Deserial for Threshold<Kind> {
+impl<Kind> Deserial for NonZeroThresholdU8<Kind> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let threshold: u8 = source.get()?;
         let r = threshold.try_into()?;
@@ -215,7 +215,7 @@ impl<Kind> Deserial for Threshold<Kind> {
     }
 }
 
-impl<Kind> Serial for Threshold<Kind> {
+impl<Kind> Serial for NonZeroThresholdU8<Kind> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let thr = u8::from(*self);
         thr.serial(out)
