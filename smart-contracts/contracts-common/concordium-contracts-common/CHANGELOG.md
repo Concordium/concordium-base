@@ -5,6 +5,7 @@
 - Add `Display` trait to `VersionedModuleSchema` to display the `VersionedModuleSchema` as a JSON template.
 - Add `Display` trait to `SchemaType` to display the `SchemaType` as a JSON template.
 - Add associated function `from_base64_str` to `VersionedModuleSchema` to easily parse from base64
+- Add `NonZeroThresholdU8`, and derived `AccountThreshold` and `SignatureThreshold` types.
 
 ## concordium-contracts-common 7.0.0 (2023-06-16)
 
