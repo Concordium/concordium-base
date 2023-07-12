@@ -429,7 +429,7 @@ impl<A: SchemaType, const N: usize> SchemaType for [A; N] {
     fn get_type() -> Type { Type::Array(N.try_into().unwrap(), Box::new(A::get_type())) }
 }
 
-impl<Kind> SchemaType for Threshold<Kind> {
+impl<Kind> SchemaType for NonZeroThresholdU8<Kind> {
     // This is not entirely ideal since it won't check if the threshold is 0, but
     // at present we do not have a type that is better suited.
     fn get_type() -> Type { u8::get_type() }

@@ -282,11 +282,11 @@ impl Deserial for AccountBalance {
     }
 }
 
-impl<Kind> Serial for Threshold<Kind> {
+impl<Kind> Serial for NonZeroThresholdU8<Kind> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.threshold.serial(out) }
 }
 
-impl<Kind> Deserial for Threshold<Kind> {
+impl<Kind> Deserial for NonZeroThresholdU8<Kind> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let threshold: u8 = u8::deserial(source)?;
         if threshold == 0 {
@@ -300,14 +300,14 @@ impl<Kind> Deserial for Threshold<Kind> {
     }
 }
 
-impl<Kind> TryFrom<u8> for Threshold<Kind> {
+impl<Kind> TryFrom<u8> for NonZeroThresholdU8<Kind> {
     type Error = ZeroSignatureThreshold;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value == 0 {
             Err(ZeroSignatureThreshold)
         } else {
-            Ok(Threshold {
+            Ok(NonZeroThresholdU8 {
                 threshold: value,
                 kind:      marker::PhantomData,
             })
@@ -315,7 +315,7 @@ impl<Kind> TryFrom<u8> for Threshold<Kind> {
     }
 }
 
-impl<Kind> Clone for Threshold<Kind> {
+impl<Kind> Clone for NonZeroThresholdU8<Kind> {
     fn clone(&self) -> Self {
         Self {
             threshold: self.threshold,
@@ -324,41 +324,42 @@ impl<Kind> Clone for Threshold<Kind> {
     }
 }
 
-impl<Kind> Copy for Threshold<Kind> {}
+impl<Kind> Copy for NonZeroThresholdU8<Kind> {}
 
-impl<Kind> From<Threshold<Kind>> for u8 {
+impl<Kind> From<NonZeroThresholdU8<Kind>> for u8 {
     #[inline(always)]
-    fn from(value: Threshold<Kind>) -> Self { value.threshold }
+    fn from(value: NonZeroThresholdU8<Kind>) -> Self { value.threshold }
 }
 
-impl<Kind> PartialEq for Threshold<Kind> {
+impl<Kind> PartialEq for NonZeroThresholdU8<Kind> {
     fn eq(&self, other: &Self) -> bool { self.threshold == other.threshold }
 }
 
-impl<Kind> PartialOrd for Threshold<Kind> {
+impl<Kind> PartialOrd for NonZeroThresholdU8<Kind> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.threshold.partial_cmp(&other.threshold)
     }
 }
 
-impl<Kind> Ord for Threshold<Kind> {
+impl<Kind> Ord for NonZeroThresholdU8<Kind> {
     fn cmp(&self, other: &Self) -> Ordering { self.threshold.cmp(&other.threshold) }
 }
-impl<Kind> PartialOrd<u8> for Threshold<Kind> {
+
+impl<Kind> PartialOrd<u8> for NonZeroThresholdU8<Kind> {
     fn partial_cmp(&self, other: &u8) -> Option<Ordering> { self.threshold.partial_cmp(other) }
 }
 
-impl<Kind> PartialEq<u8> for Threshold<Kind> {
+impl<Kind> PartialEq<u8> for NonZeroThresholdU8<Kind> {
     fn eq(&self, other: &u8) -> bool { self.threshold == *other }
 }
 
-impl<Kind> Eq for Threshold<Kind> {}
+impl<Kind> Eq for NonZeroThresholdU8<Kind> {}
 
-impl<Kind> Hash for Threshold<Kind> {
+impl<Kind> Hash for NonZeroThresholdU8<Kind> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) { self.threshold.hash(state) }
 }
 
-impl<Kind> Threshold<Kind> {
+impl<Kind> NonZeroThresholdU8<Kind> {
     /// Threshold of 1.
     pub const ONE: Self = Self {
         threshold: 1,

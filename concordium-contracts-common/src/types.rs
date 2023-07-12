@@ -393,19 +393,30 @@ impl AccountBalance {
     pub fn available(&self) -> Amount { self.total - cmp::max(self.locked, self.staked) }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+/// A marker type used to define the [`AccountThreshold`]. This is used only
+/// at the type-level and there are no values of the type.
 pub enum AccountKind {}
 
 /// The minimum number of credentials that need to sign any transaction coming
 /// from an associated account.
-pub type AccountThreshold = Threshold<AccountKind>;
+pub type AccountThreshold = NonZeroThresholdU8<AccountKind>;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+/// A marker type used to define the [`SignatureThreshold`]. This is used only
+/// at the type-level and there are no values of the type.
 pub enum SignatureKind {}
 
 /// The minimum number of signatures on a credential that need to sign any
 /// transaction coming from an associated account.
-pub type SignatureThreshold = Threshold<SignatureKind>;
+///
+/// Accounts on Concordium consist of one or more credentials, and
+/// each credential has one or more public keys, and its own threshold for how
+/// many of those credential's keys need to sign any valid message.
+///
+/// See [`AccountThreshold`] for the threshold of how many credentials need to
+/// sign a valid message.
+pub type SignatureThreshold = NonZeroThresholdU8<SignatureKind>;
 
 #[repr(transparent)]
 #[cfg_attr(feature = "derive-serde", derive(serde::Serialize, serde::Deserialize))]
@@ -418,7 +429,14 @@ pub type SignatureThreshold = Threshold<SignatureKind>;
     )
 )]
 #[derive(Debug)]
-pub struct Threshold<Kind> {
+/// A type representing a `u8` threshold, typically used for signatures.
+/// Serialization for this type ensures that the threshold is never 0.
+///
+/// This type has a phantom type marker so that thresholds of different types
+/// can be distinguished. The intended use is that a new empty type is defined
+/// to serve as marker, and then a type alias. See [`AccountThreshold`] for an
+/// example.
+pub struct NonZeroThresholdU8<Kind> {
     pub(crate) threshold: u8,
     pub(crate) kind:      PhantomData<Kind>,
 }
