@@ -12,7 +12,7 @@ pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crate::{
     bulletproofs::{range_proof::RangeProof, utils::Generators},
     common::{
-        types::{CredentialIndex, KeyIndex, KeyPair},
+        types::{CredentialIndex, KeyIndex, KeyPair, Signature},
         *,
     },
     curve_arithmetic::*,
@@ -26,6 +26,9 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
+use concordium_contracts_common as concordium_std;
+pub use concordium_contracts_common::SignatureThreshold;
+use concordium_contracts_common::{AccountThreshold, ZeroSignatureThreshold};
 use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
@@ -63,66 +66,6 @@ pub fn account_address_from_registration_id(reg_id: &impl Curve) -> AccountAddre
     let mut hasher = Sha256::new();
     reg_id.serial(&mut hasher);
     AccountAddress(hasher.finalize().into())
-}
-
-/// Threshold for the number of signatures required.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial, Into)]
-#[repr(transparent)]
-/// The values of this type must maintain the property that they are not 0.
-#[derive(SerdeSerialize)]
-#[serde(transparent)]
-pub struct SignatureThreshold(pub u8);
-
-impl Deserial for SignatureThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let w = source.get()?;
-        if w > 0 {
-            Ok(SignatureThreshold(w))
-        } else {
-            bail!("0 is not a valid signature threshold.")
-        }
-    }
-}
-
-// Need to manually implement deserialize to maintain the property that it is
-// non-zero.
-impl<'de> SerdeDeserialize<'de> for SignatureThreshold {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        struct SignatureThresholdVisitor;
-
-        impl<'de> Visitor<'de> for SignatureThresholdVisitor {
-            type Value = SignatureThreshold;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                write!(formatter, "A non-zero u8.")
-            }
-
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                if v > 0 && v <= 255 {
-                    Ok(SignatureThreshold(v as u8))
-                } else {
-                    Err(de::Error::custom(format!(
-                        "Signature threshold out of range {}",
-                        v
-                    )))
-                }
-            }
-
-            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-            where
-                E: de::Error, {
-                if v > 0 {
-                    self.visit_u64(v as u64)
-                } else {
-                    Err(de::Error::custom(format!(
-                        "Signature threshold out of range {}",
-                        v
-                    )))
-                }
-            }
-        }
-        des.deserialize_u64(SignatureThresholdVisitor)
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
@@ -193,8 +136,10 @@ impl Deserial for AccountOwnershipProof {
 impl AccountOwnershipProof {
     /// Number of individual signatures in this proof.
     /// NB: This method relies on the invariant that signatures should not
-    /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
+    /// have more than 255 elements, and has at least one signature.
+    pub fn num_proofs(&self) -> Result<SignatureThreshold, ZeroSignatureThreshold> {
+        SignatureThreshold::try_from(self.sigs.len() as u8)
+    }
 }
 
 #[derive(
@@ -1426,7 +1371,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, Attri
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, concordium_std::Serialize)]
 /// Which signature scheme is being used. Currently only one is supported.
 pub enum SchemeId {
     Ed25519,
@@ -1437,6 +1382,32 @@ pub enum SchemeId {
 /// supported.
 pub enum VerifyKey {
     Ed25519VerifyKey(ed25519::PublicKey),
+}
+
+impl concordium_std::Serial for VerifyKey {
+    fn serial<W: concordium_std::Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        match self {
+            VerifyKey::Ed25519VerifyKey(key) => {
+                concordium_std::Serial::serial(&0u8, out)?;
+                concordium_std::Serial::serial(&key.as_bytes(), out)
+            }
+        }
+    }
+}
+
+impl concordium_std::Deserial for VerifyKey {
+    fn deserial<R: concordium_std::Read>(source: &mut R) -> concordium_std::ParseResult<Self> {
+        let tag: u8 = concordium_std::Deserial::deserial(source)?;
+        if tag == 0 {
+            let bytes: [u8; ed25519::PUBLIC_KEY_LENGTH] =
+                concordium_std::Deserial::deserial(source)?;
+            let pk = ed25519::PublicKey::from_bytes(&bytes)
+                .map_err(|_| concordium_std::ParseError {})?;
+            Ok(Self::Ed25519VerifyKey(pk))
+        } else {
+            Err(concordium_std::ParseError {})
+        }
+    }
 }
 
 impl SerdeSerialize for VerifyKey {
@@ -2077,7 +2048,7 @@ pub struct AccountKeys {
     pub keys:      BTreeMap<CredentialIndex, CredentialData>,
     /// The account threshold.
     #[serde(rename = "threshold")]
-    pub threshold: SignatureThreshold,
+    pub threshold: AccountThreshold,
 }
 
 /// Create account keys with a single credential at index 0
@@ -2092,7 +2063,7 @@ impl From<(CredentialIndex, CredentialData)> for AccountKeys {
         keys.insert(ki, cd);
         Self {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: AccountThreshold::ONE,
         }
     }
 }
@@ -2107,8 +2078,66 @@ impl From<InitialAccountData> for AccountKeys {
         });
         Self {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: AccountThreshold::ONE,
         }
+    }
+}
+
+impl AccountKeys {
+    /// Sign the provided data with all of the keys in [`AccountKeys`].
+    /// The thresholds are ignored.
+    pub fn sign_data(
+        &self,
+        msg: &[u8],
+    ) -> BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>> {
+        let mut signatures = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, _>>::new();
+        for (ci, cred_keys) in self.keys.iter() {
+            let cred_sigs = cred_keys
+                .keys
+                .iter()
+                .map(|(ki, kp)| (*ki, kp.sign(msg)))
+                .collect::<BTreeMap<_, _>>();
+            signatures.insert(*ci, cred_sigs);
+        }
+        signatures
+    }
+}
+
+impl AccountKeys {
+    /// Generate new [`AccountKeys`] for the thresholds and key indices
+    /// specified in the input. If there are duplicate indices then later
+    /// ones override the previous ones.
+    ///
+    /// The keys sampled from the supplied random number generator in the order
+    /// of key indices supplied, using [`KeyPair::generate`](KeyPair::generate).
+    pub fn generate<R: rand::CryptoRng + rand::Rng>(
+        account_threshold: AccountThreshold,
+        indices: &[(CredentialIndex, SignatureThreshold, &[KeyIndex])],
+        csprng: &mut R,
+    ) -> Self {
+        let keys = indices.iter().map(|(ci, threshold, kis)| {
+            (*ci, CredentialData {
+                keys:      kis
+                    .iter()
+                    .map(|ki| (*ki, KeyPair::generate(csprng)))
+                    .collect(),
+                threshold: *threshold,
+            })
+        });
+        Self {
+            keys:      keys.collect(),
+            threshold: account_threshold,
+        }
+    }
+
+    /// Generate account keys with a single credential and key, at credential
+    /// and key indices 0.
+    pub fn singleton<R: rand::CryptoRng + rand::Rng>(csprng: &mut R) -> Self {
+        Self::generate(
+            AccountThreshold::ONE,
+            &[(0.into(), SignatureThreshold::ONE, &[0.into()])],
+            csprng,
+        )
     }
 }
 
@@ -2194,9 +2223,12 @@ impl InitialAccountDataWithSigning for InitialAccountData {
 
 /// Public credential keys currently on the account, together with the threshold
 /// needed for a valid signature on a transaction.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(
+    Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone, concordium_std::Serialize,
+)]
 pub struct CredentialPublicKeys {
     #[serde(rename = "keys")]
+    #[concordium(size_length = 1)]
     pub keys:      BTreeMap<KeyIndex, VerifyKey>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,

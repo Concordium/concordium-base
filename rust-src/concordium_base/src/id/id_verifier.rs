@@ -318,7 +318,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
 
         let pub_data = cred_data.get_cred_key_info();

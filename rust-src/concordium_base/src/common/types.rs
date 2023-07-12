@@ -6,16 +6,28 @@ use super::{
 };
 use crate::common::Serialize;
 use byteorder::{BigEndian, ReadBytesExt};
-pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use concordium_contracts_common::{
-    ContractAddress, ContractName, OwnedContractName, OwnedParameter, OwnedReceiveName, Parameter,
-    ReceiveName,
+    self as concordium_std, ContractAddress, ContractName, OwnedContractName, OwnedParameter,
+    OwnedReceiveName, Parameter, ReceiveName,
 };
+pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use derive_more::{Display, From, FromStr, Into};
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
 /// Index of an account key that is to be used.
 #[derive(
-    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Display, From, Into,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Hash,
+    Serialize,
+    Display,
+    From,
+    Into,
+    concordium_std::Serialize,
 )]
 #[repr(transparent)]
 #[derive(SerdeSerialize)]
@@ -37,6 +49,7 @@ pub struct KeyIndex(pub u8);
     Display,
     From,
     Into,
+    concordium_std::Serialize,
 )]
 #[serde(transparent)]
 /// Index of the credential that is to be used.
@@ -340,7 +353,7 @@ impl AsRef<[u8]> for Signature {
 }
 
 /// Transaction signature structure, to match the one on the Haskell side.
-#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug)]
+#[derive(SerdeDeserialize, SerdeSerialize, Clone, PartialEq, Eq, Debug, derive_more::AsRef)]
 #[serde(transparent)]
 pub struct TransactionSignature {
     pub signatures: BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,

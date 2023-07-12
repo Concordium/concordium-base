@@ -390,7 +390,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
         let (context, pio, _) = test_create_pio(
             &id_use_data,
@@ -438,7 +438,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
         let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
         let (cdi, _) = create_credential(
@@ -465,7 +465,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
         let (cdi, _) = create_credential(
             context,
@@ -540,7 +540,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
         let context = IpContext::new(&ip_info, &ars_infos, &global_ctx);
         let (cdi, _) = create_credential(
@@ -567,7 +567,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
         let (cdi, _) = create_credential(
             context,
@@ -614,7 +614,7 @@ mod tests {
                 keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
                 keys
             },
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
         let (context, pio, _) = test_create_pio(
             &id_use_data,
