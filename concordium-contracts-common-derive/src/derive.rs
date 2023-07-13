@@ -415,16 +415,16 @@ impl ContainerAttributes {
             );
         };
 
-        for forward in forward_attributes {
-            for value in &forward.values {
-                for tag in value.get_literals() {
-                    let value: usize = tag.base10_parse()?;
+        for forward_attribute in forward_attributes {
+            for forward_value in &forward_attribute.values {
+                for tag_literal in forward_value.get_literals() {
+                    let value: usize = tag_literal.base10_parse()?;
                     check!(
                         value <= repr.max_tag_value(),
-                        tag.span(),
+                        tag_literal.span(),
                         "'forward' attribute tag value of {} cannot be represented by the type \
                          {1} set in 'repr({1})'",
-                        tag,
+                        tag_literal,
                         repr.ident()
                     );
                 }
@@ -937,7 +937,7 @@ impl TryFrom<&syn::Meta> for ForwardAttribute {
         let syn::Meta::NameValue(name_value) = meta else {
             abort!(
                 meta.span(),
-                "'forward' attribute value can be provided as 'forward = x' or forward = [x, y, z].",
+                "'forward' attribute value must be provided as 'forward = x' or forward = [x, y, z].",
             );
         };
         let mut values = Vec::new();
@@ -956,7 +956,7 @@ impl TryFrom<&syn::Meta> for ForwardAttribute {
                 check!(
                     !expr_array.elems.is_empty(),
                     expr_array.span(),
-                    "'forward' attribute must be non-empty when specified as array of integers"
+                    "'forward' attribute must be non-empty when specified as array of integers."
                 );
                 for elem in &expr_array.elems {
                     match elem {
@@ -986,7 +986,7 @@ impl TryFrom<&syn::Meta> for ForwardAttribute {
             _ => {
                 abort!(
                     name_value.span(),
-                    "'forward' attribute value can be provided as 'forward = x' or forward = [x, \
+                    "'forward' attribute value must be provided as 'forward = x' or forward = [x, \
                      y, z]."
                 );
             }
@@ -1081,7 +1081,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum"
+                "'repr(..)' attribute can only be used on an enum."
             );
 
             let return_tokens = match data.fields {
@@ -1183,7 +1183,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                         variant.fields.len() == 1,
                         variant.span(),
                         "Only enum variants containing a single field can be used with the \
-                         'forward' attribute"
+                         'forward' attribute."
                     );
                     let chained_source = format_ident!("___chained_source");
 
@@ -1195,14 +1195,14 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
                     let mut tags = Vec::new();
                     for forward_attribute in variant_attributes.forwards {
-                        for value in forward_attribute.values {
-                            for tag_lit in value.get_literals() {
+                        for forward_value in forward_attribute.values {
+                            for tag_literal in forward_value.get_literals() {
                                 tag_checker.add_and_check(
-                                    tag_lit.clone(),
-                                    tag_lit.span(),
+                                    tag_literal.clone(),
+                                    tag_literal.span(),
                                     variant_ident,
                                 )?;
-                                tags.push(tag_lit);
+                                tags.push(tag_literal);
                             }
                         }
                     }
@@ -1341,7 +1341,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum",
+                "'repr(..)' attribute can only be used on an enum.",
             );
 
             let fields_tokens = match data.fields {
@@ -1433,7 +1433,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                         variant.fields.len() == 1,
                         variant.span(),
                         "Only enum variants containing a single field can be used with the \
-                         'forward' attribute"
+                         'forward' attribute."
                     );
 
                     proc_macro2::TokenStream::new()
@@ -1448,11 +1448,11 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
                 tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
                 for forward_attribute in variant_attributes.forwards {
-                    for value in forward_attribute.values {
-                        for tag_lit in value.get_literals() {
+                    for forward_value in forward_attribute.values {
+                        for tag_literal in forward_value.get_literals() {
                             tag_checker.add_and_check(
-                                tag_lit.clone(),
-                                tag_lit.span(),
+                                tag_literal.clone(),
+                                tag_literal.span(),
                                 variant_ident,
                             )?;
                         }
@@ -1566,7 +1566,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum",
+                "'repr(..)' attribute can only be used on an enum.",
             );
 
             let return_tokens = match data.fields {
@@ -1685,7 +1685,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                         variant.fields.len() == 1,
                         variant.span(),
                         "Only enum variants containing a single field can be used with the \
-                         'forward' attribute"
+                         'forward' attribute."
                     );
                     let chained_source = format_ident!("___chained_source");
 
@@ -1697,14 +1697,14 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
 
                     let mut tags = Vec::new();
                     for forward_attribute in variant_attributes.forwards {
-                        for value in forward_attribute.values {
-                            for tag_lit in value.get_literals() {
+                        for forward_value in forward_attribute.values {
+                            for tag_literal in forward_value.get_literals() {
                                 tag_checker.add_and_check(
-                                    tag_lit.clone(),
-                                    tag_lit.span(),
+                                    tag_literal.clone(),
+                                    tag_literal.span(),
                                     variant_ident,
                                 )?;
-                                tags.push(tag_lit);
+                                tags.push(tag_literal);
                             }
                         }
                     }
@@ -2205,13 +2205,13 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum",
+                "'repr(..)' attribute can only be used on an enum.",
             );
             if container_attributes.transparent {
                 check!(
                     data.fields.len() == 1,
                     ast.span(),
-                    "'transparent' attribute can only be used on a struct with a single field",
+                    "'transparent' attribute can only be used on a struct with a single field.",
                 );
 
                 // Safe to unwrap below since we already checked the length is one.
@@ -2228,7 +2228,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
             check!(
                 !container_attributes.transparent,
                 ast.span(),
-                "'transparent' attribute can only be used on a struct",
+                "'transparent' attribute can only be used on a struct.",
             );
             let mut used_variant_names = HashMap::new();
             let mut tag_checker = TagChecker::default();
@@ -2279,15 +2279,15 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                         variant.fields.len() == 1,
                         variant.span(),
                         "Only enum variants containing a single field can be used with the \
-                         'forward' attribute"
+                         'forward' attribute."
                     );
 
                     for forward_attribute in variant_attributes.forwards {
-                        for value in forward_attribute.values {
-                            for tag_lit in value.get_literals() {
+                        for forward_value in forward_attribute.values {
+                            for tag_literal in forward_value.get_literals() {
                                 tag_checker.add_and_check(
-                                    tag_lit.clone(),
-                                    tag_lit.span(),
+                                    tag_literal.clone(),
+                                    tag_literal.span(),
                                     &variant.ident,
                                 )?;
                             }
@@ -2328,7 +2328,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                                                 vec.into_iter().enumerate().map(|(i, variant)| (i as u8, variant)),
                                             )
                                         },
-                                        _ => panic!("Using 'forward' attribute for deriving SchemaType is only supported, when the inner type is an enum"),
+                                        _ => panic!("Using 'forward' attribute for deriving SchemaType is only supported, when the inner type is an enum."),
                                     };
                                     #variant_map_ident.append(&mut inner_map_option);
                                 })
@@ -2354,7 +2354,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                             abort!(
                                 ast.span(),
                                 "Invariant violated for deriving SchemaType: Forwarding data is \
-                                 unexpected here"
+                                 unexpected here."
                             );
                         }
                     })
@@ -2365,7 +2365,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
             }
         }
         _ => {
-            abort!(ast.span(), "Union is not supported");
+            abort!(ast.span(), "Union is not supported.");
         }
     };
 
