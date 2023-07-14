@@ -1342,6 +1342,20 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
     }
 }
 
+// This implementation deviates from [`std::io::Chain`](https://doc.rust-lang.org/std/io/struct.Chain.html#impl-Read-for-Chain%3CT,+U%3E)
+// since the usecase where we need this only have a mutable reference available.
+impl<'a, 'b, T: Read, U: Read> Read for Chain<&'a mut T, &'b mut U> {
+    fn read(&mut self, buf: &mut [u8]) -> ParseResult<usize> {
+        if !self.done_first {
+            match self.first.read(buf)? {
+                0 if !buf.is_empty() => self.done_first = true,
+                n => return Ok(n),
+            }
+        }
+        self.second.read(buf)
+    }
+}
+
 impl<T: AsRef<[u8]>> HasSize for T {
     fn size(&self) -> u32 { self.as_ref().len() as u32 }
 }
