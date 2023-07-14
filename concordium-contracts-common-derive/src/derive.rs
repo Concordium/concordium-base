@@ -345,7 +345,7 @@ impl ContainerAttributes {
 
     /// Get the repr attribute if set otherwise the smallest size length which
     /// can represent the number of variants.
-    fn tag_repr(&self, variants_len: usize) -> syn::Result<syn::Ident> {
+    fn tag_repr(&self, variants_len: usize) -> syn::Result<ReprAttributeValue> {
         if let Some(repr_attribute) = &self.repr {
             let max = repr_attribute.max_num_variants();
             let ident = repr_attribute.ident();
@@ -354,14 +354,26 @@ impl ContainerAttributes {
                 Span::call_site(),
                 "Too many variants. Maximum {max} are supported with 'repr({ident})'",
             );
-            Ok(ident)
+            Ok(repr_attribute.value)
         } else if variants_len <= usize::from(u8::MAX) + 1 {
-            Ok(format_ident!("u8"))
+            Ok(ReprAttributeValue::U8)
         } else if variants_len <= usize::from(u16::MAX) + 1 {
-            Ok(format_ident!("u16"))
+            Ok(ReprAttributeValue::U16)
         } else {
             abort!(Span::call_site(), "Too many variants. Maximum 65536 are supported.",);
         }
+    }
+
+    /// Run checks on variant attributes against the container attributes.
+    /// More specifically checking `tag` and `forward` attributes against the
+    /// `repr` attribute.
+    fn check_variant_attributes(
+        &self,
+        variant_attributes: &EnumVariantAttributes,
+    ) -> syn::Result<()> {
+        self.check_tag_with_repr(&variant_attributes.tag)?;
+        self.check_forwards_with_repr(&variant_attributes.forwards)?;
+        Ok(())
     }
 
     /// Ensure that when a `tag` attribute is used, a `repr` attribute is set
@@ -386,6 +398,55 @@ impl ContainerAttributes {
         }
         Ok(())
     }
+
+    /// Ensure that when `forward` attribute is used, a `repr` attribute is set
+    /// and this `repr(u*)` is large enough to represent the forwarded tag.
+    fn check_forwards_with_repr(
+        &self,
+        forward_attributes: &Vec<ForwardAttribute>,
+    ) -> syn::Result<()> {
+        if forward_attributes.is_empty() {
+            return Ok(());
+        }
+        // Ensure the repr(u*) attribute is set.
+        let Some(repr) = &self.repr else {
+            abort!(
+                Span::call_site(),
+                "'repr(..)' attribute must be set on the type when using 'forward' attribute",
+            );
+        };
+
+        for forward_attribute in forward_attributes {
+            for forward_value in &forward_attribute.values {
+                // Ensure that repr value matches the value possibly mandated by a predefined
+                // set for values.
+                if let ForwardAttributeValue::Predefined(predefined) = forward_value {
+                    let mandated_repr = predefined.value.get_repr();
+                    check!(
+                        mandated_repr == repr.value,
+                        predefined.span,
+                        "'forward' attribute value '{}' require the type to use 'repr({})'",
+                        predefined.value,
+                        mandated_repr.ident()
+                    );
+                }
+
+                // Ensure each forwarded literal can be represented with the current repr value.
+                for tag_literal in forward_value.get_lit_ints() {
+                    let value: usize = tag_literal.base10_parse()?;
+                    check!(
+                        value <= repr.max_tag_value(),
+                        tag_literal.span(),
+                        "'forward' attribute tag value of {} cannot be represented by the type \
+                         {1} set in 'repr({1})'",
+                        tag_literal,
+                        repr.ident()
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Valid values for the 'repr(..)' attribute.
@@ -393,6 +454,17 @@ impl ContainerAttributes {
 enum ReprAttributeValue {
     U8,
     U16,
+}
+
+impl ReprAttributeValue {
+    /// Construct a ['syn::Ident'] from the value.
+    fn ident(&self) -> syn::Ident {
+        use ReprAttributeValue::*;
+        match self {
+            U8 => format_ident!("u8"),
+            U16 => format_ident!("u16"),
+        }
+    }
 }
 
 /// 'repr(..)' attribute, used to specify the size length used for enum tags.
@@ -405,14 +477,8 @@ struct ReprAttribute {
 }
 
 impl ReprAttribute {
-    /// Construct a ['syn::Ident'] from the value using the attribute span.
-    fn ident(&self) -> syn::Ident {
-        use ReprAttributeValue::*;
-        match self.value {
-            U8 => format_ident!("u8"),
-            U16 => format_ident!("u16"),
-        }
-    }
+    /// Construct a ['syn::Ident'] from the value.
+    fn ident(&self) -> syn::Ident { self.value.ident() }
 
     /// Maximum tag value with the value of the 'repr' attribute.
     fn max_tag_value(&self) -> usize {
@@ -629,9 +695,12 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
 #[derive(Debug)]
 struct EnumVariantAttributes {
     /// Override tag to use for (de)serializing this variant e.g. 'tag = 42'
-    tag:    Option<TagAttribute>,
+    tag:      Option<TagAttribute>,
     /// Override variant name in the derived 'SchemaType'.
-    rename: Option<RenameAttribute>,
+    rename:   Option<RenameAttribute>,
+    /// Forward the (de)serialization to nested type for a provided list of tag
+    /// values e.g. 'forward = [255, 254, 253, 252]'.
+    forwards: Vec<ForwardAttribute>,
 }
 
 /// Attribute 'tag' for providing the tag used when serializing an enum variant.
@@ -653,6 +722,101 @@ struct RenameAttribute {
     span:  proc_macro2::Span,
 }
 
+/// Represents the value (and its span) of a 'forward' variant attribute when
+/// using a predefined set, such as `cis2_events`.
+#[derive(Debug)]
+struct PredefinedForwardSpannedValue {
+    /// The predefined set of forwarded values.
+    value: PredefinedForwardValue,
+    /// Span of the provided value.
+    span:  Span,
+}
+
+/// Value supported by the `forward` attribute.
+#[derive(Debug)]
+enum ForwardAttributeValue {
+    /// Unsigned integer literal.
+    Literal(syn::LitInt),
+    /// Predefined set of unsigned integers.
+    Predefined(PredefinedForwardSpannedValue),
+}
+
+impl ForwardAttributeValue {
+    /// Get the list of integers to forward for this value.
+    fn get_lit_ints(&self) -> Vec<syn::LitInt> {
+        use ForwardAttributeValue::*;
+        match self {
+            Literal(lit) => vec![lit.clone()],
+            Predefined(predefined) => predefined
+                .value
+                .get_literals()
+                .into_iter()
+                .map(|literal| {
+                    let mut lit_int = syn::LitInt::from(literal);
+                    lit_int.set_span(predefined.span);
+                    lit_int
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Represents the value (and its span) of a 'forward' variant attribute when
+/// using a predefined set, such as `cis2_events`.
+#[derive(Debug)]
+enum PredefinedForwardValue {
+    /// Events from CIS-2.
+    Cis2,
+    /// Events from CIS-3.
+    Cis3,
+    /// Events from CIS-4.
+    Cis4,
+}
+
+impl PredefinedForwardValue {
+    /// Get the list of literals represented by this value.
+    fn get_literals(&self) -> Vec<proc_macro2::Literal> {
+        use PredefinedForwardValue::*;
+        let iter: std::slice::Iter<u8> = match self {
+            Cis2 => [255, 254, 253, 252, 251].iter(),
+            Cis3 => [250].iter(),
+            Cis4 => [249, 248, 247, 246, 245, 244].iter(),
+        };
+        iter.copied().map(proc_macro2::Literal::u8_suffixed).collect()
+    }
+
+    /// Get the expected 'repr' value for this value.
+    fn get_repr(&self) -> ReprAttributeValue {
+        use PredefinedForwardValue::*;
+        match self {
+            Cis2 => ReprAttributeValue::U8,
+            Cis3 => ReprAttributeValue::U8,
+            Cis4 => ReprAttributeValue::U8,
+        }
+    }
+}
+
+impl std::fmt::Display for PredefinedForwardValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use PredefinedForwardValue::*;
+        match self {
+            Cis2 => write!(f, "cis2_events"),
+            Cis3 => write!(f, "cis3_events"),
+            Cis4 => write!(f, "cis4_events"),
+        }
+    }
+}
+
+/// Attribute 'forward' for specifying a list of tag values for which to forward
+/// (de)serialization to nested type.
+#[derive(Debug)]
+struct ForwardAttribute {
+    /// The tag values to forward.
+    values: Vec<ForwardAttributeValue>,
+    /// The span of the attribute.
+    span:   proc_macro2::Span,
+}
+
 impl TryFrom<&[syn::Attribute]> for EnumVariantAttributes {
     type Error = syn::Error;
 
@@ -662,6 +826,7 @@ impl TryFrom<&[syn::Attribute]> for EnumVariantAttributes {
         let mut error_option: Option<syn::Error> = None;
         let mut tag_option: Option<TagAttribute> = None;
         let mut rename_option: Option<RenameAttribute> = None;
+        let mut forwards: Vec<ForwardAttribute> = Vec::new();
 
         for meta in metas.iter() {
             if meta.path().is_ident("tag") {
@@ -674,6 +839,20 @@ impl TryFrom<&[syn::Attribute]> for EnumVariantAttributes {
                         syn::Error::new(
                             tag_attribute.span,
                             "Attribute 'tag' should only be specified once per field.",
+                        )
+                    });
+                    push_error(&mut error_option, new_error)
+                } else if let Some(forward_attribute) = forwards.first() {
+                    let new_error = syn::Error::new(
+                        forward_attribute.span,
+                        "Attribute 'forward' cannot be used together with 'tag' attribute on the \
+                         same variant.",
+                    );
+                    error_option.get_or_insert_with(|| {
+                        syn::Error::new(
+                            meta.span(),
+                            "Attribute 'forward' cannot be used together with 'tag' attribute on \
+                             the same variant.",
                         )
                     });
                     push_error(&mut error_option, new_error)
@@ -702,6 +881,27 @@ impl TryFrom<&[syn::Attribute]> for EnumVariantAttributes {
                         Err(err) => push_error(&mut error_option, err),
                     }
                 }
+            } else if meta.path().is_ident("forward") {
+                if let Some(tag_attribute) = &tag_option {
+                    let new_error = syn::Error::new(
+                        meta.span(),
+                        "Attribute 'forward' cannot be used together with 'tag' attribute on the \
+                         same variant.",
+                    );
+                    error_option.get_or_insert_with(|| {
+                        syn::Error::new(
+                            tag_attribute.span,
+                            "Attribute 'forward' cannot be used together with 'tag' attribute on \
+                             the same variant.",
+                        )
+                    });
+                    push_error(&mut error_option, new_error)
+                } else {
+                    match ForwardAttribute::try_from(meta) {
+                        Ok(forward) => forwards.push(forward),
+                        Err(err) => push_error(&mut error_option, err),
+                    }
+                }
             } else {
                 let err = syn::Error::new(
                     meta.span(),
@@ -717,8 +917,9 @@ impl TryFrom<&[syn::Attribute]> for EnumVariantAttributes {
             Err(err)
         } else {
             Ok(EnumVariantAttributes {
-                tag:    tag_option,
+                tag: tag_option,
                 rename: rename_option,
+                forwards,
             })
         }
     }
@@ -769,6 +970,100 @@ impl TryFrom<&syn::Meta> for RenameAttribute {
         Ok(Self {
             value: lit_str.value(),
             span:  meta.span(),
+        })
+    }
+}
+
+impl TryFrom<&syn::Meta> for ForwardAttribute {
+    type Error = syn::Error;
+
+    fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
+        let syn::Meta::NameValue(name_value) = meta else {
+            abort!(
+                meta.span(),
+                "'forward' attribute value must be provided as 'forward = x' or forward = [x, y, z].",
+            );
+        };
+        let mut values = Vec::new();
+        match &name_value.value {
+            syn::Expr::Lit(expr_lit) => {
+                if let syn::Lit::Int(value) = &expr_lit.lit {
+                    values.push(ForwardAttributeValue::Literal(value.clone()));
+                } else {
+                    abort!(
+                        expr_lit.lit.span(),
+                        "'forward' attribute must be an integer or an array of integers."
+                    );
+                }
+            }
+            syn::Expr::Array(expr_array) => {
+                check!(
+                    !expr_array.elems.is_empty(),
+                    expr_array.span(),
+                    "'forward' attribute must be non-empty when specified as array of integers."
+                );
+                for elem in &expr_array.elems {
+                    match elem {
+                        syn::Expr::Path(expr_path) => {
+                            let value = PredefinedForwardSpannedValue::try_from(expr_path)?;
+                            values.push(ForwardAttributeValue::Predefined(value));
+                        }
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Int(value),
+                            ..
+                        }) => {
+                            values.push(ForwardAttributeValue::Literal(value.clone()));
+                        }
+                        _ => {
+                            abort!(
+                                elem.span(),
+                                "'forward' attribute must be an integer or an array of integers."
+                            );
+                        }
+                    }
+                }
+            }
+            syn::Expr::Path(expr_path) => {
+                let value = PredefinedForwardSpannedValue::try_from(expr_path)?;
+                values.push(ForwardAttributeValue::Predefined(value));
+            }
+            _ => {
+                abort!(
+                    name_value.span(),
+                    "'forward' attribute value must be provided as 'forward = x' or forward = [x, \
+                     y, z]."
+                );
+            }
+        }
+
+        Ok(ForwardAttribute {
+            values,
+            span: meta.span(),
+        })
+    }
+}
+
+impl TryFrom<&syn::ExprPath> for PredefinedForwardSpannedValue {
+    type Error = syn::Error;
+
+    fn try_from(expr_path: &syn::ExprPath) -> Result<Self, Self::Error> {
+        let value = if expr_path.path.is_ident("cis2_events") {
+            PredefinedForwardValue::Cis2
+        } else if expr_path.path.is_ident("cis3_events") {
+            PredefinedForwardValue::Cis3
+        } else if expr_path.path.is_ident("cis4_events") {
+            PredefinedForwardValue::Cis4
+        } else {
+            abort!(
+                expr_path.span(),
+                "Invalid value provided to forward attribute, use either a signed integer literal \
+                 or 'cis2_events', cis3_events' or 'cis4_events'"
+            );
+        };
+
+        Ok(Self {
+            value,
+            span: expr_path.span(),
         })
     }
 }
@@ -830,7 +1125,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum"
+                "'repr(..)' attribute can only be used on an enum."
             );
 
             let return_tokens = match data.fields {
@@ -867,10 +1162,14 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
             let repr = container_attributes.tag_repr(data.variants.len())?;
             let mut tag_checker = TagChecker::default();
+            // Flag which is updated when iterating the variants signalling whether any of
+            // the variants have a 'forward' attribute.
+            let mut some_variant_is_forwarded = false;
+            let tag_bytes_ident = format_ident!("tag_bytes");
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -893,40 +1192,97 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     syn::Fields::Unit => (Vec::new(), proc_macro2::TokenStream::new()),
                 };
 
-                let field_tokens: proc_macro2::TokenStream = field_names
-                    .iter()
-                    .zip(variant.fields.iter())
-                    .map(|(name, field)| impl_deserial_field(field, name, &source))
-                    .collect::<syn::Result<proc_macro2::TokenStream>>()?;
-
-                // Get the literal for the tag either from a 'tag' attribute of the index of the
-                // variant. To avoid cloning, the collision checking of tags are done further
-                // down.
-                let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
-                    || {
-                        (
-                            syn::LitInt::new(i.to_string().as_str(), variant.span()),
-                            variant.ident.span(),
-                        )
-                    },
-                    |tag| (tag.value, tag.span),
-                );
-
                 let variant_ident = &variant.ident;
-                matches_tokens.extend(quote! {
-                    #tag_lit => {
-                        #field_tokens
-                        Ok(#data_name::#variant_ident #pattern)
-                    },
-                });
+                if variant_attributes.forwards.is_empty() {
+                    let field_tokens: proc_macro2::TokenStream = field_names
+                        .iter()
+                        .zip(variant.fields.iter())
+                        .map(|(name, field)| impl_deserial_field(field, name, &source))
+                        .collect::<syn::Result<proc_macro2::TokenStream>>()?;
 
-                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                    // Get the literal for the tag either from a 'tag' attribute of the index of the
+                    // variant. To avoid cloning, the collision checking of tags are done further
+                    // down.
+                    let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
+                        || {
+                            (
+                                syn::LitInt::new(i.to_string().as_str(), variant.span()),
+                                variant.ident.span(),
+                            )
+                        },
+                        |tag| (tag.value, tag.span),
+                    );
+
+                    matches_tokens.extend(quote! {
+                        #tag_lit => {
+                            #field_tokens
+                            Ok(#data_name::#variant_ident #pattern)
+                        },
+                    });
+
+                    tag_checker.add_and_check(tag_lit, tag_span, variant_ident)?;
+                } else {
+                    some_variant_is_forwarded = true;
+                    check!(
+                        variant.fields.len() == 1,
+                        variant.span(),
+                        "Only enum variants containing a single field can be used with the \
+                         'forward' attribute."
+                    );
+                    let chained_source = format_ident!("___chained_source");
+
+                    let field_tokens: proc_macro2::TokenStream = field_names
+                        .iter()
+                        .zip(variant.fields.iter())
+                        .map(|(name, field)| impl_deserial_field(field, name, &chained_source))
+                        .collect::<syn::Result<proc_macro2::TokenStream>>()?;
+
+                    let mut tags = Vec::new();
+                    for forward_attribute in variant_attributes.forwards {
+                        for forward_value in forward_attribute.values {
+                            for tag_literal in forward_value.get_lit_ints() {
+                                tag_checker.add_and_check(
+                                    tag_literal.clone(),
+                                    tag_literal.span(),
+                                    variant_ident,
+                                )?;
+                                tags.push(tag_literal);
+                            }
+                        }
+                    }
+                    matches_tokens.extend(quote! {
+                        #(#tags)|* => {
+                            let mut tag_cursor = Cursor::new(&#tag_bytes_ident);
+                            let mut chained_source = #root::Chain::new(&mut tag_cursor, #source_ident);
+                            let #chained_source = &mut chained_source;
+                            #field_tokens
+                            Ok(#data_name::#variant_ident #pattern)
+                        },
+                    });
+                }
             }
-            quote! {
-                let idx = <#repr as #root::Deserial>::deserial(#source)?;
-                match idx {
-                    #matches_tokens
-                    _ => Err(Default::default())
+            let repr_ident = repr.ident();
+            if some_variant_is_forwarded {
+                let tag_byte_type_tokens = match repr {
+                    ReprAttributeValue::U8 => quote! {[u8; 1]},
+                    ReprAttributeValue::U16 => quote! {[u8; 2]},
+                };
+
+                quote! {
+                    let #tag_bytes_ident = <#tag_byte_type_tokens as #root::Deserial>::deserial(#source_ident)?;
+                    let tag = #repr_ident::from_le_bytes(#tag_bytes_ident);
+                    match tag {
+                        #matches_tokens
+                        _ => Err(Default::default())
+                    }
+                }
+            } else {
+                quote! {
+                    let tag = <#repr_ident as #root::Deserial>::deserial(#source)?;
+                    match tag {
+                        #matches_tokens
+                        _ => Err(Default::default())
+                    }
                 }
             }
         }
@@ -1029,7 +1385,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum",
+                "'repr(..)' attribute can only be used on an enum.",
             );
 
             let fields_tokens = match data.fields {
@@ -1068,7 +1424,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -1110,19 +1466,43 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 );
 
                 let variant_ident = &variant.ident;
-                let tag_lit_size = syn::LitInt::new(
-                    format!("{tag_lit}{repr}").to_string().as_str(),
-                    variant.span(),
-                );
+
+                let serial_tag_tokens = if variant_attributes.forwards.is_empty() {
+                    let repr_ident = repr.ident();
+                    let tag_lit_size =
+                        syn::LitInt::new(format!("{tag_lit}{repr_ident}").as_str(), variant.span());
+
+                    quote! {#root::Serial::serial(&#tag_lit_size, #out_ident)?;}
+                } else {
+                    check!(
+                        variant.fields.len() == 1,
+                        variant.span(),
+                        "Only enum variants containing a single field can be used with the \
+                         'forward' attribute."
+                    );
+
+                    proc_macro2::TokenStream::new()
+                };
 
                 matches_tokens.extend(quote! {
                     #data_name::#variant_ident #pattern => {
-                        #root::Serial::serial(&#tag_lit_size, #out_ident)?;
+                        #serial_tag_tokens
                         #field_tokens
                     },
                 });
 
-                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                tag_checker.add_and_check(tag_lit, tag_span, variant_ident)?;
+                for forward_attribute in variant_attributes.forwards {
+                    for forward_value in forward_attribute.values {
+                        for tag_literal in forward_value.get_lit_ints() {
+                            tag_checker.add_and_check(
+                                tag_literal.clone(),
+                                tag_literal.span(),
+                                variant_ident,
+                            )?;
+                        }
+                    }
+                }
             }
             quote! {
                 match self {
@@ -1231,7 +1611,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum",
+                "'repr(..)' attribute can only be used on an enum.",
             );
 
             let return_tokens = match data.fields {
@@ -1277,10 +1657,14 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
             let repr = container_attributes.tag_repr(data.variants.len())?;
             let state_ident = Ident::new("_______________________________state", Span::call_site());
             let mut tag_checker = TagChecker::default();
+            // Flag which is updated when iterating the variants signalling whether any of
+            // the variants have a 'forward' attribute.
+            let mut some_variant_is_forwarded = false;
+            let tag_bytes_ident = format_ident!("tag_bytes");
 
             for (i, variant) in data.variants.iter().enumerate() {
                 let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
@@ -1302,48 +1686,106 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                     }
                     syn::Fields::Unit => (Vec::new(), proc_macro2::TokenStream::new()),
                 };
-                let field_tokens: proc_macro2::TokenStream = field_names
-                    .iter()
-                    .zip(variant.fields.iter())
-                    .map(|(name, field)| {
-                        impl_deserial_with_state_field(
-                            field,
-                            &state_ident,
-                            name,
-                            &source,
-                            state_parameter,
-                        )
-                    })
-                    .collect::<syn::Result<proc_macro2::TokenStream>>()?;
-
-                // Get the literal for the tag either from a 'tag' attribute of the index of the
-                // variant. To avoid cloning, the collision checking of tags are done further
-                // down.
-                let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
-                    || {
-                        (
-                            syn::LitInt::new(i.to_string().as_str(), variant.span()),
-                            variant.ident.span(),
-                        )
-                    },
-                    |tag| (tag.value, tag.span),
-                );
 
                 let variant_ident = &variant.ident;
-                matches_tokens.extend(quote! {
-                    #tag_lit => {
-                        #field_tokens
-                        Ok(#data_name::#variant_ident #pattern)
-                    },
-                });
+                if variant_attributes.forwards.is_empty() {
+                    let field_tokens: proc_macro2::TokenStream = field_names
+                        .iter()
+                        .zip(variant.fields.iter())
+                        .map(|(name, field)| {
+                            impl_deserial_with_state_field(
+                                field,
+                                &state_ident,
+                                name,
+                                &source,
+                                state_parameter,
+                            )
+                        })
+                        .collect::<syn::Result<proc_macro2::TokenStream>>()?;
 
-                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                    // Get the literal for the tag either from a 'tag' attribute of the index of the
+                    // variant. To avoid cloning, the collision checking of tags are done further
+                    // down.
+                    let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
+                        || {
+                            (
+                                syn::LitInt::new(i.to_string().as_str(), variant.span()),
+                                variant_ident.span(),
+                            )
+                        },
+                        |tag| (tag.value, tag.span),
+                    );
+
+                    matches_tokens.extend(quote! {
+                        #tag_lit => {
+                            #field_tokens
+                            Ok(#data_name::#variant_ident #pattern)
+                        },
+                    });
+
+                    tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                } else {
+                    some_variant_is_forwarded = true;
+                    check!(
+                        variant.fields.len() == 1,
+                        variant.span(),
+                        "Only enum variants containing a single field can be used with the \
+                         'forward' attribute."
+                    );
+                    let chained_source = format_ident!("___chained_source");
+
+                    let field_tokens: proc_macro2::TokenStream = field_names
+                        .iter()
+                        .zip(variant.fields.iter())
+                        .map(|(name, field)| impl_deserial_field(field, name, &chained_source))
+                        .collect::<syn::Result<proc_macro2::TokenStream>>()?;
+
+                    let mut tags = Vec::new();
+                    for forward_attribute in variant_attributes.forwards {
+                        for forward_value in forward_attribute.values {
+                            for tag_literal in forward_value.get_lit_ints() {
+                                tag_checker.add_and_check(
+                                    tag_literal.clone(),
+                                    tag_literal.span(),
+                                    variant_ident,
+                                )?;
+                                tags.push(tag_literal);
+                            }
+                        }
+                    }
+                    matches_tokens.extend(quote! {
+                        #(#tags)|* => {
+                            let mut tag_cursor = Cursor::new(&#tag_bytes_ident);
+                            let mut chained_source = concordium_std::Chain::new(&mut tag_cursor, #source_ident);
+                            let #chained_source = &mut chained_source;
+                            #field_tokens
+                            Ok(#data_name::#variant_ident #pattern)
+                        },
+                    });
+                }
             }
-            quote! {
-                let idx = <#repr as concordium_std::Deserial>::deserial(#source)?;
-                match idx {
-                    #matches_tokens
-                    _ => Err(Default::default())
+            let repr_ident = repr.ident();
+            if some_variant_is_forwarded {
+                let tag_byte_type_tokens = match repr {
+                    ReprAttributeValue::U8 => quote! {[u8; 1]},
+                    ReprAttributeValue::U16 => quote! {[u8; 2]},
+                };
+
+                quote! {
+                    let #tag_bytes_ident = <#tag_byte_type_tokens as concordium_std::Deserial>::deserial(#source_ident)?;
+                    let tag = #repr_ident::from_le_bytes(#tag_bytes_ident);
+                    match tag {
+                        #matches_tokens
+                        _ => Err(Default::default())
+                    }
+                }
+            } else {
+                quote! {
+                    let idx = <#repr_ident as concordium_std::Deserial>::deserial(#source)?;
+                    match idx {
+                        #matches_tokens
+                        _ => Err(Default::default())
+                    }
                 }
             }
         }
@@ -1808,13 +2250,13 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
             check!(
                 container_attributes.repr.is_none(),
                 ast.span(),
-                "'repr(..)' attribute can only be used on an enum",
+                "'repr(..)' attribute can only be used on an enum.",
             );
             if container_attributes.transparent {
                 check!(
                     data.fields.len() == 1,
                     ast.span(),
-                    "'transparent' attribute can only be used on a struct with a single field",
+                    "'transparent' attribute can only be used on a struct with a single field.",
                 );
 
                 // Safe to unwrap below since we already checked the length is one.
@@ -1831,34 +2273,30 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
             check!(
                 !container_attributes.transparent,
                 ast.span(),
-                "'transparent' attribute can only be used on a struct",
+                "'transparent' attribute can only be used on a struct.",
             );
             let mut used_variant_names = HashMap::new();
             let mut tag_checker = TagChecker::default();
-            let mut use_tagged_enum = false;
+            let mut some_variant_is_tagged = false;
+            let mut some_variant_is_forwarded = false;
 
-            let variant_data: Vec<_> = data
-                .variants
-                .iter()
-                .enumerate()
-                .map(|(i, variant)| {
-                    let variant_attributes =
-                        EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
-                    container_attributes.check_tag_with_repr(&variant_attributes.tag)?;
+            let mut variant_data = Vec::new();
+            for (i, variant) in data.variants.iter().enumerate() {
+                let variant_attributes = EnumVariantAttributes::try_from(variant.attrs.as_slice())?;
+                container_attributes.check_variant_attributes(&variant_attributes)?;
 
-                    // Handle the 'rename' attribute.
-                    let (variant_name, variant_span) = match variant_attributes.rename {
-                        Some(rename_attribute) => (rename_attribute.value, rename_attribute.span),
-                        None => (variant.ident.to_string(), variant.ident.span()),
-                    };
-                    check_for_name_collisions(
-                        &mut used_variant_names,
-                        &variant_name,
-                        variant_span,
-                    )?;
+                // Handle the 'rename' attribute.
+                let (variant_name, variant_span) = match variant_attributes.rename {
+                    Some(rename_attribute) => (rename_attribute.value, rename_attribute.span),
+                    None => (variant.ident.to_string(), variant.ident.span()),
+                };
+                check_for_name_collisions(&mut used_variant_names, &variant_name, variant_span)?;
 
-                    use_tagged_enum = use_tagged_enum || variant_attributes.tag.is_some();
+                some_variant_is_tagged = some_variant_is_tagged || variant_attributes.tag.is_some();
+                some_variant_is_forwarded =
+                    some_variant_is_forwarded || !variant_attributes.forwards.is_empty();
 
+                let data = if variant_attributes.forwards.is_empty() {
                     // Get the literal for the tag either from a 'tag' attribute of the index of the
                     // variant.
                     let (tag_lit, tag_span) = variant_attributes.tag.map_or_else(
@@ -1875,12 +2313,41 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
 
                     let fields_tokens = schema_type_fields(&variant.fields)?;
 
-                    Ok((tag_lit, quote! {
-                         (concordium_std::String::from(#variant_name), #fields_tokens)
-                    }))
-                })
-                .collect::<syn::Result<_>>()?;
-            if use_tagged_enum {
+                    SchemaTypeVariantData::Tagged {
+                        tag_lit,
+                        variant_tokens: quote! {
+                            (concordium_std::String::from(#variant_name), #fields_tokens)
+                        },
+                    }
+                } else {
+                    check!(
+                        variant.fields.len() == 1,
+                        variant.span(),
+                        "Only enum variants containing a single field can be used with the \
+                         'forward' attribute."
+                    );
+
+                    for forward_attribute in variant_attributes.forwards {
+                        for forward_value in forward_attribute.values {
+                            for tag_literal in forward_value.get_lit_ints() {
+                                tag_checker.add_and_check(
+                                    tag_literal.clone(),
+                                    tag_literal.span(),
+                                    &variant.ident,
+                                )?;
+                            }
+                        }
+                    }
+
+                    let inner_field = variant.fields.iter().next().unwrap().clone(); // Safe to unwrap because of the above check of the length.
+                    SchemaTypeVariantData::Forwards {
+                        inner_field,
+                    }
+                };
+                variant_data.push(data);
+            }
+
+            if some_variant_is_tagged || some_variant_is_forwarded {
                 // Ensure tagged enum is only used with repr(u8).
                 if let Some(repr) = &container_attributes.repr {
                     check!(
@@ -1889,22 +2356,61 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
                         "SchemaType only supports 'repr(u8)' when using 'tag' attribute."
                     );
                 }
-
-                let variant_tokens = variant_data
-                    .iter()
-                    .map(|(tag_lit, variant_tokens)| quote!((#tag_lit, #variant_tokens)));
+                let variant_map_ident = format_ident!("variant_map");
+                let insert_variant_data_tokens: Vec<_> =
+                    variant_data.iter().map(|data| {
+                        match data {
+                            SchemaTypeVariantData::Tagged { tag_lit, variant_tokens } => Ok(quote! {
+                                #variant_map_ident.insert(#tag_lit, #variant_tokens);
+                            }),
+                            SchemaTypeVariantData::Forwards { inner_field } => {
+                                let field_schema_type_tokens = schema_type_field_type(inner_field)?;
+                                Ok(quote!{
+                                    let mut inner_map_option = match #field_schema_type_tokens {
+                                        concordium_std::schema::Type::TaggedEnum(map) => map,
+                                        concordium_std::schema::Type::Enum(vec) => {
+                                            concordium_std::collections::BTreeMap::from_iter(
+                                                vec.into_iter().enumerate().map(|(i, variant)| (i as u8, variant)),
+                                            )
+                                        },
+                                        _ => panic!("Using 'forward' attribute for deriving SchemaType is only supported, when the inner type is an enum."),
+                                    };
+                                    #variant_map_ident.append(&mut inner_map_option);
+                                })
+                            }
+                        }
+                    }).collect::<syn::Result<_>>()?;
                 quote! {
-                    concordium_std::schema::Type::TaggedEnum(concordium_std::collections::BTreeMap::from([ #(#variant_tokens),* ]))
+                    let mut #variant_map_ident = concordium_std::collections::BTreeMap::default();
+                    #(#insert_variant_data_tokens)*
+                    concordium_std::schema::Type::TaggedEnum(#variant_map_ident)
                 }
             } else {
-                let variant_tokens = variant_data.iter().map(|(_, variant_tokens)| variant_tokens);
+                let variant_tokens: Vec<_> = variant_data
+                    .iter()
+                    .map(|data| match data {
+                        SchemaTypeVariantData::Tagged {
+                            variant_tokens,
+                            ..
+                        } => Ok(variant_tokens),
+                        SchemaTypeVariantData::Forwards {
+                            ..
+                        } => {
+                            abort!(
+                                ast.span(),
+                                "Invariant violated for deriving SchemaType: Forwarding data is \
+                                 unexpected here."
+                            );
+                        }
+                    })
+                    .collect::<syn::Result<_>>()?;
                 quote! {
                     concordium_std::schema::Type::Enum(Vec::from([ #(#variant_tokens),* ]))
                 }
             }
         }
         _ => {
-            abort!(ast.span(), "Union is not supported");
+            abort!(ast.span(), "Union is not supported.");
         }
     };
 
@@ -1941,6 +2447,23 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
         }
     };
     Ok(out.into())
+}
+
+/// Data tracked per variant when generating the SchemaType implementation.
+enum SchemaTypeVariantData {
+    /// A tagged variant, either implicitly or explicit.
+    Tagged {
+        /// The integer literal to used for this variant.
+        tag_lit:        syn::LitInt,
+        /// Tokens of a string of the variant name paired with the tokens to
+        /// implement fields
+        variant_tokens: proc_macro2::TokenStream,
+    },
+    /// A variant forwarding to its inner field.
+    Forwards {
+        /// The inner field being forwarded to.
+        inner_field: syn::Field,
+    },
 }
 
 /// Find a 'rename' attribute and return its value and span.

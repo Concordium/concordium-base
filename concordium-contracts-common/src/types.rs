@@ -1653,6 +1653,30 @@ pub struct Cursor<T> {
     pub data:   T,
 }
 
+/// Adapter to chain together two readers.
+///
+/// This struct is generally created by calling [`chain`] on a reader.
+/// Please see the documentation of [`chain`] for more details.
+///
+/// [`chain`]: Read::chain
+#[derive(Debug)]
+pub struct Chain<T, U> {
+    pub(crate) first:      T,
+    pub(crate) second:     U,
+    pub(crate) done_first: bool,
+}
+
+impl<T, U> Chain<T, U> {
+    /// Construct a reader by chaining to readers together.
+    pub fn new(first: T, second: U) -> Self {
+        Self {
+            first,
+            second,
+            done_first: false,
+        }
+    }
+}
+
 #[cfg(feature = "std")]
 impl std::error::Error for NewAttributeValueError {}
 
