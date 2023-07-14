@@ -268,9 +268,11 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 /// nested enum. This attribute takes a tag or a list of tags and changes the
 /// (de)serialization to hide the nesting. The `SchemaType` produced is a
 /// flatten enum hiding the nested enum.
-/// Note that the schema can only be build when the nested type is an enum
-/// implementing `SchemaType` and the compiler is unable to catch this sort of
-/// mistakes until attempting to build the schema from a smart contract.
+/// Note that the schema can only be built when the nested type is an enum
+/// implementing `SchemaType`.
+/// Incorrect use will **not** be caught when compiling the contract itself but
+/// it will be caught when attempting to build the schema using
+/// `cargo-concordium`.
 ///
 /// ```ignore
 /// #[derive(SchemaType)]

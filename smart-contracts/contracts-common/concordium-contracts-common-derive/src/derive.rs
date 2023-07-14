@@ -408,6 +408,7 @@ impl ContainerAttributes {
         if forward_attributes.is_empty() {
             return Ok(());
         }
+        // Ensure the repr(u*) attribute is set.
         let Some(repr) = &self.repr else {
             abort!(
                 Span::call_site(),
@@ -417,7 +418,21 @@ impl ContainerAttributes {
 
         for forward_attribute in forward_attributes {
             for forward_value in &forward_attribute.values {
-                for tag_literal in forward_value.get_literals() {
+                // Ensure that repr value matches the value possibly mandated by a predefined
+                // set for values.
+                if let ForwardAttributeValue::Predefined(predefined) = forward_value {
+                    let mandated_repr = predefined.value.get_repr();
+                    check!(
+                        mandated_repr == repr.value,
+                        predefined.span,
+                        "'forward' attribute value '{}' require the type to use 'repr({})'",
+                        predefined.value,
+                        mandated_repr.ident()
+                    );
+                }
+
+                // Ensure each forwarded literal can be represented with the current repr value.
+                for tag_literal in forward_value.get_lit_ints() {
                     let value: usize = tag_literal.base10_parse()?;
                     check!(
                         value <= repr.max_tag_value(),
@@ -707,7 +722,8 @@ struct RenameAttribute {
     span:  proc_macro2::Span,
 }
 
-/// Predefined set of `forward` values and span.
+/// Represents the value (and its span) of a 'forward' variant attribute when
+/// using a predefined set, such as `cis2_events`.
 #[derive(Debug)]
 struct PredefinedForwardSpannedValue {
     /// The predefined set of forwarded values.
@@ -727,21 +743,26 @@ enum ForwardAttributeValue {
 
 impl ForwardAttributeValue {
     /// Get the list of integers to forward for this value.
-    fn get_literals(&self) -> Vec<syn::LitInt> {
+    fn get_lit_ints(&self) -> Vec<syn::LitInt> {
         use ForwardAttributeValue::*;
         match self {
             Literal(lit) => vec![lit.clone()],
             Predefined(predefined) => predefined
                 .value
-                .get_literals_str()
+                .get_literals()
                 .into_iter()
-                .map(|lit| syn::LitInt::new(lit, predefined.span))
+                .map(|literal| {
+                    let mut lit_int = syn::LitInt::from(literal);
+                    lit_int.set_span(predefined.span);
+                    lit_int
+                })
                 .collect(),
         }
     }
 }
 
-/// Predefined set of `forward` values
+/// Represents the value (and its span) of a 'forward' variant attribute when
+/// using a predefined set, such as `cis2_events`.
 #[derive(Debug)]
 enum PredefinedForwardValue {
     /// Events from CIS-2.
@@ -753,12 +774,35 @@ enum PredefinedForwardValue {
 }
 
 impl PredefinedForwardValue {
-    fn get_literals_str(&self) -> Vec<&'static str> {
+    /// Get the list of literals represented by this value.
+    fn get_literals(&self) -> Vec<proc_macro2::Literal> {
+        use PredefinedForwardValue::*;
+        let iter: std::slice::Iter<u8> = match self {
+            Cis2 => [255, 254, 253, 252, 251].iter(),
+            Cis3 => [250].iter(),
+            Cis4 => [249, 248, 247, 246, 245, 244].iter(),
+        };
+        iter.copied().map(proc_macro2::Literal::u8_suffixed).collect()
+    }
+
+    /// Get the expected 'repr' value for this value.
+    fn get_repr(&self) -> ReprAttributeValue {
         use PredefinedForwardValue::*;
         match self {
-            Cis2 => vec!["255", "254", "253", "252", "251"],
-            Cis3 => vec!["250"],
-            Cis4 => vec!["249", "248", "247", "246", "245", "244"],
+            Cis2 => ReprAttributeValue::U8,
+            Cis3 => ReprAttributeValue::U8,
+            Cis4 => ReprAttributeValue::U8,
+        }
+    }
+}
+
+impl std::fmt::Display for PredefinedForwardValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use PredefinedForwardValue::*;
+        match self {
+            Cis2 => write!(f, "cis2_events"),
+            Cis3 => write!(f, "cis3_events"),
+            Cis4 => write!(f, "cis4_events"),
         }
     }
 }
@@ -1196,7 +1240,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     let mut tags = Vec::new();
                     for forward_attribute in variant_attributes.forwards {
                         for forward_value in forward_attribute.values {
-                            for tag_literal in forward_value.get_literals() {
+                            for tag_literal in forward_value.get_lit_ints() {
                                 tag_checker.add_and_check(
                                     tag_literal.clone(),
                                     tag_literal.span(),
@@ -1422,11 +1466,12 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 );
 
                 let variant_ident = &variant.ident;
-                let repr_ident = repr.ident();
-                let tag_lit_size =
-                    syn::LitInt::new(format!("{tag_lit}{repr_ident}").as_str(), variant.span());
 
                 let serial_tag_tokens = if variant_attributes.forwards.is_empty() {
+                    let repr_ident = repr.ident();
+                    let tag_lit_size =
+                        syn::LitInt::new(format!("{tag_lit}{repr_ident}").as_str(), variant.span());
+
                     quote! {#root::Serial::serial(&#tag_lit_size, #out_ident)?;}
                 } else {
                     check!(
@@ -1446,10 +1491,10 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                     },
                 });
 
-                tag_checker.add_and_check(tag_lit, tag_span, &variant.ident)?;
+                tag_checker.add_and_check(tag_lit, tag_span, variant_ident)?;
                 for forward_attribute in variant_attributes.forwards {
                     for forward_value in forward_attribute.values {
-                        for tag_literal in forward_value.get_literals() {
+                        for tag_literal in forward_value.get_lit_ints() {
                             tag_checker.add_and_check(
                                 tag_literal.clone(),
                                 tag_literal.span(),
@@ -1698,7 +1743,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                     let mut tags = Vec::new();
                     for forward_attribute in variant_attributes.forwards {
                         for forward_value in forward_attribute.values {
-                            for tag_literal in forward_value.get_literals() {
+                            for tag_literal in forward_value.get_lit_ints() {
                                 tag_checker.add_and_check(
                                     tag_literal.clone(),
                                     tag_literal.span(),
@@ -2284,7 +2329,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
 
                     for forward_attribute in variant_attributes.forwards {
                         for forward_value in forward_attribute.values {
-                            for tag_literal in forward_value.get_literals() {
+                            for tag_literal in forward_value.get_lit_ints() {
                                 tag_checker.add_and_check(
                                     tag_literal.clone(),
                                     tag_literal.span(),
