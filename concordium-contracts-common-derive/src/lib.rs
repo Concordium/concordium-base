@@ -129,6 +129,18 @@ pub fn deserial_derive(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
+/// Setting `#[concordium(forward = n)]` on a variant will produce an error if:
+/// - The type does _not_ have a `#[concordium(repr(u*))]` attribute.
+/// - If any of the forwarded tags `n` cannot be represented by the
+///   `#[concordium(repr(u*))]`.
+/// - Any of the forwarded tags `n` overlap with a tag of another variant.
+/// - `n` contains a predefined set and the value of `#[concordium(repr(u*))]`
+///   is incompatible.
+/// - If the variant does _not_ have exactly one field.
+///
+/// Note that the derive macro does _not_ check forwarded tags matches the tags
+/// of the inner type.
+///
 /// #### Example
 ///
 /// Example of enum specifying the tag of the variant `A` to the value `42u8`.
@@ -297,6 +309,18 @@ pub fn deserial_with_state_derive(input: TokenStream) -> TokenStream {
 ///     Cis2(Cis2Event),
 /// }
 /// ```
+///
+/// Setting `#[concordium(forward = n)]` on a variant will produce an error if:
+/// - The type does _not_ have a `#[concordium(repr(u*))]` attribute.
+/// - If any of the forwarded tags `n` cannot be represented by the
+///   `#[concordium(repr(u*))]`.
+/// - Any of the forwarded tags `n` overlap with a tag of another variant.
+/// - `n` contains a predefined set and the value of `#[concordium(repr(u*))]`
+///   is incompatible.
+/// - If the variant does _not_ have exactly one field.
+///
+/// Note that the derive macro does _not_ check forwarded tags matches the tags
+/// of the inner type.
 ///
 /// ## Generic type bounds
 ///
