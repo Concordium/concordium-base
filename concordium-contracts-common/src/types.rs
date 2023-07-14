@@ -1619,19 +1619,6 @@ impl<T, U> Chain<T, U> {
             done_first: false,
         }
     }
-
-    /// Consumes the `Chain`, returning the wrapped readers.
-    pub fn into_inner(self) -> (T, U) { (self.first, self.second) }
-
-    /// Gets references to the underlying readers in this `Chain`.
-    pub fn get_ref(&self) -> (&T, &U) { (&self.first, &self.second) }
-
-    /// Gets mutable references to the underlying readers in this `Chain`.
-    ///
-    /// Care should be taken to avoid modifying the internal I/O state of the
-    /// underlying readers as doing so may corrupt the internal state of this
-    /// `Chain`.
-    pub fn get_mut(&mut self) -> (&mut T, &mut U) { (&mut self.first, &mut self.second) }
 }
 
 #[cfg(feature = "std")]
