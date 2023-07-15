@@ -107,6 +107,7 @@ pub struct RevocationKeyWithNonce {
 #[doc(hidden)]
 pub enum IssuerKeyRole {}
 
+/// Public key of an issuer.
 pub type IssuerKey = Ed25519PublicKey<IssuerKeyRole>;
 
 /// Data for events of registering and updating a credential.
