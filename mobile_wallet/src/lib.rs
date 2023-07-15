@@ -1196,16 +1196,16 @@ fn get_verifiable_credential_keys_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let wallet = parse_wallet_input(&v)?;
     let verifiable_credential_index = try_get(&v, "verifiableCredentialIndex")?;
+    let issuer = try_get(&v, "issuer")?;
 
-    let signing_key = wallet.get_verifiable_credential_signing_key(verifiable_credential_index)?;
-    let public_key = wallet.get_verifiable_credential_public_key(verifiable_credential_index)?;
-    let encryption_key =
-        wallet.get_verifiable_credential_encryption_key(verifiable_credential_index)?;
+    let signing_key =
+        wallet.get_verifiable_credential_signing_key(issuer, verifiable_credential_index)?;
+    let public_key =
+        wallet.get_verifiable_credential_public_key(issuer, verifiable_credential_index)?;
 
     let response = serde_json::json!({
         "signKey": hex::encode(signing_key),
         "verifyKey": hex::encode(public_key),
-        "encryptionKey": hex::encode(encryption_key)
     });
     Ok(to_string(&response)?)
 }
