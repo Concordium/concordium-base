@@ -15,6 +15,8 @@ pub struct CredentialType {
     pub credential_type: String,
 }
 
+// TODO: make field above private, add TryFrom/Into instances
+
 /// A schema reference is a schema URL pointing to the JSON
 /// schema for a verifiable credential.
 #[derive(
@@ -100,11 +102,11 @@ pub struct RevocationKeyWithNonce {
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RegistryMetadata {
     /// A reference to the issuer's metadata.
-    issuer_metadata:   MetadataUrl,
+    pub issuer_metadata:   MetadataUrl,
     /// The type of credentials used.
-    credential_type:   CredentialType,
+    pub credential_type:   CredentialType,
     /// A reference to the JSON schema corresponding to this type.
-    credential_schema: SchemaRef,
+    pub credential_schema: SchemaRef,
 }
 
 #[doc(hidden)]

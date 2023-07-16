@@ -308,8 +308,8 @@ pub struct SignedCommitments<C: Curve> {
         serialize_with = "crate::common::base16_encode",
         deserialize_with = "crate::common::base16_decode"
     )]
-    signature:   ed25519_dalek::Signature,
-    commitments: BTreeMap<u8, pedersen_commitment::Commitment<C>>,
+    pub signature:   ed25519_dalek::Signature,
+    pub commitments: BTreeMap<u8, pedersen_commitment::Commitment<C>>,
 }
 
 impl<C: Curve> SignedCommitments<C> {
@@ -1004,6 +1004,12 @@ impl Web3IdSigner for ed25519_dalek::Keypair {
     }
 }
 
+impl Web3IdSigner for crate::common::types::KeyPair {
+    fn id(&self) -> ed25519_dalek::PublicKey { self.public }
+
+    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature { self.secret.sign(msg) }
+}
+
 impl Web3IdSigner for ed25519_dalek::SecretKey {
     fn id(&self) -> ed25519_dalek::PublicKey { self.into() }
 
@@ -1044,6 +1050,51 @@ pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
         /// convenient if it is a separate map itself.
         randomness:    &'a BTreeMap<u8, pedersen_commitment::Randomness<C>>,
     },
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(bound(
+    deserialize = "C: Curve, AttributeType: DeserializeOwned",
+    serialize = "C: Curve, AttributeType: serde::Serialize"
+))]
+#[serde(rename_all = "camelCase")]
+#[serde_with::serde_as]
+/// The full credential, including secrets.
+pub struct Web3IdCredential<C: Curve, AttributeType> {
+    /// The credential holder's public key.
+    pub holder_id:     CredentialHolderId,
+    pub issuance_date: chrono::DateTime<chrono::Utc>,
+    pub registry:      ContractAddress,
+    pub issuer_key:    IssuerKey,
+    #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
+    pub values:        BTreeMap<u8, AttributeType>,
+    /// The randomness to go along with commitments in `values`. This has to
+    /// have the same keys as the `values` field, but it is more
+    /// convenient if it is a separate map itself.
+    #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
+    pub randomness:    BTreeMap<u8, pedersen_commitment::Randomness<C>>,
+    #[serde(
+        serialize_with = "crate::common::base16_encode",
+        deserialize_with = "crate::common::base16_decode"
+    )]
+    /// The signature on the commitments from the issuer.
+    pub signature:     ed25519_dalek::Signature,
+}
+
+impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
+    /// Convert the credential into inputs for a proof.
+    pub fn into_inputs<'a, S: Web3IdSigner>(
+        &'a self,
+        signer: &'a S,
+    ) -> CommitmentInputs<'a, C, AttributeType, S> {
+        CommitmentInputs::Web3Issuer {
+            signature: self.signature,
+            issuance_date: self.issuance_date,
+            signer,
+            values: &self.values,
+            randomness: &self.randomness,
+        }
+    }
 }
 
 #[serde_with::serde_as]
