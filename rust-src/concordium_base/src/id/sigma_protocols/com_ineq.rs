@@ -1,6 +1,6 @@
 //! The module provides the implementation of the sigma protocol for "proof of
 //! inequality for committed value and public value". This protocol enables one
-//! to prove that a committed value is not equal to a public one , without
+//! to prove that a committed value is not equal to a public one, without
 //! revealing the value.
 
 use super::{
