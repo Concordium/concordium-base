@@ -40,8 +40,7 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     let mut transcript = RandomOracle::domain(b"InequalityProof");
 
     let c = com_key.hide(&value, value_tilde);
-    transcript.append_message(b"g", &com_key.g);
-    transcript.append_message(b"h", &com_key.h);
+    transcript.append_message(b"commitmentKey", &com_key);
     transcript.append_message(b"public commitment", &c);
     transcript.append_message(b"public value", &pub_value);
 
