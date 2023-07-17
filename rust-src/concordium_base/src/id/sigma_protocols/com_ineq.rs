@@ -83,6 +83,16 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     })
 }
 
+/// Function for verifying that a value inside a commitment is not equal to a
+/// public value `pub_value`. The parameters are
+/// - `com_key` - the commitment key used to commit to the value
+/// - `c` - the commitment to the value
+/// - `pub_value` - the public value claimed to be different from the committed
+///   value
+/// - `proof` - the proof
+///
+/// The function outputs a bool, indicating whether the proof is correct or not.
+
 pub fn verify_com_ineq<C: Curve>(
     com_key: &CommitmentKey<C>,
     c: &Commitment<C>,
