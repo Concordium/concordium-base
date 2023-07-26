@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use crate as concordium_std;
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
@@ -557,6 +558,7 @@ impl quickcheck::Arbitrary for PublicKeyEd25519 {
     }
 }
 
+#[cfg(feature = "std")]
 pub(crate) type KeyIndex = u8;
 
 #[cfg(feature = "std")]
@@ -587,6 +589,7 @@ pub struct AccountPublicKeys {
     pub threshold: AccountThreshold,
 }
 
+#[cfg(feature = "std")]
 pub(crate) type CredentialIndex = u8;
 
 #[cfg(feature = "std")]
