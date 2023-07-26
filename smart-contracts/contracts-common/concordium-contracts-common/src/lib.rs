@@ -89,9 +89,8 @@ pub use std::{string::String, vec::Vec};
 
 /// Re-export.
 pub mod collections {
-    pub use collections::BTreeMap;
     #[cfg(feature = "std")]
-    use std::collections;
+    pub use std::collections::BTreeMap;
 }
 
 #[macro_use]
