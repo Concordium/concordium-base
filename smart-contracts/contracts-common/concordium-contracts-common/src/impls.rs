@@ -414,6 +414,20 @@ impl schema::SchemaType for SignatureEd25519 {
     fn get_type() -> crate::schema::Type { schema::Type::ByteArray(64) }
 }
 
+impl Serial for SignatureEcdsaSecp256k1 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
+}
+
+impl Deserial for SignatureEcdsaSecp256k1 {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        Ok(SignatureEcdsaSecp256k1(Deserial::deserial(source)?))
+    }
+}
+
+impl schema::SchemaType for SignatureEcdsaSecp256k1 {
+    fn get_type() -> crate::schema::Type { schema::Type::ByteArray(64) }
+}
+
 impl Serial for ExchangeRate {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         out.write_u64(self.numerator())?;
