@@ -82,7 +82,18 @@
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
-use std::{string::String, vec::Vec};
+
+/// Re-export.
+#[cfg(feature = "std")]
+pub use std::{string::String, vec::Vec};
+
+/// Re-export.
+pub mod collections {
+    pub use collections::BTreeMap;
+    #[cfg(feature = "std")]
+    use std::collections;
+}
+
 #[macro_use]
 mod traits;
 #[macro_use]
