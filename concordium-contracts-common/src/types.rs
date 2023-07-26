@@ -543,6 +543,38 @@ impl FromStr for SignatureEd25519 {
     }
 }
 
+/// Signature for a ECDSA (over Secp256k1) message. Must be 64 bytes longs
+/// (serialized in compressed format).
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[repr(transparent)]
+pub struct SignatureEcdsaSecp256k1(pub [u8; 64]);
+
+impl fmt::Display for SignatureEcdsaSecp256k1 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0 {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for SignatureEcdsaSecp256k1 {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 128 {
+            return Err(ParseError {});
+        }
+
+        let mut signature: [u8; 64] = [0u8; 64];
+        for (i, place) in signature.iter_mut().enumerate() {
+            *place = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).map_err(|_| ParseError {})?;
+        }
+
+        Ok(SignatureEcdsaSecp256k1(signature))
+    }
+}
+
 #[cfg(feature = "concordium-quickcheck")]
 /// Arbitrary public keys.
 /// Note that this is a simple generator that might produce an array of bytes
@@ -585,7 +617,7 @@ pub struct CredentialPublicKeys {
 /// than to pass them to verification functions.
 pub struct AccountPublicKeys {
     #[concordium(size_length = 1)]
-    pub keys:      crate::collections::BTreeMap<crate::CredentialIndex, CredentialPublicKeys>,
+    pub keys:      crate::collections::BTreeMap<CredentialIndex, CredentialPublicKeys>,
     pub threshold: AccountThreshold,
 }
 
