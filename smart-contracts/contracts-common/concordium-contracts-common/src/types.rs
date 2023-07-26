@@ -18,6 +18,7 @@ use quickcheck::Gen;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
+#[cfg(all(feature = "std", feature = "concordium-quickcheck"))]
 use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::{cmp, convert, fmt, hash, iter, ops, str};
@@ -558,6 +559,7 @@ impl quickcheck::Arbitrary for PublicKeyEd25519 {
 
 pub(crate) type KeyIndex = u8;
 
+#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, crate::SchemaType, PartialEq, Eq)]
 /// A public indexed by the signature scheme. Currently only a
 /// single scheme is supported, `ed25519`.
@@ -565,13 +567,15 @@ pub enum PublicKey {
     Ed25519(PublicKeyEd25519),
 }
 
+#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, crate::SchemaType, PartialEq, Eq)]
 pub struct CredentialPublicKeys {
     #[concordium(size_length = 1)]
-    pub keys:      BTreeMap<KeyIndex, PublicKey>,
+    pub keys:      crate::collections::BTreeMap<KeyIndex, PublicKey>,
     pub threshold: SignatureThreshold,
 }
 
+#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, crate::SchemaType, PartialEq, Eq)]
 /// Public keys of an account, together with the thresholds.
 /// This type is deliberately made opaque, but it has serialization instances
@@ -579,12 +583,13 @@ pub struct CredentialPublicKeys {
 /// than to pass them to verification functions.
 pub struct AccountPublicKeys {
     #[concordium(size_length = 1)]
-    pub keys:      BTreeMap<crate::CredentialIndex, CredentialPublicKeys>,
+    pub keys:      crate::collections::BTreeMap<crate::CredentialIndex, CredentialPublicKeys>,
     pub threshold: AccountThreshold,
 }
 
 pub(crate) type CredentialIndex = u8;
 
+#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, crate::SchemaType)]
 #[non_exhaustive]
 /// A cryptographic signature indexed by the signature scheme. Currently only a
@@ -593,6 +598,7 @@ pub enum Signature {
     Ed25519(SignatureEd25519),
 }
 
+#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, crate::SchemaType)]
 #[concordium(transparent)]
 /// Account signatures. This is an analogue of transaction signatures that are
@@ -603,14 +609,15 @@ pub enum Signature {
 /// credential indexes, and the inner map maps key indices to [`Signature`]s.
 pub struct AccountSignatures {
     #[concordium(size_length = 1)]
-    pub sigs: BTreeMap<CredentialIndex, CredentialSignatures>,
+    pub sigs: crate::collections::BTreeMap<CredentialIndex, CredentialSignatures>,
 }
 
+#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, crate::SchemaType)]
 #[concordium(transparent)]
 pub struct CredentialSignatures {
     #[concordium(size_length = 1)]
-    pub sigs: BTreeMap<KeyIndex, Signature>,
+    pub sigs: crate::collections::BTreeMap<KeyIndex, Signature>,
 }
 
 /// Timestamp represented as milliseconds since unix epoch.
