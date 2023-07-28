@@ -83,15 +83,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-/// Re-export.
 #[cfg(feature = "std")]
-pub use std::{string::String, vec::Vec};
-
-/// Re-export.
-pub mod collections {
-    #[cfg(feature = "std")]
-    pub use std::collections::BTreeMap;
-}
+use std::{string::String, vec::Vec};
 
 #[macro_use]
 mod traits;
@@ -107,7 +100,7 @@ mod types;
 #[cfg(feature = "smart-contract")]
 pub use concordium_contracts_common_derive::*;
 #[cfg(not(feature = "smart-contract"))]
-pub use concordium_contracts_common_derive::{Deserial, SchemaType, Serial, Serialize};
+pub use concordium_contracts_common_derive::{Deserial, Serial, Serialize};
 
 pub use impls::*;
 pub use traits::*;

@@ -372,56 +372,16 @@ impl<Kind> NonZeroThresholdU8<Kind> {
     };
 }
 
-impl Serial for PublicKeyEd25519 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
-}
-
-impl Deserial for PublicKeyEd25519 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        Ok(PublicKeyEd25519(Deserial::deserial(source)?))
-    }
-}
-
 impl schema::SchemaType for PublicKeyEd25519 {
     fn get_type() -> crate::schema::Type { schema::Type::ByteArray(32) }
-}
-
-impl Serial for PublicKeyEcdsaSecp256k1 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
-}
-
-impl Deserial for PublicKeyEcdsaSecp256k1 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        Ok(PublicKeyEcdsaSecp256k1(Deserial::deserial(source)?))
-    }
 }
 
 impl schema::SchemaType for PublicKeyEcdsaSecp256k1 {
     fn get_type() -> crate::schema::Type { schema::Type::ByteArray(33) }
 }
 
-impl Serial for SignatureEd25519 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
-}
-
-impl Deserial for SignatureEd25519 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        Ok(SignatureEd25519(Deserial::deserial(source)?))
-    }
-}
-
 impl schema::SchemaType for SignatureEd25519 {
     fn get_type() -> crate::schema::Type { schema::Type::ByteArray(64) }
-}
-
-impl Serial for SignatureEcdsaSecp256k1 {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
-}
-
-impl Deserial for SignatureEcdsaSecp256k1 {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        Ok(SignatureEcdsaSecp256k1(Deserial::deserial(source)?))
-    }
 }
 
 impl schema::SchemaType for SignatureEcdsaSecp256k1 {
