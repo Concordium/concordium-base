@@ -7,6 +7,7 @@
 - Support adding `#[concordium(forward = n)]`, for enum variants, where `n` is either an unsigned integer literal, `cis2_events`, `cis3_events`, `cis4_events` or an array of the same options.
   Setting this attribute on a variant overrides the (de)serialization to flatten with the (de)serialization of the inner field when using derive macros such as `Serial`, `Deserial`, `DeserialWithState` and `SchemaType`.
   Note that setting `#[concordium(repr(u*))]` is required when using this attribute.
+- `derive(StateClone)` removed completely, as `StateClone` trait is removed from `concordium-std`
 
 ## concordium-contracts-common-derive 3.0.0 (2023-06-16)
 
