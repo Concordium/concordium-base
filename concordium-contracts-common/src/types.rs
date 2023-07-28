@@ -1,4 +1,3 @@
-#[cfg(feature = "std")]
 use crate as concordium_std;
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
@@ -9,6 +8,8 @@ use alloc::{boxed::Box, collections::BTreeMap};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
+#[cfg(feature = "std")]
+use concordium_contracts_common_derive::SchemaType;
 #[cfg(not(feature = "std"))]
 use core::{cmp, convert, fmt, hash, iter, ops, str};
 use core::{marker::PhantomData, str::FromStr};
@@ -19,7 +20,7 @@ use quickcheck::Gen;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
-#[cfg(all(feature = "std", feature = "concordium-quickcheck"))]
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::{cmp, convert, fmt, hash, iter, ops, str};
@@ -451,7 +452,7 @@ pub struct NonZeroThresholdU8<Kind> {
 pub struct ZeroSignatureThreshold;
 
 /// Public key for Ed25519. Must be 32 bytes long.
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
 #[repr(transparent)]
 pub struct PublicKeyEd25519(pub [u8; 32]);
 
@@ -482,7 +483,7 @@ impl FromStr for PublicKeyEd25519 {
 }
 
 /// Public key for ECDSA over Secp256k1. Must be 33 bytes long.
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
 #[repr(transparent)]
 pub struct PublicKeyEcdsaSecp256k1(pub [u8; 33]);
 
@@ -513,7 +514,7 @@ impl FromStr for PublicKeyEcdsaSecp256k1 {
 }
 
 /// Signature for a Ed25519 message. Must be 64 bytes long.
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
 #[repr(transparent)]
 pub struct SignatureEd25519(pub [u8; 64]);
 
@@ -545,7 +546,7 @@ impl FromStr for SignatureEd25519 {
 
 /// Signature for a ECDSA (over Secp256k1) message. Must be 64 bytes longs
 /// (serialized in compressed format).
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
 #[repr(transparent)]
 pub struct SignatureEcdsaSecp256k1(pub [u8; 64]);
 
@@ -594,7 +595,7 @@ impl quickcheck::Arbitrary for PublicKeyEd25519 {
 pub(crate) type KeyIndex = u8;
 
 #[cfg(feature = "std")]
-#[derive(crate::Serialize, Debug, crate::SchemaType, PartialEq, Eq)]
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 /// A public indexed by the signature scheme. Currently only a
 /// single scheme is supported, `ed25519`.
 pub enum PublicKey {
@@ -602,22 +603,22 @@ pub enum PublicKey {
 }
 
 #[cfg(feature = "std")]
-#[derive(crate::Serialize, Debug, crate::SchemaType, PartialEq, Eq)]
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 pub struct CredentialPublicKeys {
     #[concordium(size_length = 1)]
-    pub keys:      crate::collections::BTreeMap<KeyIndex, PublicKey>,
+    pub keys:      BTreeMap<KeyIndex, PublicKey>,
     pub threshold: SignatureThreshold,
 }
 
 #[cfg(feature = "std")]
-#[derive(crate::Serialize, Debug, crate::SchemaType, PartialEq, Eq)]
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 /// Public keys of an account, together with the thresholds.
 /// This type is deliberately made opaque, but it has serialization instances
 /// since inside smart contracts there is no need to inspect the values other
 /// than to pass them to verification functions.
 pub struct AccountPublicKeys {
     #[concordium(size_length = 1)]
-    pub keys:      crate::collections::BTreeMap<CredentialIndex, CredentialPublicKeys>,
+    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
     pub threshold: AccountThreshold,
 }
 
@@ -625,7 +626,7 @@ pub struct AccountPublicKeys {
 pub(crate) type CredentialIndex = u8;
 
 #[cfg(feature = "std")]
-#[derive(crate::Serialize, Debug, crate::SchemaType)]
+#[derive(crate::Serialize, Debug, SchemaType)]
 #[non_exhaustive]
 /// A cryptographic signature indexed by the signature scheme. Currently only a
 /// single scheme is supported, `ed25519`.
@@ -634,7 +635,7 @@ pub enum Signature {
 }
 
 #[cfg(feature = "std")]
-#[derive(crate::Serialize, Debug, crate::SchemaType)]
+#[derive(crate::Serialize, Debug, SchemaType)]
 #[concordium(transparent)]
 /// Account signatures. This is an analogue of transaction signatures that are
 /// part of transactions that get sent to the chain.
@@ -644,15 +645,15 @@ pub enum Signature {
 /// credential indexes, and the inner map maps key indices to [`Signature`]s.
 pub struct AccountSignatures {
     #[concordium(size_length = 1)]
-    pub sigs: crate::collections::BTreeMap<CredentialIndex, CredentialSignatures>,
+    pub sigs: BTreeMap<CredentialIndex, CredentialSignatures>,
 }
 
 #[cfg(feature = "std")]
-#[derive(crate::Serialize, Debug, crate::SchemaType)]
+#[derive(crate::Serialize, Debug, SchemaType)]
 #[concordium(transparent)]
 pub struct CredentialSignatures {
     #[concordium(size_length = 1)]
-    pub sigs: crate::collections::BTreeMap<KeyIndex, Signature>,
+    pub sigs: BTreeMap<KeyIndex, Signature>,
 }
 
 /// Timestamp represented as milliseconds since unix epoch.
