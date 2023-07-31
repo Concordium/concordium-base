@@ -169,7 +169,7 @@ pub enum CredentialMetadata {
     /// Metadata of a Web3Id credential.
     Web3Id {
         contract: ContractAddress,
-        owner:    CredentialHolderId,
+        holder:   CredentialHolderId,
     },
 }
 
@@ -205,7 +205,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
             },
             CredentialProof::Web3Id {
                 created,
-                owner,
+                holder,
                 network,
                 contract,
                 ty: _,
@@ -218,7 +218,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 network:       *network,
                 cred_metadata: CredentialMetadata::Web3Id {
                     contract: *contract,
-                    owner:    *owner,
+                    holder:   *holder,
                 },
             },
         }
@@ -238,7 +238,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 statement: proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
             CredentialProof::Web3Id {
-                owner,
+                holder,
                 network,
                 contract,
                 ty,
@@ -248,7 +248,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
                 ty:         ty.clone(),
                 network:    *network,
                 contract:   *contract,
-                credential: *owner,
+                credential: *holder,
                 statement:  proofs.iter().map(|(x, _)| x.clone()).collect(),
             },
         }
@@ -258,9 +258,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialProof<C, Attribute
 #[derive(Clone, serde::Deserialize)]
 #[serde(bound(deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned"))]
 #[serde(try_from = "serde_json::Value")]
-/// A proof corresponding to one [`CredentialStatement`]. This contains the
-/// statement and the metadata. The only data missing to verify the
-/// cryptographic proof are the public commitments.
+/// A proof corresponding to one [`CredentialStatement`]. This contains almost
+/// all the information needed to verify it, except the issuer's public key in
+/// case of the `Web3Id` proof, and the public commitments in case of the
+/// `Account` proof.
 pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     Account {
         /// Creation timestamp of the proof.
@@ -281,7 +282,7 @@ pub enum CredentialProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
         /// Creation timestamp of the proof.
         created:       chrono::DateTime<chrono::Utc>,
         /// Owner of the credential, a public key.
-        owner:         CredentialHolderId,
+        holder:        CredentialHolderId,
         network:       Network,
         /// Reference to a specific smart contract instance.
         contract:      ContractAddress,
@@ -406,14 +407,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 issuance_date,
                 commitments,
                 proofs,
-                owner,
+                holder,
             } => {
                 let json = serde_json::json!({
                     "type": ty,
                     "issuer": format!("did:ccd:{network}:sci:{}:{}/issuer", contract.index, contract.subindex),
                     "issuanceDate": issuance_date,
                     "credentialSubject": {
-                        "id": format!("did:ccd:{network}:pkc:{}", owner),
+                        "id": format!("did:ccd:{network}:pkc:{}", holder),
                         "statement": proofs.iter().map(|x| &x.0).collect::<Vec<_>>(),
                         "proof": {
                             "type": "ConcordiumZKProofV3",
@@ -540,7 +541,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
 
                 Ok(Self::Web3Id {
                     created,
-                    owner: CredentialHolderId::new(key),
+                    holder: CredentialHolderId::new(key),
                     network: issuer.network,
                     contract: address,
                     issuance_date,
@@ -582,7 +583,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> crate::common::Serial
                 commitments,
                 proofs,
                 issuance_date,
-                owner,
+                holder: owner,
                 ty,
             } => {
                 1u8.serial(out);
@@ -850,7 +851,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
 
         for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
             request.credential_statements.push(cred_proof.statement());
-            if let CredentialProof::Web3Id { owner, .. } = &cred_proof {
+            if let CredentialProof::Web3Id { holder: owner, .. } = &cred_proof {
                 let Some(sig) = linking_proof_iter.next() else {return Err(PresentationVerificationError::MissingLinkingProof)};
                 if owner.public_key.verify(&to_sign, &sig.signature).is_err() {
                     return Err(PresentationVerificationError::InvalidLinkinProof);
@@ -1077,7 +1078,8 @@ pub struct Web3IdCredential<C: Curve, AttributeType> {
         serialize_with = "crate::common::base16_encode",
         deserialize_with = "crate::common::base16_decode"
     )]
-    /// The signature on the commitments from the issuer.
+    /// The signature on the holder's public key and the commitments from the
+    /// issuer.
     pub signature:     ed25519_dalek::Signature,
 }
 
@@ -1220,7 +1222,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
                 proofs,
                 created: _,
                 issuance_date: _,
-                owner,
+                holder: owner,
                 ty: _,
             },
             CredentialsInputs::Web3 { issuer_pk },
@@ -1340,7 +1342,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                     contract,
                     created,
                     issuance_date,
-                    owner: signer.id().into(),
+                    holder: signer.id().into(),
                     ty,
                 })
             }
