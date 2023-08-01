@@ -57,7 +57,7 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 /// This is done by verifying that the attribute inside the commitment satisfies
 /// that `attribute-upper+2^n` and attribute-lower lie in `[0, 2^n)`.
 /// For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
-
+#[allow(clippy::too_many_arguments)]
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     version: &ProofVersion,
     transcript: &mut RandomOracle,
@@ -102,6 +102,8 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     }
 }
 
+/// Helper functionf for verifying range proofs.
+#[allow(clippy::too_many_arguments)]
 fn verify_attribute_range_helper<C: Curve>(
     version: &ProofVersion,
     transcript: &mut RandomOracle,

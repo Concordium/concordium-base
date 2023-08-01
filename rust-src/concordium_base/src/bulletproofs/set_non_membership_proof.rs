@@ -59,7 +59,7 @@ pub enum ProverError {
 ///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::too_many_arguments)]
 pub fn prove<C: Curve, R: Rng>(
     version: &ProofVersion,
     transcript: &mut RandomOracle,

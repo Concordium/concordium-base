@@ -215,6 +215,7 @@ pub fn prove_ownership_of_account(
 /// that lower <= attribute < upper.
 /// This is done by proving that attribute-upper+2^n and attribute-lower lie in
 /// [0, 2^n). For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
+#[allow(clippy::too_many_arguments)]
 pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     version: &ProofVersion,
     transcript: &mut RandomOracle,
@@ -264,6 +265,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
 }
 
 /// Helper function for producing a range proof.
+#[allow(clippy::too_many_arguments)]
 fn prove_attribute_in_range_helper<C: Curve>(
     version: &ProofVersion,
     transcript: &mut RandomOracle,
