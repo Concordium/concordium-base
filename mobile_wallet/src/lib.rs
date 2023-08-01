@@ -15,7 +15,7 @@ use concordium_base::{
     id::{
         self, account_holder,
         constants::{ArCurve, AttributeKind},
-        id_proof_types::{Statement, StatementWithContext, ProofVersion},
+        id_proof_types::{ProofVersion, Statement, StatementWithContext},
         pedersen_commitment::Value as PedersenValue,
         ps_sig,
         secret_sharing::Threshold,
@@ -1051,7 +1051,13 @@ fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
     let id_object: IdentityObjectV1<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
     let challenge: [u8; 32] = try_get(&v, "challenge")?;
     let proof = statement
-        .prove(&ProofVersion::Version1, &global, &challenge, &id_object.alist, &credential_context)
+        .prove(
+            &ProofVersion::Version1,
+            &global,
+            &challenge,
+            &id_object.alist,
+            &credential_context,
+        )
         .context("Could not produce proof.")?;
     let response = serde_json::json!({
         "idProof": common::Versioned::new(common::VERSION_0, proof),
