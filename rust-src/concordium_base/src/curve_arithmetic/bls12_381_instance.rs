@@ -4,8 +4,8 @@ use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
     bls12_381::{
-        Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed,
-        G2Prepared, G1, G2,
+        Bls12, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed, G2Prepared,
+        G1, G2,
     },
     Engine, PairingCurveAffine,
 };
@@ -30,7 +30,6 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
 }
 
 impl Curve for G2 {
-    type Base = Fq;
     type Compressed = G2Compressed;
     type Scalar = Fr;
 
@@ -114,7 +113,6 @@ impl Curve for G2 {
 }
 
 impl Curve for G1 {
-    type Base = Fq;
     type Compressed = G1Compressed;
     type Scalar = Fr;
 
@@ -198,7 +196,6 @@ impl Curve for G1 {
 }
 
 impl Curve for G1Affine {
-    type Base = Fq;
     type Compressed = G1Compressed;
     type Scalar = Fr;
 
@@ -279,7 +276,6 @@ impl Curve for G1Affine {
 }
 
 impl Curve for G2Affine {
-    type Base = Fq;
     type Compressed = G2Compressed;
     type Scalar = Fr;
 
