@@ -57,7 +57,10 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 /// This is done by verifying that the attribute inside the commitment satisfies
 /// that `attribute-upper+2^n` and attribute-lower lie in `[0, 2^n)`.
 /// For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
+
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    version: &ProofVersion,
+    transcript: &mut RandomOracle,
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
     lower: &AttributeType,
@@ -65,9 +68,50 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     c: &Commitment<C>,
     proof: &RangeProof<C>,
 ) -> Result<(), VerificationError> {
-    let mut transcript = RandomOracle::domain("attribute_range_proof");
     let a = lower.to_field_element();
     let b = upper.to_field_element();
+    match version {
+        ProofVersion::Version1 => {
+            let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
+            verify_attribute_range_helper(
+                &ProofVersion::Version1,
+                &mut transcript_v1,
+                keys,
+                gens,
+                a,
+                b,
+                c,
+                proof,
+            )
+        }
+        ProofVersion::Version2 => {
+            transcript.add_bytes(b"AttributeRangeProof");
+            transcript.append_message(b"a", &a);
+            transcript.append_message(b"b", &b);
+            verify_attribute_range_helper(
+                &ProofVersion::Version2,
+                transcript,
+                keys,
+                gens,
+                a,
+                b,
+                c,
+                proof,
+            )
+        }
+    }
+}
+
+fn verify_attribute_range_helper<C: Curve>(
+    version: &ProofVersion,
+    transcript: &mut RandomOracle,
+    keys: &PedersenKey<C>,
+    gens: &Generators<C>,
+    a: C::Scalar,
+    b: C::Scalar,
+    c: &Commitment<C>,
+    proof: &RangeProof<C>,
+) -> Result<(), VerificationError> {
     let zero_randomness = PedersenRandomness::<C>::zero();
     let com_a = keys.hide_worker(&a, &zero_randomness);
     let com_b = keys.hide_worker(&b, &zero_randomness);
@@ -78,7 +122,8 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let com_delta_minus_a = Commitment(c.0.minus_point(&com_a.0));
 
     verify_efficient(
-        &mut transcript,
+        version,
+        transcript,
         64,
         &[com_delta_minus_b_plus_2n, com_delta_minus_a],
         proof,
@@ -124,13 +169,20 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     /// probability.
     pub fn verify(
         &self,
+        version: &ProofVersion,
         challenge: &[u8],
         global: &GlobalContext<C>,
         commitments: &CredentialDeploymentCommitments<C>,
         proofs: &Proof<C, AttributeType>,
     ) -> bool {
-        self.statement
-            .verify(challenge, global, &self.credential, commitments, proofs)
+        self.statement.verify(
+            version,
+            challenge,
+            global,
+            &self.credential,
+            commitments,
+            proofs,
+        )
     }
 }
 
@@ -142,6 +194,7 @@ impl<
 {
     pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
         &self,
+        version: &ProofVersion,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
@@ -186,6 +239,8 @@ impl<
                     // There is a commitment to the relevant attribute. We can then check the
                     // proof.
                     if super::id_verifier::verify_attribute_range(
+                        version,
+                        transcript,
                         &global.on_chain_commitment_key,
                         global.bulletproof_generators(),
                         &statement.lower,
@@ -210,6 +265,7 @@ impl<
                     let attribute_vec: Vec<_> =
                         statement.set.iter().map(|x| x.to_field_element()).collect();
                     if verify_set_membership(
+                        version,
                         transcript,
                         &attribute_vec,
                         com,
@@ -234,6 +290,7 @@ impl<
                     let attribute_vec: Vec<_> =
                         statement.set.iter().map(|x| x.to_field_element()).collect();
                     if verify_set_non_membership(
+                        version,
                         transcript,
                         &attribute_vec,
                         com,
@@ -269,6 +326,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
     /// probability.
     pub fn verify(
         &self,
+        version: &ProofVersion,
         challenge: &[u8],
         global: &GlobalContext<C>,
         credential: &CredId<C>,
@@ -283,7 +341,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
             return false;
         }
         for (statement, proof) in self.statements.iter().zip(proofs.proofs.iter()) {
-            if !statement.verify(global, &mut transcript, &commitments.cmm_attributes, proof) {
+            if !statement.verify(
+                version,
+                global,
+                &mut transcript,
+                &commitments.cmm_attributes,
+                proof,
+            ) {
                 return false;
             }
         }
@@ -362,13 +426,112 @@ mod tests {
         let upper = AttributeKind("20000103".to_string());
         let value = Value::<G1>::new(attribute.to_field_element());
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
-        let maybe_proof =
-            prove_attribute_in_range(gens, &keys, &attribute, &lower, &upper, &randomness);
+        let mut transcript = RandomOracle::domain("Test");
+        let maybe_proof = prove_attribute_in_range(
+            &ProofVersion::Version1,
+            &mut transcript.split(),
+            &mut thread_rng(),
+            gens,
+            &keys,
+            &attribute,
+            &lower,
+            &upper,
+            &randomness,
+        );
         if let Some(proof) = maybe_proof {
             assert_eq!(
-                verify_attribute_range(&keys, gens, &lower, &upper, &commitment, &proof),
+                verify_attribute_range(
+                    &ProofVersion::Version1,
+                    &mut transcript,
+                    &keys,
+                    gens,
+                    &lower,
+                    &upper,
+                    &commitment,
+                    &proof
+                ),
                 Ok(()),
-                "Incorrect range proof."
+                "Incorrect version 1 range proof."
+            );
+        } else {
+            panic!("Failed to produce proof.");
+        };
+        let mut transcript = RandomOracle::domain("Test");
+        let maybe_proof = prove_attribute_in_range(
+            &ProofVersion::Version2,
+            &mut transcript.split(),
+            &mut thread_rng(),
+            gens,
+            &keys,
+            &attribute,
+            &lower,
+            &upper,
+            &randomness,
+        );
+        if let Some(proof) = maybe_proof {
+            assert_eq!(
+                verify_attribute_range(
+                    &ProofVersion::Version2,
+                    &mut transcript,
+                    &keys,
+                    gens,
+                    &lower,
+                    &upper,
+                    &commitment,
+                    &proof
+                ),
+                Ok(()),
+                "Incorrect version 2 range proof."
+            );
+        } else {
+            panic!("Failed to produce proof.");
+        };
+    }
+
+    #[test]
+    fn test_verify_attribute_in_range_shift_cheat() {
+        let mut csprng = thread_rng();
+        let global = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let keys = global.on_chain_commitment_key;
+        let gens = global.bulletproof_generators();
+        let lower = AttributeKind("20000102".to_string());
+        let attribute = AttributeKind("20000102".to_string());
+        let upper = AttributeKind("20000103".to_string());
+        let value = Value::<G1>::new(attribute.to_field_element());
+        let (commitment, randomness) = keys.commit(&value, &mut csprng);
+        let mut transcript = RandomOracle::domain("Test");
+        let maybe_proof = prove_attribute_in_range(
+            &ProofVersion::Version2,
+            &mut transcript.split(),
+            &mut thread_rng(),
+            gens,
+            &keys,
+            &attribute,
+            &lower,
+            &upper,
+            &randomness,
+        );
+        let lower_shifted = AttributeKind("20000107".to_string());
+        let upper_shifted = AttributeKind("20000108".to_string());
+        let five = G1::scalar_from_u64(5);
+        let five_value: Value<G1> = Value::new(five);
+        let five_com = keys.hide(&five_value, &PedersenRandomness::zero());
+        let commitment_shifted = Commitment(commitment.0.plus_point(&five_com));
+        if let Some(proof) = maybe_proof {
+            assert_eq!(
+                verify_attribute_range(
+                    &ProofVersion::Version2,
+                    &mut transcript,
+                    &keys,
+                    gens,
+                    &lower_shifted,
+                    &upper_shifted,
+                    &commitment_shifted,
+                    &proof
+                )
+                .is_ok(),
+                false,
+                "Shifting statement and commitment using same proof should fail."
             );
         } else {
             panic!("Failed to produce proof.");
@@ -521,15 +684,25 @@ mod tests {
 
         // Construct proof of statement from secret
         let challenge = [0u8; 32]; // verifiers challenge
-        let proof =
-            full_statement.prove(&global, &challenge, &attribute_list, &attribute_randomness);
+        let proof = full_statement.prove(
+            &ProofVersion::Version2,
+            &global,
+            &challenge,
+            &attribute_list,
+            &attribute_randomness,
+        );
         assert!(proof.is_some());
         let proof = proof.unwrap();
 
         // Prove the second statement
         let challenge2 = [1u8; 32]; // verifiers challenge
-        let proof2 =
-            full_statement2.prove(&global, &challenge2, &attribute_list, &attribute_randomness);
+        let proof2 = full_statement2.prove(
+            &ProofVersion::Version2,
+            &global,
+            &challenge2,
+            &attribute_list,
+            &attribute_randomness,
+        );
         assert!(proof2.is_some());
         let proof2 = proof2.unwrap();
 
@@ -550,9 +723,16 @@ mod tests {
 
         // the verifier uses these commitments to verify the proofs
 
-        let result = full_statement.verify(&challenge, &global, &coms, &proof);
+        let result =
+            full_statement.verify(&ProofVersion::Version2, &challenge, &global, &coms, &proof);
         assert!(result, "Statement should verify.");
-        let result2 = full_statement2.verify(&challenge2, &global, &coms, &proof2);
+        let result2 = full_statement2.verify(
+            &ProofVersion::Version2,
+            &challenge2,
+            &global,
+            &coms,
+            &proof2,
+        );
         assert!(result2, "Statement 2 should verify.");
     }
 }

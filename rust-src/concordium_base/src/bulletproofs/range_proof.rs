@@ -3,6 +3,7 @@ use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value},
+    id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
@@ -78,6 +79,7 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
 /// See the documentation of `prove` below for the meaning of arguments.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_given_scalars<C: Curve, T: Rng>(
+    version: &ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
@@ -95,6 +97,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
     }
 
     prove(
+        version,
         transcript,
         csprng,
         n,
@@ -120,6 +123,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 pub fn prove<C: Curve, T: Rng>(
+    version: &ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
@@ -185,6 +189,15 @@ pub fn prove<C: Curve, T: Rng>(
         transcript.append_message(b"Vj", &V_j.0);
         V_vec.push(V_j);
     }
+
+    if let ProofVersion::Version2 = version {
+        // Explicitly add n, generators and commitment keys to the transcript
+        transcript.append_message(b"n", &n);
+        transcript.append_message(b"G", &G);
+        transcript.append_message(b"H", &H);
+        transcript.append_message(b"v_keys", &v_keys);
+    }
+
     // compute blinding factor of A and S
     let mut a_tilde_sum = C::Scalar::zero();
     let mut s_tilde_sum = C::Scalar::zero();
@@ -477,6 +490,7 @@ pub enum VerificationError {
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_efficient<C: Curve>(
+    version: &ProofVersion,
     transcript: &mut RandomOracle,
     n: u8,
     commitments: &[Commitment<C>],
@@ -498,6 +512,14 @@ pub fn verify_efficient<C: Curve>(
     // append commitment V_j to transcript!
     for V in commitments {
         transcript.append_message(b"Vj", &V.0);
+    }
+
+    if let ProofVersion::Version2 = version {
+        // Explicitly add n, generators and commitment keys to the transcript
+        transcript.append_message(b"n", &n);
+        transcript.append_message(b"G", &G);
+        transcript.append_message(b"H", &H);
+        transcript.append_message(b"v_keys", &v_keys);
     }
     // define the commitments A,S,T_1,T_2
     let A = proof.A;
@@ -669,10 +691,17 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
 ) -> Option<RangeProof<C>> {
     let mut randomness = **randomness_b;
     randomness.sub_assign(randomness_a);
-    prove(transcript, csprng, n, 2, &[b - a, a], gens, key, &[
-        Randomness::new(randomness),
-        Randomness::new(**randomness_a),
-    ])
+    prove(
+        &ProofVersion::Version1,
+        transcript,
+        csprng,
+        n,
+        2,
+        &[b - a, a],
+        gens,
+        key,
+        &[Randomness::new(randomness), Randomness::new(**randomness_a)],
+    )
 }
 
 /// Given commitments to a and b, verify that a <= b
@@ -690,6 +719,7 @@ pub fn verify_less_than_or_equal<C: Curve>(
 ) -> bool {
     let commitment = Commitment(commitment_b.0.minus_point(&commitment_a.0));
     verify_efficient(
+        &ProofVersion::Version1,
         transcript,
         n,
         &[commitment, *commitment_a],
@@ -889,6 +919,7 @@ mod tests {
         }
         let mut transcript = RandomOracle::empty();
         let proof = prove(
+            &ProofVersion::Version1,
             &mut transcript,
             rng,
             n,
@@ -901,8 +932,42 @@ mod tests {
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
-        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        assert!(result.is_ok());
+        let result = verify_efficient(
+            &ProofVersion::Version1,
+            &mut transcript,
+            n,
+            &commitments,
+            &proof,
+            &gens,
+            &keys,
+        );
+        assert!(result.is_ok(), "Version 1 proof should verify");
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(
+            &ProofVersion::Version2,
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &v_vec,
+            &gens,
+            &keys,
+            &randomness,
+        );
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
+        let mut transcript = RandomOracle::empty();
+        let result = verify_efficient(
+            &ProofVersion::Version2,
+            &mut transcript,
+            n,
+            &commitments,
+            &proof,
+            &gens,
+            &keys,
+        );
+        assert!(result.is_ok(), "Version 2 proof should verify");
     }
 
     #[allow(non_snake_case)]
@@ -954,6 +1019,7 @@ mod tests {
         }
         let mut transcript = RandomOracle::empty();
         let proof = prove(
+            &ProofVersion::Version1,
             &mut transcript,
             rng,
             n,
@@ -967,8 +1033,43 @@ mod tests {
         let proof = proof.unwrap();
 
         let mut transcript = RandomOracle::empty();
-        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        assert!(result.is_ok());
+        let result = verify_efficient(
+            &ProofVersion::Version1,
+            &mut transcript,
+            n,
+            &commitments,
+            &proof,
+            &gens,
+            &keys,
+        );
+        assert!(result.is_ok(), "Version 1 proof should verify");
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(
+            &ProofVersion::Version2,
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &v_vec,
+            &gens,
+            &keys,
+            &randomness,
+        );
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
+
+        let mut transcript = RandomOracle::empty();
+        let result = verify_efficient(
+            &ProofVersion::Version2,
+            &mut transcript,
+            n,
+            &commitments,
+            &proof,
+            &gens,
+            &keys,
+        );
+        assert!(result.is_ok(), "Version 2 proof should verify");
     }
 
     #[allow(non_snake_case)]
@@ -1071,7 +1172,15 @@ mod tests {
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
-        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        let result = verify_efficient(
+            &ProofVersion::Version1,
+            &mut transcript,
+            n,
+            &commitments,
+            &proof,
+            &gens,
+            &keys,
+        );
         assert_eq!(
             result,
             Err(VerificationError::Second),
@@ -1112,6 +1221,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(
+            &ProofVersion::Version1,
             &mut transcript,
             rng,
             n,
@@ -1125,7 +1235,15 @@ mod tests {
         let proof = proof.unwrap();
 
         let mut transcript = RandomOracle::empty();
-        let result = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        let result = verify_efficient(
+            &ProofVersion::Version1,
+            &mut transcript,
+            n,
+            &commitments,
+            &proof,
+            &gens,
+            &keys,
+        );
         assert!(result.is_ok());
     }
 }

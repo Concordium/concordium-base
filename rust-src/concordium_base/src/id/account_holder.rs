@@ -1,6 +1,7 @@
 //! Functionality needed by the account holder, either when interacting with the
 //! identity provider, or when interacting with the chain.
 use super::{
+    id_proof_types::ProofVersion,
     secret_sharing::*,
     sigma_protocols::{
         com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, common::*, dlog,
@@ -451,6 +452,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
             .map(|x| PedersenRandomness::new(*x.as_ref()))
             .collect::<Vec<_>>();
         let bulletproof = bulletprove(
+            &ProofVersion::Version1,
             transcript,
             csprng,
             u8::from(CHUNK_SIZE),

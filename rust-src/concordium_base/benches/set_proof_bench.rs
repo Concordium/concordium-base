@@ -5,6 +5,7 @@ extern crate criterion;
 use concordium_base::{
     bulletproofs::{set_membership_proof, set_non_membership_proof, utils::Generators},
     curve_arithmetic::*,
+    id::id_proof_types::ProofVersion,
     pedersen_commitment::{CommitmentKey, Randomness},
     random_oracle::RandomOracle,
 };
@@ -68,6 +69,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
                 let rng = &mut thread_rng();
                 let mut transcript = RandomOracle::empty();
                 set_membership_proof::prove(
+                    &ProofVersion::Version1,
                     &mut transcript,
                     rng,
                     &the_set_p,
@@ -90,6 +92,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
                 let rng = &mut thread_rng();
                 let mut transcript = RandomOracle::empty();
                 set_non_membership_proof::prove(
+                    &ProofVersion::Version1,
                     &mut transcript,
                     rng,
                     &the_set_p,
@@ -105,6 +108,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         // Generate valid proofs for verification
         let mut transcript = RandomOracle::empty();
         let snm_proof = set_non_membership_proof::prove(
+            &ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -116,8 +120,16 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         assert!(snm_proof.is_ok());
         let snm_proof = snm_proof.unwrap();
         let mut transcript = RandomOracle::empty();
-        let sm_proof =
-            set_membership_proof::prove(&mut transcript, rng, &the_set, w, &gens, &v_keys, &w_rand);
+        let sm_proof = set_membership_proof::prove(
+            &ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            w,
+            &gens,
+            &v_keys,
+            &w_rand,
+        );
         assert!(sm_proof.is_ok());
         let sm_proof = sm_proof.unwrap();
 
@@ -131,6 +143,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
             b.iter(|| {
                 let mut transcript = RandomOracle::empty();
                 set_membership_proof::verify(
+                    &ProofVersion::Version1,
                     &mut transcript,
                     &the_set_p,
                     &w_com_p,
@@ -152,6 +165,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
             b.iter(|| {
                 let mut transcript = RandomOracle::empty();
                 set_non_membership_proof::verify(
+                    &ProofVersion::Version1,
                     &mut transcript,
                     &the_set_p,
                     &v_com_p,
