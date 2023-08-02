@@ -303,11 +303,18 @@ pub struct SignedCommitments<C: Curve> {
 }
 
 impl<C: Curve> SignedCommitments<C> {
-    /// Verify signatures on the commitments.
-    pub fn verify_signature(&self, owner: &CredentialHolderId, issuer_pk: &IssuerKey) -> bool {
+    /// Verify signatures on the commitments in the context of the holder's
+    /// public key, and the issuer contract.
+    pub fn verify_signature(
+        &self,
+        holder: &CredentialHolderId,
+        issuer_pk: &IssuerKey,
+        issuer_contract: ContractAddress,
+    ) -> bool {
         use crate::common::Serial;
         let mut data = COMMITMENT_SIGNATURE_DOMAIN_STRING.to_vec();
-        owner.serial(&mut data);
+        holder.serial(&mut data);
+        issuer_contract.serial(&mut data);
         self.commitments.serial(&mut data);
         issuer_pk.public_key.verify(&data, &self.signature).is_ok()
     }
@@ -315,12 +322,14 @@ impl<C: Curve> SignedCommitments<C> {
     /// Sign commitments for the owner.
     pub fn from_commitments(
         commitments: BTreeMap<u8, pedersen_commitment::Commitment<C>>,
-        owner: &CredentialHolderId,
+        holder: &CredentialHolderId,
         signer: &impl Web3IdSigner,
+        issuer_contract: ContractAddress,
     ) -> Self {
         use crate::common::Serial;
         let mut data = COMMITMENT_SIGNATURE_DOMAIN_STRING.to_vec();
-        owner.serial(&mut data);
+        holder.serial(&mut data);
+        issuer_contract.serial(&mut data);
         commitments.serial(&mut data);
         Self {
             signature: signer.sign(&data),
@@ -332,13 +341,13 @@ impl<C: Curve> SignedCommitments<C> {
         global: &GlobalContext<C>,
         values: &BTreeMap<u8, AttributeType>,
         randomness: &BTreeMap<u8, pedersen_commitment::Randomness<C>>,
-        owner: &CredentialHolderId,
+        holder: &CredentialHolderId,
         signer: &impl Web3IdSigner,
+        issuer_contract: ContractAddress,
     ) -> Option<Self> {
         // TODO: This is a bit inefficient. We don't need the intermediate map, we can
         // just serialize directly.
 
-        // TODO: It would be better to use different commitment keys for different tags.
         let cmm_key = &global.on_chain_commitment_key;
         let mut commitments = BTreeMap::new();
         for ((vi, value), (ri, randomness)) in values.iter().zip(randomness.iter()) {
@@ -353,7 +362,12 @@ impl<C: Curve> SignedCommitments<C> {
                 ),
             );
         }
-        Some(Self::from_commitments(commitments, owner, signer))
+        Some(Self::from_commitments(
+            commitments,
+            holder,
+            signer,
+            issuer_contract,
+        ))
     }
 }
 
@@ -1065,8 +1079,8 @@ pub struct Web3IdCredential<C: Curve, AttributeType> {
     /// have the same keys as the `values` field, but it is more
     /// convenient if it is a separate map itself.
     pub randomness:        BTreeMap<u8, pedersen_commitment::Randomness<C>>,
-    /// The signature on the holder's public key and the commitments from the
-    /// issuer.
+    /// The signature on the holder's public key, the contract address of the
+    /// issuer, and the commitments from the issuer.
     pub signature:         ed25519_dalek::Signature,
 }
 
@@ -1436,7 +1450,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
         (
             CredentialProof::Web3Id {
                 network: _proof_network,
-                contract: _proof_contract,
+                contract: proof_contract,
                 commitments,
                 proofs,
                 created: _,
@@ -1445,7 +1459,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
             },
             CredentialsInputs::Web3 { issuer_pk },
         ) => {
-            if !commitments.verify_signature(owner, issuer_pk) {
+            if !commitments.verify_signature(owner, issuer_pk, *proof_contract) {
                 return false;
             }
             for (statement, proof) in proofs.iter() {
@@ -1745,6 +1759,8 @@ mod tests {
         let signer_2 = ed25519_dalek::Keypair::generate(&mut rng);
         let issuer_1 = ed25519_dalek::Keypair::generate(&mut rng);
         let issuer_2 = ed25519_dalek::Keypair::generate(&mut rng);
+        let contract_1 = ContractAddress::new(1337, 42);
+        let contract_2 = ContractAddress::new(1338, 0);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
                 ty:         [
@@ -1755,7 +1771,7 @@ mod tests {
                 .into_iter()
                 .collect(),
                 network:    Network::Testnet,
-                contract:   ContractAddress::new(1337, 42),
+                contract:   contract_1,
                 credential: CredentialHolderId::new(signer_1.public),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
@@ -1790,7 +1806,7 @@ mod tests {
                 .into_iter()
                 .collect(),
                 network:    Network::Testnet,
-                contract:   ContractAddress::new(1338, 0),
+                contract:   contract_2,
                 credential: CredentialHolderId::new(signer_2.public),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
@@ -1841,6 +1857,7 @@ mod tests {
             &randomness_1,
             &CredentialHolderId::new(signer_1.public),
             &issuer_1,
+            contract_1,
         )
         .unwrap();
 
@@ -1869,6 +1886,7 @@ mod tests {
             &randomness_2,
             &CredentialHolderId::new(signer_2.public),
             &issuer_2,
+            contract_2,
         )
         .unwrap();
         let secrets_2 = CommitmentInputs::Web3Issuer {
@@ -1925,6 +1943,7 @@ mod tests {
         let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
         let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
         let issuer_1 = ed25519_dalek::Keypair::generate(&mut rng);
+        let contract_1 = ContractAddress::new(1337, 42);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
                 ty:         [
@@ -1935,7 +1954,7 @@ mod tests {
                 .into_iter()
                 .collect(),
                 network:    Network::Testnet,
-                contract:   ContractAddress::new(1337, 42),
+                contract:   contract_1,
                 credential: CredentialHolderId::new(signer_1.public),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
@@ -2012,6 +2031,7 @@ mod tests {
             &randomness_1,
             &CredentialHolderId::new(signer_1.public),
             &issuer_1,
+            contract_1,
         )
         .unwrap();
         let secrets_1 = CommitmentInputs::Web3Issuer {
@@ -2092,6 +2112,7 @@ mod tests {
     }
 
     #[test]
+    /// Basic test that conversion of Web3IdCredential from/to JSON works.
     fn test_credential_json() {
         let mut rng = rand::thread_rng();
         let signer = ed25519_dalek::Keypair::generate(&mut rng);
