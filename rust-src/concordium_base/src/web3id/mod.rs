@@ -11,6 +11,7 @@ pub mod did;
 use crate::{
     base::CredentialRegistrationID,
     cis4_types::IssuerKey,
+    common::{base16_decode_string, base16_encode_string},
     curve_arithmetic::Curve,
     id::{
         constants::{ArCurve, AttributeKind},
@@ -20,7 +21,9 @@ use crate::{
     pedersen_commitment,
     random_oracle::RandomOracle,
 };
-use concordium_contracts_common::{hashes::HashBytes, ContractAddress};
+use concordium_contracts_common::{
+    hashes::HashBytes, ContractAddress, OwnedEntrypointName, OwnedParameter,
+};
 use did::*;
 use ed25519_dalek::Verifier;
 use serde::de::DeserializeOwned;
@@ -421,6 +424,18 @@ fn get_field(
     match value.get_mut(field) {
         Some(v) => Ok(v.take()),
         None => anyhow::bail!("Field {field} is not present."),
+    }
+}
+
+/// Extract an optional value at the given key. This mutates the `value`
+/// replacing the value at the provided key with `Null`.
+fn get_optional_field(
+    value: &mut serde_json::Value,
+    field: &'static str,
+) -> anyhow::Result<serde_json::Value> {
+    match value.get_mut(field) {
+        Some(v) => Ok(v.take()),
+        None => Ok(serde_json::Value::Null),
     }
 }
 
@@ -1014,33 +1029,131 @@ pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
     },
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-#[serde(bound(
-    deserialize = "C: Curve, AttributeType: DeserializeOwned",
-    serialize = "C: Curve, AttributeType: serde::Serialize"
-))]
-#[serde(rename_all = "camelCase")]
-#[serde_with::serde_as]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(transparent)]
+pub struct CredentialSchema {
+    schema: serde_json::Value,
+}
+
+impl CredentialSchema {
+    pub fn attribute_tag(&self, attribute: &str) -> Option<u8> {
+        let value = self.schema.pointer(&format!(
+            "/properties/credentialSubject/properties/{attribute}/index"
+        ))?;
+        let num = value.as_u64()?;
+        num.try_into().ok()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 /// The full credential, including secrets.
 pub struct Web3IdCredential<C: Curve, AttributeType> {
     /// The credential holder's public key.
-    pub holder_id:  CredentialHolderId,
-    pub registry:   ContractAddress,
-    pub issuer_key: IssuerKey,
-    #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
-    pub values:     BTreeMap<u8, AttributeType>,
+    pub holder_id:         CredentialHolderId,
+    pub network:           Network,
+    pub registry:          ContractAddress,
+    pub credential_type:   BTreeSet<String>,
+    pub credential_schema: String,
+    pub issuer_key:        IssuerKey,
+    pub valid_from:        chrono::DateTime<chrono::Utc>,
+    /// After this date, the credential becomes expired. `None` corresponds to a
+    /// credential that cannot expire.
+    pub valid_until:       Option<chrono::DateTime<chrono::Utc>>,
+    pub attribute_names:   BTreeMap<u8, String>,
+    pub values:            BTreeMap<u8, AttributeType>,
     /// The randomness to go along with commitments in `values`. This has to
     /// have the same keys as the `values` field, but it is more
     /// convenient if it is a separate map itself.
-    #[serde_as(as = "BTreeMap<serde_with::DisplayFromStr, _>")]
-    pub randomness: BTreeMap<u8, pedersen_commitment::Randomness<C>>,
-    #[serde(
-        serialize_with = "crate::common::base16_encode",
-        deserialize_with = "crate::common::base16_decode"
-    )]
+    pub randomness:        BTreeMap<u8, pedersen_commitment::Randomness<C>>,
     /// The signature on the holder's public key and the commitments from the
     /// issuer.
-    pub signature:  ed25519_dalek::Signature,
+    pub signature:         ed25519_dalek::Signature,
+}
+
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+#[error("Tag name for attribute {missing_name} is missing.")]
+pub struct Web3IdCredentialConversionError {
+    pub missing_name: u8,
+}
+
+impl<C: Curve, AttributeType: serde::Serialize> TryFrom<Web3IdCredential<C, AttributeType>>
+    for serde_json::Value
+{
+    type Error = Web3IdCredentialConversionError;
+
+    fn try_from(value: Web3IdCredential<C, AttributeType>) -> Result<Self, Self::Error> {
+        let id = Method {
+            network: value.network,
+            ty:      IdentifierType::ContractData {
+                address:    value.registry,
+                entrypoint: OwnedEntrypointName::new_unchecked("credentialEntry".into()),
+                parameter:  OwnedParameter::from_serial(&value.holder_id).unwrap(),
+            },
+        };
+        let verification_method = Method {
+            network: value.network,
+            ty:      IdentifierType::PublicKey {
+                key: value.issuer_key.public_key,
+            },
+        };
+        let cred_id = Method {
+            network: value.network,
+            ty:      IdentifierType::PublicKey {
+                key: value.holder_id.public_key,
+            },
+        };
+        let issuer = Method {
+            network: value.network,
+            ty:      IdentifierType::ContractData {
+                address:    value.registry,
+                entrypoint: OwnedEntrypointName::new_unchecked("issuer".into()),
+                parameter:  OwnedParameter::empty(),
+            },
+        };
+        let mut named_attributes = BTreeMap::new();
+        for (k, v) in value.values {
+            let name = value
+                .attribute_names
+                .get(&k)
+                .ok_or(Self::Error { missing_name: k })?;
+            named_attributes.insert(name, v);
+        }
+
+        let subject = serde_json::json!({
+            "id": cred_id,
+            "attributes": named_attributes,
+        });
+        let proof = serde_json::json!({
+            "type": "Ed25519Signature2020",
+            "verificationMethod": verification_method,
+            "proofPurpose": "assertionMethod",
+            "proofValue": base16_encode_string(&value.signature),
+        });
+        let mut named_randomness = BTreeMap::new();
+        for (k, v) in value.randomness {
+            let name = value
+                .attribute_names
+                .get(&k)
+                .ok_or(Self::Error { missing_name: k })?;
+            named_randomness.insert(name, v);
+        }
+
+        let v = serde_json::json!({
+            "id": id,
+            "type": value.credential_type,
+            "issuer": issuer,
+            "validFrom": value.valid_from,
+            "validUntil": value.valid_until,
+            "credentialSubject": subject,
+            "credentialSchema": {
+                "type": "JsonSchema2023",
+                "id": value.credential_schema
+            },
+            "randomness": named_randomness,
+            "proof": proof,
+        });
+        Ok(v)
+    }
 }
 
 impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
@@ -1055,6 +1168,160 @@ impl<C: Curve, AttributeType> Web3IdCredential<C, AttributeType> {
             values: &self.values,
             randomness: &self.randomness,
         }
+    }
+
+    /// Parse a credential from JSON assuming a corresponding JSON credential
+    /// schema.
+    pub fn from_json(
+        schema: &CredentialSchema,
+        mut value: serde_json::Value,
+    ) -> anyhow::Result<Self>
+    where
+        AttributeType: DeserializeOwned, {
+        use anyhow::Context;
+
+        let id_value = get_field(&mut value, "id")?;
+        let Some(Ok((_, id))) = id_value.as_str().map(parse_did) else {
+            anyhow::bail!("id field is not a valid DID");
+        };
+        let IdentifierType::ContractData {
+                address,
+                entrypoint,
+                parameter,
+        } = id.ty else {
+            anyhow::bail!("Only Web3 credentials are supported.")
+        };
+        anyhow::ensure!(entrypoint == "credentialEntry", "Incorrect entrypoint.");
+        let holder_id =
+            CredentialHolderId::new(ed25519_dalek::PublicKey::from_bytes(parameter.as_ref())?);
+
+        // Just validate the issuer field.
+        {
+            let issuer_value = get_field(&mut value, "issuer")?;
+            let Some(Ok((_, id))) = issuer_value.as_str().map(parse_did) else {
+                anyhow::bail!("issuer field is not a valid DID");
+            };
+            let IdentifierType::ContractData {
+                address: issuer_address,
+                entrypoint: issuer_entrypoint,
+                parameter: issuer_parameter,
+            } = id.ty else {
+                anyhow::bail!("Only Web3 credentials are supported.")
+            };
+            anyhow::ensure!(address == issuer_address, "Inconsistent issuer addresses.");
+            anyhow::ensure!(issuer_entrypoint == "issuer", "Invalid issuer entrypoint.");
+            anyhow::ensure!(
+                issuer_parameter == OwnedParameter::empty(),
+                "Issuer parameter should be empty."
+            )
+        }
+
+        let valid_from = get_field(&mut value, "validFrom")?;
+        let valid_until = get_optional_field(&mut value, "validUntil")?;
+
+        let randomness_value = get_field(&mut value, "randomness")?;
+        let mut named_randomness = serde_json::from_value::<
+            BTreeMap<String, pedersen_commitment::Randomness<C>>,
+        >(randomness_value)?;
+
+        let mut randomness = BTreeMap::new();
+        let mut attribute_names = BTreeMap::new();
+        let mut values = BTreeMap::new();
+        {
+            let mut subject = get_field(&mut value, "credentialSubject")?;
+
+            let cred_id = get_field(&mut subject, "id")?;
+            let Some(Ok((_, cred_id))) = cred_id.as_str().map(parse_did) else {
+                anyhow::bail!("credentialSubject/id field is not a valid DID");
+            };
+            let IdentifierType::PublicKey {
+                key,
+            } = cred_id.ty else {
+                anyhow::bail!("Credential subject id must be a public key.")
+            };
+            anyhow::ensure!(
+                holder_id.public_key == key,
+                "Inconsistent data. Holder id and credential id do not match."
+            );
+            anyhow::ensure!(cred_id.network == id.network, "Inconsistent networks.");
+
+            let mapping: BTreeMap<String, AttributeType> =
+                serde_json::from_value(get_field(&mut subject, "attributes")?)?;
+            for (an, av) in mapping {
+                let at = schema
+                    .attribute_tag(an.as_str())
+                    .context("Unknown attribute name.")?;
+                randomness.insert(
+                    at,
+                    named_randomness
+                        .remove(&an)
+                        .with_context(|| format!("Missing randomness {an}."))?,
+                );
+                if attribute_names.insert(at, an).is_some() {
+                    anyhow::bail!("Duplicate tag: {at}");
+                }
+                values.insert(at, av);
+            }
+        }
+
+        let (issuer_key, signature) = {
+            let mut proof = get_field(&mut value, "proof")?;
+            let ty = get_field(&mut proof, "type")?;
+            anyhow::ensure!(
+                ty == "Ed25519Signature2020",
+                "Only `Ed25519Signature2020` type is supported."
+            );
+            let purpose = get_field(&mut proof, "proofPurpose")?;
+            anyhow::ensure!(
+                purpose == "assertionMethod",
+                "Only `assertionMethod` purpose is supported."
+            );
+            let method = get_field(&mut proof, "verificationMethod")?;
+            let Some(Ok((_, method))) = method.as_str().map(parse_did) else {
+                anyhow::bail!("verificationMethod field is not a valid DID");
+            };
+            let IdentifierType::PublicKey {
+                key,
+            } = method.ty else {
+                anyhow::bail!("Verification method must be a public key.")
+            };
+            anyhow::ensure!(method.network == id.network, "Inconsistent networks.");
+            let sig = get_field(&mut proof, "proofValue")?;
+            let signature =
+                base16_decode_string(sig.as_str().context("proofValue must be a string.")?)?;
+            (key.into(), signature)
+        };
+
+        let credential_schema = {
+            let mut schema = get_field(&mut value, "credentialSchema")?;
+            let ty = get_field(&mut schema, "type")?;
+            anyhow::ensure!(
+                ty == "JsonSchema2023",
+                "Only `JsonSchema2023` type is supported."
+            );
+            let id = get_field(&mut schema, "id")?;
+            let serde_json::Value::String(id) = id else {
+                anyhow::bail!("The id should be a string.")
+            };
+            id
+        };
+
+        let credential_type = serde_json::from_value(get_field(&mut value, "type")?)?;
+
+        Ok(Self {
+            holder_id,
+            network: id.network,
+            registry: address,
+            credential_type,
+            issuer_key,
+            attribute_names,
+            values,
+            randomness,
+            signature,
+            valid_from: serde_json::from_value(valid_from)?,
+            valid_until: serde_json::from_value(valid_until)?,
+            credential_schema,
+        })
     }
 }
 
@@ -1462,6 +1729,7 @@ mod tests {
         AttributeInRangeStatement, AttributeInSetStatement, AttributeNotInSetStatement,
     };
     use anyhow::Context;
+    use chrono::TimeZone;
     use rand::Rng;
     use std::marker::PhantomData;
 
@@ -1821,5 +2089,74 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_credential_json() {
+        let mut rng = rand::thread_rng();
+        let signer = ed25519_dalek::Keypair::generate(&mut rng);
+        let issuer = ed25519_dalek::Keypair::generate(&mut rng);
+        let mut randomness = BTreeMap::new();
+        randomness.insert(0, pedersen_commitment::Randomness::generate(&mut rng));
+        randomness.insert(3, pedersen_commitment::Randomness::generate(&mut rng));
+        randomness.insert(17, pedersen_commitment::Randomness::generate(&mut rng));
+
+        let mut values = BTreeMap::new();
+        values.insert(0, Web3IdAttribute::Numeric(1234));
+        values.insert(3, Web3IdAttribute::String(AttributeKind("Hello".into())));
+        values.insert(17, Web3IdAttribute::String(AttributeKind("World".into())));
+
+        let mut attribute_names = BTreeMap::new();
+        attribute_names.insert(0, "Attribute 0".into());
+        attribute_names.insert(3, "Some attribute".into());
+        attribute_names.insert(17, "Another attribute".into());
+
+        let cred = Web3IdCredential::<ArCurve, Web3IdAttribute> {
+            holder_id: signer.public.into(),
+            network: Network::Testnet,
+            registry: ContractAddress::new(3, 17),
+            credential_type: [
+                "VerifiableCredential".into(),
+                "ConcordiumVerifiableCredential".into(),
+                "UniversityDegreeCredential".into(),
+            ]
+            .into_iter()
+            .collect(),
+            credential_schema: "http://link/to/schema".into(),
+            issuer_key: issuer.public.into(),
+            valid_from: chrono::Utc.timestamp_millis_opt(17).unwrap(),
+            valid_until: chrono::Utc.timestamp_millis_opt(12345).earliest(),
+            attribute_names,
+            values,
+            randomness,
+            signature: issuer.sign(b"Something"),
+        };
+
+        let schema = CredentialSchema {
+            schema: serde_json::json!({
+            "properties": {
+                "credentialSubject": {
+                    "properties": {
+                        "Attribute 0": {
+                            "index": 0
+                        },
+                        "Some attribute": {
+                            "index": 3
+                        },
+                        "Another attribute": {
+                            "index": 17
+                        },
+                    }
+                }
+            }
+            }),
+        };
+
+        let json = cred.clone().try_into().unwrap();
+
+        let value = Web3IdCredential::<ArCurve, Web3IdAttribute>::from_json(&schema, json)
+            .expect("JSON parsing succeeds");
+
+        assert_eq!(value, cred, "Credential and parsed credential differ.");
     }
 }
