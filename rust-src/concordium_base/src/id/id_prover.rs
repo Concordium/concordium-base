@@ -85,6 +85,12 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                 transcript.add_bytes(b"RevealAttributeDlogProof");
                 transcript.append_message(b"x", &x);
+                if let ProofVersion::Version2 = version {
+                    transcript.append_message(b"keys", &global.on_chain_commitment_key);
+                    let x_value: Value<C> = Value::new(x);
+                    let comm = global.on_chain_commitment_key.hide(&x_value, &randomness);
+                    transcript.append_message(b"C", &comm);
+                }
                 // This is the Dlog proof section 9.2.4 from the Bluepaper.
                 let h = global.on_chain_commitment_key.h;
                 let h_r = h.mul_by_scalar(&randomness);

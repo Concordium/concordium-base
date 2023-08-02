@@ -217,6 +217,10 @@ impl<
                     transcript.add_bytes(b"RevealAttributeDlogProof");
                     // x is known to the verifier and should go into the transcript
                     transcript.append_message(b"x", &x);
+                    if let ProofVersion::Version2 = version {
+                        transcript.append_message(b"keys", &global.on_chain_commitment_key);
+                        transcript.append_message(b"C", &com);
+                    }
                     let mut minus_x = x;
                     minus_x.negate();
                     let g_minus_x = global.on_chain_commitment_key.g.mul_by_scalar(&minus_x);
@@ -687,7 +691,7 @@ mod tests {
         // Construct proof of statement from secret
         let challenge = [0u8; 32]; // verifiers challenge
         let proof = full_statement.prove(
-            &ProofVersion::Version2,
+            &ProofVersion::Version1,
             &global,
             &challenge,
             &attribute_list,
@@ -699,7 +703,7 @@ mod tests {
         // Prove the second statement
         let challenge2 = [1u8; 32]; // verifiers challenge
         let proof2 = full_statement2.prove(
-            &ProofVersion::Version2,
+            &ProofVersion::Version1,
             &global,
             &challenge2,
             &attribute_list,
@@ -726,8 +730,42 @@ mod tests {
         // the verifier uses these commitments to verify the proofs
 
         let result =
+            full_statement.verify(&ProofVersion::Version1, &challenge, &global, &coms, &proof);
+        assert!(result, "Version 1 statement should verify.");
+        let result2 = full_statement2.verify(
+            &ProofVersion::Version1,
+            &challenge2,
+            &global,
+            &coms,
+            &proof2,
+        );
+        assert!(result2, "Version 1 statement 2 should verify.");
+
+        // Version 2 proofs
+        let proof = full_statement.prove(
+            &ProofVersion::Version2,
+            &global,
+            &challenge,
+            &attribute_list,
+            &attribute_randomness,
+        );
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
+
+        // Prove the second statement
+        let proof2 = full_statement2.prove(
+            &ProofVersion::Version2,
+            &global,
+            &challenge2,
+            &attribute_list,
+            &attribute_randomness,
+        );
+        assert!(proof2.is_some());
+        let proof2 = proof2.unwrap();
+
+        let result =
             full_statement.verify(&ProofVersion::Version2, &challenge, &global, &coms, &proof);
-        assert!(result, "Statement should verify.");
+        assert!(result, "Version 2 statement should verify.");
         let result2 = full_statement2.verify(
             &ProofVersion::Version2,
             &challenge2,
@@ -735,6 +773,6 @@ mod tests {
             &coms,
             &proof2,
         );
-        assert!(result2, "Statement 2 should verify.");
+        assert!(result2, "Version 2 statement 2 should verify.");
     }
 }
