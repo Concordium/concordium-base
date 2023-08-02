@@ -1064,16 +1064,25 @@ impl CredentialSchema {
 pub struct Web3IdCredential<C: Curve, AttributeType> {
     /// The credential holder's public key.
     pub holder_id:         CredentialHolderId,
+    /// The network to which the credential applies.
     pub network:           Network,
+    /// The address of the credential registry where the credential is tracked.
     pub registry:          ContractAddress,
+    /// Credential type describing what kind of a credential it is.
     pub credential_type:   BTreeSet<String>,
+    /// Link to the credential schema.
     pub credential_schema: String,
+    /// The issuer's public key.
     pub issuer_key:        IssuerKey,
+    /// Start of the validity of the credential.
     pub valid_from:        chrono::DateTime<chrono::Utc>,
     /// After this date, the credential becomes expired. `None` corresponds to a
     /// credential that cannot expire.
     pub valid_until:       Option<chrono::DateTime<chrono::Utc>>,
+    /// Names of attribute tags. The names are used in JSON serialization of
+    /// this credential.
     pub attribute_names:   BTreeMap<u8, String>,
+    /// The values of different attributes, indexed by attribute tags.
     pub values:            BTreeMap<u8, AttributeType>,
     /// The randomness to go along with commitments in `values`. This has to
     /// have the same keys as the `values` field, but it is more
