@@ -264,7 +264,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     }
 }
 
-/// Helper function for producing a range proof.     
+/// Helper function for producing a range proof.
 #[allow(clippy::too_many_arguments)]
 fn prove_attribute_in_range_helper<C: Curve>(
     version: &ProofVersion,
