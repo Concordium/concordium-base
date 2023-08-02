@@ -998,3 +998,19 @@ data BlockHeightInput
       Absolute
         { aBlockHeight :: !AbsoluteBlockHeight
         }
+
+-- |Information of a baker in a reward period.
+data BakerRewardPeriodInfo = BakerRewardPeriodInfo
+    { -- |The baker id and public keys.
+      brpiBaker :: !BakerInfo,
+      -- |The effective stake of the baker pool.
+      brpiEffectiveStake :: !Amount,
+      -- |The commission rates of the baker.
+      brpiCommissionRates :: !CommissionRates,
+      -- |The amount staked by the baker itself.
+      brpiEquityCapital :: !Amount,
+      -- | The total capital delegated to the baker pool.
+      brpiDelegatedCapital :: !Amount,
+      -- |Whether the baker is part of the finalization committee.
+      brpiIsFinalizer :: !Bool
+    }
