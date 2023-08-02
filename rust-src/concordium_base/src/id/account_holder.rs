@@ -1134,7 +1134,7 @@ pub fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
         // We can just commit with randomness 0.
         if !policy.policy_vec.contains_key(&i) {
             let value = Value::<C>::new(val.to_field_element());
-            let attr_rand = secret_data.get_attribute_commitment_randomness(i)?;
+            let attr_rand = secret_data.get_attribute_commitment_randomness(&i)?;
             let cmm = commitment_key.hide(&value, &attr_rand);
             cmm_attributes.insert(i, cmm);
             attributes_rand.insert(i, attr_rand);

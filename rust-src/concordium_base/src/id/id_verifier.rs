@@ -385,9 +385,9 @@ mod tests {
 
         fn get_attribute_commitment_randomness(
             &self,
-            attribute_tag: AttributeTag,
+            attribute_tag: &AttributeTag,
         ) -> Result<PedersenRandomness<G1>, Self::ErrorType> {
-            match self.randomness.get(&attribute_tag) {
+            match self.randomness.get(attribute_tag) {
                 Some(r) => Ok(r.clone()),
                 _ => {
                     let mut csprng = rand::thread_rng();

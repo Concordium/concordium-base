@@ -10,6 +10,8 @@ use std::{
     marker::PhantomData,
 };
 
+/// Maximum capacity of a vector to preallocate when parsing.
+/// This must always be at least 1 to ensure progress.
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
 /// Result when deserializing a value. This is a simple wrapper around `Result`
@@ -465,6 +467,40 @@ impl<T: Serial> Serial for Vec<T> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         (self.len() as u64).serial(out);
         serial_vector_no_length(self, out)
+    }
+}
+
+/// Serialize a string by encoding its length as a u64 in big endian and then
+/// the utf8 encoding of the content.
+impl Serial for String {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.len() as u64).serial(out);
+        out.write_all(self.as_bytes())
+            .expect("Writing to buffer succeeds.")
+    }
+}
+
+impl Deserial for String {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len = u64::deserial(source)?;
+        if len as usize <= MAX_PREALLOCATED_CAPACITY {
+            let mut data = vec![0u8; len as usize];
+            source.read_exact(&mut data)?;
+            let s = String::from_utf8(data)?;
+            Ok(s)
+        } else {
+            let mut chunk = vec![0u8; MAX_PREALLOCATED_CAPACITY];
+            let mut data = Vec::new();
+            let mut remaining = len as usize;
+            while remaining > 0 {
+                let to_read = std::cmp::min(remaining, MAX_PREALLOCATED_CAPACITY);
+                source.read_exact(&mut chunk[..to_read])?;
+                data.append(&mut chunk);
+                remaining -= to_read;
+            }
+            let s = String::from_utf8(data)?;
+            Ok(s)
+        }
     }
 }
 
