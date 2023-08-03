@@ -577,8 +577,8 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeTag, AttributeType>
     for AttributeList<F, AttributeType>
 {
-    fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType> {
-        self.alist.get(&attribute_tag)
+    fn get_attribute_value(&self, attribute_tag: &AttributeTag) -> Option<&AttributeType> {
+        self.alist.get(attribute_tag)
     }
 }
 
@@ -2475,59 +2475,63 @@ pub trait HasAttributeRandomness<C: Curve, TagType = AttributeTag> {
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: TagType,
+        attribute_tag: &TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
 }
 
 #[derive(thiserror::Error, Debug)]
 #[error("The randomness for attribute {tag} is missing.")]
-pub struct MissingAttributeRandomnessError {
-    tag: u8,
+pub struct MissingAttributeRandomnessError<TagType> {
+    tag: TagType,
 }
 
-impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
-    for BTreeMap<TagType, PedersenRandomness<C>>
+impl<
+        C: Curve,
+        TagType: Ord + Clone + std::fmt::Display + std::fmt::Debug + Send + Sync + 'static,
+    > HasAttributeRandomness<C, TagType> for BTreeMap<TagType, PedersenRandomness<C>>
 {
-    type ErrorType = MissingAttributeRandomnessError;
+    type ErrorType = MissingAttributeRandomnessError<TagType>;
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: TagType,
+        attribute_tag: &TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
-        self.get(&attribute_tag)
+        self.get(attribute_tag)
             .cloned()
             .ok_or(MissingAttributeRandomnessError {
-                tag: attribute_tag.into(),
+                tag: attribute_tag.clone(),
             })
     }
 }
 
-impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
-    for BTreeMap<TagType, Value<C>>
+impl<
+        C: Curve,
+        TagType: Ord + Clone + std::fmt::Display + std::fmt::Debug + Send + Sync + 'static,
+    > HasAttributeRandomness<C, TagType> for BTreeMap<TagType, Value<C>>
 {
-    type ErrorType = MissingAttributeRandomnessError;
+    type ErrorType = MissingAttributeRandomnessError<TagType>;
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: TagType,
+        attribute_tag: &TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
-        self.get(&attribute_tag)
+        self.get(attribute_tag)
             .map(PedersenRandomness::from_value)
             .ok_or(MissingAttributeRandomnessError {
-                tag: attribute_tag.into(),
+                tag: attribute_tag.clone(),
             })
     }
 }
 
 pub trait HasAttributeValues<F: Field, TagType, AttributeType: Attribute<F>> {
-    fn get_attribute_value(&self, attribute_tag: TagType) -> Option<&AttributeType>;
+    fn get_attribute_value(&self, attribute_tag: &TagType) -> Option<&AttributeType>;
 }
 
 impl<F: Field, TagType: Serialize + std::cmp::Ord, AttributeType: Attribute<F>>
     HasAttributeValues<F, TagType, AttributeType> for BTreeMap<TagType, AttributeType>
 {
-    fn get_attribute_value(&self, attribute_tag: TagType) -> Option<&AttributeType> {
-        self.get(&attribute_tag)
+    fn get_attribute_value(&self, attribute_tag: &TagType) -> Option<&AttributeType> {
+        self.get(attribute_tag)
     }
 }
 
@@ -2545,7 +2549,7 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
 
     fn get_attribute_commitment_randomness(
         &self,
-        _attribute_tag: AttributeTag,
+        _attribute_tag: &AttributeTag,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
         let mut csprng = rand::thread_rng();
         Ok(PedersenRandomness::generate(&mut csprng))

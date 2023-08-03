@@ -321,13 +321,13 @@ impl HasAttributeRandomness<ArCurve> for CredentialContext {
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: AttributeTag,
+        attribute_tag: &AttributeTag,
     ) -> Result<CommitmentRandomness<ArCurve>, Self::ErrorType> {
         self.wallet.get_attribute_commitment_randomness(
             self.identity_provider_index.0,
             self.identity_index,
             self.credential_index.into(),
-            attribute_tag,
+            *attribute_tag,
         )
     }
 }

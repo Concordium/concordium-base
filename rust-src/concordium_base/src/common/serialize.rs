@@ -10,6 +10,8 @@ use std::{
     marker::PhantomData,
 };
 
+/// Maximum capacity of a vector to preallocate when parsing.
+/// This must always be at least 1 to ensure progress.
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
 /// Result when deserializing a value. This is a simple wrapper around `Result`
@@ -468,6 +470,40 @@ impl<T: Serial> Serial for Vec<T> {
     }
 }
 
+/// Serialize a string by encoding its length as a u64 in big endian and then
+/// the utf8 encoding of the content.
+impl Serial for String {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.len() as u64).serial(out);
+        out.write_all(self.as_bytes())
+            .expect("Writing to buffer succeeds.")
+    }
+}
+
+impl Deserial for String {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len = u64::deserial(source)?;
+        if len as usize <= MAX_PREALLOCATED_CAPACITY {
+            let mut data = vec![0u8; len as usize];
+            source.read_exact(&mut data)?;
+            let s = String::from_utf8(data)?;
+            Ok(s)
+        } else {
+            let mut chunk = vec![0u8; MAX_PREALLOCATED_CAPACITY];
+            let mut data = Vec::new();
+            let mut remaining = len as usize;
+            while remaining > 0 {
+                let to_read = std::cmp::min(remaining, MAX_PREALLOCATED_CAPACITY);
+                source.read_exact(&mut chunk[..to_read])?;
+                data.extend_from_slice(&chunk[..to_read]);
+                remaining -= to_read;
+            }
+            let s = String::from_utf8(data)?;
+            Ok(s)
+        }
+    }
+}
+
 /// Serialize a slice by encoding its length as a u64 in big endian and then
 /// the list of elements in sequence.
 impl<T: Serial> Serial for &[T] {
@@ -921,5 +957,16 @@ fn test_set_serialization() {
         }
         let deserialized = super::serialize_deserialize(&set).expect("Deserialization succeeds.");
         assert_eq!(set, deserialized);
+    }
+}
+
+#[test]
+fn test_string_serialization() {
+    use rand::Rng;
+    for _ in 0..1000 {
+        let n: usize = rand::thread_rng().gen_range(0, 2 * MAX_PREALLOCATED_CAPACITY);
+        let s: String = String::from_utf8(vec!['a' as u8; n]).unwrap();
+        let deserialized = super::serialize_deserialize(&s).expect("Deserialization succeeds.");
+        assert_eq!(s, deserialized);
     }
 }

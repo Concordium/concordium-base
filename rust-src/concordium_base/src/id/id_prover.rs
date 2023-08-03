@@ -60,7 +60,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     }
 }
 
-impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribute<C::Scalar>>
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
     AtomicStatement<C, TagType, AttributeType>
 {
     pub(crate) fn prove(
@@ -74,10 +74,10 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
         match self {
             AtomicStatement::RevealAttribute { statement } => {
                 let attribute = attribute_values
-                    .get_attribute_value(statement.attribute_tag)?
+                    .get_attribute_value(&statement.attribute_tag)?
                     .clone();
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                 transcript.add_bytes(b"RevealAttributeDlogProof");
@@ -96,9 +96,9 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 Some(AtomicProof::RevealAttribute { attribute, proof })
             }
             AtomicStatement::AttributeInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(statement.attribute_tag)?;
+                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let attribute_scalar = attribute.to_field_element();
                 let attribute_vec: Vec<_> =
@@ -117,9 +117,9 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 Some(proof)
             }
             AtomicStatement::AttributeNotInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(statement.attribute_tag)?;
+                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let attribute_scalar = attribute.to_field_element();
                 let attribute_vec: Vec<_> =
@@ -138,9 +138,9 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 Some(proof)
             }
             AtomicStatement::AttributeInRange { statement } => {
-                let attribute = attribute_values.get_attribute_value(statement.attribute_tag)?;
+                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let proof = prove_attribute_in_range(
                     global.bulletproof_generators(),
