@@ -495,7 +495,7 @@ impl Deserial for String {
             while remaining > 0 {
                 let to_read = std::cmp::min(remaining, MAX_PREALLOCATED_CAPACITY);
                 source.read_exact(&mut chunk[..to_read])?;
-                data.extend_from_slice(&mut chunk[..to_read]);
+                data.extend_from_slice(&chunk[..to_read]);
                 remaining -= to_read;
             }
             let s = String::from_utf8(data)?;
