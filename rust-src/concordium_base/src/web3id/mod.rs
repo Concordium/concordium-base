@@ -1043,22 +1043,6 @@ pub enum CommitmentInputs<'a, C: Curve, AttributeType, Web3IdSigner> {
     },
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-#[serde(transparent)]
-pub struct CredentialSchema {
-    schema: serde_json::Value,
-}
-
-impl CredentialSchema {
-    pub fn attribute_tag(&self, attribute: &str) -> Option<u8> {
-        let value = self.schema.pointer(&format!(
-            "/properties/credentialSubject/properties/{attribute}/index"
-        ))?;
-        let num = value.as_u64()?;
-        num.try_into().ok()
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(bound(
     deserialize = "AttributeType: DeserializeOwned, C: Curve",
