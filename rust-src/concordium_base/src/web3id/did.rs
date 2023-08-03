@@ -1,10 +1,6 @@
 //! Definition of Concordium DIDs and their parser.
 
-use crate::{
-    base::CredentialRegistrationID,
-    common::{base16_decode_string, Deserial},
-    id::types::IpIdentity,
-};
+use crate::{base::CredentialRegistrationID, common::base16_decode_string, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, ContractAddress, EntrypointName, OwnedEntrypointName, OwnedParameter,
 };
@@ -97,7 +93,10 @@ pub enum IdentifierType {
 }
 
 impl IdentifierType {
-    pub fn extract_contract<D: Deserial>(
+    /// If `self` is the [`ContractData`](Self::ContractData) variant then
+    /// check if the entrypoint is as specified, and attempt to parse the
+    /// parameter into the provided type.
+    pub fn extract_contract<D: concordium_contracts_common::Deserial>(
         &self,
         ep: EntrypointName,
     ) -> Option<(ContractAddress, D)> {
@@ -111,10 +110,12 @@ impl IdentifierType {
         if entrypoint.as_entrypoint_name() != ep {
             return None;
         }
-        let d = crate::common::from_bytes(&mut std::io::Cursor::new(parameter.as_ref())).ok()?;
+        let d = concordium_contracts_common::from_bytes(parameter.as_ref()).ok()?;
         Some((*address, d))
     }
 
+    /// If `self` is the [`PublicKey`](Self::PublicKey) variant then extract the
+    /// public key, otherwise return [`None`].
     pub fn extract_public_key(&self) -> Option<ed25519_dalek::PublicKey> {
         let IdentifierType::PublicKey {
             key,
