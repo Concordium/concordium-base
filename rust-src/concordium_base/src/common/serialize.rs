@@ -959,3 +959,14 @@ fn test_set_serialization() {
         assert_eq!(set, deserialized);
     }
 }
+
+#[test]
+fn test_string_serialization() {
+    use rand::Rng;
+    for _ in 0..1000 {
+        let n: usize = rand::thread_rng().gen_range(0, 2 * MAX_PREALLOCATED_CAPACITY);
+        let s: String = String::from_utf8(vec!['a' as u8; n]).unwrap();
+        let deserialized = super::serialize_deserialize(&s).expect("Deserialization succeeds.");
+        assert_eq!(s, deserialized);
+    }
+}
