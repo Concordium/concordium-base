@@ -1014,3 +1014,15 @@ data BakerRewardPeriodInfo = BakerRewardPeriodInfo
       -- |Whether the baker is part of the finalization committee.
       brpiIsFinalizer :: !Bool
     }
+    deriving (Show)
+
+instance ToJSON BakerRewardPeriodInfo where
+    toJSON BakerRewardPeriodInfo{..} =
+        object
+            [ "baker" .= brpiBaker,
+              "effectiveStake" .= brpiBaker,
+              "commissionRates" .= brpiCommissionRates,
+              "equityCapital" .= brpiEquityCapital,
+              "delegatedCapital" .= brpiDelegatedCapital,
+              "isFinalizer" .= brpiIsFinalizer
+            ]

@@ -139,6 +139,16 @@ instance Serialize BakerInfo where
         _bakerAggregationVerifyKey <- get
         return BakerInfo{..}
 
+instance ToJSON BakerInfo where
+    toJSON BakerInfo{..} =
+        object
+            [
+                "bakerId" .= _bakerIdentity,
+                "bakerElectionVerifyKey" .= _bakerElectionVerifyKey,
+                "bakerSignatureVerifyKey" .= _bakerSignatureVerifyKey,
+                "bakerAggregationVerifyKey" .= _bakerAggregationVerifyKey
+            ]
+
 -- Define the class 'HasBakerInfo' with accessor lenses and an instance for 'BakerInfo'.
 makeClassy ''BakerInfo
 
