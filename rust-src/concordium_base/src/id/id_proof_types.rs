@@ -18,6 +18,7 @@ use pairing::bls12_381::G1;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use std::{collections::BTreeSet, convert::TryFrom, marker::PhantomData, str::FromStr};
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy)]
 pub enum ProofVersion {
     Version1,
     Version2,

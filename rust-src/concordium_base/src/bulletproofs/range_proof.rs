@@ -79,7 +79,7 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
 /// See the documentation of `prove` below for the meaning of arguments.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_given_scalars<C: Curve, T: Rng>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
@@ -123,7 +123,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 pub fn prove<C: Curve, T: Rng>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
@@ -190,7 +190,7 @@ pub fn prove<C: Curve, T: Rng>(
         V_vec.push(V_j);
     }
 
-    if let ProofVersion::Version2 = version {
+    if version >= ProofVersion::Version2 {
         // Explicitly add n, generators and commitment keys to the transcript
         transcript.append_message(b"n", &n);
         transcript.append_message(b"G", &G);
@@ -490,7 +490,7 @@ pub enum VerificationError {
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_efficient<C: Curve>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     n: u8,
     commitments: &[Commitment<C>],
@@ -514,7 +514,7 @@ pub fn verify_efficient<C: Curve>(
         transcript.append_message(b"Vj", &V.0);
     }
 
-    if let ProofVersion::Version2 = version {
+    if version >= ProofVersion::Version2 {
         // Explicitly add n, generators and commitment keys to the transcript
         transcript.append_message(b"n", &n);
         transcript.append_message(b"G", &G);
@@ -692,7 +692,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
     let mut randomness = **randomness_b;
     randomness.sub_assign(randomness_a);
     prove(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         transcript,
         csprng,
         n,
@@ -719,7 +719,7 @@ pub fn verify_less_than_or_equal<C: Curve>(
 ) -> bool {
     let commitment = Commitment(commitment_b.0.minus_point(&commitment_a.0));
     verify_efficient(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         transcript,
         n,
         &[commitment, *commitment_a],
@@ -919,7 +919,7 @@ mod tests {
         }
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             n,
@@ -933,7 +933,7 @@ mod tests {
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
         let result = verify_efficient(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             n,
             &commitments,
@@ -945,7 +945,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             rng,
             n,
@@ -959,7 +959,7 @@ mod tests {
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
         let result = verify_efficient(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             n,
             &commitments,
@@ -1019,7 +1019,7 @@ mod tests {
         }
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             n,
@@ -1034,7 +1034,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let result = verify_efficient(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             n,
             &commitments,
@@ -1046,7 +1046,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             rng,
             n,
@@ -1061,7 +1061,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let result = verify_efficient(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             n,
             &commitments,
@@ -1173,7 +1173,7 @@ mod tests {
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
         let result = verify_efficient(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             n,
             &commitments,
@@ -1221,7 +1221,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             n,
@@ -1236,7 +1236,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let result = verify_efficient(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             n,
             &commitments,

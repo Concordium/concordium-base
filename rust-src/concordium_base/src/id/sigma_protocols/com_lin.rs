@@ -408,7 +408,7 @@ mod tests {
         }
         let gens = crate::bulletproofs::utils::Generators { G_H };
         let proof = crate::bulletproofs::range_proof::prove_given_scalars(
-            &crate::id::id_proof_types::ProofVersion::Version1,
+            crate::id::id_proof_types::ProofVersion::Version1,
             &mut ro.split(),
             rng,
             n,
@@ -419,7 +419,7 @@ mod tests {
             &rs_copy,
         );
         assert!(crate::bulletproofs::range_proof::verify_efficient(
-            &crate::id::id_proof_types::ProofVersion::Version1,
+            crate::id::id_proof_types::ProofVersion::Version1,
             &mut ro,
             n,
             &cmms_copy,

@@ -1210,7 +1210,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
         ) => {
             for (statement, proof) in proofs.iter() {
                 if !statement.verify(
-                    &ProofVersion::Version2,
+                    ProofVersion::Version2,
                     global,
                     transcript,
                     commitments,
@@ -1238,7 +1238,7 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
             }
             for (statement, proof) in proofs.iter() {
                 if !statement.verify(
-                    &ProofVersion::Version2,
+                    ProofVersion::Version2,
                     global,
                     transcript,
                     &commitments.commitments,
@@ -1279,7 +1279,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                 for statement in statement {
                     let proof = statement
                         .prove(
-                            &ProofVersion::Version2,
+                            ProofVersion::Version2,
                             global,
                             ro,
                             csprng,
@@ -1350,7 +1350,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                 for statement in statement {
                     let proof = statement
                         .prove(
-                            &ProofVersion::Version2,
+                            ProofVersion::Version2,
                             global,
                             ro,
                             csprng,

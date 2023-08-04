@@ -1052,7 +1052,7 @@ fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
     let challenge: [u8; 32] = try_get(&v, "challenge")?;
     let proof = statement
         .prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &global,
             &challenge,
             &id_object.alist,

@@ -268,7 +268,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
     let bulletproof_a = bulletprove(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         ro,
         csprng,
         u8::from(CHUNK_SIZE),
@@ -280,7 +280,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     )?;
 
     let bulletproof_s_prime = bulletprove(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         ro,
         csprng,
         u8::from(CHUNK_SIZE),
@@ -429,7 +429,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .collect();
 
     let bulletproof_s_prime = bulletprove(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         ro,
         csprng,
         u8::from(CHUNK_SIZE),
@@ -545,7 +545,7 @@ pub fn verify_enc_trans<C: Curve>(
     };
 
     let first_bulletproof = verify_efficient(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         ro,
         u8::from(CHUNK_SIZE),
         &commitments_a,
@@ -557,7 +557,7 @@ pub fn verify_enc_trans<C: Curve>(
         return Err(VerificationError::FirstBulletproofError(err));
     }
     let second_bulletproof = verify_efficient(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         ro,
         u8::from(CHUNK_SIZE),
         &commitments_s_prime,
@@ -641,7 +641,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     let num_bits_in_chunk = (64 / num_chunks) as u8; // as is safe here because the number is < 64
 
     let bulletproof = verify_efficient(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         ro,
         num_bits_in_chunk,
         &commitments_s_prime,

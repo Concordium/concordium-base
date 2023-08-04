@@ -59,7 +59,7 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 /// For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
@@ -74,7 +74,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
         ProofVersion::Version1 => {
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
             verify_attribute_range_helper(
-                &ProofVersion::Version1,
+                ProofVersion::Version1,
                 &mut transcript_v1,
                 keys,
                 gens,
@@ -89,7 +89,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
             verify_attribute_range_helper(
-                &ProofVersion::Version2,
+                ProofVersion::Version2,
                 transcript,
                 keys,
                 gens,
@@ -105,7 +105,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
 /// Helper functionf for verifying range proofs.
 #[allow(clippy::too_many_arguments)]
 fn verify_attribute_range_helper<C: Curve>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     keys: &PedersenKey<C>,
     gens: &Generators<C>,
@@ -171,7 +171,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     /// probability.
     pub fn verify(
         &self,
-        version: &ProofVersion,
+        version: ProofVersion,
         challenge: &[u8],
         global: &GlobalContext<C>,
         commitments: &CredentialDeploymentCommitments<C>,
@@ -196,7 +196,7 @@ impl<
 {
     pub(crate) fn verify<Q: std::cmp::Ord + Borrow<TagType>>(
         &self,
-        version: &ProofVersion,
+        version: ProofVersion,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         cmm_attributes: &BTreeMap<Q, Commitment<C>>,
@@ -217,7 +217,7 @@ impl<
                     transcript.add_bytes(b"RevealAttributeDlogProof");
                     // x is known to the verifier and should go into the transcript
                     transcript.append_message(b"x", &x);
-                    if let ProofVersion::Version2 = version {
+                    if version >= ProofVersion::Version2 {
                         transcript.append_message(b"keys", &global.on_chain_commitment_key);
                         transcript.append_message(b"C", &com);
                     }
@@ -332,7 +332,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
     /// probability.
     pub fn verify(
         &self,
-        version: &ProofVersion,
+        version: ProofVersion,
         challenge: &[u8],
         global: &GlobalContext<C>,
         credential: &CredId<C>,
@@ -434,7 +434,7 @@ mod tests {
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
         let mut transcript = RandomOracle::domain("Test");
         let maybe_proof = prove_attribute_in_range(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript.split(),
             &mut thread_rng(),
             gens,
@@ -447,7 +447,7 @@ mod tests {
         if let Some(proof) = maybe_proof {
             assert_eq!(
                 verify_attribute_range(
-                    &ProofVersion::Version1,
+                    ProofVersion::Version1,
                     &mut transcript,
                     &keys,
                     gens,
@@ -464,7 +464,7 @@ mod tests {
         };
         let mut transcript = RandomOracle::domain("Test");
         let maybe_proof = prove_attribute_in_range(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript.split(),
             &mut thread_rng(),
             gens,
@@ -477,7 +477,7 @@ mod tests {
         if let Some(proof) = maybe_proof {
             assert_eq!(
                 verify_attribute_range(
-                    &ProofVersion::Version2,
+                    ProofVersion::Version2,
                     &mut transcript,
                     &keys,
                     gens,
@@ -507,7 +507,7 @@ mod tests {
         let (commitment, randomness) = keys.commit(&value, &mut csprng);
         let mut transcript = RandomOracle::domain("Test");
         let maybe_proof = prove_attribute_in_range(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript.split(),
             &mut thread_rng(),
             gens,
@@ -526,7 +526,7 @@ mod tests {
         if let Some(proof) = maybe_proof {
             assert_eq!(
                 verify_attribute_range(
-                    &ProofVersion::Version2,
+                    ProofVersion::Version2,
                     &mut transcript,
                     &keys,
                     gens,
@@ -691,7 +691,7 @@ mod tests {
         // Construct proof of statement from secret
         let challenge = [0u8; 32]; // verifiers challenge
         let proof = full_statement.prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &global,
             &challenge,
             &attribute_list,
@@ -703,7 +703,7 @@ mod tests {
         // Prove the second statement
         let challenge2 = [1u8; 32]; // verifiers challenge
         let proof2 = full_statement2.prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &global,
             &challenge2,
             &attribute_list,
@@ -730,20 +730,15 @@ mod tests {
         // the verifier uses these commitments to verify the proofs
 
         let result =
-            full_statement.verify(&ProofVersion::Version1, &challenge, &global, &coms, &proof);
+            full_statement.verify(ProofVersion::Version1, &challenge, &global, &coms, &proof);
         assert!(result, "Version 1 statement should verify.");
-        let result2 = full_statement2.verify(
-            &ProofVersion::Version1,
-            &challenge2,
-            &global,
-            &coms,
-            &proof2,
-        );
+        let result2 =
+            full_statement2.verify(ProofVersion::Version1, &challenge2, &global, &coms, &proof2);
         assert!(result2, "Version 1 statement 2 should verify.");
 
         // Version 2 proofs
         let proof = full_statement.prove(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &global,
             &challenge,
             &attribute_list,
@@ -754,7 +749,7 @@ mod tests {
 
         // Prove the second statement
         let proof2 = full_statement2.prove(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &global,
             &challenge2,
             &attribute_list,
@@ -764,15 +759,10 @@ mod tests {
         let proof2 = proof2.unwrap();
 
         let result =
-            full_statement.verify(&ProofVersion::Version2, &challenge, &global, &coms, &proof);
+            full_statement.verify(ProofVersion::Version2, &challenge, &global, &coms, &proof);
         assert!(result, "Version 2 statement should verify.");
-        let result2 = full_statement2.verify(
-            &ProofVersion::Version2,
-            &challenge2,
-            &global,
-            &coms,
-            &proof2,
-        );
+        let result2 =
+            full_statement2.verify(ProofVersion::Version2, &challenge2, &global, &coms, &proof2);
         assert!(result2, "Version 2 statement 2 should verify.");
     }
 }

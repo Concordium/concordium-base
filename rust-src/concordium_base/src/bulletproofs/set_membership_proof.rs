@@ -89,7 +89,7 @@ fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case, clippy::too_many_arguments)]
 pub fn prove<C: Curve, R: Rng>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut R,
     the_set: &[C::Scalar],
@@ -122,7 +122,7 @@ pub fn prove<C: Curve, R: Rng>(
     // Select generators for vector commitments
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(n).cloned().unzip();
 
-    if let ProofVersion::Version2 = version {
+    if version >= ProofVersion::Version2 {
         // Explicitly add generators and commitment keys to the transcript
         transcript.append_message(b"G", &G);
         transcript.append_message(b"H", &H);
@@ -369,7 +369,7 @@ pub enum VerificationError {
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
 pub fn verify<C: Curve>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     the_set: &[C::Scalar],
     V: &Commitment<C>,
@@ -394,7 +394,7 @@ pub fn verify<C: Curve>(
     transcript.append_message(b"V", &V.0);
     transcript.append_message(b"theSet", &set_vec);
 
-    if let ProofVersion::Version2 = version {
+    if version >= ProofVersion::Version2 {
         // Explicitly add generators and commitment keys to the transcript
         transcript.append_message(b"G", &G);
         transcript.append_message(b"H", &H);
@@ -609,7 +609,7 @@ mod tests {
         // prove
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -624,7 +624,7 @@ mod tests {
         // verify
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             &the_set,
             &v_com,
@@ -637,7 +637,7 @@ mod tests {
         // prove
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             rng,
             &the_set,
@@ -652,7 +652,7 @@ mod tests {
         // verify
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             &the_set,
             &v_com,
@@ -677,7 +677,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -692,7 +692,7 @@ mod tests {
         // verify
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             &the_set,
             &v_com,
@@ -704,7 +704,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             rng,
             &the_set,
@@ -719,7 +719,7 @@ mod tests {
         // verify
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             &the_set,
             &v_com,
@@ -742,7 +742,7 @@ mod tests {
 
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -769,7 +769,7 @@ mod tests {
         // prove
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -786,7 +786,7 @@ mod tests {
         let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             &the_set,
             &v_com,
@@ -811,7 +811,7 @@ mod tests {
         // prove
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -828,7 +828,7 @@ mod tests {
         let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             &new_set,
             &v_com,
@@ -852,7 +852,7 @@ mod tests {
         // prove
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -870,7 +870,7 @@ mod tests {
         let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             &the_set,
             &v_com,
@@ -897,7 +897,7 @@ mod tests {
         // prove
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -913,7 +913,7 @@ mod tests {
         let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             &the_set,
             &v_com,
@@ -926,7 +926,7 @@ mod tests {
         // prove
         let mut transcript = RandomOracle::empty();
         let proof = prove(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             rng,
             &the_set,
@@ -942,7 +942,7 @@ mod tests {
         let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
         let result = verify(
-            &ProofVersion::Version2,
+            ProofVersion::Version2,
             &mut transcript,
             &the_set,
             &v_com,

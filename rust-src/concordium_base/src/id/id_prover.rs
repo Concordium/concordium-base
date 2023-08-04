@@ -34,7 +34,7 @@ use sha2::{Digest, Sha256};
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, AttributeType> {
     pub fn prove(
         &self,
-        version: &ProofVersion,
+        version: ProofVersion,
         global: &GlobalContext<C>,
         challenge: &[u8],
         attribute_values: &impl HasAttributeValues<C::Scalar, AttributeTag, AttributeType>,
@@ -67,7 +67,7 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
 {
     pub(crate) fn prove(
         &self,
-        version: &ProofVersion,
+        version: ProofVersion,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
@@ -85,7 +85,7 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                 transcript.add_bytes(b"RevealAttributeDlogProof");
                 transcript.append_message(b"x", &x);
-                if let ProofVersion::Version2 = version {
+                if version >= ProofVersion::Version2 {
                     transcript.append_message(b"keys", &global.on_chain_commitment_key);
                     let x_value: Value<C> = Value::new(x);
                     let comm = global.on_chain_commitment_key.hide(&x_value, &randomness);
@@ -223,7 +223,7 @@ pub fn prove_ownership_of_account(
 /// [0, 2^n). For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut impl rand::Rng,
     gens: &Generators<C>,
@@ -240,7 +240,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
         ProofVersion::Version1 => {
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
             prove_attribute_in_range_helper(
-                &ProofVersion::Version1,
+                ProofVersion::Version1,
                 &mut transcript_v1,
                 csprng,
                 gens,
@@ -256,7 +256,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
             prove_attribute_in_range_helper(
-                &ProofVersion::Version2,
+                ProofVersion::Version2,
                 transcript,
                 csprng,
                 gens,
@@ -273,7 +273,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
 /// Helper function for producing a range proof.
 #[allow(clippy::too_many_arguments)]
 fn prove_attribute_in_range_helper<C: Curve>(
-    version: &ProofVersion,
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut impl rand::Rng,
     gens: &Generators<C>,

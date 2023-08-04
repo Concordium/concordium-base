@@ -322,7 +322,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
         transcript.append_message(b"encrypted_share", &ciphers);
         if verify_efficient(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             transcript,
             32,
             &commitments,

@@ -69,7 +69,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
                 let rng = &mut thread_rng();
                 let mut transcript = RandomOracle::empty();
                 set_membership_proof::prove(
-                    &ProofVersion::Version1,
+                    ProofVersion::Version1,
                     &mut transcript,
                     rng,
                     &the_set_p,
@@ -92,7 +92,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
                 let rng = &mut thread_rng();
                 let mut transcript = RandomOracle::empty();
                 set_non_membership_proof::prove(
-                    &ProofVersion::Version1,
+                    ProofVersion::Version1,
                     &mut transcript,
                     rng,
                     &the_set_p,
@@ -108,7 +108,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         // Generate valid proofs for verification
         let mut transcript = RandomOracle::empty();
         let snm_proof = set_non_membership_proof::prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -121,7 +121,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         let snm_proof = snm_proof.unwrap();
         let mut transcript = RandomOracle::empty();
         let sm_proof = set_membership_proof::prove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             &mut transcript,
             rng,
             &the_set,
@@ -143,7 +143,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
             b.iter(|| {
                 let mut transcript = RandomOracle::empty();
                 set_membership_proof::verify(
-                    &ProofVersion::Version1,
+                    ProofVersion::Version1,
                     &mut transcript,
                     &the_set_p,
                     &w_com_p,
@@ -165,7 +165,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
             b.iter(|| {
                 let mut transcript = RandomOracle::empty();
                 set_non_membership_proof::verify(
-                    &ProofVersion::Version1,
+                    ProofVersion::Version1,
                     &mut transcript,
                     &the_set_p,
                     &v_com_p,

@@ -2470,19 +2470,6 @@ pub enum AccountCredentialValues<C: Curve, AttributeType: Attribute<C::Scalar>> 
     },
 }
 
-pub trait HasAttributeCommitmentKey<C: Curve, TagType = AttributeTag> {
-    type ErrorType: 'static + Send + Sync + std::error::Error;
-
-    fn get_attribute_commitment_key(
-        &self,
-        attribute_tag: TagType,
-    ) -> Result<PedersenKey<C>, Self::ErrorType>;
-}
-
-pub trait HasBulletproofsGenerators<C: Curve> {
-    fn generators(&self) -> Generators<C>;
-}
-
 pub trait HasAttributeRandomness<C: Curve, TagType = AttributeTag> {
     type ErrorType: 'static + Send + Sync + std::error::Error;
 

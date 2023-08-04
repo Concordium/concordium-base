@@ -452,7 +452,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
             .map(|x| PedersenRandomness::new(*x.as_ref()))
             .collect::<Vec<_>>();
         let bulletproof = bulletprove(
-            &ProofVersion::Version1,
+            ProofVersion::Version1,
             transcript,
             csprng,
             u8::from(CHUNK_SIZE),

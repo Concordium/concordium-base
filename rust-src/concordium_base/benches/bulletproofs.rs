@@ -72,7 +72,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     group.bench_function("Prove", move |b| {
         b.iter(|| {
             prove(
-                &ProofVersion::Version1,
+                ProofVersion::Version1,
                 &mut transcript,
                 rng,
                 n,
@@ -88,7 +88,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let rng = &mut thread_rng();
     let mut transcript = RandomOracle::empty();
     let proof = prove(
-        &ProofVersion::Version1,
+        ProofVersion::Version1,
         &mut transcript,
         rng,
         n,
@@ -104,7 +104,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
         b.iter(|| {
             let mut transcript = RandomOracle::empty();
             assert!(verify_efficient(
-                &ProofVersion::Version1,
+                ProofVersion::Version1,
                 &mut transcript,
                 n,
                 &commitments,
