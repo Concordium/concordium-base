@@ -1,14 +1,15 @@
 use crate as concordium_std;
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
+#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
+use alloc::boxed::Box;
+#[cfg(not(feature = "std"))]
+use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, string::ToString, vec::Vec};
-#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
-use alloc::{boxed::Box, collections::BTreeMap};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
-#[cfg(feature = "std")]
 use concordium_contracts_common_derive::SchemaType;
 #[cfg(not(feature = "std"))]
 use core::{cmp, convert, fmt, hash, iter, ops, str};
@@ -591,10 +592,8 @@ impl quickcheck::Arbitrary for PublicKeyEd25519 {
     }
 }
 
-#[cfg(feature = "std")]
 pub(crate) type KeyIndex = u8;
 
-#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 /// A public indexed by the signature scheme. Currently only a
 /// single scheme is supported, `ed25519`.
@@ -602,7 +601,6 @@ pub enum PublicKey {
     Ed25519(PublicKeyEd25519),
 }
 
-#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 pub struct CredentialPublicKeys {
     #[concordium(size_length = 1)]
@@ -610,7 +608,6 @@ pub struct CredentialPublicKeys {
     pub threshold: SignatureThreshold,
 }
 
-#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 /// Public keys of an account, together with the thresholds.
 pub struct AccountPublicKeys {
@@ -619,10 +616,8 @@ pub struct AccountPublicKeys {
     pub threshold: AccountThreshold,
 }
 
-#[cfg(feature = "std")]
 pub(crate) type CredentialIndex = u8;
 
-#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, SchemaType)]
 #[non_exhaustive]
 /// A cryptographic signature indexed by the signature scheme. Currently only a
@@ -631,7 +626,6 @@ pub enum Signature {
     Ed25519(SignatureEd25519),
 }
 
-#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, SchemaType)]
 #[concordium(transparent)]
 /// Account signatures. This is an analogue of transaction signatures that are
@@ -644,7 +638,6 @@ pub struct AccountSignatures {
     pub sigs: BTreeMap<CredentialIndex, CredentialSignatures>,
 }
 
-#[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, SchemaType)]
 #[concordium(transparent)]
 pub struct CredentialSignatures {
