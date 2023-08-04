@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Add signature and key types to `concordium-contracts-common`.
 - Add `Display` trait to `VersionedModuleSchema` to display the `VersionedModuleSchema` as a JSON template.
 - Add `Display` trait to `SchemaType` to display the `SchemaType` as a JSON template.
 - Add associated function `from_base64_str` to `VersionedModuleSchema` to easily parse from base64

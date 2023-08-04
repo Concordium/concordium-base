@@ -1,15 +1,19 @@
+use crate as concordium_std;
 pub use crate::hashes::ModuleReference;
 use crate::{constants, to_bytes, Serial};
+#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
+use alloc::boxed::Box;
+#[cfg(not(feature = "std"))]
+use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, string::ToString, vec::Vec};
-#[cfg(all(not(feature = "std"), feature = "concordium-quickcheck"))]
-use alloc::{boxed::Box, collections::BTreeMap};
 #[cfg(feature = "fuzz")]
 use arbitrary::Arbitrary;
 use cmp::Ordering;
-use core::marker::PhantomData;
+use concordium_contracts_common_derive::SchemaType;
 #[cfg(not(feature = "std"))]
 use core::{cmp, convert, fmt, hash, iter, ops, str};
+use core::{marker::PhantomData, str::FromStr};
 use hash::Hash;
 #[cfg(feature = "concordium-quickcheck")]
 use quickcheck::Gen;
@@ -17,7 +21,7 @@ use quickcheck::Gen;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "derive-serde")]
 pub use serde_impl::*;
-#[cfg(all(feature = "std", feature = "concordium-quickcheck"))]
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::{cmp, convert, fmt, hash, iter, ops, str};
@@ -447,6 +451,199 @@ pub struct NonZeroThresholdU8<Kind> {
 /// An error type that indicates that a 0 attempted to be used as a signature
 /// threshold.
 pub struct ZeroSignatureThreshold;
+
+/// Public key for Ed25519. Must be 32 bytes long.
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
+#[repr(transparent)]
+pub struct PublicKeyEd25519(pub [u8; 32]);
+
+impl fmt::Display for PublicKeyEd25519 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0 {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for PublicKeyEd25519 {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 64 {
+            return Err(ParseError {});
+        }
+
+        let mut public_key: [u8; 32] = [0u8; 32];
+        for (i, place) in public_key.iter_mut().enumerate() {
+            *place = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).map_err(|_| ParseError {})?;
+        }
+
+        Ok(PublicKeyEd25519(public_key))
+    }
+}
+
+/// Public key for ECDSA over Secp256k1. Must be 33 bytes long.
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
+#[repr(transparent)]
+pub struct PublicKeyEcdsaSecp256k1(pub [u8; 33]);
+
+impl fmt::Display for PublicKeyEcdsaSecp256k1 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0 {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for PublicKeyEcdsaSecp256k1 {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 66 {
+            return Err(ParseError {});
+        }
+
+        let mut public_key: [u8; 33] = [0u8; 33];
+        for (i, place) in public_key.iter_mut().enumerate() {
+            *place = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).map_err(|_| ParseError {})?;
+        }
+
+        Ok(PublicKeyEcdsaSecp256k1(public_key))
+    }
+}
+
+/// Signature for a Ed25519 message. Must be 64 bytes long.
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
+#[repr(transparent)]
+pub struct SignatureEd25519(pub [u8; 64]);
+
+impl fmt::Display for SignatureEd25519 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0 {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for SignatureEd25519 {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 128 {
+            return Err(ParseError {});
+        }
+
+        let mut signature: [u8; 64] = [0u8; 64];
+        for (i, place) in signature.iter_mut().enumerate() {
+            *place = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).map_err(|_| ParseError {})?;
+        }
+
+        Ok(SignatureEd25519(signature))
+    }
+}
+
+/// Signature for a ECDSA (over Secp256k1) message. Must be 64 bytes longs
+/// (serialized in compressed format).
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
+#[repr(transparent)]
+pub struct SignatureEcdsaSecp256k1(pub [u8; 64]);
+
+impl fmt::Display for SignatureEcdsaSecp256k1 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0 {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for SignatureEcdsaSecp256k1 {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 128 {
+            return Err(ParseError {});
+        }
+
+        let mut signature: [u8; 64] = [0u8; 64];
+        for (i, place) in signature.iter_mut().enumerate() {
+            *place = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).map_err(|_| ParseError {})?;
+        }
+
+        Ok(SignatureEcdsaSecp256k1(signature))
+    }
+}
+
+#[cfg(feature = "concordium-quickcheck")]
+/// Arbitrary public keys.
+/// Note that this is a simple generator that might produce an array of bytes
+/// that is not a valid public key.
+impl quickcheck::Arbitrary for PublicKeyEd25519 {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        let lower: u128 = quickcheck::Arbitrary::arbitrary(g);
+        let upper: u128 = quickcheck::Arbitrary::arbitrary(g);
+        let mut out = [0u8; 32];
+        out[..16].copy_from_slice(&lower.to_le_bytes());
+        out[16..].copy_from_slice(&upper.to_le_bytes());
+        PublicKeyEd25519(out)
+    }
+}
+
+pub(crate) type KeyIndex = u8;
+
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
+/// A public indexed by the signature scheme. Currently only a
+/// single scheme is supported, `ed25519`.
+pub enum PublicKey {
+    Ed25519(PublicKeyEd25519),
+}
+
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
+pub struct CredentialPublicKeys {
+    #[concordium(size_length = 1)]
+    pub keys:      BTreeMap<KeyIndex, PublicKey>,
+    pub threshold: SignatureThreshold,
+}
+
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
+/// Public keys of an account, together with the thresholds.
+pub struct AccountPublicKeys {
+    #[concordium(size_length = 1)]
+    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
+    pub threshold: AccountThreshold,
+}
+
+pub(crate) type CredentialIndex = u8;
+
+#[derive(crate::Serialize, Debug, SchemaType)]
+#[non_exhaustive]
+/// A cryptographic signature indexed by the signature scheme. Currently only a
+/// single scheme is supported, `ed25519`.
+pub enum Signature {
+    Ed25519(SignatureEd25519),
+}
+
+#[derive(crate::Serialize, Debug, SchemaType)]
+#[concordium(transparent)]
+/// Account signatures. This is an analogue of transaction signatures that are
+/// part of transactions that get sent to the chain.
+///
+/// It should be thought of as a nested map, indexed on the outer layer by
+/// credential indexes, and the inner map maps key indices to [`Signature`]s.
+pub struct AccountSignatures {
+    #[concordium(size_length = 1)]
+    pub sigs: BTreeMap<CredentialIndex, CredentialSignatures>,
+}
+
+#[derive(crate::Serialize, Debug, SchemaType)]
+#[concordium(transparent)]
+pub struct CredentialSignatures {
+    #[concordium(size_length = 1)]
+    pub sigs: BTreeMap<KeyIndex, Signature>,
+}
 
 /// Timestamp represented as milliseconds since unix epoch.
 ///
