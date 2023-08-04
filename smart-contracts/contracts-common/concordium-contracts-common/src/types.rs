@@ -613,9 +613,6 @@ pub struct CredentialPublicKeys {
 #[cfg(feature = "std")]
 #[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 /// Public keys of an account, together with the thresholds.
-/// This type is deliberately made opaque, but it has serialization instances
-/// since inside smart contracts there is no need to inspect the values other
-/// than to pass them to verification functions.
 pub struct AccountPublicKeys {
     #[concordium(size_length = 1)]
     pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
@@ -640,7 +637,6 @@ pub enum Signature {
 /// Account signatures. This is an analogue of transaction signatures that are
 /// part of transactions that get sent to the chain.
 ///
-/// This type is deliberately made opaque, but it has serialization instances.
 /// It should be thought of as a nested map, indexed on the outer layer by
 /// credential indexes, and the inner map maps key indices to [`Signature`]s.
 pub struct AccountSignatures {
