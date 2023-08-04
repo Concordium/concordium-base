@@ -6,8 +6,8 @@
 //! The reason is that the SigmaProtocol trait is implemented based on Maurer's
 //! definition of Sigma protocols, where the first message (i.e.,
 //! commit_point()) is independent of the witness. To make inequality interface
-//! similar to other sigma protocols, the prover needs to compute a commitment to
-//! the secret (`value`-`pub_value`) in the first message, which requires
+//! similar to other sigma protocols, the prover needs to compute a commitment
+//! to the secret (`value`-`pub_value`) in the first message, which requires
 //! commit_point() to be witness-dependent.
 
 use super::{
