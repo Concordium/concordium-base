@@ -5,14 +5,14 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::{Challenge, RandomOracle},
 };
 use ff::Field;
 use itertools::izip;
 
-pub struct ComMultSecret<T: Curve> {
+pub struct ComMultSecret<T: Group> {
     pub values: [Value<T>; 2],
     pub rands:  [Randomness<T>; 3],
 }
@@ -22,13 +22,13 @@ pub struct ComMultSecret<T: Curve> {
 ///   commited values should be equal to the last)
 /// * `cmm_key` - The commitment key with which all the commitments are
 ///   generated.
-pub struct ComMult<C: Curve> {
+pub struct ComMult<C: Group> {
     pub cmms:    [Commitment<C>; 3],
     pub cmm_key: CommitmentKey<C>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Witness<C: Group> {
     /// The witness, expanded using the same notation as in the specification.
     ss: [C::Scalar; 2],
     ts: [C::Scalar; 2],
@@ -36,7 +36,7 @@ pub struct Witness<C: Curve> {
 }
 
 #[allow(non_snake_case)]
-impl<C: Curve> SigmaProtocol for ComMult<C> {
+impl<C: Group> SigmaProtocol for ComMult<C> {
     type CommitMessage = ([Commitment<C>; 2], Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     // alpha's, R_i's, R's

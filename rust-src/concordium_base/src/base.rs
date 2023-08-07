@@ -634,7 +634,7 @@ pub struct BakerElectionSignKey {
 }
 
 impl BakerElectionSignKey {
-    pub fn generate<T: CryptoRng + Rng>(csprng: &mut T) -> Self {
+    pub fn generate<T: Rng>(csprng: &mut T) -> Self {
         Self {
             sign_key: crate::ecvrf::SecretKey::generate(csprng),
         }
@@ -681,7 +681,7 @@ pub struct BakerKeyPairs {
 
 impl BakerKeyPairs {
     /// Generate key pairs needed for becoming a baker.
-    pub fn generate<T: Rng + CryptoRng>(csprng: &mut T) -> Self {
+    pub fn generate<T: CryptoRng + Rng>(csprng: &mut T) -> Self {
         let signature_sign = BakerSignatureSignKey::generate(csprng);
         let signature_verify = BakerSignatureVerifyKey::from(&signature_sign);
         let election_sign = BakerElectionSignKey::generate(csprng);

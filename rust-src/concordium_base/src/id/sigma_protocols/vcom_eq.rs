@@ -5,7 +5,7 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     pedersen_commitment::{Commitment, Value},
     random_oracle::{Challenge, RandomOracle},
 };
@@ -17,7 +17,7 @@ type IndexType = u8;
 
 /// The public information known to both the prover and the verifier.
 #[derive(Debug, Clone, Serialize)]
-pub struct VecComEq<C: Curve> {
+pub struct VecComEq<C: Group> {
     /// The commitment C
     pub comm:  Commitment<C>,
     /// The commitments C_i for i in I
@@ -38,7 +38,7 @@ pub struct VecComEq<C: Curve> {
 
 /// `VecComEq` witness. We deliberately make it opaque.
 #[derive(Clone, Debug, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Witness<C: Group> {
     #[size_length = 2]
     sis: Vec<C::Scalar>,
     t:   C::Scalar,
@@ -49,7 +49,7 @@ pub struct Witness<C: Curve> {
 /// Convenient alias
 pub type Proof<C> = SigmaProof<Witness<C>>;
 
-impl<C: Curve> SigmaProtocol for VecComEq<C> {
+impl<C: Group> SigmaProtocol for VecComEq<C> {
     type CommitMessage = (C, Vec<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<C::Scalar>, C::Scalar, BTreeMap<IndexType, C::Scalar>);

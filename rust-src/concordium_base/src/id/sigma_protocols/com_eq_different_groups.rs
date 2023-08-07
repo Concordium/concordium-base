@@ -5,7 +5,7 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::RandomOracle,
 };
@@ -13,19 +13,19 @@ use ff::Field;
 use rand::*;
 
 #[derive(Debug)]
-pub struct ComEqDiffGroupsSecret<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
+pub struct ComEqDiffGroupsSecret<C1: Group, C2: Group<Scalar = C1::Scalar>> {
     pub value:      Value<C2>,
     pub rand_cmm_1: Randomness<C1>,
     pub rand_cmm_2: Randomness<C2>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize, SerdeBase16Serialize)]
-pub struct Witness<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
+pub struct Witness<C1: Group, C2: Group<Scalar = C1::Scalar>> {
     /// The triple (s_1, s_2, t).
     witness: (C1::Scalar, C1::Scalar, C2::Scalar),
 }
 
-pub struct ComEqDiffGroups<C1: Curve, C2: Curve> {
+pub struct ComEqDiffGroups<C1: Group, C2: Group> {
     /// A pair of commitments to the same value in different
     ///   groups.
     pub commitment_1: Commitment<C1>,
@@ -37,7 +37,7 @@ pub struct ComEqDiffGroups<C1: Curve, C2: Curve> {
 }
 
 #[allow(non_snake_case)]
-impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroups<C1, C2> {
+impl<C1: Group, C2: Group<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroups<C1, C2> {
     type CommitMessage = (Commitment<C1>, Commitment<C2>);
     type ProtocolChallenge = C1::Scalar;
     // The triple alpha_1, alpha_2, R

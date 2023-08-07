@@ -10,7 +10,7 @@ pub use constants::*;
 
 pub use self::{errors::*, proof::*, public::*, secret::*};
 use crate::common::*;
-use rand::{CryptoRng, Rng};
+use rand::Rng;
 
 /// An ed25519 keypair.
 #[derive(Debug, Serialize)]
@@ -25,7 +25,7 @@ impl Keypair {
     /// Generate an ed25519 keypair.
     pub fn generate<R>(csprng: &mut R) -> Keypair
     where
-        R: CryptoRng + Rng, {
+        R: Rng, {
         let sk = SecretKey::generate(csprng);
         let pk = PublicKey::from(&sk);
 

@@ -2,15 +2,15 @@
 //! this crate
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     random_oracle::RandomOracle,
 };
 use ff::Field;
 
 /// Inner product proof
 #[derive(Clone, Serialize, Debug)]
-pub struct InnerProductProof<C: Curve> {
-    #[size_length = 4]
+pub struct InnerProductProof<C: Group> {
+    //#[size_length = 4]
     pub lr_vec: Vec<(C, C)>,
     pub a:      C::Scalar,
     pub b:      C::Scalar,
@@ -33,7 +33,7 @@ pub struct InnerProductProof<C: Curve> {
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
-pub fn prove_inner_product<C: Curve>(
+pub fn prove_inner_product<C: Group>(
     transcript: &mut RandomOracle,
     G_slice: &[C],
     H_slice: &[C],
@@ -65,7 +65,7 @@ pub fn prove_inner_product<C: Curve>(
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
-pub fn prove_inner_product_with_scalars<C: Curve>(
+pub fn prove_inner_product_with_scalars<C: Group>(
     transcript: &mut RandomOracle,
     G_slice: &[C],
     H_slice: &[C],
@@ -206,7 +206,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
 /// This struct contains vectors of scalars that are needed for verification.
 /// Both u_sq and u_inv_sq have to be of equal length k, and s has to be of
 /// length 2^k.
-pub struct VerificationScalars<C: Curve> {
+pub struct VerificationScalars<C: Group> {
     pub u_sq:     Vec<C::Scalar>,
     pub u_inv_sq: Vec<C::Scalar>,
     pub s:        Vec<C::Scalar>,
@@ -221,7 +221,7 @@ pub struct VerificationScalars<C: Curve> {
 ///   is the length of proof.lr_vec
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
-pub fn verify_scalars<C: Curve>(
+pub fn verify_scalars<C: Group>(
     transcript: &mut RandomOracle,
     n: usize,
     proof: &InnerProductProof<C>,
@@ -290,7 +290,7 @@ pub fn verify_scalars<C: Curve>(
 /// `G_vec` and `H_vec` must be of the same length, and this length must a power
 /// of 2.
 #[allow(non_snake_case)]
-pub fn verify_inner_product<C: Curve>(
+pub fn verify_inner_product<C: Group>(
     transcript: &mut RandomOracle,
     G_vec: &[C],
     H_vec: &[C],
@@ -344,7 +344,7 @@ pub fn verify_inner_product<C: Curve>(
 /// - The length of `P_prime_exponents` is equal to the length of
 ///   `P_prime_bases`
 #[allow(non_snake_case)]
-pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
+pub(crate) fn verify_inner_product_with_scalars<C: Group>(
     transcript: &mut RandomOracle,
     H_exponents: &[C::Scalar],
     P_prime_bases: &[C],
@@ -460,17 +460,17 @@ pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curve_arithmetic::Curve;
+    use crate::curve_arithmetic::curve_group::Group;
     use pairing::bls12_381::G1;
     use rand::thread_rng;
-    type SomeCurve = G1;
+    type SomeGroup = G1;
 
     #[test]
     fn testinner() {
-        let one = SomeCurve::scalar_from_u64(1);
-        let two = SomeCurve::scalar_from_u64(2);
-        let three = SomeCurve::scalar_from_u64(3);
-        let eleven = SomeCurve::scalar_from_u64(11);
+        let one = SomeGroup::scalar_from_u64(1);
+        let two = SomeGroup::scalar_from_u64(2);
+        let three = SomeGroup::scalar_from_u64(3);
+        let eleven = SomeGroup::scalar_from_u64(11);
 
         let v = vec![one, two, three];
         let u = vec![three, one, two];
@@ -489,10 +489,10 @@ mod tests {
         let mut a_vec = vec![];
         let mut b_vec = vec![];
         for _ in 0..n {
-            let g = SomeCurve::generate(rng);
-            let h = SomeCurve::generate(rng);
-            let a = SomeCurve::generate_scalar(rng);
-            let b = SomeCurve::generate_scalar(rng);
+            let g = SomeGroup::generate(rng);
+            let h = SomeGroup::generate(rng);
+            let a = SomeGroup::generate_scalar(rng);
+            let b = SomeGroup::generate_scalar(rng);
 
             G_vec.push(g);
             H_vec.push(h);
@@ -500,7 +500,7 @@ mod tests {
             b_vec.push(b);
         }
 
-        let Q = SomeCurve::generate(rng);
+        let Q = SomeGroup::generate(rng);
         let P_prime = multiexp(&G_vec, &a_vec)
             .plus_point(&multiexp(&H_vec, &b_vec))
             .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));

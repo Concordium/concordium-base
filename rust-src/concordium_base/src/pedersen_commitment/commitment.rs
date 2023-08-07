@@ -2,15 +2,15 @@
 
 //! Commitment type
 
-use crate::{common::*, curve_arithmetic::*};
+use crate::{common::*, curve_arithmetic::curve_group::Group};
 
 use std::ops::Deref;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 /// A Commitment is a group element.
-pub struct Commitment<C: Curve>(pub C);
+pub struct Commitment<C: Group>(pub C);
 
-impl<C: Curve> Commitment<C> {
+impl<C: Group> Commitment<C> {
     /// Combine two commitments. If the first is a commitment to v_1 with
     /// randomness r_1 and the second is a commitment to v_2 with randomness
     /// r_2, the resulting commitment is a commitment to v_1 + v_2 with
@@ -25,7 +25,7 @@ impl<C: Curve> Commitment<C> {
 /// This trait allows automatic conversion of `&Commitment<C>` to `&C`. In
 /// particular this means that we can simply write `c.mul_by_scalar`, for
 /// example.
-impl<C: Curve> Deref for Commitment<C> {
+impl<C: Group> Deref for Commitment<C> {
     type Target = C;
 
     fn deref(&self) -> &C { &self.0 }
@@ -34,7 +34,7 @@ impl<C: Curve> Deref for Commitment<C> {
 /// This trait allows automatic conversion of `&Commitment<C>` to `&C`. In
 /// particular this means that we can simply write `c.mul_by_scalar`, for
 /// example.
-impl<C: Curve> std::borrow::Borrow<C> for Commitment<C> {
+impl<C: Group> std::borrow::Borrow<C> for Commitment<C> {
     fn borrow(&self) -> &C { &self.0 }
 }
 
@@ -43,7 +43,7 @@ mod tests {
     use super::*;
     use pairing::bls12_381::{G1, G2};
     use rand::*;
-    impl<C: Curve> Commitment<C> {
+    impl<C: Group> Commitment<C> {
         pub fn generate<T: Rng>(csprng: &mut T) -> Commitment<C> { Commitment(C::generate(csprng)) }
     }
 

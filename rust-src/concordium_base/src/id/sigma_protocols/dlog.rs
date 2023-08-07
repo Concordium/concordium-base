@@ -4,33 +4,33 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{Curve, Value},
+    curve_arithmetic::{curve_group::Group, Value},
     random_oracle::{Challenge, RandomOracle},
 };
 use ff::Field;
 
-pub struct Dlog<C: Curve> {
+pub struct Dlog<C: Group> {
     /// Evaluated point.
     pub public: C,
     /// The base point.
     pub coeff:  C,
 }
 
-pub struct DlogSecret<C: Curve> {
+pub struct DlogSecret<C: Group> {
     pub secret: Value<C>,
 }
 
 /// Dlog witness. We deliberately make it opaque.
 /// We implement Copy to make the interface easier to use.
 #[derive(Debug, Serialize, Clone, Copy, Eq, PartialEq)]
-pub struct Witness<C: Curve> {
+pub struct Witness<C: Group> {
     witness: C::Scalar,
 }
 
 /// Convenient alias for aggregate dlog proof
 pub type Proof<C> = SigmaProof<Witness<C>>;
 
-impl<C: Curve> SigmaProtocol for Dlog<C> {
+impl<C: Group> SigmaProtocol for Dlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
     type ProverState = C::Scalar;

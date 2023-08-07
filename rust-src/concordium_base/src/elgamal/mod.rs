@@ -1,4 +1,4 @@
-//! Implementation of elgamal public key encryption and decryption over a Curve.
+//! Implementation of elgamal public key encryption and decryption over a Group.
 
 mod cipher;
 mod errors;
@@ -8,7 +8,7 @@ mod secret;
 
 pub use self::{cipher::*, message::*, public::*, secret::*};
 
-use crate::curve_arithmetic::{Curve, Value};
+use crate::curve_arithmetic::{curve_group::Group, Value};
 use ff::{Field, PrimeField};
 use rand::*;
 
@@ -88,7 +88,7 @@ impl ChunkSize {
 
 /// Transform a scalar into as many chunks as necessary.
 /// The chunks are returned in little-endian order.
-pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: ChunkSize) -> Vec<Value<C>> {
+pub fn value_to_chunks<C: Group>(val: &C::Scalar, chunk_size: ChunkSize) -> Vec<Value<C>> {
     // u64 chunks as little-endian limbs
     let size = usize::from(u8::from(chunk_size));
     let n = C::SCALAR_LENGTH / size;
@@ -110,7 +110,7 @@ pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: ChunkSize) -> Vec<
 /// It assumes that the chunks are reasonable and at most 64 bits.
 ///
 /// The chunks are assumed to be in little-endian order.
-pub fn chunks_to_value<C: Curve>(chunks: &[Value<C>], chunk_size: ChunkSize) -> Value<C> {
+pub fn chunks_to_value<C: Group>(chunks: &[Value<C>], chunk_size: ChunkSize) -> Value<C> {
     // 2^64
     let mul = {
         let mut factor = C::scalar_from_u64(1);
@@ -135,7 +135,7 @@ pub fn chunks_to_value<C: Curve>(chunks: &[Value<C>], chunk_size: ChunkSize) -> 
 
 /// Wrapper around `encrypt_in_chunks_given_generator` that uses the generator
 /// that is part of the public key.
-pub fn encrypt_in_chunks<C: Curve, R: Rng>(
+pub fn encrypt_in_chunks<C: Group, R: Rng>(
     pk: &PublicKey<C>,
     val: &Value<C>,
     chunk_size: ChunkSize,
@@ -144,7 +144,7 @@ pub fn encrypt_in_chunks<C: Curve, R: Rng>(
     encrypt_in_chunks_given_generator(pk, val, chunk_size, &pk.generator, csprng)
 }
 
-pub fn encrypt_in_chunks_given_generator<C: Curve, R: Rng>(
+pub fn encrypt_in_chunks_given_generator<C: Group, R: Rng>(
     pk: &PublicKey<C>,
     val: &Value<C>,
     chunk_size: ChunkSize,
@@ -157,7 +157,7 @@ pub fn encrypt_in_chunks_given_generator<C: Curve, R: Rng>(
 
 /// Encrypt a single `u64` value in chunks in the exponent of the given
 /// generator.
-pub fn encrypt_u64_in_chunks_given_generator<C: Curve, R: Rng>(
+pub fn encrypt_u64_in_chunks_given_generator<C: Group, R: Rng>(
     pk: &PublicKey<C>,
     val: u64,
     chunk_size: ChunkSize,
@@ -174,7 +174,7 @@ pub fn encrypt_u64_in_chunks_given_generator<C: Curve, R: Rng>(
 
 /// Wrapper around `decrypt_from_chunks_given_generator` that uses the generator
 /// that is part of the key.
-pub fn decrypt_from_chunks<C: Curve>(
+pub fn decrypt_from_chunks<C: Group>(
     sk: &SecretKey<C>,
     cipher: &[Cipher<C>],
     m: u64,
@@ -183,7 +183,7 @@ pub fn decrypt_from_chunks<C: Curve>(
     decrypt_from_chunks_given_generator(sk, cipher, &sk.generator, m, chunk_size)
 }
 
-pub fn decrypt_from_chunks_given_generator<C: Curve>(
+pub fn decrypt_from_chunks_given_generator<C: Group>(
     sk: &SecretKey<C>,
     cipher: &[Cipher<C>],
     generator: &C,
@@ -194,7 +194,7 @@ pub fn decrypt_from_chunks_given_generator<C: Curve>(
     decrypt_from_chunks_given_table(sk, cipher, &bsgs, chunk_size)
 }
 
-pub fn decrypt_from_chunks_given_table<C: Curve>(
+pub fn decrypt_from_chunks_given_table<C: Group>(
     sk: &SecretKey<C>,
     ciphers: &[Cipher<C>],
     table: &BabyStepGiantStep<C>,
@@ -217,7 +217,7 @@ mod tests {
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
     // going to use explicit curve instances.
-    fn test_encrypt_decrypt_success_generic<C: Curve>() {
+    fn test_encrypt_decrypt_success_generic<C: Group>() {
         let mut csprng = thread_rng();
         for _i in 1..10 {
             let sk: SecretKey<C> = SecretKey::generate_all(&mut csprng);
@@ -242,14 +242,14 @@ mod tests {
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
     // going to use explicit curve instances.
-    fn test_encrypt_decrypt_exponent_success_generic<C: Curve>() {
+    fn test_encrypt_decrypt_exponent_success_generic<C: Group>() {
         let mut csprng = thread_rng();
         let sk: SecretKey<C> = SecretKey::generate_all(&mut csprng);
         let pk = PublicKey::from(&sk);
         for _i in 1..10 {
             let n = csprng.gen_range(0, 1000);
-            let mut e = <C as Curve>::Scalar::zero();
-            let one_scalar = Value::<C>::new(<C as Curve>::Scalar::one());
+            let mut e = <C as Group>::Scalar::zero();
+            let one_scalar = Value::<C>::new(<C as Group>::Scalar::one());
             for _ in 0..n {
                 e.add_assign(&one_scalar);
             }
@@ -273,7 +273,7 @@ mod tests {
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
     // going to use explicit curve instances.
-    fn test_chunking_generic<C: Curve>() {
+    fn test_chunking_generic<C: Group>() {
         let mut csprng = thread_rng();
         use ChunkSize::*;
         let possible_chunk_sizes = [One, Two, Four, Eight, Sixteen, ThirtyTwo];
@@ -296,7 +296,7 @@ mod tests {
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
     // going to use explicit curve instances.
-    fn test_chunked_encrypt_decrypt_generic<C: Curve>() {
+    fn test_chunked_encrypt_decrypt_generic<C: Group>() {
         let mut csprng = thread_rng();
         let sk = SecretKey::<C>::generate_all(&mut csprng);
         let pk = PublicKey::<C>::from(&sk);

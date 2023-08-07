@@ -1,17 +1,20 @@
 //! Shared functions used by the proofs in this crate
-use crate::{common::*, curve_arithmetic::Curve};
+use crate::{
+    common::*,
+    curve_arithmetic::{curve_group, curve_group::Group},
+};
 use ff::Field;
 #[cfg(test)]
 use rand::Rng;
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, SerdeBase16Serialize)]
-pub struct Generators<C: Curve> {
+pub struct Generators<C: curve_group::Group> {
     #[size_length = 4]
     pub G_H: Vec<(C, C)>,
 }
 
-impl<C: Curve> Generators<C> {
+impl<C: Group> Generators<C> {
     /// **Warning** do not use in production!
     /// This generates a list of generators of a given size for
     /// testing purposes. For production, generators must be created such that

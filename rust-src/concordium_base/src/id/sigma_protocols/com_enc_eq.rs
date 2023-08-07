@@ -5,7 +5,7 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     elgamal::{
         Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
     },
@@ -16,14 +16,14 @@ use ff::Field;
 use rand::*;
 
 #[derive(Debug)]
-pub struct ComEncEqSecret<T: Curve> {
+pub struct ComEncEqSecret<T: Group> {
     pub value:         Value<T>,
     pub elgamal_rand:  ElgamalRandomness<T>,
     pub pedersen_rand: PedersenRandomness<T>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct Witness<T: Curve> {
+pub struct Witness<T: Group> {
     /// The values
     /// * $\alpha - c R$
     /// * $\beta - c x$
@@ -36,7 +36,7 @@ pub struct Witness<T: Curve> {
     witness: (T::Scalar, T::Scalar, T::Scalar),
 }
 
-pub struct ComEncEq<C: Curve> {
+pub struct ComEncEq<C: Group> {
     /// The encryption $e$ of the secret value.
     pub cipher: ElGamalCipher<C>,
     /// The commitment to the same value.
@@ -50,7 +50,7 @@ pub struct ComEncEq<C: Curve> {
 }
 
 #[allow(non_snake_case)]
-impl<C: Curve> SigmaProtocol for ComEncEq<C> {
+impl<C: Group> SigmaProtocol for ComEncEq<C> {
     type CommitMessage = (ElGamalCipher<C>, Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     // (beta, alpha, gamma)

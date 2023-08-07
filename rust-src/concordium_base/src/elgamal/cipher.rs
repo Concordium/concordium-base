@@ -1,6 +1,9 @@
 //! Elgamal cipher  types
 
-use crate::{common::*, curve_arithmetic::*};
+use crate::{
+    common::*,
+    curve_arithmetic::{curve_group::Group, *},
+};
 
 use rand::*;
 use std::ops::Deref;
@@ -9,27 +12,27 @@ use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, SerdeBase16Serialize)]
 /// Encrypted message.
-pub struct Cipher<C: Curve>(pub C, pub C);
+pub struct Cipher<C: Group>(pub C, pub C);
 
 /// Randomness which was used to encrypt a message.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[repr(transparent)]
-pub struct Randomness<C: Curve> {
+pub struct Randomness<C: Group> {
     pub randomness: Rc<Secret<C::Scalar>>,
 }
 
-impl<C: Curve> AsRef<C::Scalar> for Randomness<C> {
+impl<C: Group> AsRef<C::Scalar> for Randomness<C> {
     fn as_ref(&self) -> &C::Scalar { &self.randomness }
 }
 
 /// This trait allows automatic conversion of `&Randomness<C>` to `&C::Scalar`.
-impl<C: Curve> Deref for Randomness<C> {
+impl<C: Group> Deref for Randomness<C> {
     type Target = C::Scalar;
 
     fn deref(&self) -> &C::Scalar { &self.randomness }
 }
 
-impl<C: Curve> Randomness<C> {
+impl<C: Group> Randomness<C> {
     pub fn new(v: C::Scalar) -> Self {
         Randomness {
             randomness: Rc::new(Secret::new(v)),
@@ -50,7 +53,7 @@ impl<C: Curve> Randomness<C> {
     }
 }
 
-impl<C: Curve> Cipher<C> {
+impl<C: Group + HasUnchecked> Cipher<C> {
     /// Construct a cipher from a slice of bytes.
     /// only use if you know that the bytes are an encoding fo a cipher
     /// A `Result` whose okay value is a cipher key or whose error value
@@ -97,7 +100,7 @@ impl<C: Curve> Cipher<C> {
 /// \sum_i v_i \cdot s_i where s_i is the i-th scalar.
 ///
 /// This function assumes the two slices have the same length.
-pub fn multicombine<C: Curve>(ciphers: &[Cipher<C>], scalars: &[C::Scalar]) -> Cipher<C> {
+pub fn multicombine<C: Group>(ciphers: &[Cipher<C>], scalars: &[C::Scalar]) -> Cipher<C> {
     assert_eq!(
         ciphers.len(),
         scalars.len(),

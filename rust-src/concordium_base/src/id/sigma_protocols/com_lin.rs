@@ -6,14 +6,14 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::{Challenge, RandomOracle},
 };
 use ff::Field;
 use itertools::izip;
 
-pub struct ComLinSecret<C: Curve> {
+pub struct ComLinSecret<C: Group> {
     /// The secret values, s's above.
     xs: Vec<Value<C>>,
     /// The randomness used in commitments to s_i's.
@@ -23,7 +23,7 @@ pub struct ComLinSecret<C: Curve> {
     r:  Randomness<C>,
 }
 
-pub struct ComLin<C: Curve> {
+pub struct ComLin<C: Group> {
     /// The coefficients u_i.
     pub us:      Vec<C::Scalar>,
     /// The commitments to s_i's.
@@ -37,7 +37,7 @@ pub struct ComLin<C: Curve> {
 // TODO: What if u = 0?
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Witness<C: Group> {
     /// Randomized s_i's
     #[size_length = 4]
     /// Randomized r_i's.
@@ -48,7 +48,7 @@ pub struct Witness<C: Curve> {
     s:  C::Scalar,
 }
 
-impl<C: Curve> SigmaProtocol for ComLin<C> {
+impl<C: Group> SigmaProtocol for ComLin<C> {
     type CommitMessage = (Vec<Commitment<C>>, Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<Value<C>>, Vec<Randomness<C>>, Randomness<C>);

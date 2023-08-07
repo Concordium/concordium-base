@@ -2,7 +2,7 @@
 
 use super::{commitment::*, randomness::*};
 
-use crate::curve_arithmetic::*;
+use crate::curve_arithmetic::{curve_group, curve_group::Group, *};
 
 use crate::common::*;
 use rand::*;
@@ -10,7 +10,7 @@ use rand::*;
 /// A commitment key is a pair of group elements that are used as a base to
 /// raise the value and randomness, respectively.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
-pub struct CommitmentKey<C: Curve> {
+pub struct CommitmentKey<C: curve_group::Group> {
     /// Base to raise the value to when committing.
     pub g: C,
     /// Base to raise the randomness to when committing.
@@ -20,7 +20,7 @@ pub struct CommitmentKey<C: Curve> {
 /// A vector commitment key is a list of group elements that are used as bases
 /// to raise the values and randomness, respectively.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
-pub struct VecCommitmentKey<C: Curve> {
+pub struct VecCommitmentKey<C: curve_group::Group> {
     /// Bases to raise the values to when committing.
     /// It is assumed that this is non-empty.
     #[size_length = 4]
@@ -29,7 +29,7 @@ pub struct VecCommitmentKey<C: Curve> {
     pub h:  C,
 }
 
-impl<C: Curve> CommitmentKey<C> {
+impl<C: curve_group::Group> CommitmentKey<C> {
     pub fn new(g: C, h: C) -> Self { CommitmentKey { g, h } }
 
     /// Commit to the given value using a freshly generated randomness, and
@@ -76,7 +76,7 @@ impl<C: Curve> CommitmentKey<C> {
     }
 }
 
-impl<C: Curve> VecCommitmentKey<C> {
+impl<C: Group> VecCommitmentKey<C> {
     pub fn new(gs: Vec<C>, h: C) -> Self { VecCommitmentKey { gs, h } }
 
     /// Commit to the given values using a freshly generated randomness, and

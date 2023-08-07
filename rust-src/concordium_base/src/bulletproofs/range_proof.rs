@@ -2,7 +2,7 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value},
+    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, curve_group, Value},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
@@ -16,7 +16,7 @@ pub use super::utils::Generators;
 /// Bulletproof style range proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
-pub struct RangeProof<C: Curve> {
+pub struct RangeProof<C: curve_group::Group> {
     /// Commitments to the bits `a_i` of the value, and `a_i - 1`
     A:        C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
@@ -78,7 +78,7 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
 ///
 /// See the documentation of `prove` below for the meaning of arguments.
 #[allow(clippy::too_many_arguments)]
-pub fn prove_given_scalars<C: Curve, T: Rng>(
+pub fn prove_given_scalars<C: curve_group::Group, T: Rng>(
     version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut T,
@@ -122,7 +122,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 #[allow(clippy::many_single_char_names)]
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
-pub fn prove<C: Curve, T: Rng>(
+pub fn prove<C: curve_group::Group, T: Rng>(
     version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut T,
@@ -488,7 +488,7 @@ pub enum VerificationError {
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::many_single_char_names)]
-pub fn verify_efficient<C: Curve>(
+pub fn verify_efficient<C: curve_group::Group>(
     version: ProofVersion,
     transcript: &mut RandomOracle,
     n: u8,
@@ -676,7 +676,7 @@ pub fn verify_efficient<C: Curve>(
 /// For proving that a <= b for integers a,b
 /// It is assumed that a,b \in [0, 2^n)
 #[allow(clippy::too_many_arguments)]
-pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
+pub fn prove_less_than_or_equal<C: curve_group::Group, T: Rng>(
     transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
@@ -706,7 +706,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
 /// It is assumed that b \in [0, 2^n),
 /// but it should follow that a \in [0, 2^n) if the
 /// proof verifies.
-pub fn verify_less_than_or_equal<C: Curve>(
+pub fn verify_less_than_or_equal<C: curve_group::Group>(
     transcript: &mut RandomOracle,
     n: u8,
     commitment_a: &Commitment<C>,
@@ -730,6 +730,8 @@ pub fn verify_less_than_or_equal<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::curve_group::Group;
+
     use super::*;
     use pairing::bls12_381::G1;
 
@@ -742,7 +744,7 @@ mod tests {
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
-    fn cheat_prove<C: Curve, T: Rng>(
+    fn cheat_prove<C: curve_group::Group, T: Rng>(
         n: u8,
         m: u8,
         v_vec: Vec<u64>,

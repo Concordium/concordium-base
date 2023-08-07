@@ -7,7 +7,7 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::*,
+    curve_arithmetic::{curve_group, *},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey},
     random_oracle::RandomOracle,
@@ -17,7 +17,7 @@ use itertools::izip;
 use rand::*;
 
 #[derive(Clone, Debug, Serialize)]
-pub struct Witness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct Witness<P: Pairing, C: curve_group::Group<Scalar = P::ScalarField>> {
     /// The witness that the prover knows $r'$ (see specification)
     witness_rho:    P::ScalarField,
     /// List of witnesses $(w_i, R_i)$ that the user knows the messages m_i and
@@ -27,7 +27,7 @@ pub struct Witness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     witness_commit: Vec<(P::ScalarField, C::Scalar)>,
 }
 
-pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct ComEqSig<P: Pairing, C: curve_group::Group<Scalar = P::ScalarField>> {
     /// The blinded signature
     pub blinded_sig: BlindedSignature<P>,
     ///  A list of commitments that were signed.
@@ -41,18 +41,18 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 
 pub type ValuesAndRands<C> = (Value<C>, Randomness<C>);
 
-pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct ComEqSigSecret<P: Pairing, C: curve_group::Group<Scalar = P::ScalarField>> {
     pub blind_rand:       BlindingRandomness<P>,
     pub values_and_rands: Vec<ValuesAndRands<C>>,
 }
 
-pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct ComEqSigState<P: Pairing, C: curve_group::Group<Scalar = P::ScalarField>> {
     pub rho_prime:  P::ScalarField,
     pub mus_and_rs: Vec<(Value<C>, Randomness<C>)>,
 }
 
 #[allow(non_snake_case)]
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P, C> {
+impl<P: Pairing, C: curve_group::Group<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P, C> {
     type CommitMessage = (P::TargetField, Vec<Commitment<C>>);
     type ProtocolChallenge = C::Scalar;
     // Triple (rho', [mu_i], [R_i])
@@ -99,7 +99,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         let mut mus_cRs = Vec::with_capacity(n);
 
         // randomness corresponding to the r_prime (r').
-        let rho_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
+        let rho_prime = <P::G2 as curve_group::Group>::generate_non_zero_scalar(csprng);
 
         // The auxiliary point which we are going to pair with a_hat to obtain the final
         // challenge. This is using the bilinearity property of pairings and differs

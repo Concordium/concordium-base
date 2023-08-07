@@ -1,5 +1,4 @@
 use super::{bls12_381_g1hash::*, bls12_381_g2hash::*, *};
-use byteorder::ReadBytesExt;
 use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
@@ -27,6 +26,14 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
     // unset two topmost bits in the last read u64.
     fr[3] &= !(1u64 << 63 | 1u64 << 62);
     Fr::from_repr(FrRepr(fr)).expect("The scalar with top two bits erased should be valid.")
+}
+
+impl HasUnchecked for G2 {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
+        let mut g = G2Compressed::empty();
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?.into_projective())
+    }
 }
 
 impl Curve for G2 {
@@ -82,12 +89,12 @@ impl Curve for G2 {
         }
     }
 
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t.into_projective()),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
+    // fn decompress_unchecked(c: &Self::Compressed) -> Result<Self,
+    // CurveDecodingError> {     match c.into_affine_unchecked() {
+    //         Ok(t) => Ok(t.into_projective()),
+    //         Err(_) => Err(CurveDecodingError::NotOnCurve),
+    //     }
+    // }
 
     #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
@@ -99,17 +106,19 @@ impl Curve for G2 {
         scalar_from_bytes_helper(bytes)
     }
 
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
-        let mut g = G2Compressed::empty();
-        bytes.read_exact(g.as_mut())?;
-        Ok(g.into_affine_unchecked()?.into_projective())
-    }
-
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::random(csprng) }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
     fn hash_to_group(b: &[u8]) -> Self { hash_to_curve_g2(b, HASH_TO_GROUP_G2_DST) }
+}
+
+impl HasUnchecked for G1 {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
+        let mut g = G1Compressed::empty();
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?.into_projective())
+    }
 }
 
 impl Curve for G1 {
@@ -165,12 +174,12 @@ impl Curve for G1 {
         }
     }
 
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t.into_projective()),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
+    // fn decompress_unchecked(c: &Self::Compressed) -> Result<Self,
+    // CurveDecodingError> {     match c.into_affine_unchecked() {
+    //         Ok(t) => Ok(t.into_projective()),
+    //         Err(_) => Err(CurveDecodingError::NotOnCurve),
+    //     }
+    // }
 
     #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
@@ -182,17 +191,25 @@ impl Curve for G1 {
         scalar_from_bytes_helper(bytes)
     }
 
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
-        let mut g = G1Compressed::empty();
-        bytes.read_exact(g.as_mut())?;
-        Ok(g.into_affine_unchecked()?.into_projective())
-    }
+    // fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) ->
+    // anyhow::Result<Self> {     let mut g = G1Compressed::empty();
+    //     bytes.read_exact(g.as_mut())?;
+    //     Ok(g.into_affine_unchecked()?.into_projective())
+    // }
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::random(csprng) }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
     fn hash_to_group(bytes: &[u8]) -> Self { hash_to_curve(bytes, HASH_TO_GROUP_G1_DST) }
+}
+
+impl HasUnchecked for G1Affine {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
+        let mut g = G1Compressed::empty();
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?)
+    }
 }
 
 impl Curve for G1Affine {
@@ -246,12 +263,12 @@ impl Curve for G1Affine {
         }
     }
 
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
+    // fn decompress_unchecked(c: &Self::Compressed) -> Result<Self,
+    // CurveDecodingError> {     match c.into_affine_unchecked() {
+    //         Ok(t) => Ok(t),
+    //         Err(_) => Err(CurveDecodingError::NotOnCurve),
+    //     }
+    // }
 
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
@@ -262,17 +279,19 @@ impl Curve for G1Affine {
         scalar_from_bytes_helper(bytes)
     }
 
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
-        let mut g = G1Compressed::empty();
-        bytes.read_exact(g.as_mut())?;
-        Ok(g.into_affine_unchecked()?)
-    }
-
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::random(csprng).into_affine() }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
     fn hash_to_group(b: &[u8]) -> Self { hash_to_curve(b, HASH_TO_GROUP_G1_DST).into_affine() }
+}
+
+impl HasUnchecked for G2Affine {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
+        let mut g = G2Compressed::empty();
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?)
+    }
 }
 
 impl Curve for G2Affine {
@@ -326,12 +345,12 @@ impl Curve for G2Affine {
         }
     }
 
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
+    // fn decompress_unchecked(c: &Self::Compressed) -> Result<Self,
+    // CurveDecodingError> {     match c.into_affine_unchecked() {
+    //         Ok(t) => Ok(t),
+    //         Err(_) => Err(CurveDecodingError::NotOnCurve),
+    //     }
+    // }
 
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
@@ -340,12 +359,6 @@ impl Curve for G2Affine {
     #[inline(always)]
     fn scalar_from_bytes<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
         scalar_from_bytes_helper(bytes)
-    }
-
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> anyhow::Result<Self> {
-        let mut g = G2Compressed::empty();
-        bytes.read_exact(g.as_mut())?;
-        Ok(g.into_affine_unchecked()?)
     }
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::random(csprng).into_affine() }

@@ -2,7 +2,7 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve},
+    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, curve_group},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
@@ -14,7 +14,7 @@ use std::iter::once;
 /// Bulletproof style set-non-membership proof
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
-pub struct SetNonMembershipProof<C: Curve> {
+pub struct SetNonMembershipProof<C: curve_group::Group> {
     /// Commitments to the multiplicative inverse of `v-s_i` for each `i`, and
     /// the all-`v` vector.
     A:        C,
@@ -60,7 +60,7 @@ pub enum ProverError {
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
 #[allow(non_snake_case, clippy::too_many_arguments)]
-pub fn prove<C: Curve, R: Rng>(
+pub fn prove<C: curve_group::Group, R: Rng>(
     version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut R,
@@ -340,7 +340,7 @@ pub enum VerificationError {
 ///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
-pub fn verify<C: Curve>(
+pub fn verify<C: curve_group::Group>(
     version: ProofVersion,
     transcript: &mut RandomOracle,
     the_set: &[C::Scalar],
@@ -495,12 +495,14 @@ pub fn verify<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::curve_group::Group;
+
     use super::*;
     use pairing::bls12_381::G1;
     type SomeCurve = G1;
 
     /// Converts the u64 set vector into a vector over the field
-    fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
+    fn get_set_vector<C: curve_group::Group>(the_set: &[u64]) -> Vec<C::Scalar> {
         the_set.iter().copied().map(C::scalar_from_u64).collect()
     }
 
@@ -518,7 +520,7 @@ mod tests {
 
     /// Generates commitment to v given commitment key and randomness
     fn get_v_com(
-        v: &<SomeCurve as Curve>::Scalar,
+        v: &<SomeCurve as curve_group::Group>::Scalar,
         v_keys: &CommitmentKey<G1>,
         v_rand: &Randomness<G1>,
     ) -> Commitment<G1> {
@@ -526,6 +528,7 @@ mod tests {
 
         v_keys.hide(&v_value, &v_rand)
     }
+
 
     #[test]
     /// Test whether verifying an honestly generated proof works

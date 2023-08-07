@@ -9,14 +9,14 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::RandomOracle,
 };
 use ff::Field;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct Witness<T: Curve> {
+pub struct Witness<T: Group> {
     /// The pair $(s, t)$ where
     /// * $s = \alpha - c a$
     /// * $t = R - c r$
@@ -26,12 +26,12 @@ pub struct Witness<T: Curve> {
 }
 
 #[derive(Debug, Serialize)]
-pub struct CommittedPoints<C: Curve, D: Curve> {
+pub struct CommittedPoints<C: Group, D: Group> {
     pub u: C,
     pub v: Commitment<D>,
 }
 
-pub struct ComEq<C: Curve, D: Curve<Scalar = C::Scalar>> {
+pub struct ComEq<C: Group, D: Group<Scalar = C::Scalar>> {
     /// The list of commitments.
     pub commitment: Commitment<D>,
     /// The evaluation $y$ (see above for notation).
@@ -43,13 +43,13 @@ pub struct ComEq<C: Curve, D: Curve<Scalar = C::Scalar>> {
     pub g:          C,
 }
 
-pub struct ComEqSecret<C: Curve> {
+pub struct ComEqSecret<C: Group> {
     pub r: Randomness<C>,
     pub a: Value<C>,
 }
 
 #[allow(non_snake_case)]
-impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
+impl<C: Group, D: Group<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     type CommitMessage = CommittedPoints<C, D>;
     type ProtocolChallenge = C::Scalar;
     // Vector of pairs (alpha_i, R_i).

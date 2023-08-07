@@ -6,14 +6,14 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{curve_group::Group, multiexp},
     random_oracle::{Challenge, RandomOracle},
 };
 use ff::Field;
 use itertools::izip;
 use std::rc::Rc;
 
-pub struct AggregateDlog<C: Curve> {
+pub struct AggregateDlog<C: Group> {
     /// Evaluated point.
     pub public: C,
     /// The points G_i references in the module description, in the given order.
@@ -22,7 +22,7 @@ pub struct AggregateDlog<C: Curve> {
 
 /// Aggregate dlog witness. We deliberately make it opaque.
 #[derive(Debug, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Witness<C: Group> {
     #[size_length = 4]
     witness: Vec<C::Scalar>,
 }
@@ -30,7 +30,7 @@ pub struct Witness<C: Curve> {
 /// Convenient alias for aggregate dlog proof
 pub type Proof<C> = SigmaProof<Witness<C>>;
 
-impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
+impl<C: Group> SigmaProtocol for AggregateDlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
     type ProverState = Vec<C::Scalar>;

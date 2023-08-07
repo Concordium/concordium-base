@@ -13,6 +13,8 @@ homepage = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
 ff = "0.5"
+ark-ff = "0.4"
+ark-ec = "0.4"
 sha2 = "0.10"
 sha3 = "0.10"
 anyhow = "1.0"

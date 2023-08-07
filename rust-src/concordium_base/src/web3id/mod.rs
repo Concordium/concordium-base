@@ -1435,11 +1435,11 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, AttributeType> {
-    fn prove<Signer: Web3IdSigner>(
+    fn prove<Signer: Web3IdSigner, R: rand::Rng>(
         self,
         global: &GlobalContext<C>,
         ro: &mut RandomOracle,
-        csprng: &mut impl rand::Rng,
+        csprng: &mut R,
         input: CommitmentInputs<C, AttributeType, Signer>,
     ) -> Result<CredentialProof<C, AttributeType>, ProofError> {
         match (self, input) {

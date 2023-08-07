@@ -12,7 +12,7 @@
 //! with the context used to produce the proof. Any verification of sub-proofs
 //! needs to be performed in the same order as when producing the proof.
 
-use crate::{common::*, curve_arithmetic::Curve};
+use crate::{common::*, curve_arithmetic::curve_group};
 use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
@@ -110,7 +110,9 @@ impl RandomOracle {
     /// Try to convert the computed result into a field element. This interprets
     /// the output of the random oracle as a big-endian integer and reduces is
     /// mod field order.
-    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_bytes(self.result()) }
+    pub fn result_to_scalar<C: curve_group::Group>(self) -> C::Scalar {
+        C::scalar_from_bytes(self.result())
+    }
 
     /// Get a challenge from the current state, consuming the state.
     pub fn get_challenge(self) -> Challenge {
@@ -121,7 +123,10 @@ impl RandomOracle {
 
     /// Get a challenge in the form of a Scalar, using `label` as domain
     /// separation.
-    pub fn challenge_scalar<C: Curve, B: AsRef<[u8]>>(&mut self, label: B) -> C::Scalar {
+    pub fn challenge_scalar<C: curve_group::Group, B: AsRef<[u8]>>(
+        &mut self,
+        label: B,
+    ) -> C::Scalar {
         self.add_bytes(label);
         self.split().result_to_scalar::<C>()
     }

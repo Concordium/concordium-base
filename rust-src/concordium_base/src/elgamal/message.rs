@@ -2,17 +2,17 @@
 
 use rand::*;
 
-use crate::{common::*, curve_arithmetic::Curve};
+use crate::{common::*, curve_arithmetic::curve_group::Group};
 
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 #[repr(transparent)]
 /// Message to be encrypted. This is a simple wrapper around a group element,
 /// but we use it for added type safety.
-pub struct Message<C: Curve> {
+pub struct Message<C: Group> {
     pub value: C,
 }
 
-impl<C: Curve> Message<C> {
+impl<C: Group> Message<C> {
     // generate random message (for testing)
     pub fn generate<T>(csprng: &mut T) -> Self
     where
@@ -28,7 +28,7 @@ mod tests {
     use super::*;
     use pairing::bls12_381::{G1, G2};
 
-    fn test_message_serialization_helper<C: Curve>() {
+    fn test_message_serialization_helper<C: Group>() {
         let mut csprng = thread_rng();
         for _i in 1..100 {
             let m: Message<C> = Message::generate(&mut csprng);

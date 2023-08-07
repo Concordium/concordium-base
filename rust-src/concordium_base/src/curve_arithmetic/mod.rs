@@ -1,8 +1,10 @@
 //! Basic definitions of the curve and pairing abstractions, and implementations
 //! of these abstractions for the curves used on Concordium.
+mod akrworks_instance;
 mod bls12_381_g1hash;
 mod bls12_381_g2hash;
 mod bls12_381_instance;
+mod curve25519_instance;
 
 pub mod secret_value;
 pub use secret_value::{Secret, Value};
@@ -20,12 +22,88 @@ pub enum CurveDecodingError {
     NotOnCurve,
 }
 
+pub mod curve_group {
+    use crate::common::Serialize;
+    use ff::{Field, PrimeField};
+    use rand::Rng;
+    use std::fmt::Debug;
+
+    pub trait Group:
+        Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
+        /// The prime field of the group order size.
+        type Scalar: PrimeField + Field + Serialize;
+        /// Size in bytes of elements of the [Curve::Scalar] field.
+        const SCALAR_LENGTH: usize;
+        /// Size in bytes of group elements when serialized.
+        const GROUP_ELEMENT_LENGTH: usize;
+        /// Unit for the group operation.
+        fn zero_point() -> Self;
+        /// Chosen generator of the group.
+        fn generator() -> Self;
+        fn is_zero_point(&self) -> bool;
+        #[must_use]
+        /// Return the group inverse of the given element.
+        fn inverse_point(&self) -> Self;
+        #[must_use]
+        /// Given x compute x + x.
+        fn double_point(&self) -> Self;
+        #[must_use]
+        /// The group operation.
+        fn plus_point(&self, other: &Self) -> Self;
+        #[must_use]
+        /// Subtraction. This is generally more efficient than a combination of
+        /// [Curve::inverse_point] and [Curve::plus_point].
+        fn minus_point(&self, other: &Self) -> Self;
+        #[must_use]
+        /// Exponentiation by a scalar, i.e., compute n * x for a group element
+        /// x and integer n.
+        fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
+        /// Generate a random group element, uniformly distributed.
+        fn generate<R: Rng>(rng: &mut R) -> Self;
+        /// Generate a random scalar value, uniformly distributed.
+        fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
+        /// Generate a non-zero scalar. The default implementation does repeated
+        /// sampling until a non-zero scalar is reached.
+        fn generate_non_zero_scalar<R: Rng>(rng: &mut R) -> Self::Scalar {
+            loop {
+                let s = Self::generate_scalar(rng);
+                if !s.is_zero() {
+                    return s;
+                }
+            }
+        }
+        /// Make a scalar from a 64-bit unsigned integer. This function assumes
+        /// that the field is big enough to accommodate any 64-bit
+        /// unsigned integer.
+        fn scalar_from_u64(n: u64) -> Self::Scalar;
+        /// Make a scalar by taking the first Scalar::CAPACITY bits and
+        /// interpreting them as a little-endian integer.
+        fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
+        /// Hash to a curve point from a seed. This is deterministic function.
+        fn hash_to_group(m: &[u8]) -> Self;
+    }
+}
+
+/// There might be situationg when implementations do not provide unchecked
+/// operations. But these operations are only used in special situations, most
+/// of the protocols actually do not require these.
+// This is not ideal, the trait is not constrained to be `Group`, if we add the
+// constraint, it's impossible to use it as a constaint for `Curve`, because of
+// conflicting associated type name.
+pub trait HasUnchecked: Sized {
+    /// Deserialize a value from a byte source, but do not check that it is in
+    /// the group itself. This can be cheaper if the source of the value is
+    /// s trusted, but it must not be used on untrusted sources.
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> anyhow::Result<Self>;
+}
+
 /// A relatively large trait that covers what is needed to perform constructions
 /// and proofs upon a base group. This can only be implemented by groups of
 /// prime order size. More correctly this would be called a group, since it is
 /// generally a subset of an elliptic curve, but the name is in use now.
 pub trait Curve:
-    Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
+    HasUnchecked + Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static
+{
     /// The prime field of the group order size.
     type Scalar: PrimeField + Field + Serialize;
     /// A compressed representation of curve points used for compact
@@ -60,11 +138,9 @@ pub trait Curve:
     #[must_use]
     fn compress(&self) -> Self::Compressed;
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    /// Deserialize a value from a byte source, but do not check that it is in
-    /// the group itself. This can be cheaper if the source of the value is
-    /// trusted, but it must not be used on untrusted sources.
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> anyhow::Result<Self>;
+    // fn decompress_unchecked(c: &Self::Compressed) -> Result<Self,
+    // CurveDecodingError>;
+
     /// Generate a random group element, uniformly distributed.
     fn generate<R: Rng>(rng: &mut R) -> Self;
     /// Generate a random scalar value, uniformly distributed.
@@ -87,6 +163,45 @@ pub trait Curve:
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
     /// Hash to a curve point from a seed. This is deterministic function.
     fn hash_to_group(m: &[u8]) -> Self;
+}
+
+impl<C: Curve> curve_group::Group for C {
+    type Scalar = C::Scalar;
+
+    const GROUP_ELEMENT_LENGTH: usize = C::GROUP_ELEMENT_LENGTH;
+    const SCALAR_LENGTH: usize = C::SCALAR_LENGTH;
+
+    fn zero_point() -> Self { <Self as Curve>::zero_point() }
+
+    fn is_zero_point(&self) -> bool { <Self as Curve>::is_zero_point(self) }
+
+    fn inverse_point(&self) -> Self { <Self as Curve>::inverse_point(self) }
+
+    fn double_point(&self) -> Self { <Self as Curve>::double_point(self) }
+
+    fn plus_point(&self, other: &Self) -> Self { <Self as Curve>::plus_point(self, other) }
+
+    fn minus_point(&self, other: &Self) -> Self { <Self as Curve>::minus_point(self, other) }
+
+    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
+        <Self as Curve>::mul_by_scalar(self, scalar)
+    }
+
+    fn generate<R: Rng>(rng: &mut R) -> Self { <Self as Curve>::generate(rng) }
+
+    fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar {
+        <Self as Curve>::generate_scalar(rng)
+    }
+
+    fn scalar_from_u64(n: u64) -> Self::Scalar { <Self as Curve>::scalar_from_u64(n) }
+
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
+        <Self as Curve>::scalar_from_bytes(bs)
+    }
+
+    fn generator() -> Self { Self::one_point() }
+
+    fn hash_to_group(m: &[u8]) -> Self { <Self as Curve>::hash_to_group(m) }
 }
 
 /// A pairing friendly curve is a collection of two groups and a pairing
@@ -121,7 +236,7 @@ pub trait Pairing: Sized + 'static + Clone {
         let pairs = [
             (&Self::g1_prepare(g1x), &Self::g2_prepare(g2x)),
             (
-                &Self::g1_prepare(&g1y.inverse_point()),
+                &Self::g1_prepare(&Curve::inverse_point(g1y)),
                 &Self::g2_prepare(g2y),
             ),
         ];
@@ -180,7 +295,7 @@ pub trait Pairing: Sized + 'static + Clone {
 
 /// Like 'multiexp_worker', but computes a reasonable window size automatically.
 #[inline(always)]
-pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
+pub fn multiexp<C: curve_group::Group, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
     // This number is based on the benchmark in benches/multiexp_bench.rs
     let window_size = 4;
     multiexp_worker(gs, exps, window_size)
@@ -193,7 +308,7 @@ pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
 /// - the lengths of inputs are the same
 /// - window size at least 1
 /// - window_size < 62
-pub fn multiexp_worker<C: Curve, X: Borrow<C>>(
+pub fn multiexp_worker<C: curve_group::Group, X: Borrow<C>>(
     gs: &[X],
     exps: &[C::Scalar],
     window_size: usize,
@@ -216,7 +331,7 @@ pub fn multiexp_worker<C: Curve, X: Borrow<C>>(
 ///
 /// See <https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf> for what it means
 /// for the table to be computed correctly.
-pub fn multiexp_worker_given_table<C: Curve>(
+pub fn multiexp_worker_given_table<C: curve_group::Group>(
     exps: &[C::Scalar],
     table: &[Vec<C>],
     window_size: usize,
@@ -283,7 +398,10 @@ pub fn multiexp_worker_given_table<C: Curve>(
 }
 
 /// Compute the table of powers that can be used `multiexp_worker_given_table`.
-pub fn multiexp_table<C: Curve, X: Borrow<C>>(gs: &[X], window_size: usize) -> Vec<Vec<C>> {
+pub fn multiexp_table<C: curve_group::Group, X: Borrow<C>>(
+    gs: &[X],
+    window_size: usize,
+) -> Vec<Vec<C>> {
     let k = gs.len();
     let mut table = Vec::with_capacity(k);
     for g in gs.iter() {
@@ -311,20 +429,20 @@ mod tests {
     pub fn test_multiscalar() {
         let mut csprng = thread_rng();
         for l in 1..100 {
-            let mut gs = Vec::with_capacity(l);
+            let mut gs: Vec<G1> = Vec::with_capacity(l);
             let mut es = Vec::with_capacity(l);
             for _ in 0..l {
                 gs.push(G1::generate(&mut csprng));
                 es.push(G1::generate_scalar(&mut csprng));
             }
-            let mut goal = G1::zero_point();
+            let mut goal = <G1 as Curve>::zero_point();
             // Naive multiply + add method.
             for (g, e) in gs.iter().zip(es.iter()) {
                 goal = goal.plus_point(&g.mul_by_scalar(e))
             }
             let g = multiexp(&gs, &es);
             assert!(
-                goal.minus_point(&g).is_zero_point(),
+                Curve::minus_point(&goal, &g).is_zero_point(),
                 "Multiexponentiation produces a different answer than the naive method."
             )
         }

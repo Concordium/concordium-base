@@ -4,7 +4,7 @@
 use super::{cipher::*, message::*};
 use crate::{
     common::*,
-    curve_arithmetic::{Curve, Value},
+    curve_arithmetic::{curve_group::Group, Value},
 };
 use anyhow::{bail, Result};
 use ff::Field;
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 /// Elgamal secret key packed together with a chosen generator.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
-pub struct SecretKey<C: Curve> {
+pub struct SecretKey<C: Group> {
     /// Generator of the group, not secret but convenient to have here.
     pub generator: C,
     /// Secret key.
@@ -34,7 +34,7 @@ pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
 
 #[derive(Eq, PartialEq, Debug)]
 /// The table for the baby step giant step algorithm, with some auxiliary data.
-pub struct BabyStepGiantStep<C: Curve> {
+pub struct BabyStepGiantStep<C: Group> {
     /// Precomputed table of powers.
     table:         BabyStepGiantStepTable,
     /// Point base^{-m}
@@ -43,7 +43,7 @@ pub struct BabyStepGiantStep<C: Curve> {
     m:             u64,
 }
 
-impl<C: Curve> Serial for BabyStepGiantStep<C> {
+impl<C: Group> Serial for BabyStepGiantStep<C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.put(&self.m);
         out.put(&self.inverse_point);
@@ -54,7 +54,7 @@ impl<C: Curve> Serial for BabyStepGiantStep<C> {
     }
 }
 
-impl<C: Curve> Deserial for BabyStepGiantStep<C> {
+impl<C: Group> Deserial for BabyStepGiantStep<C> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Result<Self> {
         let m: u64 = source.get()?;
         let inverse_point = source.get()?;
@@ -75,7 +75,7 @@ impl<C: Curve> Deserial for BabyStepGiantStep<C> {
     }
 }
 
-impl<C: Curve> BabyStepGiantStep<C> {
+impl<C: Group> BabyStepGiantStep<C> {
     /// Generate a new instance, precomputing the table.
     pub fn new(base: &C, m: u64) -> Self {
         let mut table = HashMap::with_capacity(m as usize);
@@ -116,7 +116,7 @@ impl<C: Curve> BabyStepGiantStep<C> {
     }
 }
 
-impl<C: Curve> SecretKey<C> {
+impl<C: Group> SecretKey<C> {
     pub fn decrypt(&self, c: &Cipher<C>) -> Message<C> {
         let x = c.0; // k * g
         let kag = x.mul_by_scalar(&self.scalar); // k * a * g
@@ -160,7 +160,7 @@ impl<C: Curve> SecretKey<C> {
     pub fn generate_all<T: Rng>(csprng: &mut T) -> Self {
         let x = C::generate_non_zero_scalar(csprng);
         SecretKey {
-            generator: C::one_point().mul_by_scalar(&x),
+            generator: C::generator().mul_by_scalar(&x),
             scalar:    C::generate_scalar(csprng),
         }
     }

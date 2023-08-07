@@ -6,23 +6,23 @@ use rand::*;
 use super::{cipher::*, message::*, secret::*};
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve, Value},
+    curve_arithmetic::{curve_group::Group, multiexp, Value},
 };
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct PublicKey<C: Curve> {
+pub struct PublicKey<C: Group> {
     pub generator: C,
     pub key:       C,
 }
 
-impl<C: Curve> Debug for PublicKey<C> {
+impl<C: Group> Debug for PublicKey<C> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         write!(f, "PublicKey({:?}, {:?})", self.generator, self.key)
     }
 }
 
-impl<C: Curve> From<&SecretKey<C>> for PublicKey<C> {
+impl<C: Group> From<&SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(secret_key: &SecretKey<C>) -> PublicKey<C> {
         let generator: C = secret_key.generator;
@@ -31,7 +31,7 @@ impl<C: Curve> From<&SecretKey<C>> for PublicKey<C> {
     }
 }
 
-impl<C: Curve> PublicKey<C> {
+impl<C: Group> PublicKey<C> {
     /// Encrypt and returned the randomness used. NB: Randomness must be kept
     /// private.
     pub fn encrypt_rand<T>(&self, csprng: &mut T, m: &Message<C>) -> (Cipher<C>, Randomness<C>)

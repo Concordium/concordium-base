@@ -4,7 +4,7 @@ use super::{constants::*, errors::*, public::*};
 use crate::common::*;
 use core::fmt::Debug;
 use curve25519_dalek::{constants, scalar::Scalar};
-use rand::{CryptoRng, Rng};
+use rand::Rng;
 use sha2::{digest::Digest, Sha512};
 use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
@@ -84,7 +84,7 @@ impl SecretKey {
     /// Generate a `SecretKey` from a `csprng`.
     pub fn generate<T>(csprng: &mut T) -> SecretKey
     where
-        T: CryptoRng + Rng, {
+        T: Rng, {
         let mut sk: SecretKey = SecretKey([0u8; 32]);
 
         csprng.fill_bytes(&mut sk.0);

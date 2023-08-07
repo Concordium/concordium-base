@@ -3,7 +3,10 @@
 //! Randomness
 //! The randomness used in commitment
 
-use crate::{common::*, curve_arithmetic::*};
+use crate::{
+    common::*,
+    curve_arithmetic::{curve_group::Group, *},
+};
 
 use ff::Field;
 
@@ -16,11 +19,11 @@ use std::rc::Rc;
 /// Secret by default.
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
-pub struct Randomness<C: Curve> {
+pub struct Randomness<C: Group> {
     pub randomness: Rc<Secret<C::Scalar>>,
 }
 
-impl<C: Curve> Clone for Randomness<C> {
+impl<C: Group> Clone for Randomness<C> {
     fn clone(&self) -> Self {
         Self {
             randomness: self.randomness.clone(),
@@ -29,17 +32,17 @@ impl<C: Curve> Clone for Randomness<C> {
 }
 
 /// This trait allows automatic conversion of `&Randomness<C>` to `&C::Scalar`.
-impl<C: Curve> Deref for Randomness<C> {
+impl<C: Group> Deref for Randomness<C> {
     type Target = C::Scalar;
 
     fn deref(&self) -> &C::Scalar { &self.randomness }
 }
 
-impl<C: Curve> AsRef<C::Scalar> for Randomness<C> {
+impl<C: Group> AsRef<C::Scalar> for Randomness<C> {
     fn as_ref(&self) -> &C::Scalar { &self.randomness }
 }
 
-impl<C: Curve> Randomness<C> {
+impl<C: Group> Randomness<C> {
     pub fn new(x: C::Scalar) -> Self {
         Randomness {
             randomness: Rc::new(Secret::new(x)),

@@ -12,6 +12,8 @@ use std::{
     sync::atomic,
 };
 
+use super::curve_group::Group;
+
 /// A generic wrapper for a secret that implements a zeroize on drop.
 /// Other types are expected to wrap this in more convenient interfaces.
 /// Ideally the constraint would be Default, but fields we have do not implement
@@ -53,27 +55,27 @@ impl<F: Field + Serialize> Drop for Secret<F> {
 /// some scalars as secret, so that their use is harder and there is
 /// no implicit copy.
 #[derive(Debug, PartialEq, Eq, Serialize, Clone, SerdeBase16Serialize)]
-pub struct Value<C: Curve> {
+pub struct Value<C: Group> {
     pub value: Rc<Secret<C::Scalar>>,
 }
 
 /// This trait allows automatic conversion of `&Value<C>` to `&C::Scalar`.
-impl<C: Curve> Deref for Value<C> {
+impl<C: Group> Deref for Value<C> {
     type Target = C::Scalar;
 
     fn deref(&self) -> &C::Scalar { &self.value }
 }
 
-impl<C: Curve> AsRef<C::Scalar> for Value<C> {
+impl<C: Group> AsRef<C::Scalar> for Value<C> {
     fn as_ref(&self) -> &C::Scalar { &self.value }
 }
 
 /// Any 64-bit value can be converted (by-value) to a scalar.
-impl<C: Curve> From<u64> for Value<C> {
+impl<C: Group> From<u64> for Value<C> {
     fn from(secret: u64) -> Self { Self::new(C::scalar_from_u64(secret)) }
 }
 
-impl<C: Curve> Value<C> {
+impl<C: Group> Value<C> {
     pub fn new(secret: C::Scalar) -> Self {
         Self {
             value: Rc::new(Secret::new(secret)),
@@ -91,7 +93,7 @@ impl<C: Curve> Value<C> {
     /// View the value as a value in another group. This does not
     /// copy the secret value.
     #[inline]
-    pub fn view<T: Curve<Scalar = C::Scalar>>(&self) -> Value<T> {
+    pub fn view<T: Group<Scalar = C::Scalar>>(&self) -> Value<T> {
         Value {
             value: self.value.clone(),
         }

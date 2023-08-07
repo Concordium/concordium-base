@@ -404,7 +404,7 @@ pub type ConfigureBakerKeysPayload = BakerKeysPayload<ConfigureBakerKeysMarker>;
 
 impl<T> BakerKeysPayload<T> {
     /// Construct a BakerKeysPayload taking a prefix for the challenge.
-    fn new_payload<R: Rng + CryptoRng>(
+    fn new_payload<R: CryptoRng + Rng>(
         baker_keys: &BakerKeyPairs,
         sender: AccountAddress,
         challenge_prefix: &[u8],
@@ -447,7 +447,7 @@ impl<T> BakerKeysPayload<T> {
 
 impl BakerAddKeysPayload {
     /// Construct a BakerKeysPayload with proofs for adding a baker.
-    pub fn new<T: Rng + CryptoRng>(
+    pub fn new<T: CryptoRng + Rng>(
         baker_keys: &BakerKeyPairs,
         sender: AccountAddress,
         csprng: &mut T,
@@ -458,7 +458,7 @@ impl BakerAddKeysPayload {
 
 impl BakerUpdateKeysPayload {
     /// Construct a BakerKeysPayload with proofs for updating baker keys.
-    pub fn new<T: Rng + CryptoRng>(
+    pub fn new<T: CryptoRng + Rng>(
         baker_keys: &BakerKeyPairs,
         sender: AccountAddress,
         csprng: &mut T,
@@ -469,7 +469,7 @@ impl BakerUpdateKeysPayload {
 
 impl ConfigureBakerKeysPayload {
     /// Construct a BakerKeysPayload with proofs for updating baker keys.
-    pub fn new<T: Rng + CryptoRng>(
+    pub fn new<T: CryptoRng + Rng>(
         baker_keys: &BakerKeyPairs,
         sender: AccountAddress,
         csprng: &mut T,
@@ -601,7 +601,7 @@ impl ConfigureBakerPayload {
 
     /// Add keys to the payload. This will construct proofs of validity and
     /// insert the public keys into the payload.
-    pub fn add_keys<T: Rng + CryptoRng>(
+    pub fn add_keys<T: CryptoRng + Rng>(
         &mut self,
         baker_keys: &BakerKeyPairs,
         sender: AccountAddress,
