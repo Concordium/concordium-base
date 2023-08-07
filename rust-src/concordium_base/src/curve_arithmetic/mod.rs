@@ -28,9 +28,6 @@ pub trait Curve:
     Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
     /// The prime field of the group order size.
     type Scalar: PrimeField + Field + Serialize;
-    /// A compressed representation of curve points used for compact
-    /// serialization.
-    type Compressed;
     /// Size in bytes of elements of the [Curve::Scalar] field.
     const SCALAR_LENGTH: usize;
     /// Size in bytes of group elements when serialized.
@@ -57,10 +54,6 @@ pub trait Curve:
     /// Exponentiation by a scalar, i.e., compute n * x for a group element x
     /// and integer n.
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
-    #[must_use]
-    fn compress(&self) -> Self::Compressed;
-    fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     /// Deserialize a value from a byte source, but do not check that it is in
     /// the group itself. This can be cheaper if the source of the value is
     /// trusted, but it must not be used on untrusted sources.
