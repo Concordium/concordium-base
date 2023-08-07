@@ -6,6 +6,7 @@ extern crate criterion;
 use concordium_base::{
     bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators},
     curve_arithmetic::*,
+    id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
@@ -71,6 +72,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     group.bench_function("Prove", move |b| {
         b.iter(|| {
             prove(
+                ProofVersion::Version1,
                 &mut transcript,
                 rng,
                 n,
@@ -86,6 +88,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let rng = &mut thread_rng();
     let mut transcript = RandomOracle::empty();
     let proof = prove(
+        ProofVersion::Version1,
         &mut transcript,
         rng,
         n,
@@ -100,9 +103,16 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     group.bench_function("Verify Efficient", move |b| {
         b.iter(|| {
             let mut transcript = RandomOracle::empty();
-            assert!(
-                verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys).is_ok()
-            );
+            assert!(verify_efficient(
+                ProofVersion::Version1,
+                &mut transcript,
+                n,
+                &commitments,
+                &proof,
+                &gens,
+                &keys
+            )
+            .is_ok());
         })
     });
 }

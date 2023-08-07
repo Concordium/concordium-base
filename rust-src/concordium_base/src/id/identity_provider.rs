@@ -1,6 +1,7 @@
 //! Functionality needed by the identity provider. This gathers together the
 //! primitives from the rest of the library into a convenient package.
 use super::{
+    id_proof_types::ProofVersion,
     secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
     types::*,
@@ -320,7 +321,17 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         let gens = &context.global_context.bulletproof_generators().take(32 * 8);
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
         transcript.append_message(b"encrypted_share", &ciphers);
-        if verify_efficient(transcript, 32, &commitments, proof, gens, &keys).is_err() {
+        if verify_efficient(
+            ProofVersion::Version1,
+            transcript,
+            32,
+            &commitments,
+            proof,
+            gens,
+            &keys,
+        )
+        .is_err()
+        {
             return Err(Reason::IncorrectProof);
         }
     }

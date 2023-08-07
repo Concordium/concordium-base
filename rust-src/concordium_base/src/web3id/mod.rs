@@ -15,7 +15,7 @@ use crate::{
     curve_arithmetic::Curve,
     id::{
         constants::{ArCurve, AttributeKind},
-        id_proof_types::{AtomicProof, AtomicStatement},
+        id_proof_types::{AtomicProof, AtomicStatement, ProofVersion},
         types::{Attribute, AttributeTag, GlobalContext, IpIdentity},
     },
     pedersen_commitment,
@@ -1391,7 +1391,13 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
             CredentialsInputs::Account { commitments },
         ) => {
             for (statement, proof) in proofs.iter() {
-                if !statement.verify(global, transcript, commitments, proof) {
+                if !statement.verify(
+                    ProofVersion::Version2,
+                    global,
+                    transcript,
+                    commitments,
+                    proof,
+                ) {
                     return false;
                 }
             }
@@ -1412,7 +1418,13 @@ fn verify_single_credential<C: Curve, AttributeType: Attribute<C::Scalar>>(
                 return false;
             }
             for (statement, proof) in proofs.iter() {
-                if !statement.verify(global, transcript, &commitments.commitments, proof) {
+                if !statement.verify(
+                    ProofVersion::Version2,
+                    global,
+                    transcript,
+                    &commitments.commitments,
+                    proof,
+                ) {
                     return false;
                 }
             }
@@ -1446,7 +1458,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                 let mut proofs = Vec::new();
                 for statement in statement {
                     let proof = statement
-                        .prove(global, ro, csprng, values, randomness)
+                        .prove(
+                            ProofVersion::Version2,
+                            global,
+                            ro,
+                            csprng,
+                            values,
+                            randomness,
+                        )
                         .ok_or(ProofError::MissingAttribute)?;
                     proofs.push((statement, proof));
                 }
@@ -1509,7 +1528,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialStatement<C, Attri
                 };
                 for statement in statement {
                     let proof = statement
-                        .prove(global, ro, csprng, values, randomness)
+                        .prove(
+                            ProofVersion::Version2,
+                            global,
+                            ro,
+                            csprng,
+                            values,
+                            randomness,
+                        )
                         .ok_or(ProofError::MissingAttribute)?;
                     proofs.push((statement, proof));
                 }

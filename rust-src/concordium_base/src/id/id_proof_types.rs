@@ -18,6 +18,12 @@ use pairing::bls12_381::G1;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use std::{collections::BTreeSet, convert::TryFrom, marker::PhantomData, str::FromStr};
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy)]
+pub enum ProofVersion {
+    Version1,
+    Version2,
+}
+
 /// For the case where the verifier wants the user to show the value of an
 /// attribute and prove that it is indeed the value inside the on-chain
 /// commitment. Since the verifier does not know the attribute value before
