@@ -102,7 +102,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     }
 }
 
-/// Helper functionf for verifying range proofs.
+/// Helper function for verifying range proofs.
 #[allow(clippy::too_many_arguments)]
 fn verify_attribute_range_helper<C: Curve>(
     version: ProofVersion,
@@ -460,7 +460,7 @@ mod tests {
                 "Incorrect version 1 range proof."
             );
         } else {
-            panic!("Failed to produce proof.");
+            panic!("Failed to produce version 1 proof.");
         };
         let mut transcript = RandomOracle::domain("Test");
         let maybe_proof = prove_attribute_in_range(
@@ -490,7 +490,7 @@ mod tests {
                 "Incorrect version 2 range proof."
             );
         } else {
-            panic!("Failed to produce proof.");
+            panic!("Failed to produce version 2 proof.");
         };
     }
 

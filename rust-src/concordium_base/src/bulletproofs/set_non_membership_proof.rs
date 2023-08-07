@@ -73,19 +73,10 @@ pub fn prove<C: Curve, R: Rng>(
     // Part 0: Add public inputs to transcript
     // Domain separation
     transcript.add_bytes(b"SetNonMembershipProof");
-    // Compute commitment V for v
-    let v_value = Value::<C>::new(v);
-    let V = v_keys.hide(&v_value, v_rand);
-    // Append V to the transcript
-    transcript.append_message(b"V", &V.0);
     // Pad set if not power of two
     let mut set_vec = the_set.to_vec();
     pad_vector_to_power_of_two(&mut set_vec);
     let n = set_vec.len();
-    // Append the set to the transcript
-    transcript.append_message(b"theSet", &set_vec);
-
-    // Part 1: Setup and generation of vector commitments
     // Check that we have enough generators for vector commitments
     if gens.G_H.len() < n {
         return Err(ProverError::NotEnoughGenerators);
@@ -117,6 +108,15 @@ pub fn prove<C: Curve, R: Rng>(
         transcript.append_message(b"v_keys", v_keys);
     }
 
+    // Compute commitment V for v
+    let v_value = Value::<C>::new(v);
+    let V = v_keys.hide(&v_value, v_rand);
+    // Append V to the transcript
+    transcript.append_message(b"V", &V.0);
+    // Append the set to the transcript
+    transcript.append_message(b"theSet", &set_vec);
+
+    // Part 1: Setup and generation of vector commitments
     // Compute A_scalars, that is a_L, a_R and a_tilde
     let mut A_scalars = Vec::with_capacity(2 * n + 1);
     // Compute a_L_i <- (v - si)^-1
@@ -362,16 +362,15 @@ pub fn verify<C: Curve>(
 
     // Domain separation
     transcript.add_bytes(b"SetNonMembershipProof");
-    // append commitment V to transcript
-    transcript.append_message(b"V", &V.0);
-    transcript.append_message(b"theSet", &set_vec);
-
     if version >= ProofVersion::Version2 {
         // Explicitly add generators and commitment keys to the transcript
         transcript.append_message(b"G", &G);
         transcript.append_message(b"H", &H);
         transcript.append_message(b"v_keys", v_keys);
     }
+    // append commitment V to transcript
+    transcript.append_message(b"V", &V.0);
+    transcript.append_message(b"theSet", &set_vec);
 
     // define the commitments A,S
     let A = proof.A;

@@ -168,6 +168,13 @@ pub fn prove<C: Curve, T: Rng>(
     let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut a_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut s_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
+    if version >= ProofVersion::Version2 {
+        // Explicitly add n, generators and commitment keys to the transcript
+        transcript.append_message(b"G", &G);
+        transcript.append_message(b"H", &H);
+        transcript.append_message(b"v_keys", &v_keys);
+        transcript.append_message(b"n", &n);
+    }
     for j in 0..v_vec.len() {
         // get binary representation of value j
         let (a_L_j, a_R_j) = a_L_a_R(v_vec[j], n);
@@ -188,14 +195,6 @@ pub fn prove<C: Curve, T: Rng>(
         // append commitment V_j to transcript!
         transcript.append_message(b"Vj", &V_j.0);
         V_vec.push(V_j);
-    }
-
-    if version >= ProofVersion::Version2 {
-        // Explicitly add n, generators and commitment keys to the transcript
-        transcript.append_message(b"n", &n);
-        transcript.append_message(b"G", &G);
-        transcript.append_message(b"H", &H);
-        transcript.append_message(b"v_keys", &v_keys);
     }
 
     // compute blinding factor of A and S
@@ -509,17 +508,16 @@ pub fn verify_efficient<C: Curve>(
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(nm).cloned().unzip();
     let B = v_keys.g;
     let B_tilde = v_keys.h;
-    // append commitment V_j to transcript!
-    for V in commitments {
-        transcript.append_message(b"Vj", &V.0);
-    }
-
     if version >= ProofVersion::Version2 {
         // Explicitly add n, generators and commitment keys to the transcript
-        transcript.append_message(b"n", &n);
         transcript.append_message(b"G", &G);
         transcript.append_message(b"H", &H);
         transcript.append_message(b"v_keys", &v_keys);
+        transcript.append_message(b"n", &n);
+    }
+    // append commitment V_j to transcript!
+    for V in commitments {
+        transcript.append_message(b"Vj", &V.0);
     }
     // define the commitments A,S,T_1,T_2
     let A = proof.A;
