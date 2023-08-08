@@ -150,8 +150,6 @@ struct CreateCredential {
     #[structopt(
         long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
-        required_unless = "account",
-        conflicts_with = "account",
         default_value = "900"
     )]
     expiry:      u64,
@@ -200,8 +198,6 @@ struct CreateCredentialV1 {
     #[structopt(
         long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
-        required_unless = "account",
-        conflicts_with = "account",
         default_value = "900"
     )]
     expiry:             u64,
