@@ -55,7 +55,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     type ProtocolChallenge = C::Scalar;
     // (beta, alpha, gamma)
     type ProverState = (Value<C>, ElgamalRandomness<C>, PedersenRandomness<C>);
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = ComEncEqSecret<C>;
 
     #[inline]
@@ -75,7 +75,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn commit_point<R: Rng>(
+    fn compute_commit_message<R: Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -90,12 +90,12 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let x = &secret.value;
         let cR = &secret.elgamal_rand;
         let r = &secret.pedersen_rand;
@@ -123,7 +123,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let g_1 = self.pub_key.generator;
         let h_1 = self.pub_key.key;

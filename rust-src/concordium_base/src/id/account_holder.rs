@@ -148,21 +148,21 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.witness.w1.w2.witnesses.into_iter())
+        .zip(proof.response.r1.r2.responses.into_iter())
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
     // Returning the version 0 pre-identity object.
     let poks_common = CommonPioProofFields {
         challenge: proof.challenge,
-        id_cred_sec_witness: proof.witness.w1.w1.w1.w1,
-        commitments_same_proof: proof.witness.w1.w1.w1.w2,
-        commitments_prf_same: proof.witness.w1.w1.w2,
+        id_cred_sec_witness: proof.response.r1.r1.r1.r1,
+        commitments_same_proof: proof.response.r1.r1.r1.r2,
+        commitments_prf_same: proof.response.r1.r1.r2,
         bulletproofs,
     };
     let poks = PreIdentityProof {
         common_proof_fields: poks_common,
-        prf_regid_proof: proof.witness.w2,
+        prf_regid_proof: proof.response.r2,
         proof_acc_sk,
     };
     let pio = PreIdentityObject {
@@ -222,16 +222,16 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.witness.w2.witnesses.into_iter())
+        .zip(proof.response.r2.responses.into_iter())
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
     // Returning the version 1 pre-identity object.
     let poks = CommonPioProofFields {
         challenge: proof.challenge,
-        id_cred_sec_witness: proof.witness.w1.w1.w1,
-        commitments_same_proof: proof.witness.w1.w1.w2,
-        commitments_prf_same: proof.witness.w1.w2,
+        id_cred_sec_witness: proof.response.r1.r1.r1,
+        commitments_same_proof: proof.response.r1.r1.r2,
+        commitments_prf_same: proof.response.r1.r2,
         bulletproofs,
     };
     let pio = PreIdentityObjectV1 {
@@ -939,10 +939,10 @@ where
         challenge: proof.challenge,
         proof_id_cred_pub: id_cred_pub_share_numbers
             .into_iter()
-            .zip(proof.witness.w2.witnesses)
+            .zip(proof.response.r2.responses)
             .collect(),
-        proof_reg_id: proof.witness.w1.w1,
-        proof_ip_sig: proof.witness.w1.w2,
+        proof_reg_id: proof.response.r1.r1,
+        proof_ip_sig: proof.response.r1.r2,
         cred_counter_less_than_max_accounts,
     };
 

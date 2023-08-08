@@ -177,7 +177,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     type CommitMessage = EncTransCommit<C>;
     type ProtocolChallenge = C::Scalar;
     type ProverState = EncTransState<C>;
-    type ProverWitness = EncTransWitness<C>;
+    type Response = EncTransWitness<C>;
     type SecretData = EncTransSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -191,7 +191,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -203,7 +203,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut Rs_a = vec![];
         let mut Rs_s_prime = vec![];
         for comeq in &self.encexp1 {
-            match comeq.commit_point(csprng) {
+            match comeq.compute_commit_message(csprng) {
                 Some((comm_point, (alpha, R_i))) => {
                     rands_encexp_1.push((alpha, R_i.clone()));
                     commit_encexp_1.push(comm_point);
@@ -213,7 +213,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             };
         }
         for comeq in &self.encexp2 {
-            match comeq.commit_point(csprng) {
+            match comeq.compute_commit_message(csprng) {
                 Some((comm_point, (alpha, R_s))) => {
                     rands_encexp_2.push((alpha, R_s.clone()));
                     commit_encexp_2.push(comm_point);
@@ -246,12 +246,12 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         Some((commit, rand))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let mut witness_common = *challenge;
         witness_common.mul_assign(&secret.dlog_secret);
         witness_common.negate();
@@ -267,7 +267,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             state.encexp1.iter(),
             self.encexp1.iter()
         ) {
-            match comeq1.generate_witness(sec, (*encexp1).clone(), challenge) {
+            match comeq1.compute_response(sec, (*encexp1).clone(), challenge) {
                 Some(w) => witness_encexp1.push(w),
                 None => return None,
             }
@@ -280,7 +280,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             state.encexp2.iter(),
             self.encexp2.iter()
         ) {
-            match comeq2.generate_witness(sec, (*encexp2).clone(), challenge) {
+            match comeq2.compute_response(sec, (*encexp2).clone(), challenge) {
                 Some(w) => witness_encexp2.push(w),
                 None => return None,
             }
@@ -296,7 +296,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         if self.encexp1.len() != witness.witness_encexp1.len() {
             return None;

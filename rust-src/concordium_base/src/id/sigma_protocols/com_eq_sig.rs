@@ -57,7 +57,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     type ProtocolChallenge = C::Scalar;
     // Triple (rho', [mu_i], [R_i])
     type ProverState = ComEqSigState<P, C>;
-    type ProverWitness = Witness<P, C>;
+    type Response = Witness<P, C>;
     type SecretData = ComEqSigSecret<P, C>;
 
     #[inline]
@@ -77,7 +77,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     }
 
     #[inline]
-    fn commit_point<R: Rng>(
+    fn compute_commit_message<R: Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -137,12 +137,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     }
 
     #[inline]
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         if secret.values_and_rands.len() != state.mus_and_rs.len() {
             return None;
         }
@@ -181,7 +181,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let g_tilda = self.ps_pub_key.g_tilda;
         let a_hat = self.blinded_sig.sig.0;

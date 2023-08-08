@@ -53,7 +53,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
     type CommitMessage = (C, Vec<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<C::Scalar>, C::Scalar, BTreeMap<IndexType, C::Scalar>);
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = (Vec<C::Scalar>, Value<C>, BTreeMap<IndexType, Value<C>>);
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -69,7 +69,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -98,12 +98,12 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         Some(((a, ais), (alphas, rtilde, rtildes)))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let (alphas, rtilde, rtildes) = state;
         let (xis, r, ris) = secret;
         let n = xis.len();
@@ -137,7 +137,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let Witness { sis, t, tis } = witness;
         if sis.is_empty() {

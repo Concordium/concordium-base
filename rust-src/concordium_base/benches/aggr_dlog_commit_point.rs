@@ -20,7 +20,7 @@ fn bench_aggr_dlog_commit_point(c: &mut Criterion) {
         coeff:  coeffs,
     };
     c.bench_function("Aggregate dlog commit point", move |b| {
-        b.iter(|| dlog.commit_point(&mut csprng))
+        b.iter(|| dlog.compute_commit_message(&mut csprng))
     });
 }
 

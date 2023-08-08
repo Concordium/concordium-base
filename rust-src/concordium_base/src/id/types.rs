@@ -4,7 +4,7 @@ use super::{
     secret_sharing::Threshold,
     sigma_protocols::{
         com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
-        common::{ReplicateAdapter, ReplicateWitness},
+        common::{ReplicateAdapter, ReplicateResponse},
         dlog,
     },
 };
@@ -780,7 +780,7 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 /// IdCredPub.
 pub type IdCredPubVerifiers<C> = (
     ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
-    ReplicateWitness<com_enc_eq::Witness<C>>,
+    ReplicateResponse<com_enc_eq::Witness<C>>,
 );
 
 /// Information sent from the account holder to the identity provider.

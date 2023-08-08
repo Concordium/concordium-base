@@ -54,7 +54,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     type ProtocolChallenge = C::Scalar;
     // Vector of pairs (alpha_i, R_i).
     type ProverState = (Value<D>, Randomness<D>);
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = ComEqSecret<D>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -64,7 +64,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         ro.append_message("g", &self.g)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -84,12 +84,12 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let (ref alpha, ref cR) = state;
         // compute alpha_i - a_i * c
         let mut s = *challenge;
@@ -107,7 +107,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         // let mut u = self.y.mul_by_scalar(challenge);
         // FIXME: Could benefit from multiexponentiation

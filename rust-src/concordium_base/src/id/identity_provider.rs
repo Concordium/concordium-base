@@ -107,13 +107,13 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let verifier = verifier.add_prover(verifier_prf_regid);
     // Construct the witness consisting of the common witness and the
     // prf_regid_witness above.
-    let witness = AndWitness {
-        w1: witness,
-        w2: prf_regid_witness,
+    let witness = AndResponse {
+        r1: witness,
+        r2: prf_regid_witness,
     };
     let proof = SigmaProof {
         challenge: poks_common.challenge,
-        witness,
+        response:  witness,
     };
 
     // Verify the sigma protocol proof
@@ -145,7 +145,7 @@ pub fn validate_request_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     )?;
     let proof = SigmaProof {
         challenge: poks_common.challenge,
-        witness,
+        response:  witness,
     };
     // Verify the sigma protocol proof
     if verify(&mut transcript, &verifier, &proof) {
@@ -167,7 +167,7 @@ type CommonPioVerifierType<P, C> = AndAdapter<
 
 type CommonVerifierWithWitness<P, C> = (
     CommonPioVerifierType<P, C>,
-    <CommonPioVerifierType<P, C> as SigmaProtocol>::ProverWitness,
+    <CommonPioVerifierType<P, C> as SigmaProtocol>::Response,
 );
 
 /// This is used by both `validate_request` and `validate_request_v1` to
@@ -337,15 +337,15 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
 
     transcript.append_message(b"bulletproofs", &poks_common.bulletproofs);
-    let witness = AndWitness {
-        w1: AndWitness {
-            w1: AndWitness {
-                w1: id_cred_sec_witness,
-                w2: id_cred_sec_eq_witness,
+    let witness = AndResponse {
+        r1: AndResponse {
+            r1: AndResponse {
+                r1: id_cred_sec_witness,
+                r2: id_cred_sec_eq_witness,
             },
-            w2: witness_prf_same,
+            r2: witness_prf_same,
         },
-        w2: prf_sharing_witness,
+        r2: prf_sharing_witness,
     };
     Ok((verifier, witness))
 }
@@ -474,7 +474,9 @@ fn compute_prf_sharing_verifier<C: Curve>(
         ReplicateAdapter {
             protocols: verifiers,
         },
-        ReplicateWitness { witnesses },
+        ReplicateResponse {
+            responses: witnesses,
+        },
     ))
 }
 

@@ -33,7 +33,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type CommitMessage = (C, Vec<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (C::Scalar, Vec<Vec<C::Scalar>>);
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -45,7 +45,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -82,12 +82,12 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         Some((commit, rand))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let mut witness_common = *challenge;
         witness_common.mul_assign(&secret.0);
         witness_common.negate(); // According to Bluepaper, we negate here. Shouldn't matter.
@@ -113,7 +113,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let dlog_point = self
             .dlog

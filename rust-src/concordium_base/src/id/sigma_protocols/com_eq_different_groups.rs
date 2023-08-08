@@ -42,7 +42,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     type ProtocolChallenge = C1::Scalar;
     // The triple alpha_1, alpha_2, R
     type ProverState = (Value<C1>, Randomness<C1>, Randomness<C2>);
-    type ProverWitness = Witness<C1, C2>;
+    type Response = Witness<C1, C2>;
     type SecretData = ComEqDiffGroupsSecret<C1, C2>;
 
     #[inline]
@@ -62,7 +62,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     }
 
     #[inline]
-    fn commit_point<R: Rng>(
+    fn compute_commit_message<R: Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -73,12 +73,12 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     }
 
     #[inline]
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let mut s_1 = *challenge;
         s_1.mul_assign(&secret.value);
         s_1.negate();
@@ -103,7 +103,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let y = self.commitment_1;
         let cC = self.commitment_2;

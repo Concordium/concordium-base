@@ -138,16 +138,16 @@ pub fn verify_cdi<
         second: verifier_sig,
     };
     let verifier = verifier.add_prover(id_cred_pub_verifier);
-    let witness = AndWitness {
-        w1: AndWitness {
-            w1: witness_reg_id,
-            w2: witness_sig,
+    let witness = AndResponse {
+        r1: AndResponse {
+            r1: witness_reg_id,
+            r2: witness_sig,
         },
-        w2: id_cred_pub_witnesses,
+        r2: id_cred_pub_witnesses,
     };
     let proof = SigmaProof {
         challenge: cdi.proofs.id_proofs.challenge,
-        witness,
+        response:  witness,
     };
 
     if !verify(&mut ro, &verifier, &proof) {
@@ -247,9 +247,11 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
         provers.push(item_prover);
         witnesses.push(witness.clone());
     }
-    Ok((ReplicateAdapter { protocols: provers }, ReplicateWitness {
-        witnesses,
-    }))
+    Ok(
+        (ReplicateAdapter { protocols: provers }, ReplicateResponse {
+            responses: witnesses,
+        }),
+    )
 }
 
 /// Verify a policy. This currently does not do anything since

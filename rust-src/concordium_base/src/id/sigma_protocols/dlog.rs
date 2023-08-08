@@ -34,7 +34,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
     type ProverState = C::Scalar;
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = DlogSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -46,7 +46,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -55,12 +55,12 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
         Some((randomised_point, rand_scalar))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         // If the challenge is zero, the proof is not going to be valid unless alpha
         // (randomised point) is also zero.
         let mut witness = *challenge;
@@ -72,7 +72,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let randomised_point = self
             .coeff
@@ -139,7 +139,7 @@ mod tests {
                     ..proof
                 };
                 let wrong_proof_witness = SigmaProof {
-                    witness: Witness {
+                    response: Witness {
                         witness: G1::generate_scalar(csprng),
                     },
                     ..proof

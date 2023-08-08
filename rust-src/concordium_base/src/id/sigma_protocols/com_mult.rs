@@ -41,7 +41,7 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     type ProtocolChallenge = C::Scalar;
     // alpha's, R_i's, R's
     type ProverState = ([Value<C>; 2], [Randomness<C>; 2], Randomness<C>);
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = ComMultSecret<C>;
 
     #[inline]
@@ -56,7 +56,7 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     }
 
     #[inline]
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -75,12 +75,12 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     }
 
     #[inline]
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let mut ss = [*challenge; 2];
         let mut ts = [*challenge; 2];
 
@@ -116,7 +116,7 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let mut points = [Commitment(C::zero_point()); 2];
         for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {

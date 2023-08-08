@@ -52,7 +52,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     type CommitMessage = (Vec<Commitment<C>>, Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<Value<C>>, Vec<Randomness<C>>, Randomness<C>);
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = ComLinSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -66,7 +66,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -103,12 +103,12 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         Some((cm, ps))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let (alphas, r_i_tildes, r_tilde) = state;
         let n = alphas.len();
         if self.cmms.len() != n
@@ -147,7 +147,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let zs = &witness.zs;
         let ss = &witness.ss;

@@ -34,7 +34,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
     type ProverState = Vec<C::Scalar>;
-    type ProverWitness = Witness<C>;
+    type Response = Witness<C>;
     type SecretData = Vec<Rc<C::Scalar>>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -46,7 +46,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -60,12 +60,12 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         Some((multiexp(&self.coeff, &rands), rands))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let n = secret.len();
         if state.len() != n {
             return None;
@@ -84,7 +84,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         if witness.witness.len() != self.coeff.len() {
             return None;
