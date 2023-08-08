@@ -1,22 +1,23 @@
 {-# LANGUAGE DeriveTraversable #-}
+
 -- |Types that are relevant only for ConsensusV1.
 -- Common for types defined here is that they are
 -- exposed through the node API, otherwise they should
 -- just be defined in the node.
 module Concordium.Types.ConsensusV1 where
 
-import Data.Bits
-import Data.Word
-import Data.Serialize
-import Numeric.Natural
-import qualified Data.Map.Strict as Map
 import Control.Monad
+import Data.Bits
+import qualified Data.Map.Strict as Map
+import Data.Serialize
+import Data.Word
+import Numeric.Natural
 
+import qualified Concordium.Crypto.BlsSignature as Bls
 import qualified Concordium.Crypto.SHA256 as Hash
+import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
-import Concordium.Types
-import qualified Concordium.Crypto.BlsSignature as Bls
 
 -- |A strict version of 'Maybe'.
 data Option a
