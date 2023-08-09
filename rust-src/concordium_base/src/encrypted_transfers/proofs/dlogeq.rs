@@ -8,7 +8,7 @@ use crate::{
     curve_arithmetic::Curve,
     id::sigma_protocols::{
         common::*,
-        dlog::{Witness as DlogWitness, *},
+        dlog::{Response as DlogWitness, *},
     },
     random_oracle::{Challenge, RandomOracle},
 };

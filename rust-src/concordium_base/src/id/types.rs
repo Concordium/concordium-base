@@ -734,7 +734,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for PreIdentityProof<
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for PreIdentityProof<P, C> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let challenge: Challenge = source.get()?;
-        let id_cred_sec_witness: dlog::Witness<C> = source.get()?;
+        let id_cred_sec_witness: dlog::Response<C> = source.get()?;
         let commitments_same_proof: com_eq::Witness<C> = source.get()?;
         let commitments_prf_same: com_eq_different_groups::Witness<P::G1, C> = source.get()?;
         let prf_regid_proof: com_eq::Witness<C> = source.get()?;
@@ -763,7 +763,7 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// and additionally also the proofs in IpArData.
     pub challenge:              Challenge,
     /// Witness to the proof of knowledge of IdCredSec.
-    pub id_cred_sec_witness:    dlog::Witness<C>,
+    pub id_cred_sec_witness:    dlog::Response<C>,
     /// Witness to the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.
     pub commitments_same_proof: com_eq::Witness<C>,
