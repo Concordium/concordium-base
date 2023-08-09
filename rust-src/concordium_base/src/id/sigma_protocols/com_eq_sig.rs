@@ -17,7 +17,7 @@ use itertools::izip;
 use rand::*;
 
 #[derive(Clone, Debug, Serialize)]
-pub struct Witness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The witness that the prover knows $r'$ (see specification)
     witness_rho:    P::ScalarField,
     /// List of witnesses $(w_i, R_i)$ that the user knows the messages m_i and
@@ -57,7 +57,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     type ProtocolChallenge = C::Scalar;
     // Triple (rho', [mu_i], [R_i])
     type ProverState = ComEqSigState<P, C>;
-    type Response = Witness<P, C>;
+    type Response = Response<P, C>;
     type SecretData = ComEqSigSecret<P, C>;
 
     #[inline]
@@ -171,7 +171,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
 
             wit_messages_randoms.push((wit_m, wit_r));
         }
-        Some(Witness {
+        Some(Response {
             witness_rho:    wit_r_prime,
             witness_commit: wit_messages_randoms,
         })

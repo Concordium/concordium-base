@@ -16,13 +16,13 @@ use crate::{
 use ff::Field;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct Witness<T: Curve> {
+pub struct Response<T: Curve> {
     /// The pair $(s, t)$ where
     /// * $s = \alpha - c a$
     /// * $t = R - c r$
     /// where $c$ is the challenge and $\alpha$ and $R$ are prover chosen
     /// random scalars.
-    pub witness: (T::Scalar, T::Scalar),
+    pub response: (T::Scalar, T::Scalar),
 }
 
 #[derive(Debug, Serialize)]
@@ -54,7 +54,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     type ProtocolChallenge = C::Scalar;
     // Vector of pairs (alpha_i, R_i).
     type ProverState = (Value<D>, Randomness<D>);
-    type Response = Witness<C>;
+    type Response = Response<C>;
     type SecretData = ComEqSecret<D>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -101,24 +101,24 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         t.mul_assign(&secret.r);
         t.negate();
         t.add_assign(cR);
-        Some(Witness { witness: (s, t) })
+        Some(Response { response: (s, t) })
     }
 
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         // let mut u = self.y.mul_by_scalar(challenge);
         // FIXME: Could benefit from multiexponentiation
-        // u = u.plus_point(&self.g.mul_by_scalar(&witness.witness.0));
+        // u = u.plus_point(&self.g.mul_by_scalar(&response.response.0));
 
-        let u = multiexp(&[self.y, self.g], &[*challenge, witness.witness.0]);
+        let u = multiexp(&[self.y, self.g], &[*challenge, response.response.0]);
 
         let v = self.commitment.mul_by_scalar(challenge).plus_point(
             &self
                 .cmm_key
-                .hide_worker(&witness.witness.0, &witness.witness.1),
+                .hide_worker(&response.response.0, &response.response.1),
         );
         Some(CommittedPoints {
             u,

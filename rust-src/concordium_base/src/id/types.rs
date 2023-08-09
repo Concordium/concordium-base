@@ -714,7 +714,7 @@ pub struct ChoiceArParameters {
 pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub common_proof_fields: CommonPioProofFields<P, C>,
     /// Witness to the proof that reg_id = PRF(prf_key, 0)
-    pub prf_regid_proof:     com_eq::Witness<C>,
+    pub prf_regid_proof:     com_eq::Response<C>,
     /// Signature on the public information for the IP from the account holder
     pub proof_acc_sk:        AccountOwnershipProof,
 }
@@ -735,9 +735,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for PreIdentityProo
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let challenge: Challenge = source.get()?;
         let id_cred_sec_witness: dlog::Response<C> = source.get()?;
-        let commitments_same_proof: com_eq::Witness<C> = source.get()?;
-        let commitments_prf_same: com_eq_different_groups::Witness<P::G1, C> = source.get()?;
-        let prf_regid_proof: com_eq::Witness<C> = source.get()?;
+        let commitments_same_proof: com_eq::Response<C> = source.get()?;
+        let commitments_prf_same: com_eq_different_groups::Response<P::G1, C> = source.get()?;
+        let prf_regid_proof: com_eq::Response<C> = source.get()?;
         let proof_acc_sk: AccountOwnershipProof = source.get()?;
         let bulletproofs: Vec<RangeProof<C>> = source.get()?;
         let common_proof_fields = CommonPioProofFields {
@@ -766,11 +766,11 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub id_cred_sec_witness:    dlog::Response<C>,
     /// Witness to the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.
-    pub commitments_same_proof: com_eq::Witness<C>,
+    pub commitments_same_proof: com_eq::Response<C>,
     /// Witness to the proof that cmm_prf and the
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
-    pub commitments_prf_same:   com_eq_different_groups::Witness<P::G1, C>,
+    pub commitments_prf_same:   com_eq_different_groups::Response<P::G1, C>,
     /// Bulletproofs for showing that chunks are small so that encryption
     /// of the prf key can be decrypted
     pub bulletproofs:           Vec<RangeProof<C>>,
@@ -1309,7 +1309,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub proof_ip_sig: com_eq_sig::Witness<P, C>,
+    pub proof_ip_sig: com_eq_sig::Response<P, C>,
     /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
     /// from the prf key signed by the identity provider.
     #[serde(
@@ -1317,7 +1317,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub proof_reg_id: com_mult::Witness<C>,
+    pub proof_reg_id: com_mult::Response<C>,
     /// Proof that cred_counter is less than or equal to max_accounts
     #[serde(
         rename = "credCounterLessThanMaxAccounts",

@@ -11,7 +11,7 @@
 //! requires compute_commit_message() to be witness-dependent.
 
 use super::{
-    com_mult::{ComMult, ComMultSecret, Witness as ComMultWitness},
+    com_mult::{ComMult, ComMultSecret, Response as ComMultResponse},
     common::{prove as sigma_prove, verify as sigma_verify, SigmaProof},
 };
 use crate::{
@@ -23,9 +23,9 @@ use crate::{
 use ff::Field;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Witness<C: Curve> {
-    // The witness consists of a com_mult witness and a commitment.
-    com_mult_witness: SigmaProof<ComMultWitness<C>>,
+pub struct Response<C: Curve> {
+    // The response consists of a com_mult response and a commitment.
+    com_mult_response: SigmaProof<ComMultResponse<C>>,
     aux_com:          Commitment<C>,
 }
 
@@ -43,7 +43,7 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     value_tilde: &Randomness<C>,
     pub_value: C::Scalar,
     csprng: &mut R,
-) -> Option<Witness<C>> {
+) -> Option<Response<C>> {
     let mut transcript = RandomOracle::domain(b"InequalityProof");
 
     let c = com_key.hide(&value, value_tilde);
@@ -84,8 +84,8 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     };
 
     let partial_proof = sigma_prove(&mut transcript, &prover, secret, csprng)?;
-    Some(Witness {
-        com_mult_witness: partial_proof,
+    Some(Response {
+        com_mult_response: partial_proof,
         aux_com:          cmm_2,
     })
 }
@@ -104,10 +104,10 @@ pub fn verify_com_ineq<C: Curve>(
     com_key: &CommitmentKey<C>,
     c: &Commitment<C>,
     pub_value: C::Scalar,
-    proof: &Witness<C>,
+    proof: &Response<C>,
 ) -> bool {
-    let Witness {
-        com_mult_witness,
+    let Response {
+        com_mult_response,
         aux_com,
     } = proof;
     let mut transcript = RandomOracle::domain(b"InequalityProof");
@@ -127,7 +127,7 @@ pub fn verify_com_ineq<C: Curve>(
         cmms:    [Commitment(cmm_1), *aux_com, cmm_3],
         cmm_key: *com_key,
     };
-    sigma_verify(&mut transcript, &com_mult, com_mult_witness)
+    sigma_verify(&mut transcript, &com_mult, com_mult_response)
 }
 
 #[cfg(test)]
@@ -169,9 +169,9 @@ mod tests {
         // Make the proof invalid by changing parameters
         let wrong_com_key = CommitmentKey::<G1>::generate(&mut csprng);
         let wrong_pub_value = Fr::from_str("20000102").unwrap();
-        let wrong_proof = Witness {
+        let wrong_proof = Response {
             aux_com:          Commitment(G1::generate(&mut csprng)),
-            com_mult_witness: proof.com_mult_witness.clone(),
+            com_mult_response: proof.com_mult_response.clone(),
         };
 
         // Verify failure for invalid parameters

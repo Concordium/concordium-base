@@ -20,14 +20,13 @@ pub struct ComEqDiffGroupsSecret<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize, SerdeBase16Serialize)]
-pub struct Witness<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
+pub struct Response<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
     /// The triple (s_1, s_2, t).
-    witness: (C1::Scalar, C1::Scalar, C2::Scalar),
+    response: (C1::Scalar, C1::Scalar, C2::Scalar),
 }
 
 pub struct ComEqDiffGroups<C1: Curve, C2: Curve> {
-    /// A pair of commitments to the same value in different
-    ///   groups.
+    /// A pair of commitments to the same value in different groups.
     pub commitment_1: Commitment<C1>,
     pub commitment_2: Commitment<C2>,
     /// A pair of commitment keys (for the first and second
@@ -42,7 +41,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     type ProtocolChallenge = C1::Scalar;
     // The triple alpha_1, alpha_2, R
     type ProverState = (Value<C1>, Randomness<C1>, Randomness<C2>);
-    type Response = Witness<C1, C2>;
+    type Response = Response<C1, C2>;
     type SecretData = ComEqDiffGroupsSecret<C1, C2>;
 
     #[inline]
@@ -54,14 +53,6 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     }
 
     #[inline]
-    fn get_challenge(
-        &self,
-        challenge: &crate::random_oracle::Challenge,
-    ) -> Self::ProtocolChallenge {
-        C1::scalar_from_bytes(challenge)
-    }
-
-    #[inline]
     fn compute_commit_message<R: Rng>(
         &self,
         csprng: &mut R,
@@ -70,6 +61,14 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
         let (u, alpha_2) = self.cmm_key_1.commit(&alpha_1, csprng);
         let (v, cR) = self.cmm_key_2.commit(&alpha_1, csprng);
         Some(((u, v), (alpha_1, alpha_2, cR)))
+    }
+
+    #[inline]
+    fn get_challenge(
+        &self,
+        challenge: &crate::random_oracle::Challenge,
+    ) -> Self::ProtocolChallenge {
+        C1::scalar_from_bytes(challenge)
     }
 
     #[inline]
@@ -93,8 +92,8 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
         t.mul_assign(&secret.rand_cmm_2);
         t.negate();
         t.add_assign(&state.2);
-        Some(Witness {
-            witness: (s_1, s_2, t),
+        Some(Response {
+            response: (s_1, s_2, t),
         })
     }
 
@@ -103,7 +102,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let y = self.commitment_1;
         let cC = self.commitment_2;
@@ -111,7 +110,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
         let CommitmentKey { g: cG1, h: cG2 } = self.cmm_key_1;
         let CommitmentKey { g, h } = self.cmm_key_2;
 
-        let (s_1, s_2, t) = witness.witness;
+        let (s_1, s_2, t) = response.response;
 
         let u = {
             let bases = [y.0, cG1, cG2];

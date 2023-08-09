@@ -52,7 +52,7 @@ use crate::{
     curve_arithmetic::{multiexp, Curve},
     elgamal::ChunkSize,
     id::sigma_protocols::{
-        com_eq::{ComEq, ComEqSecret, CommittedPoints, Witness as ComEqWitness},
+        com_eq::{ComEq, ComEqSecret, CommittedPoints, Response as ComEqWitness},
         common::*,
         dlog::*,
     },
@@ -313,7 +313,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             match comeq.extract_commit_message(challenge, witness) {
                 Some(m) => {
                     commit_encexp1.push(m);
-                    w_a_vec.push(witness.witness.1);
+                    w_a_vec.push(witness.response.1);
                 }
                 None => return None,
             }
@@ -322,7 +322,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             match comeq.extract_commit_message(challenge, witness) {
                 Some(m) => {
                     commit_encexp2.push(m);
-                    w_s_prime_vec.push(witness.witness.1);
+                    w_s_prime_vec.push(witness.response.1);
                 }
                 None => return None,
             }

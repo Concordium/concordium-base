@@ -28,8 +28,8 @@ pub struct ComMult<C: Curve> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Witness<C: Curve> {
-    /// The witness, expanded using the same notation as in the specification.
+pub struct Response<C: Curve> {
+    /// The response, expanded using the same notation as in the specification.
     ss: [C::Scalar; 2],
     ts: [C::Scalar; 2],
     t:  C::Scalar,
@@ -41,18 +41,13 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     type ProtocolChallenge = C::Scalar;
     // alpha's, R_i's, R's
     type ProverState = ([Value<C>; 2], [Randomness<C>; 2], Randomness<C>);
-    type Response = Witness<C>;
+    type Response = Response<C>;
     type SecretData = ComMultSecret<C>;
 
     #[inline]
     fn public(&self, ro: &mut RandomOracle) {
         ro.extend_from(b"cmms", self.cmms.iter());
         ro.append_message(b"cmm_key", &self.cmm_key)
-    }
-
-    #[inline]
-    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
     }
 
     #[inline]
@@ -72,6 +67,11 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
         };
         let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
         Some((([v_1, v_2], v), ([alpha_1, alpha_2], [cR_1, cR_2], cR)))
+    }
+
+    #[inline]
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
     }
 
     #[inline]
@@ -109,17 +109,17 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
         t.negate();
         t.add_assign(&cR);
 
-        Some(Witness { ss, ts, t })
+        Some(Response { ss, ts, t })
     }
 
     #[inline]
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let mut points = [Commitment(C::zero_point()); 2];
-        for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {
+        for (i, (s_i, t_i)) in izip!(response.ss.iter(), response.ts.iter()).enumerate() {
             points[i] = {
                 let bases = [self.cmms[i].0, self.cmm_key.g, self.cmm_key.h];
                 let powers = [*challenge, *s_i, *t_i];
@@ -128,12 +128,12 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
             }
         }
         let h = &self.cmm_key.h;
-        let s_2 = &witness.ss[1];
+        let s_2 = &response.ss[1];
         let cC_3 = self.cmms[2];
         let cC_1 = self.cmms[0];
         let v = {
             let bases = [cC_1.0, *h, cC_3.0];
-            let powers = [*s_2, witness.t, *challenge];
+            let powers = [*s_2, response.t, *challenge];
             multiexp(&bases, &powers) // C_1^s_2 * h^t * C_3^c
         };
         Some((points, Commitment(v)))

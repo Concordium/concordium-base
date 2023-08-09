@@ -37,7 +37,7 @@ pub struct ComLin<C: Curve> {
 // TODO: What if u = 0?
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Response<C: Curve> {
     /// Randomized s_i's
     #[size_length = 4]
     /// Randomized r_i's.
@@ -52,7 +52,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     type CommitMessage = (Vec<Commitment<C>>, Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<Value<C>>, Vec<Randomness<C>>, Randomness<C>);
-    type Response = Witness<C>;
+    type Response = Response<C>;
     type SecretData = ComLinSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -138,8 +138,8 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         s.mul_assign(&secret.r);
         s.negate();
         s.add_assign(&r_tilde);
-        let witness = Witness { zs, ss, s };
-        Some(witness)
+        let response = Response { zs, ss, s };
+        Some(response)
     }
 
     #[allow(non_snake_case)]
@@ -147,10 +147,10 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        let zs = &witness.zs;
-        let ss = &witness.ss;
+        let zs = &response.zs;
+        let ss = &response.ss;
         let c = *challenge;
         let n = zs.len();
         if ss.len() != n || self.us.len() != n || self.cmms.len() != n {
@@ -170,7 +170,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         }
         // TODO: The g, h are the same in this, and the loop above.
         // We could partially precompute the table to speed-up the multiexp
-        let a = Commitment(multiexp(&[g, h, self.cmm.0], &[sum, witness.s, c]));
+        let a = Commitment(multiexp(&[g, h, self.cmm.0], &[sum, response.s, c]));
         let cm = (ais, a);
         Some(cm)
     }
