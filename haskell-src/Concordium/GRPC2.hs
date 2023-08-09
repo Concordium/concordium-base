@@ -54,6 +54,7 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Block (AbsoluteBlockHeight (..))
 import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
+import qualified Concordium.Types.KonsensusV1 as KonsensusV1
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
@@ -2153,3 +2154,25 @@ instance ToProto IpAddress where
 instance ToProto IpPort where
     type Output IpPort = Proto.Port
     toProto ip = Proto.make $ ProtoFields.value .= fromIntegral (ipPort ip)
+
+instance ToProto KonsensusV1.QuorumSignature where
+    type Output KonsensusV1.QuorumSignature = Proto.QuorumSignature
+    toProto qSignature = do
+        Proto.make $ do
+            ProtoFields.value .= KonsensusV1.quorumSignatureBytes qSignature
+
+instance ToProto KonsensusV1.TimeoutSignature where
+    type Output KonsensusV1.TimeoutSignature = Proto.TimeoutSignature
+    toProto tSignature = do
+        Proto.make $ do
+            ProtoFields.value .= KonsensusV1.timeoutSignatureBytes tSignature
+
+instance ToProto KonsensusV1.QuorumCertificate where
+    type Output KonsensusV1.QuorumCertificate = Proto.QuorumCertificate
+    toProto KonsensusV1.QuorumCertificate{..} =
+        Proto.make $ do
+            ProtoFields.blockHash .= toProto qcBlock
+            ProtoFields.round .= toProto qcRound
+            ProtoFields.epoch .= toProto qcEpoch
+            ProtoFields.aggregateSignature .= toProto qcAggregateSignature
+            ProtoFields.signatories .= undefined

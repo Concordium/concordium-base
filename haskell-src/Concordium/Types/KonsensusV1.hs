@@ -5,6 +5,7 @@ module Concordium.Types.KonsensusV1 where
 
 import Control.Monad
 import Data.Bits
+import qualified Data.ByteString as BS
 import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import Data.Serialize
@@ -12,6 +13,7 @@ import Data.Word
 import Numeric.Natural
 
 import qualified Concordium.Crypto.BlsSignature as Bls
+import Concordium.Crypto.FFIHelpers
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Types
 import Concordium.Types.HashableTo
@@ -21,6 +23,9 @@ import Concordium.Utils.Serialization
 -- common message.
 newtype QuorumSignature = QuorumSignature {theQuorumSignature :: Bls.Signature}
     deriving (Eq, Ord, Show, Serialize, Semigroup, Monoid)
+
+quorumSignatureBytes :: QuorumSignature -> BS.ByteString
+quorumSignatureBytes (QuorumSignature (Bls.Signature sigPtr)) = toBytesHelper Bls.toBytesSignature sigPtr
 
 -- |Index of a finalizer in the finalization committee vector.
 newtype FinalizerIndex = FinalizerIndex {theFinalizerIndex :: Word32}
@@ -155,6 +160,9 @@ finalizerRoundsList = Map.toAscList . theFinalizerRounds
 -- |Signature by a finalizer on a 'TimeoutSignatureMessage', or an aggregation of such signatures.
 newtype TimeoutSignature = TimeoutSignature {theTimeoutSignature :: Bls.Signature}
     deriving (Eq, Ord, Show, Serialize, Semigroup, Monoid)
+
+timeoutSignatureBytes :: TimeoutSignature -> BS.ByteString
+timeoutSignatureBytes (TimeoutSignature (Bls.Signature sigPtr)) = toBytesHelper Bls.toBytesSignature sigPtr
 
 -- |A timeout certificate aggregates signatures on timeout messages for the same round.
 -- Finalizers may have different QC rounds.

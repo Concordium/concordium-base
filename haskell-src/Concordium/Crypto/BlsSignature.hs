@@ -1,7 +1,7 @@
 module Concordium.Crypto.BlsSignature (
     PublicKey,
     SecretKey (..),
-    Signature,
+    Signature (..),
     Proof,
     generateSecretKey,
     derivePublicKey,
@@ -17,6 +17,7 @@ module Concordium.Crypto.BlsSignature (
     checkProofOfKnowledgeSK,
     publicKeySize,
     proofSize,
+    toBytesSignature,
 )
 where
 
