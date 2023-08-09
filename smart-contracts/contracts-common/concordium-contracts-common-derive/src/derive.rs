@@ -1307,7 +1307,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
             if let Some(where_clauses) = where_clauses {
                 let predicates = &where_clauses.predicates;
-                quote!(#predicates, where_clause_deserial)
+                quote!(#predicates, #where_clause_deserial)
             } else {
                 where_clause_deserial
             }
@@ -1542,7 +1542,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
         if let Some(where_clauses) = where_clauses {
             let predicates = &where_clauses.predicates;
-            quote!(#predicates, where_clause_serial)
+            quote!(#predicates, #where_clause_serial)
         } else {
             where_clause_serial
         }
@@ -1818,7 +1818,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
 
         if let Some(where_clauses) = where_clauses {
             let predicates = &where_clauses.predicates;
-            quote!(#predicates, where_clause_deserial)
+            quote!(#predicates, #where_clause_deserial)
         } else {
             where_clause_deserial
         }
@@ -2432,7 +2432,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
 
             if let Some(where_clauses) = where_clauses {
                 let predicates = &where_clauses.predicates;
-                quote!(#predicates, where_clause_extra)
+                quote!(#predicates, #where_clause_extra)
             } else {
                 where_clause_extra
             }
