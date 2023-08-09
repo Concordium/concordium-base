@@ -144,7 +144,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
 
     #[allow(non_snake_case)]
     #[allow(clippy::many_single_char_names)]
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         witness: &Self::Response,

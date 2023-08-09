@@ -81,7 +81,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         Some(Response { response })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         response: &Self::Response,

@@ -134,7 +134,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         Some(Witness { sis, t, tis })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         witness: &Self::Response,

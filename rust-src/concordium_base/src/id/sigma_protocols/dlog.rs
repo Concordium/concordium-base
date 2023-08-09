@@ -69,7 +69,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
         Some(Witness { witness })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         witness: &Self::Response,

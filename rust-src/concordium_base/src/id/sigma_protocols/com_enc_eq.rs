@@ -120,7 +120,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         response: &Self::Response,

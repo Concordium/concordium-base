@@ -57,7 +57,7 @@ pub trait SigmaProtocol: Sized {
     /// This function is pure and deterministic.
     /// It is allowed to return 'None' if some of the input data is malformed,
     /// e.g., vectors of inconsistent lengths.
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         response: &Self::Response,
@@ -141,13 +141,17 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for AndAdapter<P1, P2> 
         Some(AndResponse { r1, r2 })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        let p1 = self.first.extract_point(&challenge.0, &response.r1)?;
-        let p2 = self.second.extract_point(&challenge.1, &response.r2)?;
+        let p1 = self
+            .first
+            .extract_commit_message(&challenge.0, &response.r1)?;
+        let p2 = self
+            .second
+            .extract_commit_message(&challenge.1, &response.r2)?;
         Some((p1, p2))
     }
 
@@ -256,7 +260,7 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
         Some(ReplicateResponse { responses: rs })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         response: &Self::Response,
@@ -267,7 +271,7 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
         }
         let mut points = Vec::with_capacity(n);
         for (p, res) in izip!(self.protocols.iter(), response.responses.iter()) {
-            points.push(p.extract_point(challenge, res)?);
+            points.push(p.extract_commit_message(challenge, res)?);
         }
         Some(ReplicatePoints { points })
     }
@@ -318,7 +322,7 @@ pub fn verify<D: SigmaProtocol>(
     proof: &SigmaProof<D::Response>,
 ) -> bool {
     let challenge = verifier.get_challenge(&proof.challenge);
-    match verifier.extract_point(&challenge, &proof.response) {
+    match verifier.extract_commit_message(&challenge, &proof.response) {
         None => false,
         Some(ref point) => {
             verifier.public(ro);

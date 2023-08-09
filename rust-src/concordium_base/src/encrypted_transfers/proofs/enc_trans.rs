@@ -293,7 +293,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         witness: &Self::Response,
@@ -310,7 +310,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut w_a_vec = Vec::with_capacity(self.encexp1.len());
         let mut w_s_prime_vec = Vec::with_capacity(self.encexp2.len());
         for (comeq, witness) in izip!(&self.encexp1, &witness.witness_encexp1) {
-            match comeq.extract_point(challenge, witness) {
+            match comeq.extract_commit_message(challenge, witness) {
                 Some(m) => {
                     commit_encexp1.push(m);
                     w_a_vec.push(witness.witness.1);
@@ -319,7 +319,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             }
         }
         for (comeq, witness) in izip!(&self.encexp2, &witness.witness_encexp2) {
-            match comeq.extract_point(challenge, witness) {
+            match comeq.extract_commit_message(challenge, witness) {
                 Some(m) => {
                     commit_encexp2.push(m);
                     w_s_prime_vec.push(witness.witness.1);

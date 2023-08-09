@@ -55,13 +55,13 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         Some(w1)
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         witness: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        let p1 = self.dlog1.extract_point(challenge, witness)?;
-        let p2 = self.dlog2.extract_point(challenge, witness)?;
+        let p1 = self.dlog1.extract_commit_message(challenge, witness)?;
+        let p2 = self.dlog2.extract_commit_message(challenge, witness)?;
         Some((p1, p2))
     }
 

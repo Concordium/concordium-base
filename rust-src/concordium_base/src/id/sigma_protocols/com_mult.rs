@@ -113,7 +113,7 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     }
 
     #[inline]
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
         witness: &Self::Response,
