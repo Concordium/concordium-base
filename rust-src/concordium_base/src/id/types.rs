@@ -648,7 +648,7 @@ pub struct IpArData<C: Curve> {
     /// the commitment to the share is not sent but computed from
     /// the commitments to the sharing coefficients
     #[serde(rename = "proofComEncEq")]
-    pub proof_com_enc_eq:  com_enc_eq::Witness<C>,
+    pub proof_com_enc_eq:  com_enc_eq::Response<C>,
 }
 
 /// Data structure for when a anonymity revoker decrypts its encrypted share
@@ -780,7 +780,7 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 /// IdCredPub.
 pub type IdCredPubVerifiers<C> = (
     ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
-    ReplicateResponse<com_enc_eq::Witness<C>>,
+    ReplicateResponse<com_enc_eq::Response<C>>,
 );
 
 /// Information sent from the account holder to the identity provider.
@@ -1299,7 +1299,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// the commitments to the sharing coefficients
     #[serde(rename = "proofIdCredPub")]
     #[map_size_length = 4]
-    pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
+    pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
     /// Witnesses for proof of knowledge of signature of Identity Provider on
     /// the list
     /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],

@@ -214,7 +214,7 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
     known_ars: &BTreeMap<ArIdentity, A>,
     chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
     cmm_sharing_coeff: &[Commitment<C>],
-    proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
+    proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
 ) -> Result<IdCredPubVerifiers<C>, CdiVerificationError> {
     let mut provers = Vec::with_capacity(proof_id_cred_pub.len());
     let mut witnesses = Vec::with_capacity(proof_id_cred_pub.len());

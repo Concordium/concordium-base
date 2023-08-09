@@ -261,7 +261,7 @@ type CommonPioProverType<P, C> = AndAdapter<
 
 type IpArDataClosures<'a, C> = Vec<(
     ArIdentity,
-    Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a>,
+    Box<dyn Fn(com_enc_eq::Response<C>) -> IpArData<C> + 'a>,
 )>;
 
 /// Various data returned by `generate_pio_common` needed by both
@@ -435,7 +435,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         replicated_provers.push(item_prover);
         replicated_secrets.push(secret);
         let encrypted_share = item.encrypted_share;
-        let closure: Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a> =
+        let closure: Box<dyn Fn(com_enc_eq::Response<C>) -> IpArData<C> + 'a> =
             Box::new(move |proof_com_enc_eq| IpArData {
                 enc_prf_key_share: encrypted_share,
                 proof_com_enc_eq,

@@ -23,7 +23,7 @@ pub struct ComEncEqSecret<T: Curve> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct Witness<T: Curve> {
+pub struct Response<T: Curve> {
     /// The values
     /// * $\alpha - c R$
     /// * $\beta - c x$
@@ -33,7 +33,7 @@ pub struct Witness<T: Curve> {
     /// * R is the ElGamal randomness
     /// * r is the Pedersen randomness
     /// * x is the encrypted/commited value
-    witness: (T::Scalar, T::Scalar, T::Scalar),
+    response: (T::Scalar, T::Scalar, T::Scalar),
 }
 
 pub struct ComEncEq<C: Curve> {
@@ -55,7 +55,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     type ProtocolChallenge = C::Scalar;
     // (beta, alpha, gamma)
     type ProverState = (Value<C>, ElgamalRandomness<C>, PedersenRandomness<C>);
-    type Response = Witness<C>;
+    type Response = Response<C>;
     type SecretData = ComEncEqSecret<C>;
 
     #[inline]
@@ -114,8 +114,8 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         z_3.negate();
         z_3.mul_assign(r);
         z_3.add_assign(&gamma);
-        Some(Witness {
-            witness: (z_1, z_2, z_3),
+        Some(Response {
+            response: (z_1, z_2, z_3),
         })
     }
 
@@ -123,7 +123,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let g_1 = self.pub_key.generator;
         let h_1 = self.pub_key.key;
@@ -131,9 +131,9 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         let h = self.cmm_key.h;
         let h_in_exponent = self.encryption_in_exponent_generator;
 
-        let z_1 = witness.witness.0;
-        let z_2 = witness.witness.1;
-        let z_3 = witness.witness.2;
+        let z_1 = response.response.0;
+        let z_2 = response.response.1;
+        let z_3 = response.response.2;
 
         let e_1 = self.cipher.0;
         let e_2 = self.cipher.1;

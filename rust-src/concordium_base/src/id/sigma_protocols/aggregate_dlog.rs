@@ -20,21 +20,21 @@ pub struct AggregateDlog<C: Curve> {
     pub coeff:  Vec<C>,
 }
 
-/// Aggregate dlog witness. We deliberately make it opaque.
+/// Aggregate dlog response. We deliberately make it opaque.
 #[derive(Debug, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Response<C: Curve> {
     #[size_length = 4]
-    witness: Vec<C::Scalar>,
+    response: Vec<C::Scalar>,
 }
 
 /// Convenient alias for aggregate dlog proof
-pub type Proof<C> = SigmaProof<Witness<C>>;
+pub type Proof<C> = SigmaProof<Response<C>>;
 
 impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
     type ProverState = Vec<C::Scalar>;
-    type Response = Witness<C>;
+    type Response = Response<C>;
     type SecretData = Vec<Rc<C::Scalar>>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -70,27 +70,27 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         if state.len() != n {
             return None;
         }
-        let mut witness = Vec::with_capacity(n);
+        let mut response = Vec::with_capacity(n);
         for (ref s, ref r) in izip!(secret, state) {
-            let mut wit = *challenge;
-            wit.mul_assign(s);
-            wit.negate();
-            wit.add_assign(r);
-            witness.push(wit);
+            let mut res = *challenge;
+            res.mul_assign(s);
+            res.negate();
+            res.add_assign(r);
+            response.push(res);
         }
-        Some(Witness { witness })
+        Some(Response { response })
     }
 
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        if witness.witness.len() != self.coeff.len() {
+        if response.response.len() != self.coeff.len() {
             return None;
         }
         let mut point = self.public.mul_by_scalar(challenge);
-        for (w, g) in izip!(witness.witness.iter(), self.coeff.iter()) {
+        for (w, g) in izip!(response.response.iter(), self.coeff.iter()) {
             point = point.plus_point(&g.mul_by_scalar(w));
         }
         Some(point)
