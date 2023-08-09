@@ -42,10 +42,6 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         ro.extend_from(b"coeff", &self.coeff)
     }
 
-    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
-    }
-
     fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
@@ -58,6 +54,10 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
             rands.push(rand);
         }
         Some((multiexp(&self.coeff, &rands), rands))
+    }
+
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
     }
 
     fn compute_response(

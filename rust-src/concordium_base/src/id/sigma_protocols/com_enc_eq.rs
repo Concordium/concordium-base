@@ -67,14 +67,6 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn get_challenge(
-        &self,
-        challenge: &crate::random_oracle::Challenge,
-    ) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
-    }
-
-    #[inline]
     fn compute_commit_message<R: Rng>(
         &self,
         csprng: &mut R,
@@ -87,6 +79,14 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         );
         let (rand_cmm, gamma) = self.cmm_key.commit(&beta, csprng);
         Some(((rand_cipher, rand_cmm), (beta, alpha, gamma)))
+    }
+
+    #[inline]
+    fn get_challenge(
+        &self,
+        challenge: &crate::random_oracle::Challenge,
+    ) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
     }
 
     #[inline]

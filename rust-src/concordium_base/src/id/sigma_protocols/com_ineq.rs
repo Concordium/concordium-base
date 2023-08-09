@@ -26,7 +26,7 @@ use ff::Field;
 pub struct Response<C: Curve> {
     // The response consists of a com_mult response and a commitment.
     com_mult_response: SigmaProof<ComMultResponse<C>>,
-    aux_com:          Commitment<C>,
+    aux_com:           Commitment<C>,
 }
 
 /// Function for proving that a committed value `value` is different from
@@ -86,7 +86,7 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     let partial_proof = sigma_prove(&mut transcript, &prover, secret, csprng)?;
     Some(Response {
         com_mult_response: partial_proof,
-        aux_com:          cmm_2,
+        aux_com:           cmm_2,
     })
 }
 
@@ -170,7 +170,7 @@ mod tests {
         let wrong_com_key = CommitmentKey::<G1>::generate(&mut csprng);
         let wrong_pub_value = Fr::from_str("20000102").unwrap();
         let wrong_proof = Response {
-            aux_com:          Commitment(G1::generate(&mut csprng)),
+            aux_com:           Commitment(G1::generate(&mut csprng)),
             com_mult_response: proof.com_mult_response.clone(),
         };
 
