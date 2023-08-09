@@ -2155,18 +2155,6 @@ instance ToProto IpPort where
     type Output IpPort = Proto.Port
     toProto ip = Proto.make $ ProtoFields.value .= fromIntegral (ipPort ip)
 
-instance ToProto KonsensusV1.QuorumSignature where
-    type Output KonsensusV1.QuorumSignature = Proto.QuorumSignature
-    toProto qSignature = do
-        Proto.make $ do
-            ProtoFields.value .= KonsensusV1.quorumSignatureBytes qSignature
-
-instance ToProto KonsensusV1.TimeoutSignature where
-    type Output KonsensusV1.TimeoutSignature = Proto.TimeoutSignature
-    toProto tSignature = do
-        Proto.make $ do
-            ProtoFields.value .= KonsensusV1.timeoutSignatureBytes tSignature
-
 instance ToProto KonsensusV1.QuorumCertificate where
     type Output KonsensusV1.QuorumCertificate = Proto.QuorumCertificate
     toProto KonsensusV1.QuorumCertificate{..} =
@@ -2174,5 +2162,40 @@ instance ToProto KonsensusV1.QuorumCertificate where
             ProtoFields.blockHash .= toProto qcBlock
             ProtoFields.round .= toProto qcRound
             ProtoFields.epoch .= toProto qcEpoch
-            ProtoFields.aggregateSignature .= toProto qcAggregateSignature
-            ProtoFields.signatories .= undefined
+            ProtoFields.aggregateSignature
+                .= Proto.make (ProtoFields.value .= KonsensusV1.blsSignatureBytes qcAggregateSignature)
+            ProtoFields.signatories .= (toProto <$> qcSignatories)
+
+instance ToProto KonsensusV1.FinalizerRound where
+    type Output KonsensusV1.FinalizerRound = Proto.FinalizerRound
+    toProto KonsensusV1.FinalizerRound{..} =
+        Proto.make $ do
+            ProtoFields.round .= toProto frRound
+            ProtoFields.finalizers .= (toProto <$> frFinalizers)
+
+instance ToProto KonsensusV1.TimeoutCertificate where
+    type Output KonsensusV1.TimeoutCertificate = Proto.TimeoutCertificate
+    toProto KonsensusV1.TimeoutCertificate{..} =
+        Proto.make $ do
+            ProtoFields.round .= toProto tcRound
+            ProtoFields.minEpoch .= toProto tcMinEpoch
+            ProtoFields.qcRoundsFirstEpoch .= toProto tcFinalizerQCRoundsFirstEpoch
+            ProtoFields.qcRoundsSecondEpoch .= toProto tcFinalizerQCRoundsSecondEpoch
+            ProtoFields.aggregateSignature
+                .= Proto.make (ProtoFields.value .= KonsensusV1.blsSignatureBytes tcAggregateSignature)
+
+instance ToProto KonsensusV1.EpochFinalizationEntry where
+    type Output KonsensusV1.EpochFinalizationEntry = Proto.EpochFinalizationEntry
+    toProto KonsensusV1.EpochFinalizationEntry{..} =
+        Proto.make $ do
+            ProtoFields.finalizedQc .= toProto efeFinalizedQC
+            ProtoFields.successorQc .= toProto efeSuccessorQC
+            ProtoFields.successorProof .= mkSerialize efeSuccessorProof
+
+instance ToProto KonsensusV1.BlockCertificates where
+    type Output KonsensusV1.BlockCertificates = Proto.BlockCertificates
+    toProto KonsensusV1.BlockCertificates{..} =
+        Proto.make $ do
+            ProtoFields.maybe'quorumCertificate .= fmap toProto bcQuorumCertificate
+            ProtoFields.maybe'timeoutCertificate .= fmap toProto bcTimeoutCertificate
+            ProtoFields.maybe'epochFinalizationEntry .= fmap toProto bcEpochFinalizationEntry
