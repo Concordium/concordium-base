@@ -36,9 +36,9 @@ pub struct VecComEq<C: Curve> {
     pub h_bar: C,
 }
 
-/// `VecComEq` witness. We deliberately make it opaque.
+/// `VecComEq` response. We deliberately make it opaque.
 #[derive(Clone, Debug, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Response<C: Curve> {
     #[size_length = 2]
     sis: Vec<C::Scalar>,
     t:   C::Scalar,
@@ -47,13 +47,13 @@ pub struct Witness<C: Curve> {
 }
 
 /// Convenient alias
-pub type Proof<C> = SigmaProof<Witness<C>>;
+pub type Proof<C> = SigmaProof<Response<C>>;
 
 impl<C: Curve> SigmaProtocol for VecComEq<C> {
     type CommitMessage = (C, Vec<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<C::Scalar>, C::Scalar, BTreeMap<IndexType, C::Scalar>);
-    type Response = Witness<C>;
+    type Response = Response<C>;
     type SecretData = (Vec<C::Scalar>, Value<C>, BTreeMap<IndexType, Value<C>>);
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -63,10 +63,6 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         ro.append_message(b"h", &self.h);
         ro.append_message("h_bar", &self.h_bar);
         ro.append_message("g_bar", &self.g_bar)
-    }
-
-    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
     }
 
     fn compute_commit_message<R: rand::Rng>(
@@ -96,6 +92,10 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         let a = multiexp(&gis, &alphas); // h^rtilde \prod g_i^(alpha_i)
         alphas.pop(); // remove rtilde from alphas again.
         Some(((a, ais), (alphas, rtilde, rtildes)))
+    }
+
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
     }
 
     fn compute_response(
@@ -131,15 +131,15 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         t.mul_assign(&r);
         t.negate();
         t.add_assign(&rtilde);
-        Some(Witness { sis, t, tis })
+        Some(Response { sis, t, tis })
     }
 
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        let Witness { sis, t, tis } = witness;
+        let Response { sis, t, tis } = response;
         if sis.is_empty() {
             return None;
         }
