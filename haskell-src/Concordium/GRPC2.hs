@@ -2179,8 +2179,8 @@ instance ToProto KonsensusV1.TimeoutCertificate where
         Proto.make $ do
             ProtoFields.round .= toProto tcRound
             ProtoFields.minEpoch .= toProto tcMinEpoch
-            ProtoFields.qcRoundsFirstEpoch .= toProto tcFinalizerQCRoundsFirstEpoch
-            ProtoFields.qcRoundsSecondEpoch .= toProto tcFinalizerQCRoundsSecondEpoch
+            ProtoFields.qcRoundsFirstEpoch .= (toProto <$> tcFinalizerQCRoundsFirstEpoch)
+            ProtoFields.qcRoundsSecondEpoch .= (toProto <$> tcFinalizerQCRoundsSecondEpoch)
             ProtoFields.aggregateSignature
                 .= Proto.make (ProtoFields.value .= KonsensusV1.blsSignatureBytes tcAggregateSignature)
 

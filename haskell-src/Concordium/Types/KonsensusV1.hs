@@ -39,9 +39,9 @@ data TimeoutCertificate = TimeoutCertificate
       -- |The minimum epoch for which we include signatures.
       tcMinEpoch :: !Epoch,
       -- |The rounds for which finalizers have their best QCs in the epoch 'tcMinEpoch'.
-      tcFinalizerQCRoundsFirstEpoch :: !FinalizerRound,
+      tcFinalizerQCRoundsFirstEpoch :: ![FinalizerRound],
       -- |The rounds for which finalizers have their best QCs in the epoch @tcMinEpoch + 1@.
-      tcFinalizerQCRoundsSecondEpoch :: !FinalizerRound,
+      tcFinalizerQCRoundsSecondEpoch :: ![FinalizerRound],
       -- |Aggregate of the finalizers' 'TimeoutSignature's on the round and QC round.
       tcAggregateSignature :: !Bls.Signature
     }
