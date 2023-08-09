@@ -1,13 +1,11 @@
-{-# LANGUAGE DeriveTraversable #-}
-
 -- |Types that are relevant only for ConsensusV1.
--- Common for types defined here is that they are
--- exposed through the node API, otherwise they should
--- just be defined in the node.
-module Concordium.Types.ConsensusV1 where
+-- Common for types defined here is that they are exposed through the node API,
+-- otherwise definitions should be defined in the node.
+module Concordium.Types.KonsensusV1 where
 
 import Control.Monad
 import Data.Bits
+import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import Data.Serialize
 import Data.Word
@@ -19,22 +17,55 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
 
--- |A strict version of 'Maybe'.
-data Option a
-    = Absent
-    | Present !a
-    deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
-
 -- |Signature by a finalizer on a 'QuorumSignatureMessage', or an aggregation of signatures on a
 -- common message.
 newtype QuorumSignature = QuorumSignature {theQuorumSignature :: Bls.Signature}
     deriving (Eq, Ord, Show, Serialize, Semigroup, Monoid)
 
+-- |Index of a finalizer in the finalization committee vector.
+newtype FinalizerIndex = FinalizerIndex {theFinalizerIndex :: Word32}
+    deriving (Eq, Ord, Show, Enum, Bounded, Serialize)
+
 -- |A set of 'FinalizerIndex'es.
 -- This is represented as a bit vector, where the bit @i@ is set iff the finalizer index @i@ is
 -- in the set.
 newtype FinalizerSet = FinalizerSet {theFinalizerSet :: Natural}
-    deriving (Eq, Show)
+    deriving (Eq)
+
+-- |Convert a 'FinalizerSet' to a list of 'FinalizerIndex', in ascending order.
+finalizerList :: FinalizerSet -> [FinalizerIndex]
+finalizerList = unroll 0 . theFinalizerSet
+  where
+    unroll _ 0 = []
+    unroll i x
+        | testBit x 0 = FinalizerIndex i : r
+        | otherwise = r
+      where
+        r = unroll (i + 1) (shiftR x 1)
+
+-- |The empty set of finalizers
+emptyFinalizerSet :: FinalizerSet
+emptyFinalizerSet = FinalizerSet 0
+
+-- |Add a finalizer to a 'FinalizerSet'.
+addFinalizer :: FinalizerSet -> FinalizerIndex -> FinalizerSet
+addFinalizer (FinalizerSet setOfFinalizers) (FinalizerIndex i) = FinalizerSet $ setBit setOfFinalizers (fromIntegral i)
+
+-- |Test whether a given finalizer index is present in a finalizer set.
+memberFinalizerSet :: FinalizerIndex -> FinalizerSet -> Bool
+memberFinalizerSet (FinalizerIndex fi) (FinalizerSet setOfFinalizers) =
+    testBit setOfFinalizers (fromIntegral fi)
+
+-- |Convert a list of [FinalizerIndex] to a 'FinalizerSet'.
+finalizerSet :: [FinalizerIndex] -> FinalizerSet
+finalizerSet = foldl' addFinalizer (FinalizerSet 0)
+
+-- |Test if the first finalizer set is a subset of the second.
+subsetFinalizerSet :: FinalizerSet -> FinalizerSet -> Bool
+subsetFinalizerSet (FinalizerSet s1) (FinalizerSet s2) = s1 .&. s2 == s1
+
+instance Show FinalizerSet where
+    show = show . finalizerList
 
 -- |The serialization of a 'FinalizerSet' consists of a length (Word32, big-endian), followed by
 -- that many bytes, the first of which (if any) must be non-zero. These bytes encode the bit-vector
@@ -80,6 +111,10 @@ data QuorumCertificate = QuorumCertificate
     }
     deriving (Eq, Show)
 
+-- |For generating a genesis quorum certificate with empty signature and empty finalizer set.
+genesisQuorumCertificate :: BlockHash -> QuorumCertificate
+genesisQuorumCertificate genesisHash = QuorumCertificate genesisHash 0 0 mempty $ FinalizerSet 0
+
 instance Serialize QuorumCertificate where
     put QuorumCertificate{..} = do
         put qcBlock
@@ -111,6 +146,11 @@ instance Serialize FinalizerRounds where
     get = do
         count <- getWord32be
         FinalizerRounds <$> getSafeSizedMapOf count get get
+
+-- |Unpack a 'FinalizerRounds' as a list of rounds and finalizer sets, in ascending order of
+-- round.
+finalizerRoundsList :: FinalizerRounds -> [(Round, FinalizerSet)]
+finalizerRoundsList = Map.toAscList . theFinalizerRounds
 
 -- |Signature by a finalizer on a 'TimeoutSignatureMessage', or an aggregation of such signatures.
 newtype TimeoutSignature = TimeoutSignature {theTimeoutSignature :: Bls.Signature}
@@ -153,8 +193,24 @@ instance Serialize TimeoutCertificate where
                 fail "tcMinEpoch is not the minimum epoch"
         return TimeoutCertificate{..}
 
-instance HashableTo Hash.Hash (Option TimeoutCertificate) where
-    getHash Absent = Hash.hash $ encode (0 :: Word8)
-    getHash (Present tc) = Hash.hash $ runPut $ do
-        putWord8 1
-        put tc
+-- |Returns 'True' if and only if the finalizers are exclusively in 'tcFinalizerQCRoundsFirstEpoch'
+-- in a 'TimeoutCertificate'.
+tcIsSingleEpoch :: TimeoutCertificate -> Bool
+tcIsSingleEpoch = null . theFinalizerRounds . tcFinalizerQCRoundsSecondEpoch
+
+-- |The maximum epoch for which a 'TimeoutCertificate' includes signatures.
+-- (This will be 'tcMinEpoch' in the case that the certificate contains no signatures.)
+tcMaxEpoch :: TimeoutCertificate -> Epoch
+tcMaxEpoch tc
+    | tcIsSingleEpoch tc = tcMinEpoch tc
+    | otherwise = tcMinEpoch tc + 1
+
+-- |The maximum round for which a 'TimeoutCertificate' includes signatures.
+-- (This will be 0 if the certificate contains no signatures.)
+tcMaxRound :: TimeoutCertificate -> Round
+tcMaxRound tc =
+    max
+        (maxRound (tcFinalizerQCRoundsFirstEpoch tc))
+        (maxRound (tcFinalizerQCRoundsSecondEpoch tc))
+  where
+    maxRound (FinalizerRounds r) = maybe 0 fst (Map.lookupMax r)

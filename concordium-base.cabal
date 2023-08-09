@@ -76,13 +76,13 @@ library
       Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
       Concordium.Types.Conditionally
-      Concordium.Types.ConsensusV1
       Concordium.Types.DummyData
       Concordium.Types.Execution
       Concordium.Types.Execution.TH
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
       Concordium.Types.InvokeContract
+      Concordium.Types.KonsensusV1
       Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
