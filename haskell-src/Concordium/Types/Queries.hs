@@ -1020,8 +1020,10 @@ instance ToJSON BakerRewardPeriodInfo where
     toJSON BakerRewardPeriodInfo{..} =
         object
             [ "baker" .= brpiBaker,
-              "effectiveStake" .= brpiEffectiveStake
-              "commissionRates" .= brpiCommissionRates,
+              "effectiveStake"
+                .= brpiEffectiveStake
+                    "commissionRates"
+                .= brpiCommissionRates,
               "equityCapital" .= brpiEquityCapital,
               "delegatedCapital" .= brpiDelegatedCapital,
               "isFinalizer" .= brpiIsFinalizer
