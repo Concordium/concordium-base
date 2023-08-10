@@ -85,7 +85,7 @@ instance ToJSON TimeoutCertificate where
             ]
 
 newtype SuccessorProof = SuccessorProof Hash.Hash
-    deriving (Eq, Show, ToJSON) via Hash.Hash
+    deriving (Eq, Show, ToJSON, FromJSON, Serialize) via Hash.Hash
 
 -- |The epoch finalization entry is the proof required in order to
 -- advance to a new epoch.
