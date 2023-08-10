@@ -18,13 +18,13 @@ use rand::*;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// The witness that the prover knows $r'$ (see specification)
-    witness_rho:    P::ScalarField,
-    /// List of witnesses $(w_i, R_i)$ that the user knows the messages m_i and
+    /// The response that the prover knows $r'$ (see specification)
+    response_rho:    P::ScalarField,
+    /// List of responses $(w_i, R_i)$ that the user knows the messages m_i and
     /// randomness R_i that combine to commitments and the public randomized
     /// signature.
     #[size_length = 4]
-    witness_commit: Vec<(P::ScalarField, C::Scalar)>,
+    response_commit: Vec<(P::ScalarField, C::Scalar)>,
 }
 
 pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
@@ -93,7 +93,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
             return None;
         }
 
-        // Random elements corresponding to the messages m_i, used as witnesses
+        // Random elements corresponding to the messages m_i, used as responses
         // for the aggregate log part of the proof, and the randomness R_i used
         // for the commitment part of the proof.
         let mut mus_cRs = Vec::with_capacity(n);
@@ -151,29 +151,29 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         let r_prime = secret.blind_rand.1;
         // If challange = 0 the proof is not going to be valid.
         // However this is an exceedingly unlikely case
-        let mut wit_r_prime = *challenge;
-        wit_r_prime.mul_assign(&r_prime);
-        wit_r_prime.negate();
-        wit_r_prime.add_assign(&state.rho_prime);
+        let mut res_r_prime = *challenge;
+        res_r_prime.mul_assign(&r_prime);
+        res_r_prime.negate();
+        res_r_prime.add_assign(&state.rho_prime);
 
-        let mut wit_messages_randoms = Vec::with_capacity(n);
+        let mut res_messages_randoms = Vec::with_capacity(n);
         for ((ref m, ref r), (ref mu, ref rho)) in izip!(secret.values_and_rands, state.mus_and_rs)
         {
-            let mut wit_m = *challenge;
-            wit_m.mul_assign(m);
-            wit_m.negate();
-            wit_m.add_assign(mu);
+            let mut res_m = *challenge;
+            res_m.mul_assign(m);
+            res_m.negate();
+            res_m.add_assign(mu);
 
-            let mut wit_r = *challenge;
-            wit_r.mul_assign(r);
-            wit_r.negate();
-            wit_r.add_assign(rho);
+            let mut res_r = *challenge;
+            res_r.mul_assign(r);
+            res_r.negate();
+            res_r.add_assign(rho);
 
-            wit_messages_randoms.push((wit_m, wit_r));
+            res_messages_randoms.push((res_m, res_r));
         }
         Some(Response {
-            witness_rho:    wit_r_prime,
-            witness_commit: wit_messages_randoms,
+            response_rho:    res_r_prime,
+            response_commit: res_messages_randoms,
         })
     }
 
@@ -181,7 +181,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let g_tilda = self.ps_pub_key.g_tilda;
         let a_hat = self.blinded_sig.sig.0;
@@ -192,7 +192,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
 
         let commitments = &self.commitments;
         let n = commitments.len();
-        if witness.witness_commit.len() != n {
+        if response.response_commit.len() != n {
             return None;
         }
         if n > cY_tildas.len() {
@@ -203,24 +203,19 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         let mut gs = Vec::with_capacity(n + 2);
         let mut es = Vec::with_capacity(n + 2);
 
-        // let mut point = g_tilda.mul_by_scalar(&witness.witness_rho);
         gs.push(g_tilda);
-        es.push(witness.witness_rho);
+        es.push(response.response_rho);
         let mut cmms = Vec::with_capacity(n);
-        for (cC_i, cY_tilda, (wit_m, wit_r)) in
-            izip!(commitments.iter(), cY_tildas, witness.witness_commit.iter())
+        for (cC_i, cY_tilda, (res_m, res_r)) in
+            izip!(commitments.iter(), cY_tildas, response.response_commit.iter())
         {
             // compute C_i^c * g^mu_i h^R_i
             let bases = [cC_i.0, cmm_key.g, cmm_key.h];
-            let powers = [*challenge, *wit_m, *wit_r];
+            let powers = [*challenge, *res_m, *res_r];
             let cP = multiexp(&bases, &powers);
-            // let cP = cC_i
-            //     .mul_by_scalar(challenge)
-            //     .plus_point(&cmm_key.hide_worker(wit_m, wit_r));
             cmms.push(Commitment(cP));
             gs.push(*cY_tilda);
-            es.push(*wit_m);
-            // point = point.plus_point(&cY_tilda.mul_by_scalar(&wit_m));
+            es.push(*res_m);
         }
         // finally add X_tilda and -challenge to the powers.
         gs.push(cX_tilda);
