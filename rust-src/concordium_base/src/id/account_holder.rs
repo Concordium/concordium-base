@@ -155,7 +155,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Returning the version 0 pre-identity object.
     let poks_common = CommonPioProofFields {
         challenge: proof.challenge,
-        id_cred_sec_witness: proof.response.r1.r1.r1.r1,
+        id_cred_sec_response: proof.response.r1.r1.r1.r1,
         commitments_same_proof: proof.response.r1.r1.r1.r2,
         commitments_prf_same: proof.response.r1.r1.r2,
         bulletproofs,
@@ -229,7 +229,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Returning the version 1 pre-identity object.
     let poks = CommonPioProofFields {
         challenge: proof.challenge,
-        id_cred_sec_witness: proof.response.r1.r1.r1,
+        id_cred_sec_response: proof.response.r1.r1.r1,
         commitments_same_proof: proof.response.r1.r1.r2,
         commitments_prf_same: proof.response.r1.r2,
         bulletproofs,

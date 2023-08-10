@@ -209,7 +209,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         public: *id_cred_pub,
         coeff:  context.global_context.on_chain_commitment_key.g,
     };
-    let id_cred_sec_witness = poks_common.id_cred_sec_witness;
+    let id_cred_sec_witness = poks_common.id_cred_sec_response;
 
     // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
     let id_cred_sec_eq_verifier = com_eq::ComEq {
