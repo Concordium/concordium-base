@@ -317,7 +317,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
     // We now construct all the zero-knowledge proofs.
     // Since all proofs must be bound together, we
     // first construct inputs to all the proofs, and only at the end
-    // do we produce all the different witnesses.
+    // do we produce all the different responses.
 
     // First the proof that we know id_cred_sec.
     let id_cred_pub = context
@@ -1192,13 +1192,13 @@ fn compute_pok_reg_id<C: Curve>(
         Commitment(reg_id),
         cmm_one,
     ];
-    // finally the secret keys are derived from actual commited values
+    // finally the secret keys are derived from actual committed values
     // and the randomness.
 
     let mut k = C::scalar_from_u64(u64::from(cred_counter));
     k.add_assign(&prf_key);
 
-    // combine the two randomness witnesses
+    // combine the two random values
     let mut rand_1 = C::Scalar::zero();
     rand_1.add_assign(prf_rand);
     rand_1.add_assign(cred_counter_rand);
