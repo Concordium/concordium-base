@@ -1009,7 +1009,7 @@ data BakerRewardPeriodInfo = BakerRewardPeriodInfo
       brpiCommissionRates :: !CommissionRates,
       -- |The amount staked by the baker itself.
       brpiEquityCapital :: !Amount,
-      -- | The total capital delegated to the baker pool.
+      -- |The total capital delegated to the baker pool.
       brpiDelegatedCapital :: !Amount,
       -- |Whether the baker is part of the finalization committee.
       brpiIsFinalizer :: !Bool
