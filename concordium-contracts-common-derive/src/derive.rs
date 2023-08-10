@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::ToTokens;
 use std::{collections::HashMap, convert::TryFrom, ops::Neg};
-use syn::{spanned::Spanned, DataEnum, Ident, Meta};
+use syn::{punctuated::Punctuated, spanned::Spanned, DataEnum, Ident, Meta};
 
 /// Check a condition, if false return early with a provided error message
 /// wrapped in a `syn::Error`. Similar to `ensure!` from the `anyhow` crate.
@@ -48,6 +48,25 @@ const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 3] = ["size_length", "ensure_ord
 const VALID_CONCORDIUM_ATTRIBUTES: [&str; 4] = ["state_parameter", "bound", "transparent", "repr"];
 
 fn get_root() -> proc_macro2::TokenStream { quote!(concordium_std) }
+
+/// Extend a punctuated list of tokens with another list, making sure that
+/// the punctuation is correctly maintained, i.e., if the original list ends
+/// with a trailing comma then we don't add a comma before the extra tokens,
+/// otherwise we do.
+fn extend_punctuated<T: ToTokens>(
+    seq: &Punctuated<T, syn::token::Comma>,
+    stream: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    if stream.is_empty() {
+        quote!(#seq)
+    } else if seq.is_empty() {
+        stream
+    } else if seq.trailing_punct() {
+        quote!(#seq #stream)
+    } else {
+        quote!(#seq, #stream)
+    }
+}
 
 /// Return whether an attribute item is present.
 fn contains_attribute<'a, I: IntoIterator<Item = &'a Meta>>(iter: I, name: &str) -> bool {
@@ -1307,7 +1326,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
             if let Some(where_clauses) = where_clauses {
                 let predicates = &where_clauses.predicates;
-                quote!(#predicates, where_clause_deserial)
+                extend_punctuated(predicates, where_clause_deserial)
             } else {
                 where_clause_deserial
             }
@@ -1542,7 +1561,7 @@ pub fn impl_serial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
         if let Some(where_clauses) = where_clauses {
             let predicates = &where_clauses.predicates;
-            quote!(#predicates, where_clause_serial)
+            extend_punctuated(predicates, where_clause_serial)
         } else {
             where_clause_serial
         }
@@ -1818,7 +1837,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
 
         if let Some(where_clauses) = where_clauses {
             let predicates = &where_clauses.predicates;
-            quote!(#predicates, where_clause_deserial)
+            extend_punctuated(predicates, where_clause_deserial)
         } else {
             where_clause_deserial
         }
@@ -2326,7 +2345,7 @@ pub fn schema_type_derive_worker(input: TokenStream) -> syn::Result<TokenStream>
 
             if let Some(where_clauses) = where_clauses {
                 let predicates = &where_clauses.predicates;
-                quote!(#predicates, where_clause_extra)
+                extend_punctuated(predicates, where_clause_extra)
             } else {
                 where_clause_extra
             }
