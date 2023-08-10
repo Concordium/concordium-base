@@ -54,7 +54,7 @@ impl std::fmt::Display for Reason {
 /// The validation of the two versions of identity object requests are very
 /// similar, and therefore the common validation parts of the two flows are
 /// factored out in the function `validate_request_common`. It produces the
-/// common sigma protocol verifier and witnesses that are used in both
+/// common sigma protocol verifier and responses that are used in both
 /// `validate_request` and `validate_request_v1`:
 /// * In the version 0 flow, the common verifier is AND'ed with a verifier
 ///   checking that RegID = PRF(key_PRF, 0)
@@ -87,7 +87,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Construct the common verifier and verify the range proof
-    let (verifier, witness) = validate_request_common(
+    let (verifier, response) = validate_request_common(
         &mut transcript,
         id_cred_pub,
         pre_id_obj.get_common_pio_fields(),
@@ -102,18 +102,18 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         g:          pub_info_for_ip.reg_id,
         cmm_key:    verifier.first.second.cmm_key_1,
     };
-    let prf_regid_witness = pre_id_obj.poks.prf_regid_proof.clone();
+    let prf_regid_response = pre_id_obj.poks.prf_regid_proof.clone();
 
     let verifier = verifier.add_prover(verifier_prf_regid);
-    // Construct the witness consisting of the common witness and the
-    // prf_regid_witness above.
-    let witness = AndResponse {
-        r1: witness,
-        r2: prf_regid_witness,
+    // Construct the response consisting of the common response and the
+    // prf_regid_response above.
+    let response = AndResponse {
+        r1: response,
+        r2: prf_regid_response,
     };
     let proof = SigmaProof {
         challenge: poks_common.challenge,
-        response:  witness,
+        response,
     };
 
     // Verify the sigma protocol proof
@@ -136,7 +136,7 @@ pub fn validate_request_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let mut transcript = RandomOracle::domain("PreIdentityProof");
     // Construct the common verifier and verify the range proof
-    let (verifier, witness) = validate_request_common(
+    let (verifier, response) = validate_request_common(
         &mut transcript,
         id_cred_pub,
         common_fields,
@@ -145,7 +145,7 @@ pub fn validate_request_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     )?;
     let proof = SigmaProof {
         challenge: poks_common.challenge,
-        response:  witness,
+        response,
     };
     // Verify the sigma protocol proof
     if verify(&mut transcript, &verifier, &proof) {
@@ -165,18 +165,18 @@ type CommonPioVerifierType<P, C> = AndAdapter<
     ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
 >;
 
-type CommonVerifierWithWitness<P, C> = (
+type CommonVerifierWithResponse<P, C> = (
     CommonPioVerifierType<P, C>,
     <CommonPioVerifierType<P, C> as SigmaProtocol>::Response,
 );
 
 /// This is used by both `validate_request` and `validate_request_v1` to
-/// construct the sigma protocol verifier and witness used by both of these
+/// construct the sigma protocol verifier and response used by both of these
 /// functions. The inputs are
 /// - transcript - the RandomOracle used in the protocol.
 /// - id_cred_pub - the IdCredPub of the user behind the identity.
 /// - common_fields - relevant information used to verify proofs.
-/// - poks_common - the challenge, the common sigma protocol witnesses together
+/// - poks_common - the challenge, the common sigma protocol responses together
 ///   with the range proof.
 /// - context - the identity provider context
 fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
@@ -185,7 +185,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     common_fields: CommonPioFields<P, C>,
     poks_common: &CommonPioProofFields<P, C>,
     context: IpContext<P, C>,
-) -> Result<CommonVerifierWithWitness<P, C>, Reason> {
+) -> Result<CommonVerifierWithResponse<P, C>, Reason> {
     // Verify proof:
     let ip_info = &context.ip_info;
     let commitment_key_sc = CommitmentKey {
@@ -209,7 +209,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         public: *id_cred_pub,
         coeff:  context.global_context.on_chain_commitment_key.g,
     };
-    let id_cred_sec_witness = poks_common.id_cred_sec_response;
+    let id_cred_sec_response = poks_common.id_cred_sec_response;
 
     // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
     let id_cred_sec_eq_verifier = com_eq::ComEq {
@@ -220,7 +220,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
 
     // TODO: Figure out whether we can somehow get rid of this clone.
-    let id_cred_sec_eq_witness = poks_common.commitments_same_proof.clone();
+    let id_cred_sec_eq_response = poks_common.commitments_same_proof.clone();
 
     let choice_ar_handles = common_fields.choice_ar_parameters.ar_identities.clone();
     let revocation_threshold = common_fields.choice_ar_parameters.threshold;
@@ -280,7 +280,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         cmm_key_1:    commitment_key_prf,
         cmm_key_2:    *ar_ck,
     };
-    let witness_prf_same = poks_common.commitments_prf_same;
+    let response_prf_same = poks_common.commitments_prf_same;
 
     let h_in_exponent = *context.global_context.encryption_in_exponent_generator();
     let prf_verification = compute_prf_sharing_verifier(
@@ -290,7 +290,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         context.ars_infos,
         &h_in_exponent,
     );
-    let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
+    let (prf_sharing_verifier, prf_sharing_response) = match prf_verification {
         Some(v) => v,
         None => return Err(Reason::WrongArParameters),
     };
@@ -337,17 +337,17 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
 
     transcript.append_message(b"bulletproofs", &poks_common.bulletproofs);
-    let witness = AndResponse {
+    let response = AndResponse {
         r1: AndResponse {
             r1: AndResponse {
-                r1: id_cred_sec_witness,
-                r2: id_cred_sec_eq_witness,
+                r1: id_cred_sec_response,
+                r2: id_cred_sec_eq_response,
             },
-            r2: witness_prf_same,
+            r2: response_prf_same,
         },
-        r2: prf_sharing_witness,
+        r2: prf_sharing_response,
     };
-    Ok((verifier, witness))
+    Ok((verifier, response))
 }
 
 /// Sign the given pre-identity-object to produce a version 0 identity object.
@@ -440,7 +440,7 @@ fn compute_prf_sharing_verifier<C: Curve>(
     encryption_in_exponent_generator: &C,
 ) -> Option<IdCredPubVerifiers<C>> {
     let mut verifiers = Vec::with_capacity(ip_ar_data.len());
-    let mut witnesses = Vec::with_capacity(ip_ar_data.len());
+    let mut responses = Vec::with_capacity(ip_ar_data.len());
 
     for (ar_id, ar_data) in ip_ar_data.iter() {
         let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
@@ -468,15 +468,13 @@ fn compute_prf_sharing_verifier<C: Curve>(
         };
         verifiers.push(verifier);
         // TODO: Figure out whether we can somehow get rid of this clone.
-        witnesses.push(ar_data.proof_com_enc_eq.clone())
+        responses.push(ar_data.proof_com_enc_eq.clone())
     }
     Some((
         ReplicateAdapter {
             protocols: verifiers,
         },
-        ReplicateResponse {
-            responses: witnesses,
-        },
+        ReplicateResponse { responses },
     ))
 }
 

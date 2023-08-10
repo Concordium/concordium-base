@@ -206,9 +206,11 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         gs.push(g_tilda);
         es.push(response.response_rho);
         let mut cmms = Vec::with_capacity(n);
-        for (cC_i, cY_tilda, (res_m, res_r)) in
-            izip!(commitments.iter(), cY_tildas, response.response_commit.iter())
-        {
+        for (cC_i, cY_tilda, (res_m, res_r)) in izip!(
+            commitments.iter(),
+            cY_tildas,
+            response.response_commit.iter()
+        ) {
             // compute C_i^c * g^mu_i h^R_i
             let bases = [cC_i.0, cmm_key.g, cmm_key.h];
             let powers = [*challenge, *res_m, *res_r];
