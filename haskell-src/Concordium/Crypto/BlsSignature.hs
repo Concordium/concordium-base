@@ -17,7 +17,6 @@ module Concordium.Crypto.BlsSignature (
     checkProofOfKnowledgeSK,
     publicKeySize,
     proofSize,
-    toBytesSignature,
 )
 where
 

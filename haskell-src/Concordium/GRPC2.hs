@@ -2157,8 +2157,7 @@ instance ToProto IpPort where
 
 instance ToProto KonsensusV1.QuorumCertificateSignature where
     type Output KonsensusV1.QuorumCertificateSignature = Proto.QuorumSignature
-    toProto (KonsensusV1.QuorumCertificateSignature sig) =
-        Proto.make (ProtoFields.value .= KonsensusV1.blsSignatureBytes sig)
+    toProto (KonsensusV1.QuorumCertificateSignature sig) = mkSerialize sig
 
 instance ToProto KonsensusV1.QuorumCertificate where
     type Output KonsensusV1.QuorumCertificate = Proto.QuorumCertificate
@@ -2179,8 +2178,7 @@ instance ToProto KonsensusV1.FinalizerRound where
 
 instance ToProto KonsensusV1.TimeoutCertificateSignature where
     type Output KonsensusV1.TimeoutCertificateSignature = Proto.TimeoutSignature
-    toProto (KonsensusV1.TimeoutCertificateSignature sig) =
-        Proto.make (ProtoFields.value .= KonsensusV1.blsSignatureBytes sig)
+    toProto (KonsensusV1.TimeoutCertificateSignature sig) = mkSerialize sig
 
 instance ToProto KonsensusV1.TimeoutCertificate where
     type Output KonsensusV1.TimeoutCertificate = Proto.TimeoutCertificate

@@ -5,16 +5,15 @@
 module Concordium.Types.KonsensusV1 where
 
 import Data.Aeson
-import qualified Data.ByteString as BS
+import Data.Serialize
 
 import qualified Concordium.Crypto.BlsSignature as Bls
-import Concordium.Crypto.FFIHelpers
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Types
 
 -- |An aggregate signature on a 'QuorumCertificate'.
 newtype QuorumCertificateSignature = QuorumCertificateSignature Bls.Signature
-    deriving (Eq, Show, ToJSON) via Bls.Signature
+    deriving (Eq, Show, ToJSON, FromJSON, Serialize) via Bls.Signature
 
 -- | A quorum certificate, to be formed when enough finalizers have signed the same 'QuorumSignatureMessage'.
 data QuorumCertificate = QuorumCertificate
@@ -59,7 +58,7 @@ instance ToJSON FinalizerRound where
             ]
 
 newtype TimeoutCertificateSignature = TimeoutCertificateSignature Bls.Signature
-    deriving (Eq, Show, ToJSON) via Bls.Signature
+    deriving (Eq, Show, ToJSON, FromJSON, Serialize) via Bls.Signature
 
 data TimeoutCertificate = TimeoutCertificate
     { -- |The round that has timed-out.
@@ -84,10 +83,6 @@ instance ToJSON TimeoutCertificate where
               "finalizerQCRoundsSecondEpoch" .= tcFinalizerQCRoundsSecondEpoch,
               "aggregateSignature" .= tcAggregateSignature
             ]
-
--- |Get the 'BS.ByteString' of the provided 'Bls.Signature'.
-blsSignatureBytes :: Bls.Signature -> BS.ByteString
-blsSignatureBytes (Bls.Signature sigPtr) = toBytesHelper Bls.toBytesSignature sigPtr
 
 newtype SuccessorProof = SuccessorProof Hash.Hash
     deriving (Eq, Show, ToJSON) via Hash.Hash
