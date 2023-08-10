@@ -2153,3 +2153,14 @@ instance ToProto IpAddress where
 instance ToProto IpPort where
     type Output IpPort = Proto.Port
     toProto ip = Proto.make $ ProtoFields.value .= fromIntegral (ipPort ip)
+
+instance ToProto BakerRewardPeriodInfo where
+    type Output BakerRewardPeriodInfo = Proto.BakerRewardPeriodInfo
+    toProto BakerRewardPeriodInfo{..} =
+        Proto.make $ do
+            ProtoFields.baker .= toProto brpiBaker
+            ProtoFields.effectiveStake .= toProto brpiEffectiveStake
+            ProtoFields.commissionRates .= toProto brpiCommissionRates
+            ProtoFields.equityCapital .= toProto brpiEquityCapital
+            ProtoFields.delegatedCapital .= toProto brpiDelegatedCapital
+            ProtoFields.isFinalizer .= brpiIsFinalizer
