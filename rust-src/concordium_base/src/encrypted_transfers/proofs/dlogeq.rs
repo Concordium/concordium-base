@@ -8,7 +8,7 @@ use crate::{
     curve_arithmetic::Curve,
     id::sigma_protocols::{
         common::*,
-        dlog::{Response as DlogWitness, *},
+        dlog::{Response as DlogResponse, *},
     },
     random_oracle::{Challenge, RandomOracle},
 };
@@ -22,7 +22,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
     type CommitMessage = (C, C);
     type ProtocolChallenge = C::Scalar;
     type ProverState = C::Scalar;
-    type Response = DlogWitness<C>;
+    type Response = DlogResponse<C>;
     type SecretData = DlogSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -58,10 +58,10 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        let p1 = self.dlog1.extract_commit_message(challenge, witness)?;
-        let p2 = self.dlog2.extract_commit_message(challenge, witness)?;
+        let p1 = self.dlog1.extract_commit_message(challenge, response)?;
+        let p2 = self.dlog2.extract_commit_message(challenge, response)?;
         Some((p1, p2))
     }
 

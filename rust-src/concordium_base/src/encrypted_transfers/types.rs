@@ -131,7 +131,7 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
 pub struct EncryptedAmountTransferProof<C: Curve> {
     /// Proof that accounting is done correctly, i.e., remaining + transfer is
     /// the original amount.
-    pub accounting: SigmaProof<proofs::EncTransWitness<C>>,
+    pub accounting: SigmaProof<proofs::EncTransResponse<C>>,
     /// Proof that the transfered amount is correctly encrypted, i.e., chunks
     /// are small enough.
     pub transfer_amount_correct_encryption: RangeProof<C>,
@@ -145,7 +145,7 @@ pub struct EncryptedAmountTransferProof<C: Curve> {
 pub struct SecToPubAmountTransferProof<C: Curve> {
     /// Proof that accounting is done correctly, i.e., remaining + transfer is
     /// the original amount.
-    pub accounting: SigmaProof<proofs::EncTransWitness<C>>,
+    pub accounting: SigmaProof<proofs::EncTransResponse<C>>,
     /// Proof that the remaining amount is correctly encrypted, i.e, chunks
     /// small enough.
     pub remaining_amount_correct_encryption: RangeProof<C>,

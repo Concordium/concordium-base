@@ -24,7 +24,7 @@ pub struct DlogAndAggregateDlogsEqual<C: Curve> {
 #[derive(Debug, Serialize)]
 pub struct Response<C: Curve> {
     #[size_length = 4]
-    responses:      Vec<Vec<C::Scalar>>,
+    responses:       Vec<Vec<C::Scalar>>,
     response_common: C::Scalar, // For equality
 }
 

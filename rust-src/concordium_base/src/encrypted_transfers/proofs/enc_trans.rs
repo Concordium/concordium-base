@@ -52,7 +52,7 @@ use crate::{
     curve_arithmetic::{multiexp, Curve},
     elgamal::ChunkSize,
     id::sigma_protocols::{
-        com_eq::{ComEq, ComEqSecret, CommittedPoints, Response as ComEqWitness},
+        com_eq::{ComEq, ComEqSecret, CommittedPoints, Response as ComEqResponse},
         common::*,
         dlog::*,
     },
@@ -92,24 +92,24 @@ pub struct EncTrans<C: Curve> {
     pub encexp2: Vec<ComEq<C, C>>,
 }
 
-/// Witness for the [EncTrans] protocol.
+/// Response for the [EncTrans] protocol.
 ///
-/// The elc_dec protocol actually has two witnesses, one involving sk and one
+/// The elc_dec protocol actually has two responses, one involving sk and one
 /// involving s, but since sk is also the secret for the dlog, and since
 /// s is a linear combination of the secrets for the EncExp/ComEq's,
-/// we calculate the same linear combination, but of the witnesses, in
+/// we calculate the same linear combination, but of the responses, in
 /// the extract_point function. We do therefore not need to transfer/send
-/// those witnesses, since they are determined by the ones below.
+/// those responses, since they are determined by the ones below.
 #[derive(Debug, Serialize, Clone)]
-pub struct EncTransWitness<C: Curve> {
-    /// The common witness for both dlog and elc-dec
-    witness_common:  C::Scalar,
+pub struct EncTransResponse<C: Curve> {
+    /// The common response for both dlog and elc-dec
+    response_common:  C::Scalar,
     /// For EncExp/ComEq's involving a_i
     #[size_length = 4]
-    witness_encexp1: Vec<ComEqWitness<C>>,
+    response_encexp1: Vec<ComEqResponse<C>>,
     /// For EncExp/ComEq's involving s_i'
     #[size_length = 4]
-    witness_encexp2: Vec<ComEqWitness<C>>,
+    response_encexp2: Vec<ComEqResponse<C>>,
 }
 
 /// Secret values which the [EncTrans] proof talks about. For constructing
@@ -141,7 +141,7 @@ pub struct EncTransCommit<C: Curve> {
     encexp2: Vec<CommittedPoints<C, C>>,
 }
 
-/// As for the witness, we don't need the state for elg_dec
+/// As for the response, we don't need the state for elg_dec
 #[derive(Debug, Serialize)]
 pub struct EncTransState<C: Curve> {
     /// Randomness used for dlog
@@ -177,7 +177,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     type CommitMessage = EncTransCommit<C>;
     type ProtocolChallenge = C::Scalar;
     type ProverState = EncTransState<C>;
-    type Response = EncTransWitness<C>;
+    type Response = EncTransResponse<C>;
     type SecretData = EncTransSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -252,13 +252,13 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::Response> {
-        let mut witness_common = *challenge;
-        witness_common.mul_assign(&secret.dlog_secret);
-        witness_common.negate();
-        witness_common.add_assign(&state.dlog);
+        let mut response_common = *challenge;
+        response_common.mul_assign(&secret.dlog_secret);
+        response_common.negate();
+        response_common.add_assign(&state.dlog);
         // For encexps:
-        let mut witness_encexp1 = Vec::with_capacity(secret.encexp1_secrets.len());
-        let mut witness_encexp2 = Vec::with_capacity(secret.encexp2_secrets.len());
+        let mut response_encexp1 = Vec::with_capacity(secret.encexp1_secrets.len());
+        let mut response_encexp2 = Vec::with_capacity(secret.encexp2_secrets.len());
         if secret.encexp1_secrets.len() != state.encexp1.len() {
             return None;
         }
@@ -268,7 +268,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             self.encexp1.iter()
         ) {
             match comeq1.compute_response(sec, (*encexp1).clone(), challenge) {
-                Some(w) => witness_encexp1.push(w),
+                Some(w) => response_encexp1.push(w),
                 None => return None,
             }
         }
@@ -281,27 +281,27 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             self.encexp2.iter()
         ) {
             match comeq2.compute_response(sec, (*encexp2).clone(), challenge) {
-                Some(w) => witness_encexp2.push(w),
+                Some(w) => response_encexp2.push(w),
                 None => return None,
             }
         }
 
-        Some(EncTransWitness {
-            witness_common,
-            witness_encexp1,
-            witness_encexp2,
+        Some(EncTransResponse {
+            response_common,
+            response_encexp1,
+            response_encexp2,
         })
     }
 
     fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::Response,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        if self.encexp1.len() != witness.witness_encexp1.len() {
+        if self.encexp1.len() != response.response_encexp1.len() {
             return None;
         }
-        if self.encexp2.len() != witness.witness_encexp2.len() {
+        if self.encexp2.len() != response.response_encexp2.len() {
             return None;
         }
         // For enc_exps:
@@ -309,20 +309,20 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut commit_encexp2 = Vec::with_capacity(self.encexp2.len());
         let mut w_a_vec = Vec::with_capacity(self.encexp1.len());
         let mut w_s_prime_vec = Vec::with_capacity(self.encexp2.len());
-        for (comeq, witness) in izip!(&self.encexp1, &witness.witness_encexp1) {
-            match comeq.extract_commit_message(challenge, witness) {
+        for (comeq, response) in izip!(&self.encexp1, &response.response_encexp1) {
+            match comeq.extract_commit_message(challenge, response) {
                 Some(m) => {
                     commit_encexp1.push(m);
-                    w_a_vec.push(witness.response.1);
+                    w_a_vec.push(response.response.1);
                 }
                 None => return None,
             }
         }
-        for (comeq, witness) in izip!(&self.encexp2, &witness.witness_encexp2) {
-            match comeq.extract_commit_message(challenge, witness) {
+        for (comeq, response) in izip!(&self.encexp2, &response.response_encexp2) {
+            match comeq.extract_commit_message(challenge, response) {
                 Some(m) => {
                     commit_encexp2.push(m);
-                    w_s_prime_vec.push(witness.response.1);
+                    w_s_prime_vec.push(response.response.1);
                 }
                 None => return None,
             }
@@ -336,10 +336,10 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let dlog_point = self
             .dlog
             .coeff
-            .mul_by_scalar(&witness.witness_common)
+            .mul_by_scalar(&response.response_common)
             .plus_point(&self.dlog.public.mul_by_scalar(challenge));
         let mut point = self.elg_dec.public.mul_by_scalar(challenge);
-        let exps = vec![witness.witness_common, w_lin];
+        let exps = vec![response.response_common, w_lin];
         let product = multiexp(&self.elg_dec.coeff, &exps);
         point = point.plus_point(&product);
         Some(EncTransCommit {
