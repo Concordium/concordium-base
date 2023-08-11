@@ -37,7 +37,7 @@ impl Deserial for Ed25519DlogProof {
                     response,
                 })
             } else {
-                bail!("Not a valid witness.")
+                bail!("Not a valid response.")
             }
         } else {
             bail!("Not a valid scalar.")
