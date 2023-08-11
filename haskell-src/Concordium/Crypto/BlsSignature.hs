@@ -1,7 +1,7 @@
 module Concordium.Crypto.BlsSignature (
     PublicKey,
     SecretKey (..),
-    Signature (..),
+    Signature,
     Proof,
     generateSecretKey,
     derivePublicKey,
