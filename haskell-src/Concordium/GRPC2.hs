@@ -2209,3 +2209,14 @@ instance ToProto KonsensusV1.BlockCertificates where
             ProtoFields.maybe'quorumCertificate .= fmap toProto bcQuorumCertificate
             ProtoFields.maybe'timeoutCertificate .= fmap toProto bcTimeoutCertificate
             ProtoFields.maybe'epochFinalizationEntry .= fmap toProto bcEpochFinalizationEntry
+
+instance ToProto BakerRewardPeriodInfo where
+    type Output BakerRewardPeriodInfo = Proto.BakerRewardPeriodInfo
+    toProto BakerRewardPeriodInfo{..} =
+        Proto.make $ do
+            ProtoFields.baker .= toProto brpiBaker
+            ProtoFields.effectiveStake .= toProto brpiEffectiveStake
+            ProtoFields.commissionRates .= toProto brpiCommissionRates
+            ProtoFields.equityCapital .= toProto brpiEquityCapital
+            ProtoFields.delegatedCapital .= toProto brpiDelegatedCapital
+            ProtoFields.isFinalizer .= brpiIsFinalizer
