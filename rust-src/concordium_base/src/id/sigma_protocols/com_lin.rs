@@ -1,7 +1,8 @@
-//! This module implements the com-lin sigma protocol, which allows
-//! the prover to prove knowledge of pairs (s_i, r_i) and (s, r) such that
-//! \sum_{i} u_i * s_i = u * s for some public constants u_i and u.
-//! The r's are randomness in commitments to s_i's and s'.
+//! This module implements the com-lin sigma protocol (cf. Section 9.2.11,
+//! Bluepaper v1.2.5). This protocol enables the prover to prove knowledge of
+//! pairs (s_i, r_i) and (s, r) such that \sum_{i} u_i * s_i = u * s for some
+//! public constants u_i and u. The r's are randomness in commitments to s_i's
+//! and s'.
 
 use super::common::*;
 use crate::{

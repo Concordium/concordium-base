@@ -1,7 +1,7 @@
 //! The module provides the implementation of the sigma protocol for "proof of
-//! inequality for committed value and public value". This protocol enables one
-//! to prove that a committed value is not equal to a public one, without
-//! revealing the value.
+//! inequality for committed value and public value" (cf. Section 9.2.13,
+//! Bluepaper v1.2.5). This protocol enables one to prove that a committed value
+//! is not equal to a public one, without revealing the value.
 //! Note that the interface is different from that of other sigma protocols.
 //! The reason is that the SigmaProtocol trait is implemented based on Maurer's
 //! definition of Sigma protocols, where the first message (i.e.,

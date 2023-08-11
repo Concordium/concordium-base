@@ -1,8 +1,8 @@
-//! This module implements the proof of knowledge of signature sigma protocol.
-//! This protocol allows a user to prove knowledge of a signature without
-//! revealing the original signature, or the message, but they have to reveal
-//! the blinded version of the signature, and commitments to the values that
-//! were signed.
+//! This module implements the proof of knowledge of signature sigma protocol
+//! (cf. Section 5.3.5, Bluepaper v1.2.5). This protocol allows a user to prove
+//! knowledge of a PS signature without revealing the original signature, or the
+//! message, but they have to reveal the blinded version of the signature, and
+//! commitments to the values that were signed.
 
 use super::common::*;
 use crate::{

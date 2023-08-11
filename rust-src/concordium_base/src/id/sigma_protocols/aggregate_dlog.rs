@@ -1,8 +1,8 @@
 //! The module provides the implementation of the `aggregate_dlog` sigma
-//! protocol. This protocol enables one to prove knowledge of discrete
-//! logarithms $a_1 ... a_n$ public values $ y = \prod G_i^{a_i} $.
-//! This is a specialization of `com_eq` protocol where we do not require
-//! commitments.
+//! protocol (cf. Section 9.2.2, Bluepaper v1.2.5). This protocol enables one to
+//! prove knowledge of discrete logarithms $a_1 ... a_n$ public values $ y =
+//! \prod G_i^{a_i} $. This is a specialization of `com_eq` protocol where we do
+//! not require commitments.
 use super::common::*;
 use crate::{
     common::*,

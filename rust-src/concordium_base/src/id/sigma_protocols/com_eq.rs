@@ -1,10 +1,10 @@
-//! The module provides the implementation of the `com_eq` sigma protocol.
-//! This protocol enables one to prove knowledge of discrete logarithm $a_1$
-//! together with randomnesses $r_1$ corresponding to the public value
-//! $ y = \prod G_i^{a_i} $ and commitment $C = commit(a_1, r_1)$.
-//! The product y and commitments can be in different groups, but they have to
-//! be of the same prime order, and for the implementation the field of scalars
-//! must be the same type for both groups.
+//! The module provides the implementation of the `com_eq` sigma protocol (cf.
+//! Section 9.2.5, Bluepaper v1.2.5). This protocol enables one to prove
+//! knowledge of discrete logarithm $a_1$ together with randomnesses $r_1$
+//! corresponding to the public value $ y = \prod G_i^{a_i} $ and commitment $C
+//! = commit(a_1, r_1)$. The product y and commitments can be in different
+//! groups, but they have to be of the same prime order, and for the
+//! implementation the field of scalars must be the same type for both groups.
 
 use super::common::*;
 use crate::{

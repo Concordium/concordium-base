@@ -1,7 +1,7 @@
-//! The module provides the implementation of the `com_mult` sigma protocol.
-//! This protocol enables one to prove that the the product of two commited
-//! values is equal to the third commited value, without revealing the values
-//! themselves.
+//! The module provides the implementation of the `com_mult` sigma protocol (cf.
+//! Section 9.2.10, Bluepaper v1.2.5). This protocol enables one to prove that
+//! the the product of two commited values is equal to the third commited value,
+//! without revealing the values themselves.
 use super::common::*;
 use crate::{
     common::*,
