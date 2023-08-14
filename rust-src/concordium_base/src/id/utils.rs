@@ -239,7 +239,9 @@ pub fn verify_account_ownership_proof(
     // - all keys are distinct
     // - at least one key is provided
     // - there are the same number of proofs and keys
-    let Ok(num_proofs) = proof_acc_sk.num_proofs() else { return false };
+    let Ok(num_proofs) = proof_acc_sk.num_proofs() else {
+        return false;
+    };
     if num_proofs < threshold
         || keys.len() > 255
         || keys.is_empty()

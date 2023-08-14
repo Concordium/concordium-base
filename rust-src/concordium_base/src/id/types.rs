@@ -762,7 +762,7 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Challenge for the combined proof. This includes the three proofs below,
     /// and additionally also the proofs in IpArData.
     pub challenge:              Challenge,
-    /// Response the proof of knowledge of IdCredSec.
+    /// Response in the proof of knowledge of IdCredSec.
     pub id_cred_sec_response:   dlog::Response<C>,
     /// Response in the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.

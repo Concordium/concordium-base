@@ -48,8 +48,8 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let rand_scalar = C::generate_non_zero_scalar(csprng);
-        let randomised_point = self.coeff.mul_by_scalar(&rand_scalar);
-        Some((randomised_point, rand_scalar))
+        let commit_message = self.coeff.mul_by_scalar(&rand_scalar);
+        Some((commit_message, rand_scalar))
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {

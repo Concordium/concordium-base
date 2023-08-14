@@ -23,9 +23,9 @@ use rand::*;
 pub struct Response<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The response that the prover knows $r'$ (see specification)
     response_rho:    P::ScalarField,
-    /// List of responses $(w_i, R_i)$ that the user knows the messages m_i and
-    /// randomness R_i that combine to commitments and the public randomized
-    /// signature.
+    /// List of responses $(res_m_i, res_R_i)$ that the user knows the messages
+    /// m_i and randomness R_i that combine to commitments and the public
+    /// randomized signature.
     #[size_length = 4]
     response_commit: Vec<(P::ScalarField, C::Scalar)>,
 }

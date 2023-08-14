@@ -302,9 +302,11 @@ pub fn prove<R: rand::Rng, D: SigmaProtocol>(
     secret: D::SecretData,
     csprng: &mut R,
 ) -> Option<SigmaProof<D::Response>> {
-    let (point, state) = prover.compute_commit_message(csprng)?;
+    let (commit_message, state) = prover.compute_commit_message(csprng)?;
     prover.public(ro);
-    ro.append_message("point", &point);
+    // For legacy reasons the label `point` is used when adding the commit message
+    // to the RO
+    ro.append_message("point", &commit_message);
     let challenge_bytes = ro.split().get_challenge();
     let challenge = prover.get_challenge(&challenge_bytes);
     let response = prover.compute_response(secret, state, &challenge)?;
