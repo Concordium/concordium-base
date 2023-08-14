@@ -37,7 +37,7 @@ pub struct VecComEq<C: Curve> {
     pub h_bar: C,
 }
 
-/// `VecComEq` response. We deliberately make it opaque.
+/// Response for `VecComEq` proof. We deliberately make it opaque.
 #[derive(Clone, Debug, Serialize)]
 pub struct Response<C: Curve> {
     #[size_length = 2]
