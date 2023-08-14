@@ -764,7 +764,7 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub challenge:              Challenge,
     /// Response the proof of knowledge of IdCredSec.
     pub id_cred_sec_response:   dlog::Response<C>,
-    /// Response the proof that cmm_sc and id_cred_pub
+    /// Response in the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.
     pub commitments_same_proof: com_eq::Response<C>,
     /// Response in the proof that cmm_prf and the
