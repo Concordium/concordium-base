@@ -1,7 +1,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- |Types that are relevant only for endpoints exposed in ConsensusV1.
+-- |Types that are relevant only for endpoints exposed in 'ConsensusV1'.
 module Concordium.Types.KonsensusV1 where
 
 import Data.Aeson
@@ -112,7 +112,7 @@ instance ToJSON EpochFinalizationEntry where
 -- |Block certificates for a block in 'ConsensusV1'.
 data BlockCertificates = BlockCertificates
     { -- |Quorum certificate for the block.
-      -- This is only present if the block is not a genesis block.
+      -- This is only present if and only if the block is not a genesis block.
       bcQuorumCertificate :: !(Maybe QuorumCertificate),
       -- |Timeout certificate for the block.
       -- Present if the round prior to the round of the block
