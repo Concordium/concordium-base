@@ -1670,6 +1670,7 @@ instance ToProto QueryTypes.CurrentPaydayBakerPoolStatus where
         ProtoFields.lotteryPower .= bpsLotteryPower
         ProtoFields.bakerEquityCapital .= toProto bpsBakerEquityCapital
         ProtoFields.delegatedCapital .= toProto bpsDelegatedCapital
+        ProtoFields.commissionRates .= toProto bpsCommissionRates
 
 instance ToProto QueryTypes.RewardStatus where
     type Output QueryTypes.RewardStatus = Proto.TokenomicsInfo

@@ -539,7 +539,9 @@ data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
       -- |The effective equity capital of the baker for the current reward period.
       bpsBakerEquityCapital :: !Amount,
       -- |The effective delegated capital to the pool for the current reward period.
-      bpsDelegatedCapital :: !Amount
+      bpsDelegatedCapital :: !Amount,
+      -- |The commission rates that apply for the current reward period.
+      bpsCommissionRates :: !CommissionRates
     }
     deriving (Eq, Show)
 
