@@ -13,9 +13,10 @@
 //! This is done using the subprotocols Dlog, Elgdec and EncExp (EncExp is
 //! basically just several ComEq's (can be found in
 //! sigma_protocols in the id crate)) as described in the Bluepaper, see
-//! genEncTransProofInfo and genEncTrans in "Encrypted Transfers" Section 18.2.2. The resulting sigma protocol is
-//! constructed using the sigma protocols for equality and linear relations
-//! described in the Bluepaper, "Instantiations of Sigma Protocols" Section 9.2
+//! genEncTransProofInfo and genEncTrans in "Encrypted Transfers" Section
+//! 18.2.2. The resulting sigma protocol is constructed using the sigma
+//! protocols for equality and linear relations described in the Bluepaper,
+//! "Instantiations of Sigma Protocols" Section 9.2
 //!
 //! Proving knowledge of (a_i, r_i) such that c_{i,1} = g^{r_i} and c_{i,2} =
 //! h^{a_i} pk_receiver^{r_i} is done using the ComEq sigma protocol in the
@@ -30,8 +31,8 @@
 //!
 //! Ensuring that the same secret is known in the dlog proof and the elg-dec
 //! proof is done by ensuring that the same randomness alpha and challenge c is
-//! used in the dlog proof and in the elg-dec proof (see also "Combining Sigma Protocols" Section 9.4.2 in the 
-//! Bluepaper).
+//! used in the dlog proof and in the elg-dec proof (see also "Combining Sigma
+//! Protocols" Section 9.4.2 in the Bluepaper).
 //!
 //! Proving the relation
 //!         s = \sum_{j=1}^t 2^{(chunk_size)*(j-1)} (a_j)

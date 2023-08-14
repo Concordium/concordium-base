@@ -1,4 +1,5 @@
-//! The module provides the implementation of the sigma protocol from "Proof of Inequality for Committed Value and Public Value" Section 9.2.13,
+//! The module provides the implementation of the sigma protocol from "Proof of
+//! Inequality for Committed Value and Public Value" Section 9.2.13,
 //! Bluepaper v1.2.5. This protocol enables one to prove that a committed value
 //! is not equal to a public one, without revealing the value.
 //! Note that the interface is different from that of other sigma protocols.
