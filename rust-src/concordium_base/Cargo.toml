@@ -114,7 +114,7 @@ name = "verify_cdi"
 harness = false
 
 [[bench]]
-name = "aggr_dlog_commit_point"
+name = "aggr_dlog_commit_message"
 harness = false
 
 [[bench]]

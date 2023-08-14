@@ -7,7 +7,7 @@ use pairing::bls12_381::G1;
 use rand::*;
 
 /// Benchmark the aggregate dlog sigma protocol
-fn bench_aggr_dlog_commit_point(c: &mut Criterion) {
+fn bench_aggr_dlog_commit_message(c: &mut Criterion) {
     let mut csprng = thread_rng();
     let number_of_coeffs = 42;
     let mut coeffs = Vec::with_capacity(number_of_coeffs);
@@ -19,10 +19,10 @@ fn bench_aggr_dlog_commit_point(c: &mut Criterion) {
         public: public_key,
         coeff:  coeffs,
     };
-    c.bench_function("Aggregate dlog commit point", move |b| {
+    c.bench_function("Aggregate dlog commit message", move |b| {
         b.iter(|| dlog.compute_commit_message(&mut csprng))
     });
 }
 
-criterion_group!(commit_point_benchmarks, bench_aggr_dlog_commit_point);
+criterion_group!(commit_point_benchmarks, bench_aggr_dlog_commit_message);
 criterion_main!(commit_point_benchmarks);
