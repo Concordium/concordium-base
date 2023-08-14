@@ -998,3 +998,30 @@ data BlockHeightInput
       Absolute
         { aBlockHeight :: !AbsoluteBlockHeight
         }
+
+-- |Input to queries which take an epoch as a parameter.
+data EpochRequest
+    = -- |Query by genesis index and epoch number.
+      SpecifiedEpoch
+        { -- |The genesis index to query at. The query is restricted to this genesis index, and
+          -- will not return results for other indices even if the epoch number is out of bounds.
+          erGenesisIndex :: !GenesisIndex,
+          -- |The epoch number to query at.
+          erEpoch :: !Epoch
+        }
+    | -- |Query the epoch of a specified block.
+      EpochOfBlock
+        { -- |The block whose epoch is to be used for the query.
+          erBlock :: !BlockHashInput
+        }
+
+-- |Details of which baker won the lottery in a given round in consensus version 1.
+data WinningBaker = WinningBaker
+    { -- |The round number.
+      wbRound :: !Round,
+      -- |The baker that won the round.
+      wbWinner :: !BakerId,
+      -- |'True' if the baker produced a block in this round on the finalized chain, and
+      -- 'False' otherwise.
+      wbPresent :: !Bool
+    }
