@@ -99,7 +99,7 @@ pub struct EncTrans<C: Curve> {
 /// involving s, but since sk is also the secret for the dlog, and since
 /// s is a linear combination of the secrets for the EncExp/ComEq's,
 /// we calculate the same linear combination, but of the responses, in
-/// the extract_point function. We do therefore not need to transfer/send
+/// the extract_commit_message function. We do therefore not need to transfer/send
 /// those responses, since they are determined by the ones below.
 #[derive(Debug, Serialize, Clone)]
 pub struct EncTransResponse<C: Curve> {
