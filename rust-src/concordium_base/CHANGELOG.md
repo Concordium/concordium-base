@@ -10,6 +10,7 @@
 - Add `From<&AccountKeys>` instance for AccountAccessStructure.
 - Add `verify_data_signature` function to verify a signature with account keys
   on arbitrary data.
+- Update notation of sigma protocols to better match the literature and the bluepaper. 
 
 ## 2.0.0 (2023-06-16)
 
