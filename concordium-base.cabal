@@ -82,12 +82,12 @@ library
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
       Concordium.Types.InvokeContract
-      Concordium.Types.KonsensusV1
       Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
+      Concordium.Types.Queries.KonsensusV1
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
       Concordium.Types.Transactions

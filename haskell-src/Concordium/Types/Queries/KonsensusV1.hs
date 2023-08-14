@@ -1,8 +1,8 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- |Types that are relevant only for endpoints exposed in 'ConsensusV1'.
-module Concordium.Types.KonsensusV1 where
+-- |Types that are relevant only for endpoints exposed in consensus version 1.
+module Concordium.Types.Queries.KonsensusV1 where
 
 import Data.Aeson
 import Data.Serialize
@@ -57,6 +57,7 @@ instance ToJSON FinalizerRound where
               "finalizers" .= frFinalizers
             ]
 
+-- |An aggregate signature created by members of the finalization committee on a 'TimeoutCertificate'.
 newtype TimeoutCertificateSignature = TimeoutCertificateSignature Bls.Signature
     deriving (Eq, Show, ToJSON, FromJSON, Serialize) via Bls.Signature
 
@@ -109,7 +110,7 @@ instance ToJSON EpochFinalizationEntry where
               "successorProof" .= efeSuccessorProof
             ]
 
--- |Block certificates for a block in 'ConsensusV1'.
+-- |Block certificates for a block in consensus version 1.
 data BlockCertificates = BlockCertificates
     { -- |Quorum certificate for the block.
       -- This is only present if and only if the block is not a genesis block.
