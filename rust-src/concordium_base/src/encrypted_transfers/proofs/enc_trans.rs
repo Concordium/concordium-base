@@ -53,7 +53,7 @@ use crate::{
     curve_arithmetic::{multiexp, Curve},
     elgamal::ChunkSize,
     id::sigma_protocols::{
-        com_eq::{ComEq, ComEqSecret, CommittedPoints, Response as ComEqResponse},
+        com_eq::{ComEq, ComEqSecret, CommittedMessages, Response as ComEqResponse},
         common::*,
         dlog::*,
     },
@@ -130,16 +130,16 @@ pub struct EncTransSecret<C: Curve> {
 /// after the prover has committed to all the values they wish to prove
 /// statements about. This is then used in the computation of the challenge.
 pub struct EncTransCommit<C: Curve> {
-    /// Commitmessage for dlog
+    /// Commit message for dlog
     dlog:    C,
-    /// Commitmessage for elg_dec
+    /// Commit message for elg_dec
     elg_dec: C,
-    /// Commitmessages for EncExp/ComEq's involving a_i
+    /// Commit messages for EncExp/ComEq's involving a_i
     #[size_length = 4]
-    encexp1: Vec<CommittedPoints<C, C>>,
-    /// Commitmessages for EncExp/ComEq's involving s_i'
+    encexp1: Vec<CommittedMessages<C, C>>,
+    /// Commit messages for EncExp/ComEq's involving s_i'
     #[size_length = 4]
-    encexp2: Vec<CommittedPoints<C, C>>,
+    encexp2: Vec<CommittedMessages<C, C>>,
 }
 
 /// As for the response, we don't need the state for elg_dec

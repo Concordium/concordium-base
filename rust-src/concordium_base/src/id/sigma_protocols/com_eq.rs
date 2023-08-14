@@ -28,7 +28,7 @@ pub struct Response<T: Curve> {
 }
 
 #[derive(Debug, Serialize)]
-pub struct CommittedPoints<C: Curve, D: Curve> {
+pub struct CommittedMessages<C: Curve, D: Curve> {
     pub u: C,
     pub v: Commitment<D>,
 }
@@ -52,7 +52,7 @@ pub struct ComEqSecret<C: Curve> {
 
 #[allow(non_snake_case)]
 impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
-    type CommitMessage = CommittedPoints<C, D>;
+    type CommitMessage = CommittedMessages<C, D>;
     type ProtocolChallenge = C::Scalar;
     // Vector of pairs (alpha_i, R_i).
     type ProverState = (Value<D>, Randomness<D>);
@@ -76,7 +76,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         // This cR_i is R_i from the specification.
         let (v, cR) = self.cmm_key.commit(&alpha, csprng);
         u = u.plus_point(&self.g.mul_by_scalar(&alpha));
-        Some((CommittedPoints { u, v }, (alpha, cR)))
+        Some((CommittedMessages { u, v }, (alpha, cR)))
     }
 
     fn get_challenge(
@@ -122,7 +122,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
                 .cmm_key
                 .hide_worker(&response.response.0, &response.response.1),
         );
-        Some(CommittedPoints {
+        Some(CommittedMessages {
             u,
             v: Commitment(v),
         })
