@@ -1,8 +1,8 @@
-//! This module implements the proof of knowledge of signature sigma protocol
-//! (cf. Section 5.3.5, Bluepaper v1.2.5). This protocol allows a user to prove
+//! This module implements the proof of knowledge of signature sigma protocol. This protocol allows a user to prove
 //! knowledge of a PS signature without revealing the original signature, or the
 //! message, but they have to reveal the blinded version of the signature, and
-//! commitments to the values that were signed.
+//! commitments to the values that were signed. 
+//! The protocol is a essentially `com-dlog-eq` from "Proof of Equality for Aggregated Discrete Logarithms and Commitments" Section 9.2.5, Bluepaper v1.2.5 where the blinded signature is the aggregated dlog (cf. "Proof of Knowledge of a Signature" Section 5.3.5, Bluepaper v1.2.5")
 
 use super::common::*;
 use crate::{

@@ -1,5 +1,5 @@
-//! The module provides the implementation of the `vcom_eq` sigma
-//! protocol (cf. Section 9.7.1, Bluepaper v1.2.5). This protocol enables one to
+//! The module provides the implementation of the `Vcom-com-eq` sigma
+//! protocol (cf. "Proof of Equality for Vector Pedersen Commitment and Pedersen Commitments" Section 9.7.1, Bluepaper v1.2.5). This protocol enables one to
 //! prove knowledge of $x_1, ..., x_n, r, (r_i)_{i\in I}$ such that $ C = h^r
 //! \prod_{i=1}^n g_i^{x_i}$ and $C_i = \bar{g}^{x_i} \bar{h}^{r_i}$ for $i\in
 //! I$.

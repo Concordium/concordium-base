@@ -1,4 +1,4 @@
-//! Implementation of the `com_enc_eq` sigma protocol (cf. Section 9.2.8,
+//! Implementation of the `com_enc_eq` sigma protocol (cf. "Proof of Equality for Committed Value and ElGamal Encrypted Value" Section 9.2.7,
 //! Bluepaper v1.2.5). This protocol is used to prove that the encrypted value
 //! (encrypted via ElGamal) is the same as the value committed to via the
 //! Pedersen commitment.

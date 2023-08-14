@@ -1,5 +1,5 @@
-//! The module provides the implementation of the `com_eq_diff_groups` sigma
-//! protocol (cf. Section 9.2.9, Bluepaper v1.2.5). This protocol enables one to
+//! The module provides the implementation of the `com-com-eq` sigma
+//! protocol (cf. "Proof of Equality for Commitments in Different Groups" Section 9.2.9, Bluepaper v1.2.5). This protocol enables one to
 //! prove that the value committed to in two commitments $C_1$ and $C_2$ in
 //! (potentially) two different groups (of the same order) is the same.
 use super::common::*;

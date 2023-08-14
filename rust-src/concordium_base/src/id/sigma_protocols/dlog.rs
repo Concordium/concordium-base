@@ -1,5 +1,5 @@
-//! This module provides the implementation of the discrete log sigma protocol
-//! (cf. Section 9.2.1, Bluepaper v1.2.5) which enables one to prove knowledge
+//! This module provides the implementation of the `dlog` sigma protocol
+//! (cf. "Proof of Knowledge of Discrete Logarithm" Section 9.2.1, Bluepaper v1.2.5) which enables one to prove knowledge
 //! of the discrete logarithm without revealing it.
 use super::common::*;
 use crate::{

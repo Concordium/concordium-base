@@ -12,10 +12,10 @@
 //!
 //! This is done using the subprotocols Dlog, Elgdec and EncExp (EncExp is
 //! basically just several ComEq's (can be found in
-//! sigma_protocols in the id crate)) as described in Id Layer Bluepaper, see
-//! genEncTransProofInfo and genEncTrans. The resulting sigma protocol is
-//! contructed using the sigma protocols for equality and linear relations
-//! described in the Cryptoprim Bluepaper.
+//! sigma_protocols in the id crate)) as described in the Bluepaper, see
+//! genEncTransProofInfo and genEncTrans in "Encrypted Transfers" Section 18.2.2. The resulting sigma protocol is
+//! constructed using the sigma protocols for equality and linear relations
+//! described in the Bluepaper, "Instantiations of Sigma Protocols" Section 9.2
 //!
 //! Proving knowledge of (a_i, r_i) such that c_{i,1} = g^{r_i} and c_{i,2} =
 //! h^{a_i} pk_receiver^{r_i} is done using the ComEq sigma protocol in the
@@ -30,14 +30,14 @@
 //!
 //! Ensuring that the same secret is known in the dlog proof and the elg-dec
 //! proof is done by ensuring that the same randomness alpha and challenge c is
-//! used in the dlog proof and in the elg-dec proof (see the Cryptoprim
-//! bluepaper).
+//! used in the dlog proof and in the elg-dec proof (see also "Combining Sigma Protocols" Section 9.4.2 in the 
+//! Bluepaper).
 //!
 //! Proving the relation
 //!         s = \sum_{j=1}^t 2^{(chunk_size)*(j-1)} (a_j)
 //!             +\sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j' s'
-//! is done using the protocol 10.1.4 in the Cryptoprim bluepaper for proving
-//! linear relations of preimages of homomorphisms. The homomorphism in question
+//! is done using the protocol `com-lin` for proving
+//! linear relations of preimages of homomorphisms (see "Linear Relationship of Committed Values" Section 9.2.11, Bluepaper). The homomorphism in question
 //! is the one that maps the amounts in chunks to the encrypted amounts.
 //!
 //! The trait SigmaProtocol is

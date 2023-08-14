@@ -4,7 +4,7 @@
 
 //! NB:
 //! This module is currently not used, and is only here as a reference.
-//! When using the code needs to be thouroughly reviewed.
+//! When using the code needs to be thoroughly reviewed.
 
 use crate::{
     common::*,
