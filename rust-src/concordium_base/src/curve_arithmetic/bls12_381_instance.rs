@@ -4,8 +4,8 @@ use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
     bls12_381::{
-        Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed,
-        G2Prepared, G1, G2,
+        Bls12, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed, G2Prepared,
+        G1, G2,
     },
     Engine, PairingCurveAffine,
 };
@@ -30,8 +30,6 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
 }
 
 impl Curve for G2 {
-    type Base = Fq;
-    type Compressed = G2Compressed;
     type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 96;
@@ -74,22 +72,6 @@ impl Curve for G2 {
         p
     }
 
-    fn compress(&self) -> Self::Compressed { self.into_affine().into_compressed() }
-
-    fn decompress(c: &Self::Compressed) -> Result<G2, CurveDecodingError> {
-        match c.into_affine() {
-            Ok(t) => Ok(t.into_projective()),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
-
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t.into_projective()),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
-
     #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
@@ -114,8 +96,6 @@ impl Curve for G2 {
 }
 
 impl Curve for G1 {
-    type Base = Fq;
-    type Compressed = G1Compressed;
     type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 48;
@@ -158,22 +138,6 @@ impl Curve for G1 {
         p
     }
 
-    fn compress(&self) -> Self::Compressed { self.into_affine().into_compressed() }
-
-    fn decompress(c: &Self::Compressed) -> Result<G1, CurveDecodingError> {
-        match c.into_affine() {
-            Ok(t) => Ok(t.into_projective()),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
-
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t.into_projective()),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
-
     #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
@@ -198,8 +162,6 @@ impl Curve for G1 {
 }
 
 impl Curve for G1Affine {
-    type Base = Fq;
-    type Compressed = G1Compressed;
     type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 48;
@@ -240,22 +202,6 @@ impl Curve for G1Affine {
         self.mul(s).into_affine()
     }
 
-    fn compress(&self) -> Self::Compressed { self.into_compressed() }
-
-    fn decompress(c: &Self::Compressed) -> Result<G1Affine, CurveDecodingError> {
-        match c.into_affine() {
-            Ok(t) => Ok(t),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
-
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
-
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
@@ -279,8 +225,6 @@ impl Curve for G1Affine {
 }
 
 impl Curve for G2Affine {
-    type Base = Fq;
-    type Compressed = G2Compressed;
     type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 96;
@@ -319,22 +263,6 @@ impl Curve for G2Affine {
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
         let s = *scalar;
         self.mul(s).into_affine()
-    }
-
-    fn compress(&self) -> Self::Compressed { self.into_compressed() }
-
-    fn decompress(c: &Self::Compressed) -> Result<G2Affine, CurveDecodingError> {
-        match c.into_affine() {
-            Ok(t) => Ok(t),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
-    }
-
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError> {
-        match c.into_affine_unchecked() {
-            Ok(t) => Ok(t),
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-        }
     }
 
     fn scalar_from_u64(n: u64) -> Self::Scalar {

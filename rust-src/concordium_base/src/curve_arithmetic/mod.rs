@@ -28,11 +28,6 @@ pub trait Curve:
     Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
     /// The prime field of the group order size.
     type Scalar: PrimeField + Field + Serialize;
-    /// The base field of the curve. In general larger than the Scalar field.
-    type Base: Field;
-    /// A compressed representation of curve points used for compact
-    /// serialization.
-    type Compressed;
     /// Size in bytes of elements of the [Curve::Scalar] field.
     const SCALAR_LENGTH: usize;
     /// Size in bytes of group elements when serialized.
@@ -59,10 +54,6 @@ pub trait Curve:
     /// Exponentiation by a scalar, i.e., compute n * x for a group element x
     /// and integer n.
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
-    #[must_use]
-    fn compress(&self) -> Self::Compressed;
-    fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     /// Deserialize a value from a byte source, but do not check that it is in
     /// the group itself. This can be cheaper if the source of the value is
     /// trusted, but it must not be used on untrusted sources.
@@ -96,10 +87,10 @@ pub trait Curve:
 pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField + Serialize;
     /// The first group of the pairing.
-    type G1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type G1: Curve<Scalar = Self::ScalarField>;
     /// The second group, must have the same order as [Pairing::G1]. Both G1 and
     /// G2 must be of prime order size.
-    type G2: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type G2: Curve<Scalar = Self::ScalarField>;
     /// An auxiliary type that is used as an input to the pairing function.
     type G1Prepared;
     /// An auxiliary type that is used as an input to the pairing function.

@@ -4,7 +4,7 @@
 
 //! NB:
 //! This module is currently not used, and is only here as a reference.
-//! When using the code needs to be thouroughly reviewed.
+//! When using the code needs to be thoroughly reviewed.
 
 use crate::{
     common::*,
@@ -22,10 +22,10 @@ pub struct DlogAndAggregateDlogsEqual<C: Curve> {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Response<C: Curve> {
     #[size_length = 4]
-    witnesses:      Vec<Vec<C::Scalar>>,
-    witness_common: C::Scalar, // For equality
+    responses:       Vec<Vec<C::Scalar>>,
+    response_common: C::Scalar, // For equality
 }
 
 #[allow(clippy::type_complexity)]
@@ -33,7 +33,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type CommitMessage = (C, Vec<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (C::Scalar, Vec<Vec<C::Scalar>>);
-    type ProverWitness = Witness<C>;
+    type Response = Response<C>;
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -45,7 +45,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -82,51 +82,51 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         Some((commit, rand))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
-        let mut witness_common = *challenge;
-        witness_common.mul_assign(&secret.0);
-        witness_common.negate(); // According to Bluepaper, we negate here. Shouldn't matter.
-        witness_common.add_assign(&state.0);
-        let mut witnesses = vec![];
+    ) -> Option<Self::Response> {
+        let mut response_common = *challenge;
+        response_common.mul_assign(&secret.0);
+        response_common.negate(); // According to Bluepaper, we negate here. Shouldn't matter.
+        response_common.add_assign(&state.0);
+        let mut responses = vec![];
         for (secret_vec, state_vec) in izip!(secret.1, state.1) {
-            let mut witness = vec![];
+            let mut response = vec![];
             for (ref s, ref r) in izip!(secret_vec, state_vec) {
-                let mut wit = *challenge;
-                wit.mul_assign(s);
-                wit.negate();
-                wit.add_assign(r);
-                witness.push(wit);
+                let mut res = *challenge;
+                res.mul_assign(s);
+                res.negate();
+                res.add_assign(r);
+                response.push(res);
             }
-            witnesses.push(witness);
+            responses.push(response);
         }
-        Some(Witness {
-            witnesses,
-            witness_common,
+        Some(Response {
+            responses,
+            response_common,
         })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let dlog_point = self
             .dlog
             .coeff
-            .mul_by_scalar(&witness.witness_common)
+            .mul_by_scalar(&response.response_common)
             .plus_point(&self.dlog.public.mul_by_scalar(challenge));
         let mut agg_points = vec![];
-        for (aggregate_dlog, w) in izip!(&self.aggregate_dlogs, &witness.witnesses) {
+        for (aggregate_dlog, w) in izip!(&self.aggregate_dlogs, &response.responses) {
             if w.len() + 1 != aggregate_dlog.coeff.len() {
                 return None;
             }
             let mut point = aggregate_dlog.public.mul_by_scalar(challenge);
-            let mut exps = vec![witness.witness_common];
+            let mut exps = vec![response.response_common];
             exps.extend_from_slice(w);
             let product = multiexp(&aggregate_dlog.coeff, &exps);
             point = point.plus_point(&product);

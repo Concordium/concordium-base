@@ -8,6 +8,7 @@ use crate::{
         CredentialRegistrationID, DelegationTarget, Energy, Nonce, OpenStatus, UrlText,
     },
     common::{
+        self,
         types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial, Serialize,
@@ -17,11 +18,12 @@ use crate::{
     hashes,
     id::types::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
-        CredentialPublicKeys,
+        CredentialPublicKeys, VerifyKey,
     },
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
+use concordium_contracts_common as concordium_std;
 use derive_more::*;
 use rand::{CryptoRng, Rng};
 use sha2::Digest;
@@ -1425,14 +1427,37 @@ pub trait HasAccountAccessStructure {
     fn credential_keys(&self, idx: CredentialIndex) -> Option<&CredentialPublicKeys>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, concordium_std::Serialize)]
 /// The most straighforward account access structure is a map of public keys
 /// with the account threshold.
 pub struct AccountAccessStructure {
+    /// Keys indexed by credential.
+    #[concordium(size_length = 1)]
+    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
     /// The number of credentials that needed to sign a transaction.
     pub threshold: AccountThreshold,
-    /// Keys indexed by credential.
-    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
+}
+
+impl From<&AccountKeys> for AccountAccessStructure {
+    fn from(value: &AccountKeys) -> Self {
+        Self {
+            threshold: value.threshold,
+            keys:      value
+                .keys
+                .iter()
+                .map(|(k, v)| {
+                    (*k, CredentialPublicKeys {
+                        keys:      v
+                            .keys
+                            .iter()
+                            .map(|(ki, kp)| (*ki, VerifyKey::Ed25519VerifyKey(kp.public)))
+                            .collect(),
+                        threshold: v.threshold,
+                    })
+                })
+                .collect(),
+        }
+    }
 }
 
 impl HasAccountAccessStructure for AccountAccessStructure {
@@ -1443,6 +1468,35 @@ impl HasAccountAccessStructure for AccountAccessStructure {
     }
 }
 
+// The serial and deserial implementations must match the serialization of
+// `AccountInformation` in Haskell.
+impl Serial for AccountAccessStructure {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.keys.len() as u8).serial(out);
+        for (k, v) in self.keys.iter() {
+            k.serial(out);
+            v.serial(out);
+        }
+        self.threshold.serial(out)
+    }
+}
+
+// The serial and deserial implementations must match the serialization of
+// `AccountInformation` in Haskell.
+impl Deserial for AccountAccessStructure {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len = u8::deserial(source)?;
+        let keys = common::deserial_map_no_length(source, len.into())?;
+        let threshold = source.get()?;
+        Ok(Self { threshold, keys })
+    }
+}
+
+impl AccountAccessStructure {
+    /// Return the total number of keys present in the access structure.
+    pub fn num_keys(&self) -> u32 { self.keys.values().map(|m| m.keys.len() as u32).sum() }
+}
+
 /// Verify a signature on the transaction sign hash. This is a low-level
 /// operation that is useful to avoid recomputing the transaction hash.
 pub fn verify_signature_transaction_sign_hash(
@@ -1450,18 +1504,32 @@ pub fn verify_signature_transaction_sign_hash(
     hash: &hashes::TransactionSignHash,
     signature: &TransactionSignature,
 ) -> bool {
-    if usize::from(u8::from(keys.threshold())) > signature.signatures.len() {
+    verify_data_signature(keys, hash, &signature.signatures)
+}
+
+/// Verify a signature on the provided data with respect to the account access
+/// structure.
+///
+/// This is not the same as verifying a signature on a serialized transaction.
+/// Transaction signature verification is a different protocol that first
+/// involves hashing the message.
+pub fn verify_data_signature<T: ?Sized + AsRef<[u8]>>(
+    keys: &impl HasAccountAccessStructure,
+    data: &T,
+    signatures: &BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
+) -> bool {
+    if usize::from(u8::from(keys.threshold())) > signatures.len() {
         return false;
     }
     // There are enough signatures.
-    for (&ci, cred_sigs) in signature.signatures.iter() {
+    for (&ci, cred_sigs) in signatures.iter() {
         if let Some(cred_keys) = keys.credential_keys(ci) {
             if usize::from(u8::from(cred_keys.threshold)) > cred_sigs.len() {
                 return false;
             }
             for (&ki, sig) in cred_sigs {
                 if let Some(pk) = cred_keys.get(ki) {
-                    if !pk.verify(hash, sig) {
+                    if !pk.verify(data, sig) {
                         return false;
                     }
                 } else {
@@ -3056,7 +3124,8 @@ mod tests {
         let pub_keys = keys
             .iter()
             .map(|(&ci, keys)| {
-                let threshold = SignatureThreshold(rng.gen_range(1, keys.len() + 1) as u8);
+                let threshold =
+                    SignatureThreshold::try_from(rng.gen_range(1, keys.len() + 1) as u8).unwrap();
                 let keys = keys
                     .iter()
                     .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))

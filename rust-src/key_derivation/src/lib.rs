@@ -1,5 +1,6 @@
 use concordium_base::{
     common::{base16_decode, base16_encode, SerdeDeserialize, SerdeSerialize},
+    contracts_common::ContractAddress,
     id::{
         constants::{ArCurve, IpPairing},
         curve_arithmetic::Curve,
@@ -230,9 +231,24 @@ impl ConcordiumHdWallet {
     /// which is necessary for it to be submitted to the storage contract.
     pub fn get_verifiable_credential_signing_key(
         &self,
+        issuer: ContractAddress,
         verifiable_credential_index: u32,
     ) -> Result<SecretKey, DeriveError> {
-        let path = self.make_verifiable_credential_path(&[0, verifiable_credential_index, 0])?;
+        let [i1, i2, i3, i4] = split_u64_into_chunks(issuer.index);
+        let [si1, si2, si3, si4] = split_u64_into_chunks(issuer.subindex);
+        let path = self.make_verifiable_credential_path(&[
+            0,
+            i1,
+            i2,
+            i3,
+            i4,
+            si1,
+            si2,
+            si3,
+            si4,
+            verifiable_credential_index,
+            0,
+        ])?;
         let keys = derive_from_parsed_path(&path, &self.seed)?;
         Ok(SecretKey::from_bytes(&keys.private_key)
             .expect("The byte array has correct length, so this cannot fail."))
@@ -246,24 +262,28 @@ impl ConcordiumHdWallet {
     /// [`get_verifiable_credential_signing_key`](Self::get_verifiable_credential_signing_key)
     pub fn get_verifiable_credential_public_key(
         &self,
+        issuer: ContractAddress,
         verifiable_credential_index: u32,
     ) -> Result<PublicKey, DeriveError> {
         let signing_key =
-            self.get_verifiable_credential_signing_key(verifiable_credential_index)?;
+            self.get_verifiable_credential_signing_key(issuer, verifiable_credential_index)?;
         let public_key = PublicKey::from(&signing_key);
         Ok(public_key)
     }
+}
 
-    /// Get the encryption key for the verifiable credential with the given
-    /// index. The encryption key is used as the key when encrypting the
-    /// verifiable credential before it is stored in the storage contract.
-    pub fn get_verifiable_credential_encryption_key(
-        &self,
-        verifiable_credential_index: u32,
-    ) -> Result<[u8; 32], DeriveError> {
-        let path = self.make_verifiable_credential_path(&[0, verifiable_credential_index, 1])?;
-        Ok(derive_from_parsed_path(&path, &self.seed)?.private_key)
-    }
+fn split_u64_into_chunks(x: u64) -> [u32; 4] {
+    let [b0, b1, b2, b3, b4, b5, b6, b7] = x.to_be_bytes();
+    let x0 = [b0, b1];
+    let x1 = [b2, b3];
+    let x2 = [b4, b5];
+    let x3 = [b6, b7];
+    [
+        u16::from_be_bytes(x0).into(),
+        u16::from_be_bytes(x1).into(),
+        u16::from_be_bytes(x2).into(),
+        u16::from_be_bytes(x3).into(),
+    ]
 }
 
 /// The [`ConcordiumHdWallet`] together indices that uniquely determine the
@@ -301,13 +321,13 @@ impl HasAttributeRandomness<ArCurve> for CredentialContext {
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: AttributeTag,
+        attribute_tag: &AttributeTag,
     ) -> Result<CommitmentRandomness<ArCurve>, Self::ErrorType> {
         self.wallet.get_attribute_commitment_randomness(
             self.identity_provider_index.0,
             self.identity_index,
             self.credential_index.into(),
-            attribute_tag,
+            *attribute_tag,
         )
     }
 }
@@ -571,22 +591,22 @@ mod tests {
     #[test]
     pub fn mainnet_verifiable_credential_signing_key() {
         let signing_key = create_wallet(Net::Mainnet, TEST_SEED_1)
-            .get_verifiable_credential_signing_key(1)
+            .get_verifiable_credential_signing_key(ContractAddress::new(1, 2), 1)
             .unwrap();
         assert_eq!(
             hex::encode(&signing_key),
-            "875df27dc69b0ebcb3b362b00fdc95ad50353819087fa75d39ef0aa3f9a8104a"
+            "670d904509ce09372deb784e702d4951d4e24437ad3879188d71ae6db51f3301"
         );
     }
 
     #[test]
     pub fn mainnet_verifiable_credential_public_key() {
         let public_key = create_wallet(Net::Mainnet, TEST_SEED_1)
-            .get_verifiable_credential_public_key(341)
+            .get_verifiable_credential_public_key(ContractAddress::new(3, 1232), 341)
             .unwrap();
         assert_eq!(
             hex::encode(public_key),
-            "49efcf3adcfc87864cba5095dbf669fd9fa4529bba3fcecb3b1c0c12285530c8"
+            "16afdb3cb3568b5ad8f9a0fa3c741b065642de8c53e58f7920bf449e63ff2bf9"
         );
     }
 
@@ -594,8 +614,12 @@ mod tests {
     pub fn mainnet_verifiable_credential_signing_key_matches_public_key() {
         let wallet = create_wallet(Net::Mainnet, TEST_SEED_1);
 
-        let public_key = wallet.get_verifiable_credential_public_key(0).unwrap();
-        let signing_key = wallet.get_verifiable_credential_signing_key(0).unwrap();
+        let public_key = wallet
+            .get_verifiable_credential_public_key(ContractAddress::new(1337, 0), 0)
+            .unwrap();
+        let signing_key = wallet
+            .get_verifiable_credential_signing_key(ContractAddress::new(1337, 0), 0)
+            .unwrap();
         let expanded_sk = ExpandedSecretKey::from(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
@@ -608,35 +632,24 @@ mod tests {
     }
 
     #[test]
-    pub fn mainnet_verifiable_credential_encryption_key() {
-        let wallet = create_wallet(Net::Mainnet, TEST_SEED_1);
-        let encryption_key = wallet.get_verifiable_credential_encryption_key(97).unwrap();
-
-        assert_eq!(
-            hex::encode(encryption_key),
-            "30be8892d89599867fca90dcd841ac62cc07ea0ea521e8708eb8ae143c093210"
-        );
-    }
-
-    #[test]
     pub fn testnet_verifiable_credential_signing_key() {
         let signing_key = create_wallet(Net::Testnet, TEST_SEED_1)
-            .get_verifiable_credential_signing_key(1)
+            .get_verifiable_credential_signing_key(ContractAddress::new(13, 0), 1)
             .unwrap();
         assert_eq!(
             hex::encode(&signing_key),
-            "c53e2259d321b55637952951ea56bcae336404765b85c3ba78ca22a9d06bb40f"
+            "c75a161b97a1e204d9f31202308958e541e14f0b14903bd220df883bd06702bb"
         );
     }
 
     #[test]
     pub fn testnet_verifiable_credential_public_key() {
         let public_key = create_wallet(Net::Testnet, TEST_SEED_1)
-            .get_verifiable_credential_public_key(341)
+            .get_verifiable_credential_public_key(ContractAddress::new(17, 0), 341)
             .unwrap();
         assert_eq!(
             hex::encode(public_key),
-            "20a5ce34364e1f1ce619fdfb12daa806e5e86ef44971f3c9cf1ec6b8b58e27d3"
+            "c52a30475bac88da9e65471cf9cf59f99dcce22ce31de580b3066597746b394a"
         );
     }
 
@@ -644,8 +657,12 @@ mod tests {
     pub fn testnet_verifiable_credential_signing_key_matches_public_key() {
         let wallet = create_wallet(Net::Testnet, TEST_SEED_1);
 
-        let public_key = wallet.get_verifiable_credential_public_key(0).unwrap();
-        let signing_key = wallet.get_verifiable_credential_signing_key(0).unwrap();
+        let public_key = wallet
+            .get_verifiable_credential_public_key(ContractAddress::new(13, 0), 0)
+            .unwrap();
+        let signing_key = wallet
+            .get_verifiable_credential_signing_key(ContractAddress::new(13, 0), 0)
+            .unwrap();
         let expanded_sk = ExpandedSecretKey::from(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
@@ -654,17 +671,6 @@ mod tests {
         public_key.verify(&data_to_sign, &signature).expect(
             "The public key should be able to verify the signature, otherwise the keys do not \
              match.",
-        );
-    }
-
-    #[test]
-    pub fn testnet_verifiable_credential_encryption_key() {
-        let wallet = create_wallet(Net::Testnet, TEST_SEED_1);
-        let encryption_key = wallet.get_verifiable_credential_encryption_key(97).unwrap();
-
-        assert_eq!(
-            hex::encode(encryption_key),
-            "f263c915c8000b5164e3fc1d84ce80a451eef2b32f9749a4d0d390844bb1673e"
         );
     }
 }

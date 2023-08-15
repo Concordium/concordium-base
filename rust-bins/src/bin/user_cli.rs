@@ -150,8 +150,6 @@ struct CreateCredential {
     #[structopt(
         long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
-        required_unless = "account",
-        conflicts_with = "account",
         default_value = "900"
     )]
     expiry:      u64,
@@ -200,8 +198,6 @@ struct CreateCredentialV1 {
     #[structopt(
         long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
-        required_unless = "account",
-        conflicts_with = "account",
         default_value = "900"
     )]
     expiry:             u64,
@@ -381,7 +377,7 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
             keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(1),
+        threshold: SignatureThreshold::ONE,
     };
 
     let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
@@ -795,7 +791,7 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
 
         CredentialData {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     };
     let credential_context = CredentialContext {
@@ -871,7 +867,7 @@ fn handle_create_credential(cc: CreateCredential) -> anyhow::Result<()> {
         keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
         CredentialData {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     };
 

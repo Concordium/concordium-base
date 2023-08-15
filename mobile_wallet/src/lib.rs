@@ -15,7 +15,7 @@ use concordium_base::{
     id::{
         self, account_holder,
         constants::{ArCurve, AttributeKind},
-        id_proof_types::{Statement, StatementWithContext},
+        id_proof_types::{ProofVersion, Statement, StatementWithContext},
         pedersen_commitment::Value as PedersenValue,
         ps_sig,
         secret_sharing::Threshold,
@@ -661,7 +661,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
 
     let initial_acc_data = InitialAccountData {
         keys,
-        threshold: SignatureThreshold(1),
+        threshold: SignatureThreshold::ONE,
     };
     let (pio, _) = {
         match account_holder::generate_pio(&context, threshold, &id_use_data, &initial_acc_data) {
@@ -800,7 +800,7 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
 
         CredentialData {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     };
 
@@ -919,7 +919,7 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
 
         CredentialData {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         }
     };
 
@@ -1051,7 +1051,13 @@ fn prove_id_statement_aux(input: &str) -> anyhow::Result<String> {
     let id_object: IdentityObjectV1<Bls12, ArCurve, AttributeKind> = try_get(&v, "identityObject")?;
     let challenge: [u8; 32] = try_get(&v, "challenge")?;
     let proof = statement
-        .prove(&global, &challenge, &id_object.alist, &credential_context)
+        .prove(
+            ProofVersion::Version1,
+            &global,
+            &challenge,
+            &id_object.alist,
+            &credential_context,
+        )
         .context("Could not produce proof.")?;
     let response = serde_json::json!({
         "idProof": common::Versioned::new(common::VERSION_0, proof),
@@ -1196,16 +1202,16 @@ fn get_verifiable_credential_keys_aux(input: &str) -> anyhow::Result<String> {
     let v: Value = from_str(input)?;
     let wallet = parse_wallet_input(&v)?;
     let verifiable_credential_index = try_get(&v, "verifiableCredentialIndex")?;
+    let issuer = try_get(&v, "issuer")?;
 
-    let signing_key = wallet.get_verifiable_credential_signing_key(verifiable_credential_index)?;
-    let public_key = wallet.get_verifiable_credential_public_key(verifiable_credential_index)?;
-    let encryption_key =
-        wallet.get_verifiable_credential_encryption_key(verifiable_credential_index)?;
+    let signing_key =
+        wallet.get_verifiable_credential_signing_key(issuer, verifiable_credential_index)?;
+    let public_key =
+        wallet.get_verifiable_credential_public_key(issuer, verifiable_credential_index)?;
 
     let response = serde_json::json!({
         "signKey": hex::encode(signing_key),
         "verifyKey": hex::encode(public_key),
-        "encryptionKey": hex::encode(encryption_key)
     });
     Ok(to_string(&response)?)
 }

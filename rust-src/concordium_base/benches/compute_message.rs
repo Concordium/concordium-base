@@ -101,7 +101,7 @@ fn bench_validate_request(c: &mut Criterion) {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     let (context, pio, _) = test_create_pio(
         &id_use_data,
@@ -141,7 +141,7 @@ fn bench_sign_identity_object(c: &mut Criterion) {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     let (context, pio, _) = test_create_pio(
         &id_use_data,

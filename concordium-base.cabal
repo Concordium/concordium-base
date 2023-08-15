@@ -87,6 +87,7 @@ library
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
+      Concordium.Types.Queries.KonsensusV1
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
       Concordium.Types.Transactions
