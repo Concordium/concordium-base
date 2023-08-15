@@ -1,5 +1,17 @@
 ## Unreleased changes
 
+- Remove the constant `MAX_ALLOWED_INVOKE_ENERGY` since it was no longer
+  relevant with the way the node currently handles the invoke API.
+- Add `ED25519_SIGNATURE_LENGTH` constant for the size of an ed25519 signature.
+- Add `concordium_contracts_common::{Serial,Deserial}` implementations to
+  `CredentialPublicKeys` and `AccountAccessStructure`.
+- Add `sign_data` and `generate` methods to `AccountKeys` to sign arbitrary
+  data, and to generate a fresh set of keys.
+- Add `From<&AccountKeys>` instance for AccountAccessStructure.
+- Add `verify_data_signature` function to verify a signature with account keys
+  on arbitrary data.
+- Update notation of sigma protocols to better match the literature and the bluepaper. 
+
 ## 2.0.0 (2023-06-16)
 
 - Extend types `UpdatePayload` and `UpdateType` with variants introduced in protocol version 6.

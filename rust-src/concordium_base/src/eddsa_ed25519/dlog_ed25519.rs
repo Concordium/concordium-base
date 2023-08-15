@@ -1,3 +1,7 @@
+//! This module provides the implementation of the `dlog` sigma protocol for
+//! curve25519 (cf. "Proof of Knowledge of Discrete Logarithm" Section 9.2.1,
+//! Bluepaper v1.2.5) which enables one to prove knowledge of the discrete
+//! logarithm without revealing it.
 use crate::{common::*, random_oracle::RandomOracle};
 use anyhow::bail;
 use curve25519_dalek::{
@@ -13,14 +17,14 @@ use thiserror::Error;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, SerdeBase16Serialize)]
 pub struct Ed25519DlogProof {
     challenge: Scalar,
-    witness:   Scalar,
+    response:  Scalar,
 }
 
 impl Serial for Ed25519DlogProof {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_all(self.challenge.as_bytes())
             .expect("Writing to buffer should succeed.");
-        out.write_all(self.witness.as_bytes())
+        out.write_all(self.response.as_bytes())
             .expect("Writing to buffer should succeed.");
     }
 }
@@ -31,10 +35,13 @@ impl Deserial for Ed25519DlogProof {
         source.read_exact(&mut buf)?;
         if let Some(challenge) = Scalar::from_canonical_bytes(buf) {
             source.read_exact(&mut buf)?;
-            if let Some(witness) = Scalar::from_canonical_bytes(buf) {
-                Ok(Ed25519DlogProof { challenge, witness })
+            if let Some(response) = Scalar::from_canonical_bytes(buf) {
+                Ok(Ed25519DlogProof {
+                    challenge,
+                    response,
+                })
             } else {
-                bail!("Not a valid witness.")
+                bail!("Not a valid response.")
             }
         } else {
             bail!("Not a valid scalar.")
@@ -102,7 +109,7 @@ pub fn prove_dlog_ed25519<R: Rng + CryptoRng>(
     let challenge = Scalar::from_bytes_mod_order(array);
     Ed25519DlogProof {
         challenge,
-        witness: rand_scalar - challenge * secret,
+        response: rand_scalar - challenge * secret,
     }
 }
 
@@ -115,7 +122,7 @@ pub fn verify_dlog_ed25519(
         None => false,
         Some(public) => {
             let randomised_point =
-                public * proof.challenge + &proof.witness * &constants::ED25519_BASEPOINT_TABLE;
+                public * proof.challenge + &proof.response * &constants::ED25519_BASEPOINT_TABLE;
             ro.append_message(b"dlog_ed25519", public_key);
             ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
 

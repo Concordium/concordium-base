@@ -3,6 +3,7 @@ use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve},
+    id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
@@ -58,8 +59,9 @@ pub enum ProverError {
 ///   in bluepaper)
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in the bluepaper)
 /// - `v_rand` - the randomness used to commit to `v` using `v_keys`
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::too_many_arguments)]
 pub fn prove<C: Curve, R: Rng>(
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     csprng: &mut R,
     the_set: &[C::Scalar],
@@ -71,19 +73,10 @@ pub fn prove<C: Curve, R: Rng>(
     // Part 0: Add public inputs to transcript
     // Domain separation
     transcript.add_bytes(b"SetNonMembershipProof");
-    // Compute commitment V for v
-    let v_value = Value::<C>::new(v);
-    let V = v_keys.hide(&v_value, v_rand);
-    // Append V to the transcript
-    transcript.append_message(b"V", &V.0);
     // Pad set if not power of two
     let mut set_vec = the_set.to_vec();
     pad_vector_to_power_of_two(&mut set_vec);
     let n = set_vec.len();
-    // Append the set to the transcript
-    transcript.append_message(b"theSet", &set_vec);
-
-    // Part 1: Setup and generation of vector commitments
     // Check that we have enough generators for vector commitments
     if gens.G_H.len() < n {
         return Err(ProverError::NotEnoughGenerators);
@@ -108,6 +101,22 @@ pub fn prove<C: Curve, R: Rng>(
     let G = &GH_B_tilde[0..n];
     let H = &GH_B_tilde[n..2 * n];
 
+    if version >= ProofVersion::Version2 {
+        // Explicitly add generators and commitment keys to the transcript
+        transcript.append_message(b"G", &G);
+        transcript.append_message(b"H", &H);
+        transcript.append_message(b"v_keys", v_keys);
+    }
+
+    // Compute commitment V for v
+    let v_value = Value::<C>::new(v);
+    let V = v_keys.hide(&v_value, v_rand);
+    // Append V to the transcript
+    transcript.append_message(b"V", &V.0);
+    // Append the set to the transcript
+    transcript.append_message(b"theSet", &set_vec);
+
+    // Part 1: Setup and generation of vector commitments
     // Compute A_scalars, that is a_L, a_R and a_tilde
     let mut A_scalars = Vec::with_capacity(2 * n + 1);
     // Compute a_L_i <- (v - si)^-1
@@ -332,6 +341,7 @@ pub enum VerificationError {
 /// - `v_keys` - commitment keys `B` and `B_tilde` (`g,h` in bluepaper)
 #[allow(non_snake_case)]
 pub fn verify<C: Curve>(
+    version: ProofVersion,
     transcript: &mut RandomOracle,
     the_set: &[C::Scalar],
     V: &Commitment<C>,
@@ -352,6 +362,12 @@ pub fn verify<C: Curve>(
 
     // Domain separation
     transcript.add_bytes(b"SetNonMembershipProof");
+    if version >= ProofVersion::Version2 {
+        // Explicitly add generators and commitment keys to the transcript
+        transcript.append_message(b"G", &G);
+        transcript.append_message(b"H", &H);
+        transcript.append_message(b"v_keys", v_keys);
+    }
     // append commitment V to transcript
     transcript.append_message(b"V", &V.0);
     transcript.append_message(b"theSet", &set_vec);
@@ -502,11 +518,11 @@ mod tests {
 
     /// Generates commitment to v given commitment key and randomness
     fn get_v_com(
-        v: <SomeCurve as Curve>::Scalar,
-        v_keys: CommitmentKey<G1>,
-        v_rand: Randomness<G1>,
+        v: &<SomeCurve as Curve>::Scalar,
+        v_keys: &CommitmentKey<G1>,
+        v_rand: &Randomness<G1>,
     ) -> Commitment<G1> {
-        let v_value = Value::<SomeCurve>::new(v);
+        let v_value = Value::<SomeCurve>::new(*v);
 
         v_keys.hide(&v_value, &v_rand)
     }
@@ -520,18 +536,63 @@ mod tests {
         let v = SomeCurve::scalar_from_u64(4);
         let n = the_set.len();
         let (gens, v_keys, v_rand) = generate_helper_values(n);
+        let v_com = get_v_com(&v, &v_keys, &v_rand);
 
         // prove
         let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let proof = prove(
+            ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(proof.is_ok());
         let proof = proof.unwrap();
 
         // verify
-        let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
-        assert!(result.is_ok());
+        let result = verify(
+            ProofVersion::Version1,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok(), "Version 1 proof should verify");
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(
+            ProofVersion::Version2,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let mut transcript = RandomOracle::empty();
+        let result = verify(
+            ProofVersion::Version2,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok(), "Version 2 proof should verify");
     }
 
     /// Test that sets with sizes not a power of two work
@@ -544,17 +605,61 @@ mod tests {
         let n = the_set.len();
         let k = n.next_power_of_two();
         let (gens, v_keys, v_rand) = generate_helper_values(k);
+        let v_com = get_v_com(&v, &v_keys, &v_rand);
 
         let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let proof = prove(
+            ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(proof.is_ok());
         let proof = proof.unwrap();
 
         // verify
-        let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
-        assert!(result.is_ok());
+        let result = verify(
+            ProofVersion::Version1,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok(), "Version 1 proof should verify");
+
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(
+            ProofVersion::Version2,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let mut transcript = RandomOracle::empty();
+        let result = verify(
+            ProofVersion::Version2,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok(), "Version 2 proof should verify");
     }
 
     /// Test that proof fails if element is in the set
@@ -568,7 +673,16 @@ mod tests {
         let (gens, v_keys, v_rand) = generate_helper_values(n);
 
         let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let proof = prove(
+            ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(matches!(proof, Err(ProverError::CouldFindValueInSet)));
     }
 
@@ -586,15 +700,32 @@ mod tests {
 
         // prove
         let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let proof = prove(
+            ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(proof.is_ok());
         let proof = proof.unwrap();
 
         // verify
         let v = SomeCurve::scalar_from_u64(42); // different v still in set
-        let v_com = get_v_com(v, v_keys, v_rand);
+        let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        let result = verify(
+            ProofVersion::Version1,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
         assert!(matches!(result, Err(VerificationError::InconsistentT0)));
     }
 
@@ -611,15 +742,32 @@ mod tests {
 
         // prove
         let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let proof = prove(
+            ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(proof.is_ok());
         let proof = proof.unwrap();
 
         // verify
         let new_set = get_set_vector::<SomeCurve>(&[2, 7, 3, 5]);
-        let v_com = get_v_com(v, v_keys, v_rand);
+        let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &new_set, &v_com, &proof, &gens, &v_keys);
+        let result = verify(
+            ProofVersion::Version1,
+            &mut transcript,
+            &new_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
         assert!(matches!(result, Err(VerificationError::InconsistentT0)));
     }
 
@@ -635,16 +783,33 @@ mod tests {
 
         // prove
         let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let proof = prove(
+            ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(proof.is_ok());
         let mut proof = proof.unwrap();
 
         proof.ip_proof.a.negate(); // tamper with IP proof
 
         // verify
-        let v_com = get_v_com(v, v_keys, v_rand);
+        let v_com = get_v_com(&v, &v_keys, &v_rand);
         let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
+        let result = verify(
+            ProofVersion::Version1,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
         assert!(matches!(
             result,
             Err(VerificationError::IPVerificationError)
@@ -660,17 +825,62 @@ mod tests {
         let v = SomeCurve::scalar_from_u64(4);
         let num_gens = 2112;
         let (gens, v_keys, v_rand) = generate_helper_values(num_gens);
+        let v_com = get_v_com(&v, &v_keys, &v_rand);
 
         // prove
         let mut transcript = RandomOracle::empty();
-        let proof = prove(&mut transcript, rng, &the_set, v, &gens, &v_keys, &v_rand);
+        let proof = prove(
+            ProofVersion::Version1,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
         assert!(proof.is_ok());
         let proof = proof.unwrap();
 
         // verify
-        let v_com = get_v_com(v, v_keys, v_rand);
         let mut transcript = RandomOracle::empty();
-        let result = verify(&mut transcript, &the_set, &v_com, &proof, &gens, &v_keys);
-        assert!(result.is_ok());
+        let result = verify(
+            ProofVersion::Version1,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok(), "Version 1 proof should verify");
+
+        // prove
+        let mut transcript = RandomOracle::empty();
+        let proof = prove(
+            ProofVersion::Version2,
+            &mut transcript,
+            rng,
+            &the_set,
+            v,
+            &gens,
+            &v_keys,
+            &v_rand,
+        );
+        assert!(proof.is_ok());
+        let proof = proof.unwrap();
+
+        // verify
+        let mut transcript = RandomOracle::empty();
+        let result = verify(
+            ProofVersion::Version2,
+            &mut transcript,
+            &the_set,
+            &v_com,
+            &proof,
+            &gens,
+            &v_keys,
+        );
+        assert!(result.is_ok(), "Version 2 proof should verify");
     }
 }

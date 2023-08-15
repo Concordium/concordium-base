@@ -34,6 +34,7 @@ use sha2::{Digest, Sha256};
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, AttributeType> {
     pub fn prove(
         &self,
+        version: ProofVersion,
         global: &GlobalContext<C>,
         challenge: &[u8],
         attribute_values: &impl HasAttributeValues<C::Scalar, AttributeTag, AttributeType>,
@@ -49,6 +50,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
         let mut csprng = rand::thread_rng();
         for atomic_statement in self.statement.statements.iter() {
             proofs.push(atomic_statement.prove(
+                version,
                 global,
                 &mut transcript,
                 &mut csprng,
@@ -60,11 +62,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     }
 }
 
-impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribute<C::Scalar>>
+impl<C: Curve, TagType: crate::common::Serialize, AttributeType: Attribute<C::Scalar>>
     AtomicStatement<C, TagType, AttributeType>
 {
     pub(crate) fn prove(
         &self,
+        version: ProofVersion,
         global: &GlobalContext<C>,
         transcript: &mut RandomOracle,
         csprng: &mut impl rand::Rng,
@@ -74,14 +77,20 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
         match self {
             AtomicStatement::RevealAttribute { statement } => {
                 let attribute = attribute_values
-                    .get_attribute_value(statement.attribute_tag)?
+                    .get_attribute_value(&statement.attribute_tag)?
                     .clone();
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let x = attribute.to_field_element(); // This is public in the sense that the verifier should learn it
                 transcript.add_bytes(b"RevealAttributeDlogProof");
                 transcript.append_message(b"x", &x);
+                if version >= ProofVersion::Version2 {
+                    transcript.append_message(b"keys", &global.on_chain_commitment_key);
+                    let x_value: Value<C> = Value::new(x);
+                    let comm = global.on_chain_commitment_key.hide(&x_value, &randomness);
+                    transcript.append_message(b"C", &comm);
+                }
                 // This is the Dlog proof section 9.2.4 from the Bluepaper.
                 let h = global.on_chain_commitment_key.h;
                 let h_r = h.mul_by_scalar(&randomness);
@@ -96,14 +105,15 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 Some(AtomicProof::RevealAttribute { attribute, proof })
             }
             AtomicStatement::AttributeInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(statement.attribute_tag)?;
+                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let attribute_scalar = attribute.to_field_element();
                 let attribute_vec: Vec<_> =
                     statement.set.iter().map(|x| x.to_field_element()).collect();
                 let proof = prove_set_membership(
+                    version,
                     transcript,
                     csprng,
                     &attribute_vec,
@@ -117,14 +127,15 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 Some(proof)
             }
             AtomicStatement::AttributeNotInSet { statement } => {
-                let attribute = attribute_values.get_attribute_value(statement.attribute_tag)?;
+                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let attribute_scalar = attribute.to_field_element();
                 let attribute_vec: Vec<_> =
                     statement.set.iter().map(|x| x.to_field_element()).collect();
                 let proof = prove_set_non_membership(
+                    version,
                     transcript,
                     csprng,
                     &attribute_vec,
@@ -138,11 +149,14 @@ impl<C: Curve, TagType: crate::common::Serialize + Copy, AttributeType: Attribut
                 Some(proof)
             }
             AtomicStatement::AttributeInRange { statement } => {
-                let attribute = attribute_values.get_attribute_value(statement.attribute_tag)?;
+                let attribute = attribute_values.get_attribute_value(&statement.attribute_tag)?;
                 let randomness = attribute_randomness
-                    .get_attribute_commitment_randomness(statement.attribute_tag)
+                    .get_attribute_commitment_randomness(&statement.attribute_tag)
                     .ok()?;
                 let proof = prove_attribute_in_range(
+                    version,
+                    transcript,
+                    csprng,
                     global.bulletproof_generators(),
                     &global.on_chain_commitment_key,
                     attribute,
@@ -207,7 +221,11 @@ pub fn prove_ownership_of_account(
 /// that lower <= attribute < upper.
 /// This is done by proving that attribute-upper+2^n and attribute-lower lie in
 /// [0, 2^n). For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
+#[allow(clippy::too_many_arguments)]
 pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    version: ProofVersion,
+    transcript: &mut RandomOracle,
+    csprng: &mut impl rand::Rng,
     gens: &Generators<C>,
     keys: &PedersenKey<C>,
     attribute: &AttributeType,
@@ -215,11 +233,56 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     upper: &AttributeType,
     r: &PedersenRandomness<C>,
 ) -> Option<RangeProof<C>> {
-    let mut transcript = RandomOracle::domain("attribute_range_proof");
-    let mut csprng = rand::thread_rng();
     let delta = attribute.to_field_element();
     let a = lower.to_field_element();
     let b = upper.to_field_element();
+    match version {
+        ProofVersion::Version1 => {
+            let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
+            prove_attribute_in_range_helper(
+                ProofVersion::Version1,
+                &mut transcript_v1,
+                csprng,
+                gens,
+                keys,
+                delta,
+                a,
+                b,
+                r,
+            )
+        }
+        ProofVersion::Version2 => {
+            transcript.add_bytes(b"AttributeRangeProof");
+            transcript.append_message(b"a", &a);
+            transcript.append_message(b"b", &b);
+            prove_attribute_in_range_helper(
+                ProofVersion::Version2,
+                transcript,
+                csprng,
+                gens,
+                keys,
+                delta,
+                a,
+                b,
+                r,
+            )
+        }
+    }
+}
+
+/// Helper function for producing a range proof.
+#[allow(clippy::too_many_arguments)]
+fn prove_attribute_in_range_helper<C: Curve>(
+    version: ProofVersion,
+    transcript: &mut RandomOracle,
+    csprng: &mut impl rand::Rng,
+    gens: &Generators<C>,
+    keys: &PedersenKey<C>,
+    delta: C::Scalar,
+    a: C::Scalar,
+    b: C::Scalar,
+    r: &PedersenRandomness<C>,
+) -> Option<RangeProof<C>> {
     let mut scalar1 = delta;
     let two = C::scalar_from_u64(2);
     let two_n = two.pow([64]);
@@ -230,8 +293,9 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     let rand1 = r.clone();
     let rand2 = r.clone();
     prove_given_scalars(
-        &mut transcript,
-        &mut csprng,
+        version,
+        transcript,
+        csprng,
         64,
         2,
         &[scalar1, scalar2],

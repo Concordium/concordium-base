@@ -8,7 +8,7 @@ use crate::{
     curve_arithmetic::Curve,
     id::sigma_protocols::{
         common::*,
-        dlog::{Witness as DlogWitness, *},
+        dlog::{Response as DlogResponse, *},
     },
     random_oracle::{Challenge, RandomOracle},
 };
@@ -22,7 +22,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
     type CommitMessage = (C, C);
     type ProtocolChallenge = C::Scalar;
     type ProverState = C::Scalar;
-    type ProverWitness = DlogWitness<C>;
+    type Response = DlogResponse<C>;
     type SecretData = DlogSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -34,7 +34,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -45,23 +45,23 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         Some((commit, rand_scalar))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
-        let w1 = self.dlog1.generate_witness(secret, state, challenge)?;
+    ) -> Option<Self::Response> {
+        let w1 = self.dlog1.compute_response(secret, state, challenge)?;
         Some(w1)
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        let p1 = self.dlog1.extract_point(challenge, witness)?;
-        let p2 = self.dlog2.extract_point(challenge, witness)?;
+        let p1 = self.dlog1.extract_commit_message(challenge, response)?;
+        let p2 = self.dlog2.extract_commit_message(challenge, response)?;
         Some((p1, p2))
     }
 

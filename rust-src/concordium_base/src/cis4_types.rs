@@ -15,6 +15,8 @@ pub struct CredentialType {
     pub credential_type: String,
 }
 
+// TODO: make field above private, add TryFrom/Into instances
+
 /// A schema reference is a schema URL pointing to the JSON
 /// schema for a verifiable credential.
 #[derive(
@@ -33,19 +35,11 @@ pub struct CredentialInfo {
     pub holder_id:        CredentialHolderId,
     /// Whether the holder is allowed to revoke the credential or not.
     pub holder_revocable: bool,
-    /// A vector Pedersen commitment to the attributes of the verifiable
-    /// credential.
-    #[concordium(size_length = 2)]
-    #[serde(with = "crate::internal::byte_array_hex")]
-    pub commitment:       Vec<u8>,
     /// The date from which the credential is considered valid.
     pub valid_from:       contracts_common::Timestamp,
     /// After this date, the credential becomes expired. `None` corresponds to a
     /// credential that cannot expire.
     pub valid_until:      Option<contracts_common::Timestamp>,
-    /// A type of the credential that is used to identify which schema the
-    /// credential is based on.
-    pub credential_type:  CredentialType,
     /// Metadata URL of the credential.
     pub metadata_url:     MetadataUrl,
 }
@@ -104,9 +98,21 @@ pub struct RevocationKeyWithNonce {
     pub nonce: u64,
 }
 
+/// A response type for the registry metadata request.
+#[derive(contracts_common::Serialize, Debug, Clone)]
+pub struct RegistryMetadata {
+    /// A reference to the issuer's metadata.
+    pub issuer_metadata:   MetadataUrl,
+    /// The type of credentials used.
+    pub credential_type:   CredentialType,
+    /// A reference to the JSON schema corresponding to this type.
+    pub credential_schema: SchemaRef,
+}
+
 #[doc(hidden)]
 pub enum IssuerKeyRole {}
 
+/// Public key of an issuer.
 pub type IssuerKey = Ed25519PublicKey<IssuerKeyRole>;
 
 /// Data for events of registering and updating a credential.
@@ -144,15 +150,6 @@ pub struct RevokeCredentialEvent {
     /// An optional text clarifying the revocation reasons.
     /// The issuer can use this field to comment on the revocation, so the
     /// holder can observe it in the wallet.
-    reason:    Option<Reason>,
-}
-
-/// An untagged restoration event.
-#[derive(contracts_common::Serialize, Debug, Clone)]
-pub struct RestoreCredentialEvent {
-    /// A public key of the credential's holder.
-    holder_id: CredentialHolderId,
-    /// An optional text clarifying the restoring reasons.
     reason:    Option<Reason>,
 }
 

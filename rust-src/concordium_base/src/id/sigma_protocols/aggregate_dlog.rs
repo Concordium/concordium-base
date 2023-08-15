@@ -1,7 +1,8 @@
-//! The module provides the implementation of the `aggregate_dlog` sigma
-//! protocol. This protocol enables one to prove knowledge of discrete
-//! logarithms $a_1 ... a_n$ public values $ y = \prod G_i^{a_i} $.
-//! This is a specialization of `com_eq` protocol where we do not require
+//! The module provides the implementation of the `agg-dlog` sigma
+//! protocol (cf. "Proof of Knowledge for Aggregate Discrete Logarithms" Section
+//! 9.2.2, Bluepaper v1.2.5). This protocol enables one to prove knowledge of
+//! discrete logarithms $a_1 ... a_n$ for the public value $ y = \prod G_i^{a_i}
+//! $. This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
 use super::common::*;
 use crate::{
@@ -20,21 +21,21 @@ pub struct AggregateDlog<C: Curve> {
     pub coeff:  Vec<C>,
 }
 
-/// Aggregate dlog witness. We deliberately make it opaque.
+/// Aggregate dlog response. We deliberately make it opaque.
 #[derive(Debug, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Response<C: Curve> {
     #[size_length = 4]
-    witness: Vec<C::Scalar>,
+    response: Vec<C::Scalar>,
 }
 
 /// Convenient alias for aggregate dlog proof
-pub type Proof<C> = SigmaProof<Witness<C>>;
+pub type Proof<C> = SigmaProof<Response<C>>;
 
 impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
     type ProverState = Vec<C::Scalar>;
-    type ProverWitness = Witness<C>;
+    type Response = Response<C>;
     type SecretData = Vec<Rc<C::Scalar>>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -42,11 +43,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         ro.extend_from(b"coeff", &self.coeff)
     }
 
-    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
-    }
-
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -60,40 +57,44 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
         Some((multiexp(&self.coeff, &rands), rands))
     }
 
-    fn generate_witness(
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
+    }
+
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let n = secret.len();
         if state.len() != n {
             return None;
         }
-        let mut witness = Vec::with_capacity(n);
+        let mut response = Vec::with_capacity(n);
         for (ref s, ref r) in izip!(secret, state) {
-            let mut wit = *challenge;
-            wit.mul_assign(s);
-            wit.negate();
-            wit.add_assign(r);
-            witness.push(wit);
+            let mut res = *challenge;
+            res.mul_assign(s);
+            res.negate();
+            res.add_assign(r);
+            response.push(res);
         }
-        Some(Witness { witness })
+        Some(Response { response })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        if witness.witness.len() != self.coeff.len() {
+        if response.response.len() != self.coeff.len() {
             return None;
         }
-        let mut point = self.public.mul_by_scalar(challenge);
-        for (w, g) in izip!(witness.witness.iter(), self.coeff.iter()) {
-            point = point.plus_point(&g.mul_by_scalar(w));
+        let mut commit_message = self.public.mul_by_scalar(challenge);
+        for (w, g) in izip!(response.response.iter(), self.coeff.iter()) {
+            commit_message = commit_message.plus_point(&g.mul_by_scalar(w));
         }
-        Some(point)
+        Some(commit_message)
     }
 
     #[cfg(test)]

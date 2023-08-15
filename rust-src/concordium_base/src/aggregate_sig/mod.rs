@@ -136,7 +136,7 @@ impl<P: Pairing> PartialEq for Signature<P> {
 }
 
 /// A proof of knowledge of a secretkey
-pub type Proof<P> = SigmaProof<Witness<<P as Pairing>::G2>>;
+pub type Proof<P> = SigmaProof<Response<<P as Pairing>::G2>>;
 
 /// Verifies an aggregate signature on pairs `(messages m_i, PK_i)` `for i=1..n`
 /// by checking     `pairing(sig, g_2) == product_{i=0}^n (

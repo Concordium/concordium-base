@@ -1,6 +1,7 @@
-//! This module provides the implementation of the discrete log sigma protocol
-//! which enables one to prove knowledge of the discrete logarithm without
-//! revealing it.
+//! This module provides the implementation of the `dlog` sigma protocol
+//! (cf. "Proof of Knowledge of Discrete Logarithm" Section 9.2.1, Bluepaper
+//! v1.2.5) which enables one to prove knowledge of the discrete logarithm
+//! without revealing it.
 use super::common::*;
 use crate::{
     common::*,
@@ -20,21 +21,21 @@ pub struct DlogSecret<C: Curve> {
     pub secret: Value<C>,
 }
 
-/// Dlog witness. We deliberately make it opaque.
+/// Response for Dlog proof. We deliberately make it opaque.
 /// We implement Copy to make the interface easier to use.
 #[derive(Debug, Serialize, Clone, Copy, Eq, PartialEq)]
-pub struct Witness<C: Curve> {
-    witness: C::Scalar,
+pub struct Response<C: Curve> {
+    response: C::Scalar,
 }
 
 /// Convenient alias for aggregate dlog proof
-pub type Proof<C> = SigmaProof<Witness<C>>;
+pub type Proof<C> = SigmaProof<Response<C>>;
 
 impl<C: Curve> SigmaProtocol for Dlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
     type ProverState = C::Scalar;
-    type ProverWitness = Witness<C>;
+    type Response = Response<C>;
     type SecretData = DlogSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -42,41 +43,41 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
         ro.append_message("coeff", &self.coeff)
     }
 
-    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
-    }
-
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let rand_scalar = C::generate_non_zero_scalar(csprng);
-        let randomised_point = self.coeff.mul_by_scalar(&rand_scalar);
-        Some((randomised_point, rand_scalar))
+        let commit_message = self.coeff.mul_by_scalar(&rand_scalar);
+        Some((commit_message, rand_scalar))
     }
 
-    fn generate_witness(
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
+    }
+
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         // If the challenge is zero, the proof is not going to be valid unless alpha
         // (randomised point) is also zero.
-        let mut witness = *challenge;
-        witness.mul_assign(&secret.secret);
-        witness.add_assign(&state);
-        Some(Witness { witness })
+        let mut response = *challenge;
+        response.mul_assign(&secret.secret);
+        response.add_assign(&state);
+        Some(Response { response })
     }
 
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let randomised_point = self
             .coeff
-            .mul_by_scalar(&witness.witness)
+            .mul_by_scalar(&response.response)
             .minus_point(&self.public.mul_by_scalar(challenge));
         Some(randomised_point)
     }
@@ -138,9 +139,9 @@ mod tests {
                         .get_challenge(),
                     ..proof
                 };
-                let wrong_proof_witness = SigmaProof {
-                    witness: Witness {
-                        witness: G1::generate_scalar(csprng),
+                let wrong_proof_response = SigmaProof {
+                    response: Response {
+                        response: G1::generate_scalar(csprng),
                     },
                     ..proof
                 };
@@ -160,7 +161,7 @@ mod tests {
                 assert!(!verify(&mut ro.split(), &dlog_wrong_base, &proof));
                 assert!(!verify(&mut ro.split(), &dlog_wrong_public, &proof));
                 assert!(!verify(&mut ro.split(), &dlog, &wrong_proof_challenge));
-                assert!(!verify(&mut ro, &dlog, &wrong_proof_witness));
+                assert!(!verify(&mut ro, &dlog, &wrong_proof_response));
             })
         }
     }

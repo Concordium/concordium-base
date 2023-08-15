@@ -17,7 +17,8 @@ use crate::{
 };
 use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
-    Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
+    AccountThreshold, Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
+    ZeroSignatureThreshold,
 };
 use derive_more::{Add, Display, From, FromStr, Into, Sub};
 use rand::{CryptoRng, Rng};
@@ -351,37 +352,6 @@ impl UpdateSequenceNumber {
 
     /// Increase the sequence number.
     pub fn next_mut(&mut self) { self.number += 1; }
-}
-
-#[repr(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Into, Serial)]
-/// The minimum number of credentials that need to sign any transaction coming
-/// from an associated account.
-pub struct AccountThreshold {
-    #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
-    threshold: u8,
-}
-
-impl Deserial for AccountThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let threshold: u8 = source.get()?;
-        anyhow::ensure!(threshold != 0, "Account threshold cannot be 0.");
-        Ok(AccountThreshold { threshold })
-    }
-}
-
-impl TryFrom<u8> for AccountThreshold {
-    type Error = ZeroSignatureThreshold;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == 0 {
-            Err(ZeroSignatureThreshold)
-        } else {
-            Ok(AccountThreshold { threshold: value })
-        }
-    }
 }
 
 #[repr(transparent)]
@@ -860,12 +830,6 @@ impl From<UpdateKeysThreshold> for u16 {
     #[inline]
     fn from(u: UpdateKeysThreshold) -> Self { u.threshold.get() }
 }
-
-#[derive(Debug, Error)]
-#[error("Signature threshold cannot be 0.")]
-/// An error type that indicates that a 0 attempted to be used as a signature
-/// threshold.
-pub struct ZeroSignatureThreshold;
 
 impl TryFrom<u16> for UpdateKeysThreshold {
     type Error = ZeroSignatureThreshold;

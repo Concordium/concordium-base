@@ -4,7 +4,7 @@ use super::{
     secret_sharing::Threshold,
     sigma_protocols::{
         com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
-        common::{ReplicateAdapter, ReplicateWitness},
+        common::{ReplicateAdapter, ReplicateResponse},
         dlog,
     },
 };
@@ -12,7 +12,7 @@ pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crate::{
     bulletproofs::{range_proof::RangeProof, utils::Generators},
     common::{
-        types::{CredentialIndex, KeyIndex, KeyPair},
+        types::{CredentialIndex, KeyIndex, KeyPair, Signature},
         *,
     },
     curve_arithmetic::*,
@@ -26,6 +26,9 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
+use concordium_contracts_common as concordium_std;
+pub use concordium_contracts_common::SignatureThreshold;
+use concordium_contracts_common::{AccountThreshold, ZeroSignatureThreshold};
 use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
@@ -63,66 +66,6 @@ pub fn account_address_from_registration_id(reg_id: &impl Curve) -> AccountAddre
     let mut hasher = Sha256::new();
     reg_id.serial(&mut hasher);
     AccountAddress(hasher.finalize().into())
-}
-
-/// Threshold for the number of signatures required.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial, Into)]
-#[repr(transparent)]
-/// The values of this type must maintain the property that they are not 0.
-#[derive(SerdeSerialize)]
-#[serde(transparent)]
-pub struct SignatureThreshold(pub u8);
-
-impl Deserial for SignatureThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let w = source.get()?;
-        if w > 0 {
-            Ok(SignatureThreshold(w))
-        } else {
-            bail!("0 is not a valid signature threshold.")
-        }
-    }
-}
-
-// Need to manually implement deserialize to maintain the property that it is
-// non-zero.
-impl<'de> SerdeDeserialize<'de> for SignatureThreshold {
-    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        struct SignatureThresholdVisitor;
-
-        impl<'de> Visitor<'de> for SignatureThresholdVisitor {
-            type Value = SignatureThreshold;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                write!(formatter, "A non-zero u8.")
-            }
-
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                if v > 0 && v <= 255 {
-                    Ok(SignatureThreshold(v as u8))
-                } else {
-                    Err(de::Error::custom(format!(
-                        "Signature threshold out of range {}",
-                        v
-                    )))
-                }
-            }
-
-            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-            where
-                E: de::Error, {
-                if v > 0 {
-                    self.visit_u64(v as u64)
-                } else {
-                    Err(de::Error::custom(format!(
-                        "Signature threshold out of range {}",
-                        v
-                    )))
-                }
-            }
-        }
-        des.deserialize_u64(SignatureThresholdVisitor)
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
@@ -193,8 +136,10 @@ impl Deserial for AccountOwnershipProof {
 impl AccountOwnershipProof {
     /// Number of individual signatures in this proof.
     /// NB: This method relies on the invariant that signatures should not
-    /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
+    /// have more than 255 elements, and has at least one signature.
+    pub fn num_proofs(&self) -> Result<SignatureThreshold, ZeroSignatureThreshold> {
+        SignatureThreshold::try_from(self.sigs.len() as u8)
+    }
 }
 
 #[derive(
@@ -632,8 +577,8 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeTag, AttributeType>
     for AttributeList<F, AttributeType>
 {
-    fn get_attribute_value(&self, attribute_tag: AttributeTag) -> Option<&AttributeType> {
-        self.alist.get(&attribute_tag)
+    fn get_attribute_value(&self, attribute_tag: &AttributeTag) -> Option<&AttributeType> {
+        self.alist.get(attribute_tag)
     }
 }
 
@@ -698,12 +643,12 @@ pub struct IpArData<C: Curve> {
         deserialize_with = "base16_decode"
     )]
     pub enc_prf_key_share: [Cipher<C>; 8],
-    /// Witness to the proof that the computed commitment to the share
+    /// Response in the proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
     /// the commitments to the sharing coefficients
     #[serde(rename = "proofComEncEq")]
-    pub proof_com_enc_eq:  com_enc_eq::Witness<C>,
+    pub proof_com_enc_eq:  com_enc_eq::Response<C>,
 }
 
 /// Data structure for when a anonymity revoker decrypts its encrypted share
@@ -768,8 +713,8 @@ pub struct ChoiceArParameters {
 #[derive(Debug, Clone)]
 pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub common_proof_fields: CommonPioProofFields<P, C>,
-    /// Witness to the proof that reg_id = PRF(prf_key, 0)
-    pub prf_regid_proof:     com_eq::Witness<C>,
+    /// Response in the proof that reg_id = PRF(prf_key, 0)
+    pub prf_regid_proof:     com_eq::Response<C>,
     /// Signature on the public information for the IP from the account holder
     pub proof_acc_sk:        AccountOwnershipProof,
 }
@@ -777,7 +722,7 @@ pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for PreIdentityProof<P, C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.put(&self.common_proof_fields.challenge);
-        out.put(&self.common_proof_fields.id_cred_sec_witness);
+        out.put(&self.common_proof_fields.id_cred_sec_response);
         out.put(&self.common_proof_fields.commitments_same_proof);
         out.put(&self.common_proof_fields.commitments_prf_same);
         out.put(&self.prf_regid_proof);
@@ -789,15 +734,15 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for PreIdentityProof<
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for PreIdentityProof<P, C> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let challenge: Challenge = source.get()?;
-        let id_cred_sec_witness: dlog::Witness<C> = source.get()?;
-        let commitments_same_proof: com_eq::Witness<C> = source.get()?;
-        let commitments_prf_same: com_eq_different_groups::Witness<P::G1, C> = source.get()?;
-        let prf_regid_proof: com_eq::Witness<C> = source.get()?;
+        let id_cred_sec_response: dlog::Response<C> = source.get()?;
+        let commitments_same_proof: com_eq::Response<C> = source.get()?;
+        let commitments_prf_same: com_eq_different_groups::Response<P::G1, C> = source.get()?;
+        let prf_regid_proof: com_eq::Response<C> = source.get()?;
         let proof_acc_sk: AccountOwnershipProof = source.get()?;
         let bulletproofs: Vec<RangeProof<C>> = source.get()?;
         let common_proof_fields = CommonPioProofFields {
             challenge,
-            id_cred_sec_witness,
+            id_cred_sec_response,
             commitments_same_proof,
             commitments_prf_same,
             bulletproofs,
@@ -817,15 +762,15 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Challenge for the combined proof. This includes the three proofs below,
     /// and additionally also the proofs in IpArData.
     pub challenge:              Challenge,
-    /// Witness to the proof of knowledge of IdCredSec.
-    pub id_cred_sec_witness:    dlog::Witness<C>,
-    /// Witness to the proof that cmm_sc and id_cred_pub
+    /// Response in the proof of knowledge of IdCredSec.
+    pub id_cred_sec_response:   dlog::Response<C>,
+    /// Response in the proof that cmm_sc and id_cred_pub
     /// are hiding the same id_cred_sec.
-    pub commitments_same_proof: com_eq::Witness<C>,
-    /// Witness to the proof that cmm_prf and the
+    pub commitments_same_proof: com_eq::Response<C>,
+    /// Response in the proof that cmm_prf and the
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
-    pub commitments_prf_same:   com_eq_different_groups::Witness<P::G1, C>,
+    pub commitments_prf_same:   com_eq_different_groups::Response<P::G1, C>,
     /// Bulletproofs for showing that chunks are small so that encryption
     /// of the prf key can be decrypted
     pub bulletproofs:           Vec<RangeProof<C>>,
@@ -835,7 +780,7 @@ pub struct CommonPioProofFields<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 /// IdCredPub.
 pub type IdCredPubVerifiers<C> = (
     ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
-    ReplicateWitness<com_enc_eq::Witness<C>>,
+    ReplicateResponse<com_enc_eq::Response<C>>,
 );
 
 /// Information sent from the account holder to the identity provider.
@@ -1348,14 +1293,14 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         deserialize_with = "base16_decode"
     )]
     pub challenge: Challenge,
-    /// Witnesses to the proof that the computed commitment to the share
+    /// Responses in the proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
     /// the commitments to the sharing coefficients
     #[serde(rename = "proofIdCredPub")]
     #[map_size_length = 4]
-    pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
-    /// Witnesses for proof of knowledge of signature of Identity Provider on
+    pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
+    /// Responses in the proof of knowledge of signature of Identity Provider on
     /// the list
     /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
     /// AR[1], ..., AR[m])```
@@ -1364,7 +1309,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub proof_ip_sig: com_eq_sig::Witness<P, C>,
+    pub proof_ip_sig: com_eq_sig::Response<P, C>,
     /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
     /// from the prf key signed by the identity provider.
     #[serde(
@@ -1372,7 +1317,7 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub proof_reg_id: com_mult::Witness<C>,
+    pub proof_reg_id: com_mult::Response<C>,
     /// Proof that cred_counter is less than or equal to max_accounts
     #[serde(
         rename = "credCounterLessThanMaxAccounts",
@@ -1426,7 +1371,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, Attri
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, concordium_std::Serialize)]
 /// Which signature scheme is being used. Currently only one is supported.
 pub enum SchemeId {
     Ed25519,
@@ -1437,6 +1382,32 @@ pub enum SchemeId {
 /// supported.
 pub enum VerifyKey {
     Ed25519VerifyKey(ed25519::PublicKey),
+}
+
+impl concordium_std::Serial for VerifyKey {
+    fn serial<W: concordium_std::Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        match self {
+            VerifyKey::Ed25519VerifyKey(key) => {
+                concordium_std::Serial::serial(&0u8, out)?;
+                concordium_std::Serial::serial(&key.as_bytes(), out)
+            }
+        }
+    }
+}
+
+impl concordium_std::Deserial for VerifyKey {
+    fn deserial<R: concordium_std::Read>(source: &mut R) -> concordium_std::ParseResult<Self> {
+        let tag: u8 = concordium_std::Deserial::deserial(source)?;
+        if tag == 0 {
+            let bytes: [u8; ed25519::PUBLIC_KEY_LENGTH] =
+                concordium_std::Deserial::deserial(source)?;
+            let pk = ed25519::PublicKey::from_bytes(&bytes)
+                .map_err(|_| concordium_std::ParseError {})?;
+            Ok(Self::Ed25519VerifyKey(pk))
+        } else {
+            Err(concordium_std::ParseError {})
+        }
+    }
 }
 
 impl SerdeSerialize for VerifyKey {
@@ -2077,7 +2048,7 @@ pub struct AccountKeys {
     pub keys:      BTreeMap<CredentialIndex, CredentialData>,
     /// The account threshold.
     #[serde(rename = "threshold")]
-    pub threshold: SignatureThreshold,
+    pub threshold: AccountThreshold,
 }
 
 /// Create account keys with a single credential at index 0
@@ -2092,7 +2063,7 @@ impl From<(CredentialIndex, CredentialData)> for AccountKeys {
         keys.insert(ki, cd);
         Self {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: AccountThreshold::ONE,
         }
     }
 }
@@ -2107,8 +2078,66 @@ impl From<InitialAccountData> for AccountKeys {
         });
         Self {
             keys,
-            threshold: SignatureThreshold(1),
+            threshold: AccountThreshold::ONE,
         }
+    }
+}
+
+impl AccountKeys {
+    /// Sign the provided data with all of the keys in [`AccountKeys`].
+    /// The thresholds are ignored.
+    pub fn sign_data(
+        &self,
+        msg: &[u8],
+    ) -> BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>> {
+        let mut signatures = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, _>>::new();
+        for (ci, cred_keys) in self.keys.iter() {
+            let cred_sigs = cred_keys
+                .keys
+                .iter()
+                .map(|(ki, kp)| (*ki, kp.sign(msg)))
+                .collect::<BTreeMap<_, _>>();
+            signatures.insert(*ci, cred_sigs);
+        }
+        signatures
+    }
+}
+
+impl AccountKeys {
+    /// Generate new [`AccountKeys`] for the thresholds and key indices
+    /// specified in the input. If there are duplicate indices then later
+    /// ones override the previous ones.
+    ///
+    /// The keys sampled from the supplied random number generator in the order
+    /// of key indices supplied, using [`KeyPair::generate`](KeyPair::generate).
+    pub fn generate<R: rand::CryptoRng + rand::Rng>(
+        account_threshold: AccountThreshold,
+        indices: &[(CredentialIndex, SignatureThreshold, &[KeyIndex])],
+        csprng: &mut R,
+    ) -> Self {
+        let keys = indices.iter().map(|(ci, threshold, kis)| {
+            (*ci, CredentialData {
+                keys:      kis
+                    .iter()
+                    .map(|ki| (*ki, KeyPair::generate(csprng)))
+                    .collect(),
+                threshold: *threshold,
+            })
+        });
+        Self {
+            keys:      keys.collect(),
+            threshold: account_threshold,
+        }
+    }
+
+    /// Generate account keys with a single credential and key, at credential
+    /// and key indices 0.
+    pub fn singleton<R: rand::CryptoRng + rand::Rng>(csprng: &mut R) -> Self {
+        Self::generate(
+            AccountThreshold::ONE,
+            &[(0.into(), SignatureThreshold::ONE, &[0.into()])],
+            csprng,
+        )
     }
 }
 
@@ -2194,9 +2223,12 @@ impl InitialAccountDataWithSigning for InitialAccountData {
 
 /// Public credential keys currently on the account, together with the threshold
 /// needed for a valid signature on a transaction.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(
+    Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize, Clone, concordium_std::Serialize,
+)]
 pub struct CredentialPublicKeys {
     #[serde(rename = "keys")]
+    #[concordium(size_length = 1)]
     pub keys:      BTreeMap<KeyIndex, VerifyKey>,
     #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
@@ -2443,59 +2475,63 @@ pub trait HasAttributeRandomness<C: Curve, TagType = AttributeTag> {
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: TagType,
+        attribute_tag: &TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType>;
 }
 
 #[derive(thiserror::Error, Debug)]
 #[error("The randomness for attribute {tag} is missing.")]
-pub struct MissingAttributeRandomnessError {
-    tag: u8,
+pub struct MissingAttributeRandomnessError<TagType> {
+    tag: TagType,
 }
 
-impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
-    for BTreeMap<TagType, PedersenRandomness<C>>
+impl<
+        C: Curve,
+        TagType: Ord + Clone + std::fmt::Display + std::fmt::Debug + Send + Sync + 'static,
+    > HasAttributeRandomness<C, TagType> for BTreeMap<TagType, PedersenRandomness<C>>
 {
-    type ErrorType = MissingAttributeRandomnessError;
+    type ErrorType = MissingAttributeRandomnessError<TagType>;
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: TagType,
+        attribute_tag: &TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
-        self.get(&attribute_tag)
+        self.get(attribute_tag)
             .cloned()
             .ok_or(MissingAttributeRandomnessError {
-                tag: attribute_tag.into(),
+                tag: attribute_tag.clone(),
             })
     }
 }
 
-impl<C: Curve, TagType: Ord + Into<u8>> HasAttributeRandomness<C, TagType>
-    for BTreeMap<TagType, Value<C>>
+impl<
+        C: Curve,
+        TagType: Ord + Clone + std::fmt::Display + std::fmt::Debug + Send + Sync + 'static,
+    > HasAttributeRandomness<C, TagType> for BTreeMap<TagType, Value<C>>
 {
-    type ErrorType = MissingAttributeRandomnessError;
+    type ErrorType = MissingAttributeRandomnessError<TagType>;
 
     fn get_attribute_commitment_randomness(
         &self,
-        attribute_tag: TagType,
+        attribute_tag: &TagType,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
-        self.get(&attribute_tag)
+        self.get(attribute_tag)
             .map(PedersenRandomness::from_value)
             .ok_or(MissingAttributeRandomnessError {
-                tag: attribute_tag.into(),
+                tag: attribute_tag.clone(),
             })
     }
 }
 
 pub trait HasAttributeValues<F: Field, TagType, AttributeType: Attribute<F>> {
-    fn get_attribute_value(&self, attribute_tag: TagType) -> Option<&AttributeType>;
+    fn get_attribute_value(&self, attribute_tag: &TagType) -> Option<&AttributeType>;
 }
 
 impl<F: Field, TagType: Serialize + std::cmp::Ord, AttributeType: Attribute<F>>
     HasAttributeValues<F, TagType, AttributeType> for BTreeMap<TagType, AttributeType>
 {
-    fn get_attribute_value(&self, attribute_tag: TagType) -> Option<&AttributeType> {
-        self.get(&attribute_tag)
+    fn get_attribute_value(&self, attribute_tag: &TagType) -> Option<&AttributeType> {
+        self.get(attribute_tag)
     }
 }
 
@@ -2513,7 +2549,7 @@ impl<C: Curve> HasAttributeRandomness<C> for SystemAttributeRandomness {
 
     fn get_attribute_commitment_randomness(
         &self,
-        _attribute_tag: AttributeTag,
+        _attribute_tag: &AttributeTag,
     ) -> Result<PedersenRandomness<C>, Self::ErrorType> {
         let mut csprng = rand::thread_rng();
         Ok(PedersenRandomness::generate(&mut csprng))
