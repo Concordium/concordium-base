@@ -1,6 +1,7 @@
-//! This module implements the com-lin sigma protocol, which allows
-//! the prover to prove knowledge of pairs (s_i, r_i) and (s, r) such that
-//! \sum_{i} u_i * s_i = u * s for some public constants u_i and u.
+//! This module implements the `com-lin` sigma protocol (cf. "Linear
+//! Relationship of Committed Values" Section 9.2.11, Bluepaper v1.2.5). This
+//! protocol enables the prover to prove knowledge of pairs (s_i, r_i) and (s,
+//! r) such that \sum_{i} u_i * s_i = u * s for some public constants u_i and u.
 //! The r's are randomness in commitments to s_i's and s'.
 
 use super::common::*;
@@ -37,7 +38,7 @@ pub struct ComLin<C: Curve> {
 // TODO: What if u = 0?
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Witness<C: Curve> {
+pub struct Response<C: Curve> {
     /// Randomized s_i's
     #[size_length = 4]
     /// Randomized r_i's.
@@ -52,7 +53,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     type CommitMessage = (Vec<Commitment<C>>, Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     type ProverState = (Vec<Value<C>>, Vec<Randomness<C>>, Randomness<C>);
-    type ProverWitness = Witness<C>;
+    type Response = Response<C>;
     type SecretData = ComLinSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
@@ -66,7 +67,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         C::scalar_from_bytes(challenge)
     }
 
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -103,12 +104,12 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         Some((cm, ps))
     }
 
-    fn generate_witness(
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let (alphas, r_i_tildes, r_tilde) = state;
         let n = alphas.len();
         if self.cmms.len() != n
@@ -138,19 +139,19 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         s.mul_assign(&secret.r);
         s.negate();
         s.add_assign(&r_tilde);
-        let witness = Witness { zs, ss, s };
-        Some(witness)
+        let response = Response { zs, ss, s };
+        Some(response)
     }
 
     #[allow(non_snake_case)]
     #[allow(clippy::many_single_char_names)]
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
-        let zs = &witness.zs;
-        let ss = &witness.ss;
+        let zs = &response.zs;
+        let ss = &response.ss;
         let c = *challenge;
         let n = zs.len();
         if ss.len() != n || self.us.len() != n || self.cmms.len() != n {
@@ -170,7 +171,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         }
         // TODO: The g, h are the same in this, and the loop above.
         // We could partially precompute the table to speed-up the multiexp
-        let a = Commitment(multiexp(&[g, h, self.cmm.0], &[sum, witness.s, c]));
+        let a = Commitment(multiexp(&[g, h, self.cmm.0], &[sum, response.s, c]));
         let cm = (ais, a);
         Some(cm)
     }

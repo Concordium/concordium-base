@@ -99,7 +99,7 @@ pub fn verify_cdi<
         cmm_key: on_chain_commitment_key,
     };
     // FIXME: Figure out a pattern to get rid of these clone's.
-    let witness_reg_id = cdi.proofs.id_proofs.proof_reg_id.clone();
+    let response_reg_id = cdi.proofs.id_proofs.proof_reg_id.clone();
 
     let cdv = &cdi.values;
     let proofs = &cdi.proofs;
@@ -123,9 +123,9 @@ pub fn verify_cdi<
         return Err(CdiVerificationError::Signature);
     };
 
-    let witness_sig = cdi.proofs.id_proofs.proof_ip_sig.clone();
+    let response_sig = cdi.proofs.id_proofs.proof_ip_sig.clone();
 
-    let (id_cred_pub_verifier, id_cred_pub_witnesses) = id_cred_pub_verifier(
+    let (id_cred_pub_verifier, id_cred_pub_responses) = id_cred_pub_verifier(
         &on_chain_commitment_key,
         known_ars,
         &cdi.values.ar_data,
@@ -138,16 +138,16 @@ pub fn verify_cdi<
         second: verifier_sig,
     };
     let verifier = verifier.add_prover(id_cred_pub_verifier);
-    let witness = AndWitness {
-        w1: AndWitness {
-            w1: witness_reg_id,
-            w2: witness_sig,
+    let response = AndResponse {
+        r1: AndResponse {
+            r1: response_reg_id,
+            r2: response_sig,
         },
-        w2: id_cred_pub_witnesses,
+        r2: id_cred_pub_responses,
     };
     let proof = SigmaProof {
         challenge: cdi.proofs.id_proofs.challenge,
-        witness,
+        response,
     };
 
     if !verify(&mut ro, &verifier, &proof) {
@@ -214,10 +214,10 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
     known_ars: &BTreeMap<ArIdentity, A>,
     chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
     cmm_sharing_coeff: &[Commitment<C>],
-    proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
+    proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
 ) -> Result<IdCredPubVerifiers<C>, CdiVerificationError> {
     let mut provers = Vec::with_capacity(proof_id_cred_pub.len());
-    let mut witnesses = Vec::with_capacity(proof_id_cred_pub.len());
+    let mut responses = Vec::with_capacity(proof_id_cred_pub.len());
 
     // The encryptions and the proofs have to match.
     if chain_ar_data.len() != proof_id_cred_pub.len() {
@@ -226,7 +226,8 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
 
     // The following relies on the fact that iterators over BTreeMap are
     // over sorted values.
-    for ((ar_id, ar_data), (ar_id_1, witness)) in chain_ar_data.iter().zip(proof_id_cred_pub.iter())
+    for ((ar_id, ar_data), (ar_id_1, response)) in
+        chain_ar_data.iter().zip(proof_id_cred_pub.iter())
     {
         if ar_id != ar_id_1 {
             return Err(CdiVerificationError::IdCredPub);
@@ -245,11 +246,13 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
             encryption_in_exponent_generator: ar_info.get_public_key().generator,
         };
         provers.push(item_prover);
-        witnesses.push(witness.clone());
+        responses.push(response.clone());
     }
-    Ok((ReplicateAdapter { protocols: provers }, ReplicateWitness {
-        witnesses,
-    }))
+    Ok(
+        (ReplicateAdapter { protocols: provers }, ReplicateResponse {
+            responses,
+        }),
+    )
 }
 
 /// Verify a policy. This currently does not do anything since

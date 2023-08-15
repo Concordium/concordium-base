@@ -1,7 +1,8 @@
-//! The module provides the implementation of the `com_mult` sigma protocol.
-//! This protocol enables one to prove that the the product of two commited
-//! values is equal to the third commited value, without revealing the values
-//! themselves.
+//! The module provides the implementation of the `com-mult` sigma protocol (cf.
+//! "Proof of Multiplicative Relation on Commitments" Section 9.2.10, Bluepaper
+//! v1.2.5). This protocol enables one to prove that the the product of two
+//! committed values is equal to the third committed value, without revealing
+//! the values themselves.
 use super::common::*;
 use crate::{
     common::*,
@@ -28,8 +29,8 @@ pub struct ComMult<C: Curve> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Witness<C: Curve> {
-    /// The witness, expanded using the same notation as in the specification.
+pub struct Response<C: Curve> {
+    /// The response, expanded using the same notation as in the specification.
     ss: [C::Scalar; 2],
     ts: [C::Scalar; 2],
     t:  C::Scalar,
@@ -41,7 +42,7 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     type ProtocolChallenge = C::Scalar;
     // alpha's, R_i's, R's
     type ProverState = ([Value<C>; 2], [Randomness<C>; 2], Randomness<C>);
-    type ProverWitness = Witness<C>;
+    type Response = Response<C>;
     type SecretData = ComMultSecret<C>;
 
     #[inline]
@@ -51,12 +52,7 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     }
 
     #[inline]
-    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
-    }
-
-    #[inline]
-    fn commit_point<R: rand::Rng>(
+    fn compute_commit_message<R: rand::Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -75,12 +71,17 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
     }
 
     #[inline]
-    fn generate_witness(
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
+    }
+
+    #[inline]
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let mut ss = [*challenge; 2];
         let mut ts = [*challenge; 2];
 
@@ -109,17 +110,17 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
         t.negate();
         t.add_assign(&cR);
 
-        Some(Witness { ss, ts, t })
+        Some(Response { ss, ts, t })
     }
 
     #[inline]
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let mut points = [Commitment(C::zero_point()); 2];
-        for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {
+        for (i, (s_i, t_i)) in izip!(response.ss.iter(), response.ts.iter()).enumerate() {
             points[i] = {
                 let bases = [self.cmms[i].0, self.cmm_key.g, self.cmm_key.h];
                 let powers = [*challenge, *s_i, *t_i];
@@ -128,12 +129,12 @@ impl<C: Curve> SigmaProtocol for ComMult<C> {
             }
         }
         let h = &self.cmm_key.h;
-        let s_2 = &witness.ss[1];
+        let s_2 = &response.ss[1];
         let cC_3 = self.cmms[2];
         let cC_1 = self.cmms[0];
         let v = {
             let bases = [cC_1.0, *h, cC_3.0];
-            let powers = [*s_2, witness.t, *challenge];
+            let powers = [*s_2, response.t, *challenge];
             multiexp(&bases, &powers) // C_1^s_2 * h^t * C_3^c
         };
         Some((points, Commitment(v)))

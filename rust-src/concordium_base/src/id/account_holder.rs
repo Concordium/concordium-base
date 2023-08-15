@@ -148,21 +148,21 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.witness.w1.w2.witnesses.into_iter())
+        .zip(proof.response.r1.r2.responses.into_iter())
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
     // Returning the version 0 pre-identity object.
     let poks_common = CommonPioProofFields {
         challenge: proof.challenge,
-        id_cred_sec_witness: proof.witness.w1.w1.w1.w1,
-        commitments_same_proof: proof.witness.w1.w1.w1.w2,
-        commitments_prf_same: proof.witness.w1.w1.w2,
+        id_cred_sec_response: proof.response.r1.r1.r1.r1,
+        commitments_same_proof: proof.response.r1.r1.r1.r2,
+        commitments_prf_same: proof.response.r1.r1.r2,
         bulletproofs,
     };
     let poks = PreIdentityProof {
         common_proof_fields: poks_common,
-        prf_regid_proof: proof.witness.w2,
+        prf_regid_proof: proof.response.r2,
         proof_acc_sk,
     };
     let pio = PreIdentityObject {
@@ -222,16 +222,16 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.witness.w2.witnesses.into_iter())
+        .zip(proof.response.r2.responses.into_iter())
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
     // Returning the version 1 pre-identity object.
     let poks = CommonPioProofFields {
         challenge: proof.challenge,
-        id_cred_sec_witness: proof.witness.w1.w1.w1,
-        commitments_same_proof: proof.witness.w1.w1.w2,
-        commitments_prf_same: proof.witness.w1.w2,
+        id_cred_sec_response: proof.response.r1.r1.r1,
+        commitments_same_proof: proof.response.r1.r1.r2,
+        commitments_prf_same: proof.response.r1.r2,
         bulletproofs,
     };
     let pio = PreIdentityObjectV1 {
@@ -261,7 +261,7 @@ type CommonPioProverType<P, C> = AndAdapter<
 
 type IpArDataClosures<'a, C> = Vec<(
     ArIdentity,
-    Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a>,
+    Box<dyn Fn(com_enc_eq::Response<C>) -> IpArData<C> + 'a>,
 )>;
 
 /// Various data returned by `generate_pio_common` needed by both
@@ -317,7 +317,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
     // We now construct all the zero-knowledge proofs.
     // Since all proofs must be bound together, we
     // first construct inputs to all the proofs, and only at the end
-    // do we produce all the different witnesses.
+    // do we produce all the different responses.
 
     // First the proof that we know id_cred_sec.
     let id_cred_pub = context
@@ -435,7 +435,7 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         replicated_provers.push(item_prover);
         replicated_secrets.push(secret);
         let encrypted_share = item.encrypted_share;
-        let closure: Box<dyn Fn(com_enc_eq::Witness<C>) -> IpArData<C> + 'a> =
+        let closure: Box<dyn Fn(com_enc_eq::Response<C>) -> IpArData<C> + 'a> =
             Box::new(move |proof_com_enc_eq| IpArData {
                 enc_prf_key_share: encrypted_share,
                 proof_com_enc_eq,
@@ -939,10 +939,10 @@ where
         challenge: proof.challenge,
         proof_id_cred_pub: id_cred_pub_share_numbers
             .into_iter()
-            .zip(proof.witness.w2.witnesses)
+            .zip(proof.response.r2.responses)
             .collect(),
-        proof_reg_id: proof.witness.w1.w1,
-        proof_ip_sig: proof.witness.w1.w2,
+        proof_reg_id: proof.response.r1.r1,
+        proof_ip_sig: proof.response.r1.r2,
         cred_counter_less_than_max_accounts,
     };
 
@@ -1192,13 +1192,13 @@ fn compute_pok_reg_id<C: Curve>(
         Commitment(reg_id),
         cmm_one,
     ];
-    // finally the secret keys are derived from actual commited values
+    // finally the secret keys are derived from actual committed values
     // and the randomness.
 
     let mut k = C::scalar_from_u64(u64::from(cred_counter));
     k.add_assign(&prf_key);
 
-    // combine the two randomness witnesses
+    // combine the two random values
     let mut rand_1 = C::Scalar::zero();
     rand_1.add_assign(prf_rand);
     rand_1.add_assign(cred_counter_rand);

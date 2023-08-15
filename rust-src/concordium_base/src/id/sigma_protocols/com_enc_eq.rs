@@ -1,6 +1,8 @@
-//! Implementation of the `com_enc_eq` sigma protocol.
-//! This protocol is used to prove that the encrypted value (encrypted via
-//! ElGamal) is the same as the value commited to via the Pedersen commitment.
+//! Implementation of the `com_enc_eq` sigma protocol (cf. "Proof of Equality
+//! for Committed Value and ElGamal Encrypted Value" Section 9.2.7,
+//! Bluepaper v1.2.5). This protocol is used to prove that the encrypted value
+//! (encrypted via ElGamal) is the same as the value committed to via the
+//! Pedersen commitment.
 
 use super::common::*;
 use crate::{
@@ -23,7 +25,7 @@ pub struct ComEncEqSecret<T: Curve> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct Witness<T: Curve> {
+pub struct Response<T: Curve> {
     /// The values
     /// * $\alpha - c R$
     /// * $\beta - c x$
@@ -33,7 +35,7 @@ pub struct Witness<T: Curve> {
     /// * R is the ElGamal randomness
     /// * r is the Pedersen randomness
     /// * x is the encrypted/commited value
-    witness: (T::Scalar, T::Scalar, T::Scalar),
+    response: (T::Scalar, T::Scalar, T::Scalar),
 }
 
 pub struct ComEncEq<C: Curve> {
@@ -55,7 +57,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     type ProtocolChallenge = C::Scalar;
     // (beta, alpha, gamma)
     type ProverState = (Value<C>, ElgamalRandomness<C>, PedersenRandomness<C>);
-    type ProverWitness = Witness<C>;
+    type Response = Response<C>;
     type SecretData = ComEncEqSecret<C>;
 
     #[inline]
@@ -67,15 +69,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn get_challenge(
-        &self,
-        challenge: &crate::random_oracle::Challenge,
-    ) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
-    }
-
-    #[inline]
-    fn commit_point<R: Rng>(
+    fn compute_commit_message<R: Rng>(
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
@@ -90,12 +84,20 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     }
 
     #[inline]
-    fn generate_witness(
+    fn get_challenge(
+        &self,
+        challenge: &crate::random_oracle::Challenge,
+    ) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
+    }
+
+    #[inline]
+    fn compute_response(
         &self,
         secret: Self::SecretData,
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
+    ) -> Option<Self::Response> {
         let x = &secret.value;
         let cR = &secret.elgamal_rand;
         let r = &secret.pedersen_rand;
@@ -114,16 +116,16 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         z_3.negate();
         z_3.mul_assign(r);
         z_3.add_assign(&gamma);
-        Some(Witness {
-            witness: (z_1, z_2, z_3),
+        Some(Response {
+            response: (z_1, z_2, z_3),
         })
     }
 
     #[inline]
-    fn extract_point(
+    fn extract_commit_message(
         &self,
         challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
+        response: &Self::Response,
     ) -> Option<Self::CommitMessage> {
         let g_1 = self.pub_key.generator;
         let h_1 = self.pub_key.key;
@@ -131,9 +133,9 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         let h = self.cmm_key.h;
         let h_in_exponent = self.encryption_in_exponent_generator;
 
-        let z_1 = witness.witness.0;
-        let z_2 = witness.witness.1;
-        let z_3 = witness.witness.2;
+        let z_1 = response.response.0;
+        let z_2 = response.response.1;
+        let z_3 = response.response.2;
 
         let e_1 = self.cipher.0;
         let e_2 = self.cipher.1;
