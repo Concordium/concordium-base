@@ -5,7 +5,7 @@ use std::{borrow::Borrow, collections::BTreeMap};
 
 use super::{types::*, utils};
 use crate::bulletproofs::{
-    range_proof::{verify_efficient, RangeProof, VerificationError},
+    range_proof::{verify_in_range, RangeProof, VerificationError},
     set_membership_proof::verify as verify_set_membership,
     set_non_membership_proof::verify as verify_set_non_membership,
     utils::Generators,
@@ -52,9 +52,6 @@ pub fn verify_attribute<C: Curve, AttributeType: Attribute<C::Scalar>>(
 ///
 /// The function outputs a bool, indicating whether the proof is correct or not,
 /// i.e., wether is attribute inside the commitment lies in [lower,upper).
-/// This is done by verifying that the attribute inside the commitment satisfies
-/// that `attribute-upper+2^n` and attribute-lower lie in `[0, 2^n)`.
-/// For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     version: ProofVersion,
@@ -71,7 +68,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     match version {
         ProofVersion::Version1 => {
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
-            verify_attribute_range_helper(
+            verify_in_range(
                 ProofVersion::Version1,
                 &mut transcript_v1,
                 keys,
@@ -86,7 +83,7 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             transcript.add_bytes(b"AttributeRangeProof");
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
-            verify_attribute_range_helper(
+            verify_in_range(
                 ProofVersion::Version2,
                 transcript,
                 keys,
@@ -98,38 +95,6 @@ pub fn verify_attribute_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             )
         }
     }
-}
-
-/// Helper function for verifying range proofs.
-#[allow(clippy::too_many_arguments)]
-fn verify_attribute_range_helper<C: Curve>(
-    version: ProofVersion,
-    transcript: &mut RandomOracle,
-    keys: &PedersenKey<C>,
-    gens: &Generators<C>,
-    a: C::Scalar,
-    b: C::Scalar,
-    c: &Commitment<C>,
-    proof: &RangeProof<C>,
-) -> Result<(), VerificationError> {
-    let zero_randomness = PedersenRandomness::<C>::zero();
-    let com_a = keys.hide_worker(&a, &zero_randomness);
-    let com_b = keys.hide_worker(&b, &zero_randomness);
-    let two = C::scalar_from_u64(2);
-    let two_n = two.pow([64]);
-    let com_2n = keys.hide_worker(&two_n, &zero_randomness);
-    let com_delta_minus_b_plus_2n = Commitment(c.0.minus_point(&com_b.0).plus_point(&com_2n.0));
-    let com_delta_minus_a = Commitment(c.0.minus_point(&com_a.0));
-
-    verify_efficient(
-        version,
-        transcript,
-        64,
-        &[com_delta_minus_b_plus_2n, com_delta_minus_a],
-        proof,
-        gens,
-        keys,
-    )
 }
 
 /// Function for verifying account ownership. The arguments are
