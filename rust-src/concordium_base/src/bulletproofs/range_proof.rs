@@ -783,14 +783,14 @@ pub fn verify_in_range<C: Curve>(
     let two = C::scalar_from_u64(2);
     let two_n = two.pow([64]);
     let com_2n = keys.hide_worker(&two_n, &zero_randomness);
-    let com_delta_minus_b_plus_2n = Commitment(c.0.minus_point(&com_b.0).plus_point(&com_2n.0));
-    let com_delta_minus_a = Commitment(c.0.minus_point(&com_a.0));
+    let com_v_minus_b_plus_2n = Commitment(c.0.minus_point(&com_b.0).plus_point(&com_2n.0));
+    let com_v_minus_a = Commitment(c.0.minus_point(&com_a.0));
 
     verify_efficient(
         version,
         transcript,
         64,
-        &[com_delta_minus_b_plus_2n, com_delta_minus_a],
+        &[com_v_minus_b_plus_2n, com_v_minus_a],
         proof,
         gens,
         keys,
