@@ -5,7 +5,7 @@ use crate::{
     common::{types::Amount, *},
     curve_arithmetic::*,
     elgamal::*,
-    id::sigma_protocols::common::*,
+    sigma_protocols::common::*,
 };
 
 #[derive(Clone, Copy, Serialize, SerdeSerialize, SerdeDeserialize, Debug, Default)]

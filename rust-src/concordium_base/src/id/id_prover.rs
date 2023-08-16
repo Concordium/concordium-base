@@ -1,14 +1,7 @@
 //! This module exposes functions for proving statements about credentials on
 //! accounts.
 
-use super::{
-    id_proof_types::*,
-    sigma_protocols::{
-        common::prove as sigma_prove,
-        dlog::{Dlog, DlogSecret},
-    },
-    types::*,
-};
+use super::{id_proof_types::*, types::*};
 use crate::{
     bulletproofs::{
         range_proof::{prove_given_scalars, RangeProof},
@@ -19,6 +12,10 @@ use crate::{
     curve_arithmetic::{Curve, Value},
     pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness},
     random_oracle::RandomOracle,
+    sigma_protocols::{
+        common::prove as sigma_prove,
+        dlog::{Dlog, DlogSecret},
+    },
 };
 use ed25519_dalek as ed25519;
 use ff::Field;

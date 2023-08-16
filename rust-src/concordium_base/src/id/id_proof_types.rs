@@ -5,7 +5,7 @@
 //! Given the statement and relevant secret data (being the attribute value and
 //! the commitment randomness), the user can construct a proof of the statement
 //! (if the statement is true).
-use super::{constants::AttributeKind, sigma_protocols::dlog::Response as DlogResponse, types::*};
+use super::{constants::AttributeKind, types::*};
 use crate::{
     bulletproofs::{
         range_proof::RangeProof, set_membership_proof::SetMembershipProof,
@@ -13,6 +13,7 @@ use crate::{
     },
     common::*,
     curve_arithmetic::Curve,
+    sigma_protocols::dlog::Response as DlogResponse,
 };
 use pairing::bls12_381::G1;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
@@ -225,7 +226,7 @@ pub enum AtomicProof<C: Curve, AttributeType: Attribute<C::Scalar>> {
     RevealAttribute {
         attribute: AttributeType, /* The verifier has to learn this, so it is sent together with
                                    * the proof. */
-        proof:     super::sigma_protocols::common::SigmaProof<DlogResponse<C>>,
+        proof:     crate::sigma_protocols::common::SigmaProof<DlogResponse<C>>,
     },
     /// A proof that an attribute is in a range
     AttributeInRange {

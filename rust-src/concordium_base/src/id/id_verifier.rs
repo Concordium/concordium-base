@@ -11,16 +11,14 @@ use crate::bulletproofs::{
     utils::Generators,
 };
 
-use super::{
-    id_proof_types::*,
-    sigma_protocols::{common::verify as sigma_verify, dlog::Dlog},
-};
+use super::id_proof_types::*;
 use crate::{
     curve_arithmetic::Curve,
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
     random_oracle::RandomOracle,
+    sigma_protocols::{common::verify as sigma_verify, dlog::Dlog},
 };
 use ff::Field;
 use sha2::{Digest, Sha256};

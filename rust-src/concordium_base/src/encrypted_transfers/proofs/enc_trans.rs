@@ -52,13 +52,13 @@ use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve},
     elgamal::ChunkSize,
-    id::sigma_protocols::{
+    pedersen_commitment::{Randomness as PedersenRandomness, Value},
+    random_oracle::{Challenge, RandomOracle},
+    sigma_protocols::{
         com_eq::{ComEq, ComEqSecret, CommittedMessages, Response as ComEqResponse},
         common::*,
         dlog::*,
     },
-    pedersen_commitment::{Randomness as PedersenRandomness, Value},
-    random_oracle::{Challenge, RandomOracle},
 };
 use ff::Field;
 use itertools::izip;

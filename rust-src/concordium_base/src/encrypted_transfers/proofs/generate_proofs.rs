@@ -10,13 +10,10 @@ use crate::{
     common::types::Amount,
     curve_arithmetic::{Curve, Value},
     elgamal::{Cipher, PublicKey, Randomness, SecretKey},
-    id::{
-        id_proof_types::ProofVersion,
-        sigma_protocols::{com_eq::*, common::*, dlog::*},
-        types::GlobalContext,
-    },
+    id::{id_proof_types::ProofVersion, types::GlobalContext},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness},
     random_oracle::*,
+    sigma_protocols::{com_eq::*, common::*, dlog::*},
 };
 use itertools::izip;
 use rand::*;

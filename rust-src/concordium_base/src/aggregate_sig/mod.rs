@@ -5,8 +5,8 @@ mod ffi;
 use crate::{
     common::{SerdeBase16Serialize, Serialize, *},
     curve_arithmetic::{Curve, Pairing, Value},
-    id::sigma_protocols::{common::*, dlog::*},
     random_oracle::RandomOracle,
+    sigma_protocols::{common::*, dlog::*},
 };
 use ff::Field;
 use rand::Rng;

@@ -1,16 +1,12 @@
 //! Functionality needed by the chain to verify credential deployments.
-use super::{
-    secret_sharing::Threshold,
-    sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*},
-    types::*,
-    utils,
-};
+use super::{secret_sharing::Threshold, types::*, utils};
 use crate::{
     bulletproofs::range_proof::verify_less_than_or_equal,
     common::{to_bytes, types::TransactionTime},
     curve_arithmetic::{Curve, Pairing},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::RandomOracle,
+    sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*},
 };
 use core::fmt::{self, Display};
 use ed25519_dalek::Verifier;

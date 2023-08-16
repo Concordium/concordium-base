@@ -6,11 +6,11 @@
 //! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
 use crate::{
     curve_arithmetic::Curve,
-    id::sigma_protocols::{
+    random_oracle::{Challenge, RandomOracle},
+    sigma_protocols::{
         common::*,
         dlog::{Response as DlogResponse, *},
     },
-    random_oracle::{Challenge, RandomOracle},
 };
 
 struct DlogEqual<C: Curve> {

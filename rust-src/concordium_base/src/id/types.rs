@@ -1,13 +1,6 @@
 //! Main types used in the identity layer, and their serialization
 //! implementations.
-use super::{
-    secret_sharing::Threshold,
-    sigma_protocols::{
-        com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
-        common::{ReplicateAdapter, ReplicateResponse},
-        dlog,
-    },
-};
+use super::secret_sharing::Threshold;
 pub use crate::common::types::{AccountAddress, ACCOUNT_ADDRESS_SIZE};
 use crate::{
     bulletproofs::{range_proof::RangeProof, utils::Generators},
@@ -23,6 +16,11 @@ use crate::{
         Randomness as PedersenRandomness, Value as PedersenValue,
     },
     random_oracle::Challenge,
+    sigma_protocols::{
+        com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
+        common::{ReplicateAdapter, ReplicateResponse},
+        dlog,
+    },
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
