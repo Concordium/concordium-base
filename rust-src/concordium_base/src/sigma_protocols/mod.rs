@@ -10,7 +10,13 @@ pub mod com_lin;
 pub mod com_mult;
 pub mod common;
 pub mod dlog;
+pub mod enc_trans;
 pub mod vcom_eq;
+
+// the following two modules are only there for reference if we ever need them,
+// they are not used.
+mod dlogaggequal;
+mod dlogeq;
 
 #[cfg(test)]
 pub mod sigma_test;

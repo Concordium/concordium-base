@@ -1,7 +1,7 @@
 //! Implementation of high-level protocols for encrypted transfers, combining
 //! all the building parts into a single wrapper per operation.
 #![allow(non_snake_case)]
-use super::{super::types::*, enc_trans::*};
+use super::super::types::*;
 use crate::{
     bulletproofs::range_proof::{
         prove_given_scalars as bulletprove, verify_efficient,
@@ -13,7 +13,7 @@ use crate::{
     id::{id_proof_types::ProofVersion, types::GlobalContext},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness},
     random_oracle::*,
-    sigma_protocols::{com_eq::*, common::*, dlog::*},
+    sigma_protocols::{com_eq::*, common::*, dlog::*, enc_trans::*},
 };
 use itertools::izip;
 use rand::*;
