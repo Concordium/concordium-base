@@ -1191,6 +1191,66 @@ mod tests {
 
     #[allow(non_snake_case)]
     #[test]
+    fn test_in_range() {
+        let rng = &mut thread_rng();
+        let n = 64u8;
+        let m = 2u8;
+        let nm = (usize::from(n)) * (usize::from(m));
+        let mut G = Vec::with_capacity(nm);
+        let mut H = Vec::with_capacity(nm);
+        let mut G_H = Vec::with_capacity(nm);
+
+        for _i in 0..(nm) {
+            let g = SomeCurve::generate(rng);
+            let h = SomeCurve::generate(rng);
+            G.push(g);
+            H.push(h);
+            G_H.push((g, h));
+        }
+
+        let gens = Generators { G_H };
+        let B = SomeCurve::generate(rng);
+        let B_tilde = SomeCurve::generate(rng);
+        let key = CommitmentKey { g: B, h: B_tilde };
+
+        let v: u64 = 420;
+        let a = 400;
+        let b = 500;
+
+        let r_v = Randomness::generate(rng);
+        let v_scalar = SomeCurve::scalar_from_u64(v);
+        let a_scalar = SomeCurve::scalar_from_u64(a);
+        let b_scalar = SomeCurve::scalar_from_u64(b);
+        let com_v = key.hide_worker(&v_scalar, &r_v);
+        let mut transcript = RandomOracle::empty();
+        let proof = prove_in_range(
+            ProofVersion::Version2,
+            &mut transcript,
+            rng,
+            &gens,
+            &key,
+            v_scalar,
+            a_scalar,
+            b_scalar,
+            &r_v,
+        )
+        .unwrap();
+        let mut transcript = RandomOracle::empty();
+        let result = verify_in_range(
+            ProofVersion::Version2,
+            &mut transcript,
+            &key,
+            &gens,
+            a_scalar,
+            b_scalar,
+            &com_v,
+            &proof,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
     fn test_cheating_prover() {
         let rng = &mut thread_rng();
         let n = 32;
