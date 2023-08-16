@@ -5,11 +5,11 @@ The tool is partially interactive.
 # Prerequisites
 
 - The `identity_provider_cli` tool.
-- A file with cryptographic parameters for the chain. We'll refer to this file as `cryptographic-parameters.json` below.
-- A file with the list of anonymity revokers supported by the identity provider. We refer to this file as `ars.json` below.
-- When validating identity object requests, a file with identity provider private keys. We refer to this file as `ip-data.json` below.
-- When validating identity object requests, a file with request sent by the user. We refer to this file as `request.json` below.
-- When validating identity recovery requests, a file with recovery request sent by the user. We refer to this file as `recovery-request.json` below.
+- A file with cryptographic parameters for the chain. We'll refer to this file as `cryptographic-parameters.json` below. You can get it with the concordium client using the `raw GetCryptographicParameters` subcommand.
+- A file with the list of anonymity revokers supported by the identity provider. We refer to this file as `ars.json` below. If you have access to the genesis data, you can get it from there.
+- When validating identity object requests, a file with identity provider private keys. We refer to this file as `ip-data.json` below. If you have access to the genesis data, you can get it from there.
+- When validating identity object requests, a file with request sent by the user. We refer to this file as `request.json` below. See [the user-cli guide](/rust-bins/docs/user-cli.md)
+- When validating identity recovery requests, a file with recovery request sent by the user. We refer to this file as `recovery-request.json` below. See [the user-cli guide](/rust-bins/docs/user-cli.md)
 
 There are two flows for validating identity object requests, the version 0 flow and the version 1 flow. In the version 0 flow, the creation of an identity involves the creation of an initial account. In the version 1 flow, there is no initial account creation.
 # Tool invocation
