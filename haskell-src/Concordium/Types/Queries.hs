@@ -1055,3 +1055,10 @@ data WinningBaker = WinningBaker
       -- 'False' otherwise.
       wbPresent :: !Bool
     }
+
+-- |Derive JSON instance for @WinningBaker@. A JSON object field label is named after its
+-- corresponding record field name by stripping the maximal lower-case prefix of the record
+-- field name and turning its first character into lower-case. For instance, the @wbRound@
+-- record field is turned into the label @round@ in the corresponding JSON representation
+-- of the @PendingUpdate@.
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''WinningBaker)
