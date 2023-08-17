@@ -1,5 +1,7 @@
 module Concordium.Utils.InterpolationSearch where
 
+import Control.Monad
+
 -- |Perform a (linear) interpolation search to find the first instance of the search key in
 -- the given bounds. This is more efficient than a binary search when the keys are approximately
 -- linearly distributed with respect to the indices.
@@ -44,9 +46,12 @@ interpolationSearchFirstM lookupIx target low@(lowIx, (lowKey, lowVal)) high@(_,
     --   * lKey < target <= hKey
     interpolate lIx lKey hIx hKey =
         lIx
-            + fromInteger
-                ( (toInteger (hIx - lIx) * (2 * toInteger (target - lKey) - 1))
-                    `div` (2 * toInteger (hKey - lKey))
+            + max
+                1
+                ( fromInteger
+                    ( (toInteger (hIx - lIx) * (2 * toInteger (target - lKey) - 1))
+                        `div` (2 * toInteger (hKey - lKey))
+                    )
                 )
     -- Do interpolation search between the lower and upper bounds.
     -- Preconditions:
@@ -61,6 +66,21 @@ interpolationSearchFirstM lookupIx target low@(lowIx, (lowKey, lowVal)) high@(_,
         | otherwise = do
             let newIx = interpolate lIx lKey hIx hKey
             (newKey, newVal) <- lookupIx newIx
+            when (newKey < lKey || newKey > hKey) $
+                error $
+                    "Key ("
+                        ++ show (toInteger newKey)
+                        ++ ") at index "
+                        ++ show (toInteger newIx)
+                        ++ " should be in bounds ["
+                        ++ show (toInteger lKey)
+                        ++ ", "
+                        ++ show (toInteger hKey)
+                        ++ " given by indexes ("
+                        ++ show (toInteger lIx)
+                        ++ ", "
+                        ++ show (toInteger hIx)
+                        ++ ")"
             if newKey < target
                 then search (newIx, (newKey, newVal)) h
                 else search l (newIx, (newKey, newVal))
