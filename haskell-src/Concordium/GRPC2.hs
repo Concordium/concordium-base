@@ -2221,3 +2221,22 @@ instance ToProto BakerRewardPeriodInfo where
             ProtoFields.equityCapital .= toProto brpiEquityCapital
             ProtoFields.delegatedCapital .= toProto brpiDelegatedCapital
             ProtoFields.isFinalizer .= brpiIsFinalizer
+
+instance ToProto EpochRequest where
+    type Output EpochRequest = Proto.EpochRequest
+    toProto SpecifiedEpoch{..} = Proto.make $ do
+        ProtoFields.relativeEpoch
+            .= Proto.make
+                ( do
+                    ProtoFields.genesisIndex .= toProto erGenesisIndex
+                    ProtoFields.epoch .= toProto erEpoch
+                )
+    toProto EpochOfBlock{..} = Proto.make $ do
+        ProtoFields.blockHash .= toProto erBlock
+
+instance ToProto WinningBaker where
+    type Output WinningBaker = Proto.WinningBaker
+    toProto WinningBaker{..} = Proto.make $ do
+        ProtoFields.round .= toProto wbRound
+        ProtoFields.winner .= toProto wbWinner
+        ProtoFields.present .= wbPresent

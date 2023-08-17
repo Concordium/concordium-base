@@ -1,6 +1,6 @@
 cabal-version: 2.0
 
--- This file has been generated from package.yaml by hpack version 0.35.0.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -96,6 +96,7 @@ library
       Concordium.Utils
       Concordium.Utils.BinarySearch
       Concordium.Utils.Encryption
+      Concordium.Utils.InterpolationSearch
       Concordium.Utils.Serialization
       Concordium.Utils.Serialization.Put
       Concordium.Wasm
@@ -302,6 +303,7 @@ test-suite test
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
       ConcordiumTests.Utils.Encryption
+      ConcordiumTests.Utils.InterpolationSearch
       Generators
       Genesis.ParametersSpec
       Types.AccountEncryptedAmountSpec
