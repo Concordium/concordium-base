@@ -467,43 +467,6 @@ pub fn deletable_derive(input: TokenStream) -> TokenStream {
     unwrap_or_report(derive::impl_deletable(&ast))
 }
 
-/// Derive the StateClone trait.
-/// See the documentation of
-/// [`derive(StateClone)`](./derive.StateClone.html) for details and
-/// limitations.
-///
-/// The trait is used in the
-/// [`TestHost`](../concordium_std/test_infrastructure/struct.TestHost.html)
-/// when rolling back the state. If that functionality is needed, then this
-/// trait must be derived for types which have not implement the `Clone` trait.
-/// That is, `StateClone` should be derived for types with a non-trivial state.
-/// Non-trivial state here means when you have a type `MyState` which has one or
-/// more fields comprised of
-/// [`StateBox`](../concordium_std/struct.StateBox.html),
-/// [`StateSet`](../concordium_std/struct.StateSet.html), or
-/// [`StateMap`](../concordium_std/struct.StateMap.html).
-///
-/// Please note that it is
-/// necessary to specify the generic parameter name for the
-/// [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic parameter.
-/// To do so, use the `#[concordium(state_parameter =
-/// "NameOfGenericParameter")]` attribute on the type you are deriving
-/// `StateClone` for.
-///
-/// # Example
-/// ``` ignore
-/// #[derive(Serial, DeserialWithState, StateClone)]
-/// #[concordium(state_parameter = "S")]
-/// struct MyState<S> {
-///    my_state_map: StateMap<SomeType, SomeOtherType, S>,
-/// }
-/// ```
-#[proc_macro_derive(StateClone, attributes(concordium))]
-pub fn state_clone_derive(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input);
-    unwrap_or_report(derive::impl_state_clone(&ast))
-}
-
 /// Derive the appropriate export for an annotated init function.
 ///
 /// This macro requires the following items to be present
