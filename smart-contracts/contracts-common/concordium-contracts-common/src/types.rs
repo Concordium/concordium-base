@@ -743,6 +743,20 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
 }
 
 #[cfg(feature = "derive-serde")]
+/// Note that this is a lossy conversion from a datetime to a [`TimeStamp`].
+/// Any precision above milliseconds is lost.
+impl TryFrom<chrono::DateTime<chrono::Utc>> for Timestamp {
+    type Error = core::num::TryFromIntError;
+
+    fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
+        let millis = value.timestamp_millis().try_into()?;
+        Ok(Self {
+            milliseconds: millis,
+        })
+    }
+}
+
+#[cfg(feature = "derive-serde")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseTimestampError {
     ParseError(chrono::format::ParseError),
