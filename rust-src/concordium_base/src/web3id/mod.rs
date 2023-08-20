@@ -22,7 +22,7 @@ use crate::{
     random_oracle::RandomOracle,
 };
 use concordium_contracts_common::{
-    hashes::HashBytes, ContractAddress, OwnedEntrypointName, OwnedParameter,
+    hashes::HashBytes, ContractAddress, OwnedEntrypointName, OwnedParameter, Timestamp,
 };
 use did::*;
 use ed25519_dalek::Verifier;
@@ -1634,25 +1634,43 @@ pub enum CredentialsInputs<C: Curve> {
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, serde::Deserialize, Debug)]
 #[serde(try_from = "serde_json::Value")]
-/// A value of an attribute. This is the low-level representation. The two
-/// different variants are present to enable range proofs for numeric values
-/// since their embedding into field elements are more natural and more amenable
-/// to range proof than string embeddings.
+/// A value of an attribute. This is the low-level representation. The
+/// different variants are present to enable different representations in JSON,
+/// and different embeddings as field elements when constructing and verifying
+/// proofs.
 pub enum Web3IdAttribute {
+    /// A string value
     String(AttributeKind),
+    /// A number that is embedded as is to the field element.
     Numeric(u64),
+    /// A timestamp in milliseconds that is embedded like the
+    /// [`Numeric`](Self::Numeric) variant, but has a different JSON
+    /// representation, in ISO8601 compatible format.
+    Timestamp(Timestamp),
 }
 
 impl TryFrom<serde_json::Value> for Web3IdAttribute {
     type Error = anyhow::Error;
 
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+    fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
         use anyhow::Context;
         if let Some(v) = value.as_str() {
             Ok(Self::String(v.parse()?))
-        } else {
-            let v = value.as_u64().context("Not a string or number")?;
+        } else if let Some(v) = value.as_u64() {
             Ok(Self::Numeric(v))
+        } else {
+            let obj = value
+                .as_object_mut()
+                .context("Not a string, number or object")?;
+            if obj.get("type").and_then(|x| x.as_str()) != Some("date-time") {
+                anyhow::bail!("Unknown or missing attribute `type`.")
+            }
+            let dt_value = obj
+                .get_mut("timestamp")
+                .context("Missing timestamp value.")?
+                .take();
+            let dt: chrono::DateTime<chrono::Utc> = serde_json::from_value(dt_value)?;
+            Ok(Self::Timestamp(dt.try_into()?))
         }
     }
 }
@@ -1661,9 +1679,19 @@ impl serde::Serialize for Web3IdAttribute {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer, {
+        use serde::ser::{Error, SerializeMap};
         match self {
             Web3IdAttribute::String(ak) => ak.serialize(serializer),
             Web3IdAttribute::Numeric(n) => n.serialize(serializer),
+            Web3IdAttribute::Timestamp(ts) => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("type", "date-time")?;
+                map.serialize_entry(
+                    "timestamp",
+                    &chrono::DateTime::<chrono::Utc>::try_from(*ts).map_err(S::Error::custom)?,
+                )?;
+                map.end()
+            }
         }
     }
 }
@@ -1679,6 +1707,10 @@ impl crate::common::Serial for Web3IdAttribute {
                 1u8.serial(out);
                 n.serial(out)
             }
+            Web3IdAttribute::Timestamp(ts) => {
+                2u8.serial(out);
+                ts.serial(out)
+            }
         }
     }
 }
@@ -1689,6 +1721,7 @@ impl crate::common::Deserial for Web3IdAttribute {
         match source.get()? {
             0u8 => source.get().map(Web3IdAttribute::String),
             1u8 => source.get().map(Web3IdAttribute::Numeric),
+            2u8 => source.get().map(Web3IdAttribute::Timestamp),
             n => anyhow::bail!("Unrecognized attribute tag: {n}"),
         }
     }
@@ -1699,6 +1732,14 @@ impl std::fmt::Display for Web3IdAttribute {
         match self {
             Web3IdAttribute::String(ak) => ak.fmt(f),
             Web3IdAttribute::Numeric(n) => n.fmt(f),
+            Web3IdAttribute::Timestamp(ts) => {
+                // If possible render as a RFC3339 string.
+                // Revert to millisecond timestamp if this is not possible due to overflow.
+                match chrono::DateTime::<chrono::Utc>::try_from(*ts) {
+                    Ok(dt) => dt.fmt(f),
+                    Err(_) => ts.fmt(f),
+                }
+            }
         }
     }
 }
@@ -1708,6 +1749,7 @@ impl Attribute<<ArCurve as Curve>::Scalar> for Web3IdAttribute {
         match self {
             Web3IdAttribute::String(ak) => ak.to_field_element(),
             Web3IdAttribute::Numeric(n) => ArCurve::scalar_from_u64(*n),
+            Web3IdAttribute::Timestamp(n) => ArCurve::scalar_from_u64(n.timestamp_millis()),
         }
     }
 }
@@ -1806,6 +1848,18 @@ mod tests {
                             _phantom:      PhantomData,
                         },
                     },
+                    AtomicStatement::AttributeInRange {
+                        statement: AttributeInRangeStatement {
+                            attribute_tag: 2.to_string(),
+                            lower:         Web3IdAttribute::Timestamp(
+                                Timestamp::from_timestamp_millis(10000),
+                            ),
+                            upper:         Web3IdAttribute::Timestamp(
+                                Timestamp::from_timestamp_millis(20000),
+                            ),
+                            _phantom:      PhantomData,
+                        },
+                    },
                 ],
             },
         ];
@@ -1853,6 +1907,10 @@ mod tests {
             1.to_string(),
             Web3IdAttribute::String(AttributeKind("xkcd".into())),
         );
+        values_2.insert(
+            2.to_string(),
+            Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(15000)),
+        );
         let mut randomness_2 = BTreeMap::new();
         randomness_2.insert(
             0.to_string(),
@@ -1860,6 +1918,10 @@ mod tests {
         );
         randomness_2.insert(
             1.to_string(),
+            pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
+        );
+        randomness_2.insert(
+            2.to_string(),
             pedersen_commitment::Randomness::<ArCurve>::generate(&mut rng),
         );
         let commitments_2 = SignedCommitments::from_secrets(

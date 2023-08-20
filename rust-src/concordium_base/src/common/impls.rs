@@ -11,6 +11,17 @@ use std::convert::TryFrom;
 
 use super::serialize::*;
 
+impl Serial for concordium_contracts_common::Timestamp {
+    fn serial<B: Buffer>(&self, out: &mut B) { self.timestamp_millis().serial(out) }
+}
+
+impl Deserial for concordium_contracts_common::Timestamp {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let millis: u64 = source.get()?;
+        Ok(Self::from_timestamp_millis(millis))
+    }
+}
+
 impl Deserial for Fr {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Fr> {
         let mut frrepr: FrRepr = FrRepr([0u64; 4]);
