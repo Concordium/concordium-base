@@ -1,6 +1,6 @@
 use crate::{
-    id::sigma_protocols::{com_enc_eq, com_eq_sig, common::*, dlog},
     random_oracle::RandomOracle,
+    sigma_protocols::{com_enc_eq, com_eq_sig, common::*, dlog},
 };
 use pairing::bls12_381::{Bls12, G1, G2};
 

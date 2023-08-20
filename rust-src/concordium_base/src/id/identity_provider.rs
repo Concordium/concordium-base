@@ -1,12 +1,6 @@
 //! Functionality needed by the identity provider. This gathers together the
 //! primitives from the rest of the library into a convenient package.
-use super::{
-    id_proof_types::ProofVersion,
-    secret_sharing::Threshold,
-    sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
-    types::*,
-    utils,
-};
+use super::{id_proof_types::ProofVersion, secret_sharing::Threshold, types::*, utils};
 use crate::{
     bulletproofs::range_proof::verify_efficient,
     common::{to_bytes, types::TransactionTime},
@@ -14,6 +8,7 @@ use crate::{
     elgamal::multicombine,
     pedersen_commitment::{Commitment, CommitmentKey},
     random_oracle::RandomOracle,
+    sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
 };
 use ff::Field;
 use rand::*;

@@ -23,6 +23,7 @@ pub mod elgamal;
 pub mod encrypted_transfers;
 pub mod id;
 pub mod random_oracle;
+pub mod sigma_protocols;
 
 pub mod web3id;
 

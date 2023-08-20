@@ -1,14 +1,6 @@
 //! Functionality needed by the account holder, either when interacting with the
 //! identity provider, or when interacting with the chain.
-use super::{
-    id_proof_types::ProofVersion,
-    secret_sharing::*,
-    sigma_protocols::{
-        com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, common::*, dlog,
-    },
-    types::*,
-    utils,
-};
+use super::{id_proof_types::ProofVersion, secret_sharing::*, types::*, utils};
 use crate::{
     bulletproofs::{
         inner_product_proof::inner_product,
@@ -22,6 +14,9 @@ use crate::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
     random_oracle::RandomOracle,
+    sigma_protocols::{
+        com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, common::*, dlog,
+    },
 };
 use anyhow::{bail, ensure};
 use ff::Field;

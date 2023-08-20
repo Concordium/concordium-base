@@ -47,16 +47,16 @@
 //! specify the randomness to be used directly
 
 #![allow(non_snake_case)]
-use super::super::types::CHUNK_SIZE;
+use super::{
+    com_eq::{ComEq, ComEqSecret, CommittedMessages, Response as ComEqResponse},
+    common::*,
+    dlog::*,
+};
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve},
     elgamal::ChunkSize,
-    id::sigma_protocols::{
-        com_eq::{ComEq, ComEqSecret, CommittedMessages, Response as ComEqResponse},
-        common::*,
-        dlog::*,
-    },
+    encrypted_transfers::types::CHUNK_SIZE,
     pedersen_commitment::{Randomness as PedersenRandomness, Value},
     random_oracle::{Challenge, RandomOracle},
 };

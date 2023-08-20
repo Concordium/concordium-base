@@ -1,17 +1,10 @@
 //! This module exposes functions for proving statements about credentials on
 //! accounts.
 
-use super::{
-    id_proof_types::*,
-    sigma_protocols::{
-        common::prove as sigma_prove,
-        dlog::{Dlog, DlogSecret},
-    },
-    types::*,
-};
+use super::{id_proof_types::*, types::*};
 use crate::{
     bulletproofs::{
-        range_proof::{prove_given_scalars, RangeProof},
+        range_proof::{prove_in_range, RangeProof},
         set_membership_proof::prove as prove_set_membership,
         set_non_membership_proof::prove as prove_set_non_membership,
         utils::Generators,
@@ -19,9 +12,12 @@ use crate::{
     curve_arithmetic::{Curve, Value},
     pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness},
     random_oracle::RandomOracle,
+    sigma_protocols::{
+        common::prove as sigma_prove,
+        dlog::{Dlog, DlogSecret},
+    },
 };
 use ed25519_dalek as ed25519;
-use ff::Field;
 use sha2::{Digest, Sha256};
 
 /// Function for producing a proof of a statement.
@@ -219,8 +215,6 @@ pub fn prove_ownership_of_account(
 ///
 /// The function outputs a proof that the attribute is in the given range, i.e.
 /// that lower <= attribute < upper.
-/// This is done by proving that attribute-upper+2^n and attribute-lower lie in
-/// [0, 2^n). For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     version: ProofVersion,
@@ -239,7 +233,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
     match version {
         ProofVersion::Version1 => {
             let mut transcript_v1 = RandomOracle::domain("attribute_range_proof");
-            prove_attribute_in_range_helper(
+            prove_in_range(
                 ProofVersion::Version1,
                 &mut transcript_v1,
                 csprng,
@@ -255,7 +249,7 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             transcript.add_bytes(b"AttributeRangeProof");
             transcript.append_message(b"a", &a);
             transcript.append_message(b"b", &b);
-            prove_attribute_in_range_helper(
+            prove_in_range(
                 ProofVersion::Version2,
                 transcript,
                 csprng,
@@ -268,39 +262,4 @@ pub fn prove_attribute_in_range<C: Curve, AttributeType: Attribute<C::Scalar>>(
             )
         }
     }
-}
-
-/// Helper function for producing a range proof.
-#[allow(clippy::too_many_arguments)]
-fn prove_attribute_in_range_helper<C: Curve>(
-    version: ProofVersion,
-    transcript: &mut RandomOracle,
-    csprng: &mut impl rand::Rng,
-    gens: &Generators<C>,
-    keys: &PedersenKey<C>,
-    delta: C::Scalar,
-    a: C::Scalar,
-    b: C::Scalar,
-    r: &PedersenRandomness<C>,
-) -> Option<RangeProof<C>> {
-    let mut scalar1 = delta;
-    let two = C::scalar_from_u64(2);
-    let two_n = two.pow([64]);
-    scalar1.add_assign(&two_n);
-    scalar1.sub_assign(&b);
-    let mut scalar2 = delta;
-    scalar2.sub_assign(&a);
-    let rand1 = r.clone();
-    let rand2 = r.clone();
-    prove_given_scalars(
-        version,
-        transcript,
-        csprng,
-        64,
-        2,
-        &[scalar1, scalar2],
-        gens,
-        keys,
-        &[rand1, rand2],
-    )
 }

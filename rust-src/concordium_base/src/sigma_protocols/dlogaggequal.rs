@@ -9,8 +9,8 @@
 use crate::{
     common::*,
     curve_arithmetic::{multiexp, Curve},
-    id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*},
     random_oracle::{Challenge, RandomOracle},
+    sigma_protocols::{aggregate_dlog::*, common::*, dlog::*},
 };
 use ff::Field;
 use itertools::izip;

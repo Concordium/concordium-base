@@ -1,7 +1,7 @@
 #![cfg(feature = "ffi")]
 
 use super::*;
-use crate::{common::*, ffi_helpers::*, id::sigma_protocols::dlog, random_oracle::RandomOracle};
+use crate::{common::*, ffi_helpers::*, random_oracle::RandomOracle, sigma_protocols::dlog};
 use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use std::{cmp::Ordering, slice};

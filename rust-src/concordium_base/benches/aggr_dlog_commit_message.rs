@@ -1,6 +1,6 @@
 use concordium_base::{
     curve_arithmetic::*,
-    id::sigma_protocols::{aggregate_dlog::*, common::*},
+    sigma_protocols::{aggregate_dlog::*, common::*},
 };
 use criterion::*;
 use pairing::bls12_381::G1;

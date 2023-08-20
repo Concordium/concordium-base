@@ -702,7 +702,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
     )
 }
 
-/// Given commitments to a and b, verify that a <= b
+/// Given commitments to a and b, verify that a <= b.
 /// It is assumed that b \in [0, 2^n),
 /// but it should follow that a \in [0, 2^n) if the
 /// proof verifies.
@@ -726,6 +726,75 @@ pub fn verify_less_than_or_equal<C: Curve>(
         key,
     )
     .is_ok()
+}
+
+/// Prove that v is in the interval `[a, b)`.
+/// This is done by proving that `v - b + 2^n` and `b - a` lie in `[0, 2^n)` for
+/// sufficiently large `n` (here `n = 64`). For further details about this technique, see page 15 in <https://arxiv.org/pdf/1907.06381.pdf>.
+#[allow(clippy::too_many_arguments)]
+pub fn prove_in_range<C: Curve>(
+    version: ProofVersion,
+    transcript: &mut RandomOracle,
+    csprng: &mut impl rand::Rng,
+    gens: &Generators<C>,
+    keys: &CommitmentKey<C>,
+    v: C::Scalar,
+    a: C::Scalar,
+    b: C::Scalar,
+    r: &Randomness<C>,
+) -> Option<RangeProof<C>> {
+    let mut scalar1 = v;
+    let two = C::scalar_from_u64(2);
+    let two_n = two.pow([64]);
+    scalar1.add_assign(&two_n);
+    scalar1.sub_assign(&b);
+    let mut scalar2 = v;
+    scalar2.sub_assign(&a);
+    let rand1 = r.clone();
+    let rand2 = r.clone();
+    prove_given_scalars(
+        version,
+        transcript,
+        csprng,
+        64,
+        2,
+        &[scalar1, scalar2],
+        gens,
+        keys,
+        &[rand1, rand2],
+    )
+}
+
+/// Given a commitment `c` to `v`, verify that `v` is in `[a, b)`.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_in_range<C: Curve>(
+    version: ProofVersion,
+    transcript: &mut RandomOracle,
+    keys: &CommitmentKey<C>,
+    gens: &Generators<C>,
+    a: C::Scalar,
+    b: C::Scalar,
+    c: &Commitment<C>,
+    proof: &RangeProof<C>,
+) -> Result<(), VerificationError> {
+    let zero_randomness = Randomness::<C>::zero();
+    let com_a = keys.hide_worker(&a, &zero_randomness);
+    let com_b = keys.hide_worker(&b, &zero_randomness);
+    let two = C::scalar_from_u64(2);
+    let two_n = two.pow([64]);
+    let com_2n = keys.hide_worker(&two_n, &zero_randomness);
+    let com_v_minus_b_plus_2n = Commitment(c.0.minus_point(&com_b.0).plus_point(&com_2n.0));
+    let com_v_minus_a = Commitment(c.0.minus_point(&com_a.0));
+
+    verify_efficient(
+        version,
+        transcript,
+        64,
+        &[com_v_minus_b_plus_2n, com_v_minus_a],
+        proof,
+        gens,
+        keys,
+    )
 }
 
 #[cfg(test)]
@@ -1118,6 +1187,66 @@ mod tests {
             &gens,
             &key
         ));
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn test_in_range() {
+        let rng = &mut thread_rng();
+        let n = 64u8;
+        let m = 2u8;
+        let nm = (usize::from(n)) * (usize::from(m));
+        let mut G = Vec::with_capacity(nm);
+        let mut H = Vec::with_capacity(nm);
+        let mut G_H = Vec::with_capacity(nm);
+
+        for _i in 0..(nm) {
+            let g = SomeCurve::generate(rng);
+            let h = SomeCurve::generate(rng);
+            G.push(g);
+            H.push(h);
+            G_H.push((g, h));
+        }
+
+        let gens = Generators { G_H };
+        let B = SomeCurve::generate(rng);
+        let B_tilde = SomeCurve::generate(rng);
+        let key = CommitmentKey { g: B, h: B_tilde };
+
+        let v: u64 = 420;
+        let a = 400;
+        let b = 500;
+
+        let r_v = Randomness::generate(rng);
+        let v_scalar = SomeCurve::scalar_from_u64(v);
+        let a_scalar = SomeCurve::scalar_from_u64(a);
+        let b_scalar = SomeCurve::scalar_from_u64(b);
+        let com_v = key.hide_worker(&v_scalar, &r_v);
+        let mut transcript = RandomOracle::empty();
+        let proof = prove_in_range(
+            ProofVersion::Version2,
+            &mut transcript,
+            rng,
+            &gens,
+            &key,
+            v_scalar,
+            a_scalar,
+            b_scalar,
+            &r_v,
+        )
+        .unwrap();
+        let mut transcript = RandomOracle::empty();
+        let result = verify_in_range(
+            ProofVersion::Version2,
+            &mut transcript,
+            &key,
+            &gens,
+            a_scalar,
+            b_scalar,
+            &com_v,
+            &proof,
+        );
+        assert!(result.is_ok());
     }
 
     #[allow(non_snake_case)]

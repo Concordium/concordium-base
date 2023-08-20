@@ -1,11 +1,10 @@
 //! This module provides common types and constants for encrypted transfers.
-use super::proofs;
 use crate::{
     bulletproofs::range_proof::*,
     common::{types::Amount, *},
     curve_arithmetic::*,
     elgamal::*,
-    id::sigma_protocols::common::*,
+    sigma_protocols::{common::*, enc_trans::EncTransResponse},
 };
 
 #[derive(Clone, Copy, Serialize, SerdeSerialize, SerdeDeserialize, Debug, Default)]
@@ -131,7 +130,7 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
 pub struct EncryptedAmountTransferProof<C: Curve> {
     /// Proof that accounting is done correctly, i.e., remaining + transfer is
     /// the original amount.
-    pub accounting: SigmaProof<proofs::EncTransResponse<C>>,
+    pub accounting: SigmaProof<EncTransResponse<C>>,
     /// Proof that the transfered amount is correctly encrypted, i.e., chunks
     /// are small enough.
     pub transfer_amount_correct_encryption: RangeProof<C>,
@@ -145,7 +144,7 @@ pub struct EncryptedAmountTransferProof<C: Curve> {
 pub struct SecToPubAmountTransferProof<C: Curve> {
     /// Proof that accounting is done correctly, i.e., remaining + transfer is
     /// the original amount.
-    pub accounting: SigmaProof<proofs::EncTransResponse<C>>,
+    pub accounting: SigmaProof<EncTransResponse<C>>,
     /// Proof that the remaining amount is correctly encrypted, i.e, chunks
     /// small enough.
     pub remaining_amount_correct_encryption: RangeProof<C>,
