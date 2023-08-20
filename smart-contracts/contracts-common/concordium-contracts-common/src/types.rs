@@ -743,7 +743,7 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
 }
 
 #[cfg(feature = "derive-serde")]
-/// Note that this is a lossy conversion from a datetime to a [`TimeStamp`].
+/// Note that this is a lossy conversion from a datetime to a [`Timestamp`].
 /// Any precision above milliseconds is lost.
 impl TryFrom<chrono::DateTime<chrono::Utc>> for Timestamp {
     type Error = core::num::TryFromIntError;
@@ -1865,11 +1865,6 @@ pub struct Cursor<T> {
 }
 
 /// Adapter to chain together two readers.
-///
-/// This struct is generally created by calling [`chain`] on a reader.
-/// Please see the documentation of [`chain`] for more details.
-///
-/// [`chain`]: Read::chain
 #[derive(Debug)]
 pub struct Chain<T, U> {
     pub(crate) first:      T,
