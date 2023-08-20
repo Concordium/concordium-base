@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common-derive 4.0.0 (2023-08-21)
+
 - Fix a bug in derivation macros for `Serial`, `Deserial`, `DeserialWithState`
   and `SchemaType` which incorrectly handled the case where the type had `where`
   predicates in its definition.

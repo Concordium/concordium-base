@@ -1,6 +1,6 @@
 [package]
 name = "concordium-contracts-common"
-version = "7.1.0"
+version = "8.0.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2021"
 rust-version = "1.65"
@@ -66,7 +66,7 @@ version = "1.0"
 
 [dependencies.concordium-contracts-common-derive]
 path = "../concordium-contracts-common-derive"
-version = "3"
+version = "4"
 
 [dependencies.hex]
 optional = true
