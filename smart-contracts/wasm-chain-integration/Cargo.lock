@@ -375,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-smart-contract-engine"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -402,7 +402,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-wasm"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "concordium-contracts-common",

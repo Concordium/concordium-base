@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 3.0.0 (2023-08-21)
+
 - Remove the constant `MAX_ALLOWED_INVOKE_ENERGY` since it was no longer
   relevant with the way the node currently handles the invoke API.
 - Add `ED25519_SIGNATURE_LENGTH` constant for the size of an ed25519 signature.
