@@ -45,7 +45,7 @@ path = "../wasm-transform"
 version = "2"
 
 [dependencies.concordium-contracts-common]
-version = "7.0"
+version = "8.0"
 path = "../../concordium-contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 

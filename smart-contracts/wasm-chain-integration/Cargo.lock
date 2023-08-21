@@ -345,7 +345,7 @@ checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 
 [[package]]
 name = "concordium-contracts-common"
-version = "7.1.0"
+version = "8.0.0"
 dependencies = [
  "arbitrary",
  "base64",
@@ -366,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common-derive"
-version = "3.0.0"
+version = "4.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
