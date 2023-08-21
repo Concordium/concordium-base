@@ -1,6 +1,6 @@
 [package]
 name = "concordium-smart-contract-engine"
-version = "2.0.0"
+version = "3.0.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
@@ -42,7 +42,7 @@ rand = { version = "=0.8", features = ["small_rng"] }
 
 [dependencies.concordium-wasm]
 path = "../wasm-transform"
-version = "2"
+version = "3"
 
 [dependencies.concordium-contracts-common]
 version = "8.0"

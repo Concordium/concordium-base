@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-wasm 3.0.0 (2023-08-21)
+
 - `validate_module` is now parameterized by `ValidationConfig` which determines
   which Wasm features should be allowed. The currently supported configurable features are
   - allow access to globals (defined in the current module) in data and element

@@ -42,7 +42,7 @@ optional = true
 
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "2"
+version = "3"
 
 [build-dependencies]
 napi-build = "*"
