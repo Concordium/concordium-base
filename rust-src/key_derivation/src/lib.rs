@@ -270,6 +270,19 @@ impl ConcordiumHdWallet {
         let public_key = PublicKey::from(&signing_key);
         Ok(public_key)
     }
+
+    /// Get the encryption key for the verifiable credential backup.
+    /// The key is used to encrypt and decrypt the backup file of verifiable
+    /// credentials. The backup is encrypted using `AES-256-GCM`, with this
+    /// key acting as the password in the `PBKDF2WithHmacSHA256` key derivation.
+    pub fn get_verifiable_credential_backup_encryption_key(
+        &self,
+    ) -> Result<SecretKey, DeriveError> {
+        let path = self.make_verifiable_credential_path(&[1])?;
+        let keys = derive_from_parsed_path(&path, &self.seed)?;
+        Ok(SecretKey::from_bytes(&keys.private_key)
+            .expect("The byte array has correct length, so this cannot fail."))
+    }
 }
 
 fn split_u64_into_chunks(x: u64) -> [u32; 4] {
@@ -632,6 +645,17 @@ mod tests {
     }
 
     #[test]
+    pub fn mainnet_verifiable_credential_backup_encryption_key() {
+        let key = create_wallet(Net::Mainnet, TEST_SEED_1)
+            .get_verifiable_credential_backup_encryption_key()
+            .unwrap();
+        assert_eq!(
+            hex::encode(key),
+            "5032086037b639f116642752460bf2e2b89d7278fe55511c028b194ba77192a1"
+        );
+    }
+
+    #[test]
     pub fn testnet_verifiable_credential_signing_key() {
         let signing_key = create_wallet(Net::Testnet, TEST_SEED_1)
             .get_verifiable_credential_signing_key(ContractAddress::new(13, 0), 1)
@@ -650,6 +674,17 @@ mod tests {
         assert_eq!(
             hex::encode(public_key),
             "c52a30475bac88da9e65471cf9cf59f99dcce22ce31de580b3066597746b394a"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_backup_encryption_key() {
+        let key = create_wallet(Net::Testnet, TEST_SEED_1)
+            .get_verifiable_credential_backup_encryption_key()
+            .unwrap();
+        assert_eq!(
+            hex::encode(key),
+            "10f85290e33b1a79a0330180c4b6c67fd9ad1a1dd3d0f918ab1cbcf8787fc3ca"
         );
     }
 
