@@ -30,6 +30,7 @@ pub struct SchemaRef {
 #[derive(
     serde::Serialize, serde::Deserialize, contracts_common::Serialize, PartialEq, Eq, Clone, Debug,
 )]
+#[serde(rename_all = "camelCase")]
 pub struct CredentialInfo {
     /// The holder's identifier.
     pub holder_id:        CredentialHolderId,
@@ -45,7 +46,8 @@ pub struct CredentialInfo {
 }
 
 /// Response to a credential data query.
-#[derive(contracts_common::Serialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, contracts_common::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct CredentialEntry {
     pub credential_info:  CredentialInfo,
     /// A schema URL or DID address pointing to the JSON schema for a verifiable
