@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+- Add `Serialize` and `Deserialize` instances to `CredentialStatus` type.
+
 ## 3.0.0 (2023-08-21)
 
 - Remove the constant `MAX_ALLOWED_INVOKE_ENERGY` since it was no longer
