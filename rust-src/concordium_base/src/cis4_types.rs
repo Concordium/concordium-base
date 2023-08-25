@@ -60,6 +60,8 @@ pub struct CredentialEntry {
 }
 
 #[derive(
+    serde::Serialize,
+    serde::Deserialize,
     contracts_common::Serialize,
     PartialOrd,
     Ord,
@@ -71,6 +73,7 @@ pub struct CredentialEntry {
     Debug,
     derive_more::Display,
 )]
+#[serde(rename_all = "camelCase")]
 /// The current status of a credential.
 pub enum CredentialStatus {
     /// The credential is active.
