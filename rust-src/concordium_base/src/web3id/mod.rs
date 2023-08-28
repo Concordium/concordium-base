@@ -1670,7 +1670,15 @@ impl TryFrom<serde_json::Value> for Web3IdAttribute {
                 .context("Missing timestamp value.")?
                 .take();
             let dt: chrono::DateTime<chrono::Utc> = serde_json::from_value(dt_value)?;
-            Ok(Self::Timestamp(dt.try_into()?))
+            let timestamp = dt
+                .signed_duration_since(chrono::DateTime::<chrono::Utc>::MIN_UTC)
+                .num_milliseconds();
+            let timestamp = Timestamp::from_timestamp_millis(
+                timestamp
+                    .try_into()
+                    .context("Timesetamps before -262144-01-01T00:00:00Z are not supported.")?,
+            );
+            Ok(Self::Timestamp(timestamp))
         }
     }
 }
@@ -1684,12 +1692,13 @@ impl serde::Serialize for Web3IdAttribute {
             Web3IdAttribute::String(ak) => ak.serialize(serializer),
             Web3IdAttribute::Numeric(n) => n.serialize(serializer),
             Web3IdAttribute::Timestamp(ts) => {
+                let epoch = chrono::DateTime::<chrono::Utc>::MIN_UTC;
+                let Some(dt) = epoch.checked_add_signed(chrono::Duration::milliseconds(ts.timestamp_millis().try_into().map_err(S::Error::custom)?)) else {
+                    return Err(S::Error::custom("Timestamp out of range."));
+                };
                 let mut map = serializer.serialize_map(Some(2))?;
                 map.serialize_entry("type", "date-time")?;
-                map.serialize_entry(
-                    "timestamp",
-                    &chrono::DateTime::<chrono::Utc>::try_from(*ts).map_err(S::Error::custom)?,
-                )?;
+                map.serialize_entry("timestamp", &dt)?;
                 map.end()
             }
         }
