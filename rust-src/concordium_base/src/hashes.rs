@@ -36,6 +36,11 @@ pub enum PureHashMarker {}
 /// nonce.
 pub enum ElectionNonceMarker {}
 
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+/// Used as a phantom type to indicate a hash is a successor proof of an
+/// epoch finalization entry.
+pub enum SuccessorProofMarker {}
+
 /// The leadership election nonce is an unpredictable value updated once an
 /// epoch to make sure that bakers cannot predict too far in the future when
 /// they will win blocks.
@@ -52,6 +57,8 @@ pub type TransactionSignHash = HashBytes<TransactionSignMarker>;
 pub type UpdateSignHash = HashBytes<UpdateSignMarker>;
 /// Hash of the block state that is included in a block.
 pub type StateHash = HashBytes<StateMarker>;
+/// Hash that is a successor proof of an epoch finalization entry.
+pub type SuccessorProof = HashBytes<SuccessorProofMarker>;
 
 /// A Sha256 with no specific meaning.
 pub type Hash = HashBytes<PureHashMarker>;
