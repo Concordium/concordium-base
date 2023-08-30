@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+- Fix `Display` implementation of `Web3IdAttribute::Timestamp` attribute.
+
 ## 3.0.1 (2023-08-28)
 
 - Add `Serialize` and `Deserialize` instances to `CredentialStatus` type.
