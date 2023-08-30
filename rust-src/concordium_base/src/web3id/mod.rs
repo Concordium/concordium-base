@@ -1744,9 +1744,16 @@ impl std::fmt::Display for Web3IdAttribute {
             Web3IdAttribute::Timestamp(ts) => {
                 // If possible render as a RFC3339 string.
                 // Revert to millisecond timestamp if this is not possible due to overflow.
-                match chrono::DateTime::<chrono::Utc>::try_from(*ts) {
-                    Ok(dt) => dt.fmt(f),
-                    Err(_) => ts.fmt(f),
+                let epoch = chrono::DateTime::<chrono::Utc>::MIN_UTC;
+                if let Some(dt) = ts
+                    .timestamp_millis()
+                    .try_into()
+                    .ok()
+                    .and_then(|ms| epoch.checked_add_signed(chrono::Duration::milliseconds(ms)))
+                {
+                    dt.fmt(f)
+                } else {
+                    ts.fmt(f)
                 }
             }
         }
