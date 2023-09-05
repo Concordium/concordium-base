@@ -910,7 +910,7 @@ async fn main() -> anyhow::Result<()> {
         .and_then(get_broken_reply);
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
-    let server = verify_request
+    let server = verify_request //
         .or(retrieve_identity)
         .or(retrieve_failed_identity)
         .or(create_identity)
@@ -928,10 +928,10 @@ async fn main() -> anyhow::Result<()> {
 /// A helper macro to check whether the expression is an error, an in that case
 /// fail with internal server error.
 macro_rules! ok_or_500 (
-    ($e: expr, $s: expr) => {
+    ($e: expr, $s: expr, $uri: expr) => {
         if $e.is_err() {
             error!($s);
-            return Err(warp::reject::custom(IdRequestRejection::InternalError))
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(Some($uri))))
         }
     };
 );
@@ -964,7 +964,8 @@ async fn save_validated_request(
 
     ok_or_500!(
         db.write_request_record(&base_16_encoded_id_cred_pub_hash, &identity_object_request),
-        "Could not write the valid request to database."
+        "Could not write the valid request to database.",
+        identity_object_request.redirect_uri
     );
 
     let attribute_form_url = format!(
@@ -1001,7 +1002,8 @@ async fn save_validated_request_v1(
 
     ok_or_500!(
         db.write_request_record_v1(&base_16_encoded_id_cred_pub_hash, &identity_object_request),
-        "Could not write the valid request to database."
+        "Could not write the valid request to database.",
+        identity_object_request.redirect_uri
     );
 
     let attribute_form_url = format!(
@@ -1065,14 +1067,14 @@ async fn submit_account_creation(
 /// An internal error type used by this server to manage error handling.
 enum IdRequestRejection {
     /// Request was made with an unsupported version of the identity object.
-    UnsupportedVersion,
+    UnsupportedVersion(Option<String>),
     /// The request had invalid proofs.
-    InvalidProofs,
+    InvalidProofs(Option<String>),
     /// The identity verifier could not validate the supporting evidence, e.g.,
     /// passport.
-    IdVerifierFailure,
+    IdVerifierFailure(Option<String>),
     /// Internal server error occurred.
-    InternalError,
+    InternalError(Option<String>),
     /// Registration ID was reused, leading to initial account creation failure.
     ReuseOfRegId,
     /// Malformed request.
@@ -1080,7 +1082,7 @@ enum IdRequestRejection {
     /// Missing validated request for the given id_cred_pub
     NoValidRequest,
     /// Duplicate idCredPub.
-    DuplicateRequest,
+    DuplicateRequest(Option<String>),
 }
 
 #[derive(Debug)]
@@ -1112,82 +1114,95 @@ struct ErrorResponse {
 }
 
 /// Helper function to make the reply.
-fn mk_reply(message: &'static str, code: StatusCode) -> impl warp::Reply {
-    let msg = ErrorResponse {
-        message,
-        code: code.as_u16(),
-    };
-    warp::reply::with_status(warp::reply::json(&msg), code)
+fn mk_reply(
+    message: &'static str,
+    code: StatusCode,
+    redirect_uri: &Option<String>,
+) -> impl warp::Reply {
+    if let Some(uri) = redirect_uri {
+        let callback_location = uri.to_owned() + "#error=\"" + message + "\"";
+
+        warp::reply::with_status(
+            warp::reply::with_header(warp::reply(), LOCATION, callback_location),
+            code,
+        ).into_response()
+    } else {
+         let msg = ErrorResponse {
+            message,
+            code: code.as_u16(),
+        };
+         warp::reply::with_status(warp::reply::json(&msg), code).into_response()
+    }
 }
 
 async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible> {
     if err.is_not_found() {
         let code = StatusCode::NOT_FOUND;
         let message = "Not found.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::UnsupportedVersion) = err.find() {
+        Ok(mk_reply(message, code, &None))
+    } else if let Some(IdRequestRejection::UnsupportedVersion(uri)) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Unsupported version.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::InvalidProofs) = err.find() {
+        Ok(mk_reply(message, code, uri))
+    } else if let Some(IdRequestRejection::InvalidProofs(uri)) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Invalid proofs.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::IdVerifierFailure) = err.find() {
+        Ok(mk_reply(message, code, uri))
+    } else if let Some(IdRequestRejection::IdVerifierFailure(uri)) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "ID verifier rejected.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::InternalError) = err.find() {
+        Ok(mk_reply(message, code, uri))
+    } else if let Some(IdRequestRejection::InternalError(uri)) = err.find() {
         let code = StatusCode::INTERNAL_SERVER_ERROR;
-        let message = "Internal server error";
-        Ok(mk_reply(message, code))
+        let message = "Internal server error.";
+        Ok(mk_reply(message, code, uri))
     } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
         let code = StatusCode::BAD_REQUEST;
-        let message = "Reuse of RegId";
-        Ok(mk_reply(message, code))
+        let message = "Reuse of RegId.";
+        Ok(mk_reply(message, code, &None))
     } else if let Some(IdRequestRejection::Malformed) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Malformed request.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "No validated request was found for the given id_cred_pub.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::DuplicateRequest) = err.find() {
+        Ok(mk_reply(message, code, &None))
+    } else if let Some(IdRequestRejection::DuplicateRequest(uri)) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Duplicate id_cred_pub.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, uri))
     } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Invalid ID recovery proof.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     } else if let Some(IdRecoveryRejection::NonExistingIdObject) = err.find() {
         let code = StatusCode::NOT_FOUND;
         let message = "ID object not found in database.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     } else if let Some(IdRecoveryRejection::InvalidTimestamp) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Invalid timestamp.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     } else if let Some(IdRecoveryRejection::Malformed) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Malformed ID recovery request.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     } else if let Some(IdRecoveryRejection::UnsupportedVersion) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Unsupported version.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     } else if err
         .find::<warp::filters::body::BodyDeserializeError>()
         .is_some()
     {
         let code = StatusCode::BAD_REQUEST;
         let message = "Malformed body.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     } else {
         let code = StatusCode::INTERNAL_SERVER_ERROR;
         let message = "Internal error.";
-        Ok(mk_reply(message, code))
+        Ok(mk_reply(message, code, &None))
     }
 }
 
@@ -1216,6 +1231,7 @@ async fn create_signed_identity_object(
     };
 
     let request = identity_object_input.id_object_request.value;
+    let redirect_uri = identity_object_input.redirect_uri;
 
     // Identity verification process between the identity provider and the identity
     // verifier. In this example the identity verifier is queried and will
@@ -1237,7 +1253,9 @@ async fn create_signed_identity_object(
             Ok(attribute_list) => attribute_list,
             Err(e) => {
                 error!("Could not deserialize response from the verifier {}.", e);
-                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure));
+                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure(
+                    Some(redirect_uri),
+                )));
             }
         },
         Err(e) => {
@@ -1245,7 +1263,9 @@ async fn create_signed_identity_object(
                 "Could not retrieve attribute list from the verifier: {}.",
                 e
             );
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
@@ -1276,13 +1296,16 @@ async fn create_signed_identity_object(
         Ok(signature) => signature,
         Err(e) => {
             error!("Could not sign the identity object {}.", e);
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
     ok_or_500!(
         save_revocation_record(&db, &request, &alist),
-        "Could not write the revocation record to database."
+        "Could not write the revocation record to database.",
+        redirect_uri
     );
 
     let id = IdentityObject {
@@ -1333,7 +1356,8 @@ async fn create_signed_identity_object(
             &versioned_id,
             &versioned_submission
         ),
-        "Could not write to database."
+        "Could not write to database.",
+        redirect_uri
     );
 
     // Submit and wait for the submission ID.
@@ -1349,7 +1373,8 @@ async fn create_signed_identity_object(
         Ok(status) => {
             ok_or_500!(
                 db.write_pending(&id_cred_pub_hash, status, submission_value),
-                "Could not write submission status."
+                "Could not write submission status.",
+                redirect_uri
             );
         }
         Err(_) => return Err(warp::reject::custom(IdRequestRejection::ReuseOfRegId)),
@@ -1361,8 +1386,7 @@ async fn create_signed_identity_object(
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
     retrieve_url.set_path(&format!("api/v0/identity/{}", id_cred_pub_hash));
-    let callback_location =
-        identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
+    let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
@@ -1398,6 +1422,7 @@ async fn create_signed_identity_object_v1(
     };
 
     let request = identity_object_input.id_object_request.value;
+    let redirect_uri = identity_object_input.redirect_uri;
 
     // Identity verification process between the identity provider and the identity
     // verifier. In this example the identity verifier is queried and will
@@ -1419,7 +1444,9 @@ async fn create_signed_identity_object_v1(
             Ok(attribute_list) => attribute_list,
             Err(e) => {
                 error!("Could not deserialize response from the verifier {}.", e);
-                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure));
+                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure(
+                    Some(redirect_uri),
+                )));
             }
         },
         Err(e) => {
@@ -1427,7 +1454,9 @@ async fn create_signed_identity_object_v1(
                 "Could not retrieve attribute list from the verifier: {}.",
                 e
             );
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
@@ -1459,13 +1488,16 @@ async fn create_signed_identity_object_v1(
         Ok(signature) => signature,
         Err(e) => {
             error!("Could not sign the identity object {}.", e);
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
     ok_or_500!(
         save_revocation_record_v1(&db, &request, &alist),
-        "Could not write the revocation record to database."
+        "Could not write the revocation record to database.",
+        redirect_uri
     );
 
     let id = IdentityObjectV1 {
@@ -1480,7 +1512,8 @@ async fn create_signed_identity_object_v1(
     // This is stored so it can later be retrieved by querying via the idCredPub.
     ok_or_500!(
         db.write_identity_object_v1(&id_cred_pub_hash, &versioned_id),
-        "Could not write to database."
+        "Could not write to database.",
+        redirect_uri
     );
 
     // If we reached here it means we at least have a pending request. We respond
@@ -1490,8 +1523,7 @@ async fn create_signed_identity_object_v1(
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
     retrieve_url.set_path(&format!("api/v1/identity/{}", id_cred_pub_hash));
-    let callback_location =
-        identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
+    let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
@@ -1507,7 +1539,9 @@ fn validate_worker(
     input: IdentityObjectRequest,
 ) -> Result<IdentityObjectRequest, IdRequestRejection> {
     if input.id_object_request.version != VERSION_0 {
-        return Err(IdRequestRejection::UnsupportedVersion);
+        return Err(IdRequestRejection::UnsupportedVersion(Some(
+            input.redirect_uri,
+        )));
     }
     let request = &input.id_object_request.value;
     let context = IpContext {
@@ -1522,7 +1556,7 @@ fn validate_worker(
         }
         Err(e) => {
             warn!("Request is invalid {}.", e);
-            Err(IdRequestRejection::InvalidProofs)
+            Err(IdRequestRejection::InvalidProofs(Some(input.redirect_uri)))
         }
     }
 }
@@ -1534,7 +1568,9 @@ fn validate_worker_v1(
     input: IdentityObjectRequestV1,
 ) -> Result<IdentityObjectRequestV1, IdRequestRejection> {
     if input.id_object_request.version != VERSION_0 {
-        return Err(IdRequestRejection::UnsupportedVersion);
+        return Err(IdRequestRejection::UnsupportedVersion(Some(
+            input.redirect_uri,
+        )));
     }
     let request = &input.id_object_request.value;
     let context = IpContext {
@@ -1549,7 +1585,7 @@ fn validate_worker_v1(
         }
         Err(e) => {
             warn!("Request is invalid {}.", e);
-            Err(IdRequestRejection::InvalidProofs)
+            Err(IdRequestRejection::InvalidProofs(Some(input.redirect_uri)))
         }
     }
 }
@@ -1584,7 +1620,9 @@ fn extract_and_validate_request(
                             "Duplicate id_cred_pub: {}",
                             base16_encode_string(&id_cred_pub)
                         );
-                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
+                            Some(input.redirect_uri),
+                        )))
                     } else {
                         match validate_worker(&server_config, input) {
                             Ok(r) => Ok(r),
@@ -1597,7 +1635,9 @@ fn extract_and_validate_request(
                 }
                 Err(e) => {
                     error!("Error accessing the database: {:#?}", e);
-                    Err(warp::reject::custom(IdRequestRejection::InternalError))
+                    Err(warp::reject::custom(IdRequestRejection::InternalError(
+                        Some(input.redirect_uri),
+                    )))
                 }
             }
         }
@@ -1654,7 +1694,9 @@ fn extract_and_validate_request_query(
                             "Duplicate id_cred_pub: {}",
                             base16_encode_string(&id_cred_pub)
                         );
-                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
+                            Some(input.redirect_uri),
+                        )))
                     } else {
                         let input = IdentityObjectRequest {
                             id_object_request,
@@ -1672,7 +1714,9 @@ fn extract_and_validate_request_query(
                 }
                 Err(e) => {
                     error!("Error accessing the database: {:#?}", e);
-                    Err(warp::reject::custom(IdRequestRejection::InternalError))
+                    Err(warp::reject::custom(IdRequestRejection::InternalError(
+                        Some(input.redirect_uri),
+                    )))
                 }
             }
         }
@@ -1728,7 +1772,9 @@ fn extract_and_validate_request_query_v1(
                             "Duplicate id_cred_pub: {}",
                             base16_encode_string(&id_cred_pub)
                         );
-                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
+                            Some(input.redirect_uri),
+                        )))
                     } else {
                         let input = IdentityObjectRequestV1 {
                             id_object_request,
@@ -1746,7 +1792,9 @@ fn extract_and_validate_request_query_v1(
                 }
                 Err(e) => {
                     error!("Error accessing the database: {:#?}", e);
-                    Err(warp::reject::custom(IdRequestRejection::InternalError))
+                    Err(warp::reject::custom(IdRequestRejection::InternalError(
+                        Some(input.redirect_uri),
+                    )))
                 }
             }
         }
@@ -1895,7 +1943,9 @@ async fn create_failed_identity(
         db.read_request_record_v1(&id_cred_pub_hash)
             .map(|r| r.redirect_uri)
     } else {
-        return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
+        return Err(warp::reject::custom(
+            IdRequestRejection::UnsupportedVersion(None),
+        ));
     } {
         Ok(request) => request,
         Err(e) => {
@@ -1952,6 +2002,7 @@ async fn get_broken_reply() -> Result<impl Reply, Rejection> {
     Ok(mk_reply(
         "Broken Endpoint was used",
         StatusCode::BAD_REQUEST,
+        &None,
     ))
 }
 
@@ -2026,7 +2077,7 @@ mod tests {
                 .filter(&extract_and_validate_request(db, server_config.clone()))
                 .await;
             if let Err(e) = matches {
-                if let Some(IdRequestRejection::InvalidProofs) = e.find() {
+                if let Some(IdRequestRejection::InvalidProofs(_)) = e.find() {
                 } else {
                     panic!("Request should fail due to invalid proofs.")
                 }
