@@ -910,7 +910,7 @@ async fn main() -> anyhow::Result<()> {
         .and_then(get_broken_reply);
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
-    let server = verify_request //
+    let server = verify_request
         .or(retrieve_identity)
         .or(retrieve_failed_identity)
         .or(create_identity)

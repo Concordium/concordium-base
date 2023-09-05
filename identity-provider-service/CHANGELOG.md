@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Added improved error handling, so that the wallet can handle some of the errors
+
 ## 0.5.2
 
 - Extend default ID doc expiry to 2030.
