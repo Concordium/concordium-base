@@ -1500,8 +1500,7 @@ convertAccountTransaction ty cost sender result = case ty of
     mkNone rr = Proto.make $ do
         ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
-        ProtoFields.effects
-            . ProtoFields.none
+        ProtoFields.effects . ProtoFields.none
             .= ( Proto.make $ do
                     ProtoFields.rejectReason .= toProto rr
                     case ty of
