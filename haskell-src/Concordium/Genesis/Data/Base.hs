@@ -22,46 +22,46 @@ import Concordium.Types.Parameters
 import Concordium.Types.Updates
 import Concordium.Utils.Serialization
 
--- |A class that provides access to fields of genesis data that
--- are expected to be stable across versions.
--- This is only applicable to consensus version 0.
+-- | A class that provides access to fields of genesis data that
+--  are expected to be stable across versions.
+--  This is only applicable to consensus version 0.
 class BasicGenesisData gd where
-    -- |The genesis time.
+    -- | The genesis time.
     gdGenesisTime :: gd -> Timestamp
 
-    -- |The duration of a slot.
+    -- | The duration of a slot.
     gdSlotDuration :: gd -> Duration
 
-    -- |The maximum energy per block.
+    -- | The maximum energy per block.
     gdMaxBlockEnergy :: gd -> Energy
 
-    -- |The finalization parameters.
+    -- | The finalization parameters.
     gdFinalizationParameters :: gd -> FinalizationParameters
 
-    -- |The epoch length in slots
+    -- | The epoch length in slots
     gdEpochLength :: gd -> EpochLength
 
--- |Core parameters that are set at genesis.
--- These parameters are not updatable (except via protocol update) and
--- so are specified anew in any regenesis block.
--- This is only applicable to consensus version 0.
+-- | Core parameters that are set at genesis.
+--  These parameters are not updatable (except via protocol update) and
+--  so are specified anew in any regenesis block.
+--  This is only applicable to consensus version 0.
 data CoreGenesisParameters = CoreGenesisParameters
-    { -- |The nominal time of the genesis block.
+    { -- | The nominal time of the genesis block.
       genesisTime :: !Timestamp,
-      -- |The duration of each slot.
+      -- | The duration of each slot.
       genesisSlotDuration :: !Duration,
-      -- |Length of a baking epoch.
+      -- | Length of a baking epoch.
       genesisEpochLength :: !EpochLength,
-      -- |The maximum total energy that may be expended by transactions in a block.
+      -- | The maximum total energy that may be expended by transactions in a block.
       genesisMaxBlockEnergy :: !Energy,
-      -- |The parameters of the finalization protocol.
+      -- | The parameters of the finalization protocol.
       genesisFinalizationParameters :: !FinalizationParameters
     }
     deriving (Eq, Show)
 
--- |Extract the core genesis parameters.
--- This is only applicable to consensus version 0.
-coreGenesisParameters :: BasicGenesisData gd => gd -> CoreGenesisParameters
+-- | Extract the core genesis parameters.
+--  This is only applicable to consensus version 0.
+coreGenesisParameters :: (BasicGenesisData gd) => gd -> CoreGenesisParameters
 coreGenesisParameters gd =
     CoreGenesisParameters
         { genesisTime = gdGenesisTime gd,
@@ -93,27 +93,27 @@ instance Serialize CoreGenesisParameters where
         genesisFinalizationParameters <- getFinalizationParametersGD3
         return CoreGenesisParameters{..}
 
--- |Information about the genesis block of the chain. This is not the full
--- genesis block. It does not include the genesis state. Instead, it is the
--- minimal information needed by a running consensus.
+-- | Information about the genesis block of the chain. This is not the full
+--  genesis block. It does not include the genesis state. Instead, it is the
+--  minimal information needed by a running consensus.
 --
--- The intention is that this structured can always be deserialized from a
--- serialized @GenesisData@ provided the hash of the genesis data is known.
+--  The intention is that this structured can always be deserialized from a
+--  serialized @GenesisData@ provided the hash of the genesis data is known.
 --
--- This is only applicable to consensus version 0.
+--  This is only applicable to consensus version 0.
 data GenesisConfiguration = GenesisConfiguration
-    { -- |The tag used when deserializing genesis data. This determines the variant
-      -- of the genesis data that is to be deserialized. The allowed values depend
-      -- on the protocol version. For each protocol there is a function
-      -- 'genesisVariantTag' that determines the allowed values for this tag.
+    { -- | The tag used when deserializing genesis data. This determines the variant
+      --  of the genesis data that is to be deserialized. The allowed values depend
+      --  on the protocol version. For each protocol there is a function
+      --  'genesisVariantTag' that determines the allowed values for this tag.
       _gcTag :: !Word8,
-      -- |Genesis parameters.
+      -- | Genesis parameters.
       _gcCore :: !CoreGenesisParameters,
-      -- |Hash of the genesis block of the chain. This is carried over on protocol
-      -- updates.
+      -- | Hash of the genesis block of the chain. This is carried over on protocol
+      --  updates.
       _gcFirstGenesis :: !BlockHash,
-      -- |Hash of the current genesis block. Each protocol update introduces a new
-      -- genesis block.
+      -- | Hash of the current genesis block. Each protocol update introduces a new
+      --  genesis block.
       _gcCurrentHash :: !BlockHash
     }
     deriving (Eq, Show)
@@ -125,8 +125,8 @@ instance BasicGenesisData GenesisConfiguration where
     gdFinalizationParameters = gdFinalizationParameters . _gcCore
     gdEpochLength = gdEpochLength . _gcCore
 
--- |Serialize genesis configuration. This is done in such a way that
--- 'getGenesisConfiguration' can parse it.
+-- | Serialize genesis configuration. This is done in such a way that
+--  'getGenesisConfiguration' can parse it.
 putGenesisConfiguration :: Putter GenesisConfiguration
 putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> put _gcFirstGenesis <> put _gcCurrentHash
 
@@ -134,17 +134,17 @@ putGenesisConfiguration GenesisConfiguration{..} = put _gcTag <> put _gcCore <> 
 -- the protocol update takes effect.
 -- This version is only applicable to consensus version 0. (cf. BaseV1.RegenesisDataV1.)
 data RegenesisData = RegenesisData
-    { -- |The immutable genesis parameters.
-      -- (These need not be invariant across re-genesis.)
+    { -- | The immutable genesis parameters.
+      --  (These need not be invariant across re-genesis.)
       genesisCore :: !CoreGenesisParameters,
-      -- |The hash of the first genesis block in the chain.
+      -- | The hash of the first genesis block in the chain.
       genesisFirstGenesis :: !BlockHash,
-      -- |The hash of the preceding (re)genesis block.
+      -- | The hash of the preceding (re)genesis block.
       genesisPreviousGenesis :: !BlockHash,
-      -- |The hash of the last finalized block that terminated the chain before the
-      -- new genesis.
+      -- | The hash of the last finalized block that terminated the chain before the
+      --  new genesis.
       genesisTerminalBlock :: !BlockHash,
-      -- |The hash of the block state for the regenesis.
+      -- | The hash of the block state for the regenesis.
       genesisStateHash :: !StateHash
     }
     deriving (Eq, Show)
@@ -166,36 +166,36 @@ putRegenesisData RegenesisData{..} = do
     put genesisTerminalBlock
     put genesisStateHash
 
--- |Initial state configuration for genesis.
+-- | Initial state configuration for genesis.
 --
--- The initial accounts are assigned account indexes sequentially based
--- on their index in 'genesisAccounts'. This means that, when accounts
--- are bakers, their baker ID must correspond to this index.
+--  The initial accounts are assigned account indexes sequentially based
+--  on their index in 'genesisAccounts'. This means that, when accounts
+--  are bakers, their baker ID must correspond to this index.
 --
--- It is also required that the foundation account specified in the
--- chain parameters is one of the genesis accounts.
+--  It is also required that the foundation account specified in the
+--  chain parameters is one of the genesis accounts.
 --
--- It is likely that the data in here will change for future protocol versions, but
--- P1 and P2 updates share it.
+--  It is likely that the data in here will change for future protocol versions, but
+--  P1 and P2 updates share it.
 data GenesisState (pv :: ProtocolVersion) = GenesisState
-    { -- |Cryptographic parameters for on-chain proofs.
+    { -- | Cryptographic parameters for on-chain proofs.
       genesisCryptographicParameters :: !CryptographicParameters,
-      -- |The initial collection of identity providers.
+      -- | The initial collection of identity providers.
       genesisIdentityProviders :: !IdentityProviders,
-      -- |The initial collection of anonymity revokers.
+      -- | The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
-      -- |The initial update keys structure for chain updates.
+      -- | The initial update keys structure for chain updates.
       genesisUpdateKeys :: !(UpdateKeysCollection (AuthorizationsVersionForPV pv)),
-      -- |The initial (updatable) chain parameters.
+      -- | The initial (updatable) chain parameters.
       genesisChainParameters :: !(ChainParameters pv),
-      -- |The initial leadership election nonce.
+      -- | The initial leadership election nonce.
       genesisLeadershipElectionNonce :: !LeadershipElectionNonce,
-      -- |The initial accounts on the chain.
+      -- | The initial accounts on the chain.
       genesisAccounts :: !(Vec.Vector GenesisAccount)
     }
     deriving (Eq, Show)
 
-instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
+instance forall pv. (IsProtocolVersion pv) => Serialize (GenesisState pv) where
     put GenesisState{..} = do
         put genesisCryptographicParameters
         put genesisIdentityProviders
@@ -225,9 +225,9 @@ instance forall pv. IsProtocolVersion pv => Serialize (GenesisState pv) where
             fail "Invalid foundation account."
         return GenesisState{..}
 
--- |Construct chain parameters from the genesis accounts and 'GenesisChainParameters'.
--- It is required that an account with address matching the one in the genesis chain parameters
--- is present in the vector of genesis accounts, or else this function will error.
+-- | Construct chain parameters from the genesis accounts and 'GenesisChainParameters'.
+--  It is required that an account with address matching the one in the genesis chain parameters
+--  is present in the vector of genesis accounts, or else this function will error.
 toChainParameters :: Vec.Vector GenesisAccount -> GenesisChainParameters' cpv -> ChainParameters' cpv
 toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{..}
   where
@@ -243,8 +243,8 @@ toChainParameters genesisAccounts GenesisChainParameters{..} = ChainParameters{.
     _cpConsensusParameters = gcpConsensusParameters
     _cpFinalizationCommitteeParameters = gcpFinalizationCommitteeParameters
 
--- |Convert 'GenesisParametersV2' to genesis data.
--- This is an auxiliary function since much of the behaviour is shared between protocol versions.
+-- | Convert 'GenesisParametersV2' to genesis data.
+--  This is an auxiliary function since much of the behaviour is shared between protocol versions.
 parametersToState :: GenesisParametersV2 pv -> (CoreGenesisParameters, GenesisState pv)
 parametersToState GenesisParametersV2{..} =
     (CoreGenesisParameters{..}, GenesisState{..})

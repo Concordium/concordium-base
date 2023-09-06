@@ -98,7 +98,7 @@ runLoggerT :: LoggerT m a -> LogMethod m -> m a
 runLoggerT = runReaderT . runLoggerT'
 
 -- | Run an action in the 'LoggerT' monad, discarding all log events.
-runSilentLogger :: Applicative m => LoggerT m a -> m a
+runSilentLogger :: (Applicative m) => LoggerT m a -> m a
 runSilentLogger = flip runLoggerT (\_ _ _ -> pure ())
 
 ------------------------------------------------------------------------------
@@ -106,7 +106,7 @@ runSilentLogger = flip runLoggerT (\_ _ _ -> pure ())
 -- * The @MonadLogger@ class
 
 -- | Class for a monad that supports logging.
-class Monad m => MonadLogger m where
+class (Monad m) => MonadLogger m where
     -- | Record a log event.
     logEvent :: LogMethod m
     default logEvent :: (MonadTrans t, MonadLogger m1, m ~ t m1) => LogMethod m
@@ -114,7 +114,7 @@ class Monad m => MonadLogger m where
 
 -- These instances are declared in the same way as done in the mtl package.
 -- See https://hackage.haskell.org/package/mtl-2.2.2/docs/src/Control.Monad.Reader.Class.html#MonadReader
-instance Monad m => MonadLogger (LoggerT m) where
+instance (Monad m) => MonadLogger (LoggerT m) where
     logEvent src lvl msg = do
         logm <- Control.Monad.Reader.Class.ask
         lift $ logm src lvl msg
@@ -126,11 +126,11 @@ instance MonadLogger Identity where
 ------------------------------------------------------------------------------
 -- Instances for other mtl transformers.
 
-instance MonadLogger m => MonadLogger (ExceptT e m)
-instance MonadLogger m => MonadLogger (MaybeT m)
-instance MonadLogger m => MonadLogger (Lazy.StateT s m)
-instance MonadLogger m => MonadLogger (Strict.StateT e m)
-instance MonadLogger m => MonadLogger (ReaderT e m)
+instance (MonadLogger m) => MonadLogger (ExceptT e m)
+instance (MonadLogger m) => MonadLogger (MaybeT m)
+instance (MonadLogger m) => MonadLogger (Lazy.StateT s m)
+instance (MonadLogger m) => MonadLogger (Strict.StateT e m)
+instance (MonadLogger m) => MonadLogger (ReaderT e m)
 instance (MonadLogger m, Monoid w) => MonadLogger (Lazy.WriterT w m)
 instance (MonadLogger m, Monoid w) => MonadLogger (Strict.WriterT w m)
 instance (MonadLogger m, Monoid w) => MonadLogger (Lazy.RWST r w s m)
@@ -140,13 +140,13 @@ instance (MonadLogger m, Monoid w) => MonadLogger (Strict.RWST r w s m)
 
 -- * Helpers
 
--- |Short alias to log an exception and throw it using the MonadIO instance
+-- | Short alias to log an exception and throw it using the MonadIO instance
 logExceptionAndThrow :: (MonadLogger m, MonadIO m, Exception e) => LogSource -> e -> m a
 logExceptionAndThrow src exception = do
     logEvent src LLError $ displayException exception
     liftIO $ throwIO $ exception
 
--- |Short alias to log an error message and throw it using the MonadIO instance inside a userError
+-- | Short alias to log an error message and throw it using the MonadIO instance inside a userError
 logErrorAndThrow :: (MonadLogger m, MonadIO m) => LogSource -> String -> m a
 logErrorAndThrow src msg = do
     logEvent src LLError msg

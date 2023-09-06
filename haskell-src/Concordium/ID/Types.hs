@@ -70,7 +70,7 @@ instance FromJSONKey AccountAddress where
             )
 
 {-# WARNING randomAccountAddress "DO NOT USE IN PRODUCTION." #-}
-randomAccountAddress :: RandomGen g => g -> (AccountAddress, g)
+randomAccountAddress :: (RandomGen g) => g -> (AccountAddress, g)
 randomAccountAddress g =
     let (g1, g2) = split g
     in  (AccountAddress (FBS.pack (take accountAddressSize (randoms g1))), g2)
@@ -83,11 +83,11 @@ instance Hashable AccountAddress where
     hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toShortByteString b)
     hash (AccountAddress b) = fromIntegral (FBS.unsafeReadWord64 b)
 
--- |Show the address in base58check format.
+-- | Show the address in base58check format.
 instance Show AccountAddress where
     show = BS8.unpack . addressToBytes
 
--- |FIXME: Probably make sure the input size is not too big before doing base58check.
+-- | FIXME: Probably make sure the input size is not too big before doing base58check.
 instance FromJSON AccountAddress where
     parseJSON v = do
         r <- addressFromText <$> parseJSON v
@@ -98,19 +98,19 @@ instance FromJSON AccountAddress where
 instance ToJSON AccountAddress where
     toJSON a = String (Text.decodeUtf8 (addressToBytes a))
 
-addressFromText :: MonadError String m => Text.Text -> m AccountAddress
+addressFromText :: (MonadError String m) => Text.Text -> m AccountAddress
 addressFromText = addressFromBytes . Text.encodeUtf8
 
--- |Convert an address to valid Base58 bytes.
--- Uses version byte 1 for the base58check encoding.
+-- | Convert an address to valid Base58 bytes.
+--  Uses version byte 1 for the base58check encoding.
 addressToBytes :: AccountAddress -> ByteString
 addressToBytes (AccountAddress v) = raw (base58CheckEncode (BS.cons 1 bs))
   where
     bs = FBS.toByteString v
 
--- |Take bytes which are presumed valid base58 encoding, and try to deserialize
--- an address.
-addressFromBytes :: MonadError String m => BS.ByteString -> m AccountAddress
+-- | Take bytes which are presumed valid base58 encoding, and try to deserialize
+--  an address.
+addressFromBytes :: (MonadError String m) => BS.ByteString -> m AccountAddress
 addressFromBytes bs =
     case base58CheckDecode' bs of
         Nothing -> throwError "Base 58 checksum invalid."
@@ -132,56 +132,56 @@ addressFromRegIdRaw regIdRaw = AccountAddress (FBS.FixedByteString addr) -- NB: 
   where
     SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode regIdRaw)
 
--- |Index of the credential key needed to determine what key the signature should
--- be checked with.
+-- | Index of the credential key needed to determine what key the signature should
+--  be checked with.
 newtype KeyIndex = KeyIndex Word8
     deriving (Eq, Ord, Enum, Num, Real, Integral)
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
--- |The public credential keys belonging to a credential holder
+-- | The public credential keys belonging to a credential holder
 data CredentialPublicKeys = CredentialPublicKeys
     { credKeys :: !(Map.Map KeyIndex VerifyKey),
       credThreshold :: !SignatureThreshold
     }
     deriving (Eq, Show, Ord)
 
--- |Get the number of keys that are part of the credential.
+-- | Get the number of keys that are part of the credential.
 credNumKeys :: CredentialPublicKeys -> Int
 credNumKeys CredentialPublicKeys{..} = Map.size credKeys
 
--- |Indices of the credentials linked to an account
+-- | Indices of the credentials linked to an account
 newtype CredentialIndex = CredentialIndex Word8
     deriving (Eq, Ord, Enum, Num, Real, Integral)
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
--- |The credential index of the initial credential on an account (0).
--- This credential is special as it can never be modified or removed,
--- and is used to derive the account address and account encryption key.
+-- | The credential index of the initial credential on an account (0).
+--  This credential is special as it can never be modified or removed,
+--  and is used to derive the account address and account encryption key.
 initialCredentialIndex :: CredentialIndex
 initialCredentialIndex = 0
 
--- |The information about an account's credentials necessary for verifying the signature(s) on
--- a transaction. Namely, the account threshold, and for each credential, its threshold and
--- public keys.
+-- | The information about an account's credentials necessary for verifying the signature(s) on
+--  a transaction. Namely, the account threshold, and for each credential, its threshold and
+--  public keys.
 data AccountInformation = AccountInformation
     { aiCredentials :: !(Map.Map CredentialIndex CredentialPublicKeys),
       aiThreshold :: !AccountThreshold
     }
     deriving (Eq, Show, Ord)
 
--- |SHA256 hashing instance for `AccountInformation`
--- Security considerations: It is crucial to use a cryptographic secure hash instance for `AccountInformation`.
--- The caller must be able to use the resulting hash in security critical application code.
--- Currently the computed hash is used to short circuit the signature verification check of transactions.
+-- | SHA256 hashing instance for `AccountInformation`
+--  Security considerations: It is crucial to use a cryptographic secure hash instance for `AccountInformation`.
+--  The caller must be able to use the resulting hash in security critical application code.
+--  Currently the computed hash is used to short circuit the signature verification check of transactions.
 instance HashableTo SHA256.Hash AccountInformation where
     getHash = SHA256.hash . encode
 
--- |Get the number of keys that are part of the 'AccountInformation'
+-- | Get the number of keys that are part of the 'AccountInformation'
 getAccountInformationNumKeys :: AccountInformation -> Int
 getAccountInformationNumKeys AccountInformation{..} = List.foldl' (\acc cpi -> acc + credNumKeys cpi) 0 aiCredentials
 
--- |Check that the account information matches the given SHA256 hash.
--- Note. See above for more information.
+-- | Check that the account information matches the given SHA256 hash.
+--  Note. See above for more information.
 matchesAccountInformation :: AccountInformation -> SHA256.Hash -> Bool
 matchesAccountInformation ai h = getHash ai == h
 
@@ -264,7 +264,7 @@ getCredentialPublicKey idx keys = Map.lookup idx (credKeys keys)
 getKeyIndices :: CredentialPublicKeys -> Set.Set KeyIndex
 getKeyIndices keys = Map.keysSet $ credKeys keys
 
--- |Name of Identity Provider
+-- | Name of Identity Provider
 newtype IdentityProviderIdentity = IP_ID Word32
     deriving (Eq, Hashable, Ord)
     deriving newtype (Show, FromJSONKey)
@@ -291,16 +291,16 @@ instance ToJSONKey IdentityProviderIdentity where
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
 
--- |An Elgamal encryption key. Note that this is a full key with a specific
--- generator @g@ and the @g^s@ for a secret key @s@. In our use the generator is
--- in fact always the same (it is part of the shared cryptographic parameters of
--- the chain, set in genesis), so we could put it into a shared context instead
--- to save some space.
+-- | An Elgamal encryption key. Note that this is a full key with a specific
+--  generator @g@ and the @g^s@ for a secret key @s@. In our use the generator is
+--  in fact always the same (it is part of the shared cryptographic parameters of
+--  the chain, set in genesis), so we could put it into a shared context instead
+--  to save some space.
 newtype AccountEncryptionKey = AccountEncryptionKey {_elgamalPublicKey :: ElgamalPublicKey}
     deriving (Eq, Show, Serialize, FromJSON, ToJSON) via ElgamalPublicKey
 
--- |A marker type that has the 'FBS.FixedLength' instance to determine the size
--- of the account encryption key in bytes.
+-- | A marker type that has the 'FBS.FixedLength' instance to determine the size
+--  of the account encryption key in bytes.
 data AccountEncryptionKeySize
 
 instance FBS.FixedLength AccountEncryptionKeySize where
@@ -308,28 +308,28 @@ instance FBS.FixedLength AccountEncryptionKeySize where
     -- key is a pair of two
     fixedLength _ = 2 * 48
 
--- |A byte representation of the account encryption key. This is both smaller
--- (1/3 the size) of the 'AccountEncryptionKey' as well as much faster to load
--- since it does not involve checking whether the key is a valid point on the
--- relevant elliptic curve. As a result, this can only be used when the input is
--- either trusted to be well-formed, or when checks will be done on it before
--- the value is needed as an encryption key.
+-- | A byte representation of the account encryption key. This is both smaller
+--  (1/3 the size) of the 'AccountEncryptionKey' as well as much faster to load
+--  since it does not involve checking whether the key is a valid point on the
+--  relevant elliptic curve. As a result, this can only be used when the input is
+--  either trusted to be well-formed, or when checks will be done on it before
+--  the value is needed as an encryption key.
 newtype RawAccountEncryptionKey = RawAccountEncryptionKey (FBS.FixedByteString AccountEncryptionKeySize)
     deriving (Eq, Ord)
     deriving (Show, Serialize, FromJSON, ToJSON) via FBSHex AccountEncryptionKeySize
 
--- |Reconstruct the account encryption key from the raw representation. This
--- function is unsafe and will raise an exception if the input is not a valid
--- account encryption key. Hence it should only be used on inputs that are known
--- to be well-formed because of their provenance.
+-- | Reconstruct the account encryption key from the raw representation. This
+--  function is unsafe and will raise an exception if the input is not a valid
+--  account encryption key. Hence it should only be used on inputs that are known
+--  to be well-formed because of their provenance.
 unsafeEncryptionKeyFromRaw :: RawAccountEncryptionKey -> AccountEncryptionKey
 unsafeEncryptionKeyFromRaw (RawAccountEncryptionKey fbs) =
     case decode (FBS.toByteString fbs) of
         Left _ -> error "Precondition violation. Invalid encryption key."
         Right v -> v
 
--- |Convert the encryption key to the raw one. This is relatively expensive
--- since it involves constructing a canonical representation of the key.
+-- | Convert the encryption key to the raw one. This is relatively expensive
+--  since it involves constructing a canonical representation of the key.
 toRawEncryptionKey :: AccountEncryptionKey -> RawAccountEncryptionKey
 toRawEncryptionKey = RawAccountEncryptionKey . FBS.fromByteString . encode
 
@@ -341,7 +341,7 @@ data RegIdSize
 instance FBS.FixedLength RegIdSize where
     fixedLength _ = 48
 
--- |Credential Registration ID (48 bytes)
+-- | Credential Registration ID (48 bytes)
 newtype CredentialRegistrationID = RegIdCred GroupElement
     deriving newtype (Eq, Show, Serialize, ToJSON)
 
@@ -366,8 +366,8 @@ newtype Proofs = Proofs ShortByteString
     deriving (ToJSON) via ByteStringHex
     deriving (FromJSON) via ByteStringHex
 
--- |NB: This puts the length information up front, which is possibly not what we
--- want.
+-- | NB: This puts the length information up front, which is possibly not what we
+--  want.
 instance Serialize Proofs where
     put (Proofs bs) =
         putWord32be (fromIntegral (BSS.length bs))
@@ -376,7 +376,7 @@ instance Serialize Proofs where
         l <- fromIntegral <$> getWord32be
         Proofs <$> getShortByteString l
 
--- |We assume an non-negative integer.
+-- | We assume an non-negative integer.
 newtype AttributeValue = AttributeValue ShortByteString
     deriving (Eq)
 
@@ -406,16 +406,16 @@ instance FromJSON AttributeValue where
         unless (BS.length s <= 31) $ fail "Attribute values must fit into 31 bytes."
         return (AttributeValue (BSS.toShort s))
 
--- |ValidTo of a credential.
+-- | ValidTo of a credential.
 type CredentialValidTo = YearMonth
 
--- |CreatedAt of a credential.
+-- | CreatedAt of a credential.
 type CredentialCreatedAt = YearMonth
 
 newtype AttributeTag = AttributeTag Word8
     deriving (Eq, Show, Serialize, Ord, Enum, Num) via Word8
 
--- *NB: This mapping must be kept consistent with the mapping in id/types.rs.
+-- * NB: This mapping must be kept consistent with the mapping in id/types.rs.
 attributeNames :: [Text.Text]
 attributeNames =
     [ "firstName",
@@ -460,11 +460,11 @@ instance ToJSON AttributeTag where
     toJSON tag = maybe (String (Text.pack ("UNNAMED#" ++ show tag))) toJSON $ Map.lookup tag invMapping
 
 data Policy = Policy
-    { -- |Validity of this credential.
+    { -- | Validity of this credential.
       pValidTo :: CredentialValidTo,
-      -- |Creation of this credential
+      -- | Creation of this credential
       pCreatedAt :: CredentialCreatedAt,
-      -- |List of items in this attribute list.
+      -- | List of items in this attribute list.
       pItems :: Map.Map AttributeTag AttributeValue
     }
     deriving (Eq, Show)
@@ -484,7 +484,7 @@ instance FromJSON Policy where
         pItems <- v .: "revealedAttributes"
         return Policy{..}
 
--- |Unique identifier of the anonymity revoker.
+-- | Unique identifier of the anonymity revoker.
 newtype ArIdentity = ArIdentity Word32
     deriving (Eq, Ord)
     deriving (Show, Hashable) via Word32
@@ -496,7 +496,7 @@ instance Serialize ArIdentity where
         when (n == 0) $ fail "ArIdentity must be at least 1."
         return (ArIdentity n)
 
--- |Public key of an anonymity revoker.
+-- | Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
     deriving (Eq, Serialize, NFData)
     deriving (Show) via ElgamalPublicKey
@@ -504,7 +504,7 @@ newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
 instance ToJSON ArIdentity where
     toJSON (ArIdentity v) = toJSON v
 
--- |NB: This just reads the string. No decoding.
+-- | NB: This just reads the string. No decoding.
 instance FromJSON ArIdentity where
     parseJSON v = do
         n <- parseJSON v
@@ -527,7 +527,7 @@ instance FromJSONKey ArIdentity where
 instance ToJSONKey ArIdentity where
     toJSONKey = toJSONKeyText (Text.pack . show)
 
--- |Encryption of data with anonymity revoker's public key.
+-- | Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
     deriving (Eq, Serialize)
     deriving (Show) via ElgamalCipher
@@ -544,7 +544,7 @@ instance Serialize ShareNumber where
     put (ShareNumber n) = S.putWord32be n
     get = ShareNumber <$> S.getWord32be
 
--- |Anonymity revocation threshold.
+-- | Anonymity revocation threshold.
 newtype Threshold = Threshold Word8
     deriving (Eq, Show, Ord)
     deriving (ToJSON) via Word8
@@ -562,9 +562,9 @@ instance Serialize Threshold where
         when (n == 0) $ fail "Threshold must be at least 1."
         return (Threshold n)
 
--- |Data needed on-chain to revoke anonymity of the account holder.
+-- | Data needed on-chain to revoke anonymity of the account holder.
 newtype ChainArData = ChainArData
-    { -- |Encrypted share of id cred pub
+    { -- | Encrypted share of id cred pub
       ardIdCredPubShare :: AREnc
     }
     deriving (Eq, Show)
@@ -587,8 +587,8 @@ instance Serialize ChainArData where
 
 type AccountVerificationKey = VerifyKey
 
--- |The number of keys required to sign the message.
--- The value is at least 1 and at most 255.
+-- | The number of keys required to sign the message.
+--  The value is at least 1 and at most 255.
 newtype SignatureThreshold = SignatureThreshold Word8
     deriving newtype (Eq, Ord, Show, Enum, Num, Real, Integral)
 
@@ -635,7 +635,7 @@ instance FromJSON AccountThreshold where
         unless (x <= (255 :: Word) || x >= 1) $ fail "Signature threshold out of bounds."
         return $! AccountThreshold (fromIntegral x)
 
--- |Data about which account this credential belongs to.
+-- | Data about which account this credential belongs to.
 data CredentialAccount
     = -- | Create a new account. The list of keys must be non-empty and no longer
       -- than 255 elements.
@@ -675,24 +675,24 @@ instance Serialize CredentialAccount where
                 return $! NewAccount keys threshold
             _ -> fail "Input must be either a new account with a list of keys and threshold."
 
--- |Values, as opposed to proofs, contained in a credential deployment. The type
--- parameter @credTy@ determines the representation of credential registration
--- IDs.
+-- | Values, as opposed to proofs, contained in a credential deployment. The type
+--  parameter @credTy@ determines the representation of credential registration
+--  IDs.
 data CredentialDeploymentValues' credTy = CredentialDeploymentValues
-    { -- |Either an address of an existing account, or the list of keys the newly
-      -- created account should have, together with a threshold for how many are needed
-      -- Its address is derived from the registration id of this credential.
+    { -- | Either an address of an existing account, or the list of keys the newly
+      --  created account should have, together with a threshold for how many are needed
+      --  Its address is derived from the registration id of this credential.
       cdvPublicKeys :: !CredentialPublicKeys,
-      -- |Registration id of __this__ credential.
+      -- | Registration id of __this__ credential.
       cdvCredId :: !credTy,
-      -- |Identity of the identity provider who signed the identity object from
-      -- which this credential is derived.
+      -- | Identity of the identity provider who signed the identity object from
+      --  which this credential is derived.
       cdvIpId :: !IdentityProviderIdentity,
-      -- |Revocation threshold. Any set of this many anonymity revokers can reveal IdCredPub.
+      -- | Revocation threshold. Any set of this many anonymity revokers can reveal IdCredPub.
       cdvThreshold :: !Threshold,
-      -- |Anonymity revocation data associated with this credential.
+      -- | Anonymity revocation data associated with this credential.
       cdvArData :: !(Map.Map ArIdentity ChainArData),
-      -- |Policy. At the moment only opening of specific commitments.
+      -- | Policy. At the moment only opening of specific commitments.
       cdvPolicy :: !Policy
     }
     deriving (Eq, Show, Functor)
@@ -703,7 +703,7 @@ type CredentialDeploymentValuesRaw = CredentialDeploymentValues' RawCredentialRe
 credentialAccountAddress :: CredentialDeploymentValues -> AccountAddress
 credentialAccountAddress cdv = addressFromRegId (cdvCredId cdv)
 
-credentialDeploymentValuesList :: ToJSON credTy => CredentialDeploymentValues' credTy -> [Pair]
+credentialDeploymentValuesList :: (ToJSON credTy) => CredentialDeploymentValues' credTy -> [Pair]
 credentialDeploymentValuesList CredentialDeploymentValues{..} =
     [ "credentialPublicKeys" .= cdvPublicKeys,
       "credId" .= cdvCredId,
@@ -717,7 +717,7 @@ instance ToJSON CredentialDeploymentValues where
     toJSON =
         object . credentialDeploymentValuesList
 
-instance FromJSON credTy => FromJSON (CredentialDeploymentValues' credTy) where
+instance (FromJSON credTy) => FromJSON (CredentialDeploymentValues' credTy) where
     parseJSON = withObject "CredentialDeploymentValues" $ \v -> do
         cdvPublicKeys <- v .: "credentialPublicKeys"
         cdvCredId <- v .: "credId"
@@ -743,7 +743,7 @@ putPolicy Policy{..} =
             <> putWord16be (fromIntegral l)
             <> mapM_ (putTwoOf put put) (Map.toAscList pItems)
 
-instance Serialize credTy => Serialize (CredentialDeploymentValues' credTy) where
+instance (Serialize credTy) => Serialize (CredentialDeploymentValues' credTy) where
     get = do
         cdvPublicKeys <- get
         cdvCredId <- get
@@ -763,24 +763,24 @@ instance Serialize credTy => Serialize (CredentialDeploymentValues' credTy) wher
             <> mapM_ put (Map.toAscList cdvArData)
             <> putPolicy cdvPolicy
 
--- |The credential deployment information consists of values deployed and the
--- proofs about them.
+-- | The credential deployment information consists of values deployed and the
+--  proofs about them.
 data CredentialDeploymentInformation = CredentialDeploymentInformation
     { cdiValues :: CredentialDeploymentValues,
-      -- |Proofs of validity of this credential. Opaque from the Haskell side, since
-      -- we only pass them to Rust to check.
+      -- | Proofs of validity of this credential. Opaque from the Haskell side, since
+      --  we only pass them to Rust to check.
       cdiProofs :: Proofs
     }
     deriving (Show)
 
--- |NB: This must match the one defined in rust. In particular the
--- proof is serialized with 4 byte length.
+-- | NB: This must match the one defined in rust. In particular the
+--  proof is serialized with 4 byte length.
 instance Serialize CredentialDeploymentInformation where
     put CredentialDeploymentInformation{..} =
         put cdiValues <> put cdiProofs
     get = CredentialDeploymentInformation <$> get <*> get
 
--- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
+-- | NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
 instance Eq CredentialDeploymentInformation where
     cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
@@ -797,8 +797,8 @@ instance FromJSON CredentialDeploymentInformation where
                         }
             Left _ -> fail "\"proofs\" is not a valid base16 string."
 
--- |Information about the account that should be created as part of the initial
--- credential deployment.
+-- | Information about the account that should be created as part of the initial
+--  credential deployment.
 data InitialCredentialAccount = InitialCredentialAccount
     { icaKeys :: ![AccountVerificationKey],
       icaThreshold :: !SignatureThreshold
@@ -834,31 +834,31 @@ instance Serialize InitialCredentialAccount where
         icaThreshold <- S.get
         return InitialCredentialAccount{..}
 
--- |The data for the initial account creation. This is submitted by the identity
--- provider on behalf of the account holder. The type parameter @credTy@
--- determines the representation of credential registration IDs.
+-- | The data for the initial account creation. This is submitted by the identity
+--  provider on behalf of the account holder. The type parameter @credTy@
+--  determines the representation of credential registration IDs.
 data InitialCredentialDeploymentValues' credTy = InitialCredentialDeploymentValues
-    { -- |List of keys the new account should have, together with a threshold
-      -- for how many are needed. Its address is derived from the registration
-      -- id of this credential.
+    { -- | List of keys the new account should have, together with a threshold
+      --  for how many are needed. Its address is derived from the registration
+      --  id of this credential.
       icdvAccount :: !CredentialPublicKeys,
-      -- |Registration id of __this__ credential.
+      -- | Registration id of __this__ credential.
       icdvRegId :: !credTy,
-      -- |Identity of the identity provider who signed this account creation
+      -- | Identity of the identity provider who signed this account creation
       icdvIpId :: !IdentityProviderIdentity,
-      -- |Policy.
+      -- | Policy.
       icdvPolicy :: !Policy
     }
     deriving (Eq, Show, Functor)
 
 type InitialCredentialDeploymentValues = InitialCredentialDeploymentValues' CredentialRegistrationID
 
--- |Address of the account that is created as a result of the initial credential
--- deployment.
+-- | Address of the account that is created as a result of the initial credential
+--  deployment.
 initialCredentialAccountAddress :: InitialCredentialDeploymentValues -> AccountAddress
 initialCredentialAccountAddress icdv = addressFromRegId (icdvRegId icdv)
 
-instance ToJSON credTy => ToJSON (InitialCredentialDeploymentValues' credTy) where
+instance (ToJSON credTy) => ToJSON (InitialCredentialDeploymentValues' credTy) where
     toJSON InitialCredentialDeploymentValues{..} =
         object
             [ "credentialPublicKeys" .= icdvAccount,
@@ -867,7 +867,7 @@ instance ToJSON credTy => ToJSON (InitialCredentialDeploymentValues' credTy) whe
               "policy" .= icdvPolicy
             ]
 
-instance FromJSON credTy => FromJSON (InitialCredentialDeploymentValues' credTy) where
+instance (FromJSON credTy) => FromJSON (InitialCredentialDeploymentValues' credTy) where
     parseJSON = withObject "InitialCredentialDeploymentValues" $ \v -> do
         icdvAccount <- v .: "credentialPublicKeys"
         icdvRegId <- v .: "regId"
@@ -875,7 +875,7 @@ instance FromJSON credTy => FromJSON (InitialCredentialDeploymentValues' credTy)
         icdvPolicy <- v .: "policy"
         return InitialCredentialDeploymentValues{..}
 
-instance Serialize credTy => Serialize (InitialCredentialDeploymentValues' credTy) where
+instance (Serialize credTy) => Serialize (InitialCredentialDeploymentValues' credTy) where
     get = do
         icdvAccount <- get
         icdvRegId <- get
@@ -889,8 +889,8 @@ instance Serialize credTy => Serialize (InitialCredentialDeploymentValues' credT
             <> put icdvIpId
             <> putPolicy icdvPolicy
 
--- |A signature using the Ed25519 signature scheme.
--- Always 64 bytes in length.
+-- | A signature using the Ed25519 signature scheme.
+--  Always 64 bytes in length.
 newtype IpCdiSignature = IpCdiSignature {theSignature :: ShortByteString}
     deriving (ToJSON, FromJSON, Show) via ByteStringHex
 
@@ -898,18 +898,18 @@ instance Serialize IpCdiSignature where
     put = putShortByteString . theSignature
     get = IpCdiSignature <$> getShortByteString 64
 
--- |The initial credential deployment information consists of values deployed
--- a signature from the identity provider on said values
+-- | The initial credential deployment information consists of values deployed
+--  a signature from the identity provider on said values
 data InitialCredentialDeploymentInfo = InitialCredentialDeploymentInfo
     { icdiValues :: InitialCredentialDeploymentValues,
-      -- |A signature under the public key of identity provider's key on the
-      -- credential deployment values. This is the dual of `proofs` for the normal
-      -- credential deployment.
+      -- | A signature under the public key of identity provider's key on the
+      --  credential deployment values. This is the dual of `proofs` for the normal
+      --  credential deployment.
       icdiSig :: IpCdiSignature
     }
     deriving (Show)
 
--- |NB: This must match the one defined in rust
+-- | NB: This must match the one defined in rust
 instance Serialize InitialCredentialDeploymentInfo where
     put InitialCredentialDeploymentInfo{..} =
         put icdiValues <> put icdiSig
@@ -919,8 +919,8 @@ instance Serialize InitialCredentialDeploymentInfo where
         icdiSig <- get
         return InitialCredentialDeploymentInfo{..}
 
--- |NB: This makes sense for well-formed data only and is consistent with how
--- accounts are identified internally.
+-- | NB: This makes sense for well-formed data only and is consistent with how
+--  accounts are identified internally.
 instance Eq InitialCredentialDeploymentInfo where
     icdi1 == icdi2 = icdiValues icdi1 == icdiValues icdi2
 
@@ -930,7 +930,7 @@ instance FromJSON InitialCredentialDeploymentInfo where
         icdiSig <- v .: "sig"
         return InitialCredentialDeploymentInfo{..}
 
--- |Different kinds of credentials that can go onto the chain.
+-- | Different kinds of credentials that can go onto the chain.
 data AccountCredentialWithProofs
     = InitialACWP InitialCredentialDeploymentInfo
     | NormalACWP CredentialDeploymentInformation
@@ -946,42 +946,42 @@ instance Serialize AccountCredentialWithProofs where
             1 -> NormalACWP <$> get
             _ -> fail "Unsupported credential type."
 
--- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed and
--- commitments kept. The type parameter @credTy@ determines the representation
--- of credential registration IDs.
+-- | Analogue of 'AccountCredentialWithProofs' but with the proofs removed and
+--  commitments kept. The type parameter @credTy@ determines the representation
+--  of credential registration IDs.
 data AccountCredential' credTy
     = InitialAC (InitialCredentialDeploymentValues' credTy)
     | NormalAC (CredentialDeploymentValues' credTy) CredentialDeploymentCommitments
     deriving (Eq, Show, Functor)
 
--- |Try to decode a @RawCredentialRegistrationID@. Returns a @Left@ wrapping an error
--- message if the input could not be decoded and a @Right@ wrapping the the resulting
--- @CredentialRegistrationID@ otherwise.
+-- | Try to decode a @RawCredentialRegistrationID@. Returns a @Left@ wrapping an error
+--  message if the input could not be decoded and a @Right@ wrapping the the resulting
+--  @CredentialRegistrationID@ otherwise.
 credIdFromRaw :: RawCredentialRegistrationID -> Either String CredentialRegistrationID
 credIdFromRaw (RawCredentialRegistrationID fbs) =
     case decode (FBS.toByteString fbs) of
         Left err -> Left $ "Precondition violation. Invalid registration ID. " <> err
         Right v -> return v
 
--- |Try to decode a @RawCredentialRegistrationID@. Fails with an error message if the
--- input could not be decoded and returns the resulting @CredentialRegistrationID@
--- otherwise.
+-- | Try to decode a @RawCredentialRegistrationID@. Fails with an error message if the
+--  input could not be decoded and returns the resulting @CredentialRegistrationID@
+--  otherwise.
 unsafeCredIdFromRaw :: RawCredentialRegistrationID -> CredentialRegistrationID
 unsafeCredIdFromRaw (RawCredentialRegistrationID fbs) =
     case decode (FBS.toByteString fbs) of
         Left _ -> error "Precondition violation. Invalid registration ID."
         Right v -> v
 
--- |Account credentials with a fully deserialized and checked credential registration ID.
+-- | Account credentials with a fully deserialized and checked credential registration ID.
 type AccountCredential = AccountCredential' CredentialRegistrationID
 
--- |Account credentials with a 'RawCredentialRegistrationID'. This has a
--- slightly smaller memory footprint and is substantially quicker to
--- deserialize.
+-- | Account credentials with a 'RawCredentialRegistrationID'. This has a
+--  slightly smaller memory footprint and is substantially quicker to
+--  deserialize.
 type RawAccountCredential = AccountCredential' RawCredentialRegistrationID
 
--- |Convert an account credential to a raw one. This is a relatively expensive
--- function so should be used with care.
+-- | Convert an account credential to a raw one. This is a relatively expensive
+--  function so should be used with care.
 toRawAccountCredential :: AccountCredential -> RawAccountCredential
 toRawAccountCredential = fmap toRawCredRegId
 
@@ -1011,7 +1011,7 @@ instance Serialize CredentialType where
             1 -> return Normal
             _ -> fail "Unsupported credential type."
 
-instance Serialize credTy => Serialize (AccountCredential' credTy) where
+instance (Serialize credTy) => Serialize (AccountCredential' credTy) where
     put (InitialAC icdi) = putWord8 0 <> put icdi
     put (NormalAC cdi coms) = putWord8 1 <> put cdi <> put coms
 
@@ -1028,7 +1028,7 @@ instance FromJSON AccountCredentialWithProofs where
             Initial -> InitialACWP <$> v .: "contents"
             Normal -> NormalACWP <$> v .: "contents"
 
-instance FromJSON credTy => FromJSON (AccountCredential' credTy) where
+instance (FromJSON credTy) => FromJSON (AccountCredential' credTy) where
     parseJSON = withObject "Account credential" $ \v -> do
         ty <- v .: "type"
         case ty of
@@ -1039,14 +1039,14 @@ instance FromJSON credTy => FromJSON (AccountCredential' credTy) where
                 coms <- withObject "Credential commitments" (.: "commitments") co
                 return $ NormalAC cdv coms
 
-instance ToJSON credTy => ToJSON (AccountCredential' credTy) where
+instance (ToJSON credTy) => ToJSON (AccountCredential' credTy) where
     toJSON (InitialAC icdv) = object ["type" .= Initial, "contents" .= icdv]
     toJSON (NormalAC cdv coms) = object ["type" .= Normal, "contents" .= object (credentialDeploymentValuesList cdv ++ ["commitments" .= coms])]
 
--- |Helper class to unify access to fields of CredentialDeploymentValues
--- for both the values, as well as values with proofs.
+-- | Helper class to unify access to fields of CredentialDeploymentValues
+--  for both the values, as well as values with proofs.
 class CredentialValuesFields credTy a | a -> credTy where
-    -- |Extract the validity information for the credential.
+    -- | Extract the validity information for the credential.
     {-# INLINE validTo #-}
     validTo :: a -> CredentialValidTo
     validTo = pValidTo . policy
@@ -1092,10 +1092,10 @@ instance CredentialValuesFields CredentialRegistrationID AccountCredentialWithPr
     credPubKeys (InitialACWP icdi) = icdvAccount . icdiValues $ icdi
     credPubKeys (NormalACWP cdi) = cdvPublicKeys . cdiValues $ cdi
 
--- |Extract only the values we care about from the account credential.
--- Concretely this retains the "Values" part, as well as the commitments. This
--- function can fail if the credential proofs are malformed. This cannot happen
--- on a credential that has been validated, but it can happen before that.
+-- | Extract only the values we care about from the account credential.
+--  Concretely this retains the "Values" part, as well as the commitments. This
+--  function can fail if the credential proofs are malformed. This cannot happen
+--  on a credential that has been validated, but it can happen before that.
 values :: AccountCredentialWithProofs -> Maybe AccountCredential
 values (InitialACWP icdi) = Just (InitialAC (icdiValues icdi))
 values (NormalACWP cdi) = NormalAC (cdiValues cdi) <$> proofCommitments (cdiProofs cdi)
@@ -1113,18 +1113,18 @@ instance HasCredentialType AccountCredentialWithProofs where
 
 -- * Credential commitments helpers.
 
--- |Commitment size is 48 bytes since that is the size of the serialization of
--- G1 group of BLS12-381.
+-- | Commitment size is 48 bytes since that is the size of the serialization of
+--  G1 group of BLS12-381.
 commitmentSize :: Int
 commitmentSize = 48
 
--- |Size of a commitment in the G1 group of the BLS curve.
+-- | Size of a commitment in the G1 group of the BLS curve.
 data CommitmentSize
 
 instance FBS.FixedLength CommitmentSize where
     fixedLength _ = commitmentSize
 
--- |A commitment in the G1 group of the BLS curve.
+-- | A commitment in the G1 group of the BLS curve.
 newtype Commitment = Commitment (FBS.FixedByteString CommitmentSize)
     deriving (Eq)
     deriving (Show, ToJSON, FromJSON) via FBSHex CommitmentSize
@@ -1172,8 +1172,8 @@ instance Serialize CredentialDeploymentCommitments where
             <> mapM_ put cmmIdCredSecSharingCoeff
     get = getCommitments
 
--- |Parse commitments. This must correspond to the serialization
--- of the datatype "CredentialDeploymentCommitments" in rust-src/id/src/types.rs
+-- | Parse commitments. This must correspond to the serialization
+--  of the datatype "CredentialDeploymentCommitments" in rust-src/id/src/types.rs
 getCommitments :: Get CredentialDeploymentCommitments
 getCommitments = do
     cmmPrf <- get
@@ -1186,9 +1186,9 @@ getCommitments = do
     cmmIdCredSecSharingCoeff <- replicateM (fromIntegral cmmIdLen) get
     return CredentialDeploymentCommitments{..}
 
--- |Attempt to extract commitments from proofs. If the proofs belong
--- to a credential that has been validated this function will return 'Just',
--- otherwise it might return 'Nothing'.
+-- | Attempt to extract commitments from proofs. If the proofs belong
+--  to a credential that has been validated this function will return 'Just',
+--  otherwise it might return 'Nothing'.
 proofCommitments :: Proofs -> Maybe CredentialDeploymentCommitments
 proofCommitments (Proofs shortByteString) =
     case runGet getCommitments $ BS.drop 96 $ BSS.fromShort shortByteString of

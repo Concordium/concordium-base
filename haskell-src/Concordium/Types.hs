@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- |Basic blockchain types.
+-- | Basic blockchain types.
 module Concordium.Types (
     -- * Cost units
     module Concordium.Common.Amount,
@@ -237,25 +237,25 @@ import Test.QuickCheck.Arbitrary (Arbitrary (arbitrary))
 
 -- * Hashing
 
--- |A value equipped with its hash.
+-- | A value equipped with its hash.
 data Hashed' h a = Hashed {_unhashed :: a, _hashed :: h}
 
--- |A value equipped with a 'Hash.Hash'.
+-- | A value equipped with a 'Hash.Hash'.
 type Hashed = Hashed' Hash.Hash
 
 instance HashableTo h (Hashed' h a) where
     getHash = _hashed
 
--- |This lens allows for getting and setting the value inside a Hashed structure.
--- If a value is updated the new hash is recomputed automatically.
+-- | This lens allows for getting and setting the value inside a Hashed structure.
+--  If a value is updated the new hash is recomputed automatically.
 unhashed :: (HashableTo h a) => Lens' (Hashed' h a) a
 unhashed f h = makeHashed <$> f (_unhashed h)
 
--- |Construct a hashed value, given that the value is of a hashable type.
-makeHashed :: HashableTo h a => a -> Hashed' h a
+-- | Construct a hashed value, given that the value is of a hashable type.
+makeHashed :: (HashableTo h a) => a -> Hashed' h a
 makeHashed v = Hashed v (getHash v)
 
-instance Eq h => Eq (Hashed' h a) where
+instance (Eq h) => Eq (Hashed' h a) where
     a == b = _hashed a == _hashed b
 
 instance (Eq h, Ord a) => Ord (Hashed' h a) where
@@ -266,11 +266,11 @@ instance (Show a) => Show (Hashed' h a) where
 
 -- * Types related to bakers.
 
--- |The ID of a baker, which is the index of its account.
+-- | The ID of a baker, which is the index of its account.
 newtype BakerId = BakerId {bakerAccountIndex :: AccountIndex}
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
--- |The ID of a delegator, which is the index of its account.
+-- | The ID of a delegator, which is the index of its account.
 newtype DelegatorId = DelegatorId {delegatorAccountIndex :: AccountIndex}
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits, S.Serialize) via AccountIndex
 
@@ -284,9 +284,9 @@ type BakerAggregationPrivateKey = Bls.SecretKey
 type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
 
--- |A wrapper type over units that are measured as parts per 100000.
--- This wrapper will be used by both @AmountFraction@ and @ElectionDifficulty@.
--- It was agreed in tokenomics discussions to be sufficient.
+-- | A wrapper type over units that are measured as parts per 100000.
+--  This wrapper will be used by both @AmountFraction@ and @ElectionDifficulty@.
+--  It was agreed in tokenomics discussions to be sufficient.
 newtype PartsPerHundredThousands = PartsPerHundredThousands {partsPerHundredThousand :: Word32}
     deriving newtype (Eq, Ord, Num, Real, Enum, Integral)
 
@@ -319,38 +319,38 @@ instance FromJSON PartsPerHundredThousands where
 instance Arbitrary PartsPerHundredThousands where
     arbitrary = PartsPerHundredThousands <$> choose (0, hundredThousand)
 
--- |Make a 'PartsPerHundredThousands'.
+-- | Make a 'PartsPerHundredThousands'.
 makePartsPerHundredThousands ::
-    -- |Hundred thousandths
+    -- | Hundred thousandths
     Word32 ->
     PartsPerHundredThousands
 makePartsPerHundredThousands v = assert (v <= hundredThousand) (PartsPerHundredThousands v)
 
--- |Add two PartsPerHundredThousands.
+-- | Add two PartsPerHundredThousands.
 addPartsPerHundredThousands :: PartsPerHundredThousands -> PartsPerHundredThousands -> Maybe PartsPerHundredThousands
 addPartsPerHundredThousands (PartsPerHundredThousands a) (PartsPerHundredThousands b)
     | a + b <= hundredThousand = Just (PartsPerHundredThousands (a + b))
     | otherwise = Nothing
 
--- |Compute @1 - f@.
+-- | Compute @1 - f@.
 complementPartsPerHundredThousands :: PartsPerHundredThousands -> PartsPerHundredThousands
 complementPartsPerHundredThousands (PartsPerHundredThousands a) = PartsPerHundredThousands (hundredThousand - a)
 
--- |Compute a fraction of an amount, with the fraction given as parts per 100000.
--- The amount is rounded down to the nearest microGTU.
+-- | Compute a fraction of an amount, with the fraction given as parts per 100000.
+--  The amount is rounded down to the nearest microGTU.
 takeFractionFromPartsPerHundredThousands :: PartsPerHundredThousands -> Amount -> Amount
 takeFractionFromPartsPerHundredThousands f = fromInteger . (`div` 100000) . (toInteger (partsPerHundredThousand f) *) . toInteger
 
--- |Convert a 'PartsPerHundredThousands' to a 'Rational' with no loss of precision.
+-- | Convert a 'PartsPerHundredThousands' to a 'Rational' with no loss of precision.
 partsPerHundredThousandsToRational :: PartsPerHundredThousands -> Rational
 partsPerHundredThousandsToRational f = toInteger (partsPerHundredThousand f) % 100000
 
--- |A unicode representation of a Url.
--- The Utf8 encoding of the Url must be at most 'maxUrlTextLength' bytes.
+-- | A unicode representation of a Url.
+--  The Utf8 encoding of the Url must be at most 'maxUrlTextLength' bytes.
 newtype UrlText = UrlText T.Text
     deriving newtype (Eq, Show)
 
--- |The maximum allowed length of a 'UrlText' in bytes (Utf8 encoded).
+-- | The maximum allowed length of a 'UrlText' in bytes (Utf8 encoded).
 maxUrlTextLength :: Word16
 maxUrlTextLength = 2048
 
@@ -386,47 +386,47 @@ instance AE.FromJSON UrlText where
 emptyUrlText :: UrlText
 emptyUrlText = UrlText ""
 
--- |Due to limitations on the ledger, there has to be some restriction on the
--- precision of the input for updating ElectionDifficult. For this purpose,
--- we will consider the parameter on the ChainUpdate as parts per 100000 which
--- should probably give enough precision.
+-- | Due to limitations on the ledger, there has to be some restriction on the
+--  precision of the input for updating ElectionDifficult. For this purpose,
+--  we will consider the parameter on the ChainUpdate as parts per 100000 which
+--  should probably give enough precision.
 --
--- This value will be converted into a Double when checking the election probability.
--- The value must be in the range [0,100000).
+--  This value will be converted into a Double when checking the election probability.
+--  The value must be in the range [0,100000).
 newtype ElectionDifficulty = ElectionDifficulty {edPartsPerHundredThousands :: PartsPerHundredThousands}
     deriving (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize, Num, Integral, Enum, Real) via PartsPerHundredThousands
 
 instance HashableTo Hash.Hash ElectionDifficulty where
     getHash = Hash.hash . S.encode
 
-instance Monad m => MHashableTo m Hash.Hash ElectionDifficulty
+instance (Monad m) => MHashableTo m Hash.Hash ElectionDifficulty
 
--- |Make an election difficulty fraction.
--- The numerator (Word32) must be strictly less than 100000. This function will raise an exception otherwise.
+-- | Make an election difficulty fraction.
+--  The numerator (Word32) must be strictly less than 100000. This function will raise an exception otherwise.
 makeElectionDifficulty ::
     Word32 ->
     ElectionDifficulty
 makeElectionDifficulty v = let ppht = makePartsPerHundredThousands v in assert (ppht < 100000) $ ElectionDifficulty ppht
 
--- |Same as `makeElectionDifficulty`, but does not check its precondition.
+-- | Same as `makeElectionDifficulty`, but does not check its precondition.
 makeElectionDifficultyUnchecked ::
     Word32 ->
     ElectionDifficulty
 makeElectionDifficultyUnchecked = ElectionDifficulty . PartsPerHundredThousands
 
--- |Convert election difficulty to an IEEE754 double. In general this involves
--- some amount of rounding. Since the numerator of election difficulty is at
--- most 32-bits it can be fully represented as a Double without any loss of
--- precision. Thus the only source of rounding is division by 100000 which is
--- very small.
--- The maximum absolute error for any value of is about 7 * 10^-12.
+-- | Convert election difficulty to an IEEE754 double. In general this involves
+--  some amount of rounding. Since the numerator of election difficulty is at
+--  most 32-bits it can be fully represented as a Double without any loss of
+--  precision. Thus the only source of rounding is division by 100000 which is
+--  very small.
+--  The maximum absolute error for any value of is about 7 * 10^-12.
 getDoubleFromElectionDifficulty :: ElectionDifficulty -> Double
 getDoubleFromElectionDifficulty = (/ 100000) . fromIntegral
 
--- |A sequential index of each finalization on a chain.
--- The genesis block has finalization index 0.
--- Note that this is not comparable with block height, since finalization does not occur at every
--- level of the chain.
+-- | A sequential index of each finalization on a chain.
+--  The genesis block has finalization index 0.
+--  Note that this is not comparable with block height, since finalization does not occur at every
+--  level of the chain.
 newtype FinalizationIndex = FinalizationIndex {theFinalizationIndex :: Word64}
     deriving (Eq, Ord, Num, Real, Enum, Integral, Show, ToJSON, FromJSON) via Word64
 
@@ -436,13 +436,13 @@ instance S.Serialize FinalizationIndex where
 
 type FinalizationCommitteeSize = Word32
 
--- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).
--- Infinity and zero are disallowed.
+-- | An exchange rate (e.g. uGTU/Euro or Euro/Energy).
+--  Infinity and zero are disallowed.
 newtype ExchangeRate = ExchangeRate (Ratio Word64)
     deriving newtype (Eq, Ord, Num, Real, Show, Fractional, ToJSON)
 
--- |We require the serialization to be in reduced form to ensure
--- that an exchange rate has a unique serialized representation.
+-- | We require the serialization to be in reduced form to ensure
+--  that an exchange rate has a unique serialized representation.
 instance S.Serialize ExchangeRate where
     put (ExchangeRate r) =
         assert (numerator r /= 0 && denominator r /= 0) $
@@ -464,23 +464,23 @@ instance FromJSON ExchangeRate where
 instance HashableTo Hash.Hash ExchangeRate where
     getHash = Hash.hash . S.encode
 
-instance Monad m => MHashableTo m Hash.Hash ExchangeRate
+instance (Monad m) => MHashableTo m Hash.Hash ExchangeRate
 
--- |Energy to GTU conversion rate in microGTU per Energy.
+-- | Energy to GTU conversion rate in microGTU per Energy.
 type EnergyRate = Rational
 
--- |Compute the exchange rate of microGTU per Energy from the
--- rate of microGTU per Euro and the rate of Euros per Energy.
+-- | Compute the exchange rate of microGTU per Energy from the
+--  rate of microGTU per Euro and the rate of Euros per Energy.
 computeEnergyRate ::
-    -- |microGTU per Euro
+    -- | microGTU per Euro
     ExchangeRate ->
-    -- |Euros per Energy
+    -- | Euros per Energy
     ExchangeRate ->
     EnergyRate
 computeEnergyRate microGTUPerEuro euroPerEnergy = toRational microGTUPerEuro * toRational euroPerEnergy
 
--- |Compute the cost of energy at a given rate.
--- This rounds up to the nearest microGTU.
+-- | Compute the cost of energy at a given rate.
+--  This rounds up to the nearest microGTU.
 computeCost ::
     EnergyRate ->
     Energy ->
@@ -489,14 +489,14 @@ computeCost rate energy = ceiling (rate * fromIntegral energy)
 
 -- * Minting and rewards
 
--- |A base-10 floating point number representation.
--- The value is @mrMantissa * 10^(-mrExponent)@.
+-- | A base-10 floating point number representation.
+--  The value is @mrMantissa * 10^(-mrExponent)@.
 --
--- At least 6 significant figures were required by the specification,
--- and 'Word32' provides 9.  Exponent values greater than about
--- 29 will not be necessary, since such a rate will be effectively
--- 0 (when we compute the amount that is minted based on a 64-bit
--- value as the current number of GTUs.)
+--  At least 6 significant figures were required by the specification,
+--  and 'Word32' provides 9.  Exponent values greater than about
+--  29 will not be necessary, since such a rate will be effectively
+--  0 (when we compute the amount that is minted based on a 64-bit
+--  value as the current number of GTUs.)
 data MintRate = MintRate
     { mrMantissa :: !Word32,
       mrExponent :: !Word8
@@ -543,7 +543,7 @@ instance FromJSON MintRate where
 instance HashableTo Hash.Hash MintRate where
     getHash = Hash.hash . S.encode
 
-instance Monad m => MHashableTo m Hash.Hash MintRate
+instance (Monad m) => MHashableTo m Hash.Hash MintRate
 
 instance Arbitrary MintRate where
     arbitrary = do
@@ -555,13 +555,13 @@ instance Arbitrary MintRate where
         mrExponent <- choose (mantissaDigits, 29)
         return MintRate{..}
 
--- |Compute an amount minted at a given rate.
--- The amount is rounded down to the nearest microGTU.
+-- | Compute an amount minted at a given rate.
+--  The amount is rounded down to the nearest microGTU.
 mintAmount :: MintRate -> Amount -> Amount
 {-# INLINE mintAmount #-}
 mintAmount mr = fromInteger . (`div` (10 ^ mrExponent mr)) . (toInteger (mrMantissa mr) *) . toInteger
 
--- |A fraction in [0,1] of an 'Amount', represented as parts per 100000.
+-- | A fraction in [0,1] of an 'Amount', represented as parts per 100000.
 newtype AmountFraction = AmountFraction {rfPartsPerHundredThousands :: PartsPerHundredThousands}
     deriving newtype (Eq, Ord, Show, ToJSON, FromJSON, S.Serialize, Arbitrary)
 
@@ -573,25 +573,25 @@ makeAmountFraction = AmountFraction . makePartsPerHundredThousands
 addAmountFraction :: AmountFraction -> AmountFraction -> Maybe AmountFraction
 addAmountFraction (AmountFraction a) (AmountFraction b) = AmountFraction <$> addPartsPerHundredThousands a b
 
--- |Compute @1 - f@.
+-- | Compute @1 - f@.
 complementAmountFraction :: AmountFraction -> AmountFraction
 complementAmountFraction (AmountFraction f) = AmountFraction $ complementPartsPerHundredThousands f
 
--- |Compute a fraction of an amount.
--- The amount is rounded down to the nearest microGTU.
+-- | Compute a fraction of an amount.
+--  The amount is rounded down to the nearest microGTU.
 takeFraction :: AmountFraction -> Amount -> Amount
 takeFraction (AmountFraction f) = takeFractionFromPartsPerHundredThousands f
 
 fractionToRational :: AmountFraction -> Rational
 fractionToRational (AmountFraction f) = partsPerHundredThousandsToRational f
 
--- |The commission rates charged by a pool owner.
+-- | The commission rates charged by a pool owner.
 data CommissionRates = CommissionRates
-    { -- |Fraction of finalization rewards charged by the pool owner.
+    { -- | Fraction of finalization rewards charged by the pool owner.
       _finalizationCommission :: !AmountFraction,
-      -- |Fraction of baking rewards charged by the pool owner.
+      -- | Fraction of baking rewards charged by the pool owner.
       _bakingCommission :: !AmountFraction,
-      -- |Fraction of transaction rewards charged by the pool owner.
+      -- | Fraction of transaction rewards charged by the pool owner.
       _transactionCommission :: !AmountFraction
     }
     deriving (Eq, Show)
@@ -638,17 +638,17 @@ newtype VoterPower = VoterPower AmountUnit
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
 
--- |The identifier associated with an account.
+-- | The identifier associated with an account.
 data AccountIdentifier
-    = -- |Given credential registration id as an identifier.
+    = -- | Given credential registration id as an identifier.
       CredRegID !RawCredentialRegistrationID
-    | -- |Given address as an identifier. Multiple addresses may refer to the same account.
+    | -- | Given address as an identifier. Multiple addresses may refer to the same account.
       AccAddress !AccountAddress
-    | -- |Given index as an identifier.
+    | -- | Given index as an identifier.
       AccIndex !AccountIndex
 
--- |Decode a null-terminated string as either an account address (base-58), account index (AccountIndex) or a
--- credential registration ID (base-16).
+-- | Decode a null-terminated string as either an account address (base-58), account index (AccountIndex) or a
+--  credential registration ID (base-16).
 decodeAccountIdentifier :: ByteString -> Maybe AccountIdentifier
 decodeAccountIdentifier bs =
     case addressFromBytes bs of
@@ -658,11 +658,11 @@ decodeAccountIdentifier bs =
                 Just cid -> Just $ CredRegID cid
         Right acc -> Just $ AccAddress acc
 
--- |The index of an account. Starting with 0,
--- each account is allocated a sequential @AccountIndex@
--- when it is created.  For the most part, this is only
--- used internally.  However, it is indirectly exposed through
--- 'BakerId'.
+-- | The index of an account. Starting with 0,
+--  each account is allocated a sequential @AccountIndex@
+--  when it is created.  For the most part, this is only
+--  used internally.  However, it is indirectly exposed through
+--  'BakerId'.
 newtype AccountIndex = AccountIndex Word64
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
 
@@ -673,9 +673,9 @@ instance S.Serialize AccountIndex where
 instance HashableTo Hash.Hash AccountIndex where
     getHash = Hash.hash . S.encode
 
-instance Monad m => MHashableTo m Hash.Hash AccountIndex
+instance (Monad m) => MHashableTo m Hash.Hash AccountIndex
 
--- |Unique module reference.
+-- | Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
     deriving (Eq, Ord, Hashable, Typeable, Data)
     deriving (FromJSON, ToJSON, Read) via Hash.Hash
@@ -687,7 +687,7 @@ instance S.Serialize ModuleRef where
     get = ModuleRef <$> S.get
     put (ModuleRef mref) = S.put mref
 
--- |An address is either a contract or account.
+-- | An address is either a contract or account.
 data Address
     = AddressAccount !AccountAddress
     | AddressContract !ContractAddress
@@ -716,7 +716,7 @@ instance S.Serialize TransactionTime where
     put = P.putWord64be . ttsSeconds
     get = TransactionTime <$> G.getWord64be
 
--- |Get time in seconds since the unix epoch.
+-- | Get time in seconds since the unix epoch.
 getTransactionTime :: IO TransactionTime
 getTransactionTime = utcTimeToTransactionTime <$> getCurrentTime
 
@@ -731,11 +731,11 @@ type TransactionExpiryTime = TransactionTime
 transactionTimeToTimestamp :: TransactionTime -> Timestamp
 transactionTimeToTimestamp (TransactionTime x) = Timestamp (1000 * x)
 
--- |Check if a transaction expiry time precedes a given timestamp.
+-- | Check if a transaction expiry time precedes a given timestamp.
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired (TransactionTime x) (Timestamp t) = 1000 * x < t
 
--- |Type representing a difference between amounts.
+-- | Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta {amountDelta :: Integer}
     deriving (Eq, Ord, Show, Enum, Num, Integral, Real)
 
@@ -753,8 +753,8 @@ applyAmountDelta del amt =
   where
     amt' = fromIntegral amt + del
 
--- |The type used to count exact execution cost. This cost is then converted to
--- amounts in some way.
+-- | The type used to count exact execution cost. This cost is then converted to
+--  amounts in some way.
 newtype Energy = Energy {_energy :: Word64}
     deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON) via Word64
 
@@ -777,26 +777,26 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
--- |Data type for memos that can be added to transfers.
--- Max length of 'maxMemoSize' is assumed.
--- Create new values with 'memoFromBSS' to ensure assumed properties.
+-- | Data type for memos that can be added to transfers.
+--  Max length of 'maxMemoSize' is assumed.
+--  Create new values with 'memoFromBSS' to ensure assumed properties.
 --
--- Note that the ToJSON instance of this type is derived, based on hex encoding.
--- The FromJSON instance is manually implemented to ensure length limits.
+--  Note that the ToJSON instance of this type is derived, based on hex encoding.
+--  The FromJSON instance is manually implemented to ensure length limits.
 newtype Memo = Memo BSS.ShortByteString
     deriving (Eq)
     deriving (AE.ToJSON, Show) via BSH.ByteStringHex
 
--- |Maximum size for 'Memo'.
+-- | Maximum size for 'Memo'.
 maxMemoSize :: Int
 maxMemoSize = 256
 
 tooBigErrorString :: String -> Int -> Int -> String
 tooBigErrorString name len maxSize = "Size of the " ++ name ++ " (" ++ show len ++ " bytes) exceeds maximum allowed size (" ++ show maxSize ++ " bytes)."
 
--- |Construct 'Memo' from a 'BSS.ShortByteString'.
--- Fails if the length exceeds 'maxMemoSize'.
-memoFromBSS :: MonadError String m => BSS.ShortByteString -> m Memo
+-- | Construct 'Memo' from a 'BSS.ShortByteString'.
+--  Fails if the length exceeds 'maxMemoSize'.
+memoFromBSS :: (MonadError String m) => BSS.ShortByteString -> m Memo
 memoFromBSS bss =
     if len <= maxMemoSize
         then return . Memo $ bss
@@ -821,20 +821,20 @@ instance AE.FromJSON Memo where
             Left err -> fail err
             Right rd -> return rd
 
--- |Data type for registering data on chain.
--- Max length of 'maxRegisteredDataSize' is assumed.
--- Create new values with 'registeredDataFromBSS' to ensure assumed properties.
+-- | Data type for registering data on chain.
+--  Max length of 'maxRegisteredDataSize' is assumed.
+--  Create new values with 'registeredDataFromBSS' to ensure assumed properties.
 newtype RegisteredData = RegisteredData BSS.ShortByteString
     deriving (Eq)
     deriving (AE.ToJSON, Show) via BSH.ByteStringHex
 
--- |Maximum size for 'RegisteredData'.
+-- | Maximum size for 'RegisteredData'.
 maxRegisteredDataSize :: Int
 maxRegisteredDataSize = 256
 
--- |Construct 'RegisteredData' from a 'BSS.ShortByteString'.
--- Fails if the length exceeds 'maxRegisteredDataSize'.
-registeredDataFromBSS :: MonadError String m => BSS.ShortByteString -> m RegisteredData
+-- | Construct 'RegisteredData' from a 'BSS.ShortByteString'.
+--  Fails if the length exceeds 'maxRegisteredDataSize'.
+registeredDataFromBSS :: (MonadError String m) => BSS.ShortByteString -> m RegisteredData
 registeredDataFromBSS bss =
     if len <= maxRegisteredDataSize
         then return . RegisteredData $ bss
@@ -877,8 +877,8 @@ data AccountEncryptedAmount = AccountEncryptedAmount
       -- present, this index is the one for such amount. Otherwise it refers to the first
       -- amount in the list of incoming encrypted amounts.
       _startIndex :: !EncryptedAmountAggIndex,
-      -- |If 'Just', the amount that has resulted from aggregating other amounts and the
-      -- number of aggregated amounts (must be at least 2 if present).
+      -- | If 'Just', the amount that has resulted from aggregating other amounts and the
+      --  number of aggregated amounts (must be at least 2 if present).
       _aggregatedAmount :: !(Maybe (EncryptedAmount, Word32)),
       -- | Amounts starting at @startIndex@ (or at @startIndex + 1@ if an aggregated amount is present).
       -- They are assumed to be numbered sequentially.
@@ -888,9 +888,9 @@ data AccountEncryptedAmount = AccountEncryptedAmount
     }
     deriving (Eq, Show)
 
--- |Check whether the account encrypted amount is zero. This checks that there
--- are no incoming amounts, and that the self amount is a specific encryption of
--- 0, with randomness 0.
+-- | Check whether the account encrypted amount is zero. This checks that there
+--  are no incoming amounts, and that the self amount is a specific encryption of
+--  0, with randomness 0.
 isZeroAccountEncryptedAmount :: AccountEncryptedAmount -> Bool
 isZeroAccountEncryptedAmount AccountEncryptedAmount{..} =
     _aggregatedAmount == Nothing
@@ -933,7 +933,7 @@ instance AE.FromJSON AccountEncryptedAmount where
                     | otherwise -> fail "Cannot have less than 2 amounts aggregated"
         return AccountEncryptedAmount{..}
 
--- |Initial encrypted amount on a newly created account.
+-- | Initial encrypted amount on a newly created account.
 initialAccountEncryptedAmount :: AccountEncryptedAmount
 initialAccountEncryptedAmount =
     AccountEncryptedAmount
@@ -970,61 +970,61 @@ instance S.Serialize AccountEncryptedAmount where
 
 makeLenses ''AccountEncryptedAmount
 
--- |Get the list of incoming amounts ordered by index, starting at `_startIndex`.
+-- | Get the list of incoming amounts ordered by index, starting at `_startIndex`.
 getIncomingAmountsList :: AccountEncryptedAmount -> [EncryptedAmount]
 getIncomingAmountsList AccountEncryptedAmount{..} =
     toList $ case _aggregatedAmount of
         Nothing -> _incomingEncryptedAmounts
         Just (e, _) -> e Seq.:<| _incomingEncryptedAmounts
 
--- |Size of the transaction payload.
+-- | Size of the transaction payload.
 newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
     deriving (Eq, Show, Ord, Num, Real, Enum, Integral, FromJSON, ToJSON) via Word32
 
--- |Check that the payload size is within bounds of what the protocol version allows.
+-- | Check that the payload size is within bounds of what the protocol version allows.
 validatePayloadSize :: SProtocolVersion pv -> PayloadSize -> Bool
 validatePayloadSize spv PayloadSize{..} = thePayloadSize <= maxPayloadSize spv
 
--- |Serialization format as specified
+-- | Serialization format as specified
 --
--- * @SPEC: <$DOCS/Transactions#transaction-header>
+--  * @SPEC: <$DOCS/Transactions#transaction-header>
 instance S.Serialize PayloadSize where
     put (PayloadSize n) = S.putWord32be n
     get = PayloadSize <$> S.getWord32be
 
--- |Serialized payload of the transaction
+-- | Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload {_spayload :: BSS.ShortByteString}
     deriving (Eq, Show)
 
--- |There is no corresponding getter (to fit into the Serialize instance) since
--- encoded payload does not encode its own length. See 'getPayload' below.
+-- | There is no corresponding getter (to fit into the Serialize instance) since
+--  encoded payload does not encode its own length. See 'getPayload' below.
 putEncodedPayload :: P.Putter EncodedPayload
 putEncodedPayload = P.putShortByteString . _spayload
 
--- |Get payload with given length.
+-- | Get payload with given length.
 getEncodedPayload :: PayloadSize -> G.Get EncodedPayload
 getEncodedPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fromIntegral n)
 
 payloadSize :: EncodedPayload -> PayloadSize
 payloadSize = fromIntegral . BSS.length . _spayload
 
--- |Blockchain metadata as needed by contract execution.
+-- | Blockchain metadata as needed by contract execution.
 newtype ChainMetadata = ChainMetadata
-    { -- |Time at the beginning of the slot.
+    { -- | Time at the beginning of the slot.
       slotTime :: Timestamp
     }
 
--- |Encode chain metadata for passing over FFI. Uses little-endian encoding
--- for integral values since that is what is expected on the other side of FFI.
--- This is deliberately not made into a serialize instance so that it is not accidentally
--- misused, since it differs in endianness from most other network-related serialization.
+-- | Encode chain metadata for passing over FFI. Uses little-endian encoding
+--  for integral values since that is what is expected on the other side of FFI.
+--  This is deliberately not made into a serialize instance so that it is not accidentally
+--  misused, since it differs in endianness from most other network-related serialization.
 encodeChainMeta :: ChainMetadata -> ByteString
 encodeChainMeta ChainMetadata{..} = S.runPut encoder
   where
     encoder = P.putWord64le (tsMillis slotTime)
 
--- |The hash of a transaction which is then signed.
--- (Naturally, this does not include the transaction signature.)
+-- | The hash of a transaction which is then signed.
+--  (Naturally, this does not include the transaction signature.)
 newtype TransactionSignHashV0 = TransactionSignHashV0 {v0TransactionSignHash :: Hash.Hash}
     deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
@@ -1033,8 +1033,8 @@ type TransactionSignHash = TransactionSignHashV0
 transactionSignHashToByteString :: TransactionSignHash -> ByteString
 transactionSignHashToByteString = Hash.hashToByteString . v0TransactionSignHash
 
--- |Hash of a transaction including the signature.
--- (For credential deployments, there is no signature.)
+-- | Hash of a transaction including the signature.
+--  (For credential deployments, there is no signature.)
 newtype TransactionHashV0 = TransactionHashV0 {v0TransactionHash :: Hash.Hash}
     deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
@@ -1046,13 +1046,13 @@ type TransactionHash = TransactionHashV0
 -- which causes the AccountTransactionIndex template haskell derivation of
 -- database schemas to fail.
 
--- |The type of a block hash. This should be independent of how the hash
--- is computed. Even if the hashing scheme changes over time, it should be
--- effectively impossible for two blocks on the same chain to have the same
--- 'BlockHash'.
+-- | The type of a block hash. This should be independent of how the hash
+--  is computed. Even if the hashing scheme changes over time, it should be
+--  effectively impossible for two blocks on the same chain to have the same
+--  'BlockHash'.
 --
--- (This type may need to change if the hash size changes or a different
--- hash function is used.)
+--  (This type may need to change if the hash size changes or a different
+--  hash function is used.)
 newtype BlockHash = BlockHash {blockHash :: Hash.Hash}
     deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
@@ -1065,13 +1065,13 @@ type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
 
--- |Compute the first slot at or above the given time.
+-- | Compute the first slot at or above the given time.
 transactionTimeToSlot ::
-    -- |Genesis time
+    -- | Genesis time
     Timestamp ->
-    -- |Slot duration
+    -- | Slot duration
     Duration ->
-    -- |Time to convert
+    -- | Time to convert
     TransactionTime ->
     Slot
 transactionTimeToSlot genesis slotDur t
@@ -1080,9 +1080,9 @@ transactionTimeToSlot genesis slotDur t
   where
     tt = transactionTimeToTimestamp t
 
--- |Type indicating the index of a (re)genesis block.
--- The initial genesis block has index @0@ and each subsequent regenesis
--- has an incrementally higher index.
+-- | Type indicating the index of a (re)genesis block.
+--  The initial genesis block has index @0@ and each subsequent regenesis
+--  has an incrementally higher index.
 newtype GenesisIndex = GenesisIndex Word32
     deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON, Storable) via Word32
 
@@ -1090,28 +1090,28 @@ instance S.Serialize GenesisIndex where
     put (GenesisIndex gi) = S.putWord32be gi
     get = GenesisIndex <$> S.getWord32be
 
--- |Equivalence class of account addresses. In protocol versions 1 and 2
--- addresses are in 1-1 correspondence with accounts. In protocol version 3 only
--- the first 29 bytes of the address uniquely identify an account. This type
--- wrapper is used to wrap account addresses and add different equality and
--- hashable instances so that we can identify transactions coming from different
--- addresses but the same account.
+-- | Equivalence class of account addresses. In protocol versions 1 and 2
+--  addresses are in 1-1 correspondence with accounts. In protocol version 3 only
+--  the first 29 bytes of the address uniquely identify an account. This type
+--  wrapper is used to wrap account addresses and add different equality and
+--  hashable instances so that we can identify transactions coming from different
+--  addresses but the same account.
 --
--- For backwards compatibility we retain the equality and hashable instances for
--- account addresses as they were since account addresses are compared in a few
--- places in the scheduler.
+--  For backwards compatibility we retain the equality and hashable instances for
+--  account addresses as they were since account addresses are compared in a few
+--  places in the scheduler.
 newtype AccountAddressEq = AccountAddressEq
     { aaeAddress :: AccountAddress
     }
     deriving (Show)
 
--- |Length of the account address prefix used when uniquely determining the account.
+-- | Length of the account address prefix used when uniquely determining the account.
 accountAddressPrefixSize :: Int
 accountAddressPrefixSize = 29
 
 {-# INLINE accountAddressEmbed #-}
 
--- |Embed an account address into its equivalence class.
+-- | Embed an account address into its equivalence class.
 accountAddressEmbed :: AccountAddress -> AccountAddressEq
 accountAddressEmbed = AccountAddressEq
 
@@ -1125,13 +1125,13 @@ instance Hashable AccountAddressEq where
     hash (AccountAddressEq (AccountAddress b)) = fromIntegral (FBS.unsafeReadWord64 b)
     {-# INLINE hash #-}
 
--- |Create an alias for the address using the counter. The counter is used
--- modulo 2^24, and the three bytes are appended in big endian order.
+-- | Create an alias for the address using the counter. The counter is used
+--  modulo 2^24, and the three bytes are appended in big endian order.
 --
--- Examples
--- - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256^2) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
--- - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256 * 256 + 4 * 256 * 256 * 256) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
--- - @createAlias addr x = createAlias (createAlias addr y) x@ for any x and y
+--  Examples
+--  - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256^2) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
+--  - @createAlias 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDCeNeGWa7dj (1 + 2 * 256 + 3 * 256 * 256 + 4 * 256 * 256 * 256) = 2wkH4kHMn2WPndf8CxmsoFkX93ouZMJUwTBFSZpDBez9cfL8oC@
+--  - @createAlias addr x = createAlias (createAlias addr y) x@ for any x and y
 createAlias :: AccountAddress -> Word -> AccountAddress
 createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. rest)
   where

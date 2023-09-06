@@ -20,11 +20,11 @@ type WithEnvAndVerbosity = [(String, String)] -> Verbosity -> IO ()
 addFeatures :: [String] -> [String]
 addFeatures opts = opts ++ ["--features", "concordium_base/ffi"]
 
--- |In linux, we will produce two kind of builds:
--- - Static with musl: the rust libraries will only build static artifacts. Intended to be used inside alpine to produce a static binary.
--- - With glibc: Normal compilation. Rust will produce static and dynamic artifacts.
+-- | In linux, we will produce two kind of builds:
+--  - Static with musl: the rust libraries will only build static artifacts. Intended to be used inside alpine to produce a static binary.
+--  - With glibc: Normal compilation. Rust will produce static and dynamic artifacts.
 --
--- The first argument chooses whether to build statically with musl or not.
+--  The first argument chooses whether to build statically with musl or not.
 linuxBuild :: Bool -> WithEnvAndVerbosity
 linuxBuild True env verbosity = do
     noticeNoWrap verbosity "Static linking."
@@ -62,9 +62,9 @@ windowsBuild env verbosity = do
     notice verbosity "Copying libraries to ./lib"
     mapM_ copyLib concordiumLibs
 
--- |On Mac, we will delete the dynamic artifacts if we want to create a static binary.
+-- | On Mac, we will delete the dynamic artifacts if we want to create a static binary.
 --
--- The flag tells whether we want a static compilation or not.
+--  The flag tells whether we want a static compilation or not.
 osxBuild :: Bool -> WithEnvAndVerbosity
 osxBuild static env verbosity = do
     let copyLib lib = do

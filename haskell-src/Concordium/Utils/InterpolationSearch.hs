@@ -2,33 +2,33 @@ module Concordium.Utils.InterpolationSearch where
 
 import Control.Monad
 
--- |Perform a (linear) interpolation search to find the first instance of the search key in
--- the given bounds. This is more efficient than a binary search when the keys are approximately
--- linearly distributed with respect to the indices.
+-- | Perform a (linear) interpolation search to find the first instance of the search key in
+--  the given bounds. This is more efficient than a binary search when the keys are approximately
+--  linearly distributed with respect to the indices.
 --
--- PRECONDITIONS: For some @key :: index -> key@ and @val :: index -> value@
---   * The lookup function @lookupIx i@ returns @(key i, val i)@ for @lowIx <= i <= highIx@.
---   * @lowKey = key lowIx@ and @lowVal = val lowIx@.
---   * @highKey = key highIx@ and @highVal = val highIx@.
---   * For @lowIx <= i < highIx@, @key i <= key (i+1)@ (monotonicity).
---   * @lowIx <= highIx@.
+--  PRECONDITIONS: For some @key :: index -> key@ and @val :: index -> value@
+--    * The lookup function @lookupIx i@ returns @(key i, val i)@ for @lowIx <= i <= highIx@.
+--    * @lowKey = key lowIx@ and @lowVal = val lowIx@.
+--    * @highKey = key highIx@ and @highVal = val highIx@.
+--    * For @lowIx <= i < highIx@, @key i <= key (i+1)@ (monotonicity).
+--    * @lowIx <= highIx@.
 --
--- POSTCONDITION:
---   * If the return value is @Just (i, v)@ then @lowIx <= i <= highIx@, @v = val i@,
---     @target = key i@, and for all @lowKey <= j < i@, @key j < target@.
---   * If the return value is @Nothing@ then there is no @i@ with @lowIx <= i <= highIx@ and
---     @target = key i@.
+--  POSTCONDITION:
+--    * If the return value is @Just (i, v)@ then @lowIx <= i <= highIx@, @v = val i@,
+--      @target = key i@, and for all @lowKey <= j < i@, @key j < target@.
+--    * If the return value is @Nothing@ then there is no @i@ with @lowIx <= i <= highIx@ and
+--      @target = key i@.
 --
--- @lookupIx@ will only be invoked for indexes @lowIx < i < highIx@.
+--  @lookupIx@ will only be invoked for indexes @lowIx < i < highIx@.
 interpolationSearchFirstM ::
     (Monad m, Integral key, Integral index) =>
-    -- |Function to look up the key and value at a specific index.
+    -- | Function to look up the key and value at a specific index.
     (index -> m (key, value)) ->
-    -- |Key to search for @target@.
+    -- | Key to search for @target@.
     key ->
-    -- |Lower bound of the search range @(lowIx, (lowKey, lowVal))@.
+    -- | Lower bound of the search range @(lowIx, (lowKey, lowVal))@.
     (index, (key, value)) ->
-    -- |Upper bound of the search range @(highIx, (highKey, highVal))@.
+    -- | Upper bound of the search range @(highIx, (highKey, highVal))@.
     (index, (key, value)) ->
     m (Maybe (index, value))
 {-# INLINE interpolationSearchFirstM #-}

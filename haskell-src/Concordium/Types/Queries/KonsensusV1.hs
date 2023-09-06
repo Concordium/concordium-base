@@ -1,7 +1,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- |Types that are relevant only for endpoints exposed in consensus version 1.
+-- | Types that are relevant only for endpoints exposed in consensus version 1.
 module Concordium.Types.Queries.KonsensusV1 where
 
 import Data.Aeson
@@ -11,21 +11,21 @@ import qualified Concordium.Crypto.BlsSignature as Bls
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Types
 
--- |An aggregate signature on a 'QuorumCertificate'.
+-- | An aggregate signature on a 'QuorumCertificate'.
 newtype QuorumCertificateSignature = QuorumCertificateSignature Bls.Signature
     deriving (Eq, Show, ToJSON, FromJSON, Serialize) via Bls.Signature
 
 -- | A quorum certificate, to be formed when enough finalizers have signed the same 'QuorumSignatureMessage'.
 data QuorumCertificate = QuorumCertificate
-    { -- |Hash of the block this certificate refers to.
+    { -- | Hash of the block this certificate refers to.
       qcBlock :: !BlockHash,
-      -- |Round of the block this certificate refers to.
+      -- | Round of the block this certificate refers to.
       qcRound :: !Round,
-      -- |Epoch of the block this certificate refers to.
+      -- | Epoch of the block this certificate refers to.
       qcEpoch :: !Epoch,
-      -- |Aggregate signature on the 'QuorumSignatureMessage' with the block hash 'qcBlock'.
+      -- | Aggregate signature on the 'QuorumSignatureMessage' with the block hash 'qcBlock'.
       qcAggregateSignature :: !QuorumCertificateSignature,
-      -- |The set of finalizers whose signature is in 'qcAggregateSignature'.
+      -- | The set of finalizers whose signature is in 'qcAggregateSignature'.
       qcSignatories :: ![BakerId]
     }
     deriving (Eq, Show)
@@ -40,12 +40,12 @@ instance ToJSON QuorumCertificate where
               "signatories" .= qcSignatories
             ]
 
--- |The finalizers (identified by their 'BakerId's)
--- that signed off for in the @frRound@.
+-- | The finalizers (identified by their 'BakerId's)
+--  that signed off for in the @frRound@.
 data FinalizerRound = FinalizerRound
-    { -- |The round.
+    { -- | The round.
       frRound :: !Round,
-      -- |The finalizers who signed off in the round.
+      -- | The finalizers who signed off in the round.
       frFinalizers :: ![BakerId]
     }
     deriving (Eq, Show)
@@ -57,20 +57,20 @@ instance ToJSON FinalizerRound where
               "finalizers" .= frFinalizers
             ]
 
--- |An aggregate signature created by members of the finalization committee on a 'TimeoutCertificate'.
+-- | An aggregate signature created by members of the finalization committee on a 'TimeoutCertificate'.
 newtype TimeoutCertificateSignature = TimeoutCertificateSignature Bls.Signature
     deriving (Eq, Show, ToJSON, FromJSON, Serialize) via Bls.Signature
 
 data TimeoutCertificate = TimeoutCertificate
-    { -- |The round that has timed-out.
+    { -- | The round that has timed-out.
       tcRound :: !Round,
-      -- |The minimum epoch for which we include signatures.
+      -- | The minimum epoch for which we include signatures.
       tcMinEpoch :: !Epoch,
-      -- |The rounds for which finalizers have their best QCs in the epoch 'tcMinEpoch'.
+      -- | The rounds for which finalizers have their best QCs in the epoch 'tcMinEpoch'.
       tcFinalizerQCRoundsFirstEpoch :: ![FinalizerRound],
-      -- |The rounds for which finalizers have their best QCs in the epoch @tcMinEpoch + 1@.
+      -- | The rounds for which finalizers have their best QCs in the epoch @tcMinEpoch + 1@.
       tcFinalizerQCRoundsSecondEpoch :: ![FinalizerRound],
-      -- |Aggregate of the finalizers' 'TimeoutSignature's on the round and QC round.
+      -- | Aggregate of the finalizers' 'TimeoutSignature's on the round and QC round.
       tcAggregateSignature :: !TimeoutCertificateSignature
     }
     deriving (Eq, Show)
@@ -88,16 +88,16 @@ instance ToJSON TimeoutCertificate where
 newtype SuccessorProof = SuccessorProof Hash.Hash
     deriving (Eq, Show, ToJSON, FromJSON, Serialize) via Hash.Hash
 
--- |The epoch finalization entry is the proof required in order to
--- advance to a new epoch.
+-- | The epoch finalization entry is the proof required in order to
+--  advance to a new epoch.
 data EpochFinalizationEntry = EpochFinalizationEntry
-    { -- |The qc that is finalized by the successor qc.
+    { -- | The qc that is finalized by the successor qc.
       efeFinalizedQC :: !QuorumCertificate,
-      -- |The qc that finalizes @efeFinalizedQC@.
+      -- | The qc that finalizes @efeFinalizedQC@.
       efeSuccessorQC :: !QuorumCertificate,
-      -- |A proof that the successor qc points to a block
-      -- which is an immediate successor of the block that
-      -- @efeFinalizedQC@ points to.
+      -- | A proof that the successor qc points to a block
+      --  which is an immediate successor of the block that
+      --  @efeFinalizedQC@ points to.
       efeSuccessorProof :: !SuccessorProof
     }
     deriving (Eq, Show)
@@ -110,18 +110,18 @@ instance ToJSON EpochFinalizationEntry where
               "successorProof" .= efeSuccessorProof
             ]
 
--- |Block certificates for a block in consensus version 1.
+-- | Block certificates for a block in consensus version 1.
 data BlockCertificates = BlockCertificates
-    { -- |Quorum certificate for the block.
-      -- This is only present if and only if the block is not a genesis block.
+    { -- | Quorum certificate for the block.
+      --  This is only present if and only if the block is not a genesis block.
       bcQuorumCertificate :: !(Maybe QuorumCertificate),
-      -- |Timeout certificate for the block.
-      -- Present if the round prior to the round of the block
-      -- timed out.
+      -- | Timeout certificate for the block.
+      --  Present if the round prior to the round of the block
+      --  timed out.
       bcTimeoutCertificate :: !(Maybe TimeoutCertificate),
-      -- |Epoch finalization entry for the block.
-      -- Present if the block is the first block in an epoch,
-      -- hence concludes the prior epoch.
+      -- | Epoch finalization entry for the block.
+      --  Present if the block is the first block in an epoch,
+      --  hence concludes the prior epoch.
       bcEpochFinalizationEntry :: !(Maybe EpochFinalizationEntry)
     }
     deriving (Eq, Show)

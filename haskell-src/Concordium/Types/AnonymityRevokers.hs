@@ -16,9 +16,9 @@ import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
 
--- |The set of all anonymity revokers. Anonymity revokers are identified
--- uniquely by their identity. The public key of an anonymity revoker should
--- never be updated. A new one should be added if that is needed.
+-- | The set of all anonymity revokers. Anonymity revokers are identified
+--  uniquely by their identity. The public key of an anonymity revoker should
+--  never be updated. A new one should be added if that is needed.
 newtype AnonymityRevokers = AnonymityRevokers
     { arRevokers :: Map.Map ArIdentity ArInfo
     }
@@ -33,7 +33,7 @@ instance Show AnonymityRevokers where
 instance HashableTo H.Hash AnonymityRevokers where
     getHash = H.hash . S.encode
 
-instance Monad m => MHashableTo m H.Hash AnonymityRevokers
+instance (Monad m) => MHashableTo m H.Hash AnonymityRevokers
 
 emptyAnonymityRevokers :: AnonymityRevokers
 emptyAnonymityRevokers = AnonymityRevokers Map.empty

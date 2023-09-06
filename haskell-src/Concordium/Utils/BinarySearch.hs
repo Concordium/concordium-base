@@ -1,12 +1,12 @@
--- |This module implements binary search on vectors.
+-- | This module implements binary search on vectors.
 module Concordium.Utils.BinarySearch where
 
 import qualified Data.Vector as Vec
 
--- |Perform a binary search on a sorted vector, returning the index and the value, if found.
--- The first argument is a function that maps a value to its search key.
--- The elements of the vector must be sorted in ascending order with respect to the key, with no
--- duplicate keys.
+-- | Perform a binary search on a sorted vector, returning the index and the value, if found.
+--  The first argument is a function that maps a value to its search key.
+--  The elements of the vector must be sorted in ascending order with respect to the key, with no
+--  duplicate keys.
 binarySearchI :: (Ord k) => (a -> k) -> Vec.Vector a -> k -> Maybe (Int, a)
 binarySearchI valToKey vec key = search 0 (Vec.length vec - 1)
   where
@@ -25,20 +25,20 @@ binarySearchI valToKey vec key = search 0 (Vec.length vec - 1)
                     else Nothing
         GT -> Nothing
 
--- |Perform a binary search on a sorted vector, returning the value, if found.
--- The first argument is a function that maps a value to its search key.
--- The elements of the vector must be sorted in ascending order with respect to the key, with no
--- duplicate keys.
+-- | Perform a binary search on a sorted vector, returning the value, if found.
+--  The first argument is a function that maps a value to its search key.
+--  The elements of the vector must be sorted in ascending order with respect to the key, with no
+--  duplicate keys.
 binarySearch :: (Ord k) => (a -> k) -> Vec.Vector a -> k -> Maybe a
 binarySearch valToKey vec key = snd <$> binarySearchI valToKey vec key
 
--- |Perform a binary search on a sorted vector, returning the index and the value, if found.
--- The first argument is a function that resolves an entry in a monad.
--- Resolving entries should be idempotent, and there should be no requirements on which
--- entries are resolved, how often and in which order.
--- The second argument is a function that maps a value to its search key.
--- The elements of the vector must be sorted in ascending order with respect to the key, with no
--- duplicate keys.
+-- | Perform a binary search on a sorted vector, returning the index and the value, if found.
+--  The first argument is a function that resolves an entry in a monad.
+--  Resolving entries should be idempotent, and there should be no requirements on which
+--  entries are resolved, how often and in which order.
+--  The second argument is a function that maps a value to its search key.
+--  The elements of the vector must be sorted in ascending order with respect to the key, with no
+--  duplicate keys.
 binarySearchIM ::
     (Ord k, Monad m) =>
     (b -> m a) ->

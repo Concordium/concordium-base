@@ -16,8 +16,8 @@ import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
 
--- |The set of all identity providers. Identity providers are identified
--- uniquely by their public key (the key used to verify signatures).
+-- | The set of all identity providers. Identity providers are identified
+--  uniquely by their public key (the key used to verify signatures).
 newtype IdentityProviders = IdentityProviders
     { idProviders :: Map.Map IdentityProviderIdentity IpInfo
     }
@@ -31,7 +31,7 @@ instance Show IdentityProviders where
 instance HashableTo H.Hash IdentityProviders where
     getHash = H.hash . S.encode
 
-instance Monad m => MHashableTo m H.Hash IdentityProviders
+instance (Monad m) => MHashableTo m H.Hash IdentityProviders
 
 emptyIdentityProviders :: IdentityProviders
 emptyIdentityProviders = IdentityProviders Map.empty

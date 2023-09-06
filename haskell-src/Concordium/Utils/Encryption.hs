@@ -63,7 +63,7 @@ instance AE.FromJSON SupportedKeyDerivationMethod where
             then return PBKDF2SHA256
             else fail $ "Unsupported key derivation method: " ++ T.unpack t
 
--- |Bytestring whose JSON instances use base64 encoding.
+-- | Bytestring whose JSON instances use base64 encoding.
 newtype Base64ByteString = Base64ByteString {theBS :: ByteString}
     deriving (Eq)
 
@@ -244,8 +244,8 @@ encryptText emEncryptionMethod emKeyDerivationMethod text pwd =
 newtype EncryptedJSON a = EncryptedJSON EncryptedText
     deriving (AE.FromJSON, AE.ToJSON, Show, Eq)
 
--- |Check whether the given JSON object likely contains an encryption. This is established
--- by the presence of fields @metadata@ and @cipherText@
+-- | Check whether the given JSON object likely contains an encryption. This is established
+--  by the presence of fields @metadata@ and @cipherText@
 isLikelyEncrypted :: AE.Value -> Bool
 isLikelyEncrypted (AE.Object o) = AEMap.member "cipherText" o && AEMap.member "metadata" o
 isLikelyEncrypted _ = False

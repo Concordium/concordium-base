@@ -26,11 +26,11 @@ foreign import ccall safe "verify_cdi_ffi"
         Ptr GlobalContext ->
         Ptr IpInfo ->
         Ptr (Ptr ArInfo) ->
-        -- |Length of the ArInfo list.
+        -- | Length of the ArInfo list.
         CSize ->
-        -- |Serialized credential.
+        -- | Serialized credential.
         Ptr Word8 ->
-        -- |Length of the serialized credential.
+        -- | Length of the serialized credential.
         CSize ->
         -- | Pointer to the account address, or null if credential creates the account.
         Ptr Word8 ->
@@ -59,9 +59,9 @@ withArInfoArray arPtrs (ar : ars) k = withArInfo ar $ \arPtr -> withArInfoArray 
 withAccountAddress :: AccountAddress -> (Ptr Word8 -> IO a) -> IO a
 withAccountAddress (AccountAddress fbs) = FBS.withPtrReadOnly fbs
 
--- |Verify a credential in the context of the given cryptographic parameters and
--- identity provider information. If the account keys are given this checks that
--- the proofs contained in the credential correspond to them.
+-- | Verify a credential in the context of the given cryptographic parameters and
+--  identity provider information. If the account keys are given this checks that
+--  the proofs contained in the credential correspond to them.
 verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> CredentialDeploymentInformationBytes -> Either TransactionTime AccountAddress -> Bool
 verifyCredential gc ipInfo arInfos cdiBytes (Left tt) = unsafePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
@@ -95,8 +95,8 @@ verifyCredential gc ipInfo arInfos cdiBytes (Right address) = unsafePerformIO $ 
 
 type InitialCredentialBytes = ByteString
 
--- |Verify the initial account creation payload, in the context of the given
--- identity provider.
+-- | Verify the initial account creation payload, in the context of the given
+--  identity provider.
 verifyInitialAccountCreation :: IpInfo -> TransactionTime -> InitialCredentialBytes -> Bool
 verifyInitialAccountCreation ipInfo tt aciBytes = unsafePerformIO $ do
     res <- withIpInfo ipInfo $ \ipInfoPtr ->

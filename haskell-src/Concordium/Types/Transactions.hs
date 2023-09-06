@@ -91,29 +91,29 @@ instance S.Serialize TransactionHeader where
         thExpiry <- S.get
         return $! TransactionHeader{..}
 
--- |Construct a 'TransactionSignHash' from the serialized bytes of
--- an account transaction's header and payload.
+-- | Construct a 'TransactionSignHash' from the serialized bytes of
+--  an account transaction's header and payload.
 transactionSignHashFromBytes :: BS.ByteString -> TransactionSignHashV0
 transactionSignHashFromBytes = TransactionSignHashV0 . H.hash
 
--- |Construct a 'TransactionSignHash' from a 'TransactionHeader' and 'EncodedPayload'.
+-- | Construct a 'TransactionSignHash' from a 'TransactionHeader' and 'EncodedPayload'.
 transactionSignHashFromHeaderPayload :: TransactionHeader -> EncodedPayload -> TransactionSignHashV0
 transactionSignHashFromHeaderPayload atrHeader atrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put atrHeader <> putEncodedPayload atrPayload
 
--- |A transaction signature is map from the index of the credential to another map from the key index to the actual signature.
--- The credential index is relative to the account address, and the indices should be distinct.
--- The key index is relative to the credential.
--- The maximum length of the list is 255, and the minimum length is 1.
+-- | A transaction signature is map from the index of the credential to another map from the key index to the actual signature.
+--  The credential index is relative to the account address, and the indices should be distinct.
+--  The key index is relative to the credential.
+--  The maximum length of the list is 255, and the minimum length is 1.
 newtype TransactionSignature = TransactionSignature {tsSignatures :: Map.Map CredentialIndex (Map.Map KeyIndex Signature)}
     deriving (Eq, Show)
     deriving (ToJSON, FromJSON) via (Map.Map CredentialIndex (Map.Map KeyIndex Signature))
 
--- |Get the number of actual signatures contained in a 'TransactionSignature'.
+-- | Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
 getTransactionNumSigs = foldl' (\l m -> l + length m) 0 . tsSignatures
 
--- |NB: Relies on the scheme and signature serialization to be sensibly defined
--- as specified on the wiki!
+-- | NB: Relies on the scheme and signature serialization to be sensibly defined
+--  as specified on the wiki!
 instance S.Serialize TransactionSignature where
     put TransactionSignature{..} = do
         S.putWord8 (fromIntegral (length tsSignatures))
@@ -144,29 +144,29 @@ instance S.Serialize TransactionSignature where
                     accumulateSigs (Map.insert idx sigmap accum) (Just idx) (count - 1)
         TransactionSignature <$> accumulateSigs Map.empty Nothing len
 
--- |An 'AccountTransaction' is a transaction that originates from
--- a specific account (the sender), and is paid for by the sender.
+-- | An 'AccountTransaction' is a transaction that originates from
+--  a specific account (the sender), and is paid for by the sender.
 --
--- The representation includes a 'TransactionSignHash' which is
--- the value that is signed. This is derived from the header and
--- payload, and so does not form part of the serialization.
+--  The representation includes a 'TransactionSignHash' which is
+--  the value that is signed. This is derived from the header and
+--  payload, and so does not form part of the serialization.
 --
--- The payload is stored in serialized form. Deserializing the
--- payload is considered part of the transaction execution.
+--  The payload is stored in serialized form. Deserializing the
+--  payload is considered part of the transaction execution.
 data AccountTransaction = AccountTransaction
-    { -- |Signature
+    { -- | Signature
       atrSignature :: !TransactionSignature,
-      -- |Header
+      -- | Header
       atrHeader :: !TransactionHeader,
-      -- |Serialized payload
+      -- | Serialized payload
       atrPayload :: !EncodedPayload,
-      -- |Hash used for signing
+      -- | Hash used for signing
       atrSignHash :: !TransactionSignHashV0
     }
     deriving (Eq, Show)
 
--- |Construct an 'AccountTransaction', computing the correct
--- 'TransactionSignHash'.
+-- | Construct an 'AccountTransaction', computing the correct
+--  'TransactionSignHash'.
 makeAccountTransaction :: TransactionSignature -> TransactionHeader -> EncodedPayload -> AccountTransaction
 makeAccountTransaction atrSignature atrHeader atrPayload = AccountTransaction{..}
   where
@@ -195,9 +195,9 @@ instance HashableTo TransactionHashV0 AccountTransaction where
 instance HashableTo TransactionSignHashV0 AccountTransaction where
     getHash = atrSignHash
 
--- |An 'AccountCreation' is a credential together with an expiry. It is a
--- message that is included in a block, if valid, but it is not paid for
--- directly by the sender.
+-- | An 'AccountCreation' is a credential together with an expiry. It is a
+--  message that is included in a block, if valid, but it is not paid for
+--  directly by the sender.
 data AccountCreation = AccountCreation
     { messageExpiry :: !TransactionExpiryTime,
       credential :: !AccountCredentialWithProofs
@@ -220,19 +220,19 @@ instance FromJSON AccountCreation where
 
 --------------------------
 
--- |Metadata for a block item.
+-- | Metadata for a block item.
 data WithMetadata value = WithMetadata
     { wmdData :: !value,
-      -- |Size of the block item in bytes; derived field.
+      -- | Size of the block item in bytes; derived field.
       wmdSize :: !Int,
-      -- |Hash of the transaction. Derived from the first field.
+      -- | Hash of the transaction. Derived from the first field.
       wmdHash :: !TransactionHash,
-      -- |Arrival time of the transaction.
+      -- | Arrival time of the transaction.
       wmdArrivalTime :: !TransactionTime
     }
     deriving (Show)
 
--- |Block item metadata.
+-- | Block item metadata.
 class BIMetadata a where
     biSize :: a -> Int
     biHash :: a -> TransactionHash
@@ -246,13 +246,13 @@ instance BIMetadata (WithMetadata value) where
     {-# INLINE biArrivalTime #-}
     biArrivalTime = wmdArrivalTime
 
--- |Eq instance based on Hash comparison
--- FIXME: Possibly we want to be defensive and check true equality in case hashes are equal.
+-- | Eq instance based on Hash comparison
+--  FIXME: Possibly we want to be defensive and check true equality in case hashes are equal.
 instance Eq (WithMetadata value) where
     {-# INLINE (==) #-}
     x == y = wmdHash x == wmdHash y
 
--- |The Ord instance does comparison only on hashes.
+-- | The Ord instance does comparison only on hashes.
 instance Ord (WithMetadata value) where
     compare t1 t2 = compare (wmdHash t1) (wmdHash t2)
 
@@ -281,9 +281,9 @@ fromAccountTransaction wmdArrivalTime wmdData =
     in  WithMetadata{..}
 
 fromCDI ::
-    -- |Arrival time
+    -- | Arrival time
     TransactionTime ->
-    -- |Expiry time of the message
+    -- | Expiry time of the message
     TransactionExpiryTime ->
     CredentialDeploymentInformation ->
     CredentialDeploymentWithMeta
@@ -295,9 +295,9 @@ fromCDI wmdArrivalTime messageExpiry cdi =
     in  WithMetadata{..}
 
 fromICDI ::
-    -- |Arrival time
+    -- | Arrival time
     TransactionTime ->
-    -- |Expiry time of the message
+    -- | Expiry time of the message
     TransactionExpiryTime ->
     InitialCredentialDeploymentInfo ->
     CredentialDeploymentWithMeta
@@ -333,7 +333,7 @@ instance S.Serialize BlockItemKind where
             _ -> fail "unknown block item kind"
     {-# INLINE get #-}
 
--- |Data that can go onto a block.
+-- | Data that can go onto a block.
 data BareBlockItem
     = NormalTransaction
         { biTransaction :: !AccountTransaction
@@ -364,8 +364,8 @@ getBareBlockItem spv =
             CredentialDeploymentKind -> CredentialDeployment <$> S.get
             UpdateInstructionKind -> ChainUpdate <$> getUpdateInstruction spv
 
--- |Datatypes which have an expiry, which here we set to mean the latest time
--- the item can be included in a block.
+-- | Datatypes which have an expiry, which here we set to mean the latest time
+--  the item can be included in a block.
 class HasMessageExpiry a where
     msgExpiry :: a -> TransactionExpiryTime
 
@@ -386,11 +386,11 @@ instance HasMessageExpiry BareBlockItem where
     msgExpiry (CredentialDeployment t) = msgExpiry t
     msgExpiry (ChainUpdate t) = msgExpiry t
 
-instance HasMessageExpiry a => HasMessageExpiry (WithMetadata a) where
+instance (HasMessageExpiry a) => HasMessageExpiry (WithMetadata a) where
     {-# INLINE msgExpiry #-}
     msgExpiry = msgExpiry . wmdData
 
-instance HasMessageExpiry a => HasMessageExpiry (Versioned a) where
+instance (HasMessageExpiry a) => HasMessageExpiry (Versioned a) where
     {-# INLINE msgExpiry #-}
     msgExpiry = msgExpiry . vValue
 
@@ -408,11 +408,11 @@ instance CredentialValuesFields CredentialRegistrationID AccountCreation where
     {-# INLINE credPubKeys #-}
     credPubKeys = credPubKeys . credential
 
-instance HasCredentialType a => HasCredentialType (WithMetadata a) where
+instance (HasCredentialType a) => HasCredentialType (WithMetadata a) where
     {-# INLINE credentialType #-}
     credentialType = credentialType . wmdData
 
-instance CredentialValuesFields CredentialRegistrationID a => CredentialValuesFields CredentialRegistrationID (WithMetadata a) where
+instance (CredentialValuesFields CredentialRegistrationID a) => CredentialValuesFields CredentialRegistrationID (WithMetadata a) where
     {-# INLINE credId #-}
     credId = credId . wmdData
     {-# INLINE ipId #-}
@@ -422,7 +422,7 @@ instance CredentialValuesFields CredentialRegistrationID a => CredentialValuesFi
     {-# INLINE credPubKeys #-}
     credPubKeys = credPubKeys . wmdData
 
--- |Embed a transaction as a block item.
+-- | Embed a transaction as a block item.
 normalTransaction :: Transaction -> BlockItem
 -- the +1 is for the additional tag.
 normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, wmdSize = wmdSize + 1, ..}
@@ -433,11 +433,11 @@ credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeploym
 chainUpdate :: WithMetadata UpdateInstruction -> BlockItem
 chainUpdate WithMetadata{..} = WithMetadata{wmdData = ChainUpdate wmdData, wmdSize = wmdSize + 1, ..}
 
--- |Serialize a block item according to V0 format, without the metadata.
+-- | Serialize a block item according to V0 format, without the metadata.
 putBlockItemV0 :: BlockItem -> S.Put
 putBlockItemV0 = putBareBlockItemV0 . wmdData
 
--- |Serialize a bare block item according to the V0 format, without the metadata.
+-- | Serialize a bare block item according to the V0 format, without the metadata.
 putBareBlockItemV0 :: BareBlockItem -> S.Put
 putBareBlockItemV0 = putBareBlockItem
 
@@ -447,7 +447,7 @@ putBareBlockItemV0 = putBareBlockItem
 
 ---------------------------------
 
--- |Construct a hash from a serialized block item.
+-- | Construct a hash from a serialized block item.
 transactionHashFromBytes :: BS.ByteString -> TransactionHashV0
 transactionHashFromBytes = TransactionHashV0 . H.hash
 
@@ -460,22 +460,22 @@ transactionHashFromBareBlockItem = transactionHashFromBytes . S.runPut . putBare
 
 -------------------
 
--- |Try to parse a versioned block item, stripping the version, and
--- reconstructing the block item metadata from the raw data.
--- The parsing format is determined by the version tag.
+-- | Try to parse a versioned block item, stripping the version, and
+--  reconstructing the block item metadata from the raw data.
+--  The parsing format is determined by the version tag.
 --
--- The only supported version at the moment is version 0.
+--  The only supported version at the moment is version 0.
 --
--- Note, the deserialization is parametrised by the protocol version.
--- For version 0 serialization, the protocol version will only determine __whether__ the block item
--- can be deserialized, and not __how__ it is deserialized.
+--  Note, the deserialization is parametrised by the protocol version.
+--  For version 0 serialization, the protocol version will only determine __whether__ the block item
+--  can be deserialized, and not __how__ it is deserialized.
 --
--- * @SPEC: <$DOCS/Versioning#binary-format>
--- * @SPEC: <$DOCS/Versioning>
+--  * @SPEC: <$DOCS/Versioning#binary-format>
+--  * @SPEC: <$DOCS/Versioning>
 getExactVersionedBlockItem ::
     SProtocolVersion spv ->
-    -- |Timestamp for when the item is received, used to
-    -- construct the metadata.
+    -- | Timestamp for when the item is received, used to
+    --  construct the metadata.
     TransactionTime ->
     S.Get BlockItem
 getExactVersionedBlockItem spv time = do
@@ -484,13 +484,13 @@ getExactVersionedBlockItem spv time = do
         0 -> getBlockItemV0 spv time
         _ -> fail $ "Unsupported block item version " ++ show version ++ "."
 
--- |Get a block item according to V0 format, reconstructing metadata.
+-- | Get a block item according to V0 format, reconstructing metadata.
 --
--- * @SPEC: <$DOCS/Transactions#v0-format>
--- * @SPEC: <$DOCS/Versioning>
+--  * @SPEC: <$DOCS/Transactions#v0-format>
+--  * @SPEC: <$DOCS/Versioning>
 getBlockItemV0 ::
     SProtocolVersion spv ->
-    -- |Timestamp of when the item arrived.
+    -- | Timestamp of when the item arrived.
     TransactionTime ->
     S.Get BlockItem
 getBlockItemV0 spv time = S.label "getBlockItemV0" $ do
@@ -503,11 +503,11 @@ getBlockItemV0 spv time = S.label "getBlockItemV0" $ do
               wmdArrivalTime = time
             }
 
--- |Serialize a block item with version according to the V0 format, prepending the version.
+-- | Serialize a block item with version according to the V0 format, prepending the version.
 putVersionedBlockItemV0 :: BlockItem -> S.Put
 putVersionedBlockItemV0 bi = putVersion 0 <> putBlockItemV0 bi
 
--- |Serialize a bare block item with version according to the V0 format, prepending the version.
+-- | Serialize a bare block item with version according to the V0 format, prepending the version.
 putVersionedBareBlockItemV0 :: BareBlockItem -> S.Put
 putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 
@@ -517,18 +517,18 @@ putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 
 ----------------
 
--- |Sign a transaction with the given header and body, using the given keypair.
--- This assumes that there is only one key on the account, and that is with index 0.
+-- | Sign a transaction with the given header and body, using the given keypair.
+--  This assumes that there is only one key on the account, and that is with index 0.
 --
--- * @SPEC: <$DOCS/Transactions#transaction-signature>
+--  * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransactionSingle :: KeyPair -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransactionSingle kp = signTransaction [(0, [(0, kp)])]
 
--- |Sign a transaction with the given header and body, using the given keypairs.
--- The function does not sanity checking that the keys are valid, or that the
--- indices are distint.
+-- | Sign a transaction with the given header and body, using the given keypairs.
+--  The function does not sanity checking that the keys are valid, or that the
+--  indices are distint.
 --
--- * @SPEC: <$DOCS/Transactions#transaction-signature>
+--  * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransaction :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransaction keys atrHeader atrPayload =
     let
@@ -541,11 +541,11 @@ signTransaction keys atrHeader atrPayload =
     in
         AccountTransaction{..}
 
--- |Verify credential signatures. This checks
+-- | Verify credential signatures. This checks
 --
--- - the number of signatures is less than 255
--- - __all__ signatures are valid
--- - there are at least threshold number of signatures.
+--  - the number of signatures is less than 255
+--  - __all__ signatures are valid
+--  - there are at least threshold number of signatures.
 verifyCredentialSignatures :: BS.ByteString -> Map.Map KeyIndex Signature -> CredentialPublicKeys -> Bool
 verifyCredentialSignatures bodyHash sigs keys =
     let numSigs = length sigs
@@ -554,12 +554,12 @@ verifyCredentialSignatures bodyHash sigs keys =
         check = foldr (\(idx, sig) b -> maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getCredentialPublicKey idx keys) && b) True (Map.toList sigs)
     in  numSigs <= 255 && (fromIntegral numSigs >= credThreshold keys) && check
 
--- |Verify a given message was signed by the given account information.
--- Concretely this means
+-- | Verify a given message was signed by the given account information.
+--  Concretely this means
 --
--- - enough credential holders signed the message
--- - each of the credential signatures has the required number of signatures, see 'verifyCredentialSignatures'
--- - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
+--  - enough credential holders signed the message
+--  - each of the credential signatures has the required number of signatures, see 'verifyCredentialSignatures'
+--  - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
 verifyAccountSignature :: BS.ByteString -> Map.Map CredentialIndex (Map.Map KeyIndex Signature) -> AccountInformation -> Bool
 verifyAccountSignature msg maps ai =
     let
@@ -571,13 +571,13 @@ verifyAccountSignature msg maps ai =
     in
         numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
 
--- |Verify that the given transaction was signed by the required number of keys.
--- Concretely this means
+-- | Verify that the given transaction was signed by the required number of keys.
+--  Concretely this means
 --
--- - enough credential holders signed the transaction
--- - each of the credential signatures has the required number of signatures, see 'verifyCredentialSignatures'
--- - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
-verifyTransaction :: TransactionData msg => AccountInformation -> msg -> Bool
+--  - enough credential holders signed the transaction
+--  - each of the credential signatures has the required number of signatures, see 'verifyCredentialSignatures'
+--  - all of the signatures are valid, that is, it is not sufficient that a threshold number are valid, and some extra ones are invalid.
+verifyTransaction :: (TransactionData msg) => AccountInformation -> msg -> Bool
 verifyTransaction ai tx = verifyAccountSignature bodyHash maps ai
   where
     bodyHash = transactionSignHashToByteString (transactionSignHash tx)
@@ -589,10 +589,10 @@ verifyTransaction ai tx = verifyAccountSignature bodyHash maps ai
 
 -----------------------------------
 
--- |The 'TransactionData' class abstracts away from the particular data
--- structure. It makes it possible to unify operations on 'Transaction' as well
--- as other types providing the same data (such as partially serialized
--- transactions).
+-- | The 'TransactionData' class abstracts away from the particular data
+--  structure. It makes it possible to unify operations on 'Transaction' as well
+--  as other types providing the same data (such as partially serialized
+--  transactions).
 class TransactionData t where
     transactionHeader :: t -> TransactionHeader
     transactionSender :: t -> AccountAddress
@@ -633,12 +633,12 @@ instance TransactionData Transaction where
 --------------------------
 -- TODO: Move to Execution???
 
--- |A mapping from account addresses to amounts.
+-- | A mapping from account addresses to amounts.
 --
--- This is used in 'SpecialTransactionOutcome' to represent baking
--- and finalization rewards that pay multiple accounts.
--- Defining this as an explicit newtype is chiefly for convenience
--- in defining the serialization formats.
+--  This is used in 'SpecialTransactionOutcome' to represent baking
+--  and finalization rewards that pay multiple accounts.
+--  Defining this as an explicit newtype is chiefly for convenience
+--  in defining the serialization formats.
 newtype AccountAmounts = AccountAmounts {accountAmounts :: Map.Map AccountAddress Amount}
     deriving newtype (Eq, Ord, Show)
 
@@ -656,100 +656,100 @@ instance FromJSON AccountAmounts where
         v' <- forM v $ AE.withObject "AccountAmount" $ \o -> (,) <$> o AE..: "address" <*> o AE..: "amount"
         return $ AccountAmounts $ Map.fromList $ Vec.toList v'
 
--- |Record special transactions as well for logging purposes.
+-- | Record special transactions as well for logging purposes.
 data SpecialTransactionOutcome
-    = -- |Payment to each baker of a previous epoch,
-      -- in proportion to the number of blocks they
-      -- contributed.
+    = -- | Payment to each baker of a previous epoch,
+      --  in proportion to the number of blocks they
+      --  contributed.
       BakingRewards
-        { -- |The amount awarded to each baker.
+        { -- | The amount awarded to each baker.
           stoBakerRewards :: !AccountAmounts,
-          -- |The remaining balance of the baker reward account.
+          -- | The remaining balance of the baker reward account.
           stoRemainder :: !Amount
         }
-    | -- |Minting of new GTU.
+    | -- | Minting of new GTU.
       Mint
-        { -- |The amount allocated to the banking reward account.
+        { -- | The amount allocated to the banking reward account.
           stoMintBakingReward :: !Amount,
-          -- |The amount allocated to the finalization reward account.
+          -- | The amount allocated to the finalization reward account.
           stoMintFinalizationReward :: !Amount,
-          -- |The amount allocated as the platform development charge.
+          -- | The amount allocated as the platform development charge.
           stoMintPlatformDevelopmentCharge :: !Amount,
-          -- |The account to which the platform development charge is paid.
+          -- | The account to which the platform development charge is paid.
           stoFoundationAccount :: !AccountAddress
         }
-    | -- |Payment to each finalizer on inclusion of a finalization
-      -- record in a block.
+    | -- | Payment to each finalizer on inclusion of a finalization
+      --  record in a block.
       FinalizationRewards
-        { -- |The amount awarded to each finalizer.
+        { -- | The amount awarded to each finalizer.
           stoFinalizationRewards :: !AccountAmounts,
-          -- |The remaining balance of the finalization reward account.
+          -- | The remaining balance of the finalization reward account.
           stoRemainder :: !Amount
         }
-    | -- |Disbursement of fees from a block between the GAS account,
-      -- the baker, and the foundation. It should always be that:
+    | -- | Disbursement of fees from a block between the GAS account,
+      --  the baker, and the foundation. It should always be that:
       --
-      -- > stoTransactionFees + stOldGASAccount = stoNewGASAccount + stoBakerReward + stoFoundationCharge
+      --  > stoTransactionFees + stOldGASAccount = stoNewGASAccount + stoBakerReward + stoFoundationCharge
       BlockReward
-        { -- |The total fees paid for transactions in the block.
+        { -- | The total fees paid for transactions in the block.
           stoTransactionFees :: !Amount,
-          -- |The old balance of the GAS account.
+          -- | The old balance of the GAS account.
           stoOldGASAccount :: !Amount,
-          -- |The new balance of the GAS account.
+          -- | The new balance of the GAS account.
           stoNewGASAccount :: !Amount,
-          -- |The amount awarded to the baker.
+          -- | The amount awarded to the baker.
           stoBakerReward :: !Amount,
-          -- |The amount awarded to the foundation.
+          -- | The amount awarded to the foundation.
           stoFoundationCharge :: !Amount,
-          -- |The baker of the block, who receives the award.
+          -- | The baker of the block, who receives the award.
           stoBaker :: !AccountAddress,
-          -- |The foundation account.
+          -- | The foundation account.
           stoFoundationAccount :: !AccountAddress
         }
-    | -- |Payment for a particular account.
+    | -- | Payment for a particular account.
       PaydayFoundationReward
-        { -- |The account that got rewarded.
+        { -- | The account that got rewarded.
           stoFoundationAccount :: !AccountAddress,
-          -- |The transaction fee reward at payday to the account.
+          -- | The transaction fee reward at payday to the account.
           stoDevelopmentCharge :: !Amount
         }
-    | -- |Payment for a particular account.
+    | -- | Payment for a particular account.
       PaydayAccountReward
-        { -- |The account that got rewarded.
+        { -- | The account that got rewarded.
           stoAccount :: !AccountAddress,
-          -- |The transaction fee reward at payday to the account.
+          -- | The transaction fee reward at payday to the account.
           stoTransactionFees :: !Amount,
-          -- |The baking reward at payday to the account.
+          -- | The baking reward at payday to the account.
           stoBakerReward :: !Amount,
-          -- |The finalization reward at payday to the account.
+          -- | The finalization reward at payday to the account.
           stoFinalizationReward :: !Amount
         }
-    | -- |Amounts accrued to accounts for each baked block.
+    | -- | Amounts accrued to accounts for each baked block.
       BlockAccrueReward
-        { -- |The total fees paid for transactions in the block.
+        { -- | The total fees paid for transactions in the block.
           stoTransactionFees :: !Amount,
-          -- |The old balance of the GAS account.
+          -- | The old balance of the GAS account.
           stoOldGASAccount :: !Amount,
-          -- |The new balance of the GAS account.
+          -- | The new balance of the GAS account.
           stoNewGASAccount :: !Amount,
-          -- |The amount awarded to the baker.
+          -- | The amount awarded to the baker.
           stoBakerReward :: !Amount,
-          -- |The amount awarded to the passive delegators.
+          -- | The amount awarded to the passive delegators.
           stoPassiveReward :: !Amount,
-          -- |The amount awarded to the foundation.
+          -- | The amount awarded to the foundation.
           stoFoundationCharge :: !Amount,
-          -- |The baker of the block, who will receive the award.
+          -- | The baker of the block, who will receive the award.
           stoBakerId :: !BakerId
         }
-    | -- |Payment distributed to a pool or passive delegators.
+    | -- | Payment distributed to a pool or passive delegators.
       PaydayPoolReward
-        { -- |The pool owner (passive delegators when 'Nothing').
+        { -- | The pool owner (passive delegators when 'Nothing').
           stoPoolOwner :: !(Maybe BakerId),
-          -- |Accrued transaction fees for pool.
+          -- | Accrued transaction fees for pool.
           stoTransactionFees :: !Amount,
-          -- |Accrued baking rewards for pool.
+          -- | Accrued baking rewards for pool.
           stoBakerReward :: !Amount,
-          -- |Accrued finalization rewards for pool.
+          -- | Accrued finalization rewards for pool.
           stoFinalizationReward :: !Amount
         }
     deriving (Show, Eq)
@@ -760,7 +760,7 @@ instance HashableTo H.Hash SpecialTransactionOutcome where
     getHash = H.hash . S.encode
 
 -- Generic instance based on the HashableTo instance
-instance Monad m => MHashableTo m H.Hash SpecialTransactionOutcome
+instance (Monad m) => MHashableTo m H.Hash SpecialTransactionOutcome
 
 instance S.Serialize SpecialTransactionOutcome where
     put BakingRewards{..} = do
@@ -864,8 +864,8 @@ instance S.Serialize SpecialTransactionOutcome where
                 return PaydayPoolReward{..}
             _ -> fail "Invalid SpecialTransactionOutcome type"
 
--- |Outcomes of transactions. The vector of outcomes must have the same size as the
--- number of transactions in the block, and ordered in the same way.
+-- | Outcomes of transactions. The vector of outcomes must have the same size as the
+--  number of transactions in the block, and ordered in the same way.
 data TransactionOutcomes = TransactionOutcomes
     { outcomeValues :: !(Vec.Vector TransactionSummary),
       _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
@@ -887,9 +887,9 @@ getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf
 instance HashableTo TransactionOutcomesHash TransactionOutcomes where
     getHash transactionoutcomes = TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
 
--- |A simple wrapper around a `Hash`.
--- No matter the strategy for deriving the 'TransactionOutcomesHash' we will
--- always end up with a value of this type.
+-- | A simple wrapper around a `Hash`.
+--  No matter the strategy for deriving the 'TransactionOutcomesHash' we will
+--  always end up with a value of this type.
 newtype TransactionOutcomesHash = TransactionOutcomesHash {tohGet :: H.Hash}
     deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
@@ -898,13 +898,13 @@ emptyTransactionOutcomesV0 = TransactionOutcomes Vec.empty Seq.empty
 
 {-# NOINLINE emptyTransactionOutcomesHashV1 #-}
 
--- |Hash of the empty V1 transaction outcomes structure. This transaction outcomes
--- structure is used starting in protocol version 5.
+-- | Hash of the empty V1 transaction outcomes structure. This transaction outcomes
+--  structure is used starting in protocol version 5.
 --
--- This is not the ideal location here, since the merkle structures that define
--- it are defined in the global state modules, however any other place leads to
--- problematic module dependencies. We should ideally restructure those so that
--- we do not have this duplication here.
+--  This is not the ideal location here, since the merkle structures that define
+--  it are defined in the global state modules, however any other place leads to
+--  problematic module dependencies. We should ideally restructure those so that
+--  we do not have this duplication here.
 emptyTransactionOutcomesHashV1 :: TransactionOutcomesHash
 emptyTransactionOutcomesHashV1 =
     TransactionOutcomesHash $

@@ -84,17 +84,17 @@ foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr
 foreign import ccall safe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
 foreign import ccall safe "bls_verify_aggregate_hybrid"
     verifyBlsAggregateHybrid ::
-        -- |Array of pointers to messages
+        -- | Array of pointers to messages
         Ptr (Ptr Word8) ->
-        -- |Array of message lengths
+        -- | Array of message lengths
         Ptr CSize ->
-        -- |Array of arrays of pointers to public keys
+        -- | Array of arrays of pointers to public keys
         Ptr (Ptr (Ptr PublicKey)) ->
-        -- |Array of numbers of public keys
+        -- | Array of numbers of public keys
         Ptr CSize ->
-        -- |Length of the arrays
+        -- | Length of the arrays
         CSize ->
-        -- |Pointer to the signature to verify
+        -- | Pointer to the signature to verify
         Ptr Signature ->
         IO Word8
 foreign import ccall safe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
@@ -252,13 +252,13 @@ instance AE.ToJSON Proof where
 
 -- Signature scheme implementation
 
--- |Generate a secret key using a system random number generator.
+-- | Generate a secret key using a system random number generator.
 generateSecretKey :: IO SecretKey
 generateSecretKey = do
     ptr <- generateSecretKeyPtr
     SecretKey <$> newForeignPtr freeSecretKey ptr
 
--- |Derive a public key from a given secret key.
+-- | Derive a public key from a given secret key.
 derivePublicKey :: SecretKey -> PublicKey
 derivePublicKey sk = PublicKey <$> unsafePerformIO $ do
     pkptr <- withSecretKey sk derivePublicKeyPtr
@@ -276,7 +276,7 @@ sign m sk = Signature <$> unsafePerformIO $ do
         withSecretKey sk $ signBls (castPtr m') (fromIntegral mlen)
     newForeignPtr freeSignature sigptr
 
--- |Verify a single signature.
+-- | Verify a single signature.
 verify :: ByteString -> PublicKey -> Signature -> Bool
 verify m pk sig = unsafePerformIO $ do
     -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
@@ -284,7 +284,7 @@ verify m pk sig = unsafePerformIO $ do
         withPublicKey pk $ \pk' ->
             withSignature sig $! (fmap (== 1) . verifyBls (castPtr m') (fromIntegral mlen) pk')
 
--- |Aggregate two signatures together.
+-- | Aggregate two signatures together.
 aggregate :: Signature -> Signature -> Signature
 aggregate sig1 sig2 = Signature <$> unsafePerformIO $ do
     sigptr <- withSignature sig1 $ \sig1' ->
@@ -292,8 +292,8 @@ aggregate sig1 sig2 = Signature <$> unsafePerformIO $ do
             aggregateBls sig1' sig2'
     newForeignPtr freeSignature sigptr
 
--- |Verify a signature on bytestring under the list of public keys
--- The order of the public key list is irrelevant to the result
+-- | Verify a signature on bytestring under the list of public keys
+--  The order of the public key list is irrelevant to the result
 verifyAggregate :: ByteString -> [PublicKey] -> Signature -> Bool
 verifyAggregate m pks sig = unsafePerformIO $ do
     -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
@@ -305,16 +305,16 @@ verifyAggregate m pks sig = unsafePerformIO $ do
     withKeyArray ps [] f = withArrayLen ps f
     withKeyArray ps (pk : pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk' : ps) pks_ f
 
--- |Verify an aggregate signature on (potentially) multiple messages by multiple keys.
--- Each message is grouped with the set of keys that signed it.
+-- | Verify an aggregate signature on (potentially) multiple messages by multiple keys.
+--  Each message is grouped with the set of keys that signed it.
 --
--- The public keys MUST have been (proved to be) derived from secret keys. (Otherwise, the
--- guarantee of the signature system does not necessarily hold.)
+--  The public keys MUST have been (proved to be) derived from secret keys. (Otherwise, the
+--  guarantee of the signature system does not necessarily hold.)
 --
--- It is recommended that messages with no keys should not be included, although this is not
--- a strict requirement, as the result will be the same if they are removed.
+--  It is recommended that messages with no keys should not be included, although this is not
+--  a strict requirement, as the result will be the same if they are removed.
 --
--- Precondition: There MUST be at least one key for each message group.
+--  Precondition: There MUST be at least one key for each message group.
 verifyAggregateHybrid :: [(ByteString, [PublicKey])] -> Signature -> Bool
 verifyAggregateHybrid msPks sig = unsafePerformIO $ do
     let (ms, pksets) = unzip msPks
@@ -340,7 +340,7 @@ verifyAggregateHybrid msPks sig = unsafePerformIO $ do
     withMessageArray ms' lens (m : ms_) f = BS.unsafeUseAsCStringLen m $
         \(m', mlen) -> withMessageArray (castPtr m' : ms') (mlen : lens) ms_ f
 
--- |Create a proof of knowledge of your secret key
+-- | Create a proof of knowledge of your secret key
 proveKnowledgeOfSK :: ByteString -> SecretKey -> IO Proof
 proveKnowledgeOfSK context sk =
     Proof <$> do
@@ -350,7 +350,7 @@ proveKnowledgeOfSK context sk =
                 proveBls (castPtr c) (fromIntegral clen) sk'
         newForeignPtr freeProof proofPtr
 
--- |Check a proof of knowledge for a publickey
+-- | Check a proof of knowledge for a publickey
 checkProofOfKnowledgeSK :: ByteString -> Proof -> PublicKey -> Bool
 checkProofOfKnowledgeSK context proof pk = unsafePerformIO $ do
     -- unsafeUseAsCString is ok here, clen == 0 is appropriately handled in rust
@@ -365,7 +365,7 @@ instance Semigroup Signature where
 instance Monoid Signature where
     mempty = emptySignature
 
--- |Aggregate a list of signatures.
+-- | Aggregate a list of signatures.
 aggregateMany :: [Signature] -> Signature
 aggregateMany (s : sigs) = List.foldl' aggregate s sigs
 aggregateMany [] = emptySignature

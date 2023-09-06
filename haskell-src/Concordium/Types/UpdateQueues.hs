@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- |Implementation of the chain update mechanism: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
+-- | Implementation of the chain update mechanism: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
 module Concordium.Types.UpdateQueues where
 
 import Control.Monad
@@ -29,32 +29,32 @@ import Concordium.Types.Parameters
 import Concordium.Types.Updates
 import Concordium.Utils.Serialization
 
--- |An update queue consists of pending future updates ordered by
--- the time at which they will take effect.
+-- | An update queue consists of pending future updates ordered by
+--  the time at which they will take effect.
 data UpdateQueue e = UpdateQueue
-    { -- |The next available sequence number for an update.
+    { -- | The next available sequence number for an update.
       _uqNextSequenceNumber :: !UpdateSequenceNumber,
-      -- |Pending updates, in ascending order of effective time.
+      -- | Pending updates, in ascending order of effective time.
       _uqQueue :: ![(TransactionTime, e)]
     }
     deriving (Show, Functor, Eq)
 
 makeLenses ''UpdateQueue
 
--- |An optional queue. The queue is present if @pt@ is present for a @cpv@.
+-- | An optional queue. The queue is present if @pt@ is present for a @cpv@.
 type OUpdateQueue (pt :: ParameterType) (cpv :: ChainParametersVersion) e = OParam pt cpv (UpdateQueue e)
 
-instance HashableTo H.Hash e => HashableTo H.Hash (UpdateQueue e) where
+instance (HashableTo H.Hash e) => HashableTo H.Hash (UpdateQueue e) where
     getHash UpdateQueue{..} = H.hash $ runPut $ do
         put _uqNextSequenceNumber
         putLength $ length _uqQueue
         mapM_ (\(t, e) -> put t >> put (getHash e :: H.Hash)) _uqQueue
 
--- |Serialize an update queue in V0 format.
+-- | Serialize an update queue in V0 format.
 putUpdateQueueV0 :: (Serialize e) => Putter (UpdateQueue e)
 putUpdateQueueV0 = putUpdateQueueV0With put
 
--- |Serialize an update queue in V0 format.
+-- | Serialize an update queue in V0 format.
 putUpdateQueueV0With :: Putter e -> Putter (UpdateQueue e)
 putUpdateQueueV0With putElem UpdateQueue{..} = do
     put _uqNextSequenceNumber
@@ -64,8 +64,8 @@ putUpdateQueueV0With putElem UpdateQueue{..} = do
         putElem v
     putWord8 0
 
--- |Deserialize an update queue in V0 format.
--- The parameter defines how entries in the queue are deserialized.
+-- | Deserialize an update queue in V0 format.
+--  The parameter defines how entries in the queue are deserialized.
 getUpdateQueueV0With :: Get e -> Get (UpdateQueue e)
 getUpdateQueueV0With getElem = do
     _uqNextSequenceNumber <- get
@@ -81,18 +81,18 @@ getUpdateQueueV0With getElem = do
     _uqQueue <- loop Nothing
     return UpdateQueue{..}
 
--- |Deserialize an update queue in V0 format.
-getUpdateQueueV0 :: Serialize e => Get (UpdateQueue e)
+-- | Deserialize an update queue in V0 format.
+getUpdateQueueV0 :: (Serialize e) => Get (UpdateQueue e)
 getUpdateQueueV0 = getUpdateQueueV0With get
 
-instance ToJSON e => ToJSON (UpdateQueue e) where
+instance (ToJSON e) => ToJSON (UpdateQueue e) where
     toJSON UpdateQueue{..} =
         object
             [ "nextSequenceNumber" AE..= _uqNextSequenceNumber,
               "queue" AE..= [object ["effectiveTime" AE..= et, "update" AE..= u] | (et, u) <- _uqQueue]
             ]
 
-instance FromJSON e => FromJSON (UpdateQueue e) where
+instance (FromJSON e) => FromJSON (UpdateQueue e) where
     parseJSON = withObject "Update queue" $ \o -> do
         _uqNextSequenceNumber <- o AE..: "nextSequenceNumber"
         queue <- o AE..: "queue"
@@ -107,8 +107,8 @@ instance FromJSON e => FromJSON (UpdateQueue e) where
                 queue
         return UpdateQueue{..}
 
--- |Update queue with no pending updates, and with the minimal next
--- sequence number.
+-- | Update queue with no pending updates, and with the minimal next
+--  sequence number.
 emptyUpdateQueue :: UpdateQueue e
 emptyUpdateQueue =
     UpdateQueue
@@ -116,62 +116,62 @@ emptyUpdateQueue =
           _uqQueue = []
         }
 
--- |Add an update event to an update queue, incrementing the sequence number.
--- Any updates in the queue with later or equal effective times are removed
--- from the queue.
+-- | Add an update event to an update queue, incrementing the sequence number.
+--  Any updates in the queue with later or equal effective times are removed
+--  from the queue.
 enqueue :: TransactionTime -> e -> UpdateQueue e -> UpdateQueue e
 enqueue !t !e =
     (uqNextSequenceNumber +~ 1)
         . (uqQueue %~ \q -> let !r = takeWhile ((< t) . fst) q in r ++ [(t, e)])
 
--- |Update queues for all on-chain update types.
+-- | Update queues for all on-chain update types.
 data PendingUpdates cpv = PendingUpdates
-    { -- |Updates to the root keys.
+    { -- | Updates to the root keys.
       _pRootKeysUpdateQueue :: !(UpdateQueue (HigherLevelKeys RootKeysKind)),
-      -- |Updates to the level 1 keys.
+      -- | Updates to the level 1 keys.
       _pLevel1KeysUpdateQueue :: !(UpdateQueue (HigherLevelKeys Level1KeysKind)),
-      -- |Updates to the level 2 keys.
+      -- | Updates to the level 2 keys.
       _pLevel2KeysUpdateQueue :: !(UpdateQueue (Authorizations (AuthorizationsVersionFor cpv))),
-      -- |Protocol updates.
+      -- | Protocol updates.
       _pProtocolQueue :: !(UpdateQueue ProtocolUpdate),
-      -- |Updates to the election difficulty parameter (CPV0 and CPV1 only).
+      -- | Updates to the election difficulty parameter (CPV0 and CPV1 only).
       _pElectionDifficultyQueue :: !(OUpdateQueue 'PTElectionDifficulty cpv ElectionDifficulty),
-      -- |Updates to the euro:energy exchange rate.
+      -- | Updates to the euro:energy exchange rate.
       _pEuroPerEnergyQueue :: !(UpdateQueue ExchangeRate),
-      -- |Updates to the GTU:euro exchange rate.
+      -- | Updates to the GTU:euro exchange rate.
       _pMicroGTUPerEuroQueue :: !(UpdateQueue ExchangeRate),
-      -- |Updates to the foundation account.
+      -- | Updates to the foundation account.
       _pFoundationAccountQueue :: !(UpdateQueue AccountIndex),
-      -- |Updates to the mint distribution.
+      -- | Updates to the mint distribution.
       _pMintDistributionQueue :: !(UpdateQueue (MintDistribution (MintDistributionVersionFor cpv))),
-      -- |Updates to the transaction fee distribution.
+      -- | Updates to the transaction fee distribution.
       _pTransactionFeeDistributionQueue :: !(UpdateQueue TransactionFeeDistribution),
-      -- |Updates to the GAS rewards.
+      -- | Updates to the GAS rewards.
       _pGASRewardsQueue :: !(UpdateQueue (GASRewards (GasRewardsVersionFor cpv))),
-      -- |Updates pool parameters.
+      -- | Updates pool parameters.
       _pPoolParametersQueue :: !(UpdateQueue (PoolParameters cpv)),
-      -- |Adds a new anonymity revoker.
+      -- | Adds a new anonymity revoker.
       _pAddAnonymityRevokerQueue :: !(UpdateQueue ARS.ArInfo),
-      -- |Adds a new identity provider.
+      -- | Adds a new identity provider.
       _pAddIdentityProviderQueue :: !(UpdateQueue IPS.IpInfo),
-      -- |Updates to cooldown parameters (CPV1 onwards).
+      -- | Updates to cooldown parameters (CPV1 onwards).
       _pCooldownParametersQueue :: !(OUpdateQueue 'PTCooldownParametersAccessStructure cpv (CooldownParameters cpv)),
-      -- |Updates to time parameters (CPV1 onwards).
+      -- | Updates to time parameters (CPV1 onwards).
       _pTimeParametersQueue :: !(OUpdateQueue 'PTTimeParameters cpv TimeParameters),
-      -- |Updates to the consensus version 2 timeout parameters (CPV2 onwards).
+      -- | Updates to the consensus version 2 timeout parameters (CPV2 onwards).
       _pTimeoutParametersQueue :: !(OUpdateQueue 'PTTimeoutParameters cpv TimeoutParameters),
-      -- |Minimum block time for consensus version 2 (CPV2 onwards).
+      -- | Minimum block time for consensus version 2 (CPV2 onwards).
       _pMinBlockTimeQueue :: !(OUpdateQueue 'PTMinBlockTime cpv Duration),
-      -- |Block energy limit (CPV2 onwards).
+      -- | Block energy limit (CPV2 onwards).
       _pBlockEnergyLimitQueue :: !(OUpdateQueue 'PTBlockEnergyLimit cpv Energy),
-      -- |Finalization committee parameters queue (CPV2 onwards).
+      -- | Finalization committee parameters queue (CPV2 onwards).
       _pFinalizationCommitteeParametersQueue :: !(OUpdateQueue 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
     }
     deriving (Show, Eq)
 
 makeLenses ''PendingUpdates
 
-instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) where
+instance (IsChainParametersVersion cpv) => HashableTo H.Hash (PendingUpdates cpv) where
     getHash PendingUpdates{..} =
         withCPVConstraints (chainParametersVersion @cpv) $
             H.hash $
@@ -196,10 +196,10 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (PendingUpdates cpv) 
                     <> optionalHash _pBlockEnergyLimitQueue
                     <> optionalHash _pFinalizationCommitteeParametersQueue
       where
-        hsh :: HashableTo H.Hash a => a -> BS.ByteString
+        hsh :: (HashableTo H.Hash a) => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
         -- For SomeParam, produce the hash. For NoParam, produce the empty string.
-        optionalHash :: HashableTo H.Hash e => OUpdateQueue pt cpv e -> BS.ByteString
+        optionalHash :: (HashableTo H.Hash e) => OUpdateQueue pt cpv e -> BS.ByteString
         optionalHash = foldMap hsh
 
 pendingUpdatesV0ToJSON :: PendingUpdates 'ChainParametersV0 -> Value
@@ -274,7 +274,7 @@ pendingUpdatesV2ToJSON
               "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
             ]
 
-instance IsChainParametersVersion cpv => ToJSON (PendingUpdates cpv) where
+instance (IsChainParametersVersion cpv) => ToJSON (PendingUpdates cpv) where
     toJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> pendingUpdatesV0ToJSON
         SChainParametersV1 -> pendingUpdatesV1ToJSON
@@ -356,14 +356,14 @@ parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
     return PendingUpdates{..}
 
-instance IsChainParametersVersion cpv => FromJSON (PendingUpdates cpv) where
+instance (IsChainParametersVersion cpv) => FromJSON (PendingUpdates cpv) where
     parseJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> parsePendingUpdatesV0
         SChainParametersV1 -> parsePendingUpdatesV1
         SChainParametersV2 -> parsePendingUpdatesV2
 
--- |Initial pending updates with empty queues.
-emptyPendingUpdates :: forall cpv. IsChainParametersVersion cpv => PendingUpdates cpv
+-- | Initial pending updates with empty queues.
+emptyPendingUpdates :: forall cpv. (IsChainParametersVersion cpv) => PendingUpdates cpv
 emptyPendingUpdates =
     PendingUpdates
         emptyUpdateQueue
@@ -387,15 +387,15 @@ emptyPendingUpdates =
         (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)
 
--- |Current state of updatable parameters and update queues.
+-- | Current state of updatable parameters and update queues.
 data Updates' (cpv :: ChainParametersVersion) = Updates
-    { -- |Current update authorizations.
+    { -- | Current update authorizations.
       _currentKeyCollection :: !(Hashed (UpdateKeysCollection (AuthorizationsVersionFor cpv))),
-      -- |Current protocol update.
+      -- | Current protocol update.
       _currentProtocolUpdate :: !(Maybe ProtocolUpdate),
-      -- |Current chain parameters.
+      -- | Current chain parameters.
       _currentParameters :: !(ChainParameters' cpv),
-      -- |Pending updates.
+      -- | Pending updates.
       _pendingUpdates :: !(PendingUpdates cpv)
     }
     deriving (Show, Eq)
@@ -404,7 +404,7 @@ makeLenses ''Updates'
 
 type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv)
 
-instance IsChainParametersVersion cpv => HashableTo H.Hash (Updates' cpv) where
+instance (IsChainParametersVersion cpv) => HashableTo H.Hash (Updates' cpv) where
     getHash Updates{..} =
         H.hash $
             hsh _currentKeyCollection
@@ -414,10 +414,10 @@ instance IsChainParametersVersion cpv => HashableTo H.Hash (Updates' cpv) where
                 <> hsh _currentParameters
                 <> hsh _pendingUpdates
       where
-        hsh :: HashableTo H.Hash a => a -> BS.ByteString
+        hsh :: (HashableTo H.Hash a) => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
 
-instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
+instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (Updates' cpv) where
     toJSON Updates{..} =
         withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
             object $
@@ -427,7 +427,7 @@ instance forall cpv. IsChainParametersVersion cpv => ToJSON (Updates' cpv) where
                 ]
                     <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
 
-instance forall cpv. IsChainParametersVersion cpv => FromJSON (Updates' cpv) where
+instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (Updates' cpv) where
     parseJSON = withObject "Updates" $ \o -> do
         _currentKeyCollection <-
             withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
@@ -437,10 +437,10 @@ instance forall cpv. IsChainParametersVersion cpv => FromJSON (Updates' cpv) whe
         _pendingUpdates <- o AE..: "updateQueues"
         return Updates{..}
 
--- |An initial 'Updates' with the given initial 'Authorizations'
--- and 'ChainParameters'.
+-- | An initial 'Updates' with the given initial 'Authorizations'
+--  and 'ChainParameters'.
 initialUpdates ::
-    IsChainParametersVersion cpv =>
+    (IsChainParametersVersion cpv) =>
     UpdateKeysCollection (AuthorizationsVersionFor cpv) ->
     ChainParameters' cpv ->
     Updates' cpv
@@ -452,12 +452,12 @@ initialUpdates initialKeyCollection _currentParameters =
           ..
         }
 
--- |The status of protocol updates on a chain.  Either an update has occurred, or zero or more
--- updates are pending.
+-- | The status of protocol updates on a chain.  Either an update has occurred, or zero or more
+--  updates are pending.
 data ProtocolUpdateStatus
-    = -- |The specified protocol update has occurred.
+    = -- | The specified protocol update has occurred.
       ProtocolUpdated !ProtocolUpdate
-    | -- |No protocol update has occurred, but there may be pending updates.
-      -- The list may be empty, and is ordered by the effective timestamp of the update.
+    | -- | No protocol update has occurred, but there may be pending updates.
+      --  The list may be empty, and is ordered by the effective timestamp of the update.
       PendingProtocolUpdates ![(TransactionTime, ProtocolUpdate)]
     deriving (Eq, Show)

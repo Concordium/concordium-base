@@ -122,7 +122,7 @@ foreign import ccall unsafe "aggregate_encrypted_amounts"
         Ptr (Ptr ElgamalCipher) ->
         IO ()
 
--- |Check whether the encrypted amount is an encryption of 0 with randomness 0.
+-- | Check whether the encrypted amount is an encryption of 0 with randomness 0.
 isZeroEncryptedAmount :: EncryptedAmount -> Bool
 isZeroEncryptedAmount EncryptedAmount{..} = unsafeDupablePerformIO $
     withElgamalCipher encryptionHigh $ \highPtr ->
@@ -130,8 +130,8 @@ isZeroEncryptedAmount EncryptedAmount{..} = unsafeDupablePerformIO $
             res <- is_zero_encrypted_amount highPtr lowPtr
             return (res == 1)
 
--- |Aggregate two encrypted amounts together. This operation is strict and
--- associative.
+-- | Aggregate two encrypted amounts together. This operation is strict and
+--  associative.
 aggregateAmounts :: EncryptedAmount -> EncryptedAmount -> EncryptedAmount
 aggregateAmounts left right = unsafePerformIO $ do
     withElgamalCipher (encryptionHigh left) $ \leftHighPtr ->
@@ -149,7 +149,7 @@ aggregateAmounts left right = unsafePerformIO $ do
 -------------------------- Encrypted aggregated index --------------------------
 --------------------------------------------------------------------------------
 
--- |An index used to determine which encrypted amounts were used in a transaction.
+-- | An index used to determine which encrypted amounts were used in a transaction.
 newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex {theAggIndex :: Word64}
     deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum, Storable, Serialize)
 
@@ -157,14 +157,14 @@ newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex {theAggIndex :: Word64
 ---------------------------- Encrypted amount index ----------------------------
 --------------------------------------------------------------------------------
 
--- |An individual index of an encrypted amount. This is used when assigning
--- indices for encrypted amounts added to an account.
+-- | An individual index of an encrypted amount. This is used when assigning
+--  indices for encrypted amounts added to an account.
 newtype EncryptedAmountIndex = EncryptedAmountIndex {theIndex :: Word64}
     deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum, Serialize)
 
--- |Add an offset to an encrypted amount aggregation index to obtain a new encrypted amount index.
--- It is assume that this will not overflow. The function is still safe in case of overflow,
--- but it will wrap around.
+-- | Add an offset to an encrypted amount aggregation index to obtain a new encrypted amount index.
+--  It is assume that this will not overflow. The function is still safe in case of overflow,
+--  but it will wrap around.
 addToAggIndex :: EncryptedAmountAggIndex -> Word -> EncryptedAmountIndex
 addToAggIndex (EncryptedAmountAggIndex aggIdx) len = EncryptedAmountIndex (aggIdx + fromIntegral len)
 
@@ -275,8 +275,8 @@ makeEncryptedAmountTransferProof c = do
 getEncryptedAmountTransferProof :: Word32 -> Get EncryptedAmountTransferProof
 getEncryptedAmountTransferProof len = EncryptedAmountTransferProof <$> getShortByteString (fromIntegral len)
 
--- |Put the proof directly without the length.
--- The proof can be deserialized in the right contexts using 'getEncryptedAmountTransferProof'
+-- | Put the proof directly without the length.
+--  The proof can be deserialized in the right contexts using 'getEncryptedAmountTransferProof'
 putEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> Put
 putEncryptedAmountTransferProof = putShortByteString . theEncryptedAmountTransferProof
 
@@ -390,15 +390,15 @@ foreign import ccall safe "verify_encrypted_transfer"
         IO Word8
 
 verifyEncryptedTransferProof ::
-    -- |Global context with parameters
+    -- | Global context with parameters
     GlobalContext ->
-    -- |Public key of the receiver.
+    -- | Public key of the receiver.
     AccountEncryptionKey ->
-    -- |Public key of the sender.
+    -- | Public key of the sender.
     AccountEncryptionKey ->
-    -- |Aggregated encrypted amount on the sender's account that was used.
+    -- | Aggregated encrypted amount on the sender's account that was used.
     EncryptedAmount ->
-    -- |Proof of validity of the transfer.
+    -- | Proof of validity of the transfer.
     EncryptedAmountTransferData ->
     Bool
 verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafePerformIO $ do
@@ -469,8 +469,8 @@ makeSecToPubAmountTransferProof c = SecToPubAmountTransferProof <$> packCStringL
 getSecToPubAmountTransferProof :: Word32 -> Get SecToPubAmountTransferProof
 getSecToPubAmountTransferProof len = SecToPubAmountTransferProof <$> getShortByteString (fromIntegral len)
 
--- |Put the proof directly without the length.
--- The proof can be deserialized in the right contexts using 'getSecToPubAmountTransferProof'
+-- | Put the proof directly without the length.
+--  The proof can be deserialized in the right contexts using 'getSecToPubAmountTransferProof'
 putSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> Put
 putSecToPubAmountTransferProof = putShortByteString . theSecToPubAmountTransferProof
 
@@ -569,13 +569,13 @@ foreign import ccall safe "verify_sec_to_pub_transfer"
         IO Word8
 
 verifySecretToPublicTransferProof ::
-    -- |Global context with parameters
+    -- | Global context with parameters
     GlobalContext ->
-    -- |Public key of the sender.
+    -- | Public key of the sender.
     AccountEncryptionKey ->
-    -- |Aggregated encrypted amount on the sender's account that was used.
+    -- | Aggregated encrypted amount on the sender's account that was used.
     EncryptedAmount ->
-    -- |Proof of validity of the transfer.
+    -- | Proof of validity of the transfer.
     SecToPubAmountTransferData ->
     Bool
 verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafePerformIO $ do
@@ -601,9 +601,9 @@ verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsaf
   where
     AccountEncryptionKey senderPK' = senderPK
 
--- |Decrypt an encrypted amount.
+-- | Decrypt an encrypted amount.
 
--- |Baby-step-giant-step table to speed-up decryption.
+-- | Baby-step-giant-step table to speed-up decryption.
 newtype Table = Table (ForeignPtr Table)
 
 withTable :: Table -> (Ptr Table -> IO b) -> IO b
@@ -620,25 +620,25 @@ foreign import ccall safe "decrypt_amount"
     decryptAmountPtr ::
         Ptr Table ->
         Ptr ElgamalSecretKey ->
-        -- |Pointer to high bits of the amount
+        -- | Pointer to high bits of the amount
         Ptr ElgamalCipher ->
-        -- |Pointer to low bits of the amount
+        -- | Pointer to low bits of the amount
         Ptr ElgamalCipher ->
         IO Word64
 
--- |Compute the table in the context of the global context. The 'Word64'
--- arguments determines the size of the table, a good number to choose is 2^16,
--- although a bigger table might be better if many decryptions are going to be
--- performed.
+-- | Compute the table in the context of the global context. The 'Word64'
+--  arguments determines the size of the table, a good number to choose is 2^16,
+--  although a bigger table might be better if many decryptions are going to be
+--  performed.
 computeTable :: GlobalContext -> Word64 -> Table
 computeTable gc m = Table . unsafePerformIO $ do
     r <- withGlobalContext gc (flip computeTablePtr m)
     newForeignPtr freeTable r
 
--- |Decrypt an encrypted amount that is assumed to have been encrypted with the
--- public key corresponding to the given secret key, as well as parameters in
--- global context and table. If this is not the case this function is almost
--- certainly going to appear to loop.
+-- | Decrypt an encrypted amount that is assumed to have been encrypted with the
+--  public key corresponding to the given secret key, as well as parameters in
+--  global context and table. If this is not the case this function is almost
+--  certainly going to appear to loop.
 decryptAmount :: Table -> ElgamalSecretKey -> EncryptedAmount -> Amount
 decryptAmount table sec EncryptedAmount{..} = Amount . unsafePerformIO $
     withTable table $ \tablePtr ->
