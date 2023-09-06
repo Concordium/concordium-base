@@ -138,6 +138,8 @@ cons' !x = (x :)
 f $!! (!x, !y) = f (x, y)
 {-# INLINE ($!!) #-}
 
+infixr 0 $!!
+
 -- * Helper lenses
 
 nonEmpty :: (Monoid (f v), Foldable f) => Lens' (Maybe (f v)) (f v)

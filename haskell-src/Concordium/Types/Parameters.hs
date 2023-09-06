@@ -898,10 +898,10 @@ instance AE.ToJSON (GASRewards cpv) where
         object
             ( "baker"
                 AE..= _gasBaker
-                : finalizationProof
-                ++ [ "accountCreation" AE..= _gasAccountCreation,
-                     "chainUpdate" AE..= _gasChainUpdate
-                   ]
+                    : finalizationProof
+                    ++ [ "accountCreation" AE..= _gasAccountCreation,
+                         "chainUpdate" AE..= _gasChainUpdate
+                       ]
             )
       where
         finalizationProof = foldMap (\finProof -> ["finalizationProof" AE..= finProof]) _gasFinalizationProof
