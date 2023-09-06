@@ -12,4 +12,10 @@ in-style: left-align # How to align the in keyword with respect to let.
 single-constraint-parens: always # Whether to put parentheses round a single constraint
 unicode: never
 respectful: true # Be less aggressive in reformatting input, e.g. keep empty lines in import list.
-fixities: [] # Override fixities of operators.
+fixities: # Override fixities of operators.
+ # Fourmolu incorrectly determines the fixity of operators re-exported in Lens.Micro.Platform.
+ - infixl 1 &, <&>, &~
+ - infixr 2 <~
+ - infix 4 .=, ?=, +=, -=, *=, //=, <%=, <.=, <?=, <<%=, <<.=
+ - infixr 4 %~, +~, -~, <>~, .~, ?~, <%~, <<%~, <</~
+ - infixl 8 ^., ^.., ^?, ^?!
