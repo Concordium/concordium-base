@@ -219,6 +219,11 @@ struct WithExpiry {
     pub expiry: YearMonth,
 }
 
+enum UriOrCode {
+    Uri(String),
+    Code(StatusCode),
+}
+
 impl ServerConfig {
     /// Resolve the configuration from the command-line arguments, checking that
     /// all values have the correct formats.
@@ -1069,10 +1074,10 @@ enum IdRequestRejection {
     /// Request was made with an unsupported version of the identity object.
     UnsupportedVersion(Option<String>),
     /// The request had invalid proofs.
-    InvalidProofs(Option<String>),
+    InvalidProofs(String),
     /// The identity verifier could not validate the supporting evidence, e.g.,
     /// passport.
-    IdVerifierFailure(Option<String>),
+    IdVerifierFailure(String),
     /// Internal server error occurred.
     InternalError(Option<String>),
     /// Registration ID was reused, leading to initial account creation failure.
@@ -1082,7 +1087,7 @@ enum IdRequestRejection {
     /// Missing validated request for the given id_cred_pub
     NoValidRequest,
     /// Duplicate idCredPub.
-    DuplicateRequest(Option<String>),
+    DuplicateRequest(String),
 }
 
 #[derive(Debug)]
@@ -1114,95 +1119,89 @@ struct ErrorResponse {
 }
 
 /// Helper function to make the reply.
-fn mk_reply(
-    message: &'static str,
-    code: StatusCode,
-    redirect_uri: &Option<String>,
-) -> impl warp::Reply {
-    if let Some(uri) = redirect_uri {
-        let callback_location = uri.to_owned() + "#error=\"" + message + "\"";
+fn mk_reply(message: &'static str, either: UriOrCode) -> impl warp::Reply {
+    match either {
+        UriOrCode::Uri(uri) => {
+            let callback_location = uri.to_owned() + "#error=\"" + message + "\"";
 
-        warp::reply::with_status(
-            warp::reply::with_header(warp::reply(), LOCATION, callback_location),
-            code,
-        ).into_response()
-    } else {
-         let msg = ErrorResponse {
-            message,
-            code: code.as_u16(),
-        };
-         warp::reply::with_status(warp::reply::json(&msg), code).into_response()
+            warp::reply::with_status(
+                warp::reply::with_header(warp::reply(), LOCATION, callback_location),
+                StatusCode::FOUND,
+            )
+            .into_response()
+        }
+        UriOrCode::Code(code) => {
+            let msg = ErrorResponse {
+                message,
+                code: code.as_u16(),
+            };
+            warp::reply::with_status(warp::reply::json(&msg), code).into_response()
+        }
     }
 }
 
 async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible> {
+    use UriOrCode::*;
+
     if err.is_not_found() {
-        let code = StatusCode::NOT_FOUND;
         let message = "Not found.";
-        Ok(mk_reply(message, code, &None))
-    } else if let Some(IdRequestRejection::UnsupportedVersion(uri)) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Unsupported version.";
-        Ok(mk_reply(message, code, uri))
-    } else if let Some(IdRequestRejection::InvalidProofs(uri)) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Invalid proofs.";
-        Ok(mk_reply(message, code, uri))
-    } else if let Some(IdRequestRejection::IdVerifierFailure(uri)) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "ID verifier rejected.";
-        Ok(mk_reply(message, code, uri))
-    } else if let Some(IdRequestRejection::InternalError(uri)) = err.find() {
-        let code = StatusCode::INTERNAL_SERVER_ERROR;
-        let message = "Internal server error.";
-        Ok(mk_reply(message, code, uri))
-    } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Reuse of RegId.";
-        Ok(mk_reply(message, code, &None))
-    } else if let Some(IdRequestRejection::Malformed) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Malformed request.";
-        Ok(mk_reply(message, code, &None))
-    } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "No validated request was found for the given id_cred_pub.";
-        Ok(mk_reply(message, code, &None))
-    } else if let Some(IdRequestRejection::DuplicateRequest(uri)) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Duplicate id_cred_pub.";
-        Ok(mk_reply(message, code, uri))
-    } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Invalid ID recovery proof.";
-        Ok(mk_reply(message, code, &None))
+        Ok(mk_reply(message, Code(StatusCode::NOT_FOUND)))
     } else if let Some(IdRecoveryRejection::NonExistingIdObject) = err.find() {
-        let code = StatusCode::NOT_FOUND;
         let message = "ID object not found in database.";
-        Ok(mk_reply(message, code, &None))
+        Ok(mk_reply(message, Code(StatusCode::NOT_FOUND)))
+    } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
+        let message = "Invalid ID recovery proof.";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::InvalidTimestamp) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
         let message = "Invalid timestamp.";
-        Ok(mk_reply(message, code, &None))
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::Malformed) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
         let message = "Malformed ID recovery request.";
-        Ok(mk_reply(message, code, &None))
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::UnsupportedVersion) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
         let message = "Unsupported version.";
-        Ok(mk_reply(message, code, &None))
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
+        let message = "Reuse of RegId.";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::Malformed) = err.find() {
+        let message = "Malformed request.";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
+        let message = "No validated request was found for the given id_cred_pub.";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::DuplicateRequest(uri)) = err.find() {
+        let message = "Duplicate id_cred_pub.";
+        Ok(mk_reply(message, Uri(uri.to_owned())))
+    } else if let Some(IdRequestRejection::InvalidProofs(uri)) = err.find() {
+        let message = "Invalid proofs.";
+        Ok(mk_reply(message, Uri(uri.to_owned())))
+    } else if let Some(IdRequestRejection::IdVerifierFailure(uri)) = err.find() {
+        let message = "ID verifier rejected.";
+        Ok(mk_reply(message, Uri(uri.to_owned())))
+    } else if let Some(IdRequestRejection::InternalError(opt)) = err.find() {
+        let message = "Internal server error.";
+        let either = opt
+            .clone()
+            .map(Uri)
+            .unwrap_or(Code(StatusCode::INTERNAL_SERVER_ERROR));
+        Ok(mk_reply(message, either))
+    } else if let Some(IdRequestRejection::UnsupportedVersion(opt)) = err.find() {
+        let message = "Unsupported version.";
+        let either = opt
+            .clone()
+            .map(Uri)
+            .unwrap_or(Code(StatusCode::BAD_REQUEST));
+        Ok(mk_reply(message, either))
     } else if err
         .find::<warp::filters::body::BodyDeserializeError>()
         .is_some()
     {
-        let code = StatusCode::BAD_REQUEST;
         let message = "Malformed body.";
-        Ok(mk_reply(message, code, &None))
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else {
-        let code = StatusCode::INTERNAL_SERVER_ERROR;
         let message = "Internal error.";
-        Ok(mk_reply(message, code, &None))
+        Ok(mk_reply(message, Code(StatusCode::INTERNAL_SERVER_ERROR)))
     }
 }
 
@@ -1254,7 +1253,7 @@ async fn create_signed_identity_object(
             Err(e) => {
                 error!("Could not deserialize response from the verifier {}.", e);
                 return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure(
-                    Some(redirect_uri),
+                    redirect_uri,
                 )));
             }
         },
@@ -1445,7 +1444,7 @@ async fn create_signed_identity_object_v1(
             Err(e) => {
                 error!("Could not deserialize response from the verifier {}.", e);
                 return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure(
-                    Some(redirect_uri),
+                    redirect_uri,
                 )));
             }
         },
@@ -1556,7 +1555,7 @@ fn validate_worker(
         }
         Err(e) => {
             warn!("Request is invalid {}.", e);
-            Err(IdRequestRejection::InvalidProofs(Some(input.redirect_uri)))
+            Err(IdRequestRejection::InvalidProofs(input.redirect_uri))
         }
     }
 }
@@ -1585,7 +1584,7 @@ fn validate_worker_v1(
         }
         Err(e) => {
             warn!("Request is invalid {}.", e);
-            Err(IdRequestRejection::InvalidProofs(Some(input.redirect_uri)))
+            Err(IdRequestRejection::InvalidProofs(input.redirect_uri))
         }
     }
 }
@@ -1621,7 +1620,7 @@ fn extract_and_validate_request(
                             base16_encode_string(&id_cred_pub)
                         );
                         Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
-                            Some(input.redirect_uri),
+                            input.redirect_uri,
                         )))
                     } else {
                         match validate_worker(&server_config, input) {
@@ -1695,7 +1694,7 @@ fn extract_and_validate_request_query(
                             base16_encode_string(&id_cred_pub)
                         );
                         Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
-                            Some(input.redirect_uri),
+                            input.redirect_uri,
                         )))
                     } else {
                         let input = IdentityObjectRequest {
@@ -1773,7 +1772,7 @@ fn extract_and_validate_request_query_v1(
                             base16_encode_string(&id_cred_pub)
                         );
                         Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
-                            Some(input.redirect_uri),
+                            input.redirect_uri,
                         )))
                     } else {
                         let input = IdentityObjectRequestV1 {
@@ -2001,8 +2000,7 @@ async fn get_broken_reply() -> Result<impl Reply, Rejection> {
     log::info!("Broken Endpoint was triggered.");
     Ok(mk_reply(
         "Broken Endpoint was used",
-        StatusCode::BAD_REQUEST,
-        &None,
+        UriOrCode::Code(StatusCode::BAD_REQUEST),
     ))
 }
 
