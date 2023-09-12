@@ -1168,7 +1168,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
         let message = "Malformed request";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
-        let message = "No validated request was found for the given idCredPub";
+        let message = "No valid request was found for the given idCredPub";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRequestRejection::DuplicateRequest(uri)) = err.find() {
         let message = "Duplicate idCredPub";
