@@ -1128,7 +1128,7 @@ struct ErrorResponse {
 fn mk_reply(message: &'static str, either: UriOrCode) -> impl warp::Reply {
     match either {
         UriOrCode::Uri(uri) => {
-            let callback_location = uri.to_owned() + "#error=" + message;
+            let callback_location = uri + "#error=" + message;
 
             warp::reply::with_status(
                 warp::reply::with_header(warp::reply(), LOCATION, callback_location),
