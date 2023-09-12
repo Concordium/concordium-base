@@ -1122,7 +1122,7 @@ struct ErrorResponse {
 fn mk_reply(message: &'static str, either: UriOrCode) -> impl warp::Reply {
     match either {
         UriOrCode::Uri(uri) => {
-            let callback_location = uri.to_owned() + "#error=\"" + message + "\"";
+            let callback_location = uri.to_owned() + "#error=" + message;
 
             warp::reply::with_status(
                 warp::reply::with_header(warp::reply(), LOCATION, callback_location),
@@ -1144,50 +1144,50 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
     use UriOrCode::*;
 
     if err.is_not_found() {
-        let message = "Not found.";
+        let message = "Not found";
         Ok(mk_reply(message, Code(StatusCode::NOT_FOUND)))
     } else if let Some(IdRecoveryRejection::NonExistingIdObject) = err.find() {
-        let message = "ID object not found in database.";
+        let message = "ID object not found in database";
         Ok(mk_reply(message, Code(StatusCode::NOT_FOUND)))
     } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
-        let message = "Invalid ID recovery proof.";
+        let message = "Invalid ID recovery proof";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::InvalidTimestamp) = err.find() {
-        let message = "Invalid timestamp.";
+        let message = "Invalid timestamp";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::Malformed) = err.find() {
-        let message = "Malformed ID recovery request.";
+        let message = "Malformed ID recovery request";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::UnsupportedVersion) = err.find() {
-        let message = "Unsupported version.";
+        let message = "Unsupported version";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
-        let message = "Reuse of RegId.";
+        let message = "Reuse of RegId";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRequestRejection::Malformed) = err.find() {
-        let message = "Malformed request.";
+        let message = "Malformed request";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
-        let message = "No validated request was found for the given id_cred_pub.";
+        let message = "No validated request was found for the given idCredPub";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRequestRejection::DuplicateRequest(uri)) = err.find() {
-        let message = "Duplicate id_cred_pub.";
+        let message = "Duplicate idCredPub";
         Ok(mk_reply(message, Uri(uri.to_owned())))
     } else if let Some(IdRequestRejection::InvalidProofs(uri)) = err.find() {
-        let message = "Invalid proofs.";
+        let message = "Invalid proofs";
         Ok(mk_reply(message, Uri(uri.to_owned())))
     } else if let Some(IdRequestRejection::IdVerifierFailure(uri)) = err.find() {
-        let message = "ID verifier rejected.";
+        let message = "ID verifier rejected";
         Ok(mk_reply(message, Uri(uri.to_owned())))
     } else if let Some(IdRequestRejection::InternalError(opt)) = err.find() {
-        let message = "Internal server error.";
+        let message = "Internal server error";
         let either = opt
             .clone()
             .map(Uri)
             .unwrap_or(Code(StatusCode::INTERNAL_SERVER_ERROR));
         Ok(mk_reply(message, either))
     } else if let Some(IdRequestRejection::UnsupportedVersion(opt)) = err.find() {
-        let message = "Unsupported version.";
+        let message = "Unsupported version";
         let either = opt
             .clone()
             .map(Uri)
@@ -1197,10 +1197,10 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
         .find::<warp::filters::body::BodyDeserializeError>()
         .is_some()
     {
-        let message = "Malformed body.";
+        let message = "Malformed body";
         Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else {
-        let message = "Internal error.";
+        let message = "Internal error";
         Ok(mk_reply(message, Code(StatusCode::INTERNAL_SERVER_ERROR)))
     }
 }
