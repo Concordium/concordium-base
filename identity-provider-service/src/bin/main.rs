@@ -219,6 +219,8 @@ struct WithExpiry {
     pub expiry: YearMonth,
 }
 
+/// An Either type containing either an redirect URI or a HTTP status
+/// code. Used for error handling in `mkReply`.
 enum UriOrCode {
     Uri(String),
     Code(StatusCode),
@@ -1072,21 +1074,25 @@ async fn submit_account_creation(
 /// An internal error type used by this server to manage error handling.
 enum IdRequestRejection {
     /// Request was made with an unsupported version of the identity object.
+    /// Takes an optional redirect URI that, if provided, will propgate the
+    /// error to the wallet.
     UnsupportedVersion(Option<String>),
-    /// The request had invalid proofs.
+    /// The request had invalid proofs. Takes a redirect URI as argument.
     InvalidProofs(String),
     /// The identity verifier could not validate the supporting evidence, e.g.,
-    /// passport.
+    /// passport. Takes a redirect URI as argument.
     IdVerifierFailure(String),
     /// Internal server error occurred.
+    /// Takes an optional redirect URI that, if provided, will propgate the
+    /// error to the wallet.
     InternalError(Option<String>),
     /// Registration ID was reused, leading to initial account creation failure.
     ReuseOfRegId,
     /// Malformed request.
     Malformed,
-    /// Missing validated request for the given id_cred_pub
+    /// Missing validated request for the given id_cred_pub.
     NoValidRequest,
-    /// Duplicate idCredPub.
+    /// Duplicate idCredPub. Takes a redirect URI as argument.
     DuplicateRequest(String),
 }
 
