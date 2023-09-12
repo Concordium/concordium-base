@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.4
+## 0.5.5
 - Added improved error handling, so that the wallet can handle some of the errors
 
 ## 0.5.2
