@@ -24,6 +24,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use byteorder::ReadBytesExt;
+use chrono::TimeZone;
 use concordium_contracts_common as concordium_std;
 pub use concordium_contracts_common::SignatureThreshold;
 use concordium_contracts_common::{AccountThreshold, ZeroSignatureThreshold};
@@ -387,7 +388,7 @@ impl YearMonth {
         let date = chrono::NaiveDate::from_ymd_opt(self.year.into(), self.month.into(), 1)?;
         let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
         let dt = date.and_time(time);
-        Some(chrono::DateTime::from_utc(dt, chrono::Utc))
+        Some(chrono::Utc.from_utc_datetime(&dt))
     }
 
     /// Return the time at the beginning of the next month. This is typically
@@ -397,7 +398,7 @@ impl YearMonth {
         let time = chrono::NaiveTime::from_hms_opt(0, 0, 0)?;
         let date = date.checked_add_months(chrono::Months::new(1))?;
         let dt = date.and_time(time);
-        Some(chrono::DateTime::from_utc(dt, chrono::Utc))
+        Some(chrono::Utc.from_utc_datetime(&dt))
     }
 }
 
@@ -498,7 +499,7 @@ impl YearMonth {
     /// This fails if the conversion would lead to an out of range value,
     /// meaning a year outside of the range `1000..=9999`.
     pub fn from_timestamp(unix_seconds: i64) -> Option<YearMonth> {
-        use chrono::{Datelike, TimeZone};
+        use chrono::Datelike;
         let date = chrono::Utc.timestamp_opt(unix_seconds, 0).earliest()?;
         let year = date.year().try_into().ok()?;
         let month = date.month().try_into().ok()?;
