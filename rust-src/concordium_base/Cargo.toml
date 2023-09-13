@@ -58,7 +58,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 # Local dependencies
 [dependencies.concordium-contracts-common]
 version = "8.0"
-path = "../../concordium-contracts-common/concordium-contracts-common"
+path = "../../smart-contracts/contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
 # Local dependencies

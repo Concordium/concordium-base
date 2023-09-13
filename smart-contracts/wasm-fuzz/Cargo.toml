@@ -29,7 +29,7 @@ features = ["fuzz"]
 
 [dependencies.concordium-contracts-common]
 version = "7"
-path = "../../concordium-contracts-common/concordium-contracts-common"
+path = "../contracts-common/concordium-contracts-common"
 features = ["derive-serde", "fuzz"]
 
 [lib]
