@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "concordium-contracts-common",
+    "concordium-contracts-common-derive",
+]
