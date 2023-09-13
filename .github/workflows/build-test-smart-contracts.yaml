@@ -37,6 +37,8 @@ jobs:
     strategy:
       matrix:
         build-dir:
+          - 'contracts-common/concordium-contracts-common'
+          - 'contracts-common/concordium-contracts-common-derive'
           - 'wasm-transform'
           - 'wasm-chain-integration'
     steps:
@@ -62,6 +64,8 @@ jobs:
     strategy:
       matrix:
         build-dir:
+          - 'contracts-common/concordium-contracts-common'
+          - 'contracts-common/concordium-contracts-common-derive'
           - 'wasm-transform'
           - 'wasm-chain-integration'
     steps:
@@ -111,6 +115,74 @@ jobs:
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           cargo fmt -- --color=always --check
+
+  "lint_clippy_contracts_common":
+    name: Clippy on concordium-contracts-common
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features:
+          - ""
+          - "std"
+          - "derive-serde"
+          - "fuzz"
+          - "smart-contract"
+          - "wasm-test"
+          - "build-schema"
+          - "concordium-quickcheck"
+        target:
+          - wasm32-unknown-unknown
+          - x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install nightly toolchain with clippy available
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          target: ${{ matrix.target }}
+          override: true
+          components: clippy
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --manifest-path=smart-contracts/contracts-common/concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
+
+  "lint_clippy-contracts-common-derive":
+    name: Clippy on concordium-contracts-common-derive
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features:
+          - ""
+          - "wasm-test"
+          - "build-schema"
+          - "concordium-quickcheck"
+        target:
+          - wasm32-unknown-unknown
+          - x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install nightly toolchain with clippy available
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          target: ${{ matrix.target }}
+          override: true
+          components: clippy
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --manifest-path=smart-contracts/contracts-common/concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
 
   "lint_clippy_wasm_transform":
     name: smart-contracts/${{ matrix.build-dir }} lint:clippy
@@ -210,6 +282,8 @@ jobs:
         build-dir:
           - 'wasm-transform'
           - 'wasm-chain-integration'
+          - 'contracts-common/concordium-contracts-common'
+          - 'contracts-common/concordium-contracts-common-derive'
     steps:
       - name: Checkout
         uses: actions/checkout@v2
