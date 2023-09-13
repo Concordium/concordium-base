@@ -45,11 +45,11 @@ import Concordium.Types.Updates
 import Concordium.Utils
 import qualified Concordium.Wasm as Wasm
 
--- |We assume that the list is non-empty and at most 255 elements long.
+-- | We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
     deriving (Eq, Show)
 
--- |Helper for when an account has only one key with index 0.
+-- | Helper for when an account has only one key with index 0.
 singletonAOP :: Dlog25519Proof -> AccountOwnershipProof
 singletonAOP proof = AccountOwnershipProof [(0, proof)]
 
@@ -69,13 +69,13 @@ instance AE.FromJSON AccountOwnershipProof where
 instance AE.ToJSON AccountOwnershipProof where
     toJSON (AccountOwnershipProof proofs) = AE.toJSON $ HMap.fromList proofs
 
--- |The status of whether a baking pool allows delegators to join.
+-- | The status of whether a baking pool allows delegators to join.
 data OpenStatus
-    = -- |New delegators may join the pool.
+    = -- | New delegators may join the pool.
       OpenForAll
-    | -- |New delegators may not join, but existing delegators are kept.
+    | -- | New delegators may not join, but existing delegators are kept.
       ClosedForNew
-    | -- |No delegators are allowed.
+    | -- | No delegators are allowed.
       ClosedForAll
     deriving (Eq, Show)
 
@@ -94,11 +94,11 @@ instance S.Serialize OpenStatus where
 -- "closedForNew" and "closedForAll".
 $(deriveJSON defaultOptions{constructorTagModifier = firstLower} ''OpenStatus)
 
--- |The target to which a delegator may delegate.
+-- | The target to which a delegator may delegate.
 data DelegationTarget
-    = -- |Delegate passively.
+    = -- | Delegate passively.
       DelegatePassive
-    | -- |Delegate to a specific baker.
+    | -- | Delegate to a specific baker.
       DelegateToBaker {targetBaker :: !BakerId}
     deriving (Eq, Show)
 
@@ -122,21 +122,21 @@ instance S.Serialize DelegationTarget where
             1 -> DelegateToBaker <$> S.get
             _ -> fail "Invalid DelegationTarget"
 
--- |A collection of baker keys with corresponding proofs.
+-- | A collection of baker keys with corresponding proofs.
 data BakerKeysWithProofs = BakerKeysWithProofs
-    { -- |Public key to verify the baker has won the election.
+    { -- | Public key to verify the baker has won the election.
       bkwpElectionVerifyKey :: !BakerElectionVerifyKey,
-      -- |Proof that the baker owns the private key corresponding to the
-      -- election verification key.
+      -- | Proof that the baker owns the private key corresponding to the
+      --  election verification key.
       bkwpProofElection :: !Dlog25519Proof,
-      -- |Public key to verify block signatures signed by the baker.
+      -- | Public key to verify block signatures signed by the baker.
       bkwpSignatureVerifyKey :: !BakerSignVerifyKey,
-      -- |Proof that the baker owns the private key corresponding to the
-      -- signature verification key.
+      -- | Proof that the baker owns the private key corresponding to the
+      --  signature verification key.
       bkwpProofSig :: !Dlog25519Proof,
-      -- |Public key to verify aggregate signatures in which the baker participates.
+      -- | Public key to verify aggregate signatures in which the baker participates.
       bkwpAggregationVerifyKey :: !BakerAggregationVerifyKey,
-      -- |Proof that the baker owns the private key corresponding to the aggregation key.
+      -- | Proof that the baker owns the private key corresponding to the aggregation key.
       bkwpProofAggregation :: !BakerAggregationProof
     }
     deriving (Eq, Show)
@@ -152,99 +152,99 @@ instance S.Serialize BakerKeysWithProofs where
 
     get = BakerKeysWithProofs <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
 
--- |Size of a serialized 'BakerKeysWithProofs' structure
+-- | Size of a serialized 'BakerKeysWithProofs' structure
 bakerKeysWithProofsSize :: Int
 bakerKeysWithProofsSize =
     VRF.publicKeySize + dlogProofSize + Sig.publicKeySize + dlogProofSize + Bls.publicKeySize + Bls.proofSize
 
--- |The transaction payload. Defines the supported kinds of transactions.
+-- | The transaction payload. Defines the supported kinds of transactions.
 --
---  * @SPEC: <$DOCS/Transactions#transaction-body>
---  * @COMMENT: Serialization format is defined separately, this only defines the datatype.
+--   * @SPEC: <$DOCS/Transactions#transaction-body>
+--   * @COMMENT: Serialization format is defined separately, this only defines the datatype.
 data Payload
-    = -- |Put module on the chain.
+    = -- | Put module on the chain.
       DeployModule
-        { -- |A wasm module in binary format.
+        { -- | A wasm module in binary format.
           dmMod :: !Wasm.WasmModule
         }
-    | -- |Initialize a new contract instance.
+    | -- | Initialize a new contract instance.
       InitContract
-        { -- |Initial amount on the contract's account.
+        { -- | Initial amount on the contract's account.
           icAmount :: !Amount,
-          -- |Reference of the module (on-chain) in which the contract exist.
+          -- | Reference of the module (on-chain) in which the contract exist.
           icModRef :: !ModuleRef,
-          -- |Name of the init function to call in that module.
+          -- | Name of the init function to call in that module.
           icInitName :: !Wasm.InitName,
-          -- |Parameter to the init method,
+          -- | Parameter to the init method,
           icParam :: !Wasm.Parameter
         }
-    | -- |Update an existing contract instance.
+    | -- | Update an existing contract instance.
       Update
-        { -- |Amount to call the receive method with.
+        { -- | Amount to call the receive method with.
           uAmount :: !Amount,
-          -- |The address of the contract to invoke.
+          -- | The address of the contract to invoke.
           uAddress :: !ContractAddress,
           uReceiveName :: !Wasm.ReceiveName,
-          -- |Message to invoke the receive method with.
+          -- | Message to invoke the receive method with.
           uMessage :: !Wasm.Parameter
         }
-    | -- |Simple transfer from an account to an account.
+    | -- | Simple transfer from an account to an account.
       Transfer
-        { -- |Recipient.
+        { -- | Recipient.
           tToAddress :: !AccountAddress,
-          -- |Amount to transfer.
+          -- | Amount to transfer.
           tAmount :: !Amount
         }
-    | -- |Add a new baker for the sender account.
+    | -- | Add a new baker for the sender account.
       AddBaker
-        { -- |Public key to verify the baker has won the election.
+        { -- | Public key to verify the baker has won the election.
           abElectionVerifyKey :: !BakerElectionVerifyKey,
-          -- |Public key to verify block signatures signed by the baker.
+          -- | Public key to verify block signatures signed by the baker.
           abSignatureVerifyKey :: !BakerSignVerifyKey,
-          -- |Public key to verify aggregate signatures in which the baker participates
+          -- | Public key to verify aggregate signatures in which the baker participates
           abAggregationVerifyKey :: !BakerAggregationVerifyKey,
-          -- |Proof that the baker owns the private key corresponding to the
-          -- signature verification key.
+          -- | Proof that the baker owns the private key corresponding to the
+          --  signature verification key.
           abProofSig :: !Dlog25519Proof,
-          -- |Proof that the baker owns the private key corresponding to the
-          -- election verification key.
+          -- | Proof that the baker owns the private key corresponding to the
+          --  election verification key.
           abProofElection :: !Dlog25519Proof,
-          -- |Proof that the baker owns the private key corresponding to the aggregation
-          -- key.
+          -- | Proof that the baker owns the private key corresponding to the aggregation
+          --  key.
           abProofAggregation :: !BakerAggregationProof,
-          -- |Initial stake. This amount must be available on the account,
-          -- and will be locked.
+          -- | Initial stake. This amount must be available on the account,
+          --  and will be locked.
           abBakingStake :: !Amount,
-          -- |Whether earnings from being a baker should be automatically added
-          -- to the stake.
+          -- | Whether earnings from being a baker should be automatically added
+          --  to the stake.
           abRestakeEarnings :: !Bool
         }
-    | -- |Remove the sender account from the baking pool.
+    | -- | Remove the sender account from the baking pool.
       RemoveBaker
-    | -- |Update the amount of stake that is locked for the baker.
+    | -- | Update the amount of stake that is locked for the baker.
       UpdateBakerStake
         { ubsStake :: !Amount
         }
-    | -- |Update whether the baker's earnings are automatically restaked.
+    | -- | Update whether the baker's earnings are automatically restaked.
       UpdateBakerRestakeEarnings
         { ubreRestakeEarnings :: !Bool
         }
-    | -- |Update the baker's keys
+    | -- | Update the baker's keys
       UpdateBakerKeys
-        { -- |Public key to verify the baker has won the election.
+        { -- | Public key to verify the baker has won the election.
           ubkElectionVerifyKey :: !BakerElectionVerifyKey,
-          -- |Public key to verify block signatures signed by the baker.
+          -- | Public key to verify block signatures signed by the baker.
           ubkSignatureVerifyKey :: !BakerSignVerifyKey,
-          -- |Public key to verify aggregate signatures in which the baker participates
+          -- | Public key to verify aggregate signatures in which the baker participates
           ubkAggregationVerifyKey :: !BakerAggregationVerifyKey,
-          -- |Proof that the baker owns the private key corresponding to the
-          -- signature verification key.
+          -- | Proof that the baker owns the private key corresponding to the
+          --  signature verification key.
           ubkProofSig :: !Dlog25519Proof,
-          -- |Proof that the baker owns the private key corresponding to the
-          -- election verification key.
+          -- | Proof that the baker owns the private key corresponding to the
+          --  election verification key.
           ubkProofElection :: !Dlog25519Proof,
-          -- |Proof that the baker owns the private key corresponding to the aggregation
-          -- key.
+          -- | Proof that the baker owns the private key corresponding to the aggregation
+          --  key.
           ubkProofAggregation :: !BakerAggregationProof
         }
     | -- | Adds additional keys to the sender's account, optionally updating the signature threshold too
@@ -284,27 +284,27 @@ data Payload
         { -- | The data to register.
           rdData :: !RegisteredData
         }
-    | -- |Simple transfer from an account to an account with additional memo.
+    | -- | Simple transfer from an account to an account with additional memo.
       TransferWithMemo
-        { -- |Recipient.
+        { -- | Recipient.
           twmToAddress :: !AccountAddress,
-          -- |Memo.
+          -- | Memo.
           twmMemo :: !Memo,
-          -- |Amount to transfer.
+          -- | Amount to transfer.
           twmAmount :: !Amount
         }
     | -- | Send an encrypted amount to an account with additional memo.
       EncryptedAmountTransferWithMemo
         { -- | Receiver account address.
           eatwmTo :: !AccountAddress,
-          -- |Memo.
+          -- | Memo.
           eatwmMemo :: !Memo,
           eatwmData :: !EncryptedAmountTransferData
         }
     | -- | Send a transfer with an attached schedule and additional memo.
       TransferWithScheduleAndMemo
         { twswmTo :: !AccountAddress,
-          -- |Memo.
+          -- | Memo.
           twswmMemo :: !Memo,
           twswmSchedule :: ![(Timestamp, Amount)]
         }
@@ -313,31 +313,31 @@ data Payload
       -- The bitmap it 16-bits, allowing room for future expansion if necessary (e.g. an extra field
       -- could be added, while retaining the validity of existing transactions).
       ConfigureBaker
-        { -- |The equity capital of the baker
+        { -- | The equity capital of the baker
           cbCapital :: !(Maybe Amount),
-          -- |Whether the baker's earnings are restaked
+          -- | Whether the baker's earnings are restaked
           cbRestakeEarnings :: !(Maybe Bool),
-          -- |Whether the pool is open for delegators
+          -- | Whether the pool is open for delegators
           cbOpenForDelegation :: !(Maybe OpenStatus),
-          -- |The key/proof pairs to verify baker.
+          -- | The key/proof pairs to verify baker.
           cbKeysWithProofs :: !(Maybe BakerKeysWithProofs),
-          -- |The URL referencing the baker's metadata.
+          -- | The URL referencing the baker's metadata.
           cbMetadataURL :: !(Maybe UrlText),
-          -- |The commission the pool owner takes on transaction fees.
+          -- | The commission the pool owner takes on transaction fees.
           cbTransactionFeeCommission :: !(Maybe AmountFraction),
-          -- |The commission the pool owner takes on baking rewards.
+          -- | The commission the pool owner takes on baking rewards.
           cbBakingRewardCommission :: !(Maybe AmountFraction),
-          -- |The commission the pool owner takes on finalization rewards.
+          -- | The commission the pool owner takes on finalization rewards.
           cbFinalizationRewardCommission :: !(Maybe AmountFraction)
         }
     | -- | Configure an account's stake delegation.
       -- As with 'ConfigureBaker', the serialization uses a 16-bit bitmap.
       ConfigureDelegation
-        { -- |The capital delegated to the pool.
+        { -- | The capital delegated to the pool.
           cdCapital :: !(Maybe Amount),
-          -- |Whether the delegator's earnings are restaked.
+          -- | Whether the delegator's earnings are restaked.
           cdRestakeEarnings :: !(Maybe Bool),
-          -- |The target of the delegation.
+          -- | The target of the delegation.
           cdDelegationTarget :: !(Maybe DelegationTarget)
         }
     deriving (Eq, Show)
@@ -402,9 +402,9 @@ instance S.Serialize TransactionType where
             20 -> return TTConfigureDelegation
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
--- |Payload serialization according to
+-- | Payload serialization according to
 --
---  * @SPEC: <$DOCS/Transactions#transaction-body>
+--   * @SPEC: <$DOCS/Transactions#transaction-body>
 putPayload :: Payload -> P.Put
 putPayload DeployModule{..} =
     P.putWord8 0
@@ -538,13 +538,13 @@ putPayload ConfigureDelegation{..} = do
             .|. bitFor 1 cdRestakeEarnings
             .|. bitFor 2 cdDelegationTarget
 
--- |Set the given bit if the value is a 'Just'.
+-- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
 bitFor _ Nothing = zeroBits
 bitFor i (Just _) = bit i
 
--- |Get the payload of the given size.
--- This will only deserialize payloads that are supported at the given protocol version.
+-- | Get the payload of the given size.
+--  This will only deserialize payloads that are supported at the given protocol version.
 getPayload :: SProtocolVersion pv -> PayloadSize -> S.Get Payload
 getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
   where
@@ -702,8 +702,8 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
     configureBakerBitMask = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
 
--- |Builds a set from a list of ascending elements.
--- Fails if the elements are not ordered or a duplicate is encountered.
+-- | Builds a set from a list of ascending elements.
+--  Fails if the elements are not ordered or a duplicate is encountered.
 safeSetFromAscList :: (MonadFail m, Ord a) => [a] -> m (Set.Set a)
 safeSetFromAscList = go Set.empty Nothing
   where
@@ -717,16 +717,16 @@ safeSetFromAscList = go Set.empty Nothing
 encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . BSS.toShort . S.runPut . putPayload
 
--- |Deserialize a payload.
--- This will only deserialize payloads that are supported at the given protocol version.
+-- | Deserialize a payload.
+--  This will only deserialize payloads that are supported at the given protocol version.
 decodePayload :: SProtocolVersion pv -> PayloadSize -> EncodedPayload -> Either String Payload
 decodePayload spv size (EncodedPayload s) = S.runGet (getPayload spv size) . BSS.fromShort $ s
 {-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}
 
--- |Get the body of the payload as bytes. Essentially just remove the
--- first byte which encodes the type.
+-- | Get the body of the payload as bytes. Essentially just remove the
+--  first byte which encodes the type.
 payloadBodyBytes :: EncodedPayload -> BS.ByteString
 payloadBodyBytes (EncodedPayload ss) =
     if BSS.null ss
@@ -734,138 +734,138 @@ payloadBodyBytes (EncodedPayload ss) =
         else BS.tail (BSS.fromShort ss)
 
 data VersionedContractEvents = VersionedContractEvents
-    { -- |Version of the contract that produced the events.
+    { -- | Version of the contract that produced the events.
       veContractVersion :: !Wasm.WasmVersion,
-      -- |The events, in the order they were produced.
+      -- | The events, in the order they were produced.
       veEvents :: ![Wasm.ContractEvent]
     }
     deriving (Eq, Show, Generic)
 
--- |Events which are generated during transaction execution.
--- These are only used for committed transactions.
--- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
+-- | Events which are generated during transaction execution.
+--  These are only used for committed transactions.
+--  Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
 data Event
-    = -- |Module with the given address was deployed.
+    = -- | Module with the given address was deployed.
       ModuleDeployed !ModuleRef
-    | -- |The contract was deployed.
+    | -- | The contract was deployed.
       ContractInitialized
-        { -- |Module in which the contract source resides.
+        { -- | Module in which the contract source resides.
           ecRef :: !ModuleRef,
-          -- |Reference to the contract as deployed.
+          -- | Reference to the contract as deployed.
           ecAddress :: !ContractAddress,
-          -- |Initial amount transferred to the contract.
+          -- | Initial amount transferred to the contract.
           ecAmount :: !Amount,
-          -- |Name of the contract init function being called
+          -- | Name of the contract init function being called
           ecInitName :: !Wasm.InitName,
-          -- |Version of the contract that was initialized.
+          -- | Version of the contract that was initialized.
           ecContractVersion :: !Wasm.WasmVersion,
-          -- |Events as reported by the contract via the log method, in the
-          -- order they were reported.
+          -- | Events as reported by the contract via the log method, in the
+          --  order they were reported.
           ecEvents :: ![Wasm.ContractEvent]
         }
-    | -- |The given contract was updated.
+    | -- | The given contract was updated.
       Updated
-        { -- |Address of the contract that was updated.
+        { -- | Address of the contract that was updated.
           euAddress :: !ContractAddress,
-          -- |Address of the instigator of the update, i.e. source of the message, an account or contract.
+          -- | Address of the instigator of the update, i.e. source of the message, an account or contract.
           euInstigator :: !Address,
-          -- |Amount which was transferred to the contract.
+          -- | Amount which was transferred to the contract.
           euAmount :: !Amount,
-          -- |The message which was sent to the contract.
+          -- | The message which was sent to the contract.
           euMessage :: !Wasm.Parameter,
-          -- |Name of the contract receive function being called
+          -- | Name of the contract receive function being called
           euReceiveName :: !Wasm.ReceiveName,
-          -- |Version of the contract that was initialized.
+          -- | Version of the contract that was initialized.
           euContractVersion :: !Wasm.WasmVersion,
-          -- |Events as reported by the contract via the log method, in the
-          -- order they were reported.
+          -- | Events as reported by the contract via the log method, in the
+          --  order they were reported.
           euEvents :: ![Wasm.ContractEvent]
         }
-    | -- |Tokens were transferred.
+    | -- | Tokens were transferred.
       Transferred
-        { -- |Source.
+        { -- | Source.
           etFrom :: !Address,
-          -- |Amount.
+          -- | Amount.
           etAmount :: !Amount,
-          -- |Target.
+          -- | Target.
           etTo :: !Address
         }
-    | -- |A new account was created.
+    | -- | A new account was created.
       AccountCreated !AccountAddress
-    | -- |A new credential was deployed onto a given account.
+    | -- | A new credential was deployed onto a given account.
       CredentialDeployed
-        { -- |ID of the credential
+        { -- | ID of the credential
           ecdRegId :: !IDTypes.CredentialRegistrationID,
-          -- |Account to which it was deployed.
+          -- | Account to which it was deployed.
           ecdAccount :: !AccountAddress
         }
-    | -- |A baker was added.
+    | -- | A baker was added.
       BakerAdded
-        { -- |Baker's id
+        { -- | Baker's id
           ebaBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebaAccount :: !AccountAddress,
-          -- |Signing public key
+          -- | Signing public key
           ebaSignKey :: !BakerSignVerifyKey,
-          -- |VRF public key
+          -- | VRF public key
           ebaElectionKey :: !BakerElectionVerifyKey,
-          -- |Aggregation public key
+          -- | Aggregation public key
           ebaAggregationKey :: !BakerAggregationVerifyKey,
-          -- |Baker stake
+          -- | Baker stake
           ebaStake :: !Amount,
-          -- |Whether baker earnings are automatically staked
+          -- | Whether baker earnings are automatically staked
           ebaRestakeEarnings :: !Bool
         }
-    | -- |A baker was removed.
+    | -- | A baker was removed.
       BakerRemoved
-        { -- |Baker's id
+        { -- | Baker's id
           ebrBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebrAccount :: !AccountAddress
         }
-    | -- |A baker's stake was increased.
+    | -- | A baker's stake was increased.
       BakerStakeIncreased
-        { -- |Baker's id
+        { -- | Baker's id
           ebsiBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebsiAccount :: !AccountAddress,
-          -- |New stake
+          -- | New stake
           ebsiNewStake :: !Amount
         }
-    | -- |A baker's stake was decreased.
+    | -- | A baker's stake was decreased.
       BakerStakeDecreased
-        { -- |Baker's id
+        { -- | Baker's id
           ebsiBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebsiAccount :: !AccountAddress,
-          -- |New stake
+          -- | New stake
           ebsiNewStake :: !Amount
         }
-    | -- |A baker's restake earnings flag was set.
+    | -- | A baker's restake earnings flag was set.
       BakerSetRestakeEarnings
-        { -- |Baker's id
+        { -- | Baker's id
           ebsreBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebsreAccount :: !AccountAddress,
-          -- |Whether earnings will be restaked
+          -- | Whether earnings will be restaked
           ebsreRestakeEarnings :: !Bool
         }
-    | -- |A baker's keys were updated.
+    | -- | A baker's keys were updated.
       BakerKeysUpdated
-        { -- |Baker's id
+        { -- | Baker's id
           ebkuBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebkuAccount :: !AccountAddress,
-          -- |Signing public key
+          -- | Signing public key
           ebkuSignKey :: !BakerSignVerifyKey,
-          -- |VRF public key
+          -- | VRF public key
           ebkuElectionKey :: !BakerElectionVerifyKey,
-          -- |Aggregation public key
+          -- | Aggregation public key
           ebkuAggregationKey :: !BakerAggregationVerifyKey
         }
     | -- | A set of credential keys was updated. Also covers the case of updating the signature threshold for the credential in question
       CredentialKeysUpdated
-        { -- |The credential that had its keys and threshold updated.
+        { -- | The credential that had its keys and threshold updated.
           ckuCredId :: !CredentialRegistrationID
         }
     | -- | New encrypted amount added to an account, with a given index.
@@ -887,11 +887,11 @@ data Event
       -- balance.
       EncryptedAmountsRemoved
         { earAccount :: !AccountAddress,
-          -- |The new self amount.
+          -- | The new self amount.
           earNewAmount :: !EncryptedAmount,
-          -- |Input encrypted amount that was consumed.
+          -- | Input encrypted amount that was consumed.
           earInputAmount :: !EncryptedAmount,
-          -- |Index up to (but not including) which the amounts were removed.
+          -- | Index up to (but not including) which the amounts were removed.
           earUpToIndex :: !EncryptedAmountAggIndex
         }
     | -- | An encrypted amount was decrypted and added to the public balance of an account.
@@ -920,11 +920,11 @@ data Event
         }
     | CredentialsUpdated
         { cuAccount :: !AccountAddress,
-          -- |A list of newly added credentials. No order is guaranteed.
+          -- | A list of newly added credentials. No order is guaranteed.
           cuNewCredIds :: ![CredentialRegistrationID],
-          -- |A list of credentials that were removed from the account.
+          -- | A list of credentials that were removed from the account.
           cuRemovedCredIds :: ![CredentialRegistrationID],
-          -- |A new account threshold.
+          -- | A new account threshold.
           cuNewThreshold :: !AccountThreshold
         }
     | -- | Data was registered on the chain.
@@ -939,114 +939,114 @@ data Event
         }
     | -- | Contract invocation was interrupted. This only applies to V1 contracts.
       Interrupted
-        { -- |Address of the contract that was interrupted.
+        { -- | Address of the contract that was interrupted.
           iAddress :: !ContractAddress,
-          -- |Partial event log generated in the execution before the interrupt.
+          -- | Partial event log generated in the execution before the interrupt.
           iEvents :: ![Wasm.ContractEvent]
         }
     | -- | Contract execution resumed. This only applies to V1 contracts.
       Resumed
-        { -- |Address of the contract that was interrupted.
+        { -- | Address of the contract that was interrupted.
           rAddress :: !ContractAddress,
-          -- |Whether the operation that was invoked succeeded.
+          -- | Whether the operation that was invoked succeeded.
           rSuccess :: !Bool
         }
     | -- | Updated open status for a baker pool
       BakerSetOpenStatus
-        { -- |Baker's id
+        { -- | Baker's id
           ebsosBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebsosAccount :: !AccountAddress,
-          -- |The open status.
+          -- | The open status.
           ebsosOpenStatus :: !OpenStatus
         }
     | -- | Updated metadata url for baker pool
       BakerSetMetadataURL
-        { -- |Baker's id
+        { -- | Baker's id
           ebsmuBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebsmuAccount :: !AccountAddress,
           -- | The URL.
           ebsmuMetadataURL :: !UrlText
         }
     | -- | Updated transaction fee commission for baker pool
       BakerSetTransactionFeeCommission
-        { -- |Baker's id
+        { -- | Baker's id
           ebstfcBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebstfcAccount :: !AccountAddress,
-          -- |The transaction fee commission.
+          -- | The transaction fee commission.
           ebstfcTransactionFeeCommission :: !AmountFraction
         }
     | -- | Updated baking reward commission for baker pool
       BakerSetBakingRewardCommission
-        { -- |Baker's id
+        { -- | Baker's id
           ebsbrcBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebsbrcAccount :: !AccountAddress,
-          -- |The baking reward commission
+          -- | The baking reward commission
           ebsbrcBakingRewardCommission :: !AmountFraction
         }
     | -- | Updated finalization reward commission for baker pool
       BakerSetFinalizationRewardCommission
-        { -- |Baker's id
+        { -- | Baker's id
           ebsfrcBakerId :: !BakerId,
-          -- |Baker account
+          -- | Baker account
           ebsfrcAccount :: !AccountAddress,
-          -- |The finalization reward commission
+          -- | The finalization reward commission
           ebsfrcFinalizationRewardCommission :: !AmountFraction
         }
     | DelegationStakeIncreased
-        { -- |Delegator's id
+        { -- | Delegator's id
           edsiDelegatorId :: !DelegatorId,
-          -- |Delegator account
+          -- | Delegator account
           edsiAccount :: !AccountAddress,
-          -- |New stake
+          -- | New stake
           edsiNewStake :: !Amount
         }
     | DelegationStakeDecreased
-        { -- |Delegator's id
+        { -- | Delegator's id
           edsdDelegatorId :: !DelegatorId,
-          -- |Delegator account
+          -- | Delegator account
           edsdAccount :: !AccountAddress,
-          -- |New stake
+          -- | New stake
           edsdNewStake :: !Amount
         }
     | DelegationSetRestakeEarnings
-        { -- |Delegator's id
+        { -- | Delegator's id
           edsreDelegatorId :: !DelegatorId,
-          -- |Delegator account
+          -- | Delegator account
           edsreAccount :: !AccountAddress,
-          -- |Whether earnings will be restaked
+          -- | Whether earnings will be restaked
           edsreRestakeEarnings :: !Bool
         }
     | DelegationSetDelegationTarget
-        { -- |Delegator's id
+        { -- | Delegator's id
           edsdtDelegatorId :: !DelegatorId,
-          -- |Delegator account
+          -- | Delegator account
           edsdtAccount :: !AccountAddress,
-          -- |New delegation target
+          -- | New delegation target
           edsdtDelegationTarget :: !DelegationTarget
         }
     | DelegationAdded
-        { -- |Delegator's id
+        { -- | Delegator's id
           edaDelegatorId :: !DelegatorId,
-          -- |Delegator account
+          -- | Delegator account
           edaAccount :: !AccountAddress
         }
     | DelegationRemoved
-        { -- |Delegator's id
+        { -- | Delegator's id
           edrDelegatorId :: !DelegatorId,
-          -- |Delegator account
+          -- | Delegator account
           edrAccount :: !AccountAddress
         }
-    | -- |The contract was upgraded.
+    | -- | The contract was upgraded.
       Upgraded
-        { -- |The contract that was upgraded.
+        { -- | The contract that was upgraded.
           euAddress :: !ContractAddress,
-          -- |The old 'ModuleRef'.
+          -- | The old 'ModuleRef'.
           euFrom :: !ModuleRef,
-          -- |The new 'ModuleRef'.
+          -- | The new 'ModuleRef'.
           euTo :: !ModuleRef
         }
     deriving (Show, Generic, Eq)
@@ -1857,13 +1857,13 @@ instance AE.FromJSON Event where
                 return Upgraded{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
--- |Index of the transaction in a block, starting from 0.
+-- | Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
     deriving (Eq, Ord, Enum, Bits, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
--- |The 'Maybe TransactionType' is to cover the case of a transaction payload
--- that cannot be deserialized. A transaction is still included in a block, but
--- it does not have a type.
+-- | The 'Maybe TransactionType' is to cover the case of a transaction payload
+--  that cannot be deserialized. A transaction is still included in a block, but
+--  it does not have a type.
 data TransactionSummaryType
     = TSTAccountTransaction !(Maybe TransactionType)
     | TSTCredentialDeploymentTransaction !CredentialType
@@ -1884,7 +1884,7 @@ instance AE.FromJSON TransactionSummaryType where
             AE.String "updateTransaction" -> TSTUpdateTransaction <$> v .: "contents"
             _ -> fail "Cannot parse JSON TransactionSummaryType"
 
--- |Result of a valid transaction is a transaction summary.
+-- | Result of a valid transaction is a transaction summary.
 data TransactionSummary' a = TransactionSummary
     { tsSender :: !(Maybe AccountAddress),
       tsHash :: !TransactionHash,
@@ -1896,13 +1896,13 @@ data TransactionSummary' a = TransactionSummary
     }
     deriving (Eq, Show, Generic)
 
--- |A transaction summary parameterized with an outcome of a valid transaction
--- containing either a 'TxSuccess' or 'TxReject'.
+-- | A transaction summary parameterized with an outcome of a valid transaction
+--  containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
--- |Outcomes of a valid transaction. Either a reject with a reason or a
--- successful transaction with a list of events which occurred during execution.
--- We also record the cost of the transaction.
+-- | Outcomes of a valid transaction. Either a reject with a reason or a
+--  successful transaction with a list of events which occurred during execution.
+--  We also record the cost of the transaction.
 data ValidResult = TxSuccess {vrEvents :: ![Event]} | TxReject {vrRejectReason :: !RejectReason}
     deriving (Show, Generic, Eq)
 
@@ -1950,34 +1950,34 @@ getTransactionSummary spv = do
     tsIndex <- S.get
     return TransactionSummary{..}
 
--- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
--- Must be kept in sync with 'showRejectReason' in concordium-client (Output.hs).
+-- | Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
+--  Must be kept in sync with 'showRejectReason' in concordium-client (Output.hs).
 data RejectReason
-    = -- |Error raised when validating the Wasm module.
+    = -- | Error raised when validating the Wasm module.
       ModuleNotWF
-    | -- |As the name says.
+    | -- | As the name says.
       ModuleHashAlreadyExists !ModuleRef
-    | -- |Account does not exist.
+    | -- | Account does not exist.
       InvalidAccountReference !AccountAddress
-    | -- |Reference to a non-existing contract init method.
+    | -- | Reference to a non-existing contract init method.
       InvalidInitMethod !ModuleRef !Wasm.InitName
-    | -- |Reference to a non-existing contract receive method.
+    | -- | Reference to a non-existing contract receive method.
       InvalidReceiveMethod !ModuleRef !Wasm.ReceiveName
-    | -- |Reference to a non-existing module.
+    | -- | Reference to a non-existing module.
       InvalidModuleReference !ModuleRef
-    | -- |Contract instance does not exist.
+    | -- | Contract instance does not exist.
       InvalidContractAddress !ContractAddress
-    | -- |Runtime exception occurred when running either the init or receive method.
+    | -- | Runtime exception occurred when running either the init or receive method.
       RuntimeFailure
-    | -- |When one wishes to transfer an amount from A to B but there
-      -- are not enough funds on account/contract A to make this
-      -- possible. The data are the from address and the amount to transfer.
+    | -- | When one wishes to transfer an amount from A to B but there
+      --  are not enough funds on account/contract A to make this
+      --  possible. The data are the from address and the amount to transfer.
       AmountTooLarge !Address !Amount
-    | -- |Serialization of the body failed.
+    | -- | Serialization of the body failed.
       SerializationFailure
-    | -- |We ran of out energy to process this transaction.
+    | -- | We ran of out energy to process this transaction.
       OutOfEnergy
-    | -- |Rejected due to contract logic in init function of a contract.
+    | -- | Rejected due to contract logic in init function of a contract.
       RejectedInit {rejectReason :: !Int32}
     | RejectedReceive
         { rejectReason :: !Int32,
@@ -1985,33 +1985,33 @@ data RejectReason
           receiveName :: !Wasm.ReceiveName,
           parameter :: !Wasm.Parameter
         }
-    | -- |Proof that the baker owns relevant private keys is not valid.
+    | -- | Proof that the baker owns relevant private keys is not valid.
       InvalidProof
-    | -- |Tried to add baker/delegator for an account that already has a baker
+    | -- | Tried to add baker/delegator for an account that already has a baker
       AlreadyABaker !BakerId
-    | -- |Account is not a baker account
+    | -- | Account is not a baker account
       NotABaker !AccountAddress
-    | -- |The amount on the account was insufficient to cover the proposed stake
+    | -- | The amount on the account was insufficient to cover the proposed stake
       InsufficientBalanceForBakerStake
-    | -- |The amount provided is under the threshold required for becoming a baker
+    | -- | The amount provided is under the threshold required for becoming a baker
       StakeUnderMinimumThresholdForBaking
-    | -- |The change could not be made because the baker is in cooldown for another change
+    | -- | The change could not be made because the baker is in cooldown for another change
       BakerInCooldown
-    | -- |A baker with the given aggregation key already exists
-      -- |Encountered credential ID that does not exist
+    | -- | A baker with the given aggregation key already exists
+      --  |Encountered credential ID that does not exist
       DuplicateAggregationKey !BakerAggregationVerifyKey
     | NonExistentCredentialID
-    | -- |Attempted to add an account key to a key index already in use
+    | -- | Attempted to add an account key to a key index already in use
       KeyIndexAlreadyInUse
-    | -- |When the account threshold is updated, it must not exceed the amount of existing keys
+    | -- | When the account threshold is updated, it must not exceed the amount of existing keys
       InvalidAccountThreshold
-    | -- |When the credential key threshold is updated, it must not exceed the amount of existing keys
+    | -- | When the credential key threshold is updated, it must not exceed the amount of existing keys
       InvalidCredentialKeySignThreshold
-    | -- |Proof for an encrypted amount transfer did not validate.
+    | -- | Proof for an encrypted amount transfer did not validate.
       InvalidEncryptedAmountTransferProof
-    | -- |Proof for a secret to public transfer did not validate.
+    | -- | Proof for a secret to public transfer did not validate.
       InvalidTransferToPublicProof
-    | -- |Account tried to transfer an encrypted amount to itself, that's not allowed.
+    | -- | Account tried to transfer an encrypted amount to itself, that's not allowed.
       EncryptedAmountSelfTransfer !AccountAddress
     | -- | The provided index is below the start index or above `startIndex + length incomingAmounts`
       InvalidIndexOnEncryptedTransfer
@@ -2033,39 +2033,39 @@ data RejectReason
       RemoveFirstCredential
     | -- | The credential holder of the keys to be updated did not sign the transaction
       CredentialHolderDidNotSign
-    | -- |Account is not allowed to have multiple credentials because it contains a non-zero encrypted transfer.
+    | -- | Account is not allowed to have multiple credentials because it contains a non-zero encrypted transfer.
       NotAllowedMultipleCredentials
-    | -- |The account is not allowed to receive encrypted transfers because it has multiple credentials.
+    | -- | The account is not allowed to receive encrypted transfers because it has multiple credentials.
       NotAllowedToReceiveEncrypted
-    | -- |The account is not allowed to send encrypted transfers (or transfer from/to public to/from encrypted)
+    | -- | The account is not allowed to send encrypted transfers (or transfer from/to public to/from encrypted)
       NotAllowedToHandleEncrypted
-    | -- |A configure baker transaction is missing one or more arguments in order to add a baker.
+    | -- | A configure baker transaction is missing one or more arguments in order to add a baker.
       MissingBakerAddParameters
-    | -- |Finalization reward commission is not in the valid range for a baker
+    | -- | Finalization reward commission is not in the valid range for a baker
       FinalizationRewardCommissionNotInRange
-    | -- |Baking reward commission is not in the valid range for a baker
+    | -- | Baking reward commission is not in the valid range for a baker
       BakingRewardCommissionNotInRange
-    | -- |Transaction fee commission is not in the valid range for a baker
+    | -- | Transaction fee commission is not in the valid range for a baker
       TransactionFeeCommissionNotInRange
-    | -- |Tried to add baker for an account that already has a delegator
+    | -- | Tried to add baker for an account that already has a delegator
       AlreadyADelegator
-    | -- |The amount on the account was insufficient to cover the proposed stake
+    | -- | The amount on the account was insufficient to cover the proposed stake
       InsufficientBalanceForDelegationStake
-    | -- |A configure delegation transaction is missing one or more arguments in order to add a delegator.
+    | -- | A configure delegation transaction is missing one or more arguments in order to add a delegator.
       MissingDelegationAddParameters
-    | -- |The delegation stake when adding a baker was 0.
+    | -- | The delegation stake when adding a baker was 0.
       InsufficientDelegationStake
-    | -- |The change could not be made because the delegator is in cooldown
+    | -- | The change could not be made because the delegator is in cooldown
       DelegatorInCooldown
-    | -- |Account is not a delegation account
+    | -- | Account is not a delegation account
       NotADelegator !AccountAddress
-    | -- |Delegation target is not a baker
+    | -- | Delegation target is not a baker
       DelegationTargetNotABaker !BakerId
-    | -- |The amount would result in pool capital higher than the maximum threshold
+    | -- | The amount would result in pool capital higher than the maximum threshold
       StakeOverMaximumThresholdForPool
-    | -- |The amount would result in pool with a too high fraction of delegated capital.
+    | -- | The amount would result in pool with a too high fraction of delegated capital.
       PoolWouldBecomeOverDelegated
-    | -- |The pool is not open to delegators.
+    | -- | The pool is not open to delegators.
       PoolClosed
     deriving (Show, Eq, Generic)
 
@@ -2212,44 +2212,44 @@ instance AE.FromJSON RejectReason
 
 -- | Reasons for the execution of a transaction to fail on the current block state.
 data FailureKind
-    = -- |The sender account's amount is not sufficient to cover the
-      -- amount corresponding to the deposited energy.
+    = -- | The sender account's amount is not sufficient to cover the
+      --  amount corresponding to the deposited energy.
       InsufficientFunds
-    | -- |Signature check failed.
+    | -- | Signature check failed.
       IncorrectSignature
-    | -- |The transaction nonce is not
-      -- next in sequence. The argument
-      -- is the expected nonce.
+    | -- | The transaction nonce is not
+      --  next in sequence. The argument
+      --  is the expected nonce.
       NonSequentialNonce !Nonce
-    | -- |In the context of processing multiple transactions
-      -- from the same account, the transaction is a successor
-      -- of (has the nonce following that of) an invalid transaction.
+    | -- | In the context of processing multiple transactions
+      --  from the same account, the transaction is a successor
+      --  of (has the nonce following that of) an invalid transaction.
       SuccessorOfInvalidTransaction
-    | -- |Transaction is coming from an unknown sender.
+    | -- | Transaction is coming from an unknown sender.
       UnknownAccount !AccountAddress
-    | -- |The dedicated gas amount was lower than the minimum allowed.
+    | -- | The dedicated gas amount was lower than the minimum allowed.
       DepositInsufficient
-    | -- |The transaction has expired.
+    | -- | The transaction has expired.
       ExpiredTransaction
-    | -- |The transaction's deposited energy exceeds the maximum block energy limit.
+    | -- | The transaction's deposited energy exceeds the maximum block energy limit.
       ExceedsMaxBlockEnergy
-    | -- |The baker decided that this transaction is too big to put in a block.
+    | -- | The baker decided that this transaction is too big to put in a block.
       ExceedsMaxBlockSize
     | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
-    | -- |One of the anonymity revokers in the credential is not known.
+    | -- | One of the anonymity revokers in the credential is not known.
       UnsupportedAnonymityRevokers
-    | -- |Cannot deploy credential onto a non-existing account.
+    | -- | Cannot deploy credential onto a non-existing account.
       NonExistentAccount !AccountAddress
-    | -- |Account credential verification failed, the proofs were invalid or malformed.
+    | -- | Account credential verification failed, the proofs were invalid or malformed.
       AccountCredentialInvalid
     | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
-    | -- |The update timeout is later than the effective time
+    | -- | The update timeout is later than the effective time
       InvalidUpdateTime
-    | -- |The block contains more than the limit of credential deployments
+    | -- | The block contains more than the limit of credential deployments
       ExceedsMaxCredentialDeployments
-    | -- |Payload size exceeds maximum allowed for the protocol version.
+    | -- | Payload size exceeds maximum allowed for the protocol version.
       InvalidPayloadSize
-    | -- |The operation is not legal at the current protocol version.
+    | -- | The operation is not legal at the current protocol version.
       NotSupportedAtCurrentProtocolVersion
     deriving (Eq, Show)
 
@@ -2276,10 +2276,10 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''Transact
 addBakerChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
 addBakerChallenge addr elec sign agg = "addBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
 
--- |Generate the challenge for updating a baker's keys.
+-- | Generate the challenge for updating a baker's keys.
 updateBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
 updateBakerKeyChallenge addr elec sign agg = "updateBakerKeys" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)
 
--- |Generate the challenge for configuring a baker's keys.
+-- | Generate the challenge for configuring a baker's keys.
 configureBakerKeyChallenge :: AccountAddress -> BakerElectionVerifyKey -> BakerSignVerifyKey -> BakerAggregationVerifyKey -> BS.ByteString
 configureBakerKeyChallenge addr elec sign agg = "configureBaker" <> S.runPut (S.put addr <> S.put elec <> S.put sign <> S.put agg)

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- |Test the JSON encoding and decoding of 'AmountFraction'.
+-- | Test the JSON encoding and decoding of 'AmountFraction'.
 module Types.AmountFraction where
 
 import qualified Data.Aeson as AE

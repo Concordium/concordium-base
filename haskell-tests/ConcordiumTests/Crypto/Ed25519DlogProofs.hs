@@ -12,10 +12,10 @@ import Test.Hspec
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
-forallKP :: Testable prop => (KeyPair -> prop) -> Property
+forallKP :: (Testable prop) => (KeyPair -> prop) -> Property
 forallKP = forAll (uncurry KeyPairEd25519 <$> genEd25519KeyPair)
 
-forallKPVRF :: Testable prop => (VRF.KeyPair -> prop) -> Property
+forallKPVRF :: (Testable prop) => (VRF.KeyPair -> prop) -> Property
 forallKPVRF = forAll arbitrary
 
 testProveVerifyEd25519 :: Property

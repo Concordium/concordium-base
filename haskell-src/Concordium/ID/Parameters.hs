@@ -19,9 +19,9 @@ import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import System.IO.Unsafe
 
--- |Cryptographic parameters needed to verify on-chain proofs, e.g.,
--- group parameters (generators), commitment keys, in the future also
--- common reference strings, etc.
+-- | Cryptographic parameters needed to verify on-chain proofs, e.g.,
+--  group parameters (generators), commitment keys, in the future also
+--  common reference strings, etc.
 newtype GlobalContext = GlobalContext (ForeignPtr GlobalContext)
 
 foreign import ccall unsafe "&global_context_free" freeGlobalContext :: FunPtr (Ptr GlobalContext -> IO ())
@@ -36,28 +36,28 @@ foreign import ccall unsafe "global_context_create"
         -- utf8 encoded genesis string and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to a byte array which is the serialization of a
-        -- @Generators<G1>@ Rust-instance and its length.
+        -- | Pointer to a byte array which is the serialization of a
+        --  @Generators<G1>@ Rust-instance and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to a byte array which is the serialization of a
-        -- @CommitmentKey<G1>@ Rust-instance and its length.
+        -- | Pointer to a byte array which is the serialization of a
+        --  @CommitmentKey<G1>@ Rust-instance and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to an @GlobalContext@ Rust instance with its corresponding fields set
-        -- to deserializations of the the above. This is a null-pointer on failure.
+        -- | Pointer to an @GlobalContext@ Rust instance with its corresponding fields set
+        --  to deserializations of the the above. This is a null-pointer on failure.
         IO (Ptr GlobalContext)
 
--- |Create a @GlobalContext@ instance from constituent parts.
+-- | Create a @GlobalContext@ instance from constituent parts.
 createGlobalContext ::
-    -- |The genesis string.
+    -- | The genesis string.
     Text ->
-    -- |Serialized generators for the bulletproofs.
+    -- | Serialized generators for the bulletproofs.
     BS8.ByteString ->
-    -- |Serialized on-chain commitment key.
+    -- | Serialized on-chain commitment key.
     BS8.ByteString ->
-    -- |If the bulletproof generators or the on-chain commitment key key could not be
-    -- deserialized this returns @Nothing@. Otherwise a @GlobalContext@ is returned.
+    -- | If the bulletproof generators or the on-chain commitment key key could not be
+    --  deserialized this returns @Nothing@. Otherwise a @GlobalContext@ is returned.
     Maybe GlobalContext
 createGlobalContext genString bulletProofGens onChainComm =
     unsafePerformIO
@@ -113,7 +113,7 @@ jsonToGlobalContext bs = GlobalContext <$> fromJSONHelper freeGlobalContext glob
 globalContextToJSON :: GlobalContext -> BS.ByteString
 globalContextToJSON (GlobalContext ip) = toJSONHelper globalContextToJSONFFI ip
 
--- |Create a global context structure. This is a constant value, but quite expensive to generate.
+-- | Create a global context structure. This is a constant value, but quite expensive to generate.
 {-# NOINLINE dummyGlobalContext #-}
 {-# WARNING dummyGlobalContext "Do not use in production." #-}
 dummyGlobalContext :: GlobalContext

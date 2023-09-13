@@ -2,10 +2,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
--- |A tool for generating update keys and authorizations for
---    chain updates.  The generated authorizations can be used
---    in genesis data, or used to update the authorizations on
---    chain.
+-- | A tool for generating update keys and authorizations for
+--     chain updates.  The generated authorizations can be used
+--     in genesis data, or used to update the authorizations on
+--     chain.
 module Main where
 
 import Control.Monad
@@ -50,19 +50,19 @@ readHigherAuthDetails = maybeReader $ \s -> case reads s of
         _ -> Nothing
     _ -> Nothing
 
--- |Common parameters for generating update keys across all protocol versions.
+-- | Common parameters for generating update keys across all protocol versions.
 data CommonUpdateKeys = CommonUpdateKeys
-    { -- |Number of keys to generate
+    { -- | Number of keys to generate
       cukKeyCount :: Word16,
-      -- |Name of authorization file to generate
+      -- | Name of authorization file to generate
       cukAuthorizationFile :: FilePath,
-      -- |Directory to generate key files
+      -- | Directory to generate key files
       cukKeyPath :: FilePath,
-      -- |Threshold and number of root keys to generate
+      -- | Threshold and number of root keys to generate
       cukRootKeys :: HigherAuthDetails,
-      -- |Threshold and number of level 1 keys to generate
+      -- | Threshold and number of level 1 keys to generate
       cukLevel1Keys :: HigherAuthDetails,
-      -- |Key indices (and thresholds) to use for each update type
+      -- | Key indices (and thresholds) to use for each update type
       cukEmergency :: AuthDetails,
       cukProtocol :: AuthDetails,
       cukConsensusParameters :: AuthDetails,
@@ -78,16 +78,16 @@ data CommonUpdateKeys = CommonUpdateKeys
     }
     deriving (Show)
 
--- |Parameters for generating chain parameter update keys.
+-- | Parameters for generating chain parameter update keys.
 data GenerateUpdateKeys
     = GenerateUpdateKeysCPV0
-        { -- |Common across chain parameters versions
+        { -- | Common across chain parameters versions
           gukCommon :: CommonUpdateKeys
         }
     | GenerateUpdateKeysCPV1
-        { -- |Common across chain parameters versions
+        { -- | Common across chain parameters versions
           gukCommon :: CommonUpdateKeys,
-          -- |Key indices (and thresholds) to use for cooldown and time parameters
+          -- | Key indices (and thresholds) to use for cooldown and time parameters
           gukCooldownParameters :: AuthDetails,
           gukTimeParameters :: AuthDetails
         }
@@ -146,7 +146,7 @@ main = customExecParser p opts >>= generateKeys
                     \ the level 2 keys, thus not being counted in the total number of generated keys."
     p = prefs showHelpOnEmpty
 
--- |Generate chain update keys.
+-- | Generate chain update keys.
 generateKeys :: GenerateUpdateKeys -> IO ()
 generateKeys guk = do
     when (cukKeyCount == 0) $ die "At least one level 2 key is required."
@@ -181,7 +181,7 @@ generateKeys guk = do
             doGenerateKeys @'AuthorizationsVersion1 Authorizations{..}
   where
     CommonUpdateKeys{..} = gukCommon guk
-    doGenerateKeys :: IsAuthorizationsVersion auv => Authorizations auv -> IO ()
+    doGenerateKeys :: (IsAuthorizationsVersion auv) => Authorizations auv -> IO ()
     doGenerateKeys level2KeysPre = do
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0 .. cukKeyCount - 1]]

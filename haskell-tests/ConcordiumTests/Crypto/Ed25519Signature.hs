@@ -10,7 +10,7 @@ import Data.Word
 import Test.Hspec
 import Test.QuickCheck
 
-forallKP :: Testable prop => (KeyPair -> prop) -> Property
+forallKP :: (Testable prop) => (KeyPair -> prop) -> Property
 forallKP = forAll (uncurry KeyPairEd25519 <$> genEd25519KeyPair)
 
 testSerializeSignKeyEd25519 :: Property

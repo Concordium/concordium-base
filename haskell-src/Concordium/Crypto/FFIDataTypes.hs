@@ -56,7 +56,7 @@ newtype ElgamalSecretKey = ElgamalSecretKey (ForeignPtr ElgamalSecretKey)
 
 newtype ElgamalCipher = ElgamalCipher (ForeignPtr ElgamalCipher)
 
--- |Instances for benchmarking
+-- | Instances for benchmarking
 instance NFData PedersenKey where
     rnf = (`seq` ())
 
@@ -121,8 +121,8 @@ withElgamalCipher (ElgamalCipher fp) = withForeignPtr fp
 withElgamalPublicKey :: ElgamalPublicKey -> (Ptr ElgamalPublicKey -> IO b) -> IO b
 withElgamalPublicKey (ElgamalPublicKey fp) = withForeignPtr fp
 
--- |NOTE: This instance is different than the rust one. We add explicit length
--- information up front.
+-- | NOTE: This instance is different than the rust one. We add explicit length
+--  information up front.
 instance Serialize PedersenKey where
     get = do
         v <- getWord32be
@@ -144,7 +144,7 @@ instance AE.ToJSON PedersenKey where
 instance AE.FromJSON PedersenKey where
     parseJSON = AE.withText "PedersenKey in base16" deserializeBase16WithLength4
 
--- |This instance should only be used for testing
+-- | This instance should only be used for testing
 instance Eq PedersenKey where
     key == key' = encode key == encode key'
 
@@ -153,8 +153,8 @@ generatePedersenKey n = do
     ptr <- generatePedersenKeyPtr (fromIntegral n)
     PedersenKey <$> newForeignPtr freePedersenKey ptr
 
--- |NOTE: This instance is different than the rust one. We add explicit length
--- information up front.
+-- | NOTE: This instance is different than the rust one. We add explicit length
+--  information up front.
 instance Serialize PsSigKey where
     get = do
         v <- getWord32be
@@ -170,7 +170,7 @@ instance Serialize PsSigKey where
 instance Show PsSigKey where
     show = byteStringToHex . BS.drop 4 . encode
 
--- |This instance should only be used for testing
+-- | This instance should only be used for testing
 instance Eq PsSigKey where
     key == key' = encode key == encode key'
 
@@ -205,7 +205,7 @@ instance Serialize GroupElement where
 instance Show GroupElement where
     show = byteStringToHex . encode
 
--- |This instance should only be used for testing
+-- | This instance should only be used for testing
 instance Eq GroupElement where
     key == key' = encode key == encode key'
 
@@ -229,7 +229,7 @@ instance Serialize ElgamalPublicKey where
 instance Show ElgamalPublicKey where
     show = byteStringToHex . encode
 
--- |This instance should only be used for testing
+-- | This instance should only be used for testing
 instance Eq ElgamalPublicKey where
     key == key' = encode key == encode key'
 
@@ -253,7 +253,7 @@ instance Serialize ElgamalSecretKey where
 instance Show ElgamalSecretKey where
     show = byteStringToHex . encode
 
--- |NB: This instance should only be used for testing.
+-- | NB: This instance should only be used for testing.
 instance Eq ElgamalSecretKey where
     key == key' = encode key == encode key'
 
@@ -299,7 +299,7 @@ instance Serialize ElgamalCipher where
 instance Show ElgamalCipher where
     show = byteStringToHex . encode
 
--- |This instance should only be used for testing
+-- | This instance should only be used for testing
 instance Eq ElgamalCipher where
     key == key' = encode key == encode key'
 
@@ -314,16 +314,16 @@ generateElgamalCipher = do
     ptr <- generateElgamalCipherPtr
     unsafeMakeCipher ptr
 
--- |Encryption of 0 in the exponent, with randomness 0.
+-- | Encryption of 0 in the exponent, with randomness 0.
 zeroElgamalCipher :: ElgamalCipher
 zeroElgamalCipher = unsafePerformIO $ do
     ptr <- zeroElgamalCipherPtr
     unsafeMakeCipher ptr
 
--- |Construct an Elgamal cipher from a pointer to it.
--- This is unsafe in two different ways
+-- | Construct an Elgamal cipher from a pointer to it.
+--  This is unsafe in two different ways
 --
--- - if the pointer is Null or does not point to an `ElgamalCipher` structure the behaviour is undefined.
--- - if this function is called twice on the same value it will lead to a double free.
+--  - if the pointer is Null or does not point to an `ElgamalCipher` structure the behaviour is undefined.
+--  - if this function is called twice on the same value it will lead to a double free.
 unsafeMakeCipher :: Ptr ElgamalCipher -> IO ElgamalCipher
 unsafeMakeCipher ptr = ElgamalCipher <$> newForeignPtr freeElgamalCipher ptr

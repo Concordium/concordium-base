@@ -2,7 +2,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- |Basic types related to smart contracts.
+-- | Basic types related to smart contracts.
 module Concordium.Types.SmartContracts where
 
 import Data.Aeson
