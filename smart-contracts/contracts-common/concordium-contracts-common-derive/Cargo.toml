@@ -6,8 +6,8 @@ edition = "2021"
 rust-version = "1.65"
 license = "MPL-2.0"
 description = "Procedural macros to ease writing for smart contracts on the Concordium blockchain."
-homepage = "https://github.com/Concordium/concordium-contracts-common"
-repository = "https://github.com/Concordium/concordium-contracts-common"
+homepage = "https://github.com/Concordium/concordium-base"
+repository = "https://github.com/Concordium/concordium-base"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
