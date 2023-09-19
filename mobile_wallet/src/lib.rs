@@ -250,6 +250,7 @@ enum SpecifiedEnergy {
 
 #[derive(common::SerdeDeserialize)]
 #[serde(tag = "type", content = "payload")]
+#[serde(rename_all = "camelCase")]
 enum JSONPayload {
     InitContract {
         #[serde(flatten)]
