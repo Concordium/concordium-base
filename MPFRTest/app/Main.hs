@@ -3,9 +3,9 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 
 -- |
---Tests MPFR operations through hmpfr, randomized and in parallel. It is important to compile and run this with parallel execution enabled (see https://hspec.github.io/parallel-spec-execution.html).
---HSpec might choose how many tests to actually run in parallel, so make sure that there is at least some parallelization, which, in combination with many numbers in memory, is the point of this test.
---Note that depending on the randomness, the execution time of some tests can vary largely.
+-- Tests MPFR operations through hmpfr, randomized and in parallel. It is important to compile and run this with parallel execution enabled (see https://hspec.github.io/parallel-spec-execution.html).
+-- HSpec might choose how many tests to actually run in parallel, so make sure that there is at least some parallelization, which, in combination with many numbers in memory, is the point of this test.
+-- Note that depending on the randomness, the execution time of some tests can vary largely.
 module Main where
 
 import Prelude hiding (sum)

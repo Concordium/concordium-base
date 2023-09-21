@@ -11,7 +11,7 @@ import Concordium.Utils.InterpolationSearch
 import Control.Monad.Trans
 import Data.Word
 
--- |A list used for unit tests of the interpolation search.
+-- | A list used for unit tests of the interpolation search.
 inputList :: [(Int, String)]
 inputList =
     [ (1, "a"),
@@ -26,13 +26,13 @@ inputList =
       (6, "j")
     ]
 
--- |Run 'interpolationSearchFirstM' on a subsection of 'inputList'.
+-- | Run 'interpolationSearchFirstM' on a subsection of 'inputList'.
 runListTest ::
-    -- |Search key
+    -- | Search key
     Int ->
-    -- |Low index
+    -- | Low index
     Int ->
-    -- |High index
+    -- | High index
     Int ->
     Maybe (Int, String)
 runListTest key low high = runIdentity $ interpolationSearchFirstM lu key (low, inputList !! low) (high, inputList !! high)
@@ -42,7 +42,7 @@ runListTest key low high = runIdentity $ interpolationSearchFirstM lu key (low, 
         | i >= high = error "Index above upper bound"
         | otherwise = pure (inputList !! i)
 
--- |Test cases running 'interpolationSearchFirstM' on 'inputList' with different target keys.
+-- | Test cases running 'interpolationSearchFirstM' on 'inputList' with different target keys.
 listTests :: Spec
 listTests = do
     let fullListTest key = runListTest key 0 (length inputList - 1)
@@ -55,8 +55,8 @@ listTests = do
     it "key 6" $ fullListTest 6 `shouldBe` Just (7, "h")
     it "key 7" $ fullListTest 7 `shouldBe` Nothing
 
--- |State used in 'generalSearchTest'. This tracks the interval in which the target can be found
--- (if it is present).
+-- | State used in 'generalSearchTest'. This tracks the interval in which the target can be found
+--  (if it is present).
 data InterpolationState' index key value = InterpolationState
     { targetKey :: key,
       lowIndex :: index,
@@ -78,11 +78,11 @@ type TestVal = String
 
 type InterpolationState = InterpolationState' TestIndex TestKey TestVal
 
--- |Test 'interpolationSearchFirstM' by generating the input array on demand.
--- This progressively tracks the interval of the array in which the result may be found (if
--- present). Each successive query is expected to be within the interval, and the interval is
--- updated accordingly. When the search is complete, the interval must have been sufficiently
--- narrowed to fully determine the result.
+-- | Test 'interpolationSearchFirstM' by generating the input array on demand.
+--  This progressively tracks the interval of the array in which the result may be found (if
+--  present). Each successive query is expected to be within the interval, and the interval is
+--  updated accordingly. When the search is complete, the interval must have been sufficiently
+--  narrowed to fully determine the result.
 generalSearchTest :: Property
 generalSearchTest = forAll startState doTest
   where
@@ -124,17 +124,17 @@ generalSearchTest = forAll startState doTest
     lu ix = do
         st@InterpolationState{..} <- get
         if
-                | ix <= lowIndex -> error "Look-up below low index"
-                | ix >= highIndex -> error "Look-up above high index"
-                | targetKey < lowKey || targetKey > highKey -> error "Target out of lookup range"
-                | otherwise -> do
-                    newKey <- lift $ chooseBoundedIntegral (lowKey, highKey)
-                    newValue <- lift arbitrary
-                    put $!
-                        if newKey < targetKey
-                            then st{lowIndex = ix, lowKey = newKey, lowValue = newValue}
-                            else st{highIndex = ix, highKey = newKey, highValue = newValue}
-                    return (newKey, newValue)
+            | ix <= lowIndex -> error "Look-up below low index"
+            | ix >= highIndex -> error "Look-up above high index"
+            | targetKey < lowKey || targetKey > highKey -> error "Target out of lookup range"
+            | otherwise -> do
+                newKey <- lift $ chooseBoundedIntegral (lowKey, highKey)
+                newValue <- lift arbitrary
+                put $!
+                    if newKey < targetKey
+                        then st{lowIndex = ix, lowKey = newKey, lowValue = newValue}
+                        else st{highIndex = ix, highKey = newKey, highValue = newValue}
+                return (newKey, newValue)
     -- Run the search and check that the result is consistent with the final search interval.
     doTest st = do
         (res, endSt) <-

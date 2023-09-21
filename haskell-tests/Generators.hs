@@ -106,7 +106,7 @@ genParameter = do
     n <- choose (0, 1000)
     Wasm.Parameter . BSS.pack <$> vector n
 
--- |Generate a 'UrlText' that is a UTF-8 encoded string of no more than 'maxUrlTextLength' bytes.
+-- | Generate a 'UrlText' that is a UTF-8 encoded string of no more than 'maxUrlTextLength' bytes.
 genUrlText :: Gen UrlText
 genUrlText =
     UrlText
@@ -114,11 +114,11 @@ genUrlText =
             (Text.pack <$> scale (min (fromIntegral maxUrlTextLength)) (listOf arbitrary))
             ((<= fromIntegral maxUrlTextLength) . BS.length . TE.encodeUtf8)
 
--- |Generate an 'AmountFraction' in the range [0,1].
+-- | Generate an 'AmountFraction' in the range [0,1].
 genAmountFraction :: Gen AmountFraction
 genAmountFraction = makeAmountFraction <$> arbitrary `suchThat` (<= 100000)
 
--- |Generate a 'CapitalBound', in the range (0,1]. (0 is not a valid 'CapitalBound'.)
+-- | Generate a 'CapitalBound', in the range (0,1]. (0 is not a valid 'CapitalBound'.)
 genCapitalBound :: Gen CapitalBound
 genCapitalBound = CapitalBound . makeAmountFraction <$> arbitrary `suchThat` (\x -> x <= 100000 && x > 0)
 
@@ -286,7 +286,7 @@ genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arb
 genSignThreshold :: Gen SignatureThreshold
 genSignThreshold = SignatureThreshold <$> choose (1, 255)
 
--- |Simply generate a few 'ElgamalCipher' values for testing purposes.
+-- | Simply generate a few 'ElgamalCipher' values for testing purposes.
 elgamalCiphers :: Vec.Vector ElgamalCipher
 elgamalCiphers = unsafePerformIO $ Vec.replicateM 200 generateElgamalCipher
 {-# NOINLINE elgamalCiphers #-}
@@ -483,7 +483,7 @@ genPoolParametersV1 = do
     _ppLeverageBound <- genLeverageFactor
     return PoolParametersV1{..}
 
-genRewardParameters :: forall cpv. IsChainParametersVersion cpv => Gen (RewardParameters cpv)
+genRewardParameters :: forall cpv. (IsChainParametersVersion cpv) => Gen (RewardParameters cpv)
 genRewardParameters = withCPVConstraints (chainParametersVersion @cpv) $ do
     _rpMintDistribution <- genMintDistribution
     _rpTransactionFeeDistribution <- genTransactionFeeDistribution
@@ -593,7 +593,7 @@ genWasmVersion spv
     | supportsV1Contracts spv = elements [Wasm.V0, Wasm.V1]
     | otherwise = return Wasm.V0
 
-genEvent :: IsProtocolVersion pv => SProtocolVersion pv -> Gen Event
+genEvent :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen Event
 genEvent spv =
     oneof
         ( [ ModuleDeployed <$> genModuleRef,
@@ -736,14 +736,14 @@ instance Arbitrary RejectReason where
               return PoolClosed
             ]
 
-genValidResult :: IsProtocolVersion pv => SProtocolVersion pv -> Gen ValidResult
+genValidResult :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen ValidResult
 genValidResult spv =
     oneof
         [ TxSuccess <$> (liftArbitrary $ genEvent spv),
           TxReject <$> arbitrary
         ]
 
-genTransactionSummary :: IsProtocolVersion pv => SProtocolVersion pv -> Gen TransactionSummary
+genTransactionSummary :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen TransactionSummary
 genTransactionSummary spv = do
     tsSender <- oneof [return Nothing, Just <$> genAccountAddress]
     tsHash <- TransactionHashV0 . SHA256.Hash . FBS.pack <$> vector 32
@@ -840,7 +840,7 @@ genBlockItem =
 genElectionDifficulty :: Gen ElectionDifficulty
 genElectionDifficulty = makeElectionDifficulty <$> arbitrary `suchThat` (< 100000)
 
-genAuthorizations :: forall auv. IsAuthorizationsVersion auv => Gen (Authorizations auv)
+genAuthorizations :: forall auv. (IsAuthorizationsVersion auv) => Gen (Authorizations auv)
 genAuthorizations = do
     size <- getSize
     nKeys <- choose (1, min 65535 (1 + size))
@@ -902,7 +902,7 @@ genEnergyRate = max <*> negate <$> arbitrary
 genExchangeRates :: Gen ExchangeRates
 genExchangeRates = makeExchangeRates <$> genExchangeRate <*> genExchangeRate
 
-genMintDistribution :: forall mdv. IsMintDistributionVersion mdv => Gen (MintDistribution mdv)
+genMintDistribution :: forall mdv. (IsMintDistributionVersion mdv) => Gen (MintDistribution mdv)
 genMintDistribution = do
     _mdMintPerSlot <- conditionallyA (sSupportsMintPerSlot (sing @mdv)) genMintRate
     bf <- choose (0, 100000)
@@ -919,7 +919,7 @@ genTransactionFeeDistribution = do
         _tfdGASAccount = makeAmountFraction gf
     return TransactionFeeDistribution{..}
 
-genGASRewards :: forall grv. IsGASRewardsVersion grv => Gen (GASRewards grv)
+genGASRewards :: forall grv. (IsGASRewardsVersion grv) => Gen (GASRewards grv)
 genGASRewards = do
     _gasBaker <- makeAmountFraction <$> choose (0, 100000)
     _gasFinalizationProof <-
@@ -937,7 +937,7 @@ genHigherLevelKeys = do
     hlkThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral nKeys)
     return HigherLevelKeys{..}
 
-genRootUpdate :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen RootUpdate
+genRootUpdate :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen RootUpdate
 genRootUpdate scpv =
     oneof
         [ RootKeysRootUpdate <$> genHigherLevelKeys,
@@ -948,7 +948,7 @@ genRootUpdate scpv =
             SChainParametersV2 -> Level2KeysRootUpdateV1 <$> genAuthorizations
         ]
 
-genLevel1Update :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen Level1Update
+genLevel1Update :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen Level1Update
 genLevel1Update scpv =
     oneof
         [ Level1KeysLevel1Update <$> genHigherLevelKeys,
@@ -1004,7 +1004,7 @@ genLevel2UpdatePayload scpv =
                   GASRewardsCPV2UpdatePayload <$> genGASRewards
                 ]
 
-genUpdatePayload :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen UpdatePayload
+genUpdatePayload :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen UpdatePayload
 genUpdatePayload scpv =
     oneof
         [ genLevel2UpdatePayload scpv,
@@ -1012,7 +1012,7 @@ genUpdatePayload scpv =
           Level1UpdatePayload <$> genLevel1Update scpv
         ]
 
-genRawUpdateInstruction :: IsChainParametersVersion cpv => SChainParametersVersion cpv -> Gen RawUpdateInstruction
+genRawUpdateInstruction :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen RawUpdateInstruction
 genRawUpdateInstruction scpv = do
     ruiSeqNumber <- Nonce <$> arbitrary
     ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
@@ -1028,12 +1028,12 @@ genLevel2RawUpdateInstruction scpv = do
     ruiPayload <- genLevel2UpdatePayload scpv
     return RawUpdateInstruction{..}
 
--- |Generate an 'Authorizations' structure and the list of key pairs.
--- The threshold for each access structure is specified.
+-- | Generate an 'Authorizations' structure and the list of key pairs.
+--  The threshold for each access structure is specified.
 genAuthorizationsAndKeys ::
     forall auv.
-    IsAuthorizationsVersion auv =>
-    -- |Threshold for each access structure
+    (IsAuthorizationsVersion auv) =>
+    -- | Threshold for each access structure
     UpdateKeysThreshold ->
     Gen (Authorizations auv, [KeyPair])
 genAuthorizationsAndKeys thr = do
@@ -1078,7 +1078,7 @@ genRootKeys thr = do
     let hlkKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     return (HigherLevelKeys{hlkThreshold = thr, ..}, kps)
 
-genKeyCollection :: IsAuthorizationsVersion auv => UpdateKeysThreshold -> Gen (UpdateKeysCollection auv, [KeyPair], [KeyPair], [KeyPair])
+genKeyCollection :: (IsAuthorizationsVersion auv) => UpdateKeysThreshold -> Gen (UpdateKeysCollection auv, [KeyPair], [KeyPair], [KeyPair])
 genKeyCollection thr = do
     (rootKeys, a) <- genRootKeys thr
     (level1Keys, b) <- genLevel1Keys thr

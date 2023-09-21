@@ -46,7 +46,7 @@ version = "3"
 
 [dependencies.concordium-contracts-common]
 version = "8.0"
-path = "../../concordium-contracts-common/concordium-contracts-common"
+path = "../contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
 [lib]

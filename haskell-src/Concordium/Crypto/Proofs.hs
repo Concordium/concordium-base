@@ -50,8 +50,8 @@ newtype Dlog25519Proof = Dlog25519Proof (FixedByteString Dlog25519ProofLength)
     deriving (Eq)
     deriving (Show, Serialize, AE.FromJSON, AE.ToJSON) via FBSHex Dlog25519ProofLength
 
--- |Generate a random proof (could be completely invalid). Meant for testing.
-randomProof :: RandomGen g => g -> (Dlog25519Proof, g)
+-- | Generate a random proof (could be completely invalid). Meant for testing.
+randomProof :: (RandomGen g) => g -> (Dlog25519Proof, g)
 randomProof gen = (key, gen')
   where
     (gen0, gen') = split gen
@@ -76,11 +76,11 @@ foreign import ccall safe "eddsa_prove_dlog_ed25519"
         IO Int32
 
 checkDlog25519Proof ::
-    -- |The challenge prefix to use
+    -- | The challenge prefix to use
     BS.ByteString ->
-    -- |Public key serialized in bytes (needs to be 32 bytes in length).
+    -- | Public key serialized in bytes (needs to be 32 bytes in length).
     BS.ByteString ->
-    -- |Purported proof.
+    -- | Purported proof.
     Dlog25519Proof ->
     Bool
 checkDlog25519Proof challenge publicKey (Dlog25519Proof proof) = unsafePerformIO $
@@ -92,34 +92,34 @@ checkDlog25519Proof challenge publicKey (Dlog25519Proof proof) = unsafePerformIO
                     r <- verifyDlogFFI (castPtr c_ptr) (fromIntegral c_len) (castPtr pk_ptr) proof_ptr
                     return (r == 1)
 
--- |NB: This crucially relies on key serialization being consistent.
+-- | NB: This crucially relies on key serialization being consistent.
 checkDlog25519ProofSig ::
-    -- |The challenge prefix to use
+    -- | The challenge prefix to use
     BS.ByteString ->
-    -- |The VRF public key.
+    -- | The VRF public key.
     Sig.VerifyKey ->
-    -- |Purported proof.
+    -- | Purported proof.
     Dlog25519Proof ->
     Bool
 checkDlog25519ProofSig challenge (Sig.VerifyKeyEd25519 vfkey) = checkDlog25519Proof challenge (encode vfkey)
 
 checkDlog25519ProofVRF ::
-    -- |The challenge prefix to use
+    -- | The challenge prefix to use
     BS.ByteString ->
-    -- |The VRF public key.
+    -- | The VRF public key.
     VRF.PublicKey ->
-    -- |Purported proof.
+    -- | Purported proof.
     Dlog25519Proof ->
     Bool
 checkDlog25519ProofVRF challenge = checkDlog25519Proof challenge . encode
 
--- |NB: This crucially relies on key serialization being consistent.
+-- | NB: This crucially relies on key serialization being consistent.
 checkDlog25519ProofBlock ::
-    -- |The challenge prefix to use
+    -- | The challenge prefix to use
     BS.ByteString ->
-    -- |The VRF public key.
+    -- | The VRF public key.
     BlockSig.VerifyKey ->
-    -- |Purported proof.
+    -- | Purported proof.
     Dlog25519Proof ->
     Bool
 checkDlog25519ProofBlock challenge vfkey = checkDlog25519Proof challenge (encode vfkey)
@@ -139,17 +139,17 @@ proveDlog25519 challenge publicKey secretKey =
                                 then return (Just (Dlog25519Proof bs))
                                 else return Nothing
 
--- |NB: Key serialization must not add length information.
+-- | NB: Key serialization must not add length information.
 proveDlog25519KP :: BS.ByteString -> Sig.KeyPair -> IO (Maybe Dlog25519Proof)
 proveDlog25519KP challenge Sig.KeyPairEd25519{..} =
     proveDlog25519 challenge (encode verifyKey) (encode signKey)
 
--- |NB: Key serialization must not add length information.
+-- | NB: Key serialization must not add length information.
 proveDlog25519Block :: BS.ByteString -> BlockSig.KeyPair -> IO (Maybe Dlog25519Proof)
 proveDlog25519Block challenge BlockSig.KeyPair{..} =
     proveDlog25519 challenge (encode verifyKey) (encode signKey)
 
--- |NB: Key serialization must not add length information.
+-- | NB: Key serialization must not add length information.
 proveDlog25519VRF :: BS.ByteString -> VRF.KeyPair -> IO (Maybe Dlog25519Proof)
 proveDlog25519VRF challenge (VRF.KeyPair sigKey vfKey) =
     proveDlog25519 challenge (encode vfKey) (encode sigKey)

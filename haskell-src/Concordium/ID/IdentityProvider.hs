@@ -41,47 +41,47 @@ foreign import ccall unsafe "ip_info_verify_key" ipVerifyKeyFFI :: Ptr IpInfo ->
 foreign import ccall unsafe "ip_info_cdi_verify_key" ipCdiVerifyKeyFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_create"
     createIpInfoFFI ::
-        -- |The identity of the identity provider.
+        -- | The identity of the identity provider.
         IdentityProviderIdentity ->
-        -- |Pointer to a byte array which is the serialization of a
-        -- @ed25519_dalek::PublicKey@ Rust-instance and its length.
+        -- | Pointer to a byte array which is the serialization of a
+        --  @ed25519_dalek::PublicKey@ Rust-instance and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to a byte array which is the serialization of a
-        -- @ps_sig::PublicKey<Bls12>@ Rust-instance and its length.
+        -- | Pointer to a byte array which is the serialization of a
+        --  @ps_sig::PublicKey<Bls12>@ Rust-instance and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to a byte array which is the serialization of an
-        -- utf8 encoded string and its length.
+        -- | Pointer to a byte array which is the serialization of an
+        --  utf8 encoded string and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to a byte array which is the serialization of an
-        -- utf8 encoded string and its length.
+        -- | Pointer to a byte array which is the serialization of an
+        --  utf8 encoded string and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to a byte array which is the serialization of an
-        -- utf8 encoded string and its length.
+        -- | Pointer to a byte array which is the serialization of an
+        --  utf8 encoded string and its length.
         Ptr Word8 ->
         CSize ->
-        -- |Pointer to an @IpInfo@ Rust instance with its corresponding fields set
-        -- to deserializations of the the above. This is a null-pointer on failure.
+        -- | Pointer to an @IpInfo@ Rust instance with its corresponding fields set
+        --  to deserializations of the the above. This is a null-pointer on failure.
         IO (Ptr IpInfo)
 
--- |Create an @IpInfo@ instance from constituent parts.
+-- | Create an @IpInfo@ instance from constituent parts.
 createIpInfo ::
-    -- |The identity of the identity provider.
+    -- | The identity of the identity provider.
     IdentityProviderIdentity ->
-    -- |Serialized Pointcheval-Sanders public key.
+    -- | Serialized Pointcheval-Sanders public key.
     BS.ByteString ->
-    -- |Serialized Ed25519 public key.
+    -- | Serialized Ed25519 public key.
     BS.ByteString ->
-    -- |Name of the identity provider.
+    -- | Name of the identity provider.
     Text ->
-    -- |URL of the identity provider.
+    -- | URL of the identity provider.
     Text ->
-    -- |Description of the provider.
+    -- | Description of the provider.
     Text ->
-    -- |If the public keys cannot be deserialized this returns @Nothing@. Otherwise a @IpInfo@ is returned.
+    -- | If the public keys cannot be deserialized this returns @Nothing@. Otherwise a @IpInfo@ is returned.
     Maybe IpInfo
 createIpInfo idIdentity verifyKey cdiVerifyKey name url desc =
     unsafePerformIO
@@ -146,7 +146,7 @@ instance Show IpInfo where
 instance HashableTo H.Hash IpInfo where
     getHash = H.hash . encode
 
-instance Monad m => MHashableTo m H.Hash IpInfo
+instance (Monad m) => MHashableTo m H.Hash IpInfo
 
 jsonToIpInfo :: BS.ByteString -> Maybe IpInfo
 jsonToIpInfo bs = IpInfo <$> fromJSONHelper freeIpInfo ipInfoFromJSONFFI bs
@@ -157,33 +157,33 @@ ipInfoToJSON (IpInfo ip) = toJSONHelper ipInfoToJSONFFI ip
 ipIdentity :: IpInfo -> IdentityProviderIdentity
 ipIdentity ipInfo = unsafeDupablePerformIO $ withIpInfo ipInfo ipIdentityFFI
 
--- |Get the description name of the IP.
---  Using Text.decodeUtf8 which can throw an exception,
---  but the AR name is represented as a String in Rust, so it is safe.
+-- | Get the description name of the IP.
+--   Using Text.decodeUtf8 which can throw an exception,
+--   but the AR name is represented as a String in Rust, so it is safe.
 ipName :: IpInfo -> Text
 ipName (IpInfo ip) = Text.decodeUtf8 $ toBytesHelper ipNameFFI ip
 
--- |Get the description URL of the IP.
---  Using Text.decodeUtf8 which can throw an exception,
---  but the AR name is represented as a String in Rust, so it is safe.
+-- | Get the description URL of the IP.
+--   Using Text.decodeUtf8 which can throw an exception,
+--   but the AR name is represented as a String in Rust, so it is safe.
 ipUrl :: IpInfo -> Text
 ipUrl (IpInfo ip) = Text.decodeUtf8 $ toBytesHelper ipUrlFFI ip
 
--- |Get the description text of the IP.
---  Using Text.decodeUtf8 which can throw an exception,
---  but the AR name is represented as a String in Rust, so it is safe.
+-- | Get the description text of the IP.
+--   Using Text.decodeUtf8 which can throw an exception,
+--   but the AR name is represented as a String in Rust, so it is safe.
 ipDescription :: IpInfo -> Text
 ipDescription (IpInfo ip) = Text.decodeUtf8 $ toBytesHelper ipDescriptionFFI ip
 
--- |Get the verify key of the IP as bytes.
---  The function is currently only used for returning protobuf data in the gRPC2 api.
---  That is why it returns bytes instead of structured data.
+-- | Get the verify key of the IP as bytes.
+--   The function is currently only used for returning protobuf data in the gRPC2 api.
+--   That is why it returns bytes instead of structured data.
 ipVerifyKey :: IpInfo -> BS.ByteString
 ipVerifyKey (IpInfo ip) = toBytesHelper ipVerifyKeyFFI ip
 
--- |Get the cdi verify key of the IP as bytes.
---  The function is currently only used for returning protobuf data in the gRPC2 api.
---  That is why it returns bytes instead of a structured data.
+-- | Get the cdi verify key of the IP as bytes.
+--   The function is currently only used for returning protobuf data in the gRPC2 api.
+--   That is why it returns bytes instead of a structured data.
 ipCdiVerifyKey :: IpInfo -> BS.ByteString
 ipCdiVerifyKey (IpInfo ip) = toBytesHelper ipCdiVerifyKeyFFI ip
 

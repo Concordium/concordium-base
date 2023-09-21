@@ -16,8 +16,8 @@ import Test.QuickCheck
 
 import qualified Text.ParserCombinators.ReadP as RP
 
--- |Type representing the amount unit which is defined as the smallest
--- meaningful amount of GTU. This unit is 10^-6 GTU and denoted microGTU.
+-- | Type representing the amount unit which is defined as the smallest
+--  meaningful amount of GTU. This unit is 10^-6 GTU and denoted microGTU.
 type AmountUnit = Word64
 
 newtype Amount = Amount {_amount :: AmountUnit}
@@ -41,7 +41,7 @@ instance HashableTo Hash.Hash Amount where
 
 instance (Monad m) => MHashableTo m Hash.Hash Amount
 
--- |Converts an amount to GTU decimal representation.
+-- | Converts an amount to GTU decimal representation.
 amountToString :: Amount -> String
 amountToString (Amount amount) =
     let
@@ -51,7 +51,7 @@ amountToString (Amount amount) =
     in
         high ++ "." ++ pad ++ low
 
--- |Parse an amount from GTU decimal representation.
+-- | Parse an amount from GTU decimal representation.
 amountFromString :: String -> Maybe Amount
 amountFromString s =
     if length s == 0 || length parsed /= 1
@@ -60,8 +60,8 @@ amountFromString s =
   where
     parsed = RP.readP_to_S amountParser s
 
--- |Parse a Word64 as a decimal number with scale 10^6
--- i.e. between 0 and 18446744073709.551615
+-- | Parse a Word64 as a decimal number with scale 10^6
+--  i.e. between 0 and 18446744073709.551615
 amountParser :: RP.ReadP Word64
 amountParser = decimalAmount RP.<++ noDecimalAmount
   where

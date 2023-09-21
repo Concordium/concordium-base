@@ -35,8 +35,8 @@ codeLookup = $codeLookup'
 decodeLookup :: Int -> Word8
 decodeLookup = $decodeLookup'
 
--- |A bytestring wrapper that contains a valid base58 string, i.e., each byte in
--- the bytestring is a valid base58 character.
+-- | A bytestring wrapper that contains a valid base58 string, i.e., each byte in
+--  the bytestring is a valid base58 character.
 newtype Base58String = Base58String {raw :: BS.ByteString}
     deriving (Eq) via BS.ByteString
 
@@ -54,9 +54,9 @@ instance ToJSON Base58String where
     -- Decode here should be safe because of the invariant maintained by Base58String type.
     toJSON (Base58String bs) = String (Text.decodeUtf8 bs)
 
--- |Encode bytes into a base 58 representation. Each leading 0 byte is encoded
--- as 1, and the remaining bytes are interpreted as a big-endian positive integer,
--- and encoded as a base58 string.
+-- | Encode bytes into a base 58 representation. Each leading 0 byte is encoded
+--  as 1, and the remaining bytes are interpreted as a big-endian positive integer,
+--  and encoded as a base58 string.
 encodeBytes :: BS.ByteString -> Base58String
 encodeBytes input =
     if leadingzeros == BS.length input
@@ -74,9 +74,9 @@ encodeBytes input =
             input
     leadingzeros = if leadzero >= 0 then leadzero else (-leadzero - 1)
 
--- |Encode a non-negative integer. This function will fail if given a negative
--- integer. The resulting bytestring is without leading zeros, except if
--- encoding the integer 0.
+-- | Encode a non-negative integer. This function will fail if given a negative
+--  integer. The resulting bytestring is without leading zeros, except if
+--  encoding the integer 0.
 encodePositiveInteger' :: Integer -> BS.ByteString
 encodePositiveInteger' i
     | i < 0 = error "Input must be positive integer."
@@ -91,8 +91,8 @@ encodePositiveInteger' i
             let (d, m) = divMod x 58
             in  go d (codeLookup (fromIntegral m) : acc)
 
--- |Construct a valid Base58 string by encoding an integer.
--- Simply a wrapper around 'encodePositiveInteger''
+-- | Construct a valid Base58 string by encoding an integer.
+--  Simply a wrapper around 'encodePositiveInteger''
 encodePositiveInteger :: Integer -> Base58String
 encodePositiveInteger = Base58String . encodePositiveInteger'
 
@@ -102,8 +102,8 @@ decodePositiveInteger (Base58String b) =
         Nothing -> error "Precondition violated, not a valid base58 string."
         Just x -> x
 
--- |Given arbitrary bytes, if they are a valid base58 encoding decode to an
--- integer (assuming big-endian representation), otherwise return Nothing.
+-- | Given arbitrary bytes, if they are a valid base58 encoding decode to an
+--  integer (assuming big-endian representation), otherwise return Nothing.
 decodePositiveInteger' :: BS.ByteString -> Maybe Integer
 decodePositiveInteger' b = go 0 0
   where
@@ -143,7 +143,7 @@ base58CheckEncode input = encodeBytes (input <> BS.take 4 hashedTwice)
   where
     hashedTwice = H.hashToByteString (H.hash (H.hashToByteString (H.hash input)))
 
--- |Check whether a base58 check string is valid and return the payload bytes.
+-- | Check whether a base58 check string is valid and return the payload bytes.
 base58CheckDecode :: Base58String -> Maybe BS.ByteString
 base58CheckDecode input =
     let decoded = decodeBytes input
@@ -157,7 +157,7 @@ base58CheckDecode input =
                         then Just payload
                         else Nothing
 
--- |Check whether an arbitrary bytestring is a valid base58 check encoding.
+-- | Check whether an arbitrary bytestring is a valid base58 check encoding.
 base58CheckDecode' :: BS.ByteString -> Maybe BS.ByteString
 base58CheckDecode' input = do
     decoded <- decodeBytes' input
@@ -171,6 +171,6 @@ base58CheckDecode' input = do
                     then Just payload
                     else Nothing
 
--- |Check whether each character in the string is a valid base58 character.
+-- | Check whether each character in the string is a valid base58 character.
 checkValidBase58 :: BS.ByteString -> Bool
 checkValidBase58 bs = BS.all (\x -> (decodeLookup (fromIntegral x) /= 255)) bs

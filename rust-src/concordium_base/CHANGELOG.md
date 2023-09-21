@@ -1,6 +1,14 @@
 ## Unreleased changes
 
+- Fix `Display` implementation of `Web3IdAttribute::Timestamp` attribute.
+
+## 3.0.1 (2023-08-28)
+
 - Add `Serialize` and `Deserialize` instances to `CredentialStatus` type.
+- Fix the epoch when converting Web3ID attributes from Unix epoch to `-262144-01-01T00:00:00Z`.
+  The representable timestamps are between `-262144-01-01T00:00:00Z` and
+  `+262143-12-31T23:59:59.999Z`
+
 
 ## 3.0.0 (2023-08-21)
 

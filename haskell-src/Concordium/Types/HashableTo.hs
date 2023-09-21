@@ -18,7 +18,7 @@ instance HashableTo H.Hash BS.ByteString where
 instance HashableTo H.Hash LBS.ByteString where
     getHash = H.hashLazy
 
-instance HashableTo H.Hash v => HashableTo H.Hash (Maybe v) where
+instance (HashableTo H.Hash v) => HashableTo H.Hash (Maybe v) where
     getHash Nothing = H.hash "Nothing"
     getHash (Just v) = H.hash ("Just" <> (H.hashToByteString $ getHash v))
 
@@ -40,15 +40,15 @@ instance HashableTo H.Hash GlobalContext where
 -- HashableTo is trivially MHashableTo just by returning its hash.
 -- But in order to not produce overlapping instances, we have to
 -- declare each instance manually just using the default instance.
-class Monad m => MHashableTo m hash v where
+class (Monad m) => MHashableTo m hash v where
     getHashM :: v -> m hash
     default getHashM :: (HashableTo hash v) => v -> m hash
     getHashM = return . getHash
 
-instance Monad m => MHashableTo m H.Hash BS.ByteString
+instance (Monad m) => MHashableTo m H.Hash BS.ByteString
 
-instance Monad m => MHashableTo m H.Hash LBS.ByteString
+instance (Monad m) => MHashableTo m H.Hash LBS.ByteString
 
-instance Monad m => MHashableTo m H.Hash GlobalContext
+instance (Monad m) => MHashableTo m H.Hash GlobalContext
 
 instance (Monad m, HashableTo H.Hash v) => MHashableTo m H.Hash (Maybe v)

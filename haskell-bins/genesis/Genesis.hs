@@ -177,7 +177,7 @@ expectedIpInfosVersion = 0
 expectedGenesisParametersVersion = 2 -- We only support generating genesis for protocol version 1-4
 expectedCryptoParamsVersion = 0
 
-parseParametersAndGetGenesisData :: IsProtocolVersion pv => Value -> (GenesisParametersV2 pv -> PVGenesisData) -> IO PVGenesisData
+parseParametersAndGetGenesisData :: (IsProtocolVersion pv) => Value -> (GenesisParametersV2 pv -> PVGenesisData) -> IO PVGenesisData
 parseParametersAndGetGenesisData value f =
     case fromJSON value of
         Error err -> die $ "Could not decode genesis parameters: " ++ show err
@@ -187,7 +187,7 @@ data VersionedCoreGenesisParameters
     = CGPV0 GDBase.CoreGenesisParameters
     | CGPV1 GDBaseV1.CoreGenesisParametersV1
 
--- |Show a value wrapped in a @Conditionally@.
+-- | Show a value wrapped in a @Conditionally@.
 showConditionally :: (Show a) => Conditionally b a -> String
 showConditionally (CFalse) = "N/A"
 showConditionally (CTrue v) = show v
@@ -511,7 +511,7 @@ showAccount bkrTotalStake totalGTU GenesisAccount{..} = do
         putStrLn $ "       + earnings are " ++ (if gbRestakeEarnings then "" else "not ") ++ "restaked"
 
 -- Use the JSON instance and pretty print it, indenting everything but the first line by the stated amount.
-showAsJSON :: ToJSON a => Int -> a -> String
+showAsJSON :: (ToJSON a) => Int -> a -> String
 showAsJSON indent v =
     let bs = encodePretty v
         offset = replicate indent ' '

@@ -1,0 +1,101 @@
+[package]
+name = "concordium-contracts-common"
+version = "8.0.0"
+authors = ["Concordium <developers@concordium.com>"]
+edition = "2021"
+rust-version = "1.65"
+license = "MPL-2.0"
+description = "Common functionality used by smart contracts and the host environment on the Concordium blockchain."
+homepage = "https://github.com/Concordium/concordium-base"
+repository = "https://github.com/Concordium/concordium-base"
+readme = "../README.md"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+arbitrary = { version = "1.3", features = ["derive"], optional = true }
+base64 = "0.21"
+getrandom = { version = "0.2", features = ["custom"], optional = true }
+quickcheck = { version = "1.0.3", optional = true }
+
+[dependencies.hashbrown]
+version = "0.11"
+default-features = false
+
+[dependencies.fnv]
+version = "1.0"
+default-features = false
+
+[dependencies.serde]
+optional = true
+features = ["derive"]
+version = "1.0"
+
+[dependencies.serde_json]
+optional = true
+version = "1.0"
+
+[dependencies.chrono]
+optional = true
+version = "0.4"
+
+[dependencies.bs58]
+optional = true
+version = "0.4"
+features = ["check"]
+
+[dependencies.num-bigint]
+optional = true
+version = "0.4"
+
+[dependencies.num-integer]
+optional = true
+version = "0.1"
+
+[dependencies.num-traits]
+optional = true
+version = "0.2"
+
+[dependencies.rust_decimal]
+optional = true
+version = "1.26"
+
+[dependencies.thiserror]
+optional = true
+version = "1.0"
+
+[dependencies.concordium-contracts-common-derive]
+path = "../concordium-contracts-common-derive"
+version = "4"
+
+[dependencies.hex]
+optional = true
+version = "0.4"
+
+[features]
+default = ["std"]
+
+std = ["fnv/std"]
+wasm-test = ["concordium-contracts-common-derive/wasm-test"]
+build-schema = ["concordium-contracts-common-derive/build-schema"]
+concordium-quickcheck = ["getrandom", "quickcheck", "concordium-contracts-common-derive/concordium-quickcheck"]
+derive-serde = ["serde", "serde_json", "std", "bs58", "chrono", "num-bigint", "num-traits", "num-integer", "rust_decimal", "thiserror", "hex"]
+fuzz = ["derive-serde", "arbitrary"]
+smart-contract = []
+
+[lib]
+# Since we don't define an allocator in this crate, we can only produce an rlib
+# directly.
+crate-type = ["rlib"]
+
+[dev-dependencies]
+arbitrary = { version = "1.3", features = ["derive"] }
+rand = "=0.7"
+rand_pcg = "0.2.1"
+
+
+[package.metadata.docs.rs]
+# This sets the default target to `wasm32-unknown-unknown`, and builds both the wasm and x86 targets.
+# This is useful because some parts of documentation only exist on specific platforms.
+targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
+features = ["derive-serde", "std"]

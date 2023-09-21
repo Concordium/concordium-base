@@ -12,9 +12,9 @@ import Data.Hashable
 import qualified Data.Serialize as S
 import Data.Word
 
--- |Version of a data structure. Binary coded as a variable integer represented by
--- bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a byte
--- is Big Endian data bits for the value. A version number can be at most 2^32-1.
+-- | Version of a data structure. Binary coded as a variable integer represented by
+--  bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a byte
+--  is Big Endian data bits for the value. A version number can be at most 2^32-1.
 newtype Version = Version Word32
     deriving newtype (Eq, Ord, Num, Enum, Integral, Real, Hashable, Show, AE.FromJSON, AE.ToJSON, Bounded)
 
@@ -45,20 +45,20 @@ instance S.Serialize Version where
                     unless (value <= fromIntegral (maxBound :: Version)) $ fail "Version number value overflow"
                     return $ Version (fromIntegral value)
 
--- |Aliases for get and put methods that fix the type. This makes them more
--- convenient to use in some cases since one does not have to provide type
--- annotations.
+-- | Aliases for get and put methods that fix the type. This makes them more
+--  convenient to use in some cases since one does not have to provide type
+--  annotations.
 getVersion :: S.Get Version
 getVersion = S.get
 
 putVersion :: Version -> S.Put
 putVersion = S.put
 
--- |Versioned data structure
+-- | Versioned data structure
 data Versioned a = Versioned
-    { -- |Version of the data
+    { -- | Version of the data
       vVersion :: !Version,
-      -- |The data structure
+      -- | The data structure
       vValue :: !a
     }
     deriving (Eq, Show)
@@ -75,7 +75,7 @@ instance (AE.ToJSON a) => AE.ToJSON (Versioned a) where
               "value" .= vValue
             ]
 
-instance AE.FromJSON a => AE.FromJSON (Versioned a) where
+instance (AE.FromJSON a) => AE.FromJSON (Versioned a) where
     parseJSON = AE.withObject "Versioned" $ \obj -> do
         vVersion <- obj .: "v"
         vValue <- obj .: "value"
