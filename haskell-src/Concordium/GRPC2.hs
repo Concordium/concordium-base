@@ -3,9 +3,9 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- |Part of the implementation of the GRPC2 interface. This module contains
--- a single typeclass 'ToProto' that is used to convert from Haskell types
--- to the generate Proto types.
+-- | Part of the implementation of the GRPC2 interface. This module contains
+--  a single typeclass 'ToProto' that is used to convert from Haskell types
+--  to the generate Proto types.
 module Concordium.GRPC2 (
     ToProto (..),
     BakerAddedEvent,
@@ -59,18 +59,18 @@ import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
 
--- |A helper function that can be used to construct a value of a protobuf
--- "wrapper" type by serializing the provided value @a@ using its serialize
--- instance.
+-- | A helper function that can be used to construct a value of a protobuf
+--  "wrapper" type by serializing the provided value @a@ using its serialize
+--  instance.
 --
--- More concretely, the wrapper type should be of the form
+--  More concretely, the wrapper type should be of the form
 --
--- > message Wrapper {
--- >    bytes value = 1
--- > }
+--  > message Wrapper {
+--  >    bytes value = 1
+--  > }
 --
--- where the name @Wrapper@ can be arbitrary, but the @value@ field must exist,
--- and it must have type @bytes@.
+--  where the name @Wrapper@ can be arbitrary, but the @value@ field must exist,
+--  and it must have type @bytes@.
 mkSerialize ::
     ( Proto.Message b,
       Data.ProtoLens.Field.HasField
@@ -83,10 +83,10 @@ mkSerialize ::
     b
 mkSerialize ek = Proto.make (ProtoFields.value .= S.encode ek)
 
--- |Like 'mkSerialize' above, but used to set a wrapper type whose @value@ field
--- has type @uint64@. The supplied value must be coercible to a 'Word64'.
--- Coercible here means that the value is a newtype wrapper (possibly repeated)
--- of a Word64.
+-- | Like 'mkSerialize' above, but used to set a wrapper type whose @value@ field
+--  has type @uint64@. The supplied value must be coercible to a 'Word64'.
+--  Coercible here means that the value is a newtype wrapper (possibly repeated)
+--  of a Word64.
 mkWord64 ::
     ( Proto.Message b,
       Data.ProtoLens.Field.HasField
@@ -99,7 +99,7 @@ mkWord64 ::
     b
 mkWord64 a = Proto.make (ProtoFields.value .= coerce a)
 
--- |Like 'mkWord64', but for 32-bit integers instead of 64.
+-- | Like 'mkWord64', but for 32-bit integers instead of 64.
 mkWord32 ::
     ( Proto.Message b,
       Data.ProtoLens.Field.HasField
@@ -112,8 +112,8 @@ mkWord32 ::
     b
 mkWord32 a = Proto.make (ProtoFields.value .= coerce a)
 
--- |Like 'mkWord32', but the supplied value must be coercible to
--- 'Word16'.
+-- | Like 'mkWord32', but the supplied value must be coercible to
+--  'Word16'.
 mkWord16 ::
     forall a b.
     ( Proto.Message b,
@@ -127,8 +127,8 @@ mkWord16 ::
     b
 mkWord16 a = Proto.make (ProtoFields.value .= (fromIntegral (coerce a :: Word16) :: Word32))
 
--- |Like 'mkWord32', but the supplied value must be coercible to
--- 'Word8'.
+-- | Like 'mkWord32', but the supplied value must be coercible to
+--  'Word8'.
 mkWord8 ::
     forall a b.
     ( Proto.Message b,
@@ -142,14 +142,14 @@ mkWord8 ::
     b
 mkWord8 a = Proto.make (ProtoFields.value .= (fromIntegral (coerce a :: Word8) :: Word32))
 
--- |A helper class analogous to something like Aeson's ToJSON.
--- It exists to make it more manageable to convert the internal Haskell types to
--- their Protobuf equivalents.
+-- | A helper class analogous to something like Aeson's ToJSON.
+--  It exists to make it more manageable to convert the internal Haskell types to
+--  their Protobuf equivalents.
 class ToProto a where
-    -- |The corresponding Proto type.
+    -- | The corresponding Proto type.
     type Output a
 
-    -- |A conversion function from the type to its protobuf equivalent.
+    -- | A conversion function from the type to its protobuf equivalent.
     toProto :: a -> Output a
 
 instance ToProto Amount where
@@ -694,10 +694,10 @@ instance ToProto RejectReason where
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
 
--- |Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
---  The protobuf type is better structured and removes the need for handling impossible cases.
---  For example the case of an account transfer resulting in a smart contract update, which is a
---  technical possibility in the way that the node's trx status is defined.
+-- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
+--   The protobuf type is better structured and removes the need for handling impossible cases.
+--   For example the case of an account transfer resulting in a smart contract update, which is a
+--   technical possibility in the way that the node's trx status is defined.
 instance ToProto QueryTypes.TransactionStatus where
     type Output QueryTypes.TransactionStatus = Either ConversionError Proto.BlockItemStatus
     toProto ts = case ts of
@@ -720,8 +720,8 @@ instance ToProto QueryTypes.TransactionStatus where
             ProtoFields.blockHash .= toProto bh
             ProtoFields.outcome .= bis
 
--- |Attempt to convert a TransactionSummary type into the protobuf BlockItemSummary type.
---  See @toBlockItemStatus@ for more context.
+-- | Attempt to convert a TransactionSummary type into the protobuf BlockItemSummary type.
+--   See @toBlockItemStatus@ for more context.
 instance ToProto TransactionSummary where
     type Output TransactionSummary = Either ConversionError Proto.BlockItemSummary
     toProto TransactionSummary{..} = case tsType of
@@ -862,8 +862,8 @@ instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParameter
         ProtoFields.minBlockTime .= toProto _cpMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
 
--- |Attempt to construct the protobuf updatepayload.
---  See @toBlockItemStatus@ for more context.
+-- | Attempt to construct the protobuf updatepayload.
+--   See @toBlockItemStatus@ for more context.
 convertUpdatePayload :: Updates.UpdateType -> Updates.UpdatePayload -> Either ConversionError Proto.UpdatePayload
 convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateProtocol, Updates.ProtocolUpdatePayload pu) -> Right . Proto.make $ ProtoFields.protocolUpdate .= toProto pu
@@ -897,17 +897,17 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     _ -> Left CEInvalidUpdateResult
 
--- |The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
+-- | The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
 data ConversionError
-    = -- |An account creation failed.
+    = -- | An account creation failed.
       CEFailedAccountCreation
-    | -- |An account creation transaction occurred but was malformed and could not be converted.
+    | -- | An account creation transaction occurred but was malformed and could not be converted.
       CEInvalidAccountCreation
-    | -- |An update transaction failed.
+    | -- | An update transaction failed.
       CEFailedUpdate
-    | -- |An update transaction occurred but was malformed and could not be converted.
+    | -- | An update transaction occurred but was malformed and could not be converted.
       CEInvalidUpdateResult
-    | -- |An account transaction occurred but was malformed and could not be converted.
+    | -- | An account transaction occurred but was malformed and could not be converted.
       CEInvalidTransactionResult
     deriving (Eq)
 
@@ -1002,7 +1002,7 @@ instance ToProto (Updates.HigherLevelKeys kind) where
         ProtoFields.keys .= map toProto (Vec.toList $ Updates.hlkKeys keys)
         ProtoFields.threshold .= toProto (Updates.hlkThreshold keys)
 
-instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizations auv) where
+instance (Parameters.IsAuthorizationsVersion auv) => ToProto (Updates.Authorizations auv) where
     type Output (Updates.Authorizations auv) = AuthorizationsFamily auv
     toProto auth =
         let
@@ -1029,7 +1029,7 @@ instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizatio
                     ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
 
--- |Defines a type family that is used in the ToProto instance for Updates.Authorizations.
+-- | Defines a type family that is used in the ToProto instance for Updates.Authorizations.
 type family AuthorizationsFamily cpv where
     AuthorizationsFamily 'Parameters.AuthorizationsVersion0 = Proto.AuthorizationsV0
     AuthorizationsFamily 'Parameters.AuthorizationsVersion1 = Proto.AuthorizationsV1
@@ -1166,8 +1166,8 @@ convertContractRelatedEvents event = case event of
                     )
     _ -> Left CEInvalidTransactionResult
 
--- |Attempt to construct the protobuf type AccounTransactionType.
--- See @toBlockItemStatus@ for more context.
+-- | Attempt to construct the protobuf type AccounTransactionType.
+--  See @toBlockItemStatus@ for more context.
 convertAccountTransaction ::
     -- | The transaction type. @Nothing@ means that the transaction was serialized incorrectly.
     Maybe TransactionType ->
@@ -1500,7 +1500,8 @@ convertAccountTransaction ty cost sender result = case ty of
     mkNone rr = Proto.make $ do
         ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
-        ProtoFields.effects . ProtoFields.none
+        ProtoFields.effects
+            . ProtoFields.none
             .= ( Proto.make $ do
                     ProtoFields.rejectReason .= toProto rr
                     case ty of
@@ -2240,3 +2241,132 @@ instance ToProto WinningBaker where
         ProtoFields.round .= toProto wbRound
         ProtoFields.winner .= toProto wbWinner
         ProtoFields.present .= wbPresent
+
+instance ToProto DryRunError where
+    type Output DryRunError = Proto.DryRunErrorResponse
+    toProto DryRunErrorNoState =
+        Proto.make $ ProtoFields.noState .= Proto.defMessage
+    toProto DryRunErrorBlockNotFound =
+        Proto.make $ ProtoFields.blockNotFound .= Proto.defMessage
+    toProto DryRunErrorAccountNotFound =
+        Proto.make $ ProtoFields.accountNotFound .= Proto.defMessage
+    toProto DryRunErrorInstanceNotFound =
+        Proto.make $ ProtoFields.instanceNotFound .= Proto.defMessage
+    toProto DryRunErrorAmountOverLimit{..} =
+        Proto.make $ ProtoFields.amountOverLimit .= Proto.build (ProtoFields.amountLimit .~ toProto dreMaximumMintAmount)
+    toProto DryRunErrorBalanceInsufficient{..} =
+        Proto.make $
+            ProtoFields.balanceInsufficient
+                .= Proto.make
+                    ( do
+                        ProtoFields.requiredAmount .= toProto dreRequiredAmount
+                        ProtoFields.availableAmount .= toProto dreAvailableAmount
+                    )
+    toProto DryRunErrorSequenceNumberInvalid{..} =
+        Proto.make $
+            ProtoFields.sequenceNumberInvalid
+                .= Proto.make
+                    ( ProtoFields.nextSequenceNumber .= toProto dreNextSequenceNumber
+                    )
+    toProto DryRunErrorEnergyInsufficient{..} =
+        Proto.make $
+            ProtoFields.energyInsufficient
+                .= Proto.make
+                    (ProtoFields.energyRequired .= toProto dreEnergyRequired)
+    toProto DryRunErrorExpired{..} =
+        Proto.make $
+            ProtoFields.expired
+                .= Proto.make
+                    (ProtoFields.currentTimestamp .= toProto dreCurrentTimestamp)
+
+instance ToProto DryRunSuccess where
+    type Output DryRunSuccess = Proto.DryRunSuccessResponse
+    toProto DryRunSuccessBlockStateLoaded{..} =
+        Proto.make $ do
+            ProtoFields.blockStateLoaded
+                .= Proto.make
+                    ( do
+                        ProtoFields.currentTimestamp .= toProto drsCurrentTimestamp
+                        ProtoFields.blockHash .= toProto drsBlockHash
+                        ProtoFields.protocolVersion .= toProto drsProtocolVersion
+                    )
+    toProto DryRunSuccessAccountInfo{..} =
+        Proto.make $ ProtoFields.accountInfo .= toProto drsAccountInfo
+    toProto DryRunSuccessInstanceInfo{..} =
+        Proto.make $ ProtoFields.instanceInfo .= toProto drsInstanceInfo
+    toProto DryRunSuccessTimestampSet =
+        Proto.make $ ProtoFields.timestampSet .= Proto.defMessage
+    toProto DryRunSuccessMintedToAccount =
+        Proto.make $ ProtoFields.mintedToAccount .= Proto.defMessage
+
+instance ToProto DryRunResult where
+    type Output DryRunResult = Proto.DryRunResponse
+    toProto (DryRunResultError e) = Proto.make $ ProtoFields.error .= toProto e
+    toProto (DryRunResultSuccess s) = Proto.make $ ProtoFields.success .= toProto s
+
+instance ToProto (AsDryRunResponse DryRunSuccess) where
+    type Output (AsDryRunResponse DryRunSuccess) = Proto.DryRunResponse
+    toProto (DryRunResponse s) = Proto.make $ ProtoFields.success .= toProto s
+
+instance ToProto (AsDryRunResponse DryRunError) where
+    type Output (AsDryRunResponse DryRunError) = Proto.DryRunResponse
+    toProto (DryRunResponse e) = Proto.make $ ProtoFields.error .= toProto e
+
+instance ToProto (AsDryRunResponse InvokeContract.InvokeContractResult) where
+    -- Since this is a conversion that may fail we use Either in the output type
+    -- here so that we can forward errors, which is not in-line with other
+    -- instances which are not fallible. The caller is meant to catch the error.
+    type
+        Output (AsDryRunResponse InvokeContract.InvokeContractResult) =
+            Either ConversionError Proto.DryRunResponse
+    toProto (DryRunResponse InvokeContract.Failure{..}) =
+        return $
+            Proto.make $
+                ProtoFields.error
+                    .= Proto.make
+                        ( ProtoFields.invokeFailed
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.maybe'returnValue .= rcrReturnValue
+                                    ProtoFields.usedEnergy .= toProto rcrUsedEnergy
+                                    ProtoFields.reason .= toProto rcrReason
+                                )
+                        )
+    toProto (DryRunResponse InvokeContract.Success{..}) = do
+        effects <- mapM convertContractRelatedEvents rcrEvents
+        return $
+            Proto.make $
+                ProtoFields.success
+                    .= Proto.make
+                        ( ProtoFields.invokeSucceeded
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.maybe'returnValue .= rcrReturnValue
+                                    ProtoFields.usedEnergy .= toProto rcrUsedEnergy
+                                    ProtoFields.effects .= effects
+                                )
+                        )
+
+instance ToProto (AsDryRunResponse TransactionSummary) where
+    type Output (AsDryRunResponse TransactionSummary) = Either ConversionError Proto.DryRunResponse
+    toProto (DryRunResponse TransactionSummary{..}) = case tsType of
+        TSTAccountTransaction tty -> do
+            sender <- case tsSender of
+                Nothing -> Left CEInvalidTransactionResult
+                Just acc -> Right acc
+            details <- convertAccountTransaction tty tsCost sender tsResult
+            Right . Proto.make $
+                ProtoFields.success
+                    .= Proto.make
+                        ( ProtoFields.transactionExecuted
+                            .= Proto.make
+                                ( do
+                                    -- ProtoFields.return_value
+                                    ProtoFields.energyCost .= toProto tsEnergyCost
+                                    ProtoFields.details .= details
+                                )
+                        )
+        _ -> do
+            -- Since only account transactions can be executed in a dry run, we should not have
+            -- other transaction summary types.
+            Left CEInvalidTransactionResult

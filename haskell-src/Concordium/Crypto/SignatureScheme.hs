@@ -34,8 +34,12 @@ data SchemeId = Ed25519
 signatureSerializedSize :: Signature -> Int
 signatureSerializedSize (Signature s) = 2 + BSS.length s
 
--- |The reason for these enumerations is to support multiple different signature
--- schemes in the future.
+-- | A dummy 'Signature' that is the correct size to be an Ed25519 signature.
+dummySignatureEd25519 :: Signature
+dummySignatureEd25519 = Signature $ BSS.replicate Ed25519.signatureSize 0
+
+-- | The reason for these enumerations is to support multiple different signature
+--  schemes in the future.
 newtype VerifyKey = VerifyKeyEd25519 Ed25519.VerifyKey
     deriving (Eq, Ord, Show, Generic)
     deriving newtype (NFData)
@@ -65,8 +69,8 @@ instance Serialize VerifyKey where
         case schemeId of
             Ed25519 -> VerifyKeyEd25519 <$> get
 
--- |NB: The Eq instance should only be used for testing, it is not guaranteed to
--- be side-channel resistant.
+-- | NB: The Eq instance should only be used for testing, it is not guaranteed to
+--  be side-channel resistant.
 data KeyPair = KeyPairEd25519
     { signKey :: !Ed25519.SignKey,
       verifyKey :: !Ed25519.VerifyKey
