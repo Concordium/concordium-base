@@ -245,7 +245,7 @@ impl ServerConfig {
             "Unsupported anonymity revokers version."
         );
         let mut submit_credential_url = config.wallet_proxy_base.clone();
-        submit_credential_url.set_path("v0/submitCredential/");
+        submit_credential_url.set_path("v0/submitCredential");
         Ok(ServerConfig {
             ip_data,
             global: versioned_global.value,

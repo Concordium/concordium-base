@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.6
+
+- Changed the submitCredential url. 
+
 ## 0.5.5
 - Added improved error handling, so that the wallet can handle some of the errors
 
