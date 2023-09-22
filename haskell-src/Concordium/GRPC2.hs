@@ -2347,21 +2347,23 @@ instance ToProto (AsDryRunResponse InvokeContract.InvokeContractResult) where
                                 )
                         )
 
-instance ToProto (AsDryRunResponse TransactionSummary) where
-    type Output (AsDryRunResponse TransactionSummary) = Either ConversionError Proto.DryRunResponse
+instance ToProto (AsDryRunResponse (TransactionSummary' ValidResultWithReturn)) where
+    type
+        Output (AsDryRunResponse (TransactionSummary' ValidResultWithReturn)) =
+            Either ConversionError Proto.DryRunResponse
     toProto (DryRunResponse TransactionSummary{..}) = case tsType of
         TSTAccountTransaction tty -> do
             sender <- case tsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
-            details <- convertAccountTransaction tty tsCost sender tsResult
+            details <- convertAccountTransaction tty tsCost sender (vrwrResult tsResult)
             Right . Proto.make $
                 ProtoFields.success
                     .= Proto.make
                         ( ProtoFields.transactionExecuted
                             .= Proto.make
                                 ( do
-                                    -- ProtoFields.return_value
+                                    mapM_ (ProtoFields.returnValue .=) $ vrwrReturnValue tsResult
                                     ProtoFields.energyCost .= toProto tsEnergyCost
                                     ProtoFields.details .= details
                                 )

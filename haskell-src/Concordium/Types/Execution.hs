@@ -1,4 +1,5 @@
 {-# LANGUAGE BinaryLiterals #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE EmptyCase #-}
@@ -1894,17 +1895,29 @@ data TransactionSummary' a = TransactionSummary
       tsResult :: !a,
       tsIndex :: !TransactionIndex
     }
-    deriving (Eq, Show, Generic)
+    deriving (Eq, Show, Generic, Functor)
 
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
+
+class TransactionResult a where
+    transactionSuccess :: [Event] -> a
+    transactionReject :: RejectReason -> a
+    setTransactionReturnValue :: BS.ByteString -> a -> a
+    fromValidResult :: ValidResult -> a
 
 -- | Outcomes of a valid transaction. Either a reject with a reason or a
 --  successful transaction with a list of events which occurred during execution.
 --  We also record the cost of the transaction.
 data ValidResult = TxSuccess {vrEvents :: ![Event]} | TxReject {vrRejectReason :: !RejectReason}
     deriving (Show, Generic, Eq)
+
+instance TransactionResult ValidResult where
+    transactionSuccess = TxSuccess
+    transactionReject = TxReject
+    setTransactionReturnValue _ = id
+    fromValidResult = id
 
 putValidResult :: S.Putter ValidResult
 putValidResult TxSuccess{..} = S.putWord8 0 <> putListOf putEvent vrEvents
@@ -1916,6 +1929,18 @@ getValidResult spv =
         0 -> TxSuccess <$> getListOf (getEvent spv)
         1 -> TxReject <$> S.get
         n -> fail $ "Unrecognized ValidResult tag: " ++ show n
+
+-- | A 'ValidResult' with an optional return value.
+data ValidResultWithReturn = ValidResultWithReturn
+    { vrwrResult :: !ValidResult,
+      vrwrReturnValue :: !(Maybe BS.ByteString)
+    }
+
+instance TransactionResult ValidResultWithReturn where
+    transactionSuccess = flip ValidResultWithReturn Nothing . TxSuccess
+    transactionReject = flip ValidResultWithReturn Nothing . TxReject
+    setTransactionReturnValue rv res = res{vrwrReturnValue = Just rv}
+    fromValidResult = flip ValidResultWithReturn Nothing
 
 instance S.Serialize TransactionSummaryType where
     put (TSTAccountTransaction tt) = S.putWord8 0 <> putMaybe S.put tt
