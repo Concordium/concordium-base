@@ -5,14 +5,14 @@ on:
     branches:
       - main
     paths:
-      - 'smart-contracts/contracts-common/**/*.rs'
-      - 'smart-contracts/contracts-common/**/*.toml'
+      - "smart-contracts/contracts-common/**/*.rs"
+      - "smart-contracts/contracts-common/**/*.toml"
   pull_request:
     branches:
       - main
     paths:
-      - 'smart-contracts/contracts-common/**/*.rs'
-      - 'smart-contracts/contracts-common/**/*.toml'
+      - "smart-contracts/contracts-common/**/*.rs"
+      - "smart-contracts/contracts-common/**/*.toml"
 
 name: Clippy & fmt
 
@@ -43,6 +43,25 @@ jobs:
         with:
           command: fmt
           args: --all -- --check
+
+  rustdoc:
+    name: Docs
+    runs-on: ubuntu-latest
+    working-directory: ${{ env.WORKING_DIRECTORY }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+
+      - name: Run cargo doc
+        run: |
+          RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
   clippy:
     name: Clippy on concordium-contracts-common

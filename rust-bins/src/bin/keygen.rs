@@ -649,7 +649,7 @@ pub fn generate_ps_sk(
     })
 }
 
-/// This function is an implementation of the procedure described in https://github.com/satoshilabs/slips/blob/master/slip-0010.md
+/// This function is an implementation of the procedure described in <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
 /// It produces 32 random bytes given a seed, which is exactly a secret key for
 /// the ed25519_dalek.
 pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
@@ -676,7 +676,8 @@ pub fn generate_ed_sk(
 mod tests {
     use super::*;
 
-    /// Checking with the two test vectors mentioned in https://github.com/satoshilabs/slips/blob/master/slip-0010.md
+    /// Checking with the two test vectors mentioned in
+    /// <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>.
     #[test]
     pub fn testvector_ed() {
         let seed1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -692,7 +693,7 @@ mod tests {
     }
 
     /// Test correct generation of BIP39 sentences.
-    /// Values are taken from https://github.com/trezor/python-mnemonic/blob/master/vectors.json
+    /// Values are taken from <https://github.com/trezor/python-mnemonic/blob/master/vectors.json>.
     #[test]
     pub fn test_bip39_generation() {
         let bip39_vec: Vec<_> = bip39_words().collect();
