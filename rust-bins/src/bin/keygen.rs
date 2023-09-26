@@ -649,7 +649,7 @@ pub fn generate_ps_sk(
     })
 }
 
-/// This function is an implementation of the procedure described in <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
+/// This function is an implementation of the procedure described in <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>.
 /// It produces 32 random bytes given a seed, which is exactly a secret key for
 /// the ed25519_dalek.
 pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
