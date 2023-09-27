@@ -42,12 +42,12 @@ fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <ArCurve as Curve>::Scalar {
 }
 
 /// Convert 24 BIP-39 words to a 64 bytes seed.
-/// As described in https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki,
+/// As described in <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>,
 /// but with an empty passphrase.
 pub fn words_to_seed(words: &str) -> [u8; 64] { words_to_seed_with_passphrase(words, "") }
 
 /// Convert 24 BIP-39 words to a 64 bytes seed.
-/// As described in https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+/// As described in <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>.
 pub fn words_to_seed_with_passphrase(words: &str, passphrase: &str) -> [u8; 64] {
     let mut salt_string: String = "mnemonic".to_owned();
     salt_string.push_str(passphrase);

@@ -416,7 +416,7 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
 /// Convert given byte array to valid BIP39 sentence.
 /// Bytes must contain {16, 20, 24, 28, 32} bytes corresponding to
 /// {128, 160, 192, 224, 256} bits.
-/// This uses the method described at https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+/// This uses the method described at <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>.
 pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String>, String> {
     let ent_len = 8 * bytes.len(); // input is called entropy in BIP39
     match ent_len {
