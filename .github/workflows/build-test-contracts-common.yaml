@@ -5,14 +5,14 @@ on:
     branches:
       - main
     paths:
-      - "smart-contracts/contracts-common/**/*.rs"
-      - "smart-contracts/contracts-common/**/*.toml"
+      - 'smart-contracts/contracts-common/**/*.rs'
+      - 'smart-contracts/contracts-common/**/*.toml'
   pull_request:
     branches:
       - main
     paths:
-      - "smart-contracts/contracts-common/**/*.rs"
-      - "smart-contracts/contracts-common/**/*.toml"
+      - 'smart-contracts/contracts-common/**/*.rs'
+      - 'smart-contracts/contracts-common/**/*.toml'
 
 name: Clippy & fmt
 
