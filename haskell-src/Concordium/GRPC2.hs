@@ -2262,22 +2262,11 @@ instance ToProto DryRunError where
                         ProtoFields.requiredAmount .= toProto dreRequiredAmount
                         ProtoFields.availableAmount .= toProto dreAvailableAmount
                     )
-    toProto DryRunErrorSequenceNumberInvalid{..} =
-        Proto.make $
-            ProtoFields.sequenceNumberInvalid
-                .= Proto.make
-                    ( ProtoFields.nextSequenceNumber .= toProto dreNextSequenceNumber
-                    )
     toProto DryRunErrorEnergyInsufficient{..} =
         Proto.make $
             ProtoFields.energyInsufficient
                 .= Proto.make
                     (ProtoFields.energyRequired .= toProto dreEnergyRequired)
-    toProto DryRunErrorExpired{..} =
-        Proto.make $
-            ProtoFields.expired
-                .= Proto.make
-                    (ProtoFields.currentTimestamp .= toProto dreCurrentTimestamp)
 
 instance ToProto DryRunSuccess where
     type Output DryRunSuccess = Proto.DryRunSuccessResponse
@@ -2299,29 +2288,28 @@ instance ToProto DryRunSuccess where
     toProto DryRunSuccessMintedToAccount =
         Proto.make $ ProtoFields.mintedToAccount .= Proto.defMessage
 
-instance ToProto DryRunResult where
-    type Output DryRunResult = Proto.DryRunResponse
-    toProto (DryRunResultError e) = Proto.make $ ProtoFields.error .= toProto e
-    toProto (DryRunResultSuccess s) = Proto.make $ ProtoFields.success .= toProto s
+instance ToProto (DryRunResponse DryRunSuccess) where
+    type Output (DryRunResponse DryRunSuccess) = Proto.DryRunResponse
+    toProto (DryRunResponse{..}) = Proto.make $ do
+        ProtoFields.success .= toProto drrResponse
+        ProtoFields.quotaRemaining .= toProto drrQuotaRemaining
 
-instance ToProto (AsDryRunResponse DryRunSuccess) where
-    type Output (AsDryRunResponse DryRunSuccess) = Proto.DryRunResponse
-    toProto (DryRunResponse s) = Proto.make $ ProtoFields.success .= toProto s
+instance ToProto (DryRunResponse DryRunError) where
+    type Output (DryRunResponse DryRunError) = Proto.DryRunResponse
+    toProto (DryRunResponse{..}) = Proto.make $ do
+        ProtoFields.error .= toProto drrResponse
+        ProtoFields.quotaRemaining .= toProto drrQuotaRemaining
 
-instance ToProto (AsDryRunResponse DryRunError) where
-    type Output (AsDryRunResponse DryRunError) = Proto.DryRunResponse
-    toProto (DryRunResponse e) = Proto.make $ ProtoFields.error .= toProto e
-
-instance ToProto (AsDryRunResponse InvokeContract.InvokeContractResult) where
+instance ToProto (DryRunResponse InvokeContract.InvokeContractResult) where
     -- Since this is a conversion that may fail we use Either in the output type
     -- here so that we can forward errors, which is not in-line with other
     -- instances which are not fallible. The caller is meant to catch the error.
     type
-        Output (AsDryRunResponse InvokeContract.InvokeContractResult) =
+        Output (DryRunResponse InvokeContract.InvokeContractResult) =
             Either ConversionError Proto.DryRunResponse
-    toProto (DryRunResponse InvokeContract.Failure{..}) =
+    toProto (DryRunResponse InvokeContract.Failure{..} quotaRem) =
         return $
-            Proto.make $
+            Proto.make $ do
                 ProtoFields.error
                     .= Proto.make
                         ( ProtoFields.invokeFailed
@@ -2332,10 +2320,11 @@ instance ToProto (AsDryRunResponse InvokeContract.InvokeContractResult) where
                                     ProtoFields.reason .= toProto rcrReason
                                 )
                         )
-    toProto (DryRunResponse InvokeContract.Success{..}) = do
+                ProtoFields.quotaRemaining .= toProto quotaRem
+    toProto (DryRunResponse InvokeContract.Success{..} quotaRem) = do
         effects <- mapM convertContractRelatedEvents rcrEvents
         return $
-            Proto.make $
+            Proto.make $ do
                 ProtoFields.success
                     .= Proto.make
                         ( ProtoFields.invokeSucceeded
@@ -2346,18 +2335,19 @@ instance ToProto (AsDryRunResponse InvokeContract.InvokeContractResult) where
                                     ProtoFields.effects .= effects
                                 )
                         )
+                ProtoFields.quotaRemaining .= toProto quotaRem
 
-instance ToProto (AsDryRunResponse (TransactionSummary' ValidResultWithReturn)) where
+instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) where
     type
-        Output (AsDryRunResponse (TransactionSummary' ValidResultWithReturn)) =
+        Output (DryRunResponse (TransactionSummary' ValidResultWithReturn)) =
             Either ConversionError Proto.DryRunResponse
-    toProto (DryRunResponse TransactionSummary{..}) = case tsType of
+    toProto (DryRunResponse TransactionSummary{..} quotaRem) = case tsType of
         TSTAccountTransaction tty -> do
             sender <- case tsSender of
                 Nothing -> Left CEInvalidTransactionResult
                 Just acc -> Right acc
             details <- convertAccountTransaction tty tsCost sender (vrwrResult tsResult)
-            Right . Proto.make $
+            Right . Proto.make $ do
                 ProtoFields.success
                     .= Proto.make
                         ( ProtoFields.transactionExecuted
@@ -2368,6 +2358,7 @@ instance ToProto (AsDryRunResponse (TransactionSummary' ValidResultWithReturn)) 
                                     ProtoFields.details .= details
                                 )
                         )
+                ProtoFields.quotaRemaining .= toProto quotaRem
         _ -> do
             -- Since only account transactions can be executed in a dry run, we should not have
             -- other transaction summary types.

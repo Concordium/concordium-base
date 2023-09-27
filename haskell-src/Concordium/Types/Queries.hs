@@ -1066,15 +1066,21 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower}
 
 -- | A failing result of a dry run execution.
 data DryRunError
-    = DryRunErrorNoState
-    | DryRunErrorBlockNotFound
-    | DryRunErrorAccountNotFound
-    | DryRunErrorInstanceNotFound
-    | DryRunErrorAmountOverLimit {dreMaximumMintAmount :: !Amount}
-    | DryRunErrorBalanceInsufficient {dreRequiredAmount :: !Amount, dreAvailableAmount :: !Amount}
-    | DryRunErrorSequenceNumberInvalid {dreNextSequenceNumber :: !Nonce}
-    | DryRunErrorEnergyInsufficient {dreEnergyRequired :: !Energy}
-    | DryRunErrorExpired {dreCurrentTimestamp :: !Timestamp}
+    = -- | The current block state is undefined.
+      DryRunErrorNoState
+    | -- | The requested block was not found, so its state could not be loaded.
+      DryRunErrorBlockNotFound
+    | -- | The specified account was not found.
+      DryRunErrorAccountNotFound
+    | -- | The specified instance was not found.
+      DryRunErrorInstanceNotFound
+    | -- | The amount to mint would overflow the total CCD supply.
+      DryRunErrorAmountOverLimit {dreMaximumMintAmount :: !Amount}
+    | -- | The balance of the sender account is not sufficient to pay for the operation.
+      DryRunErrorBalanceInsufficient {dreRequiredAmount :: !Amount, dreAvailableAmount :: !Amount}
+    | -- | The energy supplied for the transaction is not sufficient to check the transaction
+      -- header.
+      DryRunErrorEnergyInsufficient {dreEnergyRequired :: !Energy}
 
 data DryRunSuccess
     = DryRunSuccessBlockStateLoaded
@@ -1087,10 +1093,9 @@ data DryRunSuccess
     | DryRunSuccessTimestampSet
     | DryRunSuccessMintedToAccount
 
-data DryRunResult
-    = DryRunResultError !DryRunError
-    | DryRunResultSuccess !DryRunSuccess
-
 -- | A wrapper type used to provide 'ToProto' instances that target DryRunResponse.
-newtype AsDryRunResponse a = DryRunResponse a
+data DryRunResponse a = DryRunResponse
+    { drrResponse :: !a,
+      drrQuotaRemaining :: !Energy
+    }
     deriving (Eq, Functor)
