@@ -3,10 +3,11 @@ use aes::{
     cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit},
     Aes256,
 };
+use base64::Engine;
 use hmac::Hmac;
 use rand::Rng;
 use serde::{Deserializer, Serializer};
-use std::{convert::TryInto, str::FromStr};
+use std::str::FromStr;
 use thiserror::Error;
 
 // Encryption
@@ -36,24 +37,16 @@ impl FromStr for Password {
 fn as_base64<A: AsRef<[u8]>, S>(key: &A, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer, {
-    serializer.serialize_str(&base64::encode(key.as_ref()))
+    serializer.serialize_str(&base64::engine::general_purpose::STANDARD.encode(key.as_ref()))
 }
 
-fn from_base64<'de, D: Deserializer<'de>, X: From<Vec<u8>>>(des: D) -> Result<X, D::Error> {
+fn from_base64<'de, D: Deserializer<'de>, X: TryFrom<Vec<u8>>>(des: D) -> Result<X, D::Error> {
     use serde::de::Error;
     let data = String::deserialize(des)?;
-    let decoded = base64::decode(data).map_err(|err| Error::custom(err.to_string()))?;
-    Ok(X::from(decoded))
-}
-
-/// This is needed before Rust 1.48 due to lacking TryFrom instances for Vec.
-fn from_base64_array<'de, D: Deserializer<'de>>(des: D) -> Result<[u8; AES_BLOCK_SIZE], D::Error> {
-    use serde::de::Error;
-    let data: Box<[u8]> = from_base64(des)?;
-    let arr: Box<[u8; AES_BLOCK_SIZE]> = data
-        .try_into()
-        .map_err(|_| Error::custom("Data of incorrect length."))?;
-    Ok(*arr)
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|err| Error::custom(err.to_string()))?;
+    X::try_from(decoded).map_err(|_| Error::custom("Data of incorrect length."))
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -95,7 +88,7 @@ pub struct EncryptionMetadata {
     #[serde(
         rename = "initializationVector",
         serialize_with = "as_base64",
-        deserialize_with = "from_base64_array"
+        deserialize_with = "from_base64"
     )]
     /// Initialization vector for AES CBC mode encryption.
     initialization_vector: [u8; AES_BLOCK_SIZE],

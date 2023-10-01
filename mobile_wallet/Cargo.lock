@@ -68,12 +68,6 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "base64"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
-
-[[package]]
-name = "base64"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
@@ -257,7 +251,7 @@ dependencies = [
 name = "concordium-contracts-common"
 version = "8.0.0"
 dependencies = [
- "base64 0.21.2",
+ "base64",
  "bs58",
  "chrono",
  "concordium-contracts-common-derive",
@@ -886,7 +880,7 @@ name = "mobile_wallet"
 version = "0.25.0"
 dependencies = [
  "anyhow",
- "base64 0.13.1",
+ "base64",
  "byteorder",
  "chrono",
  "concordium_base",
@@ -1369,7 +1363,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f02d8aa6e3c385bf084924f660ce2a3a6bd333ba55b35e8590b321f35d88513"
 dependencies = [
- "base64 0.21.2",
+ "base64",
  "chrono",
  "hex",
  "indexmap",

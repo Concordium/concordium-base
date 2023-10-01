@@ -47,7 +47,7 @@ subtle = "2.3"
 # Dependencies needed by the encryption feature.
 cbc = { version = "0.1.2", features = ["std"], optional = true }
 aes = { version = "0.8", optional = true }
-base64 = { version = "0.13", optional = true }
+base64 = { version = "0.21", optional = true }
 pbkdf2 = { version  = "0.11", optional = true }
 hmac = { version  = "0.12", optional = true }
 nom = "7.1.3"

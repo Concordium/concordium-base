@@ -96,12 +96,6 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "base64"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
-
-[[package]]
-name = "base64"
 version = "0.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ba43ea6f343b788c8764558649e08df62f86c6ef251fdaeb1ffd010a9ae50a2"
@@ -358,7 +352,7 @@ dependencies = [
 name = "concordium-contracts-common"
 version = "8.0.0"
 dependencies = [
- "base64 0.21.4",
+ "base64",
  "bs58",
  "chrono",
  "concordium-contracts-common-derive",
@@ -389,7 +383,7 @@ version = "3.0.1"
 dependencies = [
  "aes",
  "anyhow",
- "base64 0.13.1",
+ "base64",
  "bs58",
  "byteorder",
  "cbc",
@@ -1554,7 +1548,7 @@ version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ca3b16a3d82c4088f343b7480a93550b3eabe1a358569c2dfe38bbcead07237"
 dependencies = [
- "base64 0.21.4",
+ "base64",
  "chrono",
  "hex",
  "indexmap 1.9.3",
