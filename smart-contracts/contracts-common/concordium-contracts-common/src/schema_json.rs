@@ -1672,7 +1672,7 @@ Contract: MySecondContract
         \"<AccountAddress>\"
   Event:
     \"<AccountAddress>\"\n";
-              assert_eq!(display, format!("{}", schema));
+        assert_eq!(display, format!("{}", schema));
     }
 
     /// Tests schema template display of `VersionedModuleSchema::V3`
