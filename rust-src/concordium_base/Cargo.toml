@@ -27,6 +27,7 @@ byteorder = "1.3"
 hex = "0.4"
 itertools = "0.10"
 either = "1.6"
+merlin = { version = "2", default-features = false }
 pairing = "0.15"
 derive_more = "0.99"
 thiserror = "1.0"
@@ -34,6 +35,8 @@ rand = "0.7"
 num = "0.4"
 group = "0.2"
 curve25519-dalek = "3"
+curve25519-dalek-ng = "3"
+
 zeroize = "1.1"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
@@ -43,6 +46,7 @@ bs58 = { version = "0.4", features = ["check"] }
 leb128 = "0.2"
 rayon = "1.7"
 subtle = "2.3"
+bulletproofs = "3.0.0"
 
 # Dependencies needed by the encryption feature.
 cbc = { version = "0.1.2", features = ["std"], optional = true }
@@ -103,6 +107,14 @@ harness = false
 
 [[bench]]
 name = "set_proof_bench"
+harness = false
+
+[[bench]]
+name = "range_proof_bench"
+harness = false
+
+[[bench]]
+name = "range_proof_dalek_bench"
 harness = false
 
 [[bench]]
