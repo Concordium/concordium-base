@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- |This module defines the genesis data format for the 'P1' protocol version.
+-- | This module defines the genesis data format for the 'P1' protocol version.
 module Concordium.Genesis.Data.P1 where
 
 import Data.Serialize
@@ -12,28 +12,28 @@ import qualified Concordium.Genesis.Data.Base as Base
 import Concordium.Genesis.Parameters
 import Concordium.Types
 
--- |The initial genesis data for the P1 protocol version.
---  It specifies how the initial state should be configured.
+-- | The initial genesis data for the P1 protocol version.
+--   It specifies how the initial state should be configured.
 --
--- To the extent that the 'CoreGenesisParameters' are represented
--- in the block state, they should agree. (This is probably only
--- the epoch length.)
+--  To the extent that the 'CoreGenesisParameters' are represented
+--  in the block state, they should agree. (This is probably only
+--  the epoch length.)
 data GenesisDataP1
-    = -- |An initial genesis block.
+    = -- | An initial genesis block.
       GDP1Initial
-      { -- |The immutable genesis parameters.
+      { -- | The immutable genesis parameters.
         genesisCore :: !Base.CoreGenesisParameters,
-        -- |The blueprint for the initial state at genesis.
+        -- | The blueprint for the initial state at genesis.
         genesisInitialState :: !(Base.GenesisState 'P1)
       }
     deriving (Eq, Show)
 
--- |The regenesis represents a reset of the protocol with a new genesis block.
---  This does not include the full new state, but only its hash.
+-- | The regenesis represents a reset of the protocol with a new genesis block.
+--   This does not include the full new state, but only its hash.
 --
--- The relationship between the new state and the state of the
--- terminal block of the old chain should be defined by the
--- chain update mechanism used.
+--  The relationship between the new state and the state of the
+--  terminal block of the old chain should be defined by the
+--  chain update mechanism used.
 newtype RegenesisP1 = GDP1Regenesis {genesisRegenesis :: Base.RegenesisData}
 
 instance Base.BasicGenesisData GenesisDataP1 where
@@ -60,7 +60,7 @@ instance Base.BasicGenesisData RegenesisP1 where
     gdEpochLength = Base.genesisEpochLength . Base.genesisCore . genesisRegenesis
     {-# INLINE gdEpochLength #-}
 
--- |Deserialize genesis data in the V3 format.
+-- | Deserialize genesis data in the V3 format.
 getGenesisDataV3 :: Get GenesisDataP1
 getGenesisDataV3 =
     getWord8 >>= \case
@@ -76,14 +76,14 @@ getRegenesisDataV3 =
         1 -> GDP1Regenesis <$> Base.getRegenesisData
         _ -> fail "Unrecognised regenesis data type"
 
--- |Deserialize genesis configuration from the serialized genesis or regenesis data.
+-- | Deserialize genesis configuration from the serialized genesis or regenesis data.
 --
--- Note that this will not consume the entire genesis data, only the initial
--- prefix. In particular, in case of initial genesis data it will not read the
--- genesis state.
+--  Note that this will not consume the entire genesis data, only the initial
+--  prefix. In particular, in case of initial genesis data it will not read the
+--  genesis state.
 --
--- The argument is the hash of the genesis data from which the configuration is
--- to be read.
+--  The argument is the hash of the genesis data from which the configuration is
+--  to be read.
 getGenesisConfigurationV3 :: BlockHash -> Get Base.GenesisConfiguration
 getGenesisConfigurationV3 genHash = do
     getWord8 >>= \case
@@ -107,22 +107,22 @@ getGenesisConfigurationV3 genHash = do
                     }
         _ -> fail "Unrecognised genesis data type"
 
--- |Serialize genesis data in the V3 format.
+-- | Serialize genesis data in the V3 format.
 putGenesisDataV3 :: Putter GenesisDataP1
 putGenesisDataV3 GDP1Initial{..} = do
     putWord8 0
     put genesisCore
     put genesisInitialState
 
--- |Deserialize genesis data with a version tag.
+-- | Deserialize genesis data with a version tag.
 getVersionedGenesisData :: Get GenesisDataP1
 getVersionedGenesisData =
     getVersion >>= \case
         3 -> getGenesisDataV3
         n -> fail $ "Unsupported genesis data version: " ++ show n
 
--- |Serialize genesis data with a version tag.
--- This will use the V3 format.
+-- | Serialize genesis data with a version tag.
+--  This will use the V3 format.
 putVersionedGenesisData :: Putter GenesisDataP1
 putVersionedGenesisData gd = do
     putVersion 3
@@ -131,12 +131,12 @@ putVersionedGenesisData gd = do
 parametersToGenesisData :: GenesisParametersV2 'P1 -> GenesisDataP1
 parametersToGenesisData = uncurry GDP1Initial . Base.parametersToState
 
--- |Compute the block hash of the genesis block with the given genesis data.
--- Every block hash is derived from a message that begins with the block slot,
--- which is 0 for genesis blocks.  For the genesis block, as of 'P1', we include
--- a signifier of the protocol version next.
+-- | Compute the block hash of the genesis block with the given genesis data.
+--  Every block hash is derived from a message that begins with the block slot,
+--  which is 0 for genesis blocks.  For the genesis block, as of 'P1', we include
+--  a signifier of the protocol version next.
 --
--- Note, for regenesis blocks, the state is only represented by its hash.
+--  Note, for regenesis blocks, the state is only represented by its hash.
 genesisBlockHash :: GenesisDataP1 -> BlockHash
 genesisBlockHash GDP1Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
@@ -145,9 +145,9 @@ genesisBlockHash GDP1Initial{..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisCore
     put genesisInitialState
 
--- |Compute the block hash of the regenesis data as defined by the specified
--- protocol. This becomes the block hash of the genesis block of the new chain
--- after the protocol update.
+-- | Compute the block hash of the regenesis data as defined by the specified
+--  protocol. This becomes the block hash of the genesis block of the new chain
+--  after the protocol update.
 regenesisBlockHash :: RegenesisP1 -> BlockHash
 regenesisBlockHash GDP1Regenesis{genesisRegenesis = Base.RegenesisData{..}} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
@@ -159,17 +159,17 @@ regenesisBlockHash GDP1Regenesis{genesisRegenesis = Base.RegenesisData{..}} = Bl
     put genesisTerminalBlock
     put genesisStateHash
 
--- |The hash of the first genesis block in the chain.
+-- | The hash of the first genesis block in the chain.
 firstGenesisBlockHash :: RegenesisP1 -> BlockHash
 firstGenesisBlockHash GDP1Regenesis{genesisRegenesis = Base.RegenesisData{..}} = genesisFirstGenesis
 
--- |Tag of the genesis data used for serialization.
+-- | Tag of the genesis data used for serialization.
 genesisVariantTag :: GenesisDataP1 -> Word8
 genesisVariantTag GDP1Initial{} = 0
 
--- |Tag of the regenesis variant used for serialization. This tag determines
--- whether the genesis data is, e.g., initial genesis, or regenesis and allows
--- us to deserialize one or the other from the data without knowing apriori what
--- the data is.
+-- | Tag of the regenesis variant used for serialization. This tag determines
+--  whether the genesis data is, e.g., initial genesis, or regenesis and allows
+--  us to deserialize one or the other from the data without knowing apriori what
+--  the data is.
 regenesisVariantTag :: RegenesisP1 -> Word8
 regenesisVariantTag GDP1Regenesis{} = 1

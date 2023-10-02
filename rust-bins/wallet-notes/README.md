@@ -672,6 +672,29 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [get_account_keys_and_randomness-input.json](files/get_account_keys_and_randomness-input.json).
 An example output to this request is in the file [get_account_keys_and_randomness-output.json](files/get_account_keys_and_randomness-output.json).
 
+## get_verifiable_credential_keys
+Semantics: Deterministically derives signing key, verification key and an encryption key for a verifiable credential.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"seed"` ... the seed used to derive keys from, as a hex string.
+
+- `"net"` ... determines whether to derive keys for Mainnet or a Testnet. Has to be "Mainnet" or "Testnet", all other values will fail. Note that the value is case sensitive.
+
+- `"verifiableCredentialIndex"` ... the index of the verifiable credential to derive keys for, a u32 value
+
+The returned value is a JSON object with the following fields:
+
+- `"signKey"` ... the verifiable credential signing key as a hex encoded string, used to sign the encrypted verifiable credential.
+
+- `"verifyKey"` ... the verifiable credential verification key as a hex encoded string, used to identify the verifiable credential.
+
+- `"encryptionKey"` ... the verifiable credential encryption key as a hex encoded string, used to encrypt the verifiable credential.
+
+An example input to this request is in the file [get_verifiable_credential_keys-input.json](files/get_verifiable_credential_keys-input.json).
+An example output to this request is in the file [get_verifiable_credential_keys-output.json](files/get_verifiable_credential_keys-output.json).
+
 ## sign_message
 Semantics: Signs a message with the provided account keys.
 
@@ -697,13 +720,18 @@ must be a valid JSON object with fields
 
 - `"receiveName"` ... the name of the receive function that the parameter is for.
 
-- `"schema"` ... base64 encoded schema for the corresponding smart contract.
+- `"schema"` ... a JSON object with a type field and a value field. 
+  - if the type field is `"module"`, then the value field is a base64 encoded schema for the corresponding smart contract.
+  - if the type field is `"parameter"`, then the value field is a base64 encoded schema for the parameter itself.
+  - The function also supports a legacy format, where the `"schema"` field is a base64 encoded schema for the corresponding smart contract, directly.
 
 - `"schemaVersion"` ... optional, required for contracts without an embedded version to declare the version of the provided schema. The value is ignored if the version is embedded in the schema. Note that all schemas created by cargo-concordium version 2.0.0 and up have the version embedded, so this field exists only to support legacy contracts.
 
 The returned value is a JSON representation of the parameter.
 
-An example input to this request is in the file [parameter_to_json-input.json](files/parameter_to_json-input.json).
+An example input to this request, with schema type `"module"`, is in the file [parameter_to_json-module-input.json](files/parameter_to_json-module-input.json).
+An example input to this request, with schema type `"parameter"`, is in the file [parameter_to_json-parameter-input.json](files/parameter_to_json-parameter-input.json).
+An example input to this request, with the legacy format, is in the file [parameter_to_json-legacy-input.json](files/parameter_to_json-legacy-input.json).
 An example output to this request is in the file [parameter_to_json-output.json](files/parameter_to_json-output.json).
 
 ## create_account_transaction

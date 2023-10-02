@@ -19,7 +19,8 @@ use concordium_wasm::{
     artifact::{Artifact, CompiledFunctionBytes},
     machine,
     output::Output,
-    parse, utils, validate,
+    parse, utils,
+    validate::{self, ValidationConfig},
 };
 use sha2::Digest;
 
@@ -56,6 +57,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
     let skeleton = parse::parse_skeleton(CONTRACT_BYTES).unwrap();
     let module = {
         let mut module = validate::validate_module(
+            ValidationConfig::V1,
             &ConcordiumAllowedImports {
                 support_upgrade: true,
             },
@@ -215,7 +217,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
                 0x95, 0xd2, 0xd6, 0xba,
             ])
             .expect("Key generated with openssl, so should be valid.");
-            let message = secp256k1::Message::from_slice(&sha2::Sha256::digest(&[])[..])
+            let message = secp256k1::Message::from_slice(&sha2::Sha256::digest([])[..])
                 .expect("Hashes are valid messages.");
             let sig = signer.sign_ecdsa(&message, &sk);
             let pk = secp256k1::PublicKey::from_slice(&[
@@ -252,7 +254,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
                 0x95, 0xd2, 0xd6, 0xba,
             ])
             .expect("Key generated with openssl, so should be valid.");
-            let message = secp256k1::Message::from_slice(&sha2::Sha256::digest(&[])[..])
+            let message = secp256k1::Message::from_slice(&sha2::Sha256::digest([])[..])
                 .expect("Hashes are valid messages.");
             let sig = signer.sign_ecdsa(&message, &sk);
             let pk = secp256k1::PublicKey::from_slice(&[
@@ -269,7 +271,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
             let mut params = Vec::with_capacity(100);
             params.extend_from_slice(&pk.serialize());
             params.extend_from_slice(&sig.serialize_compact());
-            let incorrect_message = secp256k1::Message::from_slice(&sha2::Sha256::digest(&[0])[..])
+            let incorrect_message = secp256k1::Message::from_slice(&sha2::Sha256::digest([0])[..])
                 .expect("Hashes are valid messages.");
             params.extend_from_slice(incorrect_message.as_ref());
             params
@@ -291,7 +293,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
                 0x95, 0xd2, 0xd6, 0xba,
             ])
             .expect("Key generated with openssl, so should be valid.");
-            let message = secp256k1::Message::from_slice(&sha2::Sha256::digest(&[])[..])
+            let message = secp256k1::Message::from_slice(&sha2::Sha256::digest([])[..])
                 .expect("Hashes are valid messages.");
             let sig = signer.sign_ecdsa(&message, &sk);
             let pk = secp256k1::PublicKey::from_slice(&[

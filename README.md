@@ -84,14 +84,12 @@ See documentation for
   providers and anonymity revokers
 - [keygen genesis](./rust-bins/docs/keygen-genesis.md) (this uses a different
   key generation procedure that allows key recovery from a seed phrase)
-- [genesis tool](./rust-bins/docs/genesis-tool.md) tool to generate data for
-  test genesis blocks, allows creation of accounts and bakers
 
 # Build requirements.
 
 In order to build the components in this repository you need
 - The [cargo](https://doc.rust-lang.org/cargo/) tool for building the Rust
-components. The currently supported version is 1.62. Others may work, but we
+components. The currently supported version is 1.68. Others may work, but we
 do not regularly test with them. The easiest way to install it is via the
 [rustup](https://rustup.rs/) tool.
 - The [Haskell Stack](https://docs.haskellstack.org/en/stable/README/) tool for
@@ -114,7 +112,7 @@ dependencies must be pre-build, which is done automatically by the cabal setup
 script.
 
 Code should be formatted using [`fourmolu`](https://github.com/fourmolu/fourmolu)
-version `0.9.0.0` and using the config `fourmolu.yaml` found in the project root.
+version `0.13.1.0` and using the config `fourmolu.yaml` found in the project root.
 The CI is setup to ensure the code follows this style.
 
 To check the formatting locally run the following commnad from the project root:
@@ -142,7 +140,7 @@ issues.
 
 ## Rust workflow
 
-We use **stable version** of rust, 1.62, to compile the code. This is the
+We use **stable version** of rust, 1.68, to compile the code. This is the
 minimal supported version.
 
 The CI is configured to check two things

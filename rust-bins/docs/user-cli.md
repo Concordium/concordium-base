@@ -3,9 +3,9 @@ This page describes how to use the `user_cli` tool to request an identity object
 # Prerequisites
 
 - The `user_cli` tool.
-- A file with cryptographic parameters for the chain. We'll refer to this file as `cryptographic-parameters.json` below.
-- A file with the list of anonymity revokers supported by the identity provider. We refer to this file as `ars.json` below.
-- A file with identity provider public keys. We refer to this file as `ip-info.json` below.
+- A file with cryptographic parameters for the chain. We'll refer to this file as `cryptographic-parameters.json` below. You can get it with the concordium client using the `raw GetCryptographicParameters` subcommand.
+- A file with the list of anonymity revokers supported by the identity provider. We refer to this file as `ars.json` below. If you have access to the genesis data, you can get it from there.
+- A file with identity provider public keys. We refer to this file as `ip-info.json` below. If you have access to the genesis data, you can get it from there.
 - For creating accounts from the identity the `concordium-client` tool and access to an up-to-date node.
 
 There are two flows for creating identity requests and credentials from identity objects, the version 0 flow and the version 1 flow.

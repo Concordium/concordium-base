@@ -31,36 +31,21 @@ ff = "0.5"
 hex = "0.4"
 serde = "1.0"
 serde_json = "1.0"
-chrono = "0.4"
+chrono = "0.4.24" # the patch version is necessary since chrono adds new functionality in patch versions
 ed25519-dalek = "1.0.1"
 byteorder = "1.3"
-
-[dependencies.ffi_helpers]
-path= "../rust-src/ffi_helpers"
-version = "0"
 
 [dependencies.nodejs-sys]
 version = "0.12.0"
 features = ["napi_v6"]
 optional = true
 
-[dependencies.crypto_common]
-path = "../rust-src/crypto_common"
-version = "0"
-
-[dependencies.curve_arithmetic]
-path = "../rust-src/curve_arithmetic"
-version = "0"
-
-[dependencies.id]
-path = "../rust-src/id"
-version = "0"
+[dependencies.concordium_base]
+path = "../rust-src/concordium_base"
+version = "3"
 
 [build-dependencies]
 napi-build = "*"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rand = "=0.7"
 
 [lib]
 name = "idiss"

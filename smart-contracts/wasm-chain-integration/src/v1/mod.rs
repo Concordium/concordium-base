@@ -45,6 +45,7 @@ use concordium_wasm::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, RunnableCode},
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
+    validate::ValidationConfig,
 };
 use machine::Value;
 use sha3::Digest;
@@ -83,6 +84,15 @@ pub enum Interrupt {
     },
     /// Query the CCD/EUR and EUR/NRG exchange rates.
     QueryExchangeRates,
+    /// Check signatures on the provided data.
+    CheckAccountSignature {
+        address: AccountAddress,
+        payload: Vec<u8>,
+    },
+    /// Query account keys.
+    QueryAccountKeys {
+        address: AccountAddress,
+    },
 }
 
 impl Interrupt {
@@ -113,6 +123,12 @@ impl Interrupt {
                 ..
             } => false,
             Interrupt::QueryExchangeRates => false,
+            Interrupt::CheckAccountSignature {
+                ..
+            } => false,
+            Interrupt::QueryAccountKeys {
+                ..
+            } => false,
         }
     }
 }
@@ -150,7 +166,7 @@ impl Interrupt {
                 module_ref,
             } => {
                 out.push(2u8);
-                out.write_all(module_ref.as_ref().as_slice())?;
+                out.write_all(module_ref.as_ref())?;
                 Ok(())
             }
             Interrupt::QueryAccountBalance {
@@ -170,6 +186,23 @@ impl Interrupt {
             }
             Interrupt::QueryExchangeRates => {
                 out.push(5u8);
+                Ok(())
+            }
+            Interrupt::CheckAccountSignature {
+                address,
+                payload,
+            } => {
+                out.push(6u8);
+                out.write_all(address.as_ref())?;
+                out.write_all(&(payload.len() as u64).to_be_bytes())?;
+                out.write_all(payload)?;
+                Ok(())
+            }
+            Interrupt::QueryAccountKeys {
+                address,
+            } => {
+                out.push(7u8);
+                out.write_all(address.as_ref())?;
                 Ok(())
             }
         }
@@ -302,6 +335,8 @@ mod host {
     const QUERY_ACCOUNT_BALANCE_TAG: u32 = 2;
     const QUERY_CONTRACT_BALANCE_TAG: u32 = 3;
     const QUERY_EXCHANGE_RATE_TAG: u32 = 4;
+    const CHECK_ACCOUNT_SIGNATURE_TAG: u32 = 5;
+    const QUERY_ACCOUNT_KEYS_TAG: u32 = 6;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -396,13 +431,15 @@ mod host {
     /// Handle the `invoke` host function.
     pub(crate) fn invoke(
         support_queries: bool,
+        support_account_signature_checks: bool,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         max_parameter_size: usize,
     ) -> machine::RunResult<Option<Interrupt>> {
         energy.tick_energy(constants::INVOKE_BASE_COST)?;
-        let length = unsafe { stack.pop_u32() } as usize; // length of the instruction payload in memory
+        let length_u32 = unsafe { stack.pop_u32() }; // length of the instruction payload in memory
+        let length = length_u32 as usize;
         let start = unsafe { stack.pop_u32() } as usize; // start of the instruction payload in memory
         let tag = unsafe { stack.pop_u32() }; // tag of the instruction
         match tag {
@@ -485,6 +522,44 @@ mod host {
                 );
                 Ok(Interrupt::QueryExchangeRates.into())
             }
+            CHECK_ACCOUNT_SIGNATURE_TAG if support_account_signature_checks => {
+                ensure!(
+                    length >= ACCOUNT_ADDRESS_SIZE,
+                    "Account signature check queries must have at least the 32 bytes for an \
+                     account address, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                if energy.tick_energy(constants::copy_to_host_cost(length_u32)).is_err() {
+                    bail!(OutOfEnergy);
+                }
+                let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+                addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
+                let address = AccountAddress(addr_bytes);
+                let payload = memory[start + ACCOUNT_ADDRESS_SIZE..start + length].to_vec();
+                Ok(Interrupt::CheckAccountSignature {
+                    address,
+                    payload,
+                }
+                .into())
+            }
+            QUERY_ACCOUNT_KEYS_TAG if support_account_signature_checks => {
+                ensure!(
+                    length == ACCOUNT_ADDRESS_SIZE,
+                    "Account keys queries must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+                addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
+                let address = AccountAddress(addr_bytes);
+                Ok(Interrupt::QueryAccountKeys {
+                    address,
+                }
+                .into())
+            }
             c => bail!("Illegal instruction code {}.", c),
         }
     }
@@ -499,7 +574,7 @@ mod host {
         // the cost of this function is adequately reflected by the base cost of a
         // function call so we do not charge extra.
         let param_num = unsafe { stack.pop_u32() } as usize;
-        if let Some(param) = parameters.get(param_num as usize) {
+        if let Some(param) = parameters.get(param_num) {
             stack.push_value(param.as_ref().len() as u32);
         } else {
             stack.push_value(-1i32);
@@ -522,7 +597,7 @@ mod host {
         let param_num = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
         energy.tick_energy(constants::copy_parameter_cost(length))?;
-        if let Some(param) = parameters.get(param_num as usize) {
+        if let Some(param) = parameters.get(param_num) {
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
             let end = std::cmp::min(offset + length as usize, param.as_ref().len());
@@ -1220,6 +1295,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                 ReceiveOnlyFunc::Invoke => {
                     return host::invoke(
                         self.stateless.params.support_queries,
+                        self.stateless.params.support_account_signature_checks,
                         memory,
                         stack,
                         &mut self.energy,
@@ -1273,7 +1349,7 @@ pub type ParameterRef<'a> = &'a [u8];
 /// This is needed, for example, when execution passes through Haskell and Rust.
 /// Ideally this would be Arc<[u8]> but then this cannot be passed via the FFI
 /// boundary directly since [u8] is not Sized. To avoid a third type we settle
-/// on Vec<u8>.
+/// on [`Vec<u8>`](Vec).
 pub type ParameterVec = Vec<u8>;
 
 /// Collection of information relevant to invoke a init-function.
@@ -1363,7 +1439,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// The kind of errors that may occur during handling of contract `invoke` or
 /// `upgrade`.
 pub enum InvokeFailure {
@@ -1393,6 +1469,10 @@ pub enum InvokeFailure {
     UpgradeInvalidContractName,
     /// Attempt to upgrade a V1 contract to a V0 contract.
     UpgradeInvalidVersion,
+    /// Could not parse the signature and message.
+    SignatureDataMalformed,
+    /// Invalid signature on the provided message.
+    SignatureCheckFailed,
 }
 
 impl InvokeFailure {
@@ -1421,11 +1501,14 @@ impl InvokeFailure {
             InvokeFailure::UpgradeInvalidModuleRef => 0x07_0000_0000,
             InvokeFailure::UpgradeInvalidContractName => 0x08_0000_0000,
             InvokeFailure::UpgradeInvalidVersion => 0x09_0000_0000,
+            InvokeFailure::SignatureDataMalformed => 0x0a_0000_0000,
+            InvokeFailure::SignatureCheckFailed => 0x0b_0000_0000,
         })
     }
 }
 
 /// Response from an invoke call.
+#[derive(Debug)]
 pub enum InvokeResponse {
     /// Execution was successful, and the state potentially changed.
     Success {
@@ -1477,6 +1560,8 @@ impl InvokeResponse {
                 0x0000_0007_0000_0000 => InvokeFailure::UpgradeInvalidModuleRef,
                 0x0000_0008_0000_0000 => InvokeFailure::UpgradeInvalidContractName,
                 0x0000_0009_0000_0000 => InvokeFailure::UpgradeInvalidVersion,
+                0x0000_000a_0000_0000 => InvokeFailure::SignatureDataMalformed,
+                0x0000_000b_0000_0000 => InvokeFailure::SignatureCheckFailed,
                 x => bail!("Unrecognized error code: {}", x),
             };
             InvokeResponse::Failure {
@@ -1555,14 +1640,17 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
+    validation_config: ValidationConfig,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_init(
         artifact,
         init_ctx,
@@ -1585,14 +1673,17 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
+    validation_config: ValidationConfig,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_init(
         artifact,
         init_ctx,
@@ -1700,31 +1791,46 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct ReceiveParams {
     /// Maximum size of a parameter that an `invoke` operation can have.
-    pub max_parameter_size:           usize,
+    pub max_parameter_size:               usize,
     /// Whether the amount of logs a contract may produce, and the size of the
     /// logs, is limited.
-    pub limit_logs_and_return_values: bool,
+    pub limit_logs_and_return_values:     bool,
     /// Whether queries should be supported or not. Queries were introduced in
     /// protocol 5.
-    pub support_queries:              bool,
+    pub support_queries:                  bool,
+    /// Whether querying account public keys and checking account signatures is
+    /// supported.
+    pub support_account_signature_checks: bool,
 }
 
 impl ReceiveParams {
     /// Parameters that are in effect in protocol version 4.
     pub fn new_p4() -> Self {
         Self {
-            max_parameter_size:           1024,
-            limit_logs_and_return_values: true,
-            support_queries:              false,
+            max_parameter_size:               1024,
+            limit_logs_and_return_values:     true,
+            support_queries:                  false,
+            support_account_signature_checks: false,
         }
     }
 
     /// Parameters that are in effect in protocol version 5 and up.
     pub fn new_p5() -> Self {
         Self {
-            max_parameter_size:           u16::MAX.into(),
-            limit_logs_and_return_values: false,
-            support_queries:              true,
+            max_parameter_size:               u16::MAX.into(),
+            limit_logs_and_return_values:     false,
+            support_queries:                  true,
+            support_account_signature_checks: false,
+        }
+    }
+
+    /// Parameters that are in effect in protocol version 6 and up.
+    pub fn new_p6() -> Self {
+        Self {
+            max_parameter_size:               u16::MAX.into(),
+            limit_logs_and_return_values:     false,
+            support_queries:                  true,
+            support_account_signature_checks: true,
         }
     }
 }
@@ -1904,6 +2010,7 @@ pub fn invoke_receive_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
+    validation_config: ValidationConfig,
     ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
@@ -1911,11 +2018,13 @@ pub fn invoke_receive_from_source<
     params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_receive(
         Arc::new(artifact),
         receive_ctx,
@@ -1938,6 +2047,7 @@ pub fn invoke_receive_with_metering_from_source<
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
 >(
+    validation_config: ValidationConfig,
     ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
@@ -1945,11 +2055,13 @@ pub fn invoke_receive_with_metering_from_source<
     params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
+        validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
         },
         ctx.source,
-    )?;
+    )?
+    .artifact;
     invoke_receive(
         Arc::new(artifact),
         receive_ctx,

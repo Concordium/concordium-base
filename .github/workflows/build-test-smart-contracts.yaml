@@ -13,12 +13,22 @@ on:
   workflow_dispatch: # allows manual trigger
 
 env:
-  # from concordium/rustfmt:0.17
-  RUST_FMT: nightly-2022-06-09-x86_64-unknown-linux-gnu
-  RUST_CLIPPY: 1.62
-  TARGET: wasm32-unknown-unknown
+  RUST_FMT: nightly-2023-04-01-x86_64-unknown-linux-gnu
+  RUST_CLIPPY: 1.68
 
 jobs:
+
+  "wat-wasm-consistency":
+    name: Ensure consistency between wat and wasm files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install WABT
+        run: sudo apt-get update && sudo apt-get -y install wabt
+      - name: Check consistency
+        run: ./.diff-wat-wasm.sh
+
   "lint_fmt":
     name: smart-contracts/${{ matrix.build-dir }} lint:fmt
     # Don't run on draft pull requests
@@ -44,6 +54,33 @@ jobs:
         run: |
           cargo fmt -- --color=always --check
 
+  "lint_doc":
+    name: smart-contracts/${{ matrix.build-dir }} lint:fmt
+    # Don't run on draft pull requests
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-dir:
+          - 'wasm-transform'
+          - 'wasm-chain-integration'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_CLIPPY }}
+          override: true
+          components: clippy
+      - name: Format
+        working-directory: smart-contracts/${{ matrix.build-dir }}
+        run: |
+          RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+
   "lint_fmt_example_contracts":
     name: ${{ matrix.example-contract }} lint:fmt
     # Don't run on draft pull requests
@@ -68,7 +105,7 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_FMT }}
           override: true
-          target: ${{ env.TARGET }}
+          target: wasm32-unknown-unknown
           components: rustfmt
       - name: Format
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
@@ -95,7 +132,6 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
-          target: ${{ env.TARGET }}
           components: clippy
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
@@ -127,13 +163,12 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
-          target: ${{ env.TARGET }}
           components: clippy
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          cargo clippy --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
+          cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_example_contracts":
     name: smart-contracts/${{ matrix.example-contract }} lint:clippy
@@ -159,13 +194,13 @@ jobs:
           profile: minimal
           toolchain: ${{ env.RUST_CLIPPY }}
           override: true
-          target: ${{ env.TARGET }}
+          target: wasm32-unknown-unknown
           components: clippy
       - name: Clippy
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          cargo clippy --color=always --tests -- -Dclippy::all
+          cargo clippy --locked --color=always --tests -- -Dclippy::all
 
   "cargo_test":
     name: ${{ matrix.build-dir }} cargo:test

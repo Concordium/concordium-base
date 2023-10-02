@@ -1,23 +1,28 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{
-    types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
-    *,
+use concordium_base::{
+    common::{
+        types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    dodis_yampolskiy_prf as prf,
+    elgamal::{self, PublicKey, SecretKey},
+    id::{
+        self,
+        account_holder::*,
+        constants::{ArCurve, IpPairing},
+        curve_arithmetic::*,
+        identity_provider::*,
+        secret_sharing::*,
+        types::*,
+    },
+    pedersen_commitment::Value as PedersenValue,
+    ps_sig,
 };
 use dialoguer::{Input, MultiSelect, Select};
-use dodis_yampolskiy_prf as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use elgamal::{PublicKey, SecretKey};
-use id::{
-    account_holder::*,
-    constants::{ArCurve, IpPairing},
-    curve_arithmetic::*,
-    identity_provider::*,
-    secret_sharing::*,
-    types::*,
-};
-use key_derivation::{words_to_seed, ConcordiumHdWallet, Net};
+use key_derivation::{words_to_seed, ConcordiumHdWallet, CredentialContext, Net};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use serde_json::{json, to_value};
@@ -30,8 +35,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use structopt::StructOpt;
-
-use pedersen_scheme::Value as PedersenValue;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
@@ -1050,12 +1053,12 @@ fn handle_create_credential(cc: CreateCredential) {
     // finally we also need the credential holder information with secret keys
     // which we need to generate CDI.
     let (id_use_data, acc_data, maybe_context): (
-        IdObjectUseData<Bls12, ExampleCurve>,
+        IdObjectUseData<Bls12, ArCurve>,
         CredentialData,
         Option<CredentialContext>,
     ) = match cc.private {
         Some(path) => {
-            let id_use_data = match read_id_use_data(&path) {
+            let id_use_data = match read_id_use_data(path) {
                 Ok(v) => v,
                 Err(x) => {
                     eprintln!("Could not read ID use data object because: {}", x);
@@ -1071,13 +1074,13 @@ fn handle_create_credential(cc: CreateCredential) {
 
                 CredentialData {
                     keys,
-                    threshold: SignatureThreshold(2),
+                    threshold: SignatureThreshold::TWO,
                 }
             };
             (id_use_data, acc_data, None)
         }
         None => {
-            let wallet: ConcordiumHdWallet = match read_json_from_file(&cc.hd_wallet.unwrap()) {
+            let wallet: ConcordiumHdWallet = match read_json_from_file(cc.hd_wallet.unwrap()) {
                 Ok(w) => w,
                 Err(e) => {
                     eprintln!("Could not read file because {}", e);
@@ -1146,14 +1149,14 @@ fn handle_create_credential(cc: CreateCredential) {
 
                 CredentialData {
                     keys,
-                    threshold: SignatureThreshold(1),
+                    threshold: SignatureThreshold::ONE,
                 }
             };
             let context = CredentialContext {
                 wallet,
-                identity_provider_index,
+                identity_provider_index: identity_provider_index.into(),
                 identity_index,
-                credential_index: u32::from(acc_num),
+                credential_index: acc_num,
             };
             (id_use_data, cred_data, Some(context))
         }
@@ -1295,12 +1298,12 @@ fn handle_create_credential(cc: CreateCredential) {
         // if it is an existing account then just write the credential.
         // otherwise write the credential message that can be sent to the chain.
         let cdi_json_value = match new_or_existing {
-            Left(tt) => to_value(&Versioned::new(VERSION_0, AccountCredentialMessage {
+            Left(tt) => to_value(Versioned::new(VERSION_0, AccountCredentialMessage {
                 message_expiry: tt,
                 credential:     cdi,
             }))
             .expect("Cannot fail."),
-            Right(_) => to_value(&Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
+            Right(_) => to_value(Versioned::new(VERSION_0, cdi)).expect("Cannot fail"),
         };
         match write_json_to_file(json_file, &cdi_json_value) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
@@ -1357,7 +1360,7 @@ fn handle_create_chi(cc: CreateChi) {
     let ah_info = if let (Some(path), Some(identity_provider_index), Some(identity_index)) =
         (cc.hd_wallet, cc.identity_provider_index, cc.identity_index)
     {
-        let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
+        let wallet: ConcordiumHdWallet = match read_json_from_file(path) {
             Ok(w) => w,
             Err(e) => {
                 eprintln!("Could not read file because {}", e);
@@ -1375,9 +1378,9 @@ fn handle_create_chi(cc: CreateChi) {
 
         let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(id_cred_sec_scalar);
         let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
-        CredentialHolderInfo::<ExampleCurve> { id_cred }
+        CredentialHolderInfo::<ArCurve> { id_cred }
     } else {
-        CredentialHolderInfo::<ExampleCurve> {
+        CredentialHolderInfo::<ArCurve> {
             id_cred: IdCredentials::generate(&mut csprng),
         }
     };
@@ -1403,7 +1406,7 @@ fn handle_create_id_use_data(iud: CreateIdUseData) {
             iud.identity_provider_index,
             iud.identity_index,
         ) {
-            let wallet: ConcordiumHdWallet = match read_json_from_file(&path) {
+            let wallet: ConcordiumHdWallet = match read_json_from_file(path) {
                 Ok(w) => w,
                 Err(e) => {
                     eprintln!("Could not read file because {}", e);
@@ -1448,7 +1451,7 @@ fn handle_create_id_use_data(iud: CreateIdUseData) {
             IdObjectUseData { aci, randomness }
         } else {
             let mut csprng = thread_rng();
-            let cred_holder_info = CredentialHolderInfo::<ExampleCurve> {
+            let cred_holder_info = CredentialHolderInfo::<ArCurve> {
                 id_cred: IdCredentials::generate(&mut csprng),
             };
             let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -1630,7 +1633,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
                 }
             }
             if let Some(bin_file) = aai.bin_out {
-                match File::create(&bin_file) {
+                match File::create(bin_file) {
                     // This is a bit stupid, we should write directly to the sink.
                     Ok(mut file) => match file.write_all(&to_bytes(&versioned_icdi)) {
                         Ok(_) => println!("Wrote binary data to provided file."),
@@ -1936,7 +1939,7 @@ fn handle_start_ip(sip: StartIp) {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     let randomness = ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
     let id_use_data = IdObjectUseData { aci, randomness };
@@ -2299,7 +2302,7 @@ fn handle_recovery(girr: GenerateIdRecoveryRequest) {
         }
     };
 
-    let chi: CredentialHolderInfo<ExampleCurve> = {
+    let chi: CredentialHolderInfo<ArCurve> = {
         match decrypt_input(girr.chi) {
             Ok(chi) => chi,
             Err(e) => {

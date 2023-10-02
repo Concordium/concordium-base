@@ -1,25 +1,90 @@
 //! Basis type definitions that are used throughout the crate.
 
+use crate::{
+    common::{
+        base16_decode_string, deserial_string, types::Signature, Buffer, Deserial, Get,
+        ParseResult, Put, ReadBytesExt, SerdeBase16Serialize, SerdeDeserialize, SerdeSerialize,
+        Serial, Serialize,
+    },
+    curve_arithmetic::Curve,
+    id::{
+        constants::ArCurve,
+        types::{GlobalContext, VerifyKey},
+    },
+    pedersen_commitment::{Randomness, Value},
+    random_oracle::RandomOracle,
+    updates::{GASRewards, GASRewardsV1},
+};
+use concordium_contracts_common::AccountAddress;
 pub use concordium_contracts_common::{
-    Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
+    AccountThreshold, Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
+    ZeroSignatureThreshold,
 };
-use crypto_common::{
-    derive::{SerdeBase16Serialize, Serial, Serialize},
-    deserial_string,
-    types::Signature,
-    Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
-    Serial,
-};
-use derive_more::{Add, Display, From, FromStr, Into};
-use id::types::VerifyKey;
+use derive_more::{Add, Display, From, FromStr, Into, Sub};
 use rand::{CryptoRng, Rng};
-use random_oracle::RandomOracle;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
+    hash::Hash,
     str::FromStr,
 };
 use thiserror::Error;
+
+/// An equivalence class of account addresses. Two account addresses are
+/// equivalent if they are aliases of each other.
+///
+/// Account aliases share the first 29 bytes of the address, so the
+/// [`PartialEq`]/[`PartialOrd`] for this type adheres to that.
+#[repr(transparent)] // this is essential for the AsRef implementation
+#[derive(Eq, Debug, Clone, Copy)]
+pub struct AccountAddressEq(pub(crate) AccountAddress);
+
+impl From<AccountAddressEq> for AccountAddress {
+    fn from(aae: AccountAddressEq) -> Self { aae.0 }
+}
+
+impl From<AccountAddress> for AccountAddressEq {
+    fn from(address: AccountAddress) -> Self { Self(address) }
+}
+
+impl PartialEq for AccountAddressEq {
+    fn eq(&self, other: &Self) -> bool {
+        let bytes_1 = &self.0 .0;
+        let bytes_2 = &other.0 .0;
+        bytes_1[0..29] == bytes_2[0..29]
+    }
+}
+
+impl PartialOrd for AccountAddressEq {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+}
+
+impl Ord for AccountAddressEq {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let bytes_1 = &self.0 .0;
+        let bytes_2 = &other.0 .0;
+        bytes_1[0..29].cmp(&bytes_2[0..29])
+    }
+}
+
+impl Hash for AccountAddressEq {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0 .0[0..29].hash(state) }
+}
+
+// NB: We cannot implement `Borrow` since the equality instance for
+// AccountAddressEq is, deliberately, different, from the one for account
+// addresses.
+impl AsRef<AccountAddressEq> for AccountAddress {
+    fn as_ref(&self) -> &AccountAddressEq { unsafe { std::mem::transmute(self) } }
+}
+
+// NB: We cannot implement `Borrow` since the equality instance for
+// AccountAddressEq is, deliberately, different, from the one for account
+// addresses.
+impl AsRef<AccountAddress> for AccountAddressEq {
+    fn as_ref(&self) -> &AccountAddress { &self.0 }
+}
 
 /// Duration of a slot in milliseconds.
 #[repr(transparent)]
@@ -233,6 +298,15 @@ pub struct Epoch {
     pub epoch: u64,
 }
 
+/// Round number. Applies to protocol 6 and onward.
+#[repr(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[serde(transparent)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
+pub struct Round {
+    pub round: u64,
+}
+
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
@@ -278,37 +352,6 @@ impl UpdateSequenceNumber {
 
     /// Increase the sequence number.
     pub fn next_mut(&mut self) { self.number += 1; }
-}
-
-#[repr(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Into, Serial)]
-/// The minimum number of credentials that need to sign any transaction coming
-/// from an associated account.
-pub struct AccountThreshold {
-    #[serde(deserialize_with = "crate::internal::deserialize_non_default::deserialize")]
-    threshold: u8,
-}
-
-impl Deserial for AccountThreshold {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let threshold: u8 = source.get()?;
-        anyhow::ensure!(threshold != 0, "Account threshold cannot be 0.");
-        Ok(AccountThreshold { threshold })
-    }
-}
-
-impl TryFrom<u8> for AccountThreshold {
-    type Error = ZeroSignatureThreshold;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value == 0 {
-            Err(ZeroSignatureThreshold)
-        } else {
-            Ok(AccountThreshold { threshold: value })
-        }
-    }
 }
 
 #[repr(transparent)]
@@ -431,6 +474,7 @@ impl Deserial for ProtocolVersion {
 
 pub struct ChainParameterVersion0;
 pub struct ChainParameterVersion1;
+pub struct ChainParameterVersion2;
 
 /// Height of a block since chain genesis.
 #[repr(transparent)]
@@ -465,10 +509,39 @@ pub struct AccountIndex {
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add, Sub,
+)]
 pub struct Energy {
     pub energy: u64,
 }
+
+impl Energy {
+    /// Checked `Energy` subtraction.
+    ///
+    /// Computes `self - rhs` and returns `None` if an underflow occurred.
+    pub fn checked_sub(self, rhs: Energy) -> Option<Energy> {
+        self.energy.checked_sub(rhs.energy).map(From::from)
+    }
+
+    /// "Tick" energy: subtract the provided amount.
+    ///
+    /// Returns an error if the energy goes below `0`.
+    pub fn tick_energy(&mut self, amount: Energy) -> Result<(), InsufficientEnergy> {
+        if let Some(nrg) = self.energy.checked_sub(amount.energy) {
+            self.energy = nrg;
+            Ok(())
+        } else {
+            Err(InsufficientEnergy)
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Error)]
+#[error("Out of energy")]
+/// An error raised by [`tick_energy`](Energy::tick_energy) when subtracting the
+/// required amount of energy would lead to a negative value.
+pub struct InsufficientEnergy;
 
 /// Position of the transaction in a block.
 #[repr(transparent)]
@@ -478,20 +551,20 @@ pub struct TransactionIndex {
     pub index: u64,
 }
 
-pub type AggregateSigPairing = id::constants::IpPairing;
+pub type AggregateSigPairing = crate::id::constants::IpPairing;
 
 #[repr(transparent)]
 #[derive(SerdeBase16Serialize, Serialize)]
 /// A secret key used by bakers and finalizers to sign finalization records.
 pub struct BakerAggregationSignKey {
-    pub(crate) sign_key: aggregate_sig::SecretKey<AggregateSigPairing>,
+    pub(crate) sign_key: crate::aggregate_sig::SecretKey<AggregateSigPairing>,
 }
 
 impl BakerAggregationSignKey {
     /// Generate a fresh key using the provided random number generatro.
     pub fn generate<T: Rng>(csprng: &mut T) -> Self {
         Self {
-            sign_key: aggregate_sig::SecretKey::generate(csprng),
+            sign_key: crate::aggregate_sig::SecretKey::generate(csprng),
         }
     }
 
@@ -501,7 +574,7 @@ impl BakerAggregationSignKey {
         &self,
         csprng: &mut T,
         random_oracle: &mut RandomOracle,
-    ) -> aggregate_sig::Proof<AggregateSigPairing> {
+    ) -> crate::aggregate_sig::Proof<AggregateSigPairing> {
         self.sign_key.prove(csprng, random_oracle)
     }
 }
@@ -510,13 +583,13 @@ impl BakerAggregationSignKey {
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq)]
 /// Public key corresponding to [`BakerAggregationVerifyKey`].
 pub struct BakerAggregationVerifyKey {
-    pub(crate) verify_key: aggregate_sig::PublicKey<AggregateSigPairing>,
+    pub(crate) verify_key: crate::aggregate_sig::PublicKey<AggregateSigPairing>,
 }
 
 impl From<&BakerAggregationSignKey> for BakerAggregationVerifyKey {
     fn from(secret: &BakerAggregationSignKey) -> Self {
         Self {
-            verify_key: aggregate_sig::PublicKey::from_secret(&secret.sign_key),
+            verify_key: crate::aggregate_sig::PublicKey::from_secret(&secret.sign_key),
         }
     }
 }
@@ -557,13 +630,13 @@ impl From<&BakerSignatureSignKey> for BakerSignatureVerifyKey {
 /// A secret key used by a baker to prove that they won the lottery to produce a
 /// block.
 pub struct BakerElectionSignKey {
-    pub(crate) sign_key: ecvrf::SecretKey,
+    pub(crate) sign_key: crate::ecvrf::SecretKey,
 }
 
 impl BakerElectionSignKey {
     pub fn generate<T: CryptoRng + Rng>(csprng: &mut T) -> Self {
         Self {
-            sign_key: ecvrf::SecretKey::generate(csprng),
+            sign_key: crate::ecvrf::SecretKey::generate(csprng),
         }
     }
 }
@@ -572,13 +645,13 @@ impl BakerElectionSignKey {
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq, Eq)]
 /// A public key that corresponds to [`BakerElectionSignKey`].
 pub struct BakerElectionVerifyKey {
-    pub(crate) verify_key: ecvrf::PublicKey,
+    pub(crate) verify_key: crate::ecvrf::PublicKey,
 }
 
 impl From<&BakerElectionSignKey> for BakerElectionVerifyKey {
     fn from(secret: &BakerElectionSignKey) -> Self {
         Self {
-            verify_key: ecvrf::PublicKey::from(&secret.sign_key),
+            verify_key: crate::ecvrf::PublicKey::from(&secret.sign_key),
         }
     }
 }
@@ -645,21 +718,49 @@ impl BakerCredentials {
     }
 }
 
-// FIXME: Move to somewhere else in the dependency. This belongs to rust-src.
-#[derive(SerdeBase16Serialize, Serialize, Debug, Clone, Copy, derive_more::AsRef)]
+#[derive(
+    SerdeBase16Serialize,
+    Serialize,
+    Debug,
+    Clone,
+    Copy,
+    derive_more::AsRef,
+    derive_more::Into,
+    PartialEq,
+    Eq,
+)]
 /// A registration ID of a credential. This ID is generated from the user's PRF
 /// key and a sequential counter. [`CredentialRegistrationID`]'s generated from
 /// the same PRF key, but different counter values cannot easily be linked
 /// together.
-pub struct CredentialRegistrationID(id::constants::ArCurve);
+pub struct CredentialRegistrationID(crate::id::constants::ArCurve);
+
+impl FromStr for CredentialRegistrationID {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { base16_decode_string(s) }
+}
 
 impl CredentialRegistrationID {
-    pub fn new(g: id::constants::ArCurve) -> Self { Self(g) }
+    pub fn new(g: crate::id::constants::ArCurve) -> Self { Self(g) }
+
+    /// Construct the cred id from the exponent derived from the PRF key, in
+    /// the context of chain cryptographic parameters `crypto_params`.
+    pub fn from_exponent(
+        crypto_params: &GlobalContext<ArCurve>,
+        cexp: <crate::id::constants::ArCurve as Curve>::Scalar,
+    ) -> Self {
+        let cred_id = crypto_params
+            .on_chain_commitment_key
+            .hide(&Value::<ArCurve>::new(cexp), &Randomness::zero())
+            .0;
+        Self::new(cred_id)
+    }
 }
 
 impl fmt::Display for CredentialRegistrationID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = hex::encode(&crypto_common::to_bytes(self));
+        let s = hex::encode(crate::common::to_bytes(self));
         s.fmt(f)
     }
 }
@@ -679,8 +780,8 @@ pub struct UpdatePublicKey {
 pub struct UpdateKeyPair {
     #[serde(
         rename = "signKey",
-        serialize_with = "crypto_common::base16_encode",
-        deserialize_with = "crypto_common::base16_decode"
+        serialize_with = "crate::common::base16_encode",
+        deserialize_with = "crate::common::base16_decode"
     )]
     pub secret: ed25519_dalek::SecretKey,
     #[serde(flatten)]
@@ -729,12 +830,6 @@ impl From<UpdateKeysThreshold> for u16 {
     #[inline]
     fn from(u: UpdateKeysThreshold) -> Self { u.threshold.get() }
 }
-
-#[derive(Debug, Error)]
-#[error("Signature threshold cannot be 0.")]
-/// An error type that indicates that a 0 attempted to be used as a signature
-/// threshold.
-pub struct ZeroSignatureThreshold;
 
 impl TryFrom<u16> for UpdateKeysThreshold {
     type Error = ZeroSignatureThreshold;
@@ -1027,6 +1122,7 @@ impl Deserial for MintDistributionV1 {
     }
 }
 
+/// Trait used to define mapping from a type to a `MintDistribution` type.
 pub trait MintDistributionFamily {
     type Output;
 }
@@ -1039,7 +1135,34 @@ impl MintDistributionFamily for ChainParameterVersion1 {
     type Output = MintDistributionV1;
 }
 
+impl MintDistributionFamily for ChainParameterVersion2 {
+    type Output = MintDistributionV1;
+}
+
+/// Type family mapping a `ChainParameterVersion` to its corresponding type for
+/// the `MintDistribution`.
 pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
+
+/// Trait used to define mapping from a type to a `GasRewards` type.
+pub trait GASRewardsFamily {
+    type Output;
+}
+
+impl GASRewardsFamily for ChainParameterVersion0 {
+    type Output = GASRewards;
+}
+
+impl GASRewardsFamily for ChainParameterVersion1 {
+    type Output = GASRewards;
+}
+
+impl GASRewardsFamily for ChainParameterVersion2 {
+    type Output = GASRewardsV1;
+}
+
+/// Type family mapping a `ChainParameterVersion` to its corresponding type for
+/// the `GasRewards`.
+pub type GASRewardsFor<CPV> = <CPV as GASRewardsFamily>::Output;
 
 #[derive(Debug, Serialize, Clone, Copy)]
 /// Rate of creation of new CCDs. For example, A value of `0.05` would mean an

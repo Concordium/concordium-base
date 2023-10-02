@@ -1,10 +1,9 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::*;
+use concordium_base::{
+    common::*, curve_arithmetic::Curve, elgamal::PublicKey, id::types::*, ps_sig,
+};
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use curve_arithmetic::Curve;
-use elgamal::PublicKey;
-use id::types::*;
 use pairing::bls12_381::{Bls12, G1, G2};
 use sha2::{Digest, Sha512};
 use std::{fs, path::PathBuf};
@@ -193,7 +192,7 @@ pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::PublicKey<Bls12> {
     }
 }
 
-/// Implements a slight modification of https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.1.1
+/// Implements a slight modification of <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.1.1>.
 /// The difference is that this one does not concatenate the input
 /// to Sha512 with the single octet values 0 and 1, and neither does it
 /// concatenate with a public key.

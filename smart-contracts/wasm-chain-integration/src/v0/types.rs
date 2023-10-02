@@ -149,7 +149,7 @@ pub struct State {
     pub state: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Structure to support logging of events from smart contracts.
 /// This is a list of items emitted by the contract, in the order they were
 /// emitted.
@@ -202,7 +202,7 @@ impl InitResult {
             } => {
                 let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
                 out.push(2);
-                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
+                out.extend_from_slice(&(state.len()).to_be_bytes());
                 out.extend_from_slice(&state.state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
@@ -287,7 +287,7 @@ impl Action {
             } => {
                 let name = data.name.as_receive_name().get_chain_name().as_bytes();
                 let name_len = name.len();
-                let param_len = data.parameter.0.len();
+                let param_len = data.parameter.as_ref().len();
                 let mut out = Vec::with_capacity(1 + 8 + 8 + name_len + 4 + param_len + 4);
                 out.push(0);
                 out.extend_from_slice(&data.to_addr.index.to_be_bytes());
@@ -296,7 +296,7 @@ impl Action {
                 out.extend_from_slice(name);
                 out.extend_from_slice(&data.amount.micro_ccd.to_be_bytes());
                 out.extend_from_slice(&(param_len as u16).to_be_bytes());
-                out.extend_from_slice(&data.parameter.0);
+                out.extend_from_slice(data.parameter.as_ref());
                 out
             }
             SimpleTransfer {

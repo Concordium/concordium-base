@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Concordium.ID.AnonymityRevoker (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arName, arUrl, arDescription, arPublicKey)
+module Concordium.ID.AnonymityRevoker (ArInfo, createArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity, arName, arUrl, arDescription, arPublicKey)
 where
 
 import Concordium.Crypto.FFIHelpers
@@ -25,6 +25,7 @@ import Concordium.Types.HashableTo (HashableTo, MHashableTo, getHash)
 
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Encoding as AE
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 
 newtype ArInfo = ArInfo (ForeignPtr ArInfo)
 
@@ -38,6 +39,68 @@ foreign import ccall unsafe "ar_info_name" arNameFFI :: Ptr ArInfo -> Ptr CSize 
 foreign import ccall unsafe "ar_info_url" arUrlFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_description" arDescriptionFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ar_info_public_key" arPublicKeyFFI :: Ptr ArInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ar_info_create"
+    createArInfoFFI ::
+        -- | The identity of the anonymity revoker.
+        ArIdentity ->
+        -- | Pointer to a byte array which is the serialization of a
+        --  @elgamal::PublicKey<G1>@ Rust-instance.
+        Ptr Word8 ->
+        CSize ->
+        -- | Pointer to a byte array which is the serialization of an
+        --  utf8 encoded string and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- | Pointer to a byte array which is the serialization of an
+        --  utf8 encoded string and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- | Pointer to a byte array which is the serialization of an
+        --  utf8 encoded string and its length.
+        Ptr Word8 ->
+        CSize ->
+        -- | Pointer to an @ArInfo@ Rust instance with its corresponding fields set
+        --  to deserializations of the the above. This is a null-pointer on failure.
+        IO (Ptr ArInfo)
+
+-- | Create an @ArInfo@ Rust-instance from constituent parts.
+createArInfo ::
+    -- | The identity of the anonymity revoker.
+    ArIdentity ->
+    -- | Serialized ElGamal public key.
+    BS.ByteString ->
+    -- | Name of the identity provider.
+    Text ->
+    -- | URL of the identity provider.
+    Text ->
+    -- | Description of the provider.
+    Text ->
+    -- | If the public keys cannot be deserialized this returns @Nothing@. Otherwise an @ArInfo@ is returned.
+    Maybe ArInfo
+createArInfo arId pubKey name url desc =
+    unsafePerformIO
+        ( do
+            -- Note that empty strings correspond to arbitrary pointers being passed
+            -- to the Rust side. This is handled on the Rust side by checking the
+            -- lengths, so this is safe.
+            ptr <- unsafeUseAsCStringLen pubKey $ \(pkPtr, pkLen) ->
+                unsafeUseAsCStringLen (Text.encodeUtf8 name) $ \(nPtr, nLen) ->
+                    unsafeUseAsCStringLen (Text.encodeUtf8 url) $ \(urlPtr, urlLen) ->
+                        unsafeUseAsCStringLen (Text.encodeUtf8 desc) $ \(descPtr, descLen) ->
+                            createArInfoFFI
+                                arId
+                                (castPtr pkPtr)
+                                (fromIntegral pkLen)
+                                (castPtr nPtr)
+                                (fromIntegral nLen)
+                                (castPtr urlPtr)
+                                (fromIntegral urlLen)
+                                (castPtr descPtr)
+                                (fromIntegral descLen)
+            if ptr == nullPtr
+                then return Nothing
+                else Just . ArInfo <$> newForeignPtr freeArInfo ptr
+        )
 
 withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp
@@ -74,7 +137,7 @@ instance Show ArInfo where
 instance HashableTo H.Hash ArInfo where
     getHash = H.hash . encode
 
-instance Monad m => MHashableTo m H.Hash ArInfo
+instance (Monad m) => MHashableTo m H.Hash ArInfo
 
 jsonToArInfo :: BS.ByteString -> Maybe ArInfo
 jsonToArInfo bs = ArInfo <$> fromJSONHelper freeArInfo arInfoFromJSONFFI bs
@@ -85,36 +148,36 @@ arInfoToJSON (ArInfo ar) = toJSONHelper arInfoToJSONFFI ar
 arIdentity :: ArInfo -> ArIdentity
 arIdentity arInfo = unsafeDupablePerformIO $ withArInfo arInfo arIdentityFFI
 
--- |Get the description name of the AR.
---  Using Text.decodeUtf8 which can throw an exception,
---  but the AR name is represented as a String in Rust, so it is safe.
+-- | Get the description name of the AR.
+--   Using Text.decodeUtf8 which can throw an exception,
+--   but the AR name is represented as a String in Rust, so it is safe.
 arName :: ArInfo -> Text
 arName (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arNameFFI ar
 
--- |Get the description URL of the AR.
---  Using Text.decodeUtf8 which can throw an exception,
---  but the AR URL is represented as a String in Rust, so it is safe.
+-- | Get the description URL of the AR.
+--   Using Text.decodeUtf8 which can throw an exception,
+--   but the AR URL is represented as a String in Rust, so it is safe.
 arUrl :: ArInfo -> Text
 arUrl (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arUrlFFI ar
 
--- |Get the description string of the AR.
---  Using Text.decodeUtf8 which can throw an exception,
---  but the AR description is represented as a String in Rust, so it is safe.
+-- | Get the description string of the AR.
+--   Using Text.decodeUtf8 which can throw an exception,
+--   but the AR description is represented as a String in Rust, so it is safe.
 arDescription :: ArInfo -> Text
 arDescription (ArInfo ar) = Text.decodeUtf8 $ toBytesHelper arDescriptionFFI ar
 
--- |Get the public key of the AR as bytes.
---  The function is currently only used for returning protobuf data in the gRPC2 api.
---  That is why it returns bytes instead of structured data.
+-- | Get the public key of the AR as bytes.
+--   The function is currently only used for returning protobuf data in the gRPC2 api.
+--   That is why it returns bytes instead of structured data.
 arPublicKey :: ArInfo -> BS.ByteString
 arPublicKey (ArInfo ar) = toBytesHelper arPublicKeyFFI ar
 
--- *JSON instances
+-- * JSON instances
 
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading
 -- configuration data, or similar one-off uses.
--- Use `arInfoToJSON` for direct serialization to bytestring.
+-- Use @arInfoToJSON@ for direct serialization to bytestring.
 
 instance AE.FromJSON ArInfo where
     parseJSON v@(AE.Object _) =

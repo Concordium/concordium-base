@@ -7,23 +7,25 @@ use crate::{
         BakerElectionVerifyKey, BakerKeyPairs, BakerSignatureVerifyKey, ContractAddress,
         CredentialRegistrationID, DelegationTarget, Energy, Nonce, OpenStatus, UrlText,
     },
+    common::{
+        self,
+        types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
+        Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
+        Serial, Serialize,
+    },
     constants::*,
-    hashes, smart_contracts, updates,
+    encrypted_transfers::types::{EncryptedAmountTransferData, SecToPubAmountTransferData},
+    hashes,
+    id::types::{
+        AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
+        CredentialPublicKeys, VerifyKey,
+    },
+    random_oracle::RandomOracle,
+    smart_contracts, updates,
 };
-use crypto_common::{
-    derive::{Serial, Serialize},
-    types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
-    Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
-    Serial,
-};
+use concordium_contracts_common as concordium_std;
 use derive_more::*;
-use encrypted_transfers::types::{EncryptedAmountTransferData, SecToPubAmountTransferData};
-use id::types::{
-    AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
-    CredentialPublicKeys,
-};
 use rand::{CryptoRng, Rng};
-use random_oracle::RandomOracle;
 use sha2::Digest;
 use std::{collections::BTreeMap, marker::PhantomData};
 use thiserror::Error;
@@ -54,13 +56,13 @@ impl TryFrom<Vec<u8>> for Memo {
 }
 
 impl Deserial for Memo {
-    fn deserial<R: crypto_common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+    fn deserial<R: crate::common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u16 = source.get()?;
         anyhow::ensure!(
             usize::from(len) <= crate::constants::MAX_MEMO_SIZE,
             "Memo too big.."
         );
-        let bytes = crypto_common::deserial_bytes(source, len.into())?;
+        let bytes = crate::common::deserial_bytes(source, len.into())?;
         Ok(Memo { bytes })
     }
 }
@@ -193,7 +195,7 @@ pub struct TransactionHeader {
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, AsRef)]
 #[serde(transparent)]
 /// An account transaction payload that has not yet been deserialized.
-/// This is a simple wrapper around Vec<u8> with bespoke serialization.
+/// This is a simple wrapper around [`Vec<u8>`](Vec) with bespoke serialization.
 pub struct EncodedPayload {
     #[serde(with = "crate::internal::byte_array_hex")]
     pub(crate) payload: Vec<u8>,
@@ -259,7 +261,7 @@ pub fn get_encoded_payload<R: ReadBytesExt>(
 ) -> ParseResult<EncodedPayload> {
     // The use of deserial_bytes is safe here (no execessive allocations) because
     // payload_size is limited
-    let payload = crypto_common::deserial_bytes(source, u32::from(len) as usize)?;
+    let payload = crate::common::deserial_bytes(source, u32::from(len) as usize)?;
     Ok(EncodedPayload { payload })
 }
 
@@ -372,7 +374,7 @@ pub enum ConfigureBakerKeysMarker {}
 /// markers: `AddBakerKeysMarker` and `UpdateBakerKeysMarker`.
 pub struct BakerKeysPayload<V> {
     #[serde(skip)] // use default when deserializing
-    phantom:                    PhantomData<V>,
+    phantom: PhantomData<V>,
     /// New public key for participating in the election lottery.
     pub election_verify_key:    BakerElectionVerifyKey,
     /// New public key for verifying this baker's signatures.
@@ -382,12 +384,12 @@ pub struct BakerKeysPayload<V> {
     pub aggregation_verify_key: BakerAggregationVerifyKey,
     /// Proof of knowledge of the secret key corresponding to the signature
     /// verification key.
-    pub proof_sig:              eddsa_ed25519::Ed25519DlogProof,
+    pub proof_sig:              crate::eddsa_ed25519::Ed25519DlogProof,
     /// Proof of knowledge of the election secret key.
-    pub proof_election:         eddsa_ed25519::Ed25519DlogProof,
+    pub proof_election:         crate::eddsa_ed25519::Ed25519DlogProof,
     /// Proof of knowledge of the secret key for signing finalization
     /// records.
-    pub proof_aggregation:      aggregate_sig::Proof<AggregateSigPairing>,
+    pub proof_aggregation:      crate::aggregate_sig::Proof<AggregateSigPairing>,
 }
 
 /// Baker keys payload containing proofs construct for a `AddBaker` transaction.
@@ -415,13 +417,13 @@ impl<T> BakerKeysPayload<T> {
         baker_keys.signature_verify.serial(&mut challenge);
         baker_keys.aggregation_verify.serial(&mut challenge);
 
-        let proof_election = eddsa_ed25519::prove_dlog_ed25519(
+        let proof_election = crate::eddsa_ed25519::prove_dlog_ed25519(
             csprng,
             &mut RandomOracle::domain(&challenge),
             &baker_keys.election_verify.verify_key,
             &baker_keys.election_sign.sign_key,
         );
-        let proof_sig = eddsa_ed25519::prove_dlog_ed25519(
+        let proof_sig = crate::eddsa_ed25519::prove_dlog_ed25519(
             csprng,
             &mut RandomOracle::domain(&challenge),
             &baker_keys.signature_verify.verify_key,
@@ -497,11 +499,23 @@ pub struct InitContractPayload {
     /// Deposit this amount of CCD.
     pub amount:    Amount,
     /// Reference to the module from which to initialize the instance.
-    pub mod_ref:   smart_contracts::ModuleRef,
+    pub mod_ref:   concordium_contracts_common::ModuleReference,
     /// Name of the contract in the module.
     pub init_name: smart_contracts::OwnedContractName,
     /// Message to invoke the initialization method with.
-    pub param:     smart_contracts::Parameter,
+    pub param:     smart_contracts::OwnedParameter,
+}
+
+impl InitContractPayload {
+    /// Get the size of the payload in number of bytes.
+    pub fn size(&self) -> usize {
+        8 + // Amount
+        32 + // Module reference
+        2 + // Init name size
+        self.init_name.as_contract_name().get_chain_name().len() +
+        2 + // Parameter size
+        self.param.as_ref().len()
+    }
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
@@ -516,7 +530,19 @@ pub struct UpdateContractPayload {
     /// Name of the method to invoke on the contract.
     pub receive_name: smart_contracts::OwnedReceiveName,
     /// Message to send to the contract instance.
-    pub message:      smart_contracts::Parameter,
+    pub message:      smart_contracts::OwnedParameter,
+}
+
+impl UpdateContractPayload {
+    /// Get the size of the payload in number of bytes.
+    pub fn size(&self) -> usize {
+        8 + // Amount
+        16 + // Contract address
+        2 + // Receive name size
+        self.receive_name.as_receive_name().get_chain_name().len() +
+        2 + // Parameter size
+        self.message.as_ref().len()
+    }
 }
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize, Default)]
@@ -708,13 +734,13 @@ impl<M> From<crate::hashes::HashBytes<M>> for RegisteredData {
 }
 
 impl Deserial for RegisteredData {
-    fn deserial<R: crypto_common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+    fn deserial<R: crate::common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let len: u16 = source.get()?;
         anyhow::ensure!(
             usize::from(len) <= crate::constants::MAX_REGISTERED_DATA_SIZE,
             "Data too big to register."
         );
-        let bytes = crypto_common::deserial_bytes(source, len.into())?;
+        let bytes = crate::common::deserial_bytes(source, len.into())?;
         Ok(RegisteredData { bytes })
     }
 }
@@ -724,9 +750,9 @@ impl Deserial for RegisteredData {
 pub type AccountCredentialsMap = BTreeMap<
     CredentialIndex,
     CredentialDeploymentInfo<
-        id::constants::IpPairing,
-        id::constants::ArCurve,
-        id::constants::AttributeKind,
+        crate::id::constants::IpPairing,
+        crate::id::constants::ArCurve,
+        crate::id::constants::AttributeKind,
     >,
 >;
 
@@ -962,7 +988,7 @@ impl Serial for Payload {
                 out.put(&19u8);
                 out.put(to);
                 out.put(&(schedule.len() as u8));
-                crypto_common::serial_vector_no_length(schedule, out);
+                crate::common::serial_vector_no_length(schedule, out);
             }
             Payload::UpdateCredentials {
                 new_cred_infos,
@@ -971,9 +997,9 @@ impl Serial for Payload {
             } => {
                 out.put(&20u8);
                 out.put(&(new_cred_infos.len() as u8));
-                crypto_common::serial_map_no_length(new_cred_infos, out);
+                crate::common::serial_map_no_length(new_cred_infos, out);
                 out.put(&(remove_cred_ids.len() as u8));
-                crypto_common::serial_vector_no_length(remove_cred_ids, out);
+                crate::common::serial_vector_no_length(remove_cred_ids, out);
                 out.put(new_threshold);
             }
             Payload::RegisterData { data } => {
@@ -1001,7 +1027,7 @@ impl Serial for Payload {
                 out.put(to);
                 out.put(memo);
                 out.put(&(schedule.len() as u8));
-                crypto_common::serial_vector_no_length(schedule, out);
+                crate::common::serial_vector_no_length(schedule, out);
             }
             Payload::ConfigureBaker { data } => {
                 out.put(&25u8);
@@ -1141,16 +1167,16 @@ impl Deserial for Payload {
             19 => {
                 let to = source.get()?;
                 let len: u8 = source.get()?;
-                let schedule = crypto_common::deserial_vector_no_length(source, len.into())?;
+                let schedule = crate::common::deserial_vector_no_length(source, len.into())?;
                 Ok(Payload::TransferWithSchedule { to, schedule })
             }
             20 => {
                 let cred_infos_len: u8 = source.get()?;
                 let new_cred_infos =
-                    crypto_common::deserial_map_no_length(source, cred_infos_len.into())?;
+                    crate::common::deserial_map_no_length(source, cred_infos_len.into())?;
                 let remove_cred_ids_len: u8 = source.get()?;
                 let remove_cred_ids =
-                    crypto_common::deserial_vector_no_length(source, remove_cred_ids_len.into())?;
+                    crate::common::deserial_vector_no_length(source, remove_cred_ids_len.into())?;
                 let new_threshold = source.get()?;
                 Ok(Payload::UpdateCredentials {
                     new_cred_infos,
@@ -1182,7 +1208,7 @@ impl Deserial for Payload {
                 let to = source.get()?;
                 let memo = source.get()?;
                 let len: u8 = source.get()?;
-                let schedule = crypto_common::deserial_vector_no_length(source, len.into())?;
+                let schedule = crate::common::deserial_vector_no_length(source, len.into())?;
                 Ok(Payload::TransferWithScheduleAndMemo { to, memo, schedule })
             }
             25 => {
@@ -1275,7 +1301,7 @@ impl Deserial for Payload {
 
 impl PayloadLike for Payload {
     fn encode(&self) -> EncodedPayload {
-        let payload = crypto_common::to_bytes(&self);
+        let payload = crate::common::to_bytes(&self);
         EncodedPayload { payload }
     }
 
@@ -1395,18 +1421,43 @@ pub fn sign_transaction<S: TransactionSigner, P: PayloadLike>(
 /// Implementations of this trait are structures which can produce public keys
 /// with which transaction signatures can be verified.
 pub trait HasAccountAccessStructure {
+    /// The number of credentials that must sign a transaction.
     fn threshold(&self) -> AccountThreshold;
+    /// Access a credential at the provided index.
     fn credential_keys(&self, idx: CredentialIndex) -> Option<&CredentialPublicKeys>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, concordium_std::Serialize)]
 /// The most straighforward account access structure is a map of public keys
 /// with the account threshold.
 pub struct AccountAccessStructure {
+    /// Keys indexed by credential.
+    #[concordium(size_length = 1)]
+    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
     /// The number of credentials that needed to sign a transaction.
     pub threshold: AccountThreshold,
-    /// Keys indexed by credential.
-    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
+}
+
+impl From<&AccountKeys> for AccountAccessStructure {
+    fn from(value: &AccountKeys) -> Self {
+        Self {
+            threshold: value.threshold,
+            keys:      value
+                .keys
+                .iter()
+                .map(|(k, v)| {
+                    (*k, CredentialPublicKeys {
+                        keys:      v
+                            .keys
+                            .iter()
+                            .map(|(ki, kp)| (*ki, VerifyKey::Ed25519VerifyKey(kp.public)))
+                            .collect(),
+                        threshold: v.threshold,
+                    })
+                })
+                .collect(),
+        }
+    }
 }
 
 impl HasAccountAccessStructure for AccountAccessStructure {
@@ -1417,6 +1468,35 @@ impl HasAccountAccessStructure for AccountAccessStructure {
     }
 }
 
+// The serial and deserial implementations must match the serialization of
+// `AccountInformation` in Haskell.
+impl Serial for AccountAccessStructure {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        (self.keys.len() as u8).serial(out);
+        for (k, v) in self.keys.iter() {
+            k.serial(out);
+            v.serial(out);
+        }
+        self.threshold.serial(out)
+    }
+}
+
+// The serial and deserial implementations must match the serialization of
+// `AccountInformation` in Haskell.
+impl Deserial for AccountAccessStructure {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let len = u8::deserial(source)?;
+        let keys = common::deserial_map_no_length(source, len.into())?;
+        let threshold = source.get()?;
+        Ok(Self { threshold, keys })
+    }
+}
+
+impl AccountAccessStructure {
+    /// Return the total number of keys present in the access structure.
+    pub fn num_keys(&self) -> u32 { self.keys.values().map(|m| m.keys.len() as u32).sum() }
+}
+
 /// Verify a signature on the transaction sign hash. This is a low-level
 /// operation that is useful to avoid recomputing the transaction hash.
 pub fn verify_signature_transaction_sign_hash(
@@ -1424,18 +1504,32 @@ pub fn verify_signature_transaction_sign_hash(
     hash: &hashes::TransactionSignHash,
     signature: &TransactionSignature,
 ) -> bool {
-    if usize::from(u8::from(keys.threshold())) > signature.signatures.len() {
+    verify_data_signature(keys, hash, &signature.signatures)
+}
+
+/// Verify a signature on the provided data with respect to the account access
+/// structure.
+///
+/// This is not the same as verifying a signature on a serialized transaction.
+/// Transaction signature verification is a different protocol that first
+/// involves hashing the message.
+pub fn verify_data_signature<T: ?Sized + AsRef<[u8]>>(
+    keys: &impl HasAccountAccessStructure,
+    data: &T,
+    signatures: &BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>,
+) -> bool {
+    if usize::from(u8::from(keys.threshold())) > signatures.len() {
         return false;
     }
     // There are enough signatures.
-    for (&ci, cred_sigs) in signature.signatures.iter() {
+    for (&ci, cred_sigs) in signatures.iter() {
         if let Some(cred_keys) = keys.credential_keys(ci) {
             if usize::from(u8::from(cred_keys.threshold)) > cred_sigs.len() {
                 return false;
             }
             for (&ki, sig) in cred_sigs {
                 if let Some(pk) = cred_keys.get(ki) {
-                    if !pk.verify(hash, sig) {
+                    if !pk.verify(data, sig) {
                         return false;
                     }
                 } else {
@@ -1463,9 +1557,9 @@ pub enum BlockItem<PayloadType> {
     CredentialDeployment(
         Box<
             AccountCredentialMessage<
-                id::constants::IpPairing,
-                id::constants::ArCurve,
-                id::constants::AttributeKind,
+                crate::id::constants::IpPairing,
+                crate::id::constants::ArCurve,
+                crate::id::constants::AttributeKind,
             >,
         >,
     ),
@@ -1479,17 +1573,17 @@ impl<PayloadType> From<AccountTransaction<PayloadType>> for BlockItem<PayloadTyp
 impl<PayloadType>
     From<
         AccountCredentialMessage<
-            id::constants::IpPairing,
-            id::constants::ArCurve,
-            id::constants::AttributeKind,
+            crate::id::constants::IpPairing,
+            crate::id::constants::ArCurve,
+            crate::id::constants::AttributeKind,
         >,
     > for BlockItem<PayloadType>
 {
     fn from(
         at: AccountCredentialMessage<
-            id::constants::IpPairing,
-            id::constants::ArCurve,
-            id::constants::AttributeKind,
+            crate::id::constants::IpPairing,
+            crate::id::constants::ArCurve,
+            crate::id::constants::AttributeKind,
         >,
     ) -> Self {
         Self::CredentialDeployment(Box::new(at))
@@ -1654,7 +1748,7 @@ impl Deserial for BlockItem<EncodedPayload> {
 
 /// Energy costs of transactions.
 pub mod cost {
-    use id::types::CredentialType;
+    use crate::id::types::CredentialType;
 
     use super::*;
 
@@ -1949,7 +2043,7 @@ pub mod construct {
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
-    /// [encrypted_transfers::make_transfer_data].
+    /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer(
         num_sigs: u32,
         sender: AccountAddress,
@@ -1974,8 +2068,9 @@ pub mod construct {
         )
     }
 
-    /// Make an encrypted transfer with a memo. The payload can be constructed
-    /// using [encrypted_transfers::make_transfer_data].
+    /// Make an encrypted transfer with a memo.
+    /// The payload can be constructed using
+    /// [make_transfer_data](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer_with_memo(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2027,7 +2122,9 @@ pub mod construct {
 
     /// Transfer the given amount from encrypted to public balance of the given
     /// account. The payload may be constructed using
-    /// [encrypted_transfers::make_sec_to_pub_transfer_data]
+    /// [`make_sec_to_pub_transfer_data`][anchor]
+    ///
+    /// [anchor]: crate::encrypted_transfers::make_sec_to_pub_transfer_data
     pub fn transfer_to_public(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2469,8 +2566,8 @@ pub mod construct {
         new_threshold: AccountThreshold,
     ) -> PreAccountTransaction {
         let num_cred_keys = new_credentials
-            .iter()
-            .map(|(_, v)| v.values.cred_key_info.keys.len() as u16)
+            .values()
+            .map(|v| v.values.cred_key_info.keys.len() as u16)
             .collect::<Vec<_>>();
         let payload = Payload::UpdateCredentials {
             new_cred_infos: new_credentials,
@@ -2564,7 +2661,7 @@ pub mod send {
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
-    /// [encrypted_transfers::make_transfer_data].
+    /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2577,8 +2674,9 @@ pub mod send {
             .sign(signer)
     }
 
-    /// Make an encrypted transfer with a memo. The payload can be constructed
-    /// using [encrypted_transfers::make_transfer_data].
+    /// Make an encrypted transfer with a memo.
+    /// The payload can be constructed using
+    /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
     pub fn encrypted_transfer_with_memo(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2614,8 +2712,11 @@ pub mod send {
     }
 
     /// Transfer the given amount from encrypted to public balance of the given
-    /// account. The payload may be constructed using
-    /// [encrypted_transfers::make_sec_to_pub_transfer_data]
+    /// account.
+    /// The payload may be constructed using
+    /// [`make_sec_to_pub_transfer_data`][anchor]
+    ///
+    /// [anchor]: crate::encrypted_transfers::make_sec_to_pub_transfer_data
     pub fn transfer_to_public(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2991,8 +3092,10 @@ pub mod send {
 
 #[cfg(test)]
 mod tests {
-    use crate::hashes::TransactionSignHash;
-    use id::types::{SignatureThreshold, VerifyKey};
+    use crate::{
+        hashes::TransactionSignHash,
+        id::types::{SignatureThreshold, VerifyKey},
+    };
     use rand::Rng;
     use std::convert::TryFrom;
 
@@ -3021,7 +3124,8 @@ mod tests {
         let pub_keys = keys
             .iter()
             .map(|(&ci, keys)| {
-                let threshold = SignatureThreshold(rng.gen_range(1, keys.len() + 1) as u8);
+                let threshold =
+                    SignatureThreshold::try_from(rng.gen_range(1, keys.len() + 1) as u8).unwrap();
                 let keys = keys
                     .iter()
                     .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))

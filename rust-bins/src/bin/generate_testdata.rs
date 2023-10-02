@@ -1,19 +1,22 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{
-    types::{KeyIndex, KeyPair, TransactionTime},
-    *,
+use concordium_base::{
+    common::{
+        types::{KeyIndex, KeyPair, TransactionTime},
+        *,
+    },
+    curve_arithmetic::{Curve, Pairing},
+    dodis_yampolskiy_prf as prf,
+    id::{
+        account_holder::*,
+        constants::{ArCurve, IpPairing, *},
+        identity_provider::*,
+        secret_sharing::Threshold,
+        types::*,
+    },
+    ps_sig,
 };
-use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf as prf;
 use either::{Left, Right};
-use id::{
-    account_holder::*,
-    constants::{ArCurve, IpPairing, *},
-    identity_provider::*,
-    secret_sharing::Threshold,
-    types::*,
-};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::PathBuf};
@@ -134,7 +137,7 @@ fn main() {
             keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
             keys
         },
-        threshold: SignatureThreshold(2),
+        threshold: SignatureThreshold::TWO,
     };
     // Threshold is all anonymity revokers.
 
@@ -189,7 +192,7 @@ fn main() {
 
         let acc_data = CredentialData {
             keys,
-            threshold: SignatureThreshold(2),
+            threshold: SignatureThreshold::TWO,
         };
 
         let (cdi_1, _) = create_credential(
@@ -212,7 +215,7 @@ fn main() {
         keys_2.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
         let acc_data_2 = CredentialData {
             keys:      acc_data.keys,
-            threshold: SignatureThreshold(1),
+            threshold: SignatureThreshold::ONE,
         };
 
         let addr = account_address_from_registration_id(&cdi_1.values.cred_id);
@@ -339,7 +342,7 @@ fn main() {
 
             CredentialData {
                 keys,
-                threshold: SignatureThreshold(2),
+                threshold: SignatureThreshold::TWO,
             }
         };
 
@@ -372,14 +375,14 @@ fn main() {
             }
         };
 
-        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
+        if let Err(err) = write_json_to_file(format!("credential-{}.json", idx), &js) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);
         }
 
         if let Err(err) =
-            write_json_to_file(&format!("credential-private-keys-{}.json", idx), &acc_data)
+            write_json_to_file(format!("credential-private-keys-{}.json", idx), &acc_data)
         {
             eprintln!("Could not output private keys = {}, because {}.", idx, err);
         } else {
@@ -419,7 +422,7 @@ fn main() {
 
             InitialAccountData {
                 keys,
-                threshold: SignatureThreshold(2),
+                threshold: SignatureThreshold::TWO,
             }
         };
         let ah_info = CredentialHolderInfo::<ArCurve> {
@@ -456,7 +459,7 @@ fn main() {
         let versioned_msg = Versioned::new(VERSION_0, cred);
 
         if let Err(err) =
-            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_msg)
+            write_json_to_file(format!("initial-credential-{}.json", idx), &versioned_msg)
         {
             eprintln!(
                 "Could not output initial credential = {}, because {}.",

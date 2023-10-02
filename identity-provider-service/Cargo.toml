@@ -1,6 +1,6 @@
 [package]
 name = "identity-provider-service"
-version = "0.5.1"
+version = "0.5.6"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE-APACHE"
@@ -27,16 +27,12 @@ anyhow = "1.0"
 hex = "0.4"
 rust-embed = "6"
 ed25519-dalek = "=1.0"
-chrono = "0.4.19"
+chrono = "0.4.24" # the patch version is necessary since chrono adds new functionality in patch versions
 sha2 = "0.10"
 
-[dependencies.id]
-path = "../rust-src/id"
-version = "0"
-
-[dependencies.crypto_common]
-path = "../rust-src/crypto_common"
-version = "0"
+[dependencies.concordium_base]
+path = "../rust-src/concordium_base"
+version = "*"
 
 [dev-dependencies]
 tokio-test = "0.4"

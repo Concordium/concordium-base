@@ -1,18 +1,21 @@
 use anyhow::ensure;
-use crypto_common::{
-    base16_encode_string, to_bytes, types::TransactionTime, SerdeDeserialize, SerdeSerialize,
-    Versioned, VERSION_0,
+use concordium_base::{
+    common::{
+        base16_encode_string, to_bytes, types::TransactionTime, SerdeDeserialize, SerdeSerialize,
+        Versioned, VERSION_0,
+    },
+    id,
+    id::{
+        constants::{ArCurve, AttributeKind, IpPairing},
+        identity_provider::{
+            create_initial_cdi, sign_identity_object, sign_identity_object_v1,
+            validate_id_recovery_request, validate_request as ip_validate_request,
+            validate_request_v1 as ip_validate_request_v1,
+        },
+        types::*,
+    },
 };
 use ed25519_dalek::{ExpandedSecretKey, PublicKey};
-use id::{
-    constants::{ArCurve, AttributeKind, IpPairing},
-    identity_provider::{
-        create_initial_cdi, sign_identity_object, sign_identity_object_v1,
-        validate_id_recovery_request, validate_request as ip_validate_request,
-        validate_request_v1 as ip_validate_request_v1,
-    },
-    types::*,
-};
 use log::{error, info, warn};
 use reqwest::Client;
 use serde_json::{from_str, json, to_value};
@@ -216,6 +219,13 @@ struct WithExpiry {
     pub expiry: YearMonth,
 }
 
+/// An Either type containing either an redirect URI or a HTTP status
+/// code. Used for error handling in `mkReply`.
+enum UriOrCode {
+    Uri(String),
+    Code(StatusCode),
+}
+
 impl ServerConfig {
     /// Resolve the configuration from the command-line arguments, checking that
     /// all values have the correct formats.
@@ -235,7 +245,7 @@ impl ServerConfig {
             "Unsupported anonymity revokers version."
         );
         let mut submit_credential_url = config.wallet_proxy_base.clone();
-        submit_credential_url.set_path("v0/submitCredential/");
+        submit_credential_url.set_path("v0/submitCredential");
         Ok(ServerConfig {
             ip_data,
             global: versioned_global.value,
@@ -925,10 +935,10 @@ async fn main() -> anyhow::Result<()> {
 /// A helper macro to check whether the expression is an error, an in that case
 /// fail with internal server error.
 macro_rules! ok_or_500 (
-    ($e: expr, $s: expr) => {
+    ($e: expr, $s: expr, $uri: expr) => {
         if $e.is_err() {
             error!($s);
-            return Err(warp::reject::custom(IdRequestRejection::InternalError))
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(Some($uri))))
         }
     };
 );
@@ -946,7 +956,7 @@ async fn save_validated_request(
         .pub_info_for_ip
         .id_cred_pub;
 
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -961,7 +971,8 @@ async fn save_validated_request(
 
     ok_or_500!(
         db.write_request_record(&base_16_encoded_id_cred_pub_hash, &identity_object_request),
-        "Could not write the valid request to database."
+        "Could not write the valid request to database.",
+        identity_object_request.redirect_uri
     );
 
     let attribute_form_url = format!(
@@ -983,7 +994,7 @@ async fn save_validated_request_v1(
 ) -> Result<impl Reply, Rejection> {
     let id_cred_pub = &identity_object_request.id_object_request.value.id_cred_pub;
 
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -998,7 +1009,8 @@ async fn save_validated_request_v1(
 
     ok_or_500!(
         db.write_request_record_v1(&base_16_encoded_id_cred_pub_hash, &identity_object_request),
-        "Could not write the valid request to database."
+        "Could not write the valid request to database.",
+        identity_object_request.redirect_uri
     );
 
     let attribute_form_url = format!(
@@ -1062,22 +1074,26 @@ async fn submit_account_creation(
 /// An internal error type used by this server to manage error handling.
 enum IdRequestRejection {
     /// Request was made with an unsupported version of the identity object.
-    UnsupportedVersion,
-    /// The request had invalid proofs.
-    InvalidProofs,
+    /// Takes an optional redirect URI that, if provided, will propgate the
+    /// error to the wallet.
+    UnsupportedVersion(Option<String>),
+    /// The request had invalid proofs. Takes a redirect URI as argument.
+    InvalidProofs(String),
     /// The identity verifier could not validate the supporting evidence, e.g.,
-    /// passport.
-    IdVerifierFailure,
+    /// passport. Takes a redirect URI as argument.
+    IdVerifierFailure(String),
     /// Internal server error occurred.
-    InternalError,
+    /// Takes an optional redirect URI that, if provided, will propgate the
+    /// error to the wallet.
+    InternalError(Option<String>),
     /// Registration ID was reused, leading to initial account creation failure.
     ReuseOfRegId,
     /// Malformed request.
     Malformed,
-    /// Missing validated request for the given id_cred_pub
+    /// Missing validated request for the given id_cred_pub.
     NoValidRequest,
-    /// Duplicate idCredPub.
-    DuplicateRequest,
+    /// Duplicate idCredPub. Takes a redirect URI as argument.
+    DuplicateRequest(String),
 }
 
 #[derive(Debug)]
@@ -1109,82 +1125,89 @@ struct ErrorResponse {
 }
 
 /// Helper function to make the reply.
-fn mk_reply(message: &'static str, code: StatusCode) -> impl warp::Reply {
-    let msg = ErrorResponse {
-        message,
-        code: code.as_u16(),
-    };
-    warp::reply::with_status(warp::reply::json(&msg), code)
+fn mk_reply(message: &'static str, either: UriOrCode) -> impl warp::Reply {
+    match either {
+        UriOrCode::Uri(uri) => {
+            let callback_location = uri + "#error=" + message;
+
+            warp::reply::with_status(
+                warp::reply::with_header(warp::reply(), LOCATION, callback_location),
+                StatusCode::FOUND,
+            )
+            .into_response()
+        }
+        UriOrCode::Code(code) => {
+            let msg = ErrorResponse {
+                message,
+                code: code.as_u16(),
+            };
+            warp::reply::with_status(warp::reply::json(&msg), code).into_response()
+        }
+    }
 }
 
 async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible> {
+    use UriOrCode::*;
+
     if err.is_not_found() {
-        let code = StatusCode::NOT_FOUND;
-        let message = "Not found.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::UnsupportedVersion) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Unsupported version.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::InvalidProofs) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Invalid proofs.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::IdVerifierFailure) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "ID verifier rejected.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::InternalError) = err.find() {
-        let code = StatusCode::INTERNAL_SERVER_ERROR;
-        let message = "Internal server error";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Reuse of RegId";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::Malformed) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Malformed request.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "No validated request was found for the given id_cred_pub.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRequestRejection::DuplicateRequest) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Duplicate id_cred_pub.";
-        Ok(mk_reply(message, code))
-    } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Invalid ID recovery proof.";
-        Ok(mk_reply(message, code))
+        let message = "Not found";
+        Ok(mk_reply(message, Code(StatusCode::NOT_FOUND)))
     } else if let Some(IdRecoveryRejection::NonExistingIdObject) = err.find() {
-        let code = StatusCode::NOT_FOUND;
-        let message = "ID object not found in database.";
-        Ok(mk_reply(message, code))
+        let message = "ID object not found in database";
+        Ok(mk_reply(message, Code(StatusCode::NOT_FOUND)))
+    } else if let Some(IdRecoveryRejection::InvalidProofs) = err.find() {
+        let message = "Invalid ID recovery proof";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::InvalidTimestamp) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Invalid timestamp.";
-        Ok(mk_reply(message, code))
+        let message = "Invalid timestamp";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::Malformed) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Malformed ID recovery request.";
-        Ok(mk_reply(message, code))
+        let message = "Malformed ID recovery request";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else if let Some(IdRecoveryRejection::UnsupportedVersion) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Unsupported version.";
-        Ok(mk_reply(message, code))
+        let message = "Unsupported version";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
+        let message = "Reuse of RegId";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::Malformed) = err.find() {
+        let message = "Malformed request";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::NoValidRequest) = err.find() {
+        let message = "No valid request was found for the given idCredPub";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
+    } else if let Some(IdRequestRejection::DuplicateRequest(uri)) = err.find() {
+        let message = "Duplicate idCredPub";
+        Ok(mk_reply(message, Uri(uri.to_owned())))
+    } else if let Some(IdRequestRejection::InvalidProofs(uri)) = err.find() {
+        let message = "Invalid proofs";
+        Ok(mk_reply(message, Uri(uri.to_owned())))
+    } else if let Some(IdRequestRejection::IdVerifierFailure(uri)) = err.find() {
+        let message = "ID verifier rejected";
+        Ok(mk_reply(message, Uri(uri.to_owned())))
+    } else if let Some(IdRequestRejection::InternalError(opt)) = err.find() {
+        let message = "Internal server error";
+        let either = opt
+            .clone()
+            .map(Uri)
+            .unwrap_or(Code(StatusCode::INTERNAL_SERVER_ERROR));
+        Ok(mk_reply(message, either))
+    } else if let Some(IdRequestRejection::UnsupportedVersion(opt)) = err.find() {
+        let message = "Unsupported version";
+        let either = opt
+            .clone()
+            .map(Uri)
+            .unwrap_or(Code(StatusCode::BAD_REQUEST));
+        Ok(mk_reply(message, either))
     } else if err
         .find::<warp::filters::body::BodyDeserializeError>()
         .is_some()
     {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Malformed body.";
-        Ok(mk_reply(message, code))
+        let message = "Malformed body";
+        Ok(mk_reply(message, Code(StatusCode::BAD_REQUEST)))
     } else {
-        let code = StatusCode::INTERNAL_SERVER_ERROR;
-        let message = "Internal error.";
-        Ok(mk_reply(message, code))
+        let message = "Internal error";
+        Ok(mk_reply(message, Code(StatusCode::INTERNAL_SERVER_ERROR)))
     }
 }
 
@@ -1213,6 +1236,7 @@ async fn create_signed_identity_object(
     };
 
     let request = identity_object_input.id_object_request.value;
+    let redirect_uri = identity_object_input.redirect_uri;
 
     // Identity verification process between the identity provider and the identity
     // verifier. In this example the identity verifier is queried and will
@@ -1234,7 +1258,9 @@ async fn create_signed_identity_object(
             Ok(attribute_list) => attribute_list,
             Err(e) => {
                 error!("Could not deserialize response from the verifier {}.", e);
-                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure));
+                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure(
+                    redirect_uri,
+                )));
             }
         },
         Err(e) => {
@@ -1242,7 +1268,9 @@ async fn create_signed_identity_object(
                 "Could not retrieve attribute list from the verifier: {}.",
                 e
             );
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
@@ -1273,13 +1301,16 @@ async fn create_signed_identity_object(
         Ok(signature) => signature,
         Err(e) => {
             error!("Could not sign the identity object {}.", e);
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
     ok_or_500!(
         save_revocation_record(&db, &request, &alist),
-        "Could not write the revocation record to database."
+        "Could not write the revocation record to database.",
+        redirect_uri
     );
 
     let id = IdentityObject {
@@ -1330,7 +1361,8 @@ async fn create_signed_identity_object(
             &versioned_id,
             &versioned_submission
         ),
-        "Could not write to database."
+        "Could not write to database.",
+        redirect_uri
     );
 
     // Submit and wait for the submission ID.
@@ -1346,7 +1378,8 @@ async fn create_signed_identity_object(
         Ok(status) => {
             ok_or_500!(
                 db.write_pending(&id_cred_pub_hash, status, submission_value),
-                "Could not write submission status."
+                "Could not write submission status.",
+                redirect_uri
             );
         }
         Err(_) => return Err(warp::reject::custom(IdRequestRejection::ReuseOfRegId)),
@@ -1358,8 +1391,7 @@ async fn create_signed_identity_object(
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
     retrieve_url.set_path(&format!("api/v0/identity/{}", id_cred_pub_hash));
-    let callback_location =
-        identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
+    let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
@@ -1395,6 +1427,7 @@ async fn create_signed_identity_object_v1(
     };
 
     let request = identity_object_input.id_object_request.value;
+    let redirect_uri = identity_object_input.redirect_uri;
 
     // Identity verification process between the identity provider and the identity
     // verifier. In this example the identity verifier is queried and will
@@ -1416,7 +1449,9 @@ async fn create_signed_identity_object_v1(
             Ok(attribute_list) => attribute_list,
             Err(e) => {
                 error!("Could not deserialize response from the verifier {}.", e);
-                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure));
+                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure(
+                    redirect_uri,
+                )));
             }
         },
         Err(e) => {
@@ -1424,7 +1459,9 @@ async fn create_signed_identity_object_v1(
                 "Could not retrieve attribute list from the verifier: {}.",
                 e
             );
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
@@ -1456,13 +1493,16 @@ async fn create_signed_identity_object_v1(
         Ok(signature) => signature,
         Err(e) => {
             error!("Could not sign the identity object {}.", e);
-            return Err(warp::reject::custom(IdRequestRejection::InternalError));
+            return Err(warp::reject::custom(IdRequestRejection::InternalError(
+                Some(redirect_uri),
+            )));
         }
     };
 
     ok_or_500!(
         save_revocation_record_v1(&db, &request, &alist),
-        "Could not write the revocation record to database."
+        "Could not write the revocation record to database.",
+        redirect_uri
     );
 
     let id = IdentityObjectV1 {
@@ -1477,7 +1517,8 @@ async fn create_signed_identity_object_v1(
     // This is stored so it can later be retrieved by querying via the idCredPub.
     ok_or_500!(
         db.write_identity_object_v1(&id_cred_pub_hash, &versioned_id),
-        "Could not write to database."
+        "Could not write to database.",
+        redirect_uri
     );
 
     // If we reached here it means we at least have a pending request. We respond
@@ -1487,8 +1528,7 @@ async fn create_signed_identity_object_v1(
     // retrieve the identity object when it is available.
     let mut retrieve_url = server_config.retrieve_url.clone();
     retrieve_url.set_path(&format!("api/v1/identity/{}", id_cred_pub_hash));
-    let callback_location =
-        identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
+    let callback_location = redirect_uri + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
@@ -1504,7 +1544,9 @@ fn validate_worker(
     input: IdentityObjectRequest,
 ) -> Result<IdentityObjectRequest, IdRequestRejection> {
     if input.id_object_request.version != VERSION_0 {
-        return Err(IdRequestRejection::UnsupportedVersion);
+        return Err(IdRequestRejection::UnsupportedVersion(Some(
+            input.redirect_uri,
+        )));
     }
     let request = &input.id_object_request.value;
     let context = IpContext {
@@ -1519,7 +1561,7 @@ fn validate_worker(
         }
         Err(e) => {
             warn!("Request is invalid {}.", e);
-            Err(IdRequestRejection::InvalidProofs)
+            Err(IdRequestRejection::InvalidProofs(input.redirect_uri))
         }
     }
 }
@@ -1531,7 +1573,9 @@ fn validate_worker_v1(
     input: IdentityObjectRequestV1,
 ) -> Result<IdentityObjectRequestV1, IdRequestRejection> {
     if input.id_object_request.version != VERSION_0 {
-        return Err(IdRequestRejection::UnsupportedVersion);
+        return Err(IdRequestRejection::UnsupportedVersion(Some(
+            input.redirect_uri,
+        )));
     }
     let request = &input.id_object_request.value;
     let context = IpContext {
@@ -1546,7 +1590,7 @@ fn validate_worker_v1(
         }
         Err(e) => {
             warn!("Request is invalid {}.", e);
-            Err(IdRequestRejection::InvalidProofs)
+            Err(IdRequestRejection::InvalidProofs(input.redirect_uri))
         }
     }
 }
@@ -1569,7 +1613,7 @@ fn extract_and_validate_request(
         async move {
             let id_cred_pub = &input.id_object_request.value.pub_info_for_ip.id_cred_pub;
 
-            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
             let base_16_encoded_id_cred_pub_hash =
                 base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -1581,7 +1625,9 @@ fn extract_and_validate_request(
                             "Duplicate id_cred_pub: {}",
                             base16_encode_string(&id_cred_pub)
                         );
-                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
+                            input.redirect_uri,
+                        )))
                     } else {
                         match validate_worker(&server_config, input) {
                             Ok(r) => Ok(r),
@@ -1594,7 +1640,9 @@ fn extract_and_validate_request(
                 }
                 Err(e) => {
                     error!("Error accessing the database: {:#?}", e);
-                    Err(warp::reject::custom(IdRequestRejection::InternalError))
+                    Err(warp::reject::custom(IdRequestRejection::InternalError(
+                        Some(input.redirect_uri),
+                    )))
                 }
             }
         }
@@ -1640,7 +1688,7 @@ fn extract_and_validate_request_query(
 
             let id_cred_pub = &id_object_request.value.pub_info_for_ip.id_cred_pub;
 
-            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
             let base_16_encoded_id_cred_pub_hash =
                 base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -1651,7 +1699,9 @@ fn extract_and_validate_request_query(
                             "Duplicate id_cred_pub: {}",
                             base16_encode_string(&id_cred_pub)
                         );
-                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
+                            input.redirect_uri,
+                        )))
                     } else {
                         let input = IdentityObjectRequest {
                             id_object_request,
@@ -1669,7 +1719,9 @@ fn extract_and_validate_request_query(
                 }
                 Err(e) => {
                     error!("Error accessing the database: {:#?}", e);
-                    Err(warp::reject::custom(IdRequestRejection::InternalError))
+                    Err(warp::reject::custom(IdRequestRejection::InternalError(
+                        Some(input.redirect_uri),
+                    )))
                 }
             }
         }
@@ -1714,7 +1766,7 @@ fn extract_and_validate_request_query_v1(
             };
             let id_cred_pub = &id_object_request.value.id_cred_pub;
 
-            let id_cred_pub_hash = Sha256::digest(&to_bytes(id_cred_pub));
+            let id_cred_pub_hash = Sha256::digest(to_bytes(id_cred_pub));
             let base_16_encoded_id_cred_pub_hash =
                 base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
 
@@ -1725,7 +1777,9 @@ fn extract_and_validate_request_query_v1(
                             "Duplicate id_cred_pub: {}",
                             base16_encode_string(&id_cred_pub)
                         );
-                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest))
+                        Err(warp::reject::custom(IdRequestRejection::DuplicateRequest(
+                            input.redirect_uri,
+                        )))
                     } else {
                         let input = IdentityObjectRequestV1 {
                             id_object_request,
@@ -1743,7 +1797,9 @@ fn extract_and_validate_request_query_v1(
                 }
                 Err(e) => {
                     error!("Error accessing the database: {:#?}", e);
-                    Err(warp::reject::custom(IdRequestRejection::InternalError))
+                    Err(warp::reject::custom(IdRequestRejection::InternalError(
+                        Some(input.redirect_uri),
+                    )))
                 }
             }
         }
@@ -1802,7 +1858,7 @@ fn validate_recovery_request(
 
             if pok_result {
                 let id_cred_pub_hash =
-                    Sha256::digest(&to_bytes(&id_recovery_request.value.id_cred_pub));
+                    Sha256::digest(to_bytes(&id_recovery_request.value.id_cred_pub));
                 let base_16_encoded_id_cred_pub_hash =
                     base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
                 match db.read_identity_object(&base_16_encoded_id_cred_pub_hash) {
@@ -1848,7 +1904,7 @@ fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
         max_accounts: alist.max_accounts,
         threshold:    pre_identity_object.choice_ar_parameters.threshold,
     };
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(&ar_record.id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(&ar_record.id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
     db.write_revocation_record(&base_16_encoded_id_cred_pub_hash, ar_record)
@@ -1868,7 +1924,7 @@ fn save_revocation_record_v1<A: Attribute<id::constants::BaseField>>(
         max_accounts: alist.max_accounts,
         threshold:    pre_identity_object.choice_ar_parameters.threshold,
     };
-    let id_cred_pub_hash = Sha256::digest(&to_bytes(&ar_record.id_cred_pub));
+    let id_cred_pub_hash = Sha256::digest(to_bytes(&ar_record.id_cred_pub));
     let base_16_encoded_id_cred_pub_hash =
         base16_encode_string::<[u8; 32]>(&id_cred_pub_hash.into());
     db.write_revocation_record(&base_16_encoded_id_cred_pub_hash, ar_record)
@@ -1892,7 +1948,9 @@ async fn create_failed_identity(
         db.read_request_record_v1(&id_cred_pub_hash)
             .map(|r| r.redirect_uri)
     } else {
-        return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
+        return Err(warp::reject::custom(
+            IdRequestRejection::UnsupportedVersion(None),
+        ));
     } {
         Ok(request) => request,
         Err(e) => {
@@ -1948,7 +2006,7 @@ async fn get_broken_reply() -> Result<impl Reply, Rejection> {
     log::info!("Broken Endpoint was triggered.");
     Ok(mk_reply(
         "Broken Endpoint was used",
-        StatusCode::BAD_REQUEST,
+        UriOrCode::Code(StatusCode::BAD_REQUEST),
     ))
 }
 
@@ -1962,13 +2020,13 @@ mod tests {
         let ar_info_contents = include_str!("../../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../../data/global.json");
 
-        let ip_data: IpData<IpPairing> = from_str(&ip_data_contents)
+        let ip_data: IpData<IpPairing> = from_str(ip_data_contents)
             .expect("File did not contain a valid IpData object as JSON.");
-        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
+        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(ar_info_contents)
             .expect("File did not contain a valid ArInfos object as JSON");
         assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
         let ars = ar_info.value;
-        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
+        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(global_context_contents)
             .expect("File did not contain a valid GlobalContext object as JSON");
         assert_eq!(global_context.version, VERSION_0);
         let global = global_context.value;
@@ -2023,12 +2081,12 @@ mod tests {
                 .filter(&extract_and_validate_request(db, server_config.clone()))
                 .await;
             if let Err(e) = matches {
-                if let Some(IdRequestRejection::InvalidProofs) = e.find() {
+                if let Some(IdRequestRejection::InvalidProofs(_)) = e.find() {
                 } else {
-                    assert!(false, "Request should fail due to invalid proofs.")
+                    panic!("Request should fail due to invalid proofs.")
                 }
             } else {
-                assert!(false, "Invalid request should not pass the filter.")
+                panic!("Invalid request should not pass the filter.")
             }
         });
     }
@@ -2104,7 +2162,7 @@ mod tests {
         );
 
         let id_cred_pub_hash_digest =
-            Sha256::digest(&to_bytes(&idi.id_object_request.value.id_cred_pub));
+            Sha256::digest(to_bytes(&idi.id_object_request.value.id_cred_pub));
         let id_cred_pub_hash = base16_encode_string::<[u8; 32]>(&id_cred_pub_hash_digest.into());
 
         let root = std::path::Path::new("test-database").to_path_buf();

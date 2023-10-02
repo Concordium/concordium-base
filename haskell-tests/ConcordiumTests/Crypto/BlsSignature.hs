@@ -20,13 +20,13 @@ genSecretKey = secretBlsKeyGen
 genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
--- |Generates keypairs and messages.
--- The messages have a size of up to 100 bytes each.
--- Each message is associated with up to 10 key pairs.
+-- | Generates keypairs and messages.
+--  The messages have a size of up to 100 bytes each.
+--  Each message is associated with up to 10 key pairs.
 --
--- The keypairs and messages are constructed in this way,
--- since we're simulating that the same message may be signed by multiple key pairs.
--- Hence this generator creates groupings of key pairs on messages.
+--  The keypairs and messages are constructed in this way,
+--  since we're simulating that the same message may be signed by multiple key pairs.
+--  Hence this generator creates groupings of key pairs on messages.
 genKeyPairsAndMessages :: Gen [([(SecretKey, PublicKey)], [Word8])]
 genKeyPairsAndMessages = do
     n <- choose (10, 20)
@@ -35,13 +35,13 @@ genKeyPairsAndMessages = do
         m :: [Word8] <- resize 100 arbitrary
         return (kps, m)
 
-forAllSK :: Testable prop => (SecretKey -> prop) -> Property
+forAllSK :: (Testable prop) => (SecretKey -> prop) -> Property
 forAllSK = forAll genSecretKey
 
-forAllKP :: Testable prop => ((SecretKey, PublicKey) -> prop) -> Property
+forAllKP :: (Testable prop) => ((SecretKey, PublicKey) -> prop) -> Property
 forAllKP = forAll genKeyPair
 
-forAllKPsAndMessages :: Testable prop => ([([(SecretKey, PublicKey)], [Word8])] -> prop) -> Property
+forAllKPsAndMessages :: (Testable prop) => ([([(SecretKey, PublicKey)], [Word8])] -> prop) -> Property
 forAllKPsAndMessages = forAll genKeyPairsAndMessages
 
 -- Checks that two different keys doesn't produce the same signature on the same

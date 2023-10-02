@@ -2,9 +2,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_HADDOCK not-home #-}
 
--- |This module provides a prototype implementation of
--- EDDSA scheme of Curve Ed25519
---  IRTF RFC 8032
+-- | This module provides a prototype implementation of
+--  EDDSA scheme of Curve Ed25519
+--   IRTF RFC 8032
 module Concordium.Crypto.Ed25519Signature where
 
 import Concordium.Crypto.ByteStringHelpers
@@ -45,7 +45,7 @@ signatureSize = 64
 newtype SignKey = SignKey (ForeignPtr SignKey)
 newtype VerifyKey = VerifyKey (ForeignPtr VerifyKey)
 
--- |We compare key serializations. DO NOT USE IN PRODUCTION
+-- | We compare key serializations. DO NOT USE IN PRODUCTION
 instance Eq SignKey where
     v1 == v2 = encode v1 == encode v2
 
@@ -53,7 +53,7 @@ instance Eq SignKey where
 instance Ord VerifyKey where
     compare x y = compare (encode x) (encode y)
 
--- |Display in base 16.
+-- | Display in base 16.
 instance Show SignKey where
     show signKey = Text.unpack (serializeBase16 signKey)
 
@@ -74,11 +74,11 @@ instance AE.ToJSON SignKey where
 instance AE.FromJSON SignKey where
     parseJSON = AE.withText "Signing key in base16" deserializeBase16
 
--- |We compare key serializations.
+-- | We compare key serializations.
 instance Eq VerifyKey where
     v1 == v2 = encode v1 == encode v2
 
--- |Display in base 16.
+-- | Display in base 16.
 instance Show VerifyKey where
     show vfKey = Text.unpack (serializeBase16 vfKey)
 

@@ -114,6 +114,15 @@ impl InterpreterEnergy {
             energy: self.energy.saturating_sub(consumed),
         }
     }
+
+    /// Saturating interpreter energy subtraction.
+    ///
+    /// Computes `self - rhs` bottoming out at `0` instead of underflowing.
+    pub fn saturating_sub(self, consumed: Self) -> Self {
+        Self {
+            energy: self.energy.saturating_sub(consumed.energy),
+        }
+    }
 }
 
 impl std::str::FromStr for InterpreterEnergy {

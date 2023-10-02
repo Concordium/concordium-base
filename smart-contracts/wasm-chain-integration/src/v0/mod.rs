@@ -32,6 +32,7 @@ use concordium_wasm::{
     artifact::{Artifact, RunnableCode},
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
+    validate::ValidationConfig,
 };
 use machine::Value;
 use std::{collections::LinkedList, convert::TryInto, io::Write};
@@ -130,8 +131,7 @@ impl Outcome {
         let name = rn.to_owned();
 
         ensure!(parameter_bytes.len() <= max_parameter_size, "Parameter exceeds max size.");
-
-        let parameter = OwnedParameter(parameter_bytes.to_vec());
+        let parameter = OwnedParameter::new_unchecked(parameter_bytes.to_vec());
 
         let to_addr = ContractAddress {
             index:    addr_index,
@@ -195,9 +195,8 @@ impl State {
         let length = bytes.len();
         ensure!(offset <= self.len(), "Cannot write past the offset.");
         let offset = offset as usize;
-        let end = offset
-            .checked_add(length)
-            .ok_or_else(|| anyhow!("Writing past the end of memory."))? as usize;
+        let end =
+            offset.checked_add(length).ok_or_else(|| anyhow!("Writing past the end of memory."))?;
         let end = std::cmp::min(end, constants::MAX_CONTRACT_STATE as usize) as u32;
         if self.len() < end {
             self.state.resize(end as usize, 0u8);
@@ -1063,7 +1062,8 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
     limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact =
+        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
     invoke_init(
         &artifact,
         init_ctx,
@@ -1089,7 +1089,12 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     limit_logs_and_return_values: bool,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(
+        ValidationConfig::V0,
+        &ConcordiumAllowedImports,
+        source_bytes,
+    )?
+    .artifact;
     invoke_init(
         &artifact,
         init_ctx,
@@ -1228,7 +1233,8 @@ pub fn invoke_receive_from_source<Ctx: HasReceiveContext>(
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<ReceiveResult> {
-    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact =
+        utils::instantiate(ValidationConfig::V0, &ConcordiumAllowedImports, source_bytes)?.artifact;
     invoke_receive(
         &artifact,
         receive_ctx,
@@ -1250,7 +1256,12 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<ReceiveResult> {
-    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    let artifact = utils::instantiate_with_metering(
+        ValidationConfig::V0,
+        &ConcordiumAllowedImports,
+        source_bytes,
+    )?
+    .artifact;
     invoke_receive(
         &artifact,
         receive_ctx,

@@ -3,11 +3,15 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- |Part of the implementation of the GRPC2 interface. This module contains
--- a single typeclass 'ToProto' that is used to convert from Haskell types
--- to the generate Proto types.
+-- | Part of the implementation of the GRPC2 interface. This module contains
+--  a single typeclass 'ToProto' that is used to convert from Haskell types
+--  to the generate Proto types.
 module Concordium.GRPC2 (
     ToProto (..),
+    BakerAddedEvent,
+    BakerKeysEvent,
+    BlockHashInput (..),
+    BlockHeightInput (..),
 )
 where
 
@@ -51,21 +55,22 @@ import Concordium.Types.Block (AbsoluteBlockHeight (..))
 import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
 import qualified Concordium.Types.Parameters as Parameters
+import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
 
--- |A helper function that can be used to construct a value of a protobuf
--- "wrapper" type by serializing the provided value @a@ using its serialize
--- instance.
+-- | A helper function that can be used to construct a value of a protobuf
+--  "wrapper" type by serializing the provided value @a@ using its serialize
+--  instance.
 --
--- More concretely, the wrapper type should be of the form
+--  More concretely, the wrapper type should be of the form
 --
--- > message Wrapper {
--- >    bytes value = 1
--- > }
+--  > message Wrapper {
+--  >    bytes value = 1
+--  > }
 --
--- where the name @Wrapper@ can be arbitrary, but the @value@ field must exist,
--- and it must have type @bytes@.
+--  where the name @Wrapper@ can be arbitrary, but the @value@ field must exist,
+--  and it must have type @bytes@.
 mkSerialize ::
     ( Proto.Message b,
       Data.ProtoLens.Field.HasField
@@ -78,10 +83,10 @@ mkSerialize ::
     b
 mkSerialize ek = Proto.make (ProtoFields.value .= S.encode ek)
 
--- |Like 'mkSerialize' above, but used to set a wrapper type whose @value@ field
--- has type @uint64@. The supplied value must be coercible to a 'Word64'.
--- Coercible here means that the value is a newtype wrapper (possibly repeated)
--- of a Word64.
+-- | Like 'mkSerialize' above, but used to set a wrapper type whose @value@ field
+--  has type @uint64@. The supplied value must be coercible to a 'Word64'.
+--  Coercible here means that the value is a newtype wrapper (possibly repeated)
+--  of a Word64.
 mkWord64 ::
     ( Proto.Message b,
       Data.ProtoLens.Field.HasField
@@ -94,7 +99,7 @@ mkWord64 ::
     b
 mkWord64 a = Proto.make (ProtoFields.value .= coerce a)
 
--- |Like 'mkWord64', but for 32-bit integers instead of 64.
+-- | Like 'mkWord64', but for 32-bit integers instead of 64.
 mkWord32 ::
     ( Proto.Message b,
       Data.ProtoLens.Field.HasField
@@ -107,8 +112,8 @@ mkWord32 ::
     b
 mkWord32 a = Proto.make (ProtoFields.value .= coerce a)
 
--- |Like 'mkWord32', but the supplied value must be coercible to
--- 'Word16'.
+-- | Like 'mkWord32', but the supplied value must be coercible to
+--  'Word16'.
 mkWord16 ::
     forall a b.
     ( Proto.Message b,
@@ -122,8 +127,8 @@ mkWord16 ::
     b
 mkWord16 a = Proto.make (ProtoFields.value .= (fromIntegral (coerce a :: Word16) :: Word32))
 
--- |Like 'mkWord32', but the supplied value must be coercible to
--- 'Word8'.
+-- | Like 'mkWord32', but the supplied value must be coercible to
+--  'Word8'.
 mkWord8 ::
     forall a b.
     ( Proto.Message b,
@@ -137,14 +142,14 @@ mkWord8 ::
     b
 mkWord8 a = Proto.make (ProtoFields.value .= (fromIntegral (coerce a :: Word8) :: Word32))
 
--- |A helper class analogous to something like Aeson's ToJSON.
--- It exists to make it more manageable to convert the internal Haskell types to
--- their Protobuf equivalents.
+-- | A helper class analogous to something like Aeson's ToJSON.
+--  It exists to make it more manageable to convert the internal Haskell types to
+--  their Protobuf equivalents.
 class ToProto a where
-    -- |The corresponding Proto type.
+    -- | The corresponding Proto type.
     type Output a
 
-    -- |A conversion function from the type to its protobuf equivalent.
+    -- | A conversion function from the type to its protobuf equivalent.
     toProto :: a -> Output a
 
 instance ToProto Amount where
@@ -275,7 +280,7 @@ instance ToProto QueryTypes.ConsensusStatus where
         ProtoFields.bestBlock .= toProto csBestBlock
         ProtoFields.genesisBlock .= toProto csGenesisBlock
         ProtoFields.genesisTime .= toProto csGenesisTime
-        ProtoFields.slotDuration .= toProto csSlotDuration
+        ProtoFields.maybe'slotDuration .= fmap toProto csSlotDuration
         ProtoFields.epochDuration .= toProto csEpochDuration
         ProtoFields.lastFinalizedBlock .= toProto csLastFinalizedBlock
         ProtoFields.bestBlockHeight .= toProto csBestBlockHeight
@@ -302,6 +307,10 @@ instance ToProto QueryTypes.ConsensusStatus where
         ProtoFields.genesisIndex .= toProto csGenesisIndex
         ProtoFields.currentEraGenesisBlock .= toProto csCurrentEraGenesisBlock
         ProtoFields.currentEraGenesisTime .= toProto csCurrentEraGenesisTime
+        ProtoFields.maybe'currentTimeoutDuration .= fmap (toProto . cbftsCurrentTimeoutDuration) csConcordiumBFTStatus
+        ProtoFields.maybe'currentRound .= fmap (toProto . cbftsCurrentRound) csConcordiumBFTStatus
+        ProtoFields.maybe'currentEpoch .= fmap (toProto . cbftsCurrentEpoch) csConcordiumBFTStatus
+        ProtoFields.maybe'triggerBlockTime .= fmap (toProto . cbftsTriggerBlockTime) csConcordiumBFTStatus
 
 instance ToProto AccountThreshold where
     type Output AccountThreshold = Proto.AccountThreshold
@@ -340,11 +349,11 @@ instance ToProto AccountEncryptedAmount where
                 mkEncryptedBalance
                 ProtoFields.aggregatedAmount .= toProto aggAmount
                 ProtoFields.numAggregated .= numAgg
-                ProtoFields.incomingAmounts .= (toProto <$> toList (_incomingEncryptedAmounts encBal))
       where
         mkEncryptedBalance = do
             ProtoFields.selfAmount .= toProto (_selfAmount encBal)
             ProtoFields.startIndex .= coerce (_startIndex encBal)
+            ProtoFields.incomingAmounts .= (toProto <$> toList (_incomingEncryptedAmounts encBal))
 
 instance ToProto AccountReleaseSummary where
     type Output AccountReleaseSummary = Proto.ReleaseSchedule
@@ -420,6 +429,10 @@ instance ToProto OpenStatus where
 instance ToProto UrlText where
     type Output UrlText = Text
     toProto (UrlText s) = s
+
+instance ToProto PartsPerHundredThousands where
+    type Output PartsPerHundredThousands = Proto.AmountFraction
+    toProto (PartsPerHundredThousands ppht) = Proto.make (ProtoFields.partsPerHundredThousand .= fromIntegral ppht)
 
 instance ToProto AmountFraction where
     type Output AmountFraction = Proto.AmountFraction
@@ -681,10 +694,10 @@ instance ToProto RejectReason where
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
 
--- |Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
---  The protobuf type is better structured and removes the need for handling impossible cases.
---  For example the case of an account transfer resulting in a smart contract update, which is a
---  technical possibility in the way that the node's trx status is defined.
+-- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
+--   The protobuf type is better structured and removes the need for handling impossible cases.
+--   For example the case of an account transfer resulting in a smart contract update, which is a
+--   technical possibility in the way that the node's trx status is defined.
 instance ToProto QueryTypes.TransactionStatus where
     type Output QueryTypes.TransactionStatus = Either ConversionError Proto.BlockItemStatus
     toProto ts = case ts of
@@ -707,8 +720,8 @@ instance ToProto QueryTypes.TransactionStatus where
             ProtoFields.blockHash .= toProto bh
             ProtoFields.outcome .= bis
 
--- |Attempt to convert a TransactionSummary type into the protobuf BlockItemSummary type.
---  See @toBlockItemStatus@ for more context.
+-- | Attempt to convert a TransactionSummary type into the protobuf BlockItemSummary type.
+--   See @toBlockItemStatus@ for more context.
 instance ToProto TransactionSummary where
     type Output TransactionSummary = Either ConversionError Proto.BlockItemSummary
     toProto TransactionSummary{..} = case tsType of
@@ -835,6 +848,13 @@ instance ToProto Parameters.TimeoutParameters where
         ProtoFields.timeoutIncrease .= toProto _tpTimeoutIncrease
         ProtoFields.timeoutDecrease .= toProto _tpTimeoutDecrease
 
+instance ToProto Parameters.FinalizationCommitteeParameters where
+    type Output Parameters.FinalizationCommitteeParameters = Proto.FinalizationCommitteeParameters
+    toProto Parameters.FinalizationCommitteeParameters{..} = Proto.make $ do
+        ProtoFields.minimumFinalizers .= _fcpMinFinalizers
+        ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
+        ProtoFields.finalizerRelativeStakeThreshold .= toProto _fcpFinalizerRelativeStakeThreshold
+
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
     toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
@@ -842,8 +862,8 @@ instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParameter
         ProtoFields.minBlockTime .= toProto _cpMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
 
--- |Attempt to construct the protobuf updatepayload.
---  See @toBlockItemStatus@ for more context.
+-- | Attempt to construct the protobuf updatepayload.
+--   See @toBlockItemStatus@ for more context.
 convertUpdatePayload :: Updates.UpdateType -> Updates.UpdatePayload -> Either ConversionError Proto.UpdatePayload
 convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateProtocol, Updates.ProtocolUpdatePayload pu) -> Right . Proto.make $ ProtoFields.protocolUpdate .= toProto pu
@@ -874,19 +894,20 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateTimeoutParameters, Updates.TimeoutParametersUpdatePayload tp) -> Right . Proto.make $ ProtoFields.timeoutParametersUpdate .= toProto tp
     (Updates.UpdateMinBlockTime, Updates.MinBlockTimeUpdatePayload mbt) -> Right . Proto.make $ ProtoFields.minBlockTimeUpdate .= toProto mbt
     (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
+    (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     _ -> Left CEInvalidUpdateResult
 
--- |The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
+-- | The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
 data ConversionError
-    = -- |An account creation failed.
+    = -- | An account creation failed.
       CEFailedAccountCreation
-    | -- |An account creation transaction occurred but was malformed and could not be converted.
+    | -- | An account creation transaction occurred but was malformed and could not be converted.
       CEInvalidAccountCreation
-    | -- |An update transaction failed.
+    | -- | An update transaction failed.
       CEFailedUpdate
-    | -- |An update transaction occurred but was malformed and could not be converted.
+    | -- | An update transaction occurred but was malformed and could not be converted.
       CEInvalidUpdateResult
-    | -- |An account transaction occurred but was malformed and could not be converted.
+    | -- | An account transaction occurred but was malformed and could not be converted.
       CEInvalidTransactionResult
     deriving (Eq)
 
@@ -981,7 +1002,7 @@ instance ToProto (Updates.HigherLevelKeys kind) where
         ProtoFields.keys .= map toProto (Vec.toList $ Updates.hlkKeys keys)
         ProtoFields.threshold .= toProto (Updates.hlkThreshold keys)
 
-instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizations auv) where
+instance (Parameters.IsAuthorizationsVersion auv) => ToProto (Updates.Authorizations auv) where
     type Output (Updates.Authorizations auv) = AuthorizationsFamily auv
     toProto auth =
         let
@@ -1008,7 +1029,7 @@ instance Parameters.IsAuthorizationsVersion auv => ToProto (Updates.Authorizatio
                     ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
 
--- |Defines a type family that is used in the ToProto instance for Updates.Authorizations.
+-- | Defines a type family that is used in the ToProto instance for Updates.Authorizations.
 type family AuthorizationsFamily cpv where
     AuthorizationsFamily 'Parameters.AuthorizationsVersion0 = Proto.AuthorizationsV0
     AuthorizationsFamily 'Parameters.AuthorizationsVersion1 = Proto.AuthorizationsV1
@@ -1145,8 +1166,8 @@ convertContractRelatedEvents event = case event of
                     )
     _ -> Left CEInvalidTransactionResult
 
--- |Attempt to construct the protobuf type AccounTransactionType.
--- See @toBlockItemStatus@ for more context.
+-- | Attempt to construct the protobuf type AccounTransactionType.
+--  See @toBlockItemStatus@ for more context.
 convertAccountTransaction ::
     -- | The transaction type. @Nothing@ means that the transaction was serialized incorrectly.
     Maybe TransactionType ->
@@ -1513,6 +1534,7 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateTimeoutParameters = Proto.UPDATE_TIMEOUT_PARAMETERS
     toProto Updates.UpdateMinBlockTime = Proto.UPDATE_MIN_BLOCK_TIME
     toProto Updates.UpdateBlockEnergyLimit = Proto.UPDATE_BLOCK_ENERGY_LIMIT
+    toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType
@@ -1588,7 +1610,7 @@ instance ToProto QueryTypes.BlockInfo where
         ProtoFields.eraBlockHeight .= toProto biEraBlockHeight
         ProtoFields.receiveTime .= toProto biBlockReceiveTime
         ProtoFields.arriveTime .= toProto biBlockArriveTime
-        ProtoFields.slotNumber .= toProto biBlockSlot
+        ProtoFields.maybe'slotNumber .= fmap toProto biBlockSlot
         ProtoFields.slotTime .= toProto biBlockSlotTime
         ProtoFields.maybe'baker .= fmap toProto biBlockBaker
         ProtoFields.finalized .= biFinalized
@@ -1596,6 +1618,9 @@ instance ToProto QueryTypes.BlockInfo where
         ProtoFields.transactionsEnergyCost .= toProto biTransactionEnergyCost
         ProtoFields.transactionsSize .= fromIntegral biTransactionsSize
         ProtoFields.stateHash .= toProto biBlockStateHash
+        ProtoFields.protocolVersion .= toProto biProtocolVersion
+        ProtoFields.maybe'round .= fmap toProto biRound
+        ProtoFields.maybe'epoch .= fmap toProto biEpoch
 
 instance ToProto QueryTypes.PoolStatus where
     type Output QueryTypes.PoolStatus = Either Proto.PoolInfoResponse Proto.PassiveDelegationInfo
@@ -1645,6 +1670,7 @@ instance ToProto QueryTypes.CurrentPaydayBakerPoolStatus where
         ProtoFields.lotteryPower .= bpsLotteryPower
         ProtoFields.bakerEquityCapital .= toProto bpsBakerEquityCapital
         ProtoFields.delegatedCapital .= toProto bpsDelegatedCapital
+        ProtoFields.commissionRates .= toProto bpsCommissionRates
 
 instance ToProto QueryTypes.RewardStatus where
     type Output QueryTypes.RewardStatus = Proto.TokenomicsInfo
@@ -1703,7 +1729,7 @@ instance ToProto QueryTypes.BlockBirkParameters where
     toProto QueryTypes.BlockBirkParameters{..} = do
         bakerElectionInfo <- mapM toProto (Vec.toList bbpBakers)
         Just $ Proto.make $ do
-            ProtoFields.electionDifficulty .= toProto bbpElectionDifficulty
+            ProtoFields.maybe'electionDifficulty .= fmap toProto bbpElectionDifficulty
             ProtoFields.electionNonce .= mkSerialize bbpElectionNonce
             ProtoFields.bakerElectionInfo .= bakerElectionInfo
 
@@ -1920,6 +1946,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUETimeoutParameters timeoutParameters -> ProtoFields.timeoutParameters .= toProto timeoutParameters
             QueryTypes.PUEMinBlockTime minBlockTime -> ProtoFields.minBlockTime .= toProto minBlockTime
             QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
+            QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
@@ -1940,10 +1967,18 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.addIdentityProvider .= toProto _nusnAddIdentityProvider
         ProtoFields.cooldownParameters .= toProto _nusnCooldownParameters
         ProtoFields.timeParameters .= toProto _nusnTimeParameters
+        ProtoFields.timeoutParameters .= toProto _nusnTimeoutParameters
+        ProtoFields.minBlockTime .= toProto _nusnMinBlockTime
+        ProtoFields.blockEnergyLimit .= toProto _nusnBlockEnergyLimit
+        ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
     toProto = mkWord64
+
+instance ToProto Round where
+    type Output Round = Proto.Round
+    toProto (Round r) = mkWord64 r
 
 instance ToProto CredentialsPerBlockLimit where
     type Output CredentialsPerBlockLimit = Proto.CredentialsPerBlockLimit
@@ -2019,6 +2054,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
 
 instance ToProto FinalizationIndex where
@@ -2049,3 +2085,158 @@ instance ToProto BlockFinalizationSummary where
                         ProtoFields.finalizers .= map toProto (Vec.toList fsFinalizers)
                     )
             )
+
+instance ToProto AccountIdentifier where
+    type Output AccountIdentifier = Proto.AccountIdentifierInput
+    toProto = \case
+        CredRegID cred -> Proto.make $ ProtoFields.credId .= toProto cred
+        AccAddress addr -> Proto.make $ ProtoFields.address .= toProto addr
+        AccIndex accIdx -> Proto.make $ ProtoFields.accountIndex .= toProto accIdx
+
+instance ToProto Transactions.BareBlockItem where
+    type Output Transactions.BareBlockItem = Proto.SendBlockItemRequest
+    toProto bbi = Proto.make $
+        case bbi of
+            Transactions.NormalTransaction aTransaction ->
+                ProtoFields.accountTransaction .= toProto aTransaction
+            Transactions.CredentialDeployment aCreation ->
+                ProtoFields.credentialDeployment .= toProto aCreation
+            Transactions.ChainUpdate uInstruction ->
+                ProtoFields.updateInstruction .= toProto uInstruction
+
+instance ToProto BlockHashInput where
+    type Output BlockHashInput = Proto.BlockHashInput
+    toProto = \case
+        Best -> Proto.make $ ProtoFields.best .= Proto.defMessage
+        LastFinal -> Proto.make $ ProtoFields.lastFinal .= Proto.defMessage
+        Given bh -> Proto.make $ ProtoFields.given .= toProto bh
+        AtHeight (Absolute{..}) -> Proto.make $ ProtoFields.absoluteHeight .= toProto aBlockHeight
+        AtHeight (Relative{..}) ->
+            Proto.make $
+                ProtoFields.relativeHeight
+                    .= Proto.make
+                        ( do
+                            ProtoFields.genesisIndex .= toProto rGenesisIndex
+                            ProtoFields.height .= toProto rBlockHeight
+                            ProtoFields.restrict .= rRestrict
+                        )
+
+instance ToProto BlockHeightInput where
+    type Output BlockHeightInput = Proto.BlocksAtHeightRequest
+    toProto Relative{..} =
+        Proto.make $
+            ProtoFields.relative
+                .= Proto.make
+                    ( do
+                        ProtoFields.genesisIndex .= toProto rGenesisIndex
+                        ProtoFields.height .= toProto rBlockHeight
+                        ProtoFields.restrict .= rRestrict
+                    )
+    toProto Absolute{..} =
+        Proto.make $
+            ProtoFields.absolute .= Proto.make (ProtoFields.height .= toProto aBlockHeight)
+
+instance ToProto (BlockHashInput, InvokeContract.ContractContext) where
+    type Output (BlockHashInput, InvokeContract.ContractContext) = Proto.InvokeInstanceRequest
+    toProto (bhi, InvokeContract.ContractContext{..}) =
+        Proto.make $ do
+            ProtoFields.blockHash .= toProto bhi
+            ProtoFields.maybe'invoker .= fmap toProto ccInvoker
+            ProtoFields.instance' .= toProto ccContract
+            ProtoFields.amount .= toProto ccAmount
+            ProtoFields.entrypoint .= toProto ccMethod
+            ProtoFields.parameter .= toProto ccParameter
+            ProtoFields.energy .= toProto ccEnergy
+
+instance ToProto IpAddress where
+    type Output IpAddress = Proto.IpAddress
+    toProto ip = Proto.make $ ProtoFields.value .= ipAddress ip
+
+instance ToProto IpPort where
+    type Output IpPort = Proto.Port
+    toProto ip = Proto.make $ ProtoFields.value .= fromIntegral (ipPort ip)
+
+instance ToProto KonsensusV1.QuorumCertificateSignature where
+    type Output KonsensusV1.QuorumCertificateSignature = Proto.QuorumSignature
+    toProto (KonsensusV1.QuorumCertificateSignature sig) = mkSerialize sig
+
+instance ToProto KonsensusV1.QuorumCertificate where
+    type Output KonsensusV1.QuorumCertificate = Proto.QuorumCertificate
+    toProto KonsensusV1.QuorumCertificate{..} =
+        Proto.make $ do
+            ProtoFields.blockHash .= toProto qcBlock
+            ProtoFields.round .= toProto qcRound
+            ProtoFields.epoch .= toProto qcEpoch
+            ProtoFields.aggregateSignature .= toProto qcAggregateSignature
+            ProtoFields.signatories .= (toProto <$> qcSignatories)
+
+instance ToProto KonsensusV1.FinalizerRound where
+    type Output KonsensusV1.FinalizerRound = Proto.FinalizerRound
+    toProto KonsensusV1.FinalizerRound{..} =
+        Proto.make $ do
+            ProtoFields.round .= toProto frRound
+            ProtoFields.finalizers .= (toProto <$> frFinalizers)
+
+instance ToProto KonsensusV1.TimeoutCertificateSignature where
+    type Output KonsensusV1.TimeoutCertificateSignature = Proto.TimeoutSignature
+    toProto (KonsensusV1.TimeoutCertificateSignature sig) = mkSerialize sig
+
+instance ToProto KonsensusV1.TimeoutCertificate where
+    type Output KonsensusV1.TimeoutCertificate = Proto.TimeoutCertificate
+    toProto KonsensusV1.TimeoutCertificate{..} =
+        Proto.make $ do
+            ProtoFields.round .= toProto tcRound
+            ProtoFields.minEpoch .= toProto tcMinEpoch
+            ProtoFields.qcRoundsFirstEpoch .= (toProto <$> tcFinalizerQCRoundsFirstEpoch)
+            ProtoFields.qcRoundsSecondEpoch .= (toProto <$> tcFinalizerQCRoundsSecondEpoch)
+            ProtoFields.aggregateSignature .= toProto tcAggregateSignature
+
+instance ToProto KonsensusV1.SuccessorProof where
+    type Output KonsensusV1.SuccessorProof = Proto.SuccessorProof
+    toProto (KonsensusV1.SuccessorProof proof) = mkSerialize proof
+
+instance ToProto KonsensusV1.EpochFinalizationEntry where
+    type Output KonsensusV1.EpochFinalizationEntry = Proto.EpochFinalizationEntry
+    toProto KonsensusV1.EpochFinalizationEntry{..} =
+        Proto.make $ do
+            ProtoFields.finalizedQc .= toProto efeFinalizedQC
+            ProtoFields.successorQc .= toProto efeSuccessorQC
+            ProtoFields.successorProof .= toProto efeSuccessorProof
+
+instance ToProto KonsensusV1.BlockCertificates where
+    type Output KonsensusV1.BlockCertificates = Proto.BlockCertificates
+    toProto KonsensusV1.BlockCertificates{..} =
+        Proto.make $ do
+            ProtoFields.maybe'quorumCertificate .= fmap toProto bcQuorumCertificate
+            ProtoFields.maybe'timeoutCertificate .= fmap toProto bcTimeoutCertificate
+            ProtoFields.maybe'epochFinalizationEntry .= fmap toProto bcEpochFinalizationEntry
+
+instance ToProto BakerRewardPeriodInfo where
+    type Output BakerRewardPeriodInfo = Proto.BakerRewardPeriodInfo
+    toProto BakerRewardPeriodInfo{..} =
+        Proto.make $ do
+            ProtoFields.baker .= toProto brpiBaker
+            ProtoFields.effectiveStake .= toProto brpiEffectiveStake
+            ProtoFields.commissionRates .= toProto brpiCommissionRates
+            ProtoFields.equityCapital .= toProto brpiEquityCapital
+            ProtoFields.delegatedCapital .= toProto brpiDelegatedCapital
+            ProtoFields.isFinalizer .= brpiIsFinalizer
+
+instance ToProto EpochRequest where
+    type Output EpochRequest = Proto.EpochRequest
+    toProto SpecifiedEpoch{..} = Proto.make $ do
+        ProtoFields.relativeEpoch
+            .= Proto.make
+                ( do
+                    ProtoFields.genesisIndex .= toProto erGenesisIndex
+                    ProtoFields.epoch .= toProto erEpoch
+                )
+    toProto EpochOfBlock{..} = Proto.make $ do
+        ProtoFields.blockHash .= toProto erBlock
+
+instance ToProto WinningBaker where
+    type Output WinningBaker = Proto.WinningBaker
+    toProto WinningBaker{..} = Proto.make $ do
+        ProtoFields.round .= toProto wbRound
+        ProtoFields.winner .= toProto wbWinner
+        ProtoFields.present .= wbPresent

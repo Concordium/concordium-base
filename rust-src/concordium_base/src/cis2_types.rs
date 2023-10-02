@@ -3,11 +3,16 @@
 
 use crate::{
     hashes::Hash,
-    smart_contracts::concordium_contracts_common::{
-        deserial_vector_no_length, serial_vector_no_length, AccountAddress, Address,
-        ContractAddress, Deserial, OwnedReceiveName, ParseError, Read, Serial, Write,
+    smart_contracts::{
+        concordium_contracts_common::{
+            self as concordium_std, deserial_vector_no_length, serial_vector_no_length,
+            AccountAddress, Address, ContractAddress, Deserial, OwnedReceiveName, ParseError, Read,
+            Serial, Serialize, Write,
+        },
+        ContractEvent,
     },
 };
+use concordium_contracts_common::Cursor;
 use derive_more::{AsRef, Display, From, FromStr, Into};
 use num::ToPrimitive;
 use num_bigint::BigUint;
@@ -29,8 +34,8 @@ use thiserror::*;
     From,
     Display,
     FromStr,
-    crypto_common::SerdeSerialize,
-    crypto_common::SerdeDeserialize,
+    crate::common::SerdeSerialize,
+    crate::common::SerdeDeserialize,
 )]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
@@ -269,8 +274,8 @@ impl Deserial for TokenAmount {
     Into,
     AsRef,
     Hash,
-    crypto_common::SerdeSerialize,
-    crypto_common::SerdeDeserialize,
+    crate::common::SerdeSerialize,
+    crate::common::SerdeDeserialize,
 )]
 #[serde(try_from = "String", into = "String")]
 pub struct TokenId(Vec<u8>);
@@ -290,9 +295,29 @@ impl TokenId {
         Ok(TokenId(bytes))
     }
 
-    /// Construct a new TokenId.
+    /// Construct a new [`Self`].
     /// Without ensuring the length of the provided bytes are within `u8::MAX`.
     pub fn new_unchecked(bytes: Vec<u8>) -> Self { TokenId(bytes) }
+
+    /// Construct a new [`Self`] from a 128-bit integer. This id will always be
+    /// 16 bytes.
+    pub fn new_u128(id: u128) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from a 64-bit integer. This id will always be 8
+    /// bytes.
+    pub fn new_u64(id: u64) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from a 32-bit integer. This id will always be 4
+    /// bytes.
+    pub fn new_u32(id: u32) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from a 16-bit integer. This id will always be 2
+    /// bytes.
+    pub fn new_u16(id: u16) -> Self { Self(id.to_le_bytes().to_vec()) }
+
+    /// Construct a new [`Self`] from an 8-bit integer. This id will always be 1
+    /// byte.
+    pub fn new_u8(id: u8) -> Self { Self(vec![id]) }
 }
 
 /// Error from parsing a token ID bytes from a hex encoded string.
@@ -894,9 +919,10 @@ impl Deserial for TokenMetadataQueryResponse {
 }
 
 /// A URL for the metadata.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct MetadataUrl {
     /// The url encoded according to CIS2.
+    #[concordium(size_length = 2)]
     url:  String,
     /// An optional checksum of the content found at the URL.
     hash: Option<Hash>,
@@ -929,26 +955,13 @@ impl MetadataUrl {
     pub fn hash(&self) -> Option<Hash> { self.hash }
 }
 
-/// Deserialization for MetadataUrl according to the CIS2 specification.
-impl Deserial for MetadataUrl {
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, ParseError> {
-        let len = source.read_u16()?;
-        let mut bytes = Vec::with_capacity(len.into());
-        for _ in 0..len {
-            bytes.push(source.read_u8()?)
-        }
-        let url = String::from_utf8(bytes)?;
-        let hash = Option::<[u8; 32]>::deserial(source)?.map(|b| b.into());
-        Ok(MetadataUrl::new_unchecked(url, hash))
-    }
-}
-
 /// Smart contract logged event, part of the CIS2 specification.
 #[derive(Debug, Display, Clone)]
 pub enum Event {
     /// Transfer of an amount of tokens
     #[display(
-        fmt = "Transferred token with ID {} from {} to {}",
+        fmt = "Transferred {} of token with ID {} from {} to {}",
+        amount,
         token_id,
         "display_address(from)",
         "display_address(to)"
@@ -961,7 +974,8 @@ pub enum Event {
     },
     /// Minting an amount of tokens
     #[display(
-        fmt = "Minted token with ID {} for {}",
+        fmt = "Minted {} of token with ID {} for {}",
+        amount,
         token_id,
         "display_address(owner)"
     )]
@@ -972,7 +986,8 @@ pub enum Event {
     },
     /// Burning an amount of tokens
     #[display(
-        fmt = "Burned token with ID {} for {}",
+        fmt = "Burned {} of token with ID {} for {}",
+        amount,
         token_id,
         "display_address(owner)"
     )]
@@ -1058,6 +1073,23 @@ fn display_address(a: &Address) -> String {
     match a {
         Address::Account(addr) => format!("{}", addr),
         Address::Contract(addr) => format!("{}", addr),
+    }
+}
+
+/// Attempt to parse the contract event into an event. This requires that the
+/// entire input is consumed if it is a known CIS2 event.
+impl<'a> TryFrom<&'a ContractEvent> for Event {
+    type Error = ParseError;
+
+    fn try_from(value: &'a super::smart_contracts::ContractEvent) -> Result<Self, Self::Error> {
+        let data = value.as_ref();
+        let mut cursor = Cursor::new(data);
+        let res = Self::deserial(&mut cursor)?;
+        if cursor.offset == data.len() || matches!(&res, Self::Unknown) {
+            Ok(res)
+        } else {
+            Err(ParseError {})
+        }
     }
 }
 

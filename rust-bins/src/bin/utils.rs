@@ -5,6 +5,7 @@
 use anyhow::Context;
 use clap::AppSettings;
 use client_server_helpers::*;
+use concordium_base::common::encryption;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -55,8 +56,7 @@ fn main() -> anyhow::Result<()> {
 fn handle_encrypt(cfg: ConfigEncrypt) -> anyhow::Result<()> {
     let data = std::fs::read(&cfg.input).context("Cannot read input file.")?;
     let pass = ask_for_password_confirm("Enter password to encrypt with: ", false)?;
-    let encrypted =
-        crypto_common::encryption::encrypt(&pass.into(), &data, &mut rand::thread_rng());
+    let encrypted = encryption::encrypt(&pass.into(), &data, &mut rand::thread_rng());
     eprintln!("Writing output to {}", cfg.output.to_string_lossy());
     write_json_to_file(&cfg.output, &encrypted)?;
     Ok(())
@@ -66,7 +66,7 @@ fn handle_decrypt(cfg: ConfigDecrypt) -> anyhow::Result<()> {
     let data = std::fs::read(&cfg.input).context("Cannot read input file.")?;
     let parsed_data = serde_json::from_slice(&data)?;
     let pass = rpassword::prompt_password("Enter password to decrypt with: ")?;
-    let plaintext = match crypto_common::encryption::decrypt(&pass.into(), &parsed_data) {
+    let plaintext = match encryption::decrypt(&pass.into(), &parsed_data) {
         Ok(pt) => pt,
         Err(_) => anyhow::bail!("Could not decrypt."),
     };

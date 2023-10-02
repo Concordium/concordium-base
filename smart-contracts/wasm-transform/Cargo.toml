@@ -1,6 +1,6 @@
 [package]
 name = "concordium-wasm"
-version = "1.0.0"
+version = "3.0.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
@@ -16,13 +16,13 @@ fuzz-coverage = []
 [dependencies]
 leb128 = "0.2"
 anyhow = "1.0"
-num_enum = "0.5"
+num_enum = "0.6"
 derive_more = "0.99"
 
 
 [dependencies.concordium-contracts-common]
-version = "5"
-path = "../../concordium-contracts-common/concordium-contracts-common"
+version = "8"
+path = "../contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
 [lib]

@@ -1,13 +1,13 @@
 use anyhow::Context;
 use bitvec::prelude::*;
-use crypto_common::*;
-use curve_arithmetic::*;
+use concordium_base::{
+    common::*,
+    curve_arithmetic::*,
+    id::{constants::*, types::*},
+};
 use dialoguer::Input;
-use ed25519_hd_key_derivation::DeriveError;
 use hkdf::HkdfExtract;
-use id::{constants::*, types::*};
 use pairing::bls12_381::Bls12;
-use pedersen_scheme::Randomness as PedersenRandomness;
 use rand::Rng;
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 use serde_json::{to_string_pretty, to_writer_pretty};
@@ -20,10 +20,6 @@ use std::{
     path::Path,
     str::FromStr,
 };
-
-use key_derivation::ConcordiumHdWallet;
-
-pub type ExampleCurve = <Bls12 as Pairing>::G1;
 
 pub type ExampleAttribute = AttributeKind;
 
@@ -45,9 +41,7 @@ pub fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).coll
 
 /// Read an object containing a versioned global context from the given file.
 /// Currently only version 0 is supported.
-pub fn read_global_context<P: AsRef<Path> + Debug>(
-    filename: P,
-) -> Option<GlobalContext<ExampleCurve>> {
+pub fn read_global_context<P: AsRef<Path> + Debug>(filename: P) -> Option<GlobalContext<ArCurve>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename).ok()?;
     match params.version {
         Version { value: 0 } => serde_json::from_value(params.value).ok(),
@@ -70,7 +64,7 @@ pub fn read_ip_info<P: AsRef<Path> + Debug>(filename: P) -> io::Result<IpInfo<Bl
 /// Read id recovery request.
 pub fn read_recovery_request<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<IdRecoveryRequest<ExampleCurve>> {
+) -> io::Result<IdRecoveryRequest<ArCurve>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
@@ -84,7 +78,7 @@ pub fn read_recovery_request<P: AsRef<Path> + Debug>(
 /// Read id_object, deciding on how to parse based on the version.
 pub fn read_id_object<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<IdentityObject<Bls12, ExampleCurve, ExampleAttribute>> {
+) -> io::Result<IdentityObject<Bls12, ArCurve, ExampleAttribute>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
@@ -98,7 +92,7 @@ pub fn read_id_object<P: AsRef<Path> + Debug>(
 /// Read version id_object, deciding on how to parse based on the version.
 pub fn read_id_object_v1<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<IdentityObjectV1<Bls12, ExampleCurve, ExampleAttribute>> {
+) -> io::Result<IdentityObjectV1<Bls12, ArCurve, ExampleAttribute>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
@@ -126,8 +120,7 @@ pub fn output_possibly_encrypted<X: SerdeSerialize>(
         Ok(false)
     } else {
         let plaintext = serde_json::to_vec(data).expect("JSON serialization does not fail.");
-        let encrypted =
-            crypto_common::encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
+        let encrypted = encryption::encrypt(&pass.into(), &plaintext, &mut rand::thread_rng());
         write_json_to_file(fname, &encrypted)?;
         Ok(true)
     }
@@ -140,11 +133,11 @@ pub fn decrypt_input<P: AsRef<Path> + Debug, X: DeserializeOwned>(input: P) -> a
         Ok(data) => Ok(data),
         Err(_) => {
             let parsed_data = serde_json::from_slice(&data)?;
-            let pass = rpassword::prompt_password(&format!(
+            let pass = rpassword::prompt_password(format!(
                 "Enter password to decrypt file {} with: ",
                 input.as_ref().to_string_lossy()
             ))?;
-            let plaintext = crypto_common::encryption::decrypt(&pass.into(), &parsed_data)
+            let plaintext = encryption::decrypt(&pass.into(), &parsed_data)
                 .context("Could not decrypt data.")?;
             serde_json::from_slice(&plaintext).context("Could not parse decrypted data.")
         }
@@ -154,7 +147,7 @@ pub fn decrypt_input<P: AsRef<Path> + Debug, X: DeserializeOwned>(input: P) -> a
 /// Read id_use_data, deciding on how to parse based on the version.
 pub fn read_id_use_data<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<IdObjectUseData<Bls12, ExampleCurve>> {
+) -> io::Result<IdObjectUseData<Bls12, ArCurve>> {
     let params: Versioned<serde_json::Value> = match decrypt_input(filename) {
         Ok(versioned_val) => versioned_val,
         Err(e) => {
@@ -173,7 +166,7 @@ pub fn read_id_use_data<P: AsRef<Path> + Debug>(
 /// Read pre-identity object, deciding on how to parse based on the version.
 pub fn read_pre_identity_object<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<PreIdentityObject<Bls12, ExampleCurve>> {
+) -> io::Result<PreIdentityObject<Bls12, ArCurve>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
@@ -187,7 +180,7 @@ pub fn read_pre_identity_object<P: AsRef<Path> + Debug>(
 /// Read pre-identity object, deciding on how to parse based on the version.
 pub fn read_pre_identity_object_v1<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<PreIdentityObjectV1<Bls12, ExampleCurve>> {
+) -> io::Result<PreIdentityObjectV1<Bls12, ArCurve>> {
     let params: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match params.version {
         Version { value: 0 } => Ok(serde_json::from_value(params.value)?),
@@ -228,7 +221,7 @@ pub fn read_identity_provider<P: AsRef<Path> + Debug>(filename: P) -> io::Result
 /// version number.
 pub fn read_anonymity_revokers<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<ArInfos<ExampleCurve>> {
+) -> io::Result<ArInfos<ArCurve>> {
     let vars: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match vars.version {
         Version { value: 0 } => Ok(serde_json::from_value(vars.value)?),
@@ -243,7 +236,7 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + Debug>(
 /// version number.
 pub fn read_credential<P: AsRef<Path> + Debug>(
     filename: P,
-) -> io::Result<CredentialDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute>> {
+) -> io::Result<CredentialDeploymentInfo<Bls12, ArCurve, ExampleAttribute>> {
     let vars: Versioned<serde_json::Value> = read_json_from_file(filename)?;
     match vars.version {
         Version { value: 0 } => Ok(serde_json::from_value(vars.value)?),
@@ -411,7 +404,7 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
     let checksum = bit_vec.split_off(ent_len);
 
     // checksum is supposed to be first cs_len bits of SHA256(entropy)
-    let hash = Sha256::digest(&bit_vec.into_vec());
+    let hash = Sha256::digest(bit_vec.into_vec());
 
     // convert hash from byte vector to bit vector
     let hash_bits = BitVec::<u8, Msb0>::from_slice(&hash);
@@ -423,7 +416,7 @@ pub fn verify_bip39(word_vec: &[String], bip_word_map: &HashMap<&str, usize>) ->
 /// Convert given byte array to valid BIP39 sentence.
 /// Bytes must contain {16, 20, 24, 28, 32} bytes corresponding to
 /// {128, 160, 192, 224, 256} bits.
-/// This uses the method described at https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+/// This uses the method described at <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>.
 pub fn bytes_to_bip39(bytes: &[u8], bip_word_list: &[&str]) -> Result<Vec<String>, String> {
     let ent_len = 8 * bytes.len(); // input is called entropy in BIP39
     match ent_len {
@@ -501,27 +494,4 @@ pub fn rerandomize_bip39(
     let output_words = bytes_to_bip39(&prk, bip_word_list)?;
 
     Ok(output_words)
-}
-
-pub struct CredentialContext {
-    pub wallet:                  ConcordiumHdWallet,
-    pub identity_provider_index: u32,
-    pub identity_index:          u32,
-    pub credential_index:        u32,
-}
-
-impl HasAttributeRandomness<ArCurve> for CredentialContext {
-    type ErrorType = DeriveError;
-
-    fn get_attribute_commitment_randomness(
-        &self,
-        attribute_tag: AttributeTag,
-    ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
-        self.wallet.get_attribute_commitment_randomness(
-            self.identity_provider_index,
-            self.identity_index,
-            self.credential_index,
-            attribute_tag,
-        )
-    }
 }

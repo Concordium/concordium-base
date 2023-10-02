@@ -1,19 +1,23 @@
-use crypto_common::{base16_decode, base16_encode};
-use ed25519_dalek::{PublicKey, SecretKey};
-use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
-use hmac::Hmac;
-use id::{
-    curve_arithmetic::Curve, pedersen_commitment::Randomness as CommitmentRandomness,
-    types::AttributeTag,
+use concordium_base::{
+    common::{base16_decode, base16_encode, SerdeDeserialize, SerdeSerialize},
+    contracts_common::ContractAddress,
+    id::{
+        constants::{ArCurve, IpPairing},
+        curve_arithmetic::Curve,
+        pedersen_commitment::Randomness as CommitmentRandomness,
+        types::{AttributeTag, HasAttributeRandomness, IpIdentity},
+    },
+    ps_sig::SigRetrievalRandomness,
 };
+use ed25519_dalek::{PublicKey, SecretKey};
+pub use ed25519_hd_key_derivation::DeriveError;
+use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden};
+use hmac::Hmac;
 use keygen_bls::keygen_bls;
-use pairing::bls12_381::{Bls12, G1};
-use ps_sig::SigRetrievalRandomness;
-use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 use std::fmt;
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize)]
 pub enum Net {
     Mainnet,
     Testnet,
@@ -33,17 +37,17 @@ impl fmt::Display for Net {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.net_code()) }
 }
 
-fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <G1 as Curve>::Scalar {
+fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <ArCurve as Curve>::Scalar {
     keygen_bls(&key_seed, b"").expect("All the inputs are of the correct length, this cannot fail.")
 }
 
 /// Convert 24 BIP-39 words to a 64 bytes seed.
-/// As described in https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki,
+/// As described in <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>,
 /// but with an empty passphrase.
 pub fn words_to_seed(words: &str) -> [u8; 64] { words_to_seed_with_passphrase(words, "") }
 
 /// Convert 24 BIP-39 words to a 64 bytes seed.
-/// As described in https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+/// As described in <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>.
 pub fn words_to_seed_with_passphrase(words: &str, passphrase: &str) -> [u8; 64] {
     let mut salt_string: String = "mnemonic".to_owned();
     salt_string.push_str(passphrase);
@@ -60,7 +64,7 @@ pub fn words_to_seed_with_passphrase(words: &str, passphrase: &str) -> [u8; 64] 
 /// The wallet should be used as a single point for deriving all required keys
 /// and randomness when creating identities and accounts, as it will allow for
 /// recovering the key material and randomness from just the seed.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct ConcordiumHdWallet {
     /// The seed used as the basis for deriving keys. As all private keys are
     /// derived from this seed it means that it should be considered private
@@ -79,8 +83,8 @@ pub struct ConcordiumHdWallet {
     pub net:  Net,
 }
 
-pub type CredId = <G1 as Curve>::Scalar;
-pub type PrfKey = dodis_yampolskiy_prf::SecretKey<G1>;
+pub type CredId = <ArCurve as Curve>::Scalar;
+pub type PrfKey = concordium_base::dodis_yampolskiy_prf::SecretKey<ArCurve>;
 
 impl ConcordiumHdWallet {
     fn make_path(&self, path: &[u32]) -> Result<Vec<u32>, DeriveError> {
@@ -90,6 +94,30 @@ impl ConcordiumHdWallet {
             derivation_path.push(checked_harden(index)?)
         }
         Ok(derivation_path)
+    }
+
+    fn make_verifiable_credential_path(&self, path: &[u32]) -> Result<Vec<u32>, DeriveError> {
+        let root_path: Vec<u32> = vec![harden(1958950021), harden(self.net.net_code())];
+        let mut derivation_path = root_path;
+        for &index in path {
+            derivation_path.push(checked_harden(index)?)
+        }
+        Ok(derivation_path)
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a seed phrase. The intention
+    /// is that the `phrase` is a single-space separated list of words.
+    ///
+    /// See also [`from_words`](Self::from_words) which ensures a canonical
+    /// representation of the list of words, and is thus less error prone.
+    pub fn from_seed_phrase(phrase: &str, net: Net) -> Self {
+        let seed = words_to_seed(phrase);
+        Self { seed, net }
+    }
+
+    /// Construct [`ConcordiumHdWallet`](Self) from a list of words.
+    pub fn from_words(words: &[&str], net: Net) -> Self {
+        Self::from_seed_phrase(&words.join(" "), net)
     }
 
     /// Get the account signing key for the identity provider
@@ -163,7 +191,7 @@ impl ConcordiumHdWallet {
         &self,
         identity_provider_index: u32,
         identity_index: u32,
-    ) -> Result<SigRetrievalRandomness<Bls12>, DeriveError> {
+    ) -> Result<SigRetrievalRandomness<IpPairing>, DeriveError> {
         let path = self.make_path(&[identity_provider_index, identity_index, 4])?;
         let blinding_randomness_seed = derive_from_parsed_path(&path, &self.seed)?.private_key;
         Ok(SigRetrievalRandomness::new(bls_key_bytes_from_seed(
@@ -183,7 +211,7 @@ impl ConcordiumHdWallet {
         identity_index: u32,
         credential_counter: u32,
         attribute_tag: AttributeTag,
-    ) -> Result<CommitmentRandomness<G1>, DeriveError> {
+    ) -> Result<CommitmentRandomness<ArCurve>, DeriveError> {
         let path = self.make_path(&[
             identity_provider_index,
             identity_index,
@@ -197,12 +225,130 @@ impl ConcordiumHdWallet {
             attribute_commitment_randomness_seed,
         )))
     }
+
+    /// Get the signing key for the verifiable credential with the given index.
+    /// The signing key is used to sign the encrypted verifiable credential,
+    /// which is necessary for it to be submitted to the storage contract.
+    pub fn get_verifiable_credential_signing_key(
+        &self,
+        issuer: ContractAddress,
+        verifiable_credential_index: u32,
+    ) -> Result<SecretKey, DeriveError> {
+        let [i1, i2, i3, i4] = split_u64_into_chunks(issuer.index);
+        let [si1, si2, si3, si4] = split_u64_into_chunks(issuer.subindex);
+        let path = self.make_verifiable_credential_path(&[
+            0,
+            i1,
+            i2,
+            i3,
+            i4,
+            si1,
+            si2,
+            si3,
+            si4,
+            verifiable_credential_index,
+            0,
+        ])?;
+        let keys = derive_from_parsed_path(&path, &self.seed)?;
+        Ok(SecretKey::from_bytes(&keys.private_key)
+            .expect("The byte array has correct length, so this cannot fail."))
+    }
+
+    /// Get the public key for the verifiable credential with the given index.
+    /// The public key is used to identify the specific verifiable credential
+    /// within the registry contract.
+    /// Note that this is just a convenience wrapper. The same can be achieved
+    /// by using [`PublicKey::from`] on the result of
+    /// [`get_verifiable_credential_signing_key`](Self::get_verifiable_credential_signing_key)
+    pub fn get_verifiable_credential_public_key(
+        &self,
+        issuer: ContractAddress,
+        verifiable_credential_index: u32,
+    ) -> Result<PublicKey, DeriveError> {
+        let signing_key =
+            self.get_verifiable_credential_signing_key(issuer, verifiable_credential_index)?;
+        let public_key = PublicKey::from(&signing_key);
+        Ok(public_key)
+    }
+
+    /// Get the encryption key for the verifiable credential backup.
+    /// The key is used to encrypt and decrypt the backup file of verifiable
+    /// credentials. The backup is encrypted using `AES-256-GCM`, with this
+    /// key acting as the password in the `PBKDF2WithHmacSHA256` key derivation.
+    pub fn get_verifiable_credential_backup_encryption_key(
+        &self,
+    ) -> Result<SecretKey, DeriveError> {
+        let path = self.make_verifiable_credential_path(&[1])?;
+        let keys = derive_from_parsed_path(&path, &self.seed)?;
+        Ok(SecretKey::from_bytes(&keys.private_key)
+            .expect("The byte array has correct length, so this cannot fail."))
+    }
+}
+
+fn split_u64_into_chunks(x: u64) -> [u32; 4] {
+    let [b0, b1, b2, b3, b4, b5, b6, b7] = x.to_be_bytes();
+    let x0 = [b0, b1];
+    let x1 = [b2, b3];
+    let x2 = [b4, b5];
+    let x3 = [b6, b7];
+    [
+        u16::from_be_bytes(x0).into(),
+        u16::from_be_bytes(x1).into(),
+        u16::from_be_bytes(x2).into(),
+        u16::from_be_bytes(x3).into(),
+    ]
+}
+
+/// The [`ConcordiumHdWallet`] together indices that uniquely determine the
+/// account.
+pub struct CredentialContext {
+    pub wallet:                  ConcordiumHdWallet,
+    /// Index of the identity provider on the network.
+    pub identity_provider_index: IpIdentity,
+    /// Index of the identity. This is used to distinguish different identity
+    /// objects for the same identity provider.
+    pub identity_index:          u32,
+    /// Index of a credential. This is used to generate credentials from an
+    /// identity object.
+    pub credential_index:        u8,
+}
+
+impl CredentialContext {
+    /// Get the exponent used to determine credential registration id. This is
+    /// derived from the PRF key and the credential index. This function returns
+    /// an `Err` if the PRF key cannot be derived. It returns `Ok(None)` in the
+    /// unlikely case the PRF key and the credential index add up to 0.
+    pub fn get_cred_id_exponent(&self) -> Result<Option<<ArCurve as Curve>::Scalar>, DeriveError> {
+        let prf_key = self
+            .wallet
+            .get_prf_key(self.identity_provider_index.0, self.identity_index)?;
+        match prf_key.prf_exponent(self.credential_index) {
+            Ok(exp) => Ok(Some(exp)),
+            Err(_) => Ok(None),
+        }
+    }
+}
+
+impl HasAttributeRandomness<ArCurve> for CredentialContext {
+    type ErrorType = DeriveError;
+
+    fn get_attribute_commitment_randomness(
+        &self,
+        attribute_tag: &AttributeTag,
+    ) -> Result<CommitmentRandomness<ArCurve>, Self::ErrorType> {
+        self.wallet.get_attribute_commitment_randomness(
+            self.identity_provider_index.0,
+            self.identity_index,
+            self.credential_index.into(),
+            *attribute_tag,
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crypto_common::base16_encode_string;
+    use concordium_base::common::base16_encode_string;
     use ed25519_dalek::*;
     use std::convert::TryInto;
 
@@ -210,17 +356,16 @@ mod tests {
     const PASSPHRASE: &str = "TREZOR";
 
     fn create_wallet(net: Net, seed: &str) -> ConcordiumHdWallet {
-        let wallet = ConcordiumHdWallet {
-            seed: hex::decode(&seed).unwrap().try_into().unwrap(),
+        ConcordiumHdWallet {
+            seed: hex::decode(seed).unwrap().try_into().unwrap(),
             net,
-        };
-        wallet
+        }
     }
 
     /// Used to verify test vectors from https://github.com/trezor/python-mnemonic/blob/master/vectors.json.
     fn check_seed_vector(words: &str, expected_seed: &str) {
         let seed = words_to_seed_with_passphrase(words, PASSPHRASE);
-        assert_eq!(hex::encode(&seed), expected_seed);
+        assert_eq!(hex::encode(seed), expected_seed);
     }
 
     #[test]
@@ -240,7 +385,7 @@ mod tests {
             .get_account_public_key(1, 341, 9)
             .unwrap();
         assert_eq!(
-            hex::encode(&public_key),
+            hex::encode(public_key),
             "d54aab7218fc683cbd4d822f7c2b4e7406c41ae08913012fab0fa992fa008e98"
         );
     }
@@ -339,8 +484,7 @@ mod tests {
             .get_account_signing_key(0, 0, 0)
             .unwrap();
 
-        let sk = ed25519_dalek::SecretKey::from(signing_key);
-        let expanded_sk = ExpandedSecretKey::from(&sk);
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
         let signature = expanded_sk.sign(&data_to_sign, &pk);
@@ -455,5 +599,113 @@ mod tests {
                         crush open amazing screen patrol group space point ten exist slush \
                         involve unfold";
         check_seed_vector(mnemonic, "01f5bced59dec48e362f2c45b5de68b9fd6c92c6634f44d6d40aab69056506f0e35524a518034ddc1192e1dacd32c1ed3eaa3c3b131c88ed8e7e54c49a5d0998");
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_signing_key() {
+        let signing_key = create_wallet(Net::Mainnet, TEST_SEED_1)
+            .get_verifiable_credential_signing_key(ContractAddress::new(1, 2), 1)
+            .unwrap();
+        assert_eq!(
+            hex::encode(&signing_key),
+            "670d904509ce09372deb784e702d4951d4e24437ad3879188d71ae6db51f3301"
+        );
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_public_key() {
+        let public_key = create_wallet(Net::Mainnet, TEST_SEED_1)
+            .get_verifiable_credential_public_key(ContractAddress::new(3, 1232), 341)
+            .unwrap();
+        assert_eq!(
+            hex::encode(public_key),
+            "16afdb3cb3568b5ad8f9a0fa3c741b065642de8c53e58f7920bf449e63ff2bf9"
+        );
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_signing_key_matches_public_key() {
+        let wallet = create_wallet(Net::Mainnet, TEST_SEED_1);
+
+        let public_key = wallet
+            .get_verifiable_credential_public_key(ContractAddress::new(1337, 0), 0)
+            .unwrap();
+        let signing_key = wallet
+            .get_verifiable_credential_signing_key(ContractAddress::new(1337, 0), 0)
+            .unwrap();
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+
+        let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
+        let signature = expanded_sk.sign(&data_to_sign, &public_key);
+
+        public_key.verify(&data_to_sign, &signature).expect(
+            "The public key should be able to verify the signature, otherwise the keys do not \
+             match.",
+        );
+    }
+
+    #[test]
+    pub fn mainnet_verifiable_credential_backup_encryption_key() {
+        let key = create_wallet(Net::Mainnet, TEST_SEED_1)
+            .get_verifiable_credential_backup_encryption_key()
+            .unwrap();
+        assert_eq!(
+            hex::encode(key),
+            "5032086037b639f116642752460bf2e2b89d7278fe55511c028b194ba77192a1"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_signing_key() {
+        let signing_key = create_wallet(Net::Testnet, TEST_SEED_1)
+            .get_verifiable_credential_signing_key(ContractAddress::new(13, 0), 1)
+            .unwrap();
+        assert_eq!(
+            hex::encode(&signing_key),
+            "c75a161b97a1e204d9f31202308958e541e14f0b14903bd220df883bd06702bb"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_public_key() {
+        let public_key = create_wallet(Net::Testnet, TEST_SEED_1)
+            .get_verifiable_credential_public_key(ContractAddress::new(17, 0), 341)
+            .unwrap();
+        assert_eq!(
+            hex::encode(public_key),
+            "c52a30475bac88da9e65471cf9cf59f99dcce22ce31de580b3066597746b394a"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_backup_encryption_key() {
+        let key = create_wallet(Net::Testnet, TEST_SEED_1)
+            .get_verifiable_credential_backup_encryption_key()
+            .unwrap();
+        assert_eq!(
+            hex::encode(key),
+            "10f85290e33b1a79a0330180c4b6c67fd9ad1a1dd3d0f918ab1cbcf8787fc3ca"
+        );
+    }
+
+    #[test]
+    pub fn testnet_verifiable_credential_signing_key_matches_public_key() {
+        let wallet = create_wallet(Net::Testnet, TEST_SEED_1);
+
+        let public_key = wallet
+            .get_verifiable_credential_public_key(ContractAddress::new(13, 0), 0)
+            .unwrap();
+        let signing_key = wallet
+            .get_verifiable_credential_signing_key(ContractAddress::new(13, 0), 0)
+            .unwrap();
+        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+
+        let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
+        let signature = expanded_sk.sign(&data_to_sign, &public_key);
+
+        public_key.verify(&data_to_sign, &signature).expect(
+            "The public key should be able to verify the signature, otherwise the keys do not \
+             match.",
+        );
     }
 }

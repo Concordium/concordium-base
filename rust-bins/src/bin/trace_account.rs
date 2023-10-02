@@ -13,8 +13,11 @@ use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use clap::AppSettings;
 use client_server_helpers::read_json_from_file;
-use crypto_common::{types::Amount, *};
-use id::types::*;
+use concordium_base::{
+    common::{types::Amount, *},
+    elgamal, encrypted_transfers, id,
+    id::types::*,
+};
 
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -314,7 +317,7 @@ fn main() {
         } => {
             let input = match decryption_key {
                 Some(decryption_key) => {
-                    let encryption_secret_key = match hex::decode(&decryption_key)
+                    let encryption_secret_key = match hex::decode(decryption_key)
                         .context("Hex decoding error")
                         .and_then(|bs| from_bytes(&mut std::io::Cursor::new(bs)))
                     {

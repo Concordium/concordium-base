@@ -1,15 +1,18 @@
 use clap::AppSettings;
 use client_server_helpers::*;
+use concordium_base::{
+    common::*,
+    curve_arithmetic::Curve,
+    elgamal::{PublicKey, SecretKey},
+    id::types::*,
+    ps_sig,
+};
 use crossterm::{
     execute,
     terminal::{Clear, ClearType},
 };
-use crypto_common::*;
-use curve_arithmetic::Curve;
 use dialoguer::{Confirm, Input};
-use elgamal::{PublicKey, SecretKey};
 use hmac::{Hmac, Mac};
-use id::types::*;
 use keygen_bls::{keygen_bls, keygen_bls_deprecated};
 use pairing::bls12_381::{Bls12, Fr, G1, G2};
 use sha2::Sha512;
@@ -285,7 +288,7 @@ pub fn read_words_from_file(
 
 fn handle_generate_update_keys(kgup: KeygenGovernance) -> Result<(), String> {
     let mut csprng = rand::thread_rng();
-    let keypair = crypto_common::types::KeyPair::generate(&mut csprng);
+    let keypair = concordium_base::common::types::KeyPair::generate(&mut csprng);
     let public_bytes = keypair.public.to_bytes();
     let sig = keypair.sign(&public_bytes);
     let level_str = match kgup.level {
@@ -646,7 +649,7 @@ pub fn generate_ps_sk(
     })
 }
 
-/// This function is an implementation of the procedure described in https://github.com/satoshilabs/slips/blob/master/slip-0010.md
+/// This function is an implementation of the procedure described in <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>.
 /// It produces 32 random bytes given a seed, which is exactly a secret key for
 /// the ed25519_dalek.
 pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
@@ -673,7 +676,8 @@ pub fn generate_ed_sk(
 mod tests {
     use super::*;
 
-    /// Checking with the two test vectors mentioned in https://github.com/satoshilabs/slips/blob/master/slip-0010.md
+    /// Checking with the two test vectors mentioned in
+    /// <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>.
     #[test]
     pub fn testvector_ed() {
         let seed1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -689,7 +693,7 @@ mod tests {
     }
 
     /// Test correct generation of BIP39 sentences.
-    /// Values are taken from https://github.com/trezor/python-mnemonic/blob/master/vectors.json
+    /// Values are taken from <https://github.com/trezor/python-mnemonic/blob/master/vectors.json>.
     #[test]
     pub fn test_bip39_generation() {
         let bip39_vec: Vec<_> = bip39_words().collect();

@@ -1,6 +1,6 @@
 cabal-version: 2.0
 
--- This file has been generated from package.yaml by hpack version 0.35.0.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -87,6 +87,7 @@ library
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
+      Concordium.Types.Queries.KonsensusV1
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
       Concordium.Types.Transactions
@@ -95,6 +96,7 @@ library
       Concordium.Utils
       Concordium.Utils.BinarySearch
       Concordium.Utils.Encryption
+      Concordium.Utils.InterpolationSearch
       Concordium.Utils.Serialization
       Concordium.Utils.Serialization.Put
       Concordium.Wasm
@@ -120,12 +122,7 @@ library
       TupleSections
   ghc-options: -Wall -Wcompat -Werror=missing-fields -Werror=missing-methods -Wredundant-constraints -fno-ignore-asserts
   extra-libraries:
-      aggregate_sig
-      ecvrf
-      eddsa_ed25519
-      encrypted_transfers
-      ffi_helpers
-      id
+      concordium_base
       sha_2
   build-depends:
       QuickCheck >=2.12
@@ -306,6 +303,7 @@ test-suite test
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
       ConcordiumTests.Utils.Encryption
+      ConcordiumTests.Utils.InterpolationSearch
       Generators
       Genesis.ParametersSpec
       Types.AccountEncryptedAmountSpec

@@ -1,8 +1,10 @@
 use std::{collections::BTreeMap, fs};
 
-use crypto_common::{base16_decode_string, Versioned};
+use concordium_base::{
+    common::{base16_decode_string, Versioned},
+    id::{constants::IpPairing, types::IpInfo},
+};
 use ed25519_dalek::Verifier;
-use id::{constants::IpPairing, types::IpInfo};
 use log::{error, info};
 use reqwest::header::LOCATION;
 use rust_embed::RustEmbed;

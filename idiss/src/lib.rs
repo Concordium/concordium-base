@@ -1,14 +1,18 @@
 use anyhow::Context;
-use crypto_common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0};
-use curve_arithmetic::*;
-use id::{
-    constants::{ArCurve, AttributeKind},
-    identity_provider::{
-        create_initial_cdi, sign_identity_object, sign_identity_object_v1,
-        validate_id_recovery_request, validate_request as ip_validate_request,
-        validate_request_v1 as ip_validate_request_v1,
+use concordium_base::{
+    common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0},
+    curve_arithmetic::*,
+    id,
+    id::{
+        constants::{ArCurve, AttributeKind},
+        identity_provider::{
+            create_initial_cdi, sign_identity_object, sign_identity_object_v1,
+            validate_id_recovery_request, validate_request as ip_validate_request,
+            validate_request_v1 as ip_validate_request_v1,
+        },
+        types::*,
     },
-    types::*,
+    ps_sig,
 };
 use pairing::bls12_381::{Bls12, G1};
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
@@ -195,7 +199,7 @@ fn create_identity_object(
     let ip_private_key_str = std::str::from_utf8(ip_private_key_bytes)?;
     let ip_cdi_private_key_str = std::str::from_utf8(ip_cdi_private_key_bytes)?;
 
-    let ip_private_key: id::ps_sig::SecretKey<Bls12> =
+    let ip_private_key: ps_sig::SecretKey<Bls12> =
         base16_decode_string(ip_private_key_str).context("Could not parse ip_private_key")?;
     let ip_cdi_private_key: ed25519_dalek::SecretKey = base16_decode_string(ip_cdi_private_key_str)
         .context("Could not parse ip_cdi_private_key")?;

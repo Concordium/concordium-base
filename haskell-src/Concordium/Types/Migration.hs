@@ -6,14 +6,15 @@ module Concordium.Types.Migration where
 
 import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P4 as P4
+import qualified Concordium.Genesis.Data.P6 as P6
 import Concordium.Types
 import Concordium.Types.Accounts
 import Concordium.Types.Parameters
 import Concordium.Types.Updates
 
--- |Apply a state migration to an 'Authorizations' structure.
+-- | Apply a state migration to an 'Authorizations' structure.
 --
--- [P3 to P4]: access structures for cooldown and time parameters are added.
+--  [P3 to P4]: access structures for cooldown and time parameters are added.
 migrateAuthorizations ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -31,10 +32,13 @@ migrateAuthorizations (StateMigrationParametersP3ToP4 migration) Authorizations{
   where
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
 migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
+-- Note that the authorization for the consensus parameters v0
+-- are carried over to consensus parameters v1.
+migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
 
--- |Apply a state migration to an 'UpdateKeysCollection' structure.
+-- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
--- [P3 to P4]: access structures for cooldown and time parameters are added.
+--  [P3 to P4]: access structures for cooldown and time parameters are added.
 migrateUpdateKeysCollection ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -43,9 +47,9 @@ migrateUpdateKeysCollection ::
 migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
     UpdateKeysCollection{level2Keys = migrateAuthorizations migration level2Keys, ..}
 
--- |Apply a state migration to a 'MintDistribution' structure.
+-- | Apply a state migration to a 'MintDistribution' structure.
 --
--- [P3 to P4]: the mint-per-slot rate is removed.
+--  [P3 to P4]: the mint-per-slot rate is removed.
 migrateMintDistribution ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -57,10 +61,11 @@ migrateMintDistribution StateMigrationParametersP2P3 mint = mint
 migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
     MintDistribution{_mdMintPerSlot = CFalse, ..}
 migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
+migrateMintDistribution StateMigrationParametersP5ToP6{} mint = mint
 
--- |Apply a state migration to a 'PoolParameters' structure.
+-- | Apply a state migration to a 'PoolParameters' structure.
 --
--- [P3 to P4]: the new pool parameters are defined by the migration parameters.
+--  [P3 to P4]: the new pool parameters are defined by the migration parameters.
 migratePoolParameters ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -72,8 +77,12 @@ migratePoolParameters StateMigrationParametersP2P3 poolParams = poolParams
 migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
     P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
+migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 
--- |Apply a state migration to a 'GASRewards' structure.
+-- | Apply a state migration to a 'GASRewards' structure.
+--
+--  This does nothing except for the P5->P6 protocol update,
+--  which removes the finalization proof reward.
 migrateGASRewards ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -84,11 +93,15 @@ migrateGASRewards StateMigrationParametersP1P2 gr = gr
 migrateGASRewards StateMigrationParametersP2P3 gr = gr
 migrateGASRewards StateMigrationParametersP3ToP4{} gr = gr
 migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
+migrateGASRewards StateMigrationParametersP5ToP6{} GASRewards{..} = GASRewards{_gasFinalizationProof = CFalse, ..}
 
--- |Apply a state migration to a 'ChainParameters' structure.
+-- | Apply a state migration to a 'ChainParameters' structure.
 --
--- [P3 to P4]: the new cooldown, time and pool parameters are given by the migration parameters;
---   the mint-per-slot rate is removed from the reward parameters.
+--  [P3 to P4]: the new cooldown, time and pool parameters are given by the migration parameters;
+--    the mint-per-slot rate is removed from the reward parameters.
+--
+--  [P5 to P6]: the new consensus, finalization committee parameters are given by the migration parameters;
+--    the GAS finalization proof reward is removed.
 migrateChainParameters ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -108,18 +121,38 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
                   ..
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+          _cpFinalizationCommitteeParameters = NoParam,
           ..
         }
   where
     RewardParameters{..} = _cpRewardParameters
     P4.ProtocolUpdateData{..} = P4.migrationProtocolUpdateData migration
 migrateChainParameters StateMigrationParametersP4ToP5 cps = cps
+migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParameters{..} =
+    ChainParameters
+        { _cpConsensusParameters = P6.updateConsensusParameters $ P6.migrationProtocolUpdateData migration,
+          _cpRewardParameters =
+            RewardParameters
+                { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                  ..
+                },
+          _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+          _cpFinalizationCommitteeParameters = SomeParam finalizationCommitteeParameters,
+          -- We unwrap and wrap here in order to associate the correct cpv
+          -- with the time parameters.
+          _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
+          ..
+        }
+  where
+    RewardParameters{..} = _cpRewardParameters
+    finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
 
--- |Apply a state migration to an 'AccountStake' structure.
+-- | Apply a state migration to an 'AccountStake' structure.
 --
--- [P3 to P4]: bakers have the default baker pool information applied to them, where the pool status
---   and commission rates are given by the migration parameters; pending changes are converted from
---   epoch times to absolute times.
+--  [P3 to P4]: bakers have the default baker pool information applied to them, where the pool status
+--    and commission rates are given by the migration parameters; pending changes are converted from
+--    epoch times to absolute times.
 migrateAccountStake ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -154,9 +187,10 @@ migrateAccountStake StateMigrationParametersP4ToP5 =
                     { _delegationPendingChange = coercePendingChangeEffectiveV1 <$> _delegationPendingChange,
                       ..
                     }
+migrateAccountStake StateMigrationParametersP5ToP6{} = id
 
--- |Migrate time of the effective change from V0 to V1 accounts. Currently this
--- translates times relative to genesis to times relative to the unix epoch.
+-- | Migrate time of the effective change from V0 to V1 accounts. Currently this
+--  translates times relative to genesis to times relative to the unix epoch.
 migratePendingChangeEffective :: P4.StateMigrationData -> PendingChangeEffective 'AccountV0 -> PendingChangeEffective 'AccountV1
 migratePendingChangeEffective P4.StateMigrationData{..} (PendingChangeEffectiveV0 eff) =
     PendingChangeEffectiveV1 $
@@ -164,9 +198,9 @@ migratePendingChangeEffective P4.StateMigrationData{..} (PendingChangeEffectiveV
             migrationPreviousGenesisTime
             (migrationPreviousEpochDuration * fromIntegral eff)
 
--- |Migrate the stake pending change from the representation used by protocol
--- version @oldpv@ to the representation used by the protocol version @pv@. The
--- migration parameters supply auxiliary data needed for the migration.
+-- | Migrate the stake pending change from the representation used by protocol
+--  version @oldpv@ to the representation used by the protocol version @pv@. The
+--  migration parameters supply auxiliary data needed for the migration.
 migrateStakePendingChange ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
@@ -180,3 +214,4 @@ migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
     ReduceStake amnt eff -> ReduceStake amnt (migratePendingChangeEffective migration eff)
     RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
 migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1
+migrateStakePendingChange StateMigrationParametersP5ToP6{} = id

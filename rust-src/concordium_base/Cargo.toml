@@ -1,19 +1,27 @@
 [package]
 name = "concordium_base"
-version = "0.1.0"
+version = "3.0.1"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
+rust-version = "1.65"
 license-file = "../../LICENSE"
+include = ["src/", "data/", "benches/"]
+readme = "./README.md"
+description = "A library that defines common types and functionality that are needed by Concordium Rust projects."
+repository = "https://github.com/Concordium/concordium-base"
+homepage = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
 ff = "0.5"
 sha2 = "0.10"
+sha3 = "0.10"
 anyhow = "1.0"
 rand_core = "=0.5"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 libc = "0.2"
-chrono = "0.4.19"
+chrono = {version = "0.4.24", features = ["serde"]} # the patch version is necessary since chrono adds new functionality in patch versions
+serde_with = "3"
 ed25519-dalek = "=1.0"
 byteorder = "1.3"
 hex = "0.4"
@@ -24,26 +32,105 @@ derive_more = "0.99"
 thiserror = "1.0"
 rand = "0.7"
 num = "0.4"
+group = "0.2"
+curve25519-dalek = "3"
+zeroize = "1.1"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
 num-bigint = "0.4"
 num-traits = "0.2"
 bs58 = { version = "0.4", features = ["check"] }
 leb128 = "0.2"
+rayon = "1.7"
+subtle = "2.3"
 
-# Local dependencies
-random_oracle = { version = "*", path = "../random_oracle/" }
-id = { version = "*", path = "../id", default-features=false }
-eddsa_ed25519 = { version = "*", path = "../eddsa_ed25519", default-features = false }
-crypto_common = { version = "*", path = "../crypto_common", features = ["encryption"] }
-concordium-contracts-common = { version = "*", path = "../../concordium-contracts-common/concordium-contracts-common", features = ["derive-serde", "sdk"] }
-encrypted_transfers = { version = "*", path = "../encrypted_transfers", default-features = false }
-aggregate_sig = {version = "0", path = "../aggregate_sig", default-features = false }
-ecvrf = { version = "*", path = "../ecvrf", default-features = false }
-
-[dev-dependencies]
-rand = {version = "0.7", features = ["small_rng"]}
+# Dependencies needed by the encryption feature.
+cbc = { version = "0.1.2", features = ["std"], optional = true }
+aes = { version = "0.8", optional = true }
+base64 = { version = "0.13", optional = true }
+pbkdf2 = { version  = "0.11", optional = true }
+hmac = { version  = "0.12", optional = true }
+nom = "7.1.3"
 
 [lib]
-name = "concordium_base"
-crate-type = ["rlib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+# Local dependencies
+[dependencies.concordium-contracts-common]
+version = "8.0"
+path = "../../smart-contracts/contracts-common/concordium-contracts-common"
+features = ["derive-serde"]
+
+# Local dependencies
+[dependencies.concordium_base_derive]
+version = "1"
+path = "../concordium_base_derive"
+
+[features]
+default = []
+ffi = []
+internal-test-helpers = []
+encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
+
+[dev-dependencies]
+criterion = "0.4"
+rand = {version = "0.7", features = ["small_rng"]}
+
+[[bench]]
+name = "hash_bench"
+harness = false
+
+[[bench]]
+name = "multiexp_bench"
+harness = false
+
+[[bench]]
+name = "elgamal_benchmarks"
+harness = false
+
+[[bench]]
+name = "encrypted_transfers_benchmarks"
+harness = false
+
+[[bench]]
+name = "aggregate_signatures"
+harness = false
+
+
+[[bench]]
+name = "bulletproofs"
+harness = false
+
+[[bench]]
+name = "set_proof_bench"
+harness = false
+
+[[bench]]
+name = "eddsa_benchmarks"
+harness = false
+
+[[bench]]
+name = "verify_cdi"
+harness = false
+
+[[bench]]
+name = "aggr_dlog_commit_message"
+harness = false
+
+[[bench]]
+name = "compute_message"
+harness = false
+required-features = ["internal-test-helpers"]
+
+[[bench]]
+name = "commitment_to_share"
+harness = false
+
+
+[[bench]]
+name = "serialization_benches"
+harness = false
+
+[package.metadata.docs.rs]
+# Expose the `encryption` feature in documentation.
+features = ["encryption"]

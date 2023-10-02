@@ -17,7 +17,7 @@
 # The dependencies between the steps are described in inline comments below
 # along with a few suggestions for improving parallelization.
 
-name: Check format, build and run tests for Haskell and Rust sources
+name: Check format, docs, build and run tests for Haskell and Rust sources
 
 on:
   pull_request:
@@ -46,7 +46,7 @@ on:
   workflow_dispatch: # allow manual trigger
 
 env:
-  dummy: 0                 # change to force cache invalidation
+  dummy: 1                 # change to force cache invalidation
   CARGO_TERM_COLOR: always # implicitly adds '--color=always' to all cargo commands
 
 jobs:
@@ -58,7 +58,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: "nightly-2022-06-09-x86_64-unknown-linux-gnu"
+        - rust: "nightly-2023-04-01-x86_64-unknown-linux-gnu"
 
     steps:
     - name: Checkout
@@ -82,6 +82,39 @@ jobs:
         cargo fmt --manifest-path mobile_wallet/Cargo.toml -- --check
         cargo fmt --manifest-path identity-provider-service/Cargo.toml -- --check
 
+  rustdoc:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+      
+    strategy:
+      matrix:
+        plan:
+        - rust: 1.68
+        crates:
+        - rust-src
+        - rust-bins
+        - idiss
+        - mobile_wallet
+        - identity-provider-service
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.plan.rust }}
+        override: true
+
+    - name: Run cargo doc
+      working-directory: ${{ matrix.crates }}
+      run: |
+        RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
+
   fourmolu:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
@@ -90,9 +123,9 @@ jobs:
     - name: Download fourmolu
       uses: supplypike/setup-bin@v1
       with:
-        uri: 'https://github.com/fourmolu/fourmolu/releases/download/v0.9.0.0/fourmolu-0.9.0.0-linux-x86_64'
+        uri: 'https://github.com/fourmolu/fourmolu/releases/download/v0.13.1.0/fourmolu-0.13.1.0-linux-x86_64'
         name: 'fourmolu'
-        version: '0.9.0.0'
+        version: '0.13.1.0'
 
     - name: Checkout project
       uses: actions/checkout@v2
@@ -100,6 +133,42 @@ jobs:
     - name: Run fourmolu
       run: |
         fourmolu --color always --mode check $(git ls-files '*.hs')
+
+  # This job exists to make sure that concordium-base (the crate) compiles with
+  # the version of the compiler stated in its Cargo.toml manifest. We keep this
+  # as old as reasonable since we publish it as a library.
+  # If this job fails consider carefully whether the new language feature used
+  # adds value. If it does bump the rust version here and in Cargo.toml in rust-src/concordium-base
+  check-base-compiles:
+    needs: [fourmolu, rustfmt]
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+
+    strategy:
+      matrix:
+        plan:
+        - rust: 1.65
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    # RUST #
+
+    # Set up Rust and restore dependencies and targets from cache.
+    # This must be done before checking the Rust sources.
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.plan.rust }}
+        override: true
+        components: clippy
+
+    - name: Check that concordium base compiles with older Rust version.
+      run: |
+        cargo check --manifest-path rust-src/concordium_base/Cargo.toml
 
   build-test:
     needs: [fourmolu, rustfmt]
@@ -109,8 +178,8 @@ jobs:
     strategy:
       matrix:
         plan:
-        - ghc: 9.2.5 # used as cache key only; stack uses the one specified in stack.yaml
-          rust: 1.62
+        - ghc: 9.2.7 # used as cache key only; stack uses the one specified in stack.yaml
+          rust: 1.68
 
     steps:
     - name: Checkout
@@ -148,22 +217,28 @@ jobs:
     # Catching failure here avoids restoring of Haskell caches.
     - name: Check that all Rust targets build
       run: |
-        cargo check --manifest-path rust-src/Cargo.toml --workspace
-        cargo check --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
-        cargo check --manifest-path idiss/Cargo.toml --workspace
-        cargo check --manifest-path mobile_wallet/Cargo.toml --workspace
-        cargo check --manifest-path mobile_wallet/Cargo.toml --target aarch64-linux-android
-        cargo check --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
+        cargo check --locked --manifest-path rust-src/Cargo.toml --workspace
+        cargo check --locked --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
+        cargo check --locked --manifest-path idiss/Cargo.toml --workspace
+        cargo check --locked --manifest-path mobile_wallet/Cargo.toml --workspace
+        cargo check --locked --manifest-path mobile_wallet/Cargo.toml --target aarch64-linux-android
+        cargo check --locked --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
     # Rust code linting.
     # Could be run in parallel in a separate job
     # (the step is probably too fast for that to make sense though).
     - name: Run cargo clippy on all targets
       run: |
         cargo clippy --manifest-path rust-src/Cargo.toml --workspace -- -Dclippy::all
+        cargo clippy --manifest-path rust-src/Cargo.toml --features concordium_base/encryption --workspace -- -Dclippy::all
+        cargo clippy --manifest-path rust-src/Cargo.toml --features concordium_base/ffi --workspace -- -Dclippy::all
         cargo clippy --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
         cargo clippy --manifest-path idiss/Cargo.toml --all-features -- -Dclippy::all
         cargo clippy --manifest-path mobile_wallet/Cargo.toml -- -Dclippy::all
         cargo clippy --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
+
+    - name: Check concordium base documentation
+      run: |
+          RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path rust-src/concordium_base/Cargo.toml --no-deps --all-features
 
     # HASKELL #
 
@@ -229,4 +304,4 @@ jobs:
       run: |
         cargo test --manifest-path rust-src/Cargo.toml --all --verbose --release
         cargo test --manifest-path identity-provider-service/Cargo.toml --features=vendored-ssl --all --verbose --release
-        cargo bench --manifest-path rust-src/Cargo.toml --features id/test-helpers --no-run
+        cargo bench --manifest-path rust-src/Cargo.toml --features concordium_base/internal-test-helpers --no-run

@@ -4,11 +4,15 @@ use std::{
     marker::PhantomData,
 };
 
-use crate::{base::*, hashes, transactions::PayloadSize};
-use crypto_common::{
-    derive, deserial_bytes, deserial_map_no_length, deserial_set_no_length, deserial_string,
-    deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
-    SerdeDeserialize, SerdeSerialize, Serial,
+use crate::{
+    base::*,
+    common::{
+        self, deserial_bytes, deserial_map_no_length, deserial_set_no_length, deserial_string,
+        deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
+        SerdeDeserialize, SerdeSerialize, Serial,
+    },
+    hashes,
+    transactions::PayloadSize,
 };
 use derive_more::*;
 
@@ -84,7 +88,7 @@ impl Deserial for ProtocolUpdate {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(try_from = "transaction_fee_distribution::TransactionFeeDistributionUnchecked")]
 /// Update the transaction fee distribution to the specified value.
@@ -97,7 +101,7 @@ pub struct TransactionFeeDistribution {
 }
 
 impl Deserial for TransactionFeeDistribution {
-    fn deserial<R: crypto_common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+    fn deserial<R: common::ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let baker: AmountFraction = source.get()?;
         let gas_account: AmountFraction = source.get()?;
         anyhow::ensure!(
@@ -133,7 +137,7 @@ mod transaction_fee_distribution {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serialize, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 /// The reward fractions related to the gas account and inclusion of special
 /// transactions.
@@ -150,6 +154,23 @@ pub struct GASRewards {
     /// `FeeUpdate`: fraction paid for including an update transaction in a
     /// block.
     pub chain_update:       AmountFraction,
+}
+
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+/// The reward fractions related to the gas account and inclusion of special
+/// transactions.
+/// Introduce for protocol version 6.
+pub struct GASRewardsV1 {
+    /// `BakerPrevTransFrac`: fraction of the previous gas account paid to the
+    /// baker.
+    pub baker:            AmountFraction,
+    /// `FeeAccountCreation`: fraction paid for including each account creation
+    /// transaction in a block.
+    pub account_creation: AmountFraction,
+    /// `FeeUpdate`: fraction paid for including an update transaction in a
+    /// block.
+    pub chain_update:     AmountFraction,
 }
 
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
@@ -254,7 +275,7 @@ pub enum RootKeysKind {}
 /// type-level marker.
 pub enum Level1KeysKind {}
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound = "Kind: Sized")]
 /// Either root, level1, or level 2 access structure. They all have the same
@@ -266,7 +287,7 @@ pub struct HigherLevelAccessStructure<Kind> {
     pub keys:      Vec<UpdatePublicKey>,
     pub threshold: UpdateKeysThreshold,
     #[serde(skip)] // use default when deserializing
-    pub _phantom:  PhantomData<Kind>,
+    pub _phantom: PhantomData<Kind>,
 }
 
 impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
@@ -286,7 +307,7 @@ impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serial, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serial, Clone)]
 #[serde(rename_all = "camelCase")]
 /// And access structure for performing chain updates. The access structure is
 /// only meaningful in the context of a list of update keys to which the indices
@@ -313,7 +334,7 @@ impl Deserial for AccessStructure {
     }
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, derive::Serialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, common::Serialize)]
 #[serde(rename_all = "camelCase")]
 /// Access structures for each of the different possible chain updates, togehter
 /// with the context giving all the possible keys.
@@ -394,7 +415,7 @@ where
     Some(signer)
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, derive::Serialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, common::Serialize)]
 #[serde(rename_all = "camelCase")]
 /// Access structures for each of the different possible chain updates, togehter
 /// with the context giving all the possible keys.
@@ -439,10 +460,14 @@ impl AuthorizationsFamily for ChainParameterVersion1 {
     type Output = AuthorizationsV1;
 }
 
+impl AuthorizationsFamily for ChainParameterVersion2 {
+    type Output = AuthorizationsV1;
+}
+
 /// A mapping of chain parameter versions to authorization versions.
 pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
-#[derive(SerdeSerialize, SerdeDeserialize, derive::Serialize, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, common::Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 /// Parameters related to becoming a baker that apply to protocol versions 1-3.
 pub struct BakerParameters {
@@ -450,7 +475,7 @@ pub struct BakerParameters {
     pub minimum_threshold_for_baking: Amount,
 }
 
-#[derive(Debug, derive::Serialize, SerdeSerialize, SerdeDeserialize, Copy, Clone)]
+#[derive(Debug, common::Serialize, SerdeSerialize, SerdeDeserialize, Copy, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CooldownParameters {
     /// Number of seconds that pool owners must cooldown
@@ -459,6 +484,74 @@ pub struct CooldownParameters {
     /// Number of seconds that a delegator must cooldown
     /// when reducing their delegated stake.
     pub delegator_cooldown:  DurationSeconds,
+}
+
+/// Parameters controlling consensus timeouts for the consensus protocol version
+/// 2.
+#[derive(Debug, common::Serial, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
+pub struct TimeoutParameters {
+    /// The base value for triggering a timeout.
+    pub base:     concordium_contracts_common::Duration,
+    /// Factor for increasing the timeout. Must be greater than 1.
+    pub increase: Ratio,
+    /// Factor for decreasing the timeout. Must be between 0 and 1.
+    pub decrease: Ratio,
+}
+
+/// Error type for when constructing [`TimeoutParameters`].
+#[derive(Debug, thiserror::Error)]
+pub enum NewTimeoutParametersError {
+    #[error("Timeout increase must be greater than 1.")]
+    InvalidIncrease,
+    #[error("Timeout decrease must be between 0 and 1.")]
+    InvalidDecrease,
+}
+
+impl TimeoutParameters {
+    /// Construct [`Self`] ensuring the ratio `increase` is greater than 1 and
+    /// the `decrease` is between 0 and 1.
+    pub fn new(
+        base: concordium_contracts_common::Duration,
+        increase: Ratio,
+        decrease: Ratio,
+    ) -> Result<Self, NewTimeoutParametersError> {
+        if increase.numerator() <= increase.denominator() {
+            return Err(NewTimeoutParametersError::InvalidIncrease);
+        }
+
+        if decrease.numerator() == 0 || decrease.denominator() <= decrease.numerator() {
+            return Err(NewTimeoutParametersError::InvalidDecrease);
+        }
+
+        Ok(Self {
+            base,
+            increase,
+            decrease,
+        })
+    }
+
+    /// Construct [`Self`] without ensuring the ratio `increase` is greater than
+    /// 1 and the `decrease` is between 0 and 1.
+    pub fn new_unchecked(
+        base: concordium_contracts_common::Duration,
+        increase: Ratio,
+        decrease: Ratio,
+    ) -> Self {
+        Self {
+            base,
+            increase,
+            decrease,
+        }
+    }
+}
+
+impl Deserial for TimeoutParameters {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let base = source.get()?;
+        let increase: Ratio = source.get()?;
+        let decrease: Ratio = source.get()?;
+        Ok(Self::new(base, increase, decrease)?)
+    }
 }
 
 /// Length of a reward period in epochs.
@@ -477,14 +570,14 @@ pub struct CooldownParameters {
     Into,
     SerdeSerialize,
     SerdeDeserialize,
-    derive::Serialize,
+    common::Serialize,
 )]
 #[serde(transparent)]
 pub struct RewardPeriodLength {
     pub(crate) reward_period_epochs: Epoch,
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive::Serialize, Copy, Clone)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Copy, Clone)]
 #[serde(rename_all = "camelCase")]
 /// The time parameters are introduced as of protocol version 4, and consist of
 /// the reward period length and the mint rate per payday. These are coupled as
@@ -494,7 +587,7 @@ pub struct TimeParameters {
     pub mint_per_payday:      MintRate,
 }
 
-#[derive(Debug, derive::Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[derive(Debug, common::Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 /// Parameters related to staking pools. This applies to protocol version 4 and
 /// up.
@@ -516,6 +609,22 @@ pub struct PoolParameters {
     /// The maximum leverage that a baker can have as a ratio of total stake
     /// to equity capital.
     pub leverage_bound:                  LeverageFactor,
+}
+
+#[derive(Debug, common::Serialize, Clone, Copy, SerdeSerialize, SerdeDeserialize)]
+/// Finalization committee parameters. These parameters control which bakers are
+/// in the finalization committee.
+pub struct FinalizationCommitteeParameters {
+    /// Minimum number of bakers to include in the finalization committee before
+    /// the 'finalizer_relative_stake_threshold' takes effect.
+    pub min_finalizers: u32,
+    /// Maximum number of bakers to include in the finalization committee.
+    pub max_finalizers: u32,
+    /// Determining the staking threshold required for being eligible the
+    /// finalization committee. The required amount is given by `total stake
+    /// in pools * finalizer_relative_stake_threshold` provided as parts per
+    /// hundred thousands. Accepted values are between a value of 0 and 1.
+    pub finalizers_relative_stake_threshold: PartsPerHundredThousands,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
@@ -545,9 +654,9 @@ pub enum UpdatePayload {
     #[serde(rename = "level1")]
     Level1(Level1Update),
     #[serde(rename = "addAnonymityRevoker")]
-    AddAnonymityRevoker(Box<id::types::ArInfo<id::constants::ArCurve>>),
+    AddAnonymityRevoker(Box<crate::id::types::ArInfo<crate::id::constants::ArCurve>>),
     #[serde(rename = "addIdentityProvider")]
-    AddIdentityProvider(Box<id::types::IpInfo<id::constants::IpPairing>>),
+    AddIdentityProvider(Box<crate::id::types::IpInfo<crate::id::constants::IpPairing>>),
     #[serde(rename = "cooldownParametersCPV1")]
     CooldownParametersCPV1(CooldownParameters),
     #[serde(rename = "poolParametersCPV1")]
@@ -556,6 +665,16 @@ pub enum UpdatePayload {
     TimeParametersCPV1(TimeParameters),
     #[serde(rename = "mintDistributionCPV1")]
     MintDistributionCPV1(MintDistribution<ChainParameterVersion1>),
+    #[serde(rename = "gASRewardsCPV2")]
+    GASRewardsCPV2(GASRewardsV1),
+    #[serde(rename = "TimeoutParametersCPV2")]
+    TimeoutParametersCPV2(TimeoutParameters),
+    #[serde(rename = "minBlockTimeCPV2")]
+    MinBlockTimeCPV2(concordium_contracts_common::Duration),
+    #[serde(rename = "blockEnergyLimitCPV2")]
+    BlockEnergyLimitCPV2(Energy),
+    #[serde(rename = "finalizationCommitteeParametersCPV2")]
+    FinalizationCommitteeParametersCPV2(FinalizationCommitteeParameters),
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
@@ -578,7 +697,8 @@ pub enum UpdateType {
     UpdateMintDistribution,
     /// Update the distribution of transaction fees
     UpdateTransactionFeeDistribution,
-    /// Update the GAS rewards
+    /// Update the GAS rewards. Only applies to and including protocol version
+    /// 5.
     UpdateGASRewards,
     /// Add new anonymity revoker
     UpdateAddAnonymityRevoker,
@@ -600,6 +720,21 @@ pub enum UpdateType {
     /// Update of the time parameters. Only applies to protocol version
     /// [`P4`](ProtocolVersion::P4) and up.
     UpdateTimeParameters,
+    /// Update of the GAS rewards for chain parameter version 2. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateGASRewardsCPV2,
+    /// Update of the timeout parameters. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateTimeoutParameters,
+    /// Update of the min block time. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateMinBlockTime,
+    /// Update of the block energy limit. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateBlockEnergyLimit,
+    /// Update of the finalization committee parameters. Only applies to
+    /// protocol version [`P6`](ProtocolVersion::P6) and up.
+    UpdateFinalizationCommitteeParameters,
 }
 
 impl UpdatePayload {
@@ -623,11 +758,18 @@ impl UpdatePayload {
             UpdatePayload::PoolParametersCPV1(_) => UpdatePoolParameters,
             UpdatePayload::TimeParametersCPV1(_) => UpdateTimeParameters,
             UpdatePayload::MintDistributionCPV1(_) => UpdateMintDistribution,
+            UpdatePayload::GASRewardsCPV2(_) => UpdateGASRewardsCPV2,
+            UpdatePayload::TimeoutParametersCPV2(_) => UpdateTimeoutParameters,
+            UpdatePayload::MinBlockTimeCPV2(_) => UpdateMinBlockTime,
+            UpdatePayload::BlockEnergyLimitCPV2(_) => UpdateBlockEnergyLimit,
+            UpdatePayload::FinalizationCommitteeParametersCPV2(_) => {
+                UpdateFinalizationCommitteeParameters
+            }
         }
     }
 }
 
-#[derive(Debug, Clone, derive::Serialize)]
+#[derive(Debug, Clone, common::Serialize)]
 pub struct UpdateInstruction {
     pub header:     UpdateHeader,
     pub payload:    UpdatePayload,
@@ -668,7 +810,7 @@ impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
     }
 }
 
-#[derive(Debug, Clone, Copy, derive::Serialize)]
+#[derive(Debug, Clone, Copy, common::Serialize)]
 /// A header common to all update instructions.
 pub struct UpdateHeader {
     /// Sequence number of the update. Each update queue maintains its own
@@ -682,7 +824,7 @@ pub struct UpdateHeader {
     pub payload_size:   PayloadSize,
 }
 
-#[derive(Debug, Clone, derive::Serial, Into)]
+#[derive(Debug, Clone, common::Serial, Into)]
 /// Signature of an update instruction.
 pub struct UpdateInstructionSignature {
     #[map_size_length = 2]
@@ -725,7 +867,7 @@ pub mod update {
         timeout: TransactionTime,
         payload: UpdatePayload,
     ) -> UpdateInstruction {
-        let serialized_payload = crypto_common::to_bytes(&payload);
+        let serialized_payload = common::to_bytes(&payload);
         let header = UpdateHeader {
             seq_number,
             effective_time,
@@ -792,11 +934,17 @@ impl Serial for UpdatePayload {
             }
             UpdatePayload::AddAnonymityRevoker(add_ar) => {
                 12u8.serial(out);
-                add_ar.serial(out)
+                let mut inner = Vec::new();
+                add_ar.serial(&mut inner);
+                (inner.len() as u32).serial(out);
+                out.write_all(&inner).unwrap();
             }
             UpdatePayload::AddIdentityProvider(add_ip) => {
                 13u8.serial(out);
-                add_ip.serial(out)
+                let mut inner = Vec::new();
+                add_ip.serial(&mut inner);
+                (inner.len() as u32).serial(out);
+                out.write_all(&inner).unwrap();
             }
             UpdatePayload::CooldownParametersCPV1(cp) => {
                 14u8.serial(out);
@@ -813,6 +961,26 @@ impl Serial for UpdatePayload {
             UpdatePayload::MintDistributionCPV1(md) => {
                 17u8.serial(out);
                 md.serial(out)
+            }
+            UpdatePayload::TimeoutParametersCPV2(update) => {
+                18u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::MinBlockTimeCPV2(update) => {
+                19u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::BlockEnergyLimitCPV2(update) => {
+                20u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::GASRewardsCPV2(update) => {
+                21u8.serial(out);
+                update.serial(out)
+            }
+            UpdatePayload::FinalizationCommitteeParametersCPV2(update) => {
+                22u8.serial(out);
+                update.serial(out)
             }
         }
     }
@@ -832,12 +1000,41 @@ impl Deserial for UpdatePayload {
             9u8 => Ok(UpdatePayload::BakerStakeThreshold(source.get()?)),
             10u8 => Ok(UpdatePayload::Root(source.get()?)),
             11u8 => Ok(UpdatePayload::Level1(source.get()?)),
-            12u8 => Ok(UpdatePayload::AddAnonymityRevoker(source.get()?)),
-            13u8 => Ok(UpdatePayload::AddIdentityProvider(source.get()?)),
+            12u8 => {
+                let len: u32 = source.get()?;
+                let mut limited = std::io::Read::take(source, len.into());
+                let ar = limited.get()?;
+                if limited.limit() == 0 {
+                    Ok(UpdatePayload::AddAnonymityRevoker(ar))
+                } else {
+                    anyhow::bail!(
+                        "Incorrectly serialized anonymity revoker. Not all data was consumed."
+                    )
+                }
+            }
+            13u8 => {
+                let len: u32 = source.get()?;
+                let mut limited = std::io::Read::take(source, len.into());
+                let ip = limited.get()?;
+                if limited.limit() == 0 {
+                    Ok(UpdatePayload::AddIdentityProvider(ip))
+                } else {
+                    anyhow::bail!(
+                        "Incorrectly serialized identity provider. Not all data was consumed."
+                    )
+                }
+            }
             14u8 => Ok(UpdatePayload::CooldownParametersCPV1(source.get()?)),
             15u8 => Ok(UpdatePayload::PoolParametersCPV1(source.get()?)),
             16u8 => Ok(UpdatePayload::TimeParametersCPV1(source.get()?)),
             17u8 => Ok(UpdatePayload::MintDistributionCPV1(source.get()?)),
+            18u8 => Ok(UpdatePayload::TimeoutParametersCPV2(source.get()?)),
+            19u8 => Ok(UpdatePayload::MinBlockTimeCPV2(source.get()?)),
+            20u8 => Ok(UpdatePayload::BlockEnergyLimitCPV2(source.get()?)),
+            21u8 => Ok(UpdatePayload::GASRewardsCPV2(source.get()?)),
+            22u8 => Ok(UpdatePayload::FinalizationCommitteeParametersCPV2(
+                source.get()?,
+            )),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
     }

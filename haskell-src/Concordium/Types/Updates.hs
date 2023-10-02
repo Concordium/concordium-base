@@ -11,54 +11,54 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- |Types for chain update instructions, together with basic validation functions.
--- For specification, see: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
+-- | Types for chain update instructions, together with basic validation functions.
+--  For specification, see: https://concordium.gitlab.io/whitepapers/update-mechanism/main.pdf
 --
--- The specification defines the following update types:
+--  The specification defines the following update types:
 --
---   - authorization updates
---   - parameter updates
---   - protocol updates
---   - emergency updates
+--    - authorization updates
+--    - parameter updates
+--    - protocol updates
+--    - emergency updates
 --
--- Authorization updates alter the set of keys used to authorize chain updates.
--- (Practically, they are a type of parameter update.)
+--  Authorization updates alter the set of keys used to authorize chain updates.
+--  (Practically, they are a type of parameter update.)
 --
--- Parameter updates update a chain parameter.
--- Currently provided parameters are:
+--  Parameter updates update a chain parameter.
+--  Currently provided parameters are:
 --
---   - consensus parameters [these have a common access structure, but separate queues]
---     - for P1-P5: election difficulty
---     - for P6 onwards:
---       - timeout parameters
---       - minimum block time
---       - block energy limit
---   - Energy to Euro exchange rate
---   - GTU to Euro exchange rate
---   - address of the foundation account
---   - parameters for distribution of newly minted tokens
---   - parameters controlling the transaction fee distribution
---   - parameters controlling the GAS account
---   - parameters pertaining to bakers (P1-P3) and baker pools (P4 onwards)
---   - anonymity revokers (append only)
---   - identity providers (append only)
---   - parameters determining cooldown times (P4 onwards)
---   - parameters determining reward period length and mint rate (P4 onwards)
+--    - consensus parameters [these have a common access structure, but separate queues]
+--      - for P1-P5: election difficulty
+--      - for P6 onwards:
+--        - timeout parameters
+--        - minimum block time
+--        - block energy limit
+--    - Energy to Euro exchange rate
+--    - GTU to Euro exchange rate
+--    - address of the foundation account
+--    - parameters for distribution of newly minted tokens
+--    - parameters controlling the transaction fee distribution
+--    - parameters controlling the GAS account
+--    - parameters pertaining to bakers (P1-P3) and baker pools (P4 onwards)
+--    - anonymity revokers (append only)
+--    - identity providers (append only)
+--    - parameters determining cooldown times (P4 onwards)
+--    - parameters determining reward period length and mint rate (P4 onwards)
 --
--- Each parameter (or parameter group) has an independent update queue.
--- Sequence numbers for each different parameter are thus independent.
--- (Note, where two parameters are tightly coupled, such that one should
--- not be changed independently of the other, then they should be combined
--- as a single parameter.)
+--  Each parameter (or parameter group) has an independent update queue.
+--  Sequence numbers for each different parameter are thus independent.
+--  (Note, where two parameters are tightly coupled, such that one should
+--  not be changed independently of the other, then they should be combined
+--  as a single parameter.)
 --
--- Protocol updates specify a new protocol version.
--- The implementation should stop the current chain when a protocol update takes effect.
--- If it supports the new protocol version, it should begin a new chain according to that protocol,
--- and based on the state when the update took effect.
+--  Protocol updates specify a new protocol version.
+--  The implementation should stop the current chain when a protocol update takes effect.
+--  If it supports the new protocol version, it should begin a new chain according to that protocol,
+--  and based on the state when the update took effect.
 --
--- Emergency updates are inherently outside the scope of the chain implementation itself.
--- The chain only records the keys authorized for emergency updates, but does
--- not support any kind of emergency update messages.
+--  Emergency updates are inherently outside the scope of the chain implementation itself.
+--  The chain only records the keys authorized for emergency updates, but does
+--  not support any kind of emergency update messages.
 module Concordium.Types.Updates where
 
 import Control.Monad
@@ -108,14 +108,14 @@ import Concordium.Utils.Serialization
 
 --------------------
 
--- |Key type for update authorization.
+-- | Key type for update authorization.
 type UpdatePublicKey = VerifyKey
 
--- |Index of a key in an 'Authorizations'.
+-- | Index of a key in an 'Authorizations'.
 type UpdateKeyIndex = Word16
 
--- |A wrapper over Word16 to ensure on Serialize.get and Aeson.parseJSON that it
--- is not zero and it doesn't exceed the max value.
+-- | A wrapper over Word16 to ensure on Serialize.get and Aeson.parseJSON that it
+--  is not zero and it doesn't exceed the max value.
 newtype UpdateKeysThreshold = UpdateKeysThreshold {uktTheThreshold :: Word16}
     deriving newtype (Show, Eq, Enum, Num, Real, Ord, Integral, AE.ToJSON, AE.FromJSON)
 
@@ -132,11 +132,11 @@ instance Serialize UpdateKeysThreshold where
 
 --------------------
 
--- |Access structure for level 2 update authorization.
+-- | Access structure for level 2 update authorization.
 data AccessStructure = AccessStructure
-    { -- |Public keys
+    { -- | Public keys
       accessPublicKeys :: !(Set.Set UpdateKeyIndex),
-      -- |Number of keys required to authorize an update
+      -- | Number of keys required to authorize an update
       accessThreshold :: !UpdateKeysThreshold
     }
     deriving (Eq, Show)
@@ -153,40 +153,40 @@ instance Serialize AccessStructure where
         when (accessThreshold > fromIntegral keyCount || accessThreshold < 1) $ fail "Invalid threshold"
         return AccessStructure{..}
 
--- |The set of keys authorized for chain updates, together with
--- access structures determining which keys are authorized for
--- which update types. This is the payload of an update to authorization.
+-- | The set of keys authorized for chain updates, together with
+--  access structures determining which keys are authorized for
+--  which update types. This is the payload of an update to authorization.
 data Authorizations (auv :: AuthorizationsVersion) = Authorizations
     { asKeys :: !(Vec.Vector UpdatePublicKey),
-      -- |New emergency keys
+      -- | New emergency keys
       asEmergency :: !AccessStructure,
-      -- |New protocol update keys
+      -- | New protocol update keys
       asProtocol :: !AccessStructure,
-      -- |Parameter keys: Consensus parameters
-      -- Either 'ConsensusParametersV0' or 'ConsensusParametersV1' depending
-      -- on the chain parameter version.
+      -- | Parameter keys: Consensus parameters
+      --  Either 'ConsensusParametersV0' or 'ConsensusParametersV1' depending
+      --  on the chain parameter version.
       asParamConsensusParameters :: !AccessStructure,
-      -- |Parameter keys: Euro:NRG
+      -- | Parameter keys: Euro:NRG
       asParamEuroPerEnergy :: !AccessStructure,
-      -- |Parameter keys: microGTU:Euro
+      -- | Parameter keys: microGTU:Euro
       asParamMicroGTUPerEuro :: !AccessStructure,
-      -- |Parameter keys: foundation account
+      -- | Parameter keys: foundation account
       asParamFoundationAccount :: !AccessStructure,
-      -- |Parameter keys: mint distribution
+      -- | Parameter keys: mint distribution
       asParamMintDistribution :: !AccessStructure,
-      -- |Parameter keys: transaction fee distribution
+      -- | Parameter keys: transaction fee distribution
       asParamTransactionFeeDistribution :: !AccessStructure,
-      -- |Parameter keys: GAS rewards
+      -- | Parameter keys: GAS rewards
       asParamGASRewards :: !AccessStructure,
-      -- |Parameter keys: Baker Minimum Threshold/Pool parameters
+      -- | Parameter keys: Baker Minimum Threshold/Pool parameters
       asPoolParameters :: !AccessStructure,
-      -- |Parameter keys: ArIdentity and ArInfo
+      -- | Parameter keys: ArIdentity and ArInfo
       asAddAnonymityRevoker :: !AccessStructure,
-      -- |Parameter keys: IdentityProviderIdentity and IpInfo
+      -- | Parameter keys: IdentityProviderIdentity and IpInfo
       asAddIdentityProvider :: !AccessStructure,
-      -- |Parameter keys: Cooldown periods for pool owners and delegators
+      -- | Parameter keys: Cooldown periods for pool owners and delegators
       asCooldownParameters :: !(Conditionally (SupportsCooldownParametersAccessStructure auv) AccessStructure),
-      -- |Parameter keys: Length of reward period / payday
+      -- | Parameter keys: Length of reward period / payday
       asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure)
     }
 
@@ -212,7 +212,7 @@ putAuthorizations Authorizations{..} = do
     mapM_ put asCooldownParameters
     mapM_ put asTimeParameters
 
-getAuthorizations :: forall auv. IsAuthorizationsVersion auv => Get (Authorizations auv)
+getAuthorizations :: forall auv. (IsAuthorizationsVersion auv) => Get (Authorizations auv)
 getAuthorizations = label "deserialization update authorizations" $ do
     keyCount <- getWord16be
     asKeys <- Vec.replicateM (fromIntegral keyCount) get
@@ -239,7 +239,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) getChecked
     return Authorizations{..}
 
-instance IsAuthorizationsVersion auv => Serialize (Authorizations auv) where
+instance (IsAuthorizationsVersion auv) => Serialize (Authorizations auv) where
     put = putAuthorizations
     get = getAuthorizations
 
@@ -248,7 +248,7 @@ instance HashableTo SHA256.Hash (Authorizations auv) where
 
 instance (Monad m) => MHashableTo m SHA256.Hash (Authorizations auv)
 
-parseAuthorizationsJSON :: forall auv. IsAuthorizationsVersion auv => AE.Value -> AE.Parser (Authorizations auv)
+parseAuthorizationsJSON :: forall auv. (IsAuthorizationsVersion auv) => AE.Value -> AE.Parser (Authorizations auv)
 parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asKeys <- Vec.fromList <$> v .: "keys"
     let parseAS x =
@@ -283,10 +283,10 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     asTimeParameters <- conditionallyA (sSupportsTimeParameters auv) $ parseAS "timeParameters"
     return Authorizations{..}
 
-instance IsAuthorizationsVersion auv => AE.FromJSON (Authorizations auv) where
+instance (IsAuthorizationsVersion auv) => AE.FromJSON (Authorizations auv) where
     parseJSON = parseAuthorizationsJSON
 
-instance IsAuthorizationsVersion auv => AE.ToJSON (Authorizations auv) where
+instance (IsAuthorizationsVersion auv) => AE.ToJSON (Authorizations auv) where
     toJSON Authorizations{..} =
         AE.object
             ( [ "keys" AE..= Vec.toList asKeys,
@@ -325,9 +325,9 @@ instance IsAuthorizationsVersion auv => AE.ToJSON (Authorizations auv) where
 data RootKeysKind
 data Level1KeysKind
 
--- |This data structure will be used for all the updates that update Root or
--- level 1 keys, and to store the authorized keys for those operations. The phantom
--- type has to be either RootKeysKind or Level1KeysKind.
+-- | This data structure will be used for all the updates that update Root or
+--  level 1 keys, and to store the authorized keys for those operations. The phantom
+--  type has to be either RootKeysKind or Level1KeysKind.
 data HigherLevelKeys keyKind = HigherLevelKeys
     { hlkKeys :: !(Vec.Vector UpdatePublicKey),
       hlkThreshold :: !UpdateKeysThreshold
@@ -363,7 +363,7 @@ instance AE.ToJSON (HigherLevelKeys a) where
 instance HashableTo SHA256.Hash (HigherLevelKeys a) where
     getHash = SHA256.hash . encode
 
-instance Monad m => MHashableTo m SHA256.Hash (HigherLevelKeys a)
+instance (Monad m) => MHashableTo m SHA256.Hash (HigherLevelKeys a)
 
 --------------------
 
@@ -371,22 +371,22 @@ instance Monad m => MHashableTo m SHA256.Hash (HigherLevelKeys a)
 
 --------------------
 
--- |Root updates are the highest kind of updates. They can update every other
--- set of keys, even themselves. They can only be performed by Root level keys.
+-- | Root updates are the highest kind of updates. They can update every other
+--  set of keys, even themselves. They can only be performed by Root level keys.
 data RootUpdate
-    = -- |Update the root keys
+    = -- | Update the root keys
       RootKeysRootUpdate
         { rkruKeys :: !(HigherLevelKeys RootKeysKind)
         }
-    | -- |Update the Level 1 keys
+    | -- | Update the Level 1 keys
       Level1KeysRootUpdate
         { l1kruKeys :: !(HigherLevelKeys Level1KeysKind)
         }
-    | -- |Update the Level 2 keys in chain parameters version 0
+    | -- | Update the Level 2 keys in chain parameters version 0
       Level2KeysRootUpdate
         { l2kruAuthorizations :: !(Authorizations 'AuthorizationsVersion0)
         }
-    | -- |Update the level 2 keys in chain parameters version 1 and 2
+    | -- | Update the level 2 keys in chain parameters version 1 and 2
       Level2KeysRootUpdateV1
         { l2kruAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
@@ -454,8 +454,8 @@ instance AE.ToJSON RootUpdate where
 
 --------------------
 
--- |Level 1 updates are the intermediate update kind. They can update themselves
--- or level 2 keys. They can only be performed by Level 1 keys.
+-- | Level 1 updates are the intermediate update kind. They can update themselves
+--  or level 2 keys. They can only be performed by Level 1 keys.
 data Level1Update
     = Level1KeysLevel1Update
         { l1kl1uKeys :: !(HigherLevelKeys Level1KeysKind)
@@ -522,26 +522,26 @@ instance AE.ToJSON Level1Update where
 
 ----------------------
 
--- |Payload of a protocol update.
+-- | Payload of a protocol update.
 data ProtocolUpdate = ProtocolUpdate
-    { -- |A brief message about the update
+    { -- | A brief message about the update
       puMessage :: !Text,
-      -- |A URL of a document describing the update
+      -- | A URL of a document describing the update
       puSpecificationURL :: !Text,
-      -- |SHA256 hash of the specification document
+      -- | SHA256 hash of the specification document
       puSpecificationHash :: !SHA256.Hash,
-      -- |Auxiliary data whose interpretation is defined by the new specification
+      -- | Auxiliary data whose interpretation is defined by the new specification
       puSpecificationAuxiliaryData :: !ByteString
     }
     deriving (Eq, Show)
 
--- |The serialization of a protocol update payload is as follows:
+-- | The serialization of a protocol update payload is as follows:
 --
---      1. Length of the rest of the payload (Word64)
---      2. UTF-8 encoded textual description: length (Word64) + text (Bytes(length))
---      3. UTF-8 encoded URL of description document: length (Word64) + text (Bytes(length))
---      4. SHA-256 hash of description document
---      5. Uninterpreted bytes for the rest of the payload
+--       1. Length of the rest of the payload (Word64)
+--       2. UTF-8 encoded textual description: length (Word64) + text (Bytes(length))
+--       3. UTF-8 encoded URL of description document: length (Word64) + text (Bytes(length))
+--       4. SHA-256 hash of description document
+--       5. Uninterpreted bytes for the rest of the payload
 instance Serialize ProtocolUpdate where
     put ProtocolUpdate{..} = putNested putLength $ do
         putUtf8 puMessage
@@ -560,7 +560,7 @@ instance Serialize ProtocolUpdate where
 instance HashableTo SHA256.Hash ProtocolUpdate where
     getHash pu = SHA256.hash $ "ProtocolUpdate" <> encode pu
 
-instance Monad m => MHashableTo m SHA256.Hash ProtocolUpdate
+instance (Monad m) => MHashableTo m SHA256.Hash ProtocolUpdate
 
 instance AE.ToJSON ProtocolUpdate where
     toJSON ProtocolUpdate{..} =
@@ -587,8 +587,8 @@ instance AE.FromJSON ProtocolUpdate where
 
 -------------------------
 
--- |A data structure that holds a complete set of update keys. It will be stored
--- in the BlockState.
+-- | A data structure that holds a complete set of update keys. It will be stored
+--  in the BlockState.
 data UpdateKeysCollection (auv :: AuthorizationsVersion) = UpdateKeysCollection
     { rootKeys :: !(HigherLevelKeys RootKeysKind),
       level1Keys :: !(HigherLevelKeys Level1KeysKind),
@@ -602,35 +602,35 @@ putUpdateKeysCollection UpdateKeysCollection{..} = do
     put level1Keys
     putAuthorizations level2Keys
 
-getUpdateKeysCollection :: IsAuthorizationsVersion auv => Get (UpdateKeysCollection auv)
+getUpdateKeysCollection :: (IsAuthorizationsVersion auv) => Get (UpdateKeysCollection auv)
 getUpdateKeysCollection = UpdateKeysCollection <$> get <*> get <*> getAuthorizations
 
-instance IsAuthorizationsVersion auv => Serialize (UpdateKeysCollection auv) where
+instance (IsAuthorizationsVersion auv) => Serialize (UpdateKeysCollection auv) where
     put = putUpdateKeysCollection
     get = getUpdateKeysCollection
 
--- |SHA256 hashing instance for `UpdateKeysCollection`
--- Security considerations: It is crucial to use a cryptographic secure hash instance for `UpdateKeysCollection`.
--- The caller must be able to use the resulting hash in security critical application code.
--- Currently the computed hash is used to short circuit the signature verification check of transactions.
+-- | SHA256 hashing instance for `UpdateKeysCollection`
+--  Security considerations: It is crucial to use a cryptographic secure hash instance for `UpdateKeysCollection`.
+--  The caller must be able to use the resulting hash in security critical application code.
+--  Currently the computed hash is used to short circuit the signature verification check of transactions.
 instance HashableTo SHA256.Hash (UpdateKeysCollection auv) where
     getHash = SHA256.hash . runPut . putUpdateKeysCollection
 
--- |Check that the update keys collection matches the given SHA256 hash.
--- Note. See above for more information.
+-- | Check that the update keys collection matches the given SHA256 hash.
+--  Note. See above for more information.
 matchesUpdateKeysCollection :: UpdateKeysCollection auv -> SHA256.Hash -> Bool
 matchesUpdateKeysCollection ukc h = getHash ukc == h
 
 instance (Monad m) => MHashableTo m SHA256.Hash (UpdateKeysCollection auv)
 
-instance IsAuthorizationsVersion auv => AE.FromJSON (UpdateKeysCollection auv) where
+instance (IsAuthorizationsVersion auv) => AE.FromJSON (UpdateKeysCollection auv) where
     parseJSON = AE.withObject "UpdateKeysCollection" $ \v -> do
         rootKeys <- v .: "rootKeys"
         level1Keys <- v .: "level1Keys"
         level2Keys <- v .: "level2Keys"
         return UpdateKeysCollection{..}
 
-instance IsAuthorizationsVersion auv => AE.ToJSON (UpdateKeysCollection auv) where
+instance (IsAuthorizationsVersion auv) => AE.ToJSON (UpdateKeysCollection auv) where
     toJSON UpdateKeysCollection{..} =
         AE.object
             [ "rootKeys" AE..= rootKeys,
@@ -644,47 +644,49 @@ instance IsAuthorizationsVersion auv => AE.ToJSON (UpdateKeysCollection auv) whe
 
 -------------------------
 
--- |Types of updates to the chain. Used to disambiguate to which queue of updates should the value be pushed.
--- NB: This does not match exactly the update payload. Some update payloads can enqueue in different update queues.
+-- | Types of updates to the chain. Used to disambiguate to which queue of updates should the value be pushed.
+--  NB: This does not match exactly the update payload. Some update payloads can enqueue in different update queues.
 data UpdateType
-    = -- |Update the chain protocol
+    = -- | Update the chain protocol
       UpdateProtocol
-    | -- |Update the election difficulty
+    | -- | Update the election difficulty
       UpdateElectionDifficulty
-    | -- |Update the euro per energy exchange rate
+    | -- | Update the euro per energy exchange rate
       UpdateEuroPerEnergy
-    | -- |Update the microGTU per euro exchange rate
+    | -- | Update the microGTU per euro exchange rate
       UpdateMicroGTUPerEuro
-    | -- |Update the address of the foundation account
+    | -- | Update the address of the foundation account
       UpdateFoundationAccount
-    | -- |Update the distribution of newly minted GTU
+    | -- | Update the distribution of newly minted GTU
       UpdateMintDistribution
-    | -- |Update the distribution of transaction fees
+    | -- | Update the distribution of transaction fees
       UpdateTransactionFeeDistribution
-    | -- |Update the GAS rewards
+    | -- | Update the GAS rewards
       UpdateGASRewards
-    | -- |Update for pool parameters (previously baker stake threshold).
+    | -- | Update for pool parameters (previously baker stake threshold).
       UpdatePoolParameters
-    | -- |Add new anonymity revoker
+    | -- | Add new anonymity revoker
       UpdateAddAnonymityRevoker
-    | -- |Add new identity provider
+    | -- | Add new identity provider
       UpdateAddIdentityProvider
-    | -- |Update the root keys with the root keys
+    | -- | Update the root keys with the root keys
       UpdateRootKeys
-    | -- |Update the level 1 keys
+    | -- | Update the level 1 keys
       UpdateLevel1Keys
-    | -- |Update the level 2 keys
+    | -- | Update the level 2 keys
       UpdateLevel2Keys
-    | -- |Update for cooldown parameters, but not used by chain parameter version 0
+    | -- | Update for cooldown parameters, but not used by chain parameter version 0
       UpdateCooldownParameters
-    | -- |Update for time parameters, but not used by chain parameter version 0
+    | -- | Update for time parameters, but not used by chain parameter version 0
       UpdateTimeParameters
-    | -- |Update timeout parameters for consensus version 2
+    | -- | Update timeout parameters for consensus version 2
       UpdateTimeoutParameters
-    | -- |Update minimum block time for consensus version 2
+    | -- | Update minimum block time for consensus version 2
       UpdateMinBlockTime
-    | -- |Update block energy limit for consensus version 2
+    | -- | Update block energy limit for consensus version 2
       UpdateBlockEnergyLimit
+    | -- | Update the finalization committee parameters for consensus version 2
+      UpdateFinalizationCommitteeParameters
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -717,6 +719,7 @@ instance Serialize UpdateType where
     put UpdateTimeoutParameters = putWord8 17
     put UpdateMinBlockTime = putWord8 18
     put UpdateBlockEnergyLimit = putWord8 19
+    put UpdateFinalizationCommitteeParameters = putWord8 20
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -738,12 +741,13 @@ instance Serialize UpdateType where
             17 -> return UpdateTimeoutParameters
             18 -> return UpdateMinBlockTime
             19 -> return UpdateBlockEnergyLimit
+            20 -> return UpdateFinalizationCommitteeParameters
             n -> fail $ "invalid update type: " ++ show n
 
--- |Sequence number for updates of a given type.
+-- | Sequence number for updates of a given type.
 type UpdateSequenceNumber = Nonce
 
--- |Lowest 'UpdateSequenceNumber'.
+-- | Lowest 'UpdateSequenceNumber'.
 minUpdateSequenceNumber :: UpdateSequenceNumber
 minUpdateSequenceNumber = minNonce
 
@@ -753,10 +757,10 @@ minUpdateSequenceNumber = minNonce
 
 --------------------
 
--- |The header for an update instruction, consisting of the
--- sequence number, effective time, expiry time (timeout),
--- and payload size. This structure is the same for all
--- update payload types.
+-- | The header for an update instruction, consisting of the
+--  sequence number, effective time, expiry time (timeout),
+--  and payload size. This structure is the same for all
+--  update payload types.
 data UpdateHeader = UpdateHeader
     { updateSeqNumber :: !UpdateSequenceNumber,
       updateEffectiveTime :: !TransactionTime,
@@ -784,50 +788,52 @@ instance Serialize UpdateHeader where
 
 --------------------
 
--- |The payload of an update instruction.
+-- | The payload of an update instruction.
 data UpdatePayload
-    = -- |Update the protocol
+    = -- | Update the protocol
       ProtocolUpdatePayload !ProtocolUpdate
-    | -- |Update the election difficulty parameter
+    | -- | Update the election difficulty parameter
       ElectionDifficultyUpdatePayload !ElectionDifficulty
-    | -- |Update the euro-per-energy parameter
+    | -- | Update the euro-per-energy parameter
       EuroPerEnergyUpdatePayload !ExchangeRate
-    | -- |Update the microGTU-per-euro parameter
+    | -- | Update the microGTU-per-euro parameter
       MicroGTUPerEuroUpdatePayload !ExchangeRate
-    | -- |Update the address of the foundation account
+    | -- | Update the address of the foundation account
       FoundationAccountUpdatePayload !AccountAddress
-    | -- |Update the distribution of newly minted GTU in chain parameters version 0
+    | -- | Update the distribution of newly minted GTU in chain parameters version 0
       MintDistributionUpdatePayload !(MintDistribution 'MintDistributionVersion0)
-    | -- |Update the distribution of transaction fees
+    | -- | Update the distribution of transaction fees
       TransactionFeeDistributionUpdatePayload !TransactionFeeDistribution
-    | -- |Update the GAS rewards (chain parameters versions 0 and 1)
+    | -- | Update the GAS rewards (chain parameters versions 0 and 1)
       GASRewardsUpdatePayload !(GASRewards 'GASRewardsVersion0)
-    | -- |Update the minimum amount to register as a baker with chain parameter version 0
+    | -- | Update the minimum amount to register as a baker with chain parameter version 0
       BakerStakeThresholdUpdatePayload !(PoolParameters 'ChainParametersV0)
-    | -- |Root level update
+    | -- | Root level update
       RootUpdatePayload !RootUpdate
-    | -- |Level 1 update
+    | -- | Level 1 update
       Level1UpdatePayload !Level1Update
-    | -- |Add an anonymity revoker
+    | -- | Add an anonymity revoker
       AddAnonymityRevokerUpdatePayload !ArInfo
-    | -- |Add an identity provider
+    | -- | Add an identity provider
       AddIdentityProviderUpdatePayload !IpInfo
-    | -- |Cooldown parameters with chain parameter version 1 onwards
+    | -- | Cooldown parameters with chain parameter version 1 onwards
       CooldownParametersCPV1UpdatePayload !(CooldownParameters' 'CooldownParametersVersion1)
-    | -- |Pool parameters with chain parameter version 1 onwards
+    | -- | Pool parameters with chain parameter version 1 onwards
       PoolParametersCPV1UpdatePayload !(PoolParameters 'ChainParametersV1)
-    | -- |Time parameters with chain parameter version 1 onwards
+    | -- | Time parameters with chain parameter version 1 onwards
       TimeParametersCPV1UpdatePayload !TimeParameters
-    | -- |Update the distribution of newly minted GTU in chain parameters version 1 onwards
+    | -- | Update the distribution of newly minted GTU in chain parameters version 1 onwards
       MintDistributionCPV1UpdatePayload !(MintDistribution 'MintDistributionVersion1)
-    | -- |Update the timeout parameters (chain parameters version 2)
+    | -- | Update the timeout parameters (chain parameters version 2)
       TimeoutParametersUpdatePayload !TimeoutParameters
-    | -- |Update the minimum block time (chain parameters version 2)
+    | -- | Update the minimum block time (chain parameters version 2)
       MinBlockTimeUpdatePayload !Duration
-    | -- |Update block energy limit (chain parameters version 2)
+    | -- | Update block energy limit (chain parameters version 2)
       BlockEnergyLimitUpdatePayload !Energy
-    | -- |Update the GAS rewards (chain parameters version 2)
+    | -- | Update the GAS rewards (chain parameters version 2)
       GASRewardsCPV2UpdatePayload !(GASRewards 'GASRewardsVersion1)
+    | -- | Update the finalization committee parameters (chain parameters version 2)
+      FinalizationCommitteeParametersUpdatePayload !FinalizationCommitteeParameters
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -852,6 +858,7 @@ putUpdatePayload (TimeoutParametersUpdatePayload u) = putWord8 18 >> put u
 putUpdatePayload (MinBlockTimeUpdatePayload u) = putWord8 19 >> put u
 putUpdatePayload (BlockEnergyLimitUpdatePayload u) = putWord8 20 >> put u
 putUpdatePayload (GASRewardsCPV2UpdatePayload u) = putWord8 21 >> put u
+putUpdatePayload (FinalizationCommitteeParametersUpdatePayload u) = putWord8 22 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
@@ -891,6 +898,7 @@ getUpdatePayload spv =
         19 | isSupported PTMinBlockTime cpv -> MinBlockTimeUpdatePayload <$> get
         20 | isSupported PTBlockEnergyLimit cpv -> BlockEnergyLimitUpdatePayload <$> get
         21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
+        22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv
@@ -904,7 +912,7 @@ $( deriveJSON
     ''UpdatePayload
  )
 
--- |Determine the 'UpdateType' associated with an 'UpdatePayload'.
+-- | Determine the 'UpdateType' associated with an 'UpdatePayload'.
 updateType :: UpdatePayload -> UpdateType
 updateType ProtocolUpdatePayload{} = UpdateProtocol
 updateType ElectionDifficultyUpdatePayload{} = UpdateElectionDifficulty
@@ -932,8 +940,9 @@ updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
 updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
+updateType FinalizationCommitteeParametersUpdatePayload{} = UpdateFinalizationCommitteeParameters
 
--- |Extract the relevant set of key indices and threshold authorized for the given update instruction.
+-- | Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
 extractKeysIndices p =
     case p of
@@ -958,6 +967,7 @@ extractKeysIndices p =
         TimeoutParametersUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         MinBlockTimeUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
+        FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
@@ -971,8 +981,8 @@ extractKeysIndices p =
 -- is a cooldown parameter update or a time parameter update, which only exists in chain parameter version 1.
 -- Therefore, the empty set with threshold 1 is returned so that checkEnoughKeys will return false in this case.
 
--- |Extract the vector of public keys that are authorized for this kind of update. Note
--- that for a level 2 update it will return the whole set of level 2 keys.
+-- | Extract the vector of public keys that are authorized for this kind of update. Note
+--  that for a level 2 update it will return the whole set of level 2 keys.
 extractPubKeys :: UpdatePayload -> UpdateKeysCollection cpv -> Vec.Vector UpdatePublicKey
 extractPubKeys p =
     case p of
@@ -980,12 +990,12 @@ extractPubKeys p =
         Level1UpdatePayload{} -> hlkKeys . level1Keys
         _ -> asKeys . level2Keys
 
--- |Check that an access structure authorizes the given key set, this means particularly
--- that all the keys are authorized and the number of keys is above the threshold.
+-- | Check that an access structure authorizes the given key set, this means particularly
+--  that all the keys are authorized and the number of keys is above the threshold.
 checkEnoughKeys ::
-    -- |Set of known key indices.
+    -- | Set of known key indices.
     (Set.Set UpdateKeyIndex, UpdateKeysThreshold) ->
-    -- |Set of key indices that signed the update.
+    -- | Set of key indices that signed the update.
     Set.Set UpdateKeyIndex ->
     Bool
 checkEnoughKeys (knownIndices, thr) ks =
@@ -999,24 +1009,24 @@ checkEnoughKeys (knownIndices, thr) ks =
 
 --------------------
 
--- |Hash of an update instruction, as used for signing.
+-- | Hash of an update instruction, as used for signing.
 newtype UpdateInstructionSignHashV0 = UpdateInstructionSignHashV0 {v0UpdateInstructionSignHash :: SHA256.Hash}
     deriving newtype (Eq, Ord, Show, Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
--- |Alias for 'UpdateInstructionSignHashV0'.
+-- | Alias for 'UpdateInstructionSignHashV0'.
 type UpdateInstructionSignHash = UpdateInstructionSignHashV0
 
--- |Construct an 'UpdateInstructionSignHash' from the serialized header and payload of
--- an update instruction.
+-- | Construct an 'UpdateInstructionSignHash' from the serialized header and payload of
+--  an update instruction.
 makeUpdateInstructionSignHash ::
-    -- |Serialized update instruction header and payload
+    -- | Serialized update instruction header and payload
     ByteString ->
     UpdateInstructionSignHash
 makeUpdateInstructionSignHash body = UpdateInstructionSignHashV0 (SHA256.hash body)
 
--- |Signatures on an update instruction.
--- The serialization of 'UpdateInstructionSignatures' is uniquely determined.
--- It can't be empty and in that case will be rejected when parsing.
+-- | Signatures on an update instruction.
+--  The serialization of 'UpdateInstructionSignatures' is uniquely determined.
+--  It can't be empty and in that case will be rejected when parsing.
 newtype UpdateInstructionSignatures = UpdateInstructionSignatures
     { signatures :: Map.Map UpdateKeyIndex Signature
     }
@@ -1031,7 +1041,7 @@ instance Serialize UpdateInstructionSignatures where
         when (sz == 0) $ fail "signatures must not be empty"
         UpdateInstructionSignatures <$> getSafeSizedMapOf sz get get
 
--- |Check that a hash is correctly signed by the keys specified by the map indices.
+-- | Check that a hash is correctly signed by the keys specified by the map indices.
 checkCorrectSignatures ::
     UpdateInstructionSignHash ->
     Vec.Vector UpdatePublicKey ->
@@ -1050,9 +1060,9 @@ checkCorrectSignatures signHash keyVec UpdateInstructionSignatures{..} =
 
 --------------------
 
--- |An update instruction.
--- The header must have the correct length of the payload, and the
--- sign hash must be correctly computed (in the appropriate context).
+-- | An update instruction.
+--  The header must have the correct length of the payload, and the
+--  sign hash must be correctly computed (in the appropriate context).
 data UpdateInstruction = UpdateInstruction
     { uiHeader :: !UpdateHeader,
       uiPayload :: !UpdatePayload,
@@ -1083,8 +1093,8 @@ putUpdateInstruction UpdateInstruction{..} = do
 
 --------------------------------------
 
--- |An update instruction without signatures and payload length.
--- This is used for constructing an update instruction.
+-- | An update instruction without signatures and payload length.
+--  This is used for constructing an update instruction.
 data RawUpdateInstruction = RawUpdateInstruction
     { ruiSeqNumber :: UpdateSequenceNumber,
       ruiEffectiveTime :: TransactionTime,
@@ -1095,7 +1105,7 @@ data RawUpdateInstruction = RawUpdateInstruction
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''RawUpdateInstruction)
 
--- |Serialize a 'RawUpdateInstruction'; used for signing.
+-- | Serialize a 'RawUpdateInstruction'; used for signing.
 putRawUpdateInstruction :: Putter RawUpdateInstruction
 putRawUpdateInstruction RawUpdateInstruction{..} = do
     put ruiSeqNumber
@@ -1105,22 +1115,22 @@ putRawUpdateInstruction RawUpdateInstruction{..} = do
   where
     putPayloadSize l = put (fromIntegral l :: PayloadSize)
 
--- |Produce a signature for an update instruction with the given 'UpdateInstructionSignHash'
--- using the supplied keys.
+-- | Produce a signature for an update instruction with the given 'UpdateInstructionSignHash'
+--  using the supplied keys.
 signUpdateInstruction ::
-    -- |The hash to sign.
+    -- | The hash to sign.
     UpdateInstructionSignHash ->
-    -- |The map of keys to use for signing.
+    -- | The map of keys to use for signing.
     Map.Map UpdateKeyIndex KeyPair ->
     UpdateInstructionSignatures
 signUpdateInstruction sh =
     UpdateInstructionSignatures . fmap (\kp -> sign kp (encode sh))
 
--- |Make an 'UpdateInstruction' by signing a 'RawUpdateInstruction' with the given keys.
+-- | Make an 'UpdateInstruction' by signing a 'RawUpdateInstruction' with the given keys.
 makeUpdateInstruction ::
-    -- |The raw update instruction
+    -- | The raw update instruction
     RawUpdateInstruction ->
-    -- |The keys to be used to sign this instruction.
+    -- | The keys to be used to sign this instruction.
     Map.Map UpdateKeyIndex KeyPair ->
     UpdateInstruction
 makeUpdateInstruction rui@RawUpdateInstruction{..} keys =
@@ -1145,14 +1155,14 @@ makeUpdateInstruction rui@RawUpdateInstruction{..} keys =
 
 ----------------
 
--- |Check if an update is authorized by the given 'UpdateKeysCollection'.
--- That is, it must have signatures from at least the required threshold of
--- those authorized to perform the given update, and all signatures must be
--- valid and authorized.
+-- | Check if an update is authorized by the given 'UpdateKeysCollection'.
+--  That is, it must have signatures from at least the required threshold of
+--  those authorized to perform the given update, and all signatures must be
+--  valid and authorized.
 checkAuthorizedUpdate ::
-    -- |Current authorizations
+    -- | Current authorizations
     UpdateKeysCollection cpv ->
-    -- |Instruction to verify
+    -- | Instruction to verify
     UpdateInstruction ->
     Bool
 checkAuthorizedUpdate ukc UpdateInstruction{uiSignatures = u@UpdateInstructionSignatures{..}, ..} =

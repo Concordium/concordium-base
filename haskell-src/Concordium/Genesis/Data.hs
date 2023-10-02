@@ -4,6 +4,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+-- We suppress redundant constraint warnings since GHC does not detect when a constraint is used
+-- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 -- |
 --    This module defines the protocol versioned variants of genesis and regenesis
@@ -35,6 +38,7 @@ import Data.Word
 import Concordium.Common.Version
 import Concordium.Genesis.Account
 import Concordium.Genesis.Data.Base
+import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import qualified Concordium.Genesis.Data.P1 as P1
 import qualified Concordium.Genesis.Data.P2 as P2
 import qualified Concordium.Genesis.Data.P3 as P3
@@ -44,13 +48,13 @@ import qualified Concordium.Genesis.Data.P6 as P6
 import Concordium.Types
 import Concordium.Types.Parameters
 
--- |Data family for genesis data.
--- This has been chosen to be a data family so that the genesis data
--- will uniquely determine the protocol version.
+-- | Data family for genesis data.
+--  This has been chosen to be a data family so that the genesis data
+--  will uniquely determine the protocol version.
 --
--- The genesis data should always be serialized in such a way that a
--- 'GenesisConfiguration' can be deserialized from the byte array without
--- loading extra data.
+--  The genesis data should always be serialized in such a way that a
+--  'GenesisConfiguration' can be deserialized from the byte array without
+--  loading extra data.
 data family GenesisData (pv :: ProtocolVersion)
 
 newtype instance GenesisData 'P1 = GDP1 {unGDP1 :: P1.GenesisDataP1}
@@ -60,9 +64,9 @@ newtype instance GenesisData 'P4 = GDP4 {unGDP4 :: P4.GenesisDataP4}
 newtype instance GenesisData 'P5 = GDP5 {unGDP5 :: P5.GenesisDataP5}
 newtype instance GenesisData 'P6 = GDP6 {unGDP6 :: P6.GenesisDataP6}
 
--- |Data family for regenesis data. This has been chosen to be a data family, as
--- opposed to a type family principally so that it is injective, i.e., so that
--- the @Regenesis pv@ determines @pv@.
+-- | Data family for regenesis data. This has been chosen to be a data family, as
+--  opposed to a type family principally so that it is injective, i.e., so that
+--  the @Regenesis pv@ determines @pv@.
 data family Regenesis (pv :: ProtocolVersion)
 
 newtype instance Regenesis 'P1 = RGDP1 {unRGP1 :: P1.RegenesisP1}
@@ -172,13 +176,13 @@ instance (IsProtocolVersion pv) => Serialize (GenesisData pv) where
         SP5 -> P5.putGenesisDataV7 . unGDP5
         SP6 -> P6.putGenesisDataV8 . unGDP6
 
--- |Deserialize 'GenesisConfiguration' given the hash of the genesis. If
--- 'GenesisData' or 'Regenesis' is decodable (using its Serialize instance) from a given
--- bytestring then 'getGenesisConfiguration' will also succeed parsing.
+-- | Deserialize 'GenesisConfiguration' given the hash of the genesis. If
+--  'GenesisData' or 'Regenesis' is decodable (using its Serialize instance) from a given
+--  bytestring then 'getGenesisConfiguration' will also succeed parsing.
 --
--- Note that this will not consume the entire genesis data, only the initial
--- prefix. In particular, in case of initial genesis data it will not read the
--- genesis state.
+--  Note that this will not consume the entire genesis data, only the initial
+--  prefix. In particular, in case of initial genesis data it will not read the
+--  genesis state.
 getGenesisConfiguration :: SProtocolVersion pv -> BlockHash -> Get GenesisConfiguration
 getGenesisConfiguration spv genHash = case spv of
     SP1 -> P1.getGenesisConfigurationV3 genHash
@@ -188,9 +192,9 @@ getGenesisConfiguration spv genHash = case spv of
     SP5 -> P5.getGenesisConfigurationV7 genHash
     _ -> fail "Genesis configuration is only supported for consensus version 0"
 
--- |Deserialize genesis data with a version tag.
--- See `putVersionedGenesisData` for details of the version tag.
-getVersionedGenesisData :: forall pv. IsProtocolVersion pv => Get (GenesisData pv)
+-- | Deserialize genesis data with a version tag.
+--  See `putVersionedGenesisData` for details of the version tag.
+getVersionedGenesisData :: forall pv. (IsProtocolVersion pv) => Get (GenesisData pv)
 getVersionedGenesisData = case protocolVersion @pv of
     SP1 -> GDP1 <$> P1.getVersionedGenesisData
     SP2 -> GDP2 <$> P2.getVersionedGenesisData
@@ -199,21 +203,21 @@ getVersionedGenesisData = case protocolVersion @pv of
     SP5 -> GDP5 <$> P5.getVersionedGenesisData
     SP6 -> GDP6 <$> P6.getVersionedGenesisData
 
--- |Serialize genesis data with a version tag.
--- Each version tag must be specific to a protocol version, though more than one version tag can
--- be used for the same protocol version.
--- The currently supported versions are:
+-- | Serialize genesis data with a version tag.
+--  Each version tag must be specific to a protocol version, though more than one version tag can
+--  be used for the same protocol version.
+--  The currently supported versions are:
 --
--- +-------------+------------------+
--- | Version tag | Protocol version |
--- +=============+==================+
--- | 3           | P1               |
--- | 4           | P2               |
--- | 5           | P3               |
--- | 6           | P4               |
--- | 7           | P5               |
--- +-------------+------------------+
-putVersionedGenesisData :: forall pv. IsProtocolVersion pv => Putter (GenesisData pv)
+--  +-------------+------------------+
+--  | Version tag | Protocol version |
+--  +=============+==================+
+--  | 3           | P1               |
+--  | 4           | P2               |
+--  | 5           | P3               |
+--  | 6           | P4               |
+--  | 7           | P5               |
+--  +-------------+------------------+
+putVersionedGenesisData :: forall pv. (IsProtocolVersion pv) => Putter (GenesisData pv)
 putVersionedGenesisData = case protocolVersion @pv of
     SP1 -> P1.putVersionedGenesisData . unGDP1
     SP2 -> P2.putVersionedGenesisData . unGDP2
@@ -222,10 +226,10 @@ putVersionedGenesisData = case protocolVersion @pv of
     SP5 -> P5.putVersionedGenesisData . unGDP5
     SP6 -> P6.putVersionedGenesisData . unGDP6
 
--- |Generate the block hash of a genesis block with the given genesis data.
--- This is based on the presumption that a block hash is computed from a byte string
--- beginning with the serialization of the block slot.
-genesisBlockHash :: forall pv. IsProtocolVersion pv => GenesisData pv -> BlockHash
+-- | Generate the block hash of a genesis block with the given genesis data.
+--  This is based on the presumption that a block hash is computed from a byte string
+--  beginning with the serialization of the block slot.
+genesisBlockHash :: forall pv. (IsProtocolVersion pv) => GenesisData pv -> BlockHash
 genesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.genesisBlockHash . unGDP1
     SP2 -> P2.genesisBlockHash . unGDP2
@@ -234,8 +238,8 @@ genesisBlockHash = case protocolVersion @pv of
     SP5 -> P5.genesisBlockHash . unGDP5
     SP6 -> P6.genesisBlockHash . unGDP6
 
--- |Generate the block hash of a regenesis block with the given regenesis data.
-regenesisBlockHash :: forall pv. IsProtocolVersion pv => Regenesis pv -> BlockHash
+-- | Generate the block hash of a regenesis block with the given regenesis data.
+regenesisBlockHash :: forall pv. (IsProtocolVersion pv) => Regenesis pv -> BlockHash
 regenesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.regenesisBlockHash . unRGP1
     SP2 -> P2.regenesisBlockHash . unRGP2
@@ -244,10 +248,10 @@ regenesisBlockHash = case protocolVersion @pv of
     SP5 -> P5.regenesisBlockHash . unRGP5
     SP6 -> P6.regenesisBlockHash . unRGP6
 
--- |Hash of the initial genesis of the chain to which the given genesis data belongs.
--- Genesis created as part of a protocol update records the genesis
--- hash of the initial genesis block.
-firstGenesisBlockHash :: forall pv. IsProtocolVersion pv => Regenesis pv -> BlockHash
+-- | Hash of the initial genesis of the chain to which the given genesis data belongs.
+--  Genesis created as part of a protocol update records the genesis
+--  hash of the initial genesis block.
+firstGenesisBlockHash :: forall pv. (IsProtocolVersion pv) => Regenesis pv -> BlockHash
 firstGenesisBlockHash = case protocolVersion @pv of
     SP1 -> P1.firstGenesisBlockHash . unRGP1
     SP2 -> P2.firstGenesisBlockHash . unRGP2
@@ -256,9 +260,9 @@ firstGenesisBlockHash = case protocolVersion @pv of
     SP5 -> P5.firstGenesisBlockHash . unRGP5
     SP6 -> P6.firstGenesisBlockHash . unRGP6
 
--- |Tag of the genesis variant used for serialization. This tag determines
--- whether the genesis data is, e.g., initial genesis, or regenesis.
-genesisVariantTag :: forall pv. IsProtocolVersion pv => GenesisData pv -> Word8
+-- | Tag of the genesis variant used for serialization. This tag determines
+--  whether the genesis data is, e.g., initial genesis, or regenesis.
+genesisVariantTag :: forall pv. (IsProtocolVersion pv) => GenesisData pv -> Word8
 genesisVariantTag = case protocolVersion @pv of
     SP1 -> P1.genesisVariantTag . unGDP1
     SP2 -> P2.genesisVariantTag . unGDP2
@@ -267,11 +271,11 @@ genesisVariantTag = case protocolVersion @pv of
     SP5 -> P5.genesisVariantTag . unGDP5
     SP6 -> P6.genesisVariantTag . unGDP6
 
--- |Tag of the regenesis variant used for serialization. This tag determines
--- whether the genesis data is, e.g., initial genesis, or regenesis and allows
--- us to deserialize one or the other from the data without knowing apriori what
--- the data is.
-regenesisVariantTag :: forall pv. IsProtocolVersion pv => Regenesis pv -> Word8
+-- | Tag of the regenesis variant used for serialization. This tag determines
+--  whether the genesis data is, e.g., initial genesis, or regenesis and allows
+--  us to deserialize one or the other from the data without knowing apriori what
+--  the data is.
+regenesisVariantTag :: forall pv. (IsProtocolVersion pv) => Regenesis pv -> Word8
 regenesisVariantTag = case protocolVersion @pv of
     SP1 -> P1.regenesisVariantTag . unRGP1
     SP2 -> P2.regenesisVariantTag . unRGP2
@@ -280,16 +284,16 @@ regenesisVariantTag = case protocolVersion @pv of
     SP5 -> P5.regenesisVariantTag . unRGP5
     SP6 -> P6.regenesisVariantTag . unRGP6
 
--- |A dependent pair of a protocol version and genesis data.
-data PVGenesisData = forall pv. IsProtocolVersion pv => PVGenesisData (GenesisData pv)
+-- | A dependent pair of a protocol version and genesis data.
+data PVGenesisData = forall pv. (IsProtocolVersion pv) => PVGenesisData (GenesisData pv)
 
--- |A dependent pair of a protocol version and regenesis.
-data PVRegenesis = forall pv. IsProtocolVersion pv => PVRegenesis (Regenesis pv)
+-- | A dependent pair of a protocol version and regenesis.
+data PVRegenesis = forall pv. (IsProtocolVersion pv) => PVRegenesis (Regenesis pv)
 
--- |Deserialize genesis data with a version tag to a 'PVGenesisData'.
--- This should attempt to parse with all supported protocol versions.
--- The version tag will uniquely determine the protocol version.
--- For details, see `putVersionedGenesisData`.
+-- | Deserialize genesis data with a version tag to a 'PVGenesisData'.
+--  This should attempt to parse with all supported protocol versions.
+--  The version tag will uniquely determine the protocol version.
+--  For details, see `putVersionedGenesisData`.
 getPVGenesisData :: Get PVGenesisData
 getPVGenesisData = do
     getVersion >>= \case
@@ -301,10 +305,10 @@ getPVGenesisData = do
         8 -> PVGenesisData . GDP6 <$> P6.getGenesisDataV8
         n -> fail $ "Unsupported genesis version: " ++ show n
 
--- |Deserialize a genesis data version tag and return the associated protocol
--- version. When applied to a byte array (e.g., using 'runGet'), this consumes
--- only the version prefix of the array so it may be applied to the same input
--- as 'getPVGenesisData' to efficiently only parse the protocol version.
+-- | Deserialize a genesis data version tag and return the associated protocol
+--  version. When applied to a byte array (e.g., using 'runGet'), this consumes
+--  only the version prefix of the array so it may be applied to the same input
+--  as 'getPVGenesisData' to efficiently only parse the protocol version.
 getPVGenesisDataPV :: Get SomeProtocolVersion
 getPVGenesisDataPV = do
     getVersion >>= \case
@@ -316,39 +320,41 @@ getPVGenesisDataPV = do
         8 -> return $ SomeProtocolVersion SP6
         n -> fail $ "Unsupported genesis version: " ++ show n
 
--- |Serialize genesis data with a version tag. This is a helper function that
--- modulo types does exactly the same as 'putVersionedGenesisData' defined
--- above.
+-- | Serialize genesis data with a version tag. This is a helper function that
+--  modulo types does exactly the same as 'putVersionedGenesisData' defined
+--  above.
 putPVGenesisData :: Putter PVGenesisData
 putPVGenesisData (PVGenesisData gd) = putVersionedGenesisData gd
 
--- |Helper function that modulo types, does exactly the same as
--- 'genesisBlockHash' defined above.
+-- | Helper function that modulo types, does exactly the same as
+--  'genesisBlockHash' defined above.
 pvGenesisBlockHash :: PVGenesisData -> BlockHash
 pvGenesisBlockHash (PVGenesisData gd) = genesisBlockHash gd
 
--- |Helper function to project the protocol version out of 'PVGenesisData'.
+-- | Helper function to project the protocol version out of 'PVGenesisData'.
 pvProtocolVersion :: PVGenesisData -> ProtocolVersion
 pvProtocolVersion (PVGenesisData (_ :: GenesisData pv)) = demoteProtocolVersion (protocolVersion @pv)
 
--- |The 'StateMigrationParameters' type encapsulates additional data that is required when migrating
--- state from one protocol version to another.  As the state for an older protocol version may not
--- include state information that is required in a newer protocol version, these parameters
--- determine how to fill the gaps.  Principally, these parameters are derived from the data
--- supplied with the protocol update, though some may also derive from other data about the chain.
+-- | The 'StateMigrationParameters' type encapsulates additional data that is required when migrating
+--  state from one protocol version to another.  As the state for an older protocol version may not
+--  include state information that is required in a newer protocol version, these parameters
+--  determine how to fill the gaps.  Principally, these parameters are derived from the data
+--  supplied with the protocol update, though some may also derive from other data about the chain.
 data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) where
-    -- |No state migration is performed.
+    -- | No state migration is performed.
     StateMigrationParametersTrivial :: StateMigrationParameters p p
-    -- |The state is migrated from protocol version 'P1' to 'P2'.
+    -- | The state is migrated from protocol version 'P1' to 'P2'.
     StateMigrationParametersP1P2 :: StateMigrationParameters 'P1 'P2
-    -- |The state is migrated from protocol version 'P2' to 'P3'.
+    -- | The state is migrated from protocol version 'P2' to 'P3'.
     StateMigrationParametersP2P3 :: StateMigrationParameters 'P2 'P3
-    -- |The state is migrated from protocol version 'P3' to 'P4'.
+    -- | The state is migrated from protocol version 'P3' to 'P4'.
     StateMigrationParametersP3ToP4 :: P4.StateMigrationData -> StateMigrationParameters 'P3 'P4
-    -- |The state is migrated from protocol version 'P4' to 'P5'.
+    -- | The state is migrated from protocol version 'P4' to 'P5'.
     StateMigrationParametersP4ToP5 :: StateMigrationParameters 'P4 'P5
+    -- | The state is migrated from protocol version 'P5' to 'P6'.
+    StateMigrationParametersP5ToP6 :: P6.StateMigrationData -> StateMigrationParameters 'P5 'P6
 
--- |Extract the genesis configuration from the genesis data.
+-- | Extract the genesis configuration from the genesis data.
 genesisConfiguration :: (IsProtocolVersion pv, IsConsensusV0 pv) => GenesisData pv -> GenesisConfiguration
 genesisConfiguration genData =
     GenesisConfiguration
@@ -358,7 +364,7 @@ genesisConfiguration genData =
           _gcCurrentHash = genesisBlockHash genData
         }
 
--- |Extract the genesis configuration from the regenesis data.
+-- | Extract the genesis configuration from the regenesis data.
 regenesisConfiguration :: (IsProtocolVersion pv, IsConsensusV0 pv) => Regenesis pv -> GenesisConfiguration
 regenesisConfiguration regenData =
     GenesisConfiguration
@@ -367,3 +373,21 @@ regenesisConfiguration regenData =
           _gcFirstGenesis = firstGenesisBlockHash regenData,
           _gcCurrentHash = regenesisBlockHash regenData
         }
+
+-- | Extract the V1 core genesis parameters from the genesis data.
+genesisCoreParametersV1 ::
+    forall pv.
+    (IsProtocolVersion pv, IsConsensusV1 pv) =>
+    GenesisData pv ->
+    BaseV1.CoreGenesisParametersV1
+genesisCoreParametersV1 = case protocolVersion @pv of
+    SP6 -> \(GDP6 genData) -> P6.genesisCore genData
+
+-- | Extract the V1 core genesis parameters from the regenesis data.
+regenesisCoreParametersV1 ::
+    forall pv.
+    (IsProtocolVersion pv, IsConsensusV1 pv) =>
+    Regenesis pv ->
+    BaseV1.CoreGenesisParametersV1
+regenesisCoreParametersV1 = case protocolVersion @pv of
+    SP6 -> \(RGDP6 genData) -> BaseV1.genesisCore $ P6.genesisRegenesis genData

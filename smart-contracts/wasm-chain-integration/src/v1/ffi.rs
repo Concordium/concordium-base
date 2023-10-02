@@ -23,7 +23,8 @@ use concordium_contracts_common::OwnedReceiveName;
 use concordium_wasm::{
     artifact::{BorrowedArtifact, CompiledFunction},
     output::Output,
-    utils::parse_artifact,
+    utils::{parse_artifact, InstantiatedModule},
+    validate::ValidationConfig,
 };
 
 use crate::v0::ffi::slice_from_c_bytes;
@@ -116,7 +117,7 @@ unsafe extern "C" fn call_init_v1(
     output_len: *mut size_t,
     output_state_ptr: *mut *mut MutableState,
 ) -> *mut u8 {
-    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
     {
         borrowed_artifact
@@ -125,14 +126,12 @@ unsafe extern "C" fn call_init_v1(
     };
 
     let res = std::panic::catch_unwind(|| {
-        let init_name = slice_from_c_bytes!(init_name, init_name_len as usize);
-        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let init_name = slice_from_c_bytes!(init_name, init_name_len);
+        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len);
         let limit_logs_and_return_values = limit_logs_and_return_values != 0;
-        let init_ctx = v0::deserial_init_context(slice_from_c_bytes!(
-            init_ctx_bytes,
-            init_ctx_bytes_len as usize
-        ))
-        .expect("Precondition violation: invalid init ctx given by host.");
+        let init_ctx =
+            v0::deserial_init_context(slice_from_c_bytes!(init_ctx_bytes, init_ctx_bytes_len))
+                .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
                 let res = invoke_init(
@@ -208,6 +207,10 @@ unsafe extern "C" fn call_init_v1(
 ///   leaked.
 /// In case of execution failure, a panic, or failure to parse a null pointer is
 /// returned.
+///
+/// Note that if the `state_ptr_ptr` contains a non-null pointer it is the
+/// responsibility of the **caller** to dispose of it, or use it to call the
+/// `resume_receive_v1`.
 #[no_mangle]
 unsafe extern "C" fn call_receive_v1(
     loader: LoadCallback,
@@ -230,9 +233,14 @@ unsafe extern "C" fn call_receive_v1(
     output_return_value: *mut *mut ReturnValue,
     output_config: *mut *mut ReceiveInterruptedStateV1,
     output_len: *mut size_t,
+    // This is set to 1 if and only if the state has changed before the end of execution,
+    // in case execution terminated normally. Normally here means without a runtime exception.
+    output_state_changed: *mut u8,
     support_queries_tag: u8, // non-zero to enable support of chain queries.
+    support_account_signature_checks: u8, /* non-zero to enable support for querying account keys
+                              * and checking signatures */
 ) -> *mut u8 {
-    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len as usize);
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
     {
         borrowed_artifact
@@ -243,15 +251,15 @@ unsafe extern "C" fn call_receive_v1(
         // For FFI we only pass v0 contexts to keep the other end simpler.
         let receive_ctx_common = v0::deserial_receive_context(slice_from_c_bytes!(
             receive_ctx_bytes,
-            receive_ctx_bytes_len as usize
+            receive_ctx_bytes_len
         ))
         .expect("Precondition violation: Should be given a valid receive context.");
-        let receive_name = slice_from_c_bytes!(receive_name, receive_name_len as usize);
-        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize);
+        let receive_name = slice_from_c_bytes!(receive_name, receive_name_len);
+        let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len);
         let limit_logs_and_return_values = limit_logs_and_return_values != 0;
         let state_ptr = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         let mut loader = loader;
-        let mut state = (&mut *state_ptr).make_fresh_generation(&mut loader);
+        let mut state = (*state_ptr).make_fresh_generation(&mut loader);
         let instance_state = InstanceState::new(loader, state.get_inner(&mut loader));
         match std::str::from_utf8(receive_name)
             .ok()
@@ -275,11 +283,13 @@ unsafe extern "C" fn call_receive_v1(
                 };
 
                 let support_queries = support_queries_tag != 0;
+                let support_account_signature_checks = support_account_signature_checks != 0;
 
                 let params = ReceiveParams {
                     max_parameter_size,
                     limit_logs_and_return_values,
                     support_queries,
+                    support_account_signature_checks,
                 };
 
                 let res = invoke_receive(
@@ -317,10 +327,14 @@ unsafe extern "C" fn call_receive_v1(
                         } else {
                             *output_return_value = std::ptr::null_mut();
                         }
-                        if state_changed {
-                            let new_state = Box::into_raw(Box::new(state));
-                            *state_ptr_ptr = new_state;
-                        }
+                        let new_state = Box::into_raw(Box::new(state));
+                        // NB: We have to make sure to drop the state in Haskell for P5 or earlier.
+                        *state_ptr_ptr = new_state;
+                        *output_state_changed = if state_changed {
+                            1
+                        } else {
+                            0
+                        };
                         ptr
                     }
                     Err(_trap) => std::ptr::null_mut(),
@@ -367,6 +381,10 @@ unsafe extern "C" fn call_receive_v1(
 unsafe extern "C" fn validate_and_process_v1(
     // Whether the current protocol version supports smart contract upgrades.
     support_upgrade: u8,
+    // Allow globals in initialization expressions for data and element sections.
+    allow_globals_in_init: u8,
+    // Allow sign extension instructions.
+    allow_sign_extension_instr: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
     // this is the total length of the output byte array
@@ -377,14 +395,21 @@ unsafe extern "C" fn validate_and_process_v1(
     // be written.
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
-    let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len as usize);
+    let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
     match utils::instantiate_with_metering::<ProcessedImports, _>(
+        ValidationConfig {
+            allow_globals_in_init:      allow_globals_in_init != 0,
+            allow_sign_extension_instr: allow_sign_extension_instr != 0,
+        },
         &ConcordiumAllowedImports {
             support_upgrade: support_upgrade == 1,
         },
         wasm_bytes,
     ) {
-        Ok(artifact) => {
+        Ok(InstantiatedModule {
+            artifact,
+            custom_sections_size,
+        }) => {
             let mut out_buf = Vec::new();
             let num_exports = artifact.export.len(); // this can be at most MAX_NUM_EXPORTS
             out_buf.extend_from_slice(&(num_exports as u16).to_be_bytes());
@@ -393,7 +418,7 @@ unsafe extern "C" fn validate_and_process_v1(
                 out_buf.extend_from_slice(&(len as u16).to_be_bytes());
                 out_buf.extend_from_slice(name.as_ref().as_bytes());
             }
-
+            out_buf.extend_from_slice(&custom_sections_size.to_be_bytes());
             out_buf.shrink_to_fit();
             *output_len = out_buf.len() as size_t;
             let ptr = out_buf.as_mut_ptr();
@@ -476,9 +501,10 @@ unsafe extern "C" fn resume_receive_v1(
         // Before cloning we replace the contents of the pointer with a null pointer.
         // Whether the contents is null or not at the end of execution signals whether
         // the state has changed, so this is crucial.
-        let state_ref = std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
+        let state_ref: *mut MutableState =
+            std::mem::replace(&mut *state_ptr_ptr, std::ptr::null_mut());
         // The clone is cheap since this is reference counted.
-        let mut state = (&*state_ref).clone();
+        let mut state = (*state_ref).clone();
         // it is important to invalidate all previous iterators and entries we have
         // given out. so we start a new generation.
         let config = Box::from_raw(config);
@@ -523,7 +549,7 @@ unsafe extern "C" fn resume_receive_v1(
 unsafe extern "C" fn box_vec_u8_free(vec_ptr: *mut Vec<u8>) {
     if !vec_ptr.is_null() {
         // consume the vector
-        Box::from_raw(vec_ptr);
+        drop(Box::from_raw(vec_ptr));
     }
 }
 
@@ -552,7 +578,7 @@ unsafe extern "C" fn return_value_to_byte_array(
     rv_ptr: *mut Vec<u8>,
     output_len: *mut size_t,
 ) -> *mut u8 {
-    let mut bytes = (&*rv_ptr).clone();
+    let mut bytes = (*rv_ptr).clone();
     bytes.shrink_to_fit();
     *output_len = bytes.len() as size_t;
     let ptr = bytes.as_mut_ptr();
@@ -751,10 +777,10 @@ extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut P
         {
             let mut state_lock = mutable.get_inner(&mut loader).lock();
             let mut hasher = sha2::Sha512::new();
-            hasher.update(&seed.to_be_bytes());
+            hasher.update(seed.to_be_bytes());
             for i in 0..len {
                 let data = hasher.finalize_reset();
-                hasher.update(&data);
+                hasher.update(data);
                 state_lock.insert(&mut loader, &data, i.to_be_bytes().to_vec()).unwrap();
             }
         }

@@ -20,7 +20,10 @@ use concordium_smart_contract_engine::{
     },
     InterpreterEnergy,
 };
-use concordium_wasm::{machine, parse, validate};
+use concordium_wasm::{
+    machine, parse,
+    validate::{self, ValidationConfig},
+};
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use sha2::Digest;
 use std::time::Duration;
@@ -67,6 +70,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_HOST_FUNCTIONS)).unwrap();
     let module = {
         let mut module = validate::validate_module(
+            ValidationConfig::V1,
             &ConcordiumAllowedImports {
                 support_upgrade: true,
             },
@@ -435,7 +439,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             0x95, 0xd2, 0xd6, 0xba,
         ])
         .expect("Key generated with openssl, so should be valid.");
-        let message = secp256k1::Message::from_slice(&sha2::Sha256::digest(&[])[..])
+        let message = secp256k1::Message::from_slice(&sha2::Sha256::digest([])[..])
             .expect("Hashes are valid messages.");
         let sig = signer.sign_ecdsa(&message, &sk);
         let pk = secp256k1::PublicKey::from_slice(&[

@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MonoLocalBinds #-}
 
--- |Tests for serialization of 'ChainParameters' (binary and JSON).
+-- | Tests for serialization of 'ChainParameters' (binary and JSON).
 module Types.ParametersSpec (tests) where
 
 import Test.Hspec
@@ -16,7 +16,7 @@ import Concordium.Types.ProtocolVersion
 
 import Generators
 
-checkPutGetIsIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> ChainParameters pv -> Property
+checkPutGetIsIdentity :: (IsProtocolVersion pv) => SProtocolVersion pv -> ChainParameters pv -> Property
 checkPutGetIsIdentity _ cp = do
     let putBs = S.runPut $ putChainParameters cp
     case S.runGet getChainParameters putBs of

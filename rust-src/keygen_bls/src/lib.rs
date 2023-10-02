@@ -1,6 +1,6 @@
 //! Generate a private key in a deterministic way from a secret seed and key
 //! description.
-use curve_arithmetic::Curve;
+use concordium_base::curve_arithmetic::Curve;
 use ff::{Field, PrimeField};
 use hkdf::Hkdf;
 use pairing::bls12_381::{Fr, FrRepr, G1};
@@ -45,12 +45,12 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::InvalidLength
         slice_y1.clone_from_slice(&okm[0..31]);
         let slice_y2 = &mut y2_vec[0..okm.len() - slice_y1.len()];
         slice_y2.clone_from_slice(&okm[31..]);
-        let y1 = G1::scalar_from_bytes(&y1_vec);
-        let mut y2 = G1::scalar_from_bytes(&y2_vec);
+        let y1 = G1::scalar_from_bytes(y1_vec);
+        let mut y2 = G1::scalar_from_bytes(y2_vec);
         y2.mul_assign(&shift);
         sk = y1;
         sk.add_assign(&y2);
-        salt = Sha256::digest(&salt);
+        salt = Sha256::digest(salt);
     }
     Ok(sk)
 }
@@ -86,12 +86,12 @@ pub fn keygen_bls_deprecated(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::In
         slice_y1.clone_from_slice(&okm[0..31]);
         let slice_y2 = &mut y2_vec[0..okm.len() - slice_y1.len()];
         slice_y2.clone_from_slice(&okm[31..]);
-        let y1 = G1::scalar_from_bytes(&y1_vec);
-        let mut y2 = G1::scalar_from_bytes(&y2_vec);
+        let y1 = G1::scalar_from_bytes(y1_vec);
+        let mut y2 = G1::scalar_from_bytes(y2_vec);
         y2.mul_assign(&shift);
         sk = y1;
         sk.add_assign(&y2);
-        salt = Sha256::digest(&salt);
+        salt = Sha256::digest(salt);
     }
     Ok(sk)
 }

@@ -18,24 +18,24 @@ testTransactionTypesSerialIdentity = mapM_ testEncDec transactionTypes
   where
     testEncDec tt = decode (encode tt) `shouldBe` Right tt
 
--- |Test that decoding is the inverse of encoding for 'Event's.
-testEventSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
+-- | Test that decoding is the inverse of encoding for 'Event's.
+testEventSerializationIdentity :: (IsProtocolVersion pv) => SProtocolVersion pv -> Property
 testEventSerializationIdentity spv = forAll (genEvent spv) $ \e -> runGet (getEvent spv) (runPut $ putEvent e) === Right e
 
--- |Test that decoding is the inverse of encoding for 'Event's.
-testEventJSONSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
+-- | Test that decoding is the inverse of encoding for 'Event's.
+testEventJSONSerializationIdentity :: (IsProtocolVersion pv) => SProtocolVersion pv -> Property
 testEventJSONSerializationIdentity spv = forAll (genEvent spv) $ \e -> AE.eitherDecode (AE.encode e) === Right e
 
--- |Test that decoding is the inverse of encoding for 'RejectReason's.
+-- | Test that decoding is the inverse of encoding for 'RejectReason's.
 testRejectReasonSerializationIdentity :: RejectReason -> Property
 testRejectReasonSerializationIdentity e = decode (encode e) === Right e
 
--- |Test that decoding is the inverse of encoding for 'ValidResult's.
-testValidResultSerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
+-- | Test that decoding is the inverse of encoding for 'ValidResult's.
+testValidResultSerializationIdentity :: (IsProtocolVersion pv) => SProtocolVersion pv -> Property
 testValidResultSerializationIdentity spv = forAll (genValidResult spv) $ \e -> runGet (getValidResult spv) (runPut $ putValidResult e) === Right e
 
--- |Test that decoding is the inverse of encoding for 'TransactionSummary's.
-testTransactionSummarySerializationIdentity :: IsProtocolVersion pv => SProtocolVersion pv -> Property
+-- | Test that decoding is the inverse of encoding for 'TransactionSummary's.
+testTransactionSummarySerializationIdentity :: (IsProtocolVersion pv) => SProtocolVersion pv -> Property
 testTransactionSummarySerializationIdentity spv = forAll (genTransactionSummary spv) $ \e -> runGet (getTransactionSummary spv) (runPut $ putTransactionSummary e) === Right e
 
 tests :: Spec

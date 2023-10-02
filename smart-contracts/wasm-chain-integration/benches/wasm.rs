@@ -15,6 +15,7 @@ use concordium_wasm::{
     artifact::{ArtifactNamedImport, TryFromImport},
     machine::{Host, NoInterrupt, Value},
     types::{FunctionType, ValueType},
+    validate::ValidationConfig,
     *,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -157,7 +158,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 let skeleton =
                     parse::parse_skeleton(black_box(CONTRACT_BYTES_SIMPLE_GAME)).unwrap();
                 assert!(
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).is_ok(),
+                    validate::validate_module(
+                        ValidationConfig::V1,
+                        &ConcordiumAllowedImports,
+                        &skeleton
+                    )
+                    .is_ok(),
                     "Cannot validate module."
                 )
             })
@@ -167,8 +173,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter(move || {
                 let skeleton =
                     parse::parse_skeleton(black_box(CONTRACT_BYTES_SIMPLE_GAME)).unwrap();
-                let mut module =
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+                let mut module = validate::validate_module(
+                    ValidationConfig::V1,
+                    &ConcordiumAllowedImports,
+                    &skeleton,
+                )
+                .unwrap();
                 assert!(module.inject_metering().is_ok(), "Metering injection failed.")
             })
         });
@@ -177,8 +187,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter(move || {
                 let skeleton =
                     parse::parse_skeleton(black_box(CONTRACT_BYTES_SIMPLE_GAME)).unwrap();
-                let mut module =
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+                let mut module = validate::validate_module(
+                    ValidationConfig::V1,
+                    &ConcordiumAllowedImports,
+                    &skeleton,
+                )
+                .unwrap();
                 module.inject_metering().unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
@@ -194,7 +208,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.bench_function("validate", |b| {
             b.iter(|| {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_MINIMAL)).unwrap();
-                if let Err(e) = validate::validate_module(&ConcordiumAllowedImports, &skeleton) {
+                if let Err(e) = validate::validate_module(
+                    ValidationConfig::V1,
+                    &ConcordiumAllowedImports,
+                    &skeleton,
+                ) {
                     panic!("{}", e)
                 }
             })
@@ -203,8 +221,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.bench_function("validate + inject metering", |b| {
             b.iter(move || {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_MINIMAL)).unwrap();
-                let mut module =
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+                let mut module = validate::validate_module(
+                    ValidationConfig::V1,
+                    &ConcordiumAllowedImports,
+                    &skeleton,
+                )
+                .unwrap();
                 assert!(module.inject_metering().is_ok(), "Metering injection failed.")
             })
         });
@@ -212,8 +234,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.bench_function("validate + inject metering + compile", |b| {
             b.iter(move || {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_MINIMAL)).unwrap();
-                let mut module =
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+                let mut module = validate::validate_module(
+                    ValidationConfig::V1,
+                    &ConcordiumAllowedImports,
+                    &skeleton,
+                )
+                .unwrap();
                 module.inject_metering().unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
@@ -231,7 +257,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_COUNTER)).unwrap();
                 assert!(
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).is_ok(),
+                    validate::validate_module(
+                        ValidationConfig::V1,
+                        &ConcordiumAllowedImports,
+                        &skeleton
+                    )
+                    .is_ok(),
                     "Cannot validate module."
                 )
             })
@@ -240,8 +271,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.bench_function("validate + inject metering", |b| {
             b.iter(move || {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_COUNTER)).unwrap();
-                let mut module =
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+                let mut module = validate::validate_module(
+                    ValidationConfig::V1,
+                    &ConcordiumAllowedImports,
+                    &skeleton,
+                )
+                .unwrap();
                 assert!(module.inject_metering().is_ok(), "Metering injection failed.")
             })
         });
@@ -249,8 +284,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.bench_function("validate + inject metering + compile", |b| {
             b.iter(move || {
                 let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_COUNTER)).unwrap();
-                let mut module =
-                    validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+                let mut module = validate::validate_module(
+                    ValidationConfig::V1,
+                    &ConcordiumAllowedImports,
+                    &skeleton,
+                )
+                .unwrap();
                 module.inject_metering().unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
@@ -266,7 +305,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.measurement_time(Duration::from_secs(10));
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_INSTRUCTIONS)).unwrap();
-        let module = validate::validate_module(&TestHost::uninitialized(), &skeleton).unwrap();
+        let module =
+            validate::validate_module(ValidationConfig::V1, &TestHost::uninitialized(), &skeleton)
+                .unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
         for n in [0, 1, 10000, 100000, 200000].iter() {
             group.bench_with_input(format!("execute n = {}", n), n, |b, m| {
@@ -283,7 +324,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let skeleton =
             parse::parse_skeleton(black_box(CONTRACT_BYTES_MEMORY_INSTRUCTIONS)).unwrap();
-        let module = validate::validate_module(&TestHost::uninitialized(), &skeleton).unwrap();
+        let module =
+            validate::validate_module(ValidationConfig::V1, &TestHost::uninitialized(), &skeleton)
+                .unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
         for n in [1, 10, 50, 100, 250, 500, 1000, 1024].iter() {
             group.bench_with_input(format!("allocate n = {} pages", n), n, |b, m| {
@@ -374,7 +417,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             .throughput(criterion::Throughput::Elements(nrg));
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_LOOP)).unwrap();
-        let mut module = validate::validate_module(&TestHost::uninitialized(), &skeleton).unwrap();
+        let mut module =
+            validate::validate_module(ValidationConfig::V1, &TestHost::uninitialized(), &skeleton)
+                .unwrap();
         module.inject_metering().unwrap();
         let artifact = module.compile::<MeteringImport>().unwrap();
 
@@ -491,6 +536,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         exec("i64.rem_s", &[]);
         exec("i64.rem_u", &[]);
         exec("i32.wrap_i64", &[]);
+        exec("i32.extend8_s", &[]);
+        exec("i32.extend16_s", &[]);
+        exec("i64.extend8_s", &[]);
+        exec("i64.extend16_s", &[]);
+        exec("i64.extend32_s", &[]);
         group.finish();
     }
 
@@ -510,8 +560,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_HOST_FUNCTIONS)).unwrap();
         let module = {
-            let mut module =
-                validate::validate_module(&ConcordiumAllowedImports, &skeleton).unwrap();
+            let mut module = validate::validate_module(
+                ValidationConfig::V1,
+                &ConcordiumAllowedImports,
+                &skeleton,
+            )
+            .unwrap();
             module.inject_metering().expect("Metering injection should succeed.");
             module
         };
@@ -548,7 +602,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 InterpreterEnergy {
                     energy: nrg * 1000,
                 },
-                Parameter::from(&[] as &[u8]),
+                Parameter::empty(),
                 &init_ctx,
                 false,
             )
@@ -593,7 +647,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let artifact = &artifact;
             move |b: &mut criterion::Bencher| {
                 b.iter(|| {
-                    let mut host = setup_receive_host(State::new(state), params.into());
+                    let mut host = setup_receive_host(State::new(state), Parameter::new_unchecked(params));
                     let r = artifact
                         .run(&mut host, name, args)
                         .expect_err("Execution should fail due to out of energy.");

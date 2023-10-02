@@ -95,12 +95,7 @@ library:
     - -fno-ignore-asserts
 
   extra-libraries:
-    - aggregate_sig
-    - ecvrf
-    - eddsa_ed25519
-    - encrypted_transfers
-    - ffi_helpers
-    - id
+    - concordium_base
     - sha_2
 
   when:

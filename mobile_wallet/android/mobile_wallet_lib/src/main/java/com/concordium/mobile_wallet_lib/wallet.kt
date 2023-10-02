@@ -24,7 +24,7 @@ external fun parameter_to_json(input: String) : ReturnValue
 external fun sign_message(input: String) : ReturnValue
 external fun create_account_transaction(input: String) : ReturnValue
 external fun serialize_token_transfer_parameters(input: String) : ReturnValue
-
+external fun get_verifiable_credential_keys(input: String) : ReturnValue
 
 fun loadWalletLib() {
     System.loadLibrary("mobile_wallet")

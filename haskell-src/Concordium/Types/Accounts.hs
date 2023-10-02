@@ -15,7 +15,7 @@
 -- for pattern matching. (See: https://gitlab.haskell.org/ghc/ghc/-/issues/20896)
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
--- |Types for representing the results of consensus queries.
+-- | Types for representing the results of consensus queries.
 module Concordium.Types.Accounts (
     AccountVersion (..),
     SAccountVersion (..),
@@ -23,25 +23,25 @@ module Concordium.Types.Accounts (
     accountVersionFor,
     BakerPoolInfo (..),
     HasBakerPoolInfo,
-    -- |Whether the pool allows delegators.
+    -- | Whether the pool allows delegators.
     poolOpenStatus,
-    -- |The URL that links to the metadata about the pool.
+    -- | The URL that links to the metadata about the pool.
     poolMetadataUrl,
-    -- |The commission rates charged by the pool owner.
+    -- | The commission rates charged by the pool owner.
     poolCommissionRates,
     BakerInfo (..),
     HasBakerInfo,
     bakerInfo,
-    -- |Identity of the baker. This is actually the account index of
-    -- the account controlling the baker.
+    -- | Identity of the baker. This is actually the account index of
+    --  the account controlling the baker.
     bakerIdentity,
-    -- |The baker's public VRF key
+    -- | The baker's public VRF key
     bakerElectionVerifyKey,
-    -- |The baker's public signature key
+    -- | The baker's public signature key
     bakerSignatureVerifyKey,
-    -- |The baker's public key for finalization record aggregation
+    -- | The baker's public key for finalization record aggregation
     bakerAggregationVerifyKey,
-    -- |The details of the pool associated with a baker
+    -- | The details of the pool associated with a baker
     bakerPoolInfo,
     BakerInfoEx (..),
     bieBakerInfo,
@@ -52,13 +52,13 @@ module Concordium.Types.Accounts (
     StakePendingChange' (..),
     StakePendingChange,
     AccountBaker (..),
-    -- |The amount staked by the baker.
+    -- | The amount staked by the baker.
     stakedAmount,
-    -- |Whether baker and finalizer rewards are added to the stake.
+    -- | Whether baker and finalizer rewards are added to the stake.
     stakeEarnings,
-    -- |The baker's keys and identity.
+    -- | The baker's keys and identity.
     accountBakerInfo,
-    -- |The pending change (if any) to the baker's status.
+    -- | The pending change (if any) to the baker's status.
     bakerPendingChange,
     serializeAccountBaker,
     deserializeAccountBaker,
@@ -76,6 +76,7 @@ module Concordium.Types.Accounts (
     AccountInfo (..),
     AccountStakingInfo (..),
     toAccountStakingInfo,
+    toAccountStakingInfoP4,
 
     -- * Account structure version
     AccountStructureVersion (..),
@@ -97,30 +98,30 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
 
--- |The version of the account structure. This is used to index types that vary the account
--- structure.
+-- | The version of the account structure. This is used to index types that vary the account
+--  structure.
 data AccountStructureVersion
-    = -- |Account structure used prior to P5
+    = -- | Account structure used prior to P5
       AccountStructureV0
-    | -- |Account structure used from P5
+    | -- | Account structure used from P5
       AccountStructureV1
 
--- |The account structure version associated with an account version.
+-- | The account structure version associated with an account version.
 type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructureVersion where
     AccountStructureVersionFor 'AccountV0 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV1 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
 
--- |The 'BakerId' of a baker and its public keys.
+-- | The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
-    { -- |Identity of the baker. This is actually the account index of
-      -- the account controlling the baker.
+    { -- | Identity of the baker. This is actually the account index of
+      --  the account controlling the baker.
       _bakerIdentity :: !BakerId,
-      -- |The baker's public VRF key
+      -- | The baker's public VRF key
       _bakerElectionVerifyKey :: !BakerElectionVerifyKey,
-      -- |The baker's public signature key
+      -- | The baker's public signature key
       _bakerSignatureVerifyKey :: !BakerSignVerifyKey,
-      -- |The baker's public key for finalization record aggregation
+      -- | The baker's public key for finalization record aggregation
       _bakerAggregationVerifyKey :: !BakerAggregationVerifyKey
     }
     deriving (Eq, Show)
@@ -138,19 +139,28 @@ instance Serialize BakerInfo where
         _bakerAggregationVerifyKey <- get
         return BakerInfo{..}
 
+instance ToJSON BakerInfo where
+    toJSON BakerInfo{..} =
+        object
+            [ "bakerId" .= _bakerIdentity,
+              "bakerElectionVerifyKey" .= _bakerElectionVerifyKey,
+              "bakerSignatureVerifyKey" .= _bakerSignatureVerifyKey,
+              "bakerAggregationVerifyKey" .= _bakerAggregationVerifyKey
+            ]
+
 -- Define the class 'HasBakerInfo' with accessor lenses and an instance for 'BakerInfo'.
 makeClassy ''BakerInfo
 
--- |Additional information about a baking pool.
--- This information is added with the introduction of delegation.
+-- | Additional information about a baking pool.
+--  This information is added with the introduction of delegation.
 data BakerPoolInfo
-    = -- |The introduction of delegation requires information about the pool.
+    = -- | The introduction of delegation requires information about the pool.
       BakerPoolInfo
-      { -- |Whether the pool allows delegators.
+      { -- | Whether the pool allows delegators.
         _poolOpenStatus :: !OpenStatus,
-        -- |The URL that links to the metadata about the pool.
+        -- | The URL that links to the metadata about the pool.
         _poolMetadataUrl :: !UrlText,
-        -- |The commission rates charged by the pool owner.
+        -- | The commission rates charged by the pool owner.
         _poolCommissionRates :: !CommissionRates
       }
     deriving (Eq, Show)
@@ -169,7 +179,7 @@ instance Serialize BakerPoolInfo where
 -- Define the class 'HasBakerPoolInfo' with accessor lenses and an instance for 'BakerPoolInfo'.
 makeClassy ''BakerPoolInfo
 
--- |Helper function for defining 'ToJSON'.
+-- | Helper function for defining 'ToJSON'.
 bakerPoolInfoV1Pairs :: (KeyValue kv) => BakerPoolInfo -> [kv]
 bakerPoolInfoV1Pairs BakerPoolInfo{..} =
     [ "openStatus" .= _poolOpenStatus,
@@ -188,16 +198,16 @@ instance FromJSON BakerPoolInfo where
         _poolCommissionRates <- o .: "commissionRates"
         return BakerPoolInfo{..}
 
--- |Extended baker information. Protocol version 4 introduces baking pools that allow delegation.
--- Thus, for 'P4' onwards, the baker info is extended with 'BakerPoolInfo' that describes the
--- pool.
+-- | Extended baker information. Protocol version 4 introduces baking pools that allow delegation.
+--  Thus, for 'P4' onwards, the baker info is extended with 'BakerPoolInfo' that describes the
+--  pool.
 data BakerInfoEx (av :: AccountVersion) where
     BakerInfoExV0 :: !BakerInfo -> BakerInfoEx 'AccountV0
     BakerInfoExV1 ::
-        AVSupportsDelegation av =>
-        { -- |The baker ID and keys.
+        (AVSupportsDelegation av) =>
+        { -- | The baker ID and keys.
           _bieBakerInfo :: !BakerInfo,
-          -- |The baker pool info.
+          -- | The baker pool info.
           _bieBakerPoolInfo :: !BakerPoolInfo
         } ->
         BakerInfoEx av
@@ -205,23 +215,23 @@ data BakerInfoEx (av :: AccountVersion) where
 deriving instance Eq (BakerInfoEx av)
 deriving instance Show (BakerInfoEx av)
 
--- |Lens for '_bieBakerInfo'
+-- | Lens for '_bieBakerInfo'
 {-# INLINE bieBakerInfo #-}
-bieBakerInfo :: AVSupportsDelegation av => Lens' (BakerInfoEx av) BakerInfo
+bieBakerInfo :: (AVSupportsDelegation av) => Lens' (BakerInfoEx av) BakerInfo
 bieBakerInfo =
     lens _bieBakerInfo (\bie x -> bie{_bieBakerInfo = x})
 
--- |Lens for '_bieBakerPoolInfo'
+-- | Lens for '_bieBakerPoolInfo'
 {-# INLINE bieBakerPoolInfo #-}
-bieBakerPoolInfo :: AVSupportsDelegation av => Lens' (BakerInfoEx av) BakerPoolInfo
+bieBakerPoolInfo :: (AVSupportsDelegation av) => Lens' (BakerInfoEx av) BakerPoolInfo
 bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
--- |Note that the serialization of 'BakerInfoEx' matches exactly
--- the serialization of 'BakerInfo' for 'AccountV0'. This is needed to preserve
--- compatibility between versions, allowing 'BakerInfoEx' to be used where
--- 'BakerInfo' was used.
-instance forall av. IsAccountVersion av => Serialize (BakerInfoEx av) where
+-- | Note that the serialization of 'BakerInfoEx' matches exactly
+--  the serialization of 'BakerInfo' for 'AccountV0'. This is needed to preserve
+--  compatibility between versions, allowing 'BakerInfoEx' to be used where
+--  'BakerInfo' was used.
+instance forall av. (IsAccountVersion av) => Serialize (BakerInfoEx av) where
     put (BakerInfoExV0 bi) = put bi
     put BakerInfoExV1{..} = put _bieBakerInfo >> put _bieBakerPoolInfo
     get = case delegationSupport @av of
@@ -240,49 +250,49 @@ instance (AVSupportsDelegation av) => HasBakerPoolInfo (BakerInfoEx av) where
         (\bpi' -> bie{_bieBakerPoolInfo = bpi'})
             <$> upd _bieBakerPoolInfo
 
--- |The time at which a pending change to a baker or delegator's capital becomes effective from
--- the perspective of determining stakes.  (This will have effect on baker stakes two epochs after
--- this time.)
+-- | The time at which a pending change to a baker or delegator's capital becomes effective from
+--  the perspective of determining stakes.  (This will have effect on baker stakes two epochs after
+--  this time.)
 --
--- For 'AccountV0', this is specified as an 'Epoch', which is an absolute number of epochs since
--- the latest genesis.  For 'AccountV1' (onwards), this is an absolute timestamp. This latter choice
--- is preferable, as it does not need to be changed on a protocol update to account for the
--- resetting of the Epoch counter.
+--  For 'AccountV0', this is specified as an 'Epoch', which is an absolute number of epochs since
+--  the latest genesis.  For 'AccountV1' (onwards), this is an absolute timestamp. This latter choice
+--  is preferable, as it does not need to be changed on a protocol update to account for the
+--  resetting of the Epoch counter.
 data PendingChangeEffective (av :: AccountVersion) where
     PendingChangeEffectiveV0 :: !Epoch -> PendingChangeEffective 'AccountV0
-    PendingChangeEffectiveV1 :: AVSupportsDelegation av => !Timestamp -> PendingChangeEffective av
+    PendingChangeEffectiveV1 :: (AVSupportsDelegation av) => !Timestamp -> PendingChangeEffective av
 
 deriving instance Eq (PendingChangeEffective av)
 deriving instance Ord (PendingChangeEffective av)
 deriving instance Show (PendingChangeEffective av)
 
-instance IsAccountVersion av => Serialize (PendingChangeEffective av) where
+instance (IsAccountVersion av) => Serialize (PendingChangeEffective av) where
     put (PendingChangeEffectiveV0 epoch) = put epoch
     put (PendingChangeEffectiveV1 timestamp) = put timestamp
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> PendingChangeEffectiveV0 <$> get
         SAVDelegationSupported -> PendingChangeEffectiveV1 <$> get
 
--- |Get the 'Timestamp' from a 'PendingChangeEffective' if the account version supports delegation.
+-- | Get the 'Timestamp' from a 'PendingChangeEffective' if the account version supports delegation.
 pendingChangeEffectiveTimestamp :: (AVSupportsDelegation av) => PendingChangeEffective av -> Timestamp
 {-# INLINE pendingChangeEffectiveTimestamp #-}
 pendingChangeEffectiveTimestamp (PendingChangeEffectiveV1 ts) = ts
 
--- |Convert a 'PendingChangeEffective' between account versions that support delegation.
+-- | Convert a 'PendingChangeEffective' between account versions that support delegation.
 coercePendingChangeEffectiveV1 :: (AVSupportsDelegation av1, AVSupportsDelegation av2) => PendingChangeEffective av1 -> PendingChangeEffective av2
 coercePendingChangeEffectiveV1 (PendingChangeEffectiveV1 ts) = PendingChangeEffectiveV1 ts
 
--- |Pending changes to the baker or delegation associated with an account.
+-- | Pending changes to the baker or delegation associated with an account.
 data StakePendingChange' effectiveTime
-    = -- |There is no change pending to the baker.
+    = -- | There is no change pending to the baker.
       NoChange
-    | -- |The stake will be decreased to the given amount.
+    | -- | The stake will be decreased to the given amount.
       ReduceStake !Amount !effectiveTime
-    | -- |The baker will be removed.
+    | -- | The baker will be removed.
       RemoveStake !effectiveTime
     deriving (Eq, Ord, Show, Functor)
 
-instance Serialize effectiveTime => Serialize (StakePendingChange' effectiveTime) where
+instance (Serialize effectiveTime) => Serialize (StakePendingChange' effectiveTime) where
     put NoChange = putWord8 0
     put (ReduceStake amt et) = putWord8 1 >> put amt >> put et
     put (RemoveStake et) = putWord8 2 >> put et
@@ -296,15 +306,15 @@ instance Serialize effectiveTime => Serialize (StakePendingChange' effectiveTime
 
 type StakePendingChange (av :: AccountVersion) = StakePendingChange' (PendingChangeEffective av)
 
--- |A baker associated with an account.
+-- | A baker associated with an account.
 data AccountBaker (av :: AccountVersion) = AccountBaker
-    { -- |The amount staked by the baker.
+    { -- | The amount staked by the baker.
       _stakedAmount :: !Amount,
-      -- |Whether baker and finalizer rewards are added to the stake.
+      -- | Whether baker and finalizer rewards are added to the stake.
       _stakeEarnings :: !Bool,
-      -- |The baker's keys, identity, and pool info (V1).
+      -- | The baker's keys, identity, and pool info (V1).
       _accountBakerInfo :: !(BakerInfoEx av),
-      -- |The pending change (if any) to the baker's status.
+      -- | The pending change (if any) to the baker's status.
       _bakerPendingChange :: !(StakePendingChange av)
     }
     deriving (Eq, Show)
@@ -317,16 +327,16 @@ instance HasBakerInfo (AccountBaker av) where
 instance (AVSupportsDelegation av) => HasBakerPoolInfo (AccountBaker av) where
     bakerPoolInfo = accountBakerInfo . bakerPoolInfo
 
--- |Serialize an 'AccountBaker'
-serializeAccountBaker :: IsAccountVersion av => Putter (AccountBaker av)
+-- | Serialize an 'AccountBaker'
+serializeAccountBaker :: (IsAccountVersion av) => Putter (AccountBaker av)
 serializeAccountBaker AccountBaker{..} = do
     put _stakedAmount
     put _stakeEarnings
     put _accountBakerInfo
     put _bakerPendingChange
 
--- |Deserialize an 'AccountBaker'.
-deserializeAccountBaker :: IsAccountVersion av => Get (AccountBaker av)
+-- | Deserialize an 'AccountBaker'.
+deserializeAccountBaker :: (IsAccountVersion av) => Get (AccountBaker av)
 deserializeAccountBaker = do
     _stakedAmount <- get
     _stakeEarnings <- get
@@ -353,27 +363,27 @@ data AccountDelegation (av :: AccountVersion) where
 deriving instance Eq (AccountDelegation av)
 deriving instance Show (AccountDelegation av)
 
--- |Lens for '_delegationIdentity'
+-- | Lens for '_delegationIdentity'
 {-# INLINE delegationIdentity #-}
 delegationIdentity :: Lens' (AccountDelegation av) DelegatorId
 delegationIdentity = lens _delegationIdentity (\ad x -> ad{_delegationIdentity = x})
 
--- |Lens for '_delegationStakedAmount'
+-- | Lens for '_delegationStakedAmount'
 {-# INLINE delegationStakedAmount #-}
 delegationStakedAmount :: Lens' (AccountDelegation av) Amount
 delegationStakedAmount = lens _delegationStakedAmount (\ad x -> ad{_delegationStakedAmount = x})
 
--- |Lens for '_delegationStakeEarnings'
+-- | Lens for '_delegationStakeEarnings'
 {-# INLINE delegationStakeEarnings #-}
 delegationStakeEarnings :: Lens' (AccountDelegation av) Bool
 delegationStakeEarnings = lens _delegationStakeEarnings (\ad x -> ad{_delegationStakeEarnings = x})
 
--- |Lens for '_delegationTarget'
+-- | Lens for '_delegationTarget'
 {-# INLINE delegationTarget #-}
 delegationTarget :: Lens' (AccountDelegation av) DelegationTarget
 delegationTarget = lens _delegationTarget (\ad x -> ad{_delegationTarget = x})
 
--- |Lens for '_delegationPendingChange'
+-- | Lens for '_delegationPendingChange'
 {-# INLINE delegationPendingChange #-}
 delegationPendingChange :: Lens' (AccountDelegation av) (StakePendingChange av)
 delegationPendingChange = lens _delegationPendingChange (\ad x -> ad{_delegationPendingChange = x})
@@ -393,23 +403,23 @@ instance forall av. (IsAccountVersion av, AVSupportsDelegation av) => Serialize 
         _delegationPendingChange <- get
         return AccountDelegationV1{..}
 
--- |Whether an account stakes as a baker, delegates to a baker, or neither.
+-- | Whether an account stakes as a baker, delegates to a baker, or neither.
 data AccountStake (av :: AccountVersion) where
     AccountStakeNone :: AccountStake av
     AccountStakeBaker :: !(AccountBaker av) -> AccountStake av
     AccountStakeDelegate :: !(AccountDelegation av) -> AccountStake av
     deriving (Eq, Show)
 
--- |Serialize an 'AccountStake', depending on the account version.
--- Note that it should be recorded earlier in the serialization whether the stake is
--- 'AccountStakeNone', since in that case nothing is written.  This function is thus intended
--- to be used in the context of a broader account serialization function.
+-- | Serialize an 'AccountStake', depending on the account version.
+--  Note that it should be recorded earlier in the serialization whether the stake is
+--  'AccountStakeNone', since in that case nothing is written.  This function is thus intended
+--  to be used in the context of a broader account serialization function.
 --
--- For 'AccountV0', the baker is simply serialized. (Delegation is not possible.)
+--  For 'AccountV0', the baker is simply serialized. (Delegation is not possible.)
 --
--- For 'AccountV1', a byte is written that records whether the stake is as a baker (0) or
--- delegated (1).  Following this, the baker or delegation is simply serialized.
-serializeAccountStake :: forall av. IsAccountVersion av => Putter (AccountStake av)
+--  For 'AccountV1', a byte is written that records whether the stake is as a baker (0) or
+--  delegated (1).  Following this, the baker or delegation is simply serialized.
+serializeAccountStake :: forall av. (IsAccountVersion av) => Putter (AccountStake av)
 serializeAccountStake AccountStakeNone = return ()
 serializeAccountStake (AccountStakeBaker bkr) = case delegationSupport @av of
     SAVDelegationNotSupported -> serializeAccountBaker bkr
@@ -421,14 +431,14 @@ serializeAccountStake (AccountStakeDelegate dlg@AccountDelegationV1{}) = do
     putWord8 1
     put dlg
 
--- |Deserialize an 'AccountStake', depending on the account version.
--- This cannot deserialize the 'AccountStakeNone' case, so should be used in a context where it is
--- already determined that that is not the case.
+-- | Deserialize an 'AccountStake', depending on the account version.
+--  This cannot deserialize the 'AccountStakeNone' case, so should be used in a context where it is
+--  already determined that that is not the case.
 --
--- For 'AccountV0', the baker is simply deserialized. (Delegation is not possible.)
+--  For 'AccountV0', the baker is simply deserialized. (Delegation is not possible.)
 --
--- For 'AccountV1', the first byte indicates whether a baker (0) or a delegation (1) is read.
-deserializeAccountStake :: forall av. IsAccountVersion av => Get (AccountStake av)
+--  For 'AccountV1', the first byte indicates whether a baker (0) or a delegation (1) is read.
+deserializeAccountStake :: forall av. (IsAccountVersion av) => Get (AccountStake av)
 deserializeAccountStake = case delegationSupport @av of
     SAVDelegationNotSupported -> AccountStakeBaker <$> deserializeAccountBaker
     SAVDelegationSupported ->
@@ -440,7 +450,7 @@ deserializeAccountStake = case delegationSupport @av of
 newtype AccountStakeHash (av :: AccountVersion) = AccountStakeHash {theAccountStakeHash :: Hash.Hash}
     deriving (Eq, Ord, Show, Serialize, ToJSON, FromJSON) via Hash.Hash
 
--- |Hash of 'AccountStakeNone' in 'AccountV0'.
+-- | Hash of 'AccountStakeNone' in 'AccountV0'.
 accountStakeNoneHashV0 :: AccountStakeHash 'AccountV0
 {-# NOINLINE accountStakeNoneHashV0 #-}
 accountStakeNoneHashV0 = AccountStakeHash $ Hash.hash ""
@@ -456,12 +466,12 @@ instance HashableTo (AccountStakeHash 'AccountV0) (AccountStake 'AccountV0) wher
                     put _accountBakerInfo
                     put _bakerPendingChange
 
--- |Hash of 'AccountStakeNone' in 'AccountV1'.
+-- | Hash of 'AccountStakeNone' in 'AccountV1'.
 accountStakeNoneHashV1 :: AccountStakeHash 'AccountV1
 {-# NOINLINE accountStakeNoneHashV1 #-}
 accountStakeNoneHashV1 = AccountStakeHash $ Hash.hash "NoStake"
 
--- |The 'AccountV1' hashing of 'AccountStake' uses tags to enforce distinction between the cases.
+-- | The 'AccountV1' hashing of 'AccountStake' uses tags to enforce distinction between the cases.
 instance HashableTo (AccountStakeHash 'AccountV1) (AccountStake 'AccountV1) where
     getHash AccountStakeNone = accountStakeNoneHashV1
     getHash (AccountStakeBaker AccountBaker{..}) =
@@ -486,13 +496,13 @@ instance HashableTo (AccountStakeHash 'AccountV1) (AccountStake 'AccountV1) wher
                             put _delegationTarget
                         )
 
--- |Hash of 'AccountStakeNone' in 'AccountV2'.
+-- | Hash of 'AccountStakeNone' in 'AccountV2'.
 accountStakeNoneHashV2 :: AccountStakeHash 'AccountV2
 {-# NOINLINE accountStakeNoneHashV2 #-}
 accountStakeNoneHashV2 = AccountStakeHash $ Hash.hash "A2NoStake"
 
--- |The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
--- This is since the stake is accounted for separately in the @AccountHash@.
+-- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+--  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
     getHash AccountStakeNone = accountStakeNoneHashV2
     getHash (AccountStakeBaker AccountBaker{..}) =
@@ -517,20 +527,20 @@ instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) wher
                             put _delegationPendingChange
                         )
 
--- |Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
-getAccountStakeHash :: forall av. IsAccountVersion av => AccountStake av -> AccountStakeHash av
+-- | Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
+getAccountStakeHash :: forall av. (IsAccountVersion av) => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
     SAccountV0 -> getHash
     SAccountV1 -> getHash
     SAccountV2 -> getHash
 
--- |A representation type (used for queries) for the staking status of an account.
--- This representation is agnostic to the protocol version and represents pending change times
--- as UTCTime.
+-- | A representation type (used for queries) for the staking status of an account.
+--  This representation is agnostic to the protocol version and represents pending change times
+--  as UTCTime.
 data AccountStakingInfo
-    = -- |The account is not a baker or delegator.
+    = -- | The account is not a baker or delegator.
       AccountStakingNone
-    | -- |The account is a baker.
+    | -- | The account is a baker.
       AccountStakingBaker
         { asiStakedAmount :: !Amount,
           asiStakeEarnings :: !Bool,
@@ -538,7 +548,7 @@ data AccountStakingInfo
           asiPendingChange :: !(StakePendingChange' UTCTime),
           asiPoolInfo :: !(Maybe BakerPoolInfo)
         }
-    | -- |The account is delegating stake to a baker.
+    | -- | The account is delegating stake to a baker.
       AccountStakingDelegated
         { asiStakedAmount :: !Amount,
           asiStakeEarnings :: !Bool,
@@ -547,10 +557,10 @@ data AccountStakingInfo
         }
     deriving (Eq, Show)
 
--- |Convert an 'AccountStake' to an 'AccountStakingInfo'.
--- This takes a function for converting an epoch time to a 'UTCTime' (of the start of the epoch).
--- (This is used for rendering cooldowns prior to 'P4'.)
-toAccountStakingInfo :: forall av. IsAccountVersion av => (Epoch -> UTCTime) -> AccountStake av -> AccountStakingInfo
+-- | Convert an 'AccountStake' to an 'AccountStakingInfo'.
+--  This takes a function for converting an epoch time to a 'UTCTime' (of the start of the epoch).
+--  (This is used for rendering cooldowns prior to 'P4'.)
+toAccountStakingInfo :: forall av. (IsAccountVersion av) => (Epoch -> UTCTime) -> AccountStake av -> AccountStakingInfo
 toAccountStakingInfo _ AccountStakeNone = AccountStakingNone
 toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =
     AccountStakingBaker
@@ -573,10 +583,20 @@ toAccountStakingInfo _ (AccountStakeDelegate AccountDelegationV1{..}) =
           asiDelegationPendingChange = pcTime <$> _delegationPendingChange
         }
   where
-    pcTime :: AVSupportsDelegation av => PendingChangeEffective av -> UTCTime
+    pcTime :: (AVSupportsDelegation av) => PendingChangeEffective av -> UTCTime
     pcTime (PendingChangeEffectiveV1 t) = timestampToUTCTime t
 
-pendingChangeToJSON :: KeyValue kv => StakePendingChange' UTCTime -> [kv]
+-- | Convert an 'AccountStake' to an 'AccountStakingInfo' in protocol versions from 'P4' onwards.
+toAccountStakingInfoP4 ::
+    forall av.
+    (IsAccountVersion av, AVSupportsDelegation av) =>
+    AccountStake av ->
+    AccountStakingInfo
+toAccountStakingInfoP4 =
+    toAccountStakingInfo
+        (error "Epoch conversion is not used for account staking info in this protocol version")
+
+pendingChangeToJSON :: (KeyValue kv) => StakePendingChange' UTCTime -> [kv]
 pendingChangeToJSON NoChange = []
 pendingChangeToJSON (ReduceStake amt eff) =
     [ "pendingChange"
@@ -600,7 +620,7 @@ pendingChangeFromJSON obj = do
                 _ -> fail "Invalid pendingChange"
         Nothing -> return NoChange
 
-accountStakingInfoToJSON :: KeyValue kv => AccountStakingInfo -> [kv]
+accountStakingInfoToJSON :: (KeyValue kv) => AccountStakingInfo -> [kv]
 accountStakingInfoToJSON AccountStakingNone = []
 accountStakingInfoToJSON AccountStakingBaker{..} = ["accountBaker" .= bi]
   where
@@ -650,37 +670,37 @@ accountStakingInfoFromJSON obj = do
             return AccountStakingDelegated{..}
         (_, _) -> fail "Account must not have both accountBaker and accountDelegation."
 
--- |The details of the state of an account on the chain, as may be returned by a
--- query. At present the account credentials map must always contain credential
--- at index 0.
+-- | The details of the state of an account on the chain, as may be returned by a
+--  query. At present the account credentials map must always contain credential
+--  at index 0.
 data AccountInfo = AccountInfo
-    { -- |The next nonce for the account
+    { -- | The next nonce for the account
       aiAccountNonce :: !Nonce,
-      -- |The total non-encrypted balance on the account
+      -- | The total non-encrypted balance on the account
       aiAccountAmount :: !Amount,
-      -- |The release schedule for locked amounts on the account
+      -- | The release schedule for locked amounts on the account
       aiAccountReleaseSchedule :: !AccountReleaseSummary,
-      -- |The credentials on the account. This map must always contain a
-      -- credential at credential index 0.
+      -- | The credentials on the account. This map must always contain a
+      --  credential at credential index 0.
       aiAccountCredentials :: !(Map.Map CredentialIndex (Versioned RawAccountCredential)),
-      -- |Number of credentials required to sign a valid transaction
+      -- | Number of credentials required to sign a valid transaction
       aiAccountThreshold :: !AccountThreshold,
-      -- |The encrypted amount on the account
+      -- | The encrypted amount on the account
       aiAccountEncryptedAmount :: !AccountEncryptedAmount,
-      -- |The encryption key for the account
+      -- | The encryption key for the account
       aiAccountEncryptionKey :: !AccountEncryptionKey,
-      -- |The account index
+      -- | The account index
       aiAccountIndex :: !AccountIndex,
-      -- |The baker associated with the account (if any)
+      -- | The baker associated with the account (if any)
       aiStakingInfo :: !AccountStakingInfo,
-      -- |The canonical address of the account, derived from the first
-      -- credential. While this is not necessary, since it is derived from
-      -- another field of this type, it is convenient for consumers to have it.
+      -- | The canonical address of the account, derived from the first
+      --  credential. While this is not necessary, since it is derived from
+      --  another field of this type, it is convenient for consumers to have it.
       aiAccountAddress :: !AccountAddress
     }
     deriving (Eq, Show)
 
--- |Helper function for 'ToJSON' instance for 'AccountInfo'.
+-- | Helper function for 'ToJSON' instance for 'AccountInfo'.
 accountInfoPairs :: (KeyValue kv) => AccountInfo -> [kv]
 {-# INLINE accountInfoPairs #-}
 accountInfoPairs AccountInfo{..} =

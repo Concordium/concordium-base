@@ -56,7 +56,7 @@ data DigestSize
 instance FBS.FixedLength DigestSize where
     fixedLength _ = digestSize
 
--- |A SHA256 hash.  32 bytes.
+-- | A SHA256 hash.  32 bytes.
 newtype Hash = Hash (FBS.FixedByteString DigestSize)
     deriving (Eq, Ord, Bits, Bounded, Enum, Typeable, Data)
     deriving (Serialize) via FBSHex DigestSize
@@ -117,8 +117,8 @@ hash_update_short :: ShortByteString -> Ptr SHA256Ctx -> IO ()
 hash_update_short b ctx = withByteStringPtrLen b $
     \message mlen -> rs_sha256_update ctx (castPtr message) (fromIntegral mlen)
 
--- |NB: hash_final deallocates the context pointed to by the first argument.
--- Hence it is impossible to use hash_final twice with the same context.
+-- | NB: hash_final deallocates the context pointed to by the first argument.
+--  Hence it is impossible to use hash_final twice with the same context.
 hash_final :: Ptr SHA256Ctx -> IO (FixedByteString DigestSize)
 hash_final ptr = FBS.create $ \hsh -> rs_sha256_final hsh ptr
 
@@ -135,28 +135,32 @@ hashLazy b = Hash $
   where
     f ptr chunk = withForeignPtr ptr $ \ptr' -> hash_update chunk ptr'
 
--- |Convert a 'Hash' into a 'Double' value in the range [0,1].
--- This implementation takes the first 64-bit word (big-endian) and uses it
--- as the significand, with an exponent of -64.  Since the precision of a
--- 'Double' is only 53 bits, there is inevitably some loss.  This also means
--- that the outcome 1 is not possible.
+-- | Convert a 'Hash' into a 'Double' value in the range [0,1].
+--  This implementation takes the first 64-bit word (big-endian) and uses it
+--  as the significand, with an exponent of -64.  Since the precision of a
+--  'Double' is only 53 bits, there is inevitably some loss.  This also means
+--  that the outcome 1 is not possible.
 hashToDouble :: Hash -> Double
 hashToDouble (Hash h) =
     let w = FBS.readWord64be h
     in  encodeFloat (toInteger w) (-64)
 
--- |Convert a 'Hash' to an 'Int'.
+-- | Convert a 'Hash' to an 'Int'.
 hashToInt :: Hash -> Int
 hashToInt (Hash h) = fromIntegral . FBS.readWord64be $ h
 
--- |Convert a 'Hash' to a 'ByteString'.
--- Gives the same result a serializing, but more efficient.
+-- | Convert a 'Hash' to an 'Integer' by treating it as a big-endian, unsigned integer value.
+hashToInteger :: Hash -> Integer
+hashToInteger (Hash h) = FBS.decodeIntegerUnsigned h
+
+-- | Convert a 'Hash' to a 'ByteString'.
+--  Gives the same result a serializing, but more efficient.
 hashToByteString :: Hash -> ByteString
 hashToByteString (Hash h) = FBS.toByteString h
 
--- |Convert a 'Hash' to a 'ShortByteString'.
--- Gives the same result a serializing, but more efficient.
--- This is much more efficient than 'hashToByteString'. It involves no copying.
+-- | Convert a 'Hash' to a 'ShortByteString'.
+--  Gives the same result a serializing, but more efficient.
+--  This is much more efficient than 'hashToByteString'. It involves no copying.
 hashToShortByteString :: Hash -> ShortByteString
 hashToShortByteString (Hash h) = FBS.toShortByteString h
 

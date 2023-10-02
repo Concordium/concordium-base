@@ -83,10 +83,10 @@ foreign import ccall "ecvrf_proof_to_hash" rs_proof_to_hash :: Ptr Word8 -> Ptr 
 foreign import ccall "ecvrf_verify_key" rs_verify_key :: Ptr PublicKey -> IO Bool
 foreign import ccall "ecvrf_verify" rs_verify :: Ptr PublicKey -> Ptr Proof -> Ptr Word8 -> CSize -> IO Int32
 
--- |As a wrapper over `withForeignPtr` this allows temporary access
--- to the underlying `ForeignPtr` inside a `Proof`. The internally
--- exposed pointer must not be used outside of the call to the
--- provided function.
+-- | As a wrapper over `withForeignPtr` this allows temporary access
+--  to the underlying `ForeignPtr` inside a `Proof`. The internally
+--  exposed pointer must not be used outside of the call to the
+--  provided function.
 withProof :: Proof -> (Ptr Proof -> IO b) -> IO b
 withProof (Proof fp) = withForeignPtr fp
 
@@ -196,7 +196,7 @@ instance Show SecretKey where
 instance Eq SecretKey where
     SecretKey p1 == SecretKey p2 = eqHelper p1 p2 secretKeyEq
 
--- |A VRF key pair.
+-- | A VRF key pair.
 data KeyPair = KeyPair
     { privateKey :: !SecretKey,
       publicKey :: !PublicKey
@@ -220,7 +220,7 @@ instance AE.FromJSON KeyPair where
         when (publicKey /= pubKey privateKey) $ fail "Private key does not correspond to the public key."
         return KeyPair{..}
 
--- |A SHA512 hash.  64 bytes.
+-- | A SHA512 hash.  64 bytes.
 digestSize :: Int
 digestSize = 64
 
@@ -236,23 +236,23 @@ newtype Hash = Hash (FBS.FixedByteString DigestSize)
     deriving (Show) via FBSHex DigestSize
     deriving (AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey) via FBSHex DigestSize
 
--- |Convert a 'Hash' into a 'Double' value in the range [0,1].
--- This implementation takes the first 64-bit word (big-endian) and uses it
--- as the significand, with an exponent of -64.  Since the precision of a
--- 'Double' is only 53 bits, there is inevitably some loss.  This also means
--- that the outcome 1 is not possible.
+-- | Convert a 'Hash' into a 'Double' value in the range [0,1].
+--  This implementation takes the first 64-bit word (big-endian) and uses it
+--  as the significand, with an exponent of -64.  Since the precision of a
+--  'Double' is only 53 bits, there is inevitably some loss.  This also means
+--  that the outcome 1 is not possible.
 hashToDouble :: Hash -> Double
 hashToDouble (Hash h) =
     let w = FBS.readWord64be h
     in  encodeFloat (toInteger w) (-64)
 
--- |Convert a 'Hash' to an 'Int'.
+-- | Convert a 'Hash' to an 'Int'.
 hashToInt :: Hash -> Int
 hashToInt (Hash h) = fromIntegral . FBS.readWord64be $ h
 
--- |Generate a key pair using a given random generator.
--- Useful for generating deterministic pseudo-random keys.
-randomKeyPair :: RandomGen g => g -> (KeyPair, g)
+-- | Generate a key pair using a given random generator.
+--  Useful for generating deterministic pseudo-random keys.
+randomKeyPair :: (RandomGen g) => g -> (KeyPair, g)
 randomKeyPair gen = (key, gen')
   where
     (gen0, gen') = split gen
@@ -266,7 +266,7 @@ randomKeyPair gen = (key, gen')
 instance Arbitrary KeyPair where
     arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
 
--- |Generate a new key pair using the system random number generator.
+-- | Generate a new key pair using the system random number generator.
 newKeyPair :: IO KeyPair
 newKeyPair = do
     sk <- newPrivKey
@@ -285,7 +285,7 @@ pubKey sk = unsafePerformIO $!
             pkPtr <- rs_public_key skPtr
             PublicKey <$> newForeignPtr freePublicKey pkPtr
 
--- |Generate a VRF proof.
+-- | Generate a VRF proof.
 prove :: KeyPair -> ByteString -> Proof
 prove (KeyPair sk pk) b = unsafePerformIO $!
     withPublicKey pk $ \pkPtr ->
@@ -296,7 +296,7 @@ prove (KeyPair sk pk) b = unsafePerformIO $!
                 res <- rs_prove pkPtr skPtr (castPtr bPtr) (fromIntegral blen)
                 Proof <$> newForeignPtr freeProof res
 
--- |Verify a VRF proof.
+-- | Verify a VRF proof.
 verify :: PublicKey -> ByteString -> Proof -> Bool
 verify pk alpha prf = unsafeDupablePerformIO $!
     withPublicKey pk $ \pkPtr ->
@@ -307,7 +307,7 @@ verify pk alpha prf = unsafeDupablePerformIO $!
                 res <- rs_verify pkPtr prfPtr (castPtr alphaPtr) (fromIntegral alphaLen)
                 return $! res == 1
 
--- |Generate a 256-bit hash from a VRF proof.
+-- | Generate a 256-bit hash from a VRF proof.
 proofToHash :: Proof -> Hash
 proofToHash prf =
     Hash
@@ -315,10 +315,10 @@ proofToHash prf =
             withProof prf $ \prfPtr -> rs_proof_to_hash x prfPtr
         )
 
--- |Verify a VRF public key.
--- NB: This is redundant if only functions in this module are used to construct
--- public keys. Deserialization makes sure that the public key is always valid,
--- and given a valid secret key the derived public key is always valid as well.
+-- | Verify a VRF public key.
+--  NB: This is redundant if only functions in this module are used to construct
+--  public keys. Deserialization makes sure that the public key is always valid,
+--  and given a valid secret key the derived public key is always valid as well.
 {-# DEPRECATED verifyKey "This is no longer needed. Only valid keys can be constructed." #-}
 verifyKey :: PublicKey -> Bool
 verifyKey pk =

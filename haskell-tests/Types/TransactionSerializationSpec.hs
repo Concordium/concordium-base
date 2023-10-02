@@ -22,7 +22,7 @@ groupIntoSize s =
                     ub = 10 ^ (nd + 1) :: Integer
                 in  show lb ++ " -- " ++ show ub ++ "B"
 
--- |Check that a transaction can be serialized and deserialized.
+-- | Check that a transaction can be serialized and deserialized.
 checkTransaction :: AccountTransaction -> Property
 checkTransaction tx =
     let bs = encode tx
@@ -36,7 +36,7 @@ testTransaction size = forAll (resize size genAccountTransaction) checkTransacti
 dummyTime :: TransactionTime
 dummyTime = 37
 
--- |Check V0 serialization of block items.
+-- | Check V0 serialization of block items.
 checkBlockItem :: SProtocolVersion pv -> BlockItem -> Property
 checkBlockItem spv bi =
     case runGet (getBlockItemV0 spv (wmdArrivalTime bi)) bs of

@@ -18,10 +18,10 @@ import Database.Persist.Sql
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Types.HashableTo
 
--- |YearMonth used store expiry (validTo) and creation (createdAt).
--- The year is in Gregorian calendar and months are numbered from 1, i.e.,
--- 1 is January, ..., 12 is December.
--- Year must be a 4 digit year, i.e., between 1000 and 9999.
+-- | YearMonth used store expiry (validTo) and creation (createdAt).
+--  The year is in Gregorian calendar and months are numbered from 1, i.e.,
+--  1 is January, ..., 12 is December.
+--  Year must be a 4 digit year, i.e., between 1000 and 9999.
 data YearMonth = YearMonth
     { ymYear :: !Word16,
       ymMonth :: !Word8
@@ -105,8 +105,8 @@ newtype DurationSeconds = DurationSeconds {durationSeconds :: Word64}
 addDurationSeconds :: Timestamp -> DurationSeconds -> Timestamp
 addDurationSeconds (Timestamp ts) (DurationSeconds d) = Timestamp (ts + d * 1000)
 
--- |Check if whether the given timestamp is no greater than the end of the day
--- of the given year and month.
+-- | Check if whether the given timestamp is no greater than the end of the day
+--  of the given year and month.
 isTimestampBefore :: Timestamp -> YearMonth -> Bool
 isTimestampBefore ts ym =
     utcTs < utcYearMonthExpiryTs

@@ -575,6 +575,40 @@
     )
   )
 
+  (func (export "i32.extend8_s")
+    (loop $loop
+      (i32.extend8_s (i32.const 312312))
+      (br $loop)
+    )
+  )
+
+  (func (export "i32.extend16_s")
+    (loop $loop
+      (i32.extend16_s (i32.const 312312))
+      (br $loop)
+    )
+  )
+
+  (func (export "i64.extend8_s")
+    (loop $loop
+      (i64.extend8_s (i64.const 312312))
+      (br $loop)
+    )
+  )
+
+  (func (export "i64.extend16_s")
+    (loop $loop
+      (i64.extend16_s (i64.const 312312))
+      (br $loop)
+    )
+  )
+
+  (func (export "i64.extend32_s")
+    (loop $loop
+      (i64.extend32_s (i64.const 312312))
+      (br $loop)
+    )
+  )
 
   ;; indirectly call an empty function with 100 arguments
   (func (export "call_empty_function_100")
