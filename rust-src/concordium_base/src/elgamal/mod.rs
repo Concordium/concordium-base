@@ -8,8 +8,7 @@ mod secret;
 
 pub use self::{cipher::*, message::*, public::*, secret::*};
 
-use crate::curve_arithmetic::{Curve, Value};
-use ff::{Field, PrimeField};
+use crate::curve_arithmetic::{Curve, Field, PrimeField, Value};
 use rand::*;
 
 /// Possible chunk sizes in bits.
@@ -93,9 +92,8 @@ pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: ChunkSize) -> Vec<
     let size = usize::from(u8::from(chunk_size));
     let n = C::SCALAR_LENGTH / size;
     let mut out = Vec::with_capacity(n);
-    let repr = val.into_repr();
-    let u64_chunks = repr.as_ref();
-    for &chunk in u64_chunks {
+    let u64_chunks = val.into_repr();
+    for chunk in u64_chunks {
         out.extend(
             chunk_size
                 .u64_to_chunks(chunk)
@@ -123,7 +121,7 @@ pub fn chunks_to_value<C: Curve>(chunks: &[Value<C>], chunk_size: ChunkSize) -> 
         // get the u64 encoded in this chunk section
         let v = chunk_size.chunks_to_u64(chunk_section.iter().map(|chunk| {
             let repr = chunk.into_repr();
-            repr.as_ref()[0]
+            repr[0]
         }));
         let mut val = C::scalar_from_u64(v);
         val.mul_assign(&factor);
@@ -210,7 +208,6 @@ pub fn decrypt_from_chunks_given_table<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::Field;
     use pairing::bls12_381::{G1, G2};
     use rand::{rngs::ThreadRng, Rng};
 

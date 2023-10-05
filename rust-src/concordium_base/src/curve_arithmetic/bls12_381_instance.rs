@@ -1,11 +1,10 @@
 use super::{bls12_381_g1hash::*, bls12_381_g2hash::*, *};
 use byteorder::ReadBytesExt;
-use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
     bls12_381::{
-        Bls12, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed, G2Prepared,
-        G1, G2,
+        Bls12, Fq, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed,
+        G2Prepared, G1, G2,
     },
     Engine, PairingCurveAffine,
 };
@@ -26,7 +25,75 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
     }
     // unset two topmost bits in the last read u64.
     fr[3] &= !(1u64 << 63 | 1u64 << 62);
-    Fr::from_repr(FrRepr(fr)).expect("The scalar with top two bits erased should be valid.")
+    <Fr as ff::PrimeField>::from_repr(FrRepr(fr))
+        .expect("The scalar with top two bits erased should be valid.")
+}
+
+impl<F: ff::Field> Field for F {
+    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self { Self::random(rng) }
+
+    fn zero() -> Self { Self::zero() }
+
+    fn one() -> Self { Self::one() }
+
+    fn is_zero(&self) -> bool { Self::is_zero(self) }
+
+    fn square(&mut self) { self.square() }
+
+    fn double(&mut self) { self.double() }
+
+    fn negate(&mut self) { self.negate() }
+
+    fn add_assign(&mut self, other: &Self) { self.add_assign(other) }
+
+    fn sub_assign(&mut self, other: &Self) { self.sub_assign(other) }
+
+    fn mul_assign(&mut self, other: &Self) { self.mul_assign(other) }
+
+    fn inverse(&self) -> Option<Self> { self.inverse() }
+
+    fn frobenius_map(&mut self, power: usize) { self.frobenius_map(power) }
+}
+
+impl From<ff::PrimeFieldDecodingError> for CurveDecodingError {
+    fn from(e: ff::PrimeFieldDecodingError) -> Self {
+        let ff::PrimeFieldDecodingError::NotInField(msg) = e;
+        CurveDecodingError::NotInField(msg)
+    }
+}
+
+impl PrimeField for Fr {
+    // TODO: check this.
+    const CAPACITY: u32 = 64 * 4;
+    // TODO: check this.
+    const NUM_BITS: u32 = 64 * 4;
+
+    fn into_repr(self) -> Vec<u64> { <Self as ff::PrimeField>::into_repr(&self).0.to_vec() }
+
+    fn from_repr(limbs: &[u64]) -> Result<Self, CurveDecodingError> {
+        let l4: [u64; 4] = limbs
+            .try_into()
+            .map_err(|_| CurveDecodingError::NotInField(format!("{:?}", limbs)))?;
+        let res = <Fr as ff::PrimeField>::from_repr(FrRepr(l4))?;
+        Ok(res)
+    }
+}
+
+impl PrimeField for Fq {
+    // TODO: check this.
+    const CAPACITY: u32 = 64 * 6;
+    // TODO: check this.
+    const NUM_BITS: u32 = 64 * 6;
+
+    fn into_repr(self) -> Vec<u64> { <Self as ff::PrimeField>::into_repr(&self).0.to_vec() }
+
+    fn from_repr(limbs: &[u64]) -> Result<Self, CurveDecodingError> {
+        let l6: [u64; 6] = limbs
+            .try_into()
+            .map_err(|_| CurveDecodingError::NotInField(format!("{:?}", limbs)))?;
+        let res = <Fq as ff::PrimeField>::from_repr(FqRepr(l6))?;
+        Ok(res)
+    }
 }
 
 impl Curve for G2 {
@@ -74,7 +141,7 @@ impl Curve for G2 {
 
     #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
-        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+        <Fr as ff::PrimeField>::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
     #[inline(always)]
@@ -90,7 +157,7 @@ impl Curve for G2 {
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::random(csprng) }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { <Fr as Field>::random(csprng) }
 
     fn hash_to_group(b: &[u8]) -> Self { hash_to_curve_g2(b, HASH_TO_GROUP_G2_DST) }
 }
@@ -140,7 +207,7 @@ impl Curve for G1 {
 
     #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
-        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+        <Fr as ff::PrimeField>::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
     #[inline(always)]
@@ -156,7 +223,7 @@ impl Curve for G1 {
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::random(csprng) }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { <Fr as Field>::random(csprng) }
 
     fn hash_to_group(bytes: &[u8]) -> Self { hash_to_curve(bytes, HASH_TO_GROUP_G1_DST) }
 }
@@ -203,7 +270,7 @@ impl Curve for G1Affine {
     }
 
     fn scalar_from_u64(n: u64) -> Self::Scalar {
-        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+        <Fr as ff::PrimeField>::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
     #[inline(always)]
@@ -219,7 +286,7 @@ impl Curve for G1Affine {
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::random(csprng).into_affine() }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { <Fr as Field>::random(csprng) }
 
     fn hash_to_group(b: &[u8]) -> Self { hash_to_curve(b, HASH_TO_GROUP_G1_DST).into_affine() }
 }
@@ -266,7 +333,7 @@ impl Curve for G2Affine {
     }
 
     fn scalar_from_u64(n: u64) -> Self::Scalar {
-        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+        <Fr as ff::PrimeField>::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
     #[inline(always)]
@@ -282,13 +349,12 @@ impl Curve for G2Affine {
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::random(csprng).into_affine() }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { <Fr as Field>::random(csprng) }
 
     fn hash_to_group(b: &[u8]) -> Self { hash_to_curve_g2(b, HASH_TO_GROUP_G2_DST).into_affine() }
 }
 
 impl Pairing for Bls12 {
-    type BaseField = <Bls12 as Engine>::Fq;
     type G1 = <Bls12 as Engine>::G1;
     type G1Prepared = G1Prepared;
     type G2 = <Bls12 as Engine>::G2;
@@ -329,13 +395,13 @@ mod tests {
     fn scalar_from_bytes_small() {
         let mut rng = rand::thread_rng();
         for _ in 0..1000 {
-            let n = Fr::random(&mut rng);
+            let n = <Fr as Field>::random(&mut rng);
             let mut bytes = to_bytes(&n);
             bytes.reverse();
             let m = scalar_from_bytes_helper(&bytes);
             // make sure that n and m only differ in the topmost bit.
-            let n = n.into_repr().0;
-            let m = m.into_repr().0;
+            let n = n.into_repr();
+            let m = m.into_repr();
             let mask = !(1u64 << 63 | 1u64 << 62);
             assert_eq!(n[0], m[0], "First limb.");
             assert_eq!(n[1], m[1], "Second limb.");

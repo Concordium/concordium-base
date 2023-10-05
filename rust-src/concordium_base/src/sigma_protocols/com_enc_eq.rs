@@ -7,14 +7,13 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     elgamal::{
         Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
     },
     pedersen_commitment::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value},
     random_oracle::RandomOracle,
 };
-use ff::Field;
 use rand::*;
 
 #[derive(Debug)]

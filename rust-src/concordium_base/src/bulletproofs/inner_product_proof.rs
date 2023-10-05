@@ -2,10 +2,9 @@
 //! this crate
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field, PrimeField},
     random_oracle::RandomOracle,
 };
-use ff::Field;
 
 /// Inner product proof
 #[derive(Clone, Serialize, Debug)]
@@ -442,7 +441,7 @@ pub(crate) fn verify_inner_product_with_scalars<C: Curve>(
 /// the result is the inner product of the initial segments determined by the
 /// length of the shorter vector.
 #[allow(non_snake_case)]
-pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
+pub fn inner_product<F: PrimeField>(a: &[F], b: &[F]) -> F {
     debug_assert_eq!(
         a.len(),
         b.len(),

@@ -1,6 +1,8 @@
 //! Shared functions used by the proofs in this crate
-use crate::{common::*, curve_arithmetic::Curve};
-use ff::Field;
+use crate::{
+    common::*,
+    curve_arithmetic::{Curve, PrimeField},
+};
 #[cfg(test)]
 use rand::Rng;
 /// Struct containing generators G and H needed for range proofs
@@ -43,7 +45,7 @@ impl<C: Curve> Generators<C> {
 /// - z - the field element z
 /// - first_power - the first power j
 /// - n - the integer n.
-pub fn z_vec<F: Field>(z: F, first_power: u64, n: usize) -> Vec<F> {
+pub fn z_vec<F: PrimeField>(z: F, first_power: u64, n: usize) -> Vec<F> {
     let mut z_n = Vec::with_capacity(n);
     let exp: [u64; 1] = [first_power];
     let mut z_i = z.pow(exp);
@@ -56,7 +58,7 @@ pub fn z_vec<F: Field>(z: F, first_power: u64, n: usize) -> Vec<F> {
 
 /// Pads a non-empty field vector to a power of two length by repeating the last
 /// element For empty vectors the function is the identity.
-pub(crate) fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
+pub(crate) fn pad_vector_to_power_of_two<F: PrimeField>(vec: &mut Vec<F>) {
     let n = vec.len();
     if n == 0 {
         return;

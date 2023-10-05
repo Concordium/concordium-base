@@ -11,11 +11,10 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::RandomOracle,
 };
-use ff::Field;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct Response<T: Curve> {

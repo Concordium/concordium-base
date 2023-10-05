@@ -7,7 +7,7 @@ use crate::{
         range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal, RangeProof},
     },
     common::types::TransactionTime,
-    curve_arithmetic::{Curve, Pairing},
+    curve_arithmetic::{Curve, Field, Pairing},
     dodis_yampolskiy_prf as prf,
     elgamal::{multicombine, Cipher},
     pedersen_commitment::{
@@ -19,7 +19,6 @@ use crate::{
     },
 };
 use anyhow::{bail, ensure};
-use ff::Field;
 use itertools::izip;
 use rand::*;
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
@@ -400,7 +399,8 @@ fn generate_pio_common<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>, R: ran
         let u8_chunk_size = u8::from(CHUNK_SIZE);
         let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
         let mut power_of_two = C::Scalar::one();
-        let mut scalars = Vec::with_capacity(item.encrypted_share.len());
+        let mut scalars: Vec<<P as Pairing>::ScalarField> =
+            Vec::with_capacity(item.encrypted_share.len());
         for _ in 0..item.encrypted_share.len() {
             scalars.push(power_of_two);
             power_of_two.mul_assign(&two_chunksize);

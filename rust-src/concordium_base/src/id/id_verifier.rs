@@ -13,14 +13,13 @@ use crate::bulletproofs::{
 
 use super::id_proof_types::*;
 use crate::{
-    curve_arithmetic::Curve,
+    curve_arithmetic::{Curve, Field},
     pedersen_commitment::{
         Commitment, CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value,
     },
     random_oracle::RandomOracle,
     sigma_protocols::{common::verify as sigma_verify, dlog::Dlog},
 };
-use ff::Field;
 use sha2::{Digest, Sha256};
 
 /// Function for opening an attribute inside a commitment. The arguments are

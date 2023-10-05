@@ -7,11 +7,10 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::{Challenge, RandomOracle},
 };
-use ff::Field;
 use itertools::izip;
 
 pub struct ComLinSecret<C: Curve> {

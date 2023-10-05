@@ -32,7 +32,6 @@ use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
 use either::Either;
-use ff::Field;
 use hex::{decode, encode};
 use serde::{
     de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
@@ -365,7 +364,7 @@ impl From<u8> for AttributeTag {
 /// The meaning of attributes is then assigned at the outer layers when the
 /// library is used. In order to make the library as generic (and ultimately
 /// simple) as possible this trait is used.
-pub trait Attribute<F: Field>:
+pub trait Attribute<F: PrimeField>:
     Clone + Sized + Send + Sync + fmt::Display + Serialize + Ord {
     /// Convert an attribute to a field element
     fn to_field_element(&self) -> F;
@@ -550,7 +549,7 @@ impl From<YearMonth> for u32 {
 ))]
 /// An attribute list that is part of a normal credential. It consists of some
 /// mandatory attributes and some user selected attributes.
-pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
+pub struct AttributeList<F: PrimeField, AttributeType: Attribute<F>> {
     #[serde(rename = "validTo")]
     /// The latest month and year where the credential is still valid.
     pub valid_to:     YearMonth,
@@ -573,7 +572,7 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub _phantom:     std::marker::PhantomData<F>,
 }
 
-impl<F: Field, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeTag, AttributeType>
+impl<F: PrimeField, AttributeType: Attribute<F>> HasAttributeValues<F, AttributeTag, AttributeType>
     for AttributeList<F, AttributeType>
 {
     fn get_attribute_value(&self, attribute_tag: &AttributeTag) -> Option<&AttributeType> {
@@ -2522,11 +2521,11 @@ impl<
     }
 }
 
-pub trait HasAttributeValues<F: Field, TagType, AttributeType: Attribute<F>> {
+pub trait HasAttributeValues<F: PrimeField, TagType, AttributeType: Attribute<F>> {
     fn get_attribute_value(&self, attribute_tag: &TagType) -> Option<&AttributeType>;
 }
 
-impl<F: Field, TagType: Serialize + std::cmp::Ord, AttributeType: Attribute<F>>
+impl<F: PrimeField, TagType: Serialize + std::cmp::Ord, AttributeType: Attribute<F>>
     HasAttributeValues<F, TagType, AttributeType> for BTreeMap<TagType, AttributeType>
 {
     fn get_attribute_value(&self, attribute_tag: &TagType) -> Option<&AttributeType> {

@@ -9,7 +9,7 @@ pub use secret_value::{Secret, Value};
 
 use crate::common::{Serial, Serialize};
 use byteorder::ReadBytesExt;
-use ff::{Field, PrimeField};
+use core::fmt;
 use rand::*;
 use std::{borrow::Borrow, fmt::Debug};
 use thiserror::Error;
@@ -18,6 +18,85 @@ use thiserror::Error;
 pub enum CurveDecodingError {
     #[error("Not a point on the curve.")]
     NotOnCurve,
+    #[error("{0} is not a field element.")]
+    NotInField(String),
+}
+
+/// This trait represents an element of a field.
+pub trait Field:
+    Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display + 'static {
+    /// Returns an element chosen uniformly at random using a user-provided RNG.
+    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self;
+
+    /// Returns the zero element of the field, the additive identity.
+    fn zero() -> Self;
+
+    /// Returns the one element of the field, the multiplicative identity.
+    fn one() -> Self;
+
+    /// Returns true iff this element is zero.
+    fn is_zero(&self) -> bool;
+
+    /// Squares this element.
+    fn square(&mut self);
+
+    /// Doubles this element.
+    fn double(&mut self);
+
+    /// Negates this element.
+    fn negate(&mut self);
+
+    /// Adds another element to this element.
+    fn add_assign(&mut self, other: &Self);
+
+    /// Subtracts another element from this element.
+    fn sub_assign(&mut self, other: &Self);
+
+    /// Multiplies another element by this element.
+    fn mul_assign(&mut self, other: &Self);
+
+    /// Computes the multiplicative inverse of this element, if nonzero.
+    fn inverse(&self) -> Option<Self>;
+
+    /// Exponentiates this element by a power of the base prime modulus via
+    /// the Frobenius automorphism.
+    fn frobenius_map(&mut self, power: usize);
+
+    /// Exponentiates this element by a number represented with `u64` limbs,
+    /// least significant digit first.
+    fn pow<S: AsRef<[u64]>>(&self, exp: S) -> Self {
+        let mut res = Self::one();
+
+        let mut found_one = false;
+
+        for i in ff::BitIterator::new(exp) {
+            if found_one {
+                res.square();
+            } else {
+                found_one = i;
+            }
+
+            if i {
+                res.mul_assign(self);
+            }
+        }
+
+        res
+    }
+}
+
+pub trait PrimeField: Field {
+    /// How many bits are needed to represent an element of this field.
+    const NUM_BITS: u32;
+
+    /// How many bits of information can be reliably stored in the field
+    /// element.
+    const CAPACITY: u32;
+
+    fn into_repr(self) -> Vec<u64>;
+
+    /// Convert this prime field element into a biginteger representation.
+    fn from_repr(_: &[u64]) -> Result<Self, CurveDecodingError>;
 }
 
 /// A relatively large trait that covers what is needed to perform constructions
@@ -27,7 +106,7 @@ pub enum CurveDecodingError {
 pub trait Curve:
     Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
     /// The prime field of the group order size.
-    type Scalar: PrimeField + Field + Serialize;
+    type Scalar: PrimeField + Serialize;
     /// Size in bytes of elements of the [Curve::Scalar] field.
     const SCALAR_LENGTH: usize;
     /// Size in bytes of group elements when serialized.
@@ -95,8 +174,6 @@ pub trait Pairing: Sized + 'static + Clone {
     type G1Prepared;
     /// An auxiliary type that is used as an input to the pairing function.
     type G2Prepared;
-    /// Field of the size of G1 and G2.
-    type BaseField: PrimeField;
     /// The target of the pairing function. The pairing function actually maps
     /// to a subgroup of the same order as G1 and G2, but this subgroup is
     /// not exposed here and is generally not useful. It is subgroup of the
@@ -236,7 +313,7 @@ pub fn multiexp_worker_given_table<C: Curve>(
         let mut v = Vec::new();
         let mut c = *c;
         while !c.is_zero() {
-            let limb = c.into_repr().as_ref()[0];
+            let limb = c.into_repr()[0];
             // if the first bit is set
             if limb & 1 == 1 {
                 let u = limb & mask;

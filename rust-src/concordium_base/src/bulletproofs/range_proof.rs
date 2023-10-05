@@ -2,12 +2,13 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value},
+    curve_arithmetic::{
+        multiexp, multiexp_table, multiexp_worker_given_table, Curve, Field, PrimeField, Value,
+    },
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
-use ff::{Field, PrimeField};
 use rand::*;
 use std::iter::once;
 
@@ -42,7 +43,7 @@ fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
 /// This function computes the n-bit binary representation `a_L` of input value
 /// `v` The vector `a_R` is the bit-wise negation of `a_L`
 #[allow(non_snake_case)]
-fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
+fn a_L_a_R<F: PrimeField>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
     let mut a_L = Vec::with_capacity(usize::from(n));
     let mut a_R = Vec::with_capacity(usize::from(n));
     for i in 0..n {
@@ -63,7 +64,7 @@ fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
 /// This could use the next `z_vec` function, but for efficiency it implements
 /// the special-case logic for doubling directly.
 #[allow(non_snake_case)]
-fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
+fn two_n_vec<F: PrimeField>(n: u8) -> Vec<F> {
     let mut two_n = Vec::with_capacity(usize::from(n));
     let mut two_i = F::one();
     for _ in 0..n {
@@ -92,7 +93,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
     let mut v_integers = Vec::with_capacity(v_vec.len());
     for &v in v_vec {
         let rep = v.into_repr();
-        let r = rep.as_ref()[0];
+        let r = rep[0];
         v_integers.push(r);
     }
 

@@ -2,12 +2,13 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve},
+    curve_arithmetic::{
+        multiexp, multiexp_table, multiexp_worker_given_table, Curve, Field, PrimeField,
+    },
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
-use ff::Field;
 use rand::*;
 use std::{convert::TryInto, iter::once};
 
@@ -54,7 +55,7 @@ pub enum ProverError {
 /// Note: For multisets this function only sets the first hit to one, to allow
 /// set membership proofs in multisets.
 #[allow(non_snake_case)]
-fn a_L_a_R<F: Field>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
+fn a_L_a_R<F: PrimeField>(v: &F, set_slice: &[F]) -> Option<(Vec<F>, Vec<F>)> {
     let n = set_slice.len();
     let mut a_L = Vec::with_capacity(n);
     let mut a_R = Vec::with_capacity(n);
