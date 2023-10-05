@@ -15,22 +15,22 @@ use std::{
 /// Other types are expected to wrap this in more convenient interfaces.
 /// Ideally the constraint would be Default, but fields we have do not implement
 /// it, so we cannot use it at the moment. Hence the temporary hack of 'T:
-/// PrimeField'.
+/// Field'.
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Serialize)]
-pub struct Secret<T: PrimeField + Serialize> {
+pub struct Secret<T: Field + Serialize> {
     secret: T,
 }
 
-impl<F: PrimeField + Serialize> Secret<F> {
+impl<F: Field + Serialize> Secret<F> {
     pub fn new(secret: F) -> Self { Secret { secret } }
 }
 
-impl<F: PrimeField + Serialize> AsRef<F> for Secret<F> {
+impl<F: Field + Serialize> AsRef<F> for Secret<F> {
     fn as_ref(&self) -> &F { &self.secret }
 }
 
-impl<F: PrimeField + Serialize> Deref for Secret<F> {
+impl<F: Field + Serialize> Deref for Secret<F> {
     type Target = F;
 
     fn deref(&self) -> &Self::Target { &self.secret }
@@ -39,7 +39,7 @@ impl<F: PrimeField + Serialize> Deref for Secret<F> {
 // This works for our current fields since they are arrays
 // But in the future we need to revisit, especially if our
 // upstream dependencies decide to implement drop themselves.
-impl<F: PrimeField + Serialize> Drop for Secret<F> {
+impl<F: Field + Serialize> Drop for Secret<F> {
     fn drop(&mut self) {
         // This implementation is what the Zeroize trait implementations do.
         // It protects against most reorderings by the compiler.

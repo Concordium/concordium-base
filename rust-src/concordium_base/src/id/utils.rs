@@ -42,7 +42,7 @@ pub fn commitment_to_share<C: Curve>(
 
 /// Interpret the array as coefficients of a polynomial starting at 0,
 /// and evaluate the polynomial at the given point.
-pub fn evaluate_poly<F: PrimeField, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
+pub fn evaluate_poly<F: Field, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
     let mut eval: F = F::zero();
     // Horner's scheme at point point
     for rand in coeffs.iter().rev() {

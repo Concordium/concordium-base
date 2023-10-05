@@ -93,6 +93,7 @@ pub trait PrimeField: Field {
     /// element.
     const CAPACITY: u32;
 
+    /// Convert a biginteger representation into a prime field element
     fn into_repr(self) -> Vec<u64>;
 
     /// Convert this prime field element into a biginteger representation.
