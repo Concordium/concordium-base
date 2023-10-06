@@ -672,7 +672,7 @@ impl quickcheck::Arbitrary for Timestamp {
 impl Timestamp {
     /// Construct timestamp from milliseconds since unix epoch.
     #[inline(always)]
-    pub fn from_timestamp_millis(milliseconds: u64) -> Self {
+    pub const fn from_timestamp_millis(milliseconds: u64) -> Self {
         Self {
             milliseconds,
         }
@@ -680,7 +680,7 @@ impl Timestamp {
 
     /// Milliseconds since the UNIX epoch.
     #[inline(always)]
-    pub fn timestamp_millis(&self) -> u64 { self.milliseconds }
+    pub const fn timestamp_millis(&self) -> u64 { self.milliseconds }
 
     /// Add duration to the timestamp. Returns `None` if the resulting timestamp
     /// is not representable, i.e., too far in the future.
