@@ -3,6 +3,7 @@
 mod bls12_381_g1hash;
 mod bls12_381_g2hash;
 mod bls12_381_instance;
+mod ed25519_instance;
 
 pub mod secret_value;
 pub use secret_value::{Secret, Value};

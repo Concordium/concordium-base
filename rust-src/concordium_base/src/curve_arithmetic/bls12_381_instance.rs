@@ -63,10 +63,10 @@ impl From<ff::PrimeFieldDecodingError> for CurveDecodingError {
 }
 
 impl PrimeField for Fr {
-    // TODO: check this.
-    const CAPACITY: u32 = 64 * 4;
-    // TODO: check this.
-    const NUM_BITS: u32 = 64 * 4;
+
+    const CAPACITY: u32 = <Fr as ff::PrimeField>::CAPACITY;
+
+    const NUM_BITS: u32 = <Fr as ff::PrimeField>::NUM_BITS;
 
     fn into_repr(self) -> Vec<u64> { <Self as ff::PrimeField>::into_repr(&self).0.to_vec() }
 
@@ -80,10 +80,10 @@ impl PrimeField for Fr {
 }
 
 impl PrimeField for Fq {
-    // TODO: check this.
-    const CAPACITY: u32 = 64 * 6;
-    // TODO: check this.
-    const NUM_BITS: u32 = 64 * 6;
+
+    const CAPACITY: u32 = <Fq as ff::PrimeField>::CAPACITY;
+
+    const NUM_BITS: u32 = <Fq as ff::PrimeField>::NUM_BITS;
 
     fn into_repr(self) -> Vec<u64> { <Self as ff::PrimeField>::into_repr(&self).0.to_vec() }
 
