@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased changes
-- Fixed `Display` trait on `VersionedModuleSchema` when module contained multiple contracts to render all of them.
+- Fix `Display` trait on `VersionedModuleSchema` when module contained multiple contracts to render all of them.
 
 ## concordium-contracts-common 8.0.0 (2023-08-21)
 
