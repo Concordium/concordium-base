@@ -1901,10 +1901,19 @@ data TransactionSummary' a = TransactionSummary
 --  containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
+-- | An abstraction for constructing the result of a transaction.
+--  This is instantiated by both 'ValidResult' and 'ValidResultWithReturn'.
 class TransactionResult a where
+    -- | Construct a successful result.
     transactionSuccess :: [Event] -> a
+
+    -- | Construct a rejecting result.
     transactionReject :: RejectReason -> a
+
+    -- | Attach a return value to the transaction.
     setTransactionReturnValue :: BS.ByteString -> a -> a
+
+    -- | Construct a result from a 'ValidResult'.
     fromValidResult :: ValidResult -> a
 
 -- | Outcomes of a valid transaction. Either a reject with a reason or a

@@ -1082,20 +1082,32 @@ data DryRunError
       -- header.
       DryRunErrorEnergyInsufficient {dreEnergyRequired :: !Energy}
 
+-- | A successful result of a dry run execution.
+-- These do not cover all successful results.
 data DryRunSuccess
-    = DryRunSuccessBlockStateLoaded
-        { drsCurrentTimestamp :: !Timestamp,
+    = -- | The block state was loaded.
+      DryRunSuccessBlockStateLoaded
+        { -- | Current timestamp (taken from the block).
+          drsCurrentTimestamp :: !Timestamp,
+          -- | Block hash of the block the state was loaded from.
           drsBlockHash :: !BlockHash,
+          -- | The protocol version determined by the block.
           drsProtocolVersion :: !ProtocolVersion
         }
-    | DryRunSuccessAccountInfo {drsAccountInfo :: !AccountInfo}
-    | DryRunSuccessInstanceInfo {drsInstanceInfo :: !Wasm.InstanceInfo}
-    | DryRunSuccessTimestampSet
-    | DryRunSuccessMintedToAccount
+    | -- | The account info was successfully retrieved.
+      DryRunSuccessAccountInfo {drsAccountInfo :: !AccountInfo}
+    | -- | The smart contract instance info was successfully retrieved.
+      DryRunSuccessInstanceInfo {drsInstanceInfo :: !Wasm.InstanceInfo}
+    | -- | The current timestamp was successfully set.
+      DryRunSuccessTimestampSet
+    | -- | The requested amount was minted to the account.
+      DryRunSuccessMintedToAccount
 
 -- | A wrapper type used to provide 'ToProto' instances that target DryRunResponse.
 data DryRunResponse a = DryRunResponse
-    { drrResponse :: !a,
+    { -- | The result of the operation.
+      drrResponse :: !a,
+      -- | The remaining energy after executing the operation.
       drrQuotaRemaining :: !Energy
     }
     deriving (Eq, Functor)
