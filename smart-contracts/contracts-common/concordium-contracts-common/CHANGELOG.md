@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased changes
+- Fix `Display` trait on `VersionedModuleSchema` when module contained multiple contracts to render all of them.
+- Fix incorrect serialization of policies in `OwnedPolicy::serial_for_smart_contract`.
+  - The method is used internally in `concordium-smart-contract-testing` and the bug caused issues when checking sender policies.
+- Make `Timestamp::from_timestamp_millis` and `Timestamp::timestamp_millis` constant methods so they can be used when declaring constants.
 
 ## concordium-contracts-common 8.0.0 (2023-08-21)
 

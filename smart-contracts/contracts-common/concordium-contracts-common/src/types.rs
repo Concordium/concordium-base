@@ -672,7 +672,7 @@ impl quickcheck::Arbitrary for Timestamp {
 impl Timestamp {
     /// Construct timestamp from milliseconds since unix epoch.
     #[inline(always)]
-    pub fn from_timestamp_millis(milliseconds: u64) -> Self {
+    pub const fn from_timestamp_millis(milliseconds: u64) -> Self {
         Self {
             milliseconds,
         }
@@ -680,7 +680,7 @@ impl Timestamp {
 
     /// Milliseconds since the UNIX epoch.
     #[inline(always)]
-    pub fn timestamp_millis(&self) -> u64 { self.milliseconds }
+    pub const fn timestamp_millis(&self) -> u64 { self.milliseconds }
 
     /// Add duration to the timestamp. Returns `None` if the resulting timestamp
     /// is not representable, i.e., too far in the future.
@@ -2097,7 +2097,7 @@ impl OwnedPolicy {
     /// Serialize the policy for consumption by smart contract execution engine.
     ///
     /// This entails the following serialization scheme:
-    /// - `1`:             u8            specifying a single policy.
+    /// - `1`:             u16           specifying a single policy.
     /// - `len`:           u16           length of the inner payload
     /// - `inner payload`: `len` bytes   the serialized `OwnedPolicy`
     #[doc(hidden)]
@@ -2108,7 +2108,7 @@ impl OwnedPolicy {
         // Serialize to an inner vector.
         let inner = to_bytes(self);
         // Specify that there is only one policy.
-        out.write_u8(1)?;
+        out.write_u16(1)?;
         // Write length of the inner.
         (inner.len() as u16).serial(out)?;
         // Write the inner buffer.

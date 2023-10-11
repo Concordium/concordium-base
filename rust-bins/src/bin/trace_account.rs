@@ -10,7 +10,7 @@
 //! unexpected happens.
 
 use anyhow::Context;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use clap::AppSettings;
 use client_server_helpers::read_json_from_file;
 use concordium_base::{
@@ -671,6 +671,6 @@ fn trace_single_account(
 
 fn pretty_time(timestamp: f64) -> String {
     let naive = NaiveDateTime::from_timestamp_opt(timestamp.round() as i64, 0).unwrap(); // unwrap should be safe here since this is used for block slot times.
-    let dt: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+    let dt: DateTime<Utc> = Utc.from_utc_datetime(&naive);
     dt.format("UTC %Y-%m-%d %H:%M:%S").to_string()
 }
