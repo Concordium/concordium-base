@@ -127,7 +127,8 @@ pub fn parse_path(path: &str) -> Result<Vec<u32>, DeriveError> {
     Ok(parsed_path)
 }
 
-/// Derives hierarchical deterministic keys for ed25519 according to the SLIP0010 (https://github.com/satoshilabs/slips/blob/master/slip-0010.md)
+/// Derives hierarchical deterministic keys for ed25519 according to the
+/// SLIP0010 (<https://github.com/satoshilabs/slips/blob/master/slip-0010.md>)
 /// specification.
 ///
 /// # Arguments
@@ -147,7 +148,8 @@ pub fn derive(path: &str, seed: &[u8]) -> Result<HdKeys, DeriveError> {
     derive_from_parsed_path(&parsed_path, seed)
 }
 
-/// Derives hierarchical deterministic keys for ed25519 according to the SLIP0010 (https://github.com/satoshilabs/slips/blob/master/slip-0010.md)
+/// Derives hierarchical deterministic keys for ed25519 according to the
+/// SLIP0010 (<https://github.com/satoshilabs/slips/blob/master/slip-0010.md>)
 /// specification.
 ///
 /// # Arguments

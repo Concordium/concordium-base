@@ -17,7 +17,7 @@
 # The dependencies between the steps are described in inline comments below
 # along with a few suggestions for improving parallelization.
 
-name: Check format, build and run tests for Haskell and Rust sources
+name: Check format, docs, build and run tests for Haskell and Rust sources
 
 on:
   pull_request:
@@ -81,6 +81,39 @@ jobs:
         cargo fmt --manifest-path idiss/Cargo.toml -- --check
         cargo fmt --manifest-path mobile_wallet/Cargo.toml -- --check
         cargo fmt --manifest-path identity-provider-service/Cargo.toml -- --check
+
+  rustdoc:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+      
+    strategy:
+      matrix:
+        plan:
+        - rust: 1.68
+        crates:
+        - rust-src
+        - rust-bins
+        - idiss
+        - mobile_wallet
+        - identity-provider-service
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.plan.rust }}
+        override: true
+
+    - name: Run cargo doc
+      working-directory: ${{ matrix.crates }}
+      run: |
+        RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
   fourmolu:
     runs-on: ubuntu-latest
