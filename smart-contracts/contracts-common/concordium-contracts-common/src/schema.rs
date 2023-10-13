@@ -1218,19 +1218,16 @@ mod impls {
         }
 
         // Returns a event schema from a versioned module schema
-        pub fn get_event_schema(
-            &self,
-            contract_name: &str
-        ) -> Result<Type, VersionedSchemaError> {
+        pub fn get_event_schema(&self, contract_name: &str) -> Result<Type, VersionedSchemaError> {
             let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
 
             let param_event = match versioned_contract_schema {
                 VersionedContractSchema::V0(_) => Err(VersionedSchemaError::NoEventInContract)?,
                 VersionedContractSchema::V1(_) => Err(VersionedSchemaError::NoEventInContract)?,
                 VersionedContractSchema::V2(_) => Err(VersionedSchemaError::NoEventInContract)?,
-                VersionedContractSchema::V3(contract_schema) => Ok(contract_schema
-                    .event
-                    .ok_or(VersionedSchemaError::NoEventInContract)?)
+                VersionedContractSchema::V3(contract_schema) => {
+                    Ok(contract_schema.event.ok_or(VersionedSchemaError::NoEventInContract)?)
+                }
             };
             param_event
         }
@@ -1358,18 +1355,21 @@ mod impls {
 
         #[test]
         fn test_getting_get_event_schema() {
-            let events = Type::Enum(vec![("Foo".to_string(), Fields::None), ("Bar".to_string(), Fields::None)]);
-            let module_schema = VersionedModuleSchema::V3(
-                ModuleV3 { 
-                    contracts: BTreeMap::from([("TestContract".into(), ContractV3 {
+            let events = Type::Enum(vec![
+                ("Foo".to_string(), Fields::None),
+                ("Bar".to_string(), Fields::None),
+            ]);
+            let module_schema = VersionedModuleSchema::V3(ModuleV3 {
+                contracts: BTreeMap::from([(
+                    "TestContract".into(),
+                    ContractV3 {
                         init: None,
                         receive: BTreeMap::new(),
-                        event: Some(events.clone())
-                    })])
-             });
-            let extracted_type = module_schema
-                .get_event_schema("TestContract")
-                .unwrap();
+                        event: Some(events.clone()),
+                    },
+                )]),
+            });
+            let extracted_type = module_schema.get_event_schema("TestContract").unwrap();
             assert_eq!(extracted_type, events)
         }
 
