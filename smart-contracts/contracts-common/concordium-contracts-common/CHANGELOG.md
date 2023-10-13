@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased changes
+- Add event schema getter on `VersionedModuleSchema`.
 - Fix `Display` trait on `VersionedModuleSchema` when module contained multiple contracts to render all of them.
 - Fix incorrect serialization of policies in `OwnedPolicy::serial_for_smart_contract`.
   - The method is used internally in `concordium-smart-contract-testing` and the bug caused issues when checking sender policies.
