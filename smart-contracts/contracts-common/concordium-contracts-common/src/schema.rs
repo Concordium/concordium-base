@@ -1057,6 +1057,8 @@ mod impls {
         NoReturnValueInReceive,
         #[error("Return values not supported for this module version")]
         ReturnValueNotSupported,
+        #[error("Event schema not found in contract schema")]
+        NoEventInContract,
     }
 
     impl From<ParseError> for VersionedSchemaError {
@@ -1215,6 +1217,24 @@ mod impls {
             Ok(param_schema)
         }
 
+        // Returns a event schema from a versioned module schema
+        pub fn get_event_schema(
+            &self,
+            contract_name: &str
+        ) -> Result<Type, VersionedSchemaError> {
+            let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
+
+            let param_event = match versioned_contract_schema {
+                VersionedContractSchema::V0(_) => Err(VersionedSchemaError::NoEventInContract)?,
+                VersionedContractSchema::V1(_) => Err(VersionedSchemaError::NoEventInContract)?,
+                VersionedContractSchema::V2(_) => Err(VersionedSchemaError::NoEventInContract)?,
+                VersionedContractSchema::V3(contract_schema) => Ok(contract_schema
+                    .event
+                    .ok_or(VersionedSchemaError::NoEventInContract)?)
+            };
+            param_event
+        }
+
         /// Returns a receive function's error schema from a versioned module
         /// schema
         pub fn get_receive_error_schema(
@@ -1334,6 +1354,16 @@ mod impls {
         fn test_getting_init_param_schema() {
             let extracted_type = module_schema().get_init_param_schema("TestContract").unwrap();
             assert_eq!(extracted_type, Type::U8)
+        }        
+
+        #[test]
+        fn test_getting_get_event_schema() {
+            let module_bytes = hex::decode("ffff03010000000c00000054657374436f6e7472616374000000000001150200000003000000466f6f020300000042617202").unwrap();
+            let module_schema = VersionedModuleSchema::new(&module_bytes, &None).unwrap();
+            let extracted_type = module_schema
+                .get_event_schema("TestContract")
+                .unwrap();
+            assert_eq!(extracted_type, Type::Enum(vec![("Foo".to_string(), Fields::None), ("Bar".to_string(), Fields::None)]))
         }
 
         #[test]
