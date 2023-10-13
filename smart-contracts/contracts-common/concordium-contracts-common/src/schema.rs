@@ -1217,7 +1217,7 @@ mod impls {
             Ok(param_schema)
         }
 
-        // Returns a event schema from a versioned module schema
+        // Returns an event schema from a versioned module schema
         pub fn get_event_schema(&self, contract_name: &str) -> Result<Type, VersionedSchemaError> {
             let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
 
@@ -1226,7 +1226,7 @@ mod impls {
                 VersionedContractSchema::V1(_) => Err(VersionedSchemaError::NoEventInContract)?,
                 VersionedContractSchema::V2(_) => Err(VersionedSchemaError::NoEventInContract)?,
                 VersionedContractSchema::V3(contract_schema) => {
-                    Ok(contract_schema.event.ok_or(VersionedSchemaError::NoEventInContract)?)
+                    contract_schema.event.ok_or(VersionedSchemaError::NoEventInContract)
                 }
             };
             param_event
