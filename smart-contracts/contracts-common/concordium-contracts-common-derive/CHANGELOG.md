@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased changes
+- Replaced usage of traits in suggestion, such as `&impl HasHost<..>` with the concrete types: `&Host<..>`.
 
 ## concordium-contracts-common-derive 4.0.0 (2023-08-21)
 
