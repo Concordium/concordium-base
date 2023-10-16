@@ -1,6 +1,7 @@
 ## Unreleased changes
 
 - Fix `Display` implementation of `Web3IdAttribute::Timestamp` attribute.
+- Add helper method `parse` to `ContractEvent` for deserializing into types that implement `concordium_contracts_common::Deserial`.
 
 ## 3.0.1 (2023-08-28)
 

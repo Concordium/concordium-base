@@ -221,3 +221,23 @@ impl std::fmt::Display for ContractEvent {
         Ok(())
     }
 }
+
+impl ContractEvent {
+    /// Try to parse the event into a type that implement
+    /// [`concordium_contracts_common::Deserial`].
+    ///
+    /// Ensures that all the bytes in the event data are read.
+    pub fn parse<T: concordium_contracts_common::Deserial>(
+        &self,
+    ) -> concordium_contracts_common::ParseResult<T> {
+        use concordium_contracts_common::{Cursor, Get, ParseError};
+        let mut cursor = Cursor::new(self.as_ref());
+        let res = cursor.get()?;
+        // Check that all bytes have been read, as leftover bytes usually indicate
+        // errors.
+        if cursor.offset != self.as_ref().len() {
+            return Err(ParseError::default());
+        }
+        Ok(res)
+    }
+}
