@@ -1083,7 +1083,7 @@ data DryRunError
       DryRunErrorEnergyInsufficient {dreEnergyRequired :: !Energy}
 
 -- | A successful result of a dry run execution.
--- These do not cover all successful results.
+-- These do not cover all successful results, just ones where the protobuf encoding cannot fail.
 data DryRunSuccess
     = -- | The block state was loaded.
       DryRunSuccessBlockStateLoaded
