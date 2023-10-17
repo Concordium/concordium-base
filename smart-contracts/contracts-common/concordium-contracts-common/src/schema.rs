@@ -1351,7 +1351,7 @@ mod impls {
         fn test_getting_init_param_schema() {
             let extracted_type = module_schema().get_init_param_schema("TestContract").unwrap();
             assert_eq!(extracted_type, Type::U8)
-        }        
+        }
 
         #[test]
         fn test_getting_get_event_schema() {
