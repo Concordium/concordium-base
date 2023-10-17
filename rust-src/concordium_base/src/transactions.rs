@@ -1343,6 +1343,32 @@ pub trait ExactSizeTransactionSigner: TransactionSigner {
     fn num_keys(&self) -> u32;
 }
 
+impl<S: TransactionSigner> TransactionSigner for std::sync::Arc<S> {
+    fn sign_transaction_hash(
+        &self,
+        hash_to_sign: &hashes::TransactionSignHash,
+    ) -> TransactionSignature {
+        self.as_ref().sign_transaction_hash(hash_to_sign)
+    }
+}
+
+impl<S: ExactSizeTransactionSigner> ExactSizeTransactionSigner for std::sync::Arc<S> {
+    fn num_keys(&self) -> u32 { self.as_ref().num_keys() }
+}
+
+impl<S: TransactionSigner> TransactionSigner for std::rc::Rc<S> {
+    fn sign_transaction_hash(
+        &self,
+        hash_to_sign: &hashes::TransactionSignHash,
+    ) -> TransactionSignature {
+        self.as_ref().sign_transaction_hash(hash_to_sign)
+    }
+}
+
+impl<S: ExactSizeTransactionSigner> ExactSizeTransactionSigner for std::rc::Rc<S> {
+    fn num_keys(&self) -> u32 { self.as_ref().num_keys() }
+}
+
 /// This signs with the first `threshold` credentials and for each
 /// credential with the first threshold keys for that credential.
 impl TransactionSigner for AccountKeys {
