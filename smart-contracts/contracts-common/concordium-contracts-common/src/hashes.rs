@@ -76,7 +76,6 @@ pub enum ModuleReferenceMarker {}
 /// A reference to a smart contract module deployed on the chain.
 pub type ModuleReference = HashBytes<ModuleReferenceMarker>;
 
-
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 /// Used as a phantom type to indicate a hash is a hash with no specific
 /// meaning.
