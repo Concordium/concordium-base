@@ -648,10 +648,8 @@ pub fn get_build_info_from_skeleton(
     let mut build_context_section = None;
     for ucs in skeleton.custom.iter() {
         let cs = parse_custom(ucs)?;
-        if cs.name.as_ref() == BUILD_INFO_SECTION_NAME {
-            if build_context_section.replace(cs).is_some() {
-                return Err(CustomSectionLookupError::Multiple);
-            }
+        if cs.name.as_ref() == BUILD_INFO_SECTION_NAME && build_context_section.replace(cs).is_some() {
+            return Err(CustomSectionLookupError::Multiple);
         }
     }
     let Some(cs) = build_context_section else {
