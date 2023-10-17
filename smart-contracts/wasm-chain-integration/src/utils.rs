@@ -589,7 +589,6 @@ pub fn get_embedded_schema_v1(bytes: &[u8]) -> ExecResult<schema::VersionedModul
 
 /// The build information that will be embedded as a custom section to
 /// support reproducible builds.
-/// It is embedded serialized using the smart contract serialization format.
 #[derive(Debug, Clone, concordium_contracts_common::Serialize)]
 pub struct BuildInfo {
     /// The SHA256 hash of the tar file used to build.
@@ -605,6 +604,13 @@ pub struct BuildInfo {
     pub build_command: Vec<String>,
 }
 
+/// A versioned build information. This is the information that is embedded in a
+/// custom section. Currently there is one version, but the format supports
+/// future evolution.
+///
+/// The value is embedded in a custom section serialized using the smart
+/// contract serialization format
+/// ([`Serial`](concordium_contracts_common::Serial) trait).
 #[derive(Debug, Clone, concordium_contracts_common::Serialize)]
 pub enum VersionedBuildInfo {
     V0(BuildInfo),
@@ -629,13 +635,13 @@ impl CustomSectionLookupError {
     pub fn is_missing(&self) -> bool { matches!(self, Self::Missing) }
 }
 
-/// Extract the embedded [`VersionedBuildContext`] from a Wasm module.
+/// Extract the embedded [`VersionedBuildInfo`] from a Wasm module.
 pub fn get_build_info(bytes: &[u8]) -> Result<VersionedBuildInfo, CustomSectionLookupError> {
     let skeleton = parse_skeleton(bytes)?;
     get_build_info_from_skeleton(&skeleton)
 }
 
-/// Extract the embedded [`VersionedBuildContext`] from a [`Skeleton`].
+/// Extract the embedded [`VersionedBuildInfo`] from a [`Skeleton`].
 pub fn get_build_info_from_skeleton(
     skeleton: &Skeleton,
 ) -> Result<VersionedBuildInfo, CustomSectionLookupError> {
