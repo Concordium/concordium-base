@@ -1360,14 +1360,11 @@ mod impls {
                 ("Bar".to_string(), Fields::None),
             ]);
             let module_schema = VersionedModuleSchema::V3(ModuleV3 {
-                contracts: BTreeMap::from([(
-                    "TestContract".into(),
-                    ContractV3 {
-                        init: None,
-                        receive: BTreeMap::new(),
-                        event: Some(events.clone()),
-                    },
-                )]),
+                contracts: BTreeMap::from([("TestContract".into(), ContractV3 {
+                    init:    None,
+                    receive: BTreeMap::new(),
+                    event:   Some(events.clone()),
+                })]),
             });
             let extracted_type = module_schema.get_event_schema("TestContract").unwrap();
             assert_eq!(extracted_type, events)
