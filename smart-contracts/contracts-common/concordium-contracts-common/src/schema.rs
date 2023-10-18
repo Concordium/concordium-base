@@ -1058,7 +1058,9 @@ mod impls {
         #[error("Return values not supported for this module version")]
         ReturnValueNotSupported,
         #[error("Event schema not found in contract schema")]
-        NoErrorInEvents,
+        NoEventInContract,
+        #[error("Events not supported for this module version")]
+        EventNotSupported,
     }
 
     impl From<ParseError> for VersionedSchemaError {
@@ -1222,11 +1224,11 @@ mod impls {
             let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
 
             let param_event = match versioned_contract_schema {
-                VersionedContractSchema::V0(_) => Err(VersionedSchemaError::ErrorNotSupported)?,
-                VersionedContractSchema::V1(_) => Err(VersionedSchemaError::ErrorNotSupported)?,
-                VersionedContractSchema::V2(_) => Err(VersionedSchemaError::ErrorNotSupported)?,
+                VersionedContractSchema::V0(_) => Err(VersionedSchemaError::EventNotSupported)?,
+                VersionedContractSchema::V1(_) => Err(VersionedSchemaError::EventNotSupported)?,
+                VersionedContractSchema::V2(_) => Err(VersionedSchemaError::EventNotSupported)?,
                 VersionedContractSchema::V3(contract_schema) => {
-                    contract_schema.event.ok_or(VersionedSchemaError::NoErrorInEvents)
+                    contract_schema.event.ok_or(VersionedSchemaError::NoEventInContract)
                 }
             };
             param_event
