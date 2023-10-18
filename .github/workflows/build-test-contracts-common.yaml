@@ -38,11 +38,9 @@ jobs:
           components: rustfmt
 
       - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
         working-directory: ${{ env.WORKING_DIRECTORY }}
-        with:
-          command: fmt
-          args: --all -- --check
+        run: |
+          cargo fmt --all --check
 
   rustdoc:
     name: Docs
