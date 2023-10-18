@@ -1057,6 +1057,10 @@ mod impls {
         NoReturnValueInReceive,
         #[error("Return values not supported for this module version")]
         ReturnValueNotSupported,
+        #[error("Event schema not found in contract schema")]
+        NoEventInContract,
+        #[error("Events not supported for this module version")]
+        EventNotSupported,
     }
 
     impl From<ParseError> for VersionedSchemaError {
@@ -1215,6 +1219,21 @@ mod impls {
             Ok(param_schema)
         }
 
+        // Returns an event schema from a versioned module schema
+        pub fn get_event_schema(&self, contract_name: &str) -> Result<Type, VersionedSchemaError> {
+            let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
+
+            let param_event = match versioned_contract_schema {
+                VersionedContractSchema::V0(_) => Err(VersionedSchemaError::EventNotSupported)?,
+                VersionedContractSchema::V1(_) => Err(VersionedSchemaError::EventNotSupported)?,
+                VersionedContractSchema::V2(_) => Err(VersionedSchemaError::EventNotSupported)?,
+                VersionedContractSchema::V3(contract_schema) => {
+                    contract_schema.event.ok_or(VersionedSchemaError::NoEventInContract)
+                }
+            };
+            param_event
+        }
+
         /// Returns a receive function's error schema from a versioned module
         /// schema
         pub fn get_receive_error_schema(
@@ -1334,6 +1353,23 @@ mod impls {
         fn test_getting_init_param_schema() {
             let extracted_type = module_schema().get_init_param_schema("TestContract").unwrap();
             assert_eq!(extracted_type, Type::U8)
+        }
+
+        #[test]
+        fn test_getting_get_event_schema() {
+            let events = Type::Enum(vec![
+                ("Foo".to_string(), Fields::None),
+                ("Bar".to_string(), Fields::None),
+            ]);
+            let module_schema = VersionedModuleSchema::V3(ModuleV3 {
+                contracts: BTreeMap::from([("TestContract".into(), ContractV3 {
+                    init:    None,
+                    receive: BTreeMap::new(),
+                    event:   Some(events.clone()),
+                })]),
+            });
+            let extracted_type = module_schema.get_event_schema("TestContract").unwrap();
+            assert_eq!(extracted_type, events)
         }
 
         #[test]
