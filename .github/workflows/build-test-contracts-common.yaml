@@ -25,7 +25,6 @@ jobs:
   rustfmt:
     name: Format
     runs-on: ubuntu-latest
-    working-directory: ${{ env.WORKING_DIRECTORY }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -40,6 +39,7 @@ jobs:
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
+        working-directory: ${{ env.WORKING_DIRECTORY }}
         with:
           command: fmt
           args: --all -- --check
@@ -47,7 +47,6 @@ jobs:
   rustdoc:
     name: Docs
     runs-on: ubuntu-latest
-    working-directory: ${{ env.WORKING_DIRECTORY }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -60,13 +59,13 @@ jobs:
           override: true
 
       - name: Run cargo doc
+        working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
   clippy:
     name: Clippy on concordium-contracts-common
     runs-on: ubuntu-latest
-    working-directory: ${{ env.WORKING_DIRECTORY }}
     strategy:
       matrix:
         features:
@@ -96,6 +95,7 @@ jobs:
 
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
+        working-directory: ${{ env.WORKING_DIRECTORY }}
         with:
           command: clippy
           args: --manifest-path=concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
@@ -103,7 +103,6 @@ jobs:
   clippy-on-derive:
     name: Clippy on concordium-contracts-common-derive
     runs-on: ubuntu-latest
-    working-directory: ${{ env.WORKING_DIRECTORY }}
     strategy:
       matrix:
         features:
@@ -129,6 +128,7 @@ jobs:
 
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
+        working-directory: ${{ env.WORKING_DIRECTORY }}
         with:
           command: clippy
           args: --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
@@ -136,7 +136,6 @@ jobs:
   test:
     name: x86_64 tests
     runs-on: ubuntu-latest
-    working-directory: ${{ env.WORKING_DIRECTORY }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -150,6 +149,7 @@ jobs:
 
       - name: Run cargo test
         uses: actions-rs/cargo@v1
+        working-directory: ${{ env.WORKING_DIRECTORY }}
         with:
           command: test
           args: --workspace --all-features

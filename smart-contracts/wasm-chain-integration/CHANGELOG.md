@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+- Add `get_build_info` and `get_build_info_from_skeleton` utility functions for
+  extracting build information from a Wasm module.
+
 ## concordium-smart-contract-engine 3.0.0 (2023-08-21)
 
 - Functions that process V1 smart contract modules

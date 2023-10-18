@@ -27,11 +27,6 @@ pub enum UpdateSignMarker {}
 pub enum StateMarker {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-/// Used as a phantom type to indicate a hash is a hash with no specific
-/// meaning.
-pub enum PureHashMarker {}
-
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 /// Used as a phantom type to indicate a hash is a leadership election
 /// nonce.
 pub enum ElectionNonceMarker {}
@@ -59,6 +54,3 @@ pub type UpdateSignHash = HashBytes<UpdateSignMarker>;
 pub type StateHash = HashBytes<StateMarker>;
 /// Hash that is a successor proof of an epoch finalization entry.
 pub type SuccessorProof = HashBytes<SuccessorProofMarker>;
-
-/// A Sha256 with no specific meaning.
-pub type Hash = HashBytes<PureHashMarker>;
