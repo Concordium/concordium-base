@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased changes
+
+## concordium-contracts-common 8.1.0 (2023-10-18)
+
 - Add contract event schema getter on `VersionedModuleSchema`.
 - Fix `Display` trait on `VersionedModuleSchema` when module contained multiple contracts to render all of them.
 - Fix incorrect serialization of policies in `OwnedPolicy::serial_for_smart_contract`.
