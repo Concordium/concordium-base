@@ -223,8 +223,8 @@ impl std::fmt::Display for ContractEvent {
 }
 
 impl ContractEvent {
-    /// Try to parse the event into a type that implement
-    /// [`concordium_contracts_common::Deserial`].
+    /// Try to parse the event into a type that implements
+    /// [`Deserial`](concordium_contracts_common::Deserial).
     ///
     /// Ensures that all the bytes in the event data are read.
     pub fn parse<T: concordium_contracts_common::Deserial>(
