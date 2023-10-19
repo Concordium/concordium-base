@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+- Add helpers `from_file` and `from_slice` to construct a `WasmModule`.
+
 ## 3.1.0 (2023-10-18)
 
 - Fix `Display` implementation of `Web3IdAttribute::Timestamp` attribute.

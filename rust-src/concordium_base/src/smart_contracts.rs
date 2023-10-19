@@ -6,6 +6,7 @@ use crate::{
     },
     constants::*,
 };
+use anyhow::Context;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
@@ -142,6 +143,25 @@ impl WasmModule {
         let mut hasher = sha2::Sha256::new();
         self.serial(&mut hasher);
         ModuleReference::from(<[u8; 32]>::from(hasher.finalize()))
+    }
+
+    /// Attempt to read a [`WasmModule`] from a file.
+    pub fn from_file(path: &std::path::Path) -> anyhow::Result<Self> {
+        Self::from_slice(&std::fs::read(path).context("Unable to read file.")?)
+    }
+
+    /// Attempt to read a [`WasmModule`] from a byte slice. All of the slice is
+    /// required to be consumed.
+    pub fn from_slice(bytes: &[u8]) -> ParseResult<Self> {
+        let mut cursor = std::io::Cursor::new(bytes);
+        let module = super::common::from_bytes(&mut cursor)?;
+        let remaining = (bytes.len() as u64).saturating_sub(cursor.position());
+        anyhow::ensure!(
+            remaining == 0,
+            "There are {} remaining bytes of data.",
+            remaining
+        );
+        Ok(module)
     }
 }
 
