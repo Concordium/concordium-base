@@ -6,7 +6,6 @@ use crate::{
     },
     constants::*,
 };
-use anyhow::Context;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
@@ -135,6 +134,14 @@ pub struct WasmModule {
     pub source:  ModuleSource,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum WasmFromFileError {
+    #[error("Failed reading file: {0}")]
+    Read(#[from] std::io::Error),
+    #[error("Failed parsing module: {0}")]
+    Parse(#[from] anyhow::Error),
+}
+
 impl WasmModule {
     /// Get the identifier of the module. This identifier is used to refer to
     /// the module on the chain, e.g., when initializing a new contract
@@ -146,8 +153,8 @@ impl WasmModule {
     }
 
     /// Attempt to read a [`WasmModule`] from a file.
-    pub fn from_file(path: &std::path::Path) -> anyhow::Result<Self> {
-        Self::from_slice(&std::fs::read(path).context("Unable to read file.")?)
+    pub fn from_file(path: &std::path::Path) -> Result<Self, WasmFromFileError> {
+        Self::from_slice(&std::fs::read(path)?).map_err(WasmFromFileError::Parse)
     }
 
     /// Attempt to read a [`WasmModule`] from a byte slice. All of the slice is
