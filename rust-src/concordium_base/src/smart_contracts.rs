@@ -134,6 +134,14 @@ pub struct WasmModule {
     pub source:  ModuleSource,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum WasmFromFileError {
+    #[error("Failed reading file: {0}")]
+    Read(#[from] std::io::Error),
+    #[error("Failed parsing module: {0}")]
+    Parse(#[from] anyhow::Error),
+}
+
 impl WasmModule {
     /// Get the identifier of the module. This identifier is used to refer to
     /// the module on the chain, e.g., when initializing a new contract
@@ -142,6 +150,25 @@ impl WasmModule {
         let mut hasher = sha2::Sha256::new();
         self.serial(&mut hasher);
         ModuleReference::from(<[u8; 32]>::from(hasher.finalize()))
+    }
+
+    /// Attempt to read a [`WasmModule`] from a file.
+    pub fn from_file(path: &std::path::Path) -> Result<Self, WasmFromFileError> {
+        Self::from_slice(&std::fs::read(path)?).map_err(WasmFromFileError::Parse)
+    }
+
+    /// Attempt to read a [`WasmModule`] from a byte slice. All of the slice is
+    /// required to be consumed.
+    pub fn from_slice(bytes: &[u8]) -> ParseResult<Self> {
+        let mut cursor = std::io::Cursor::new(bytes);
+        let module = super::common::from_bytes(&mut cursor)?;
+        let remaining = (bytes.len() as u64).saturating_sub(cursor.position());
+        anyhow::ensure!(
+            remaining == 0,
+            "There are {} remaining bytes of data.",
+            remaining
+        );
+        Ok(module)
     }
 }
 
