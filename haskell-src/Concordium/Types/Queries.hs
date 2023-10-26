@@ -1110,4 +1110,4 @@ data DryRunResponse a = DryRunResponse
       -- | The remaining energy after executing the operation.
       drrQuotaRemaining :: !Energy
     }
-    deriving (Eq, Functor)
+    deriving (Eq)

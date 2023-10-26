@@ -35,6 +35,8 @@ signatureSerializedSize :: Signature -> Int
 signatureSerializedSize (Signature s) = 2 + BSS.length s
 
 -- | A dummy 'Signature' that is the correct size to be an Ed25519 signature.
+--  This is used in dry-running transactions, where it is not necessary to have valid signatures,
+--  but the implementation assumes that signatures are present.
 dummySignatureEd25519 :: Signature
 dummySignatureEd25519 = Signature $ BSS.replicate Ed25519.signatureSize 0
 
