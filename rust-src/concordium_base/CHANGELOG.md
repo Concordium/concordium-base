@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 3.1.1 (2023-10-27)
+
 - Add helpers `from_file` and `from_slice` to construct a `WasmModule`.
 
 ## 3.1.0 (2023-10-18)
