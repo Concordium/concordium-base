@@ -747,7 +747,7 @@ impl TryFrom<Timestamp> for String {
     type Error = TimestampOverflow;
 
     fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
-        if let Ok(utc) =  <chrono::DateTime<chrono::Utc>>::try_from(value) {
+        if let Ok(utc) = <chrono::DateTime<chrono::Utc>>::try_from(value) {
             Ok(utc.to_rfc3339())
         } else {
             Err(TimestampOverflow)
