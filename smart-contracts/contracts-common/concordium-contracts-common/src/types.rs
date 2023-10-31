@@ -747,7 +747,7 @@ impl TryFrom<Timestamp> for String {
     type Error = TimestampOverflow;
 
     fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
-        if let Ok(utc)=  <chrono::DateTime<chrono::Utc>>::try_from(value) {
+        if let Ok(utc) =  <chrono::DateTime<chrono::Utc>>::try_from(value) {
             Ok(utc.to_rfc3339())
         } else {
             Err(TimestampOverflow)
@@ -811,8 +811,7 @@ impl str::FromStr for Timestamp {
 /// format in the UTC time zone.
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let date: String = String::try_from(*self)
-            .map_err(|_| fmt::Error)?;
+        let date: String = String::try_from(*self).map_err(|_| fmt::Error)?;
         write!(f, "{}", date)
     }
 }
