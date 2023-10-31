@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Add `TryFrom<Timestamp> for String` such that possible errors can be matched.
+
 ## concordium-contracts-common 8.1.0 (2023-10-18)
 
 - Add contract event schema getter on `VersionedModuleSchema`.
