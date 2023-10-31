@@ -2846,12 +2846,14 @@ mod test {
     use std::str::FromStr;
 
     #[test]
+    #[cfg(feature = "derive-serde")]
     fn test_string_from_timestamp_returns_error_when_to_far_in_future() {
         let timestamp = Timestamp::from_timestamp_millis(100000001683508889);
         assert!(matches!(String::try_from(timestamp), Err(TimestampOverflow)))
     }
 
     #[test]
+    #[cfg(feature = "derive-serde")]
     fn test_string_from_timestamp() {
         let timestamp = Timestamp::from_timestamp_millis(42);
         let expected = "1970-01-01T00:00:00.042+00:00".to_string();
