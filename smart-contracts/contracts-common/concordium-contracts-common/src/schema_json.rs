@@ -2740,7 +2740,9 @@ impl Type {
                             .into(),
                     )
                 })?;
-                Ok(Value::String(timestamp.to_string()))
+                let datetime: String = String::try_from(timestamp)
+                    .map_err(|error: TimestampOverflow| ToJsonError::DeserialError { position, schema: Type::Timestamp, reason: error.to_string(), data: ToJsonErrorData::from(to_bytes(&timestamp)) })?;
+                Ok(Value::String(datetime))
             }
             Type::Duration => {
                 let duration = Duration::deserial(source).map_err(|_| {

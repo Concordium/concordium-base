@@ -743,6 +743,19 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
 }
 
 #[cfg(feature = "derive-serde")]
+impl TryFrom<Timestamp> for String {
+    type Error = TimestampOverflow;
+
+    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
+        if let Ok(utc)=  <chrono::DateTime<chrono::Utc>>::try_from(value) {
+            Ok(utc.to_rfc3339())
+        } else {
+            Err(TimestampOverflow)
+        }
+    }
+}
+
+#[cfg(feature = "derive-serde")]
 /// Note that this is a lossy conversion from a datetime to a [`Timestamp`].
 /// Any precision above milliseconds is lost.
 impl TryFrom<chrono::DateTime<chrono::Utc>> for Timestamp {
@@ -798,10 +811,9 @@ impl str::FromStr for Timestamp {
 /// format in the UTC time zone.
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use chrono::offset::TimeZone;
-        let time = self.timestamp_millis() as i64;
-        let date = chrono::Utc.timestamp_millis_opt(time).single().ok_or(fmt::Error)?;
-        write!(f, "{}", date.to_rfc3339())
+        let date: String = String::try_from(*self)
+            .map_err(|_| fmt::Error)?;
+        write!(f, "{}", date)
     }
 }
 
@@ -2832,6 +2844,23 @@ mod serde_impl {
 mod test {
     use super::*;
     use std::str::FromStr;
+
+    #[test]
+    fn test_string_from_timestamp_returns_error_when_to_far_in_future() {
+        let timestamp = Timestamp::from_timestamp_millis(100000001683508889);
+        assert!(matches!(String::try_from(timestamp), Err(TimestampOverflow)))
+    }
+
+    #[test]
+    fn test_string_from_timestamp() {
+        let timestamp = Timestamp::from_timestamp_millis(42);
+        let expected = "1970-01-01T00:00:00.042+00:00".to_string();
+        if let Ok(actual) = String::try_from(timestamp) {
+            assert_eq!(actual, expected)
+        } else {
+            assert!(false)
+        }
+    }
 
     #[test]
     fn test_duration_from_string_simple() {
