@@ -35,7 +35,7 @@ mod ffi;
 pub mod trie;
 mod types;
 
-use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
+use crate::{constants, v0, ExecResult, InterpreterEnergy, LabelEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
@@ -216,9 +216,9 @@ impl Interrupt {
 /// This keeps track of the current state and logs, gives access to the context,
 /// and makes sure that execution stays within resource bounds dictated by
 /// allocated energy.
-pub(crate) struct InitHost<'a, BackingStore, ParamType, Ctx> {
+pub(crate) struct InitHost<'a, BackingStore, ParamType, Ctx, A> {
     /// Remaining energy for execution.
-    pub energy:                   InterpreterEnergy,
+    pub energy:                   InterpreterEnergy<A>,
     /// Remaining amount of activation frames.
     /// In other words, how many more functions can we call in a nested way.
     pub activation_frames:        u32,
@@ -237,11 +237,11 @@ pub(crate) struct InitHost<'a, BackingStore, ParamType, Ctx> {
     limit_logs_and_return_values: bool,
 }
 
-impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
-    From<InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>>
-    for InitHost<'b, BackingStore, ParameterVec, Ctx2>
+impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>, A>
+    From<InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1, A>>
+    for InitHost<'b, BackingStore, ParameterVec, Ctx2, A>
 {
-    fn from(host: InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>) -> Self {
+    fn from(host: InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1, A>) -> Self {
         Self {
             energy: host.energy,
             activation_frames: host.activation_frames,
@@ -255,6 +255,68 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum EnergyLabel {
+    Operation,
+    LogEvent,
+    CopyFromHost,
+    CopyToHost,
+    StateOperation,
+    Output,
+    Invoke,
+    ReadParameter,
+    CryptographicPrimitive,
+    Upgrade,
+    MemoryAlloc,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct EnergyLabelTracker {
+    operation:              u64,
+    logevent:               u64,
+    copyfromhost:           u64,
+    copytohost:             u64,
+    stateoperation:         u64,
+    output:                 u64,
+    invoke:                 u64,
+    readparameter:          u64,
+    cryptographicprimitive: u64,
+    upgrade:                u64,
+    memory_alloc:           u64,
+}
+
+impl crate::LabelEnergy for EnergyLabelTracker {
+    fn label(&mut self, value: EnergyLabel, amount: u64) {
+        match value {
+            EnergyLabel::Operation => self.operation += amount,
+            EnergyLabel::LogEvent => self.logevent += amount,
+            EnergyLabel::CopyFromHost => self.copyfromhost += amount,
+            EnergyLabel::CopyToHost => self.copytohost += amount,
+            EnergyLabel::StateOperation => self.stateoperation += amount,
+            EnergyLabel::Output => self.output += amount,
+            EnergyLabel::Invoke => self.invoke += amount,
+            EnergyLabel::ReadParameter => self.readparameter += amount,
+            EnergyLabel::CryptographicPrimitive => self.cryptographicprimitive += amount,
+            EnergyLabel::Upgrade => self.upgrade += amount,
+            EnergyLabel::MemoryAlloc => self.memory_alloc += amount,
+        }
+    }
+
+    fn combine(&mut self, other: &Self) {
+        self.operation += other.operation;
+        self.logevent += other.logevent;
+        self.copyfromhost += other.copyfromhost;
+        self.copytohost += other.copytohost;
+        self.stateoperation += other.stateoperation;
+        self.output += other.output;
+        self.invoke += other.invoke;
+        self.readparameter += other.readparameter;
+        self.cryptographicprimitive += other.cryptographicprimitive;
+        self.upgrade += other.upgrade;
+        self.memory_alloc += other.memory_alloc;
+    }
+}
+
 #[derive(Debug)]
 /// A host implementation that provides access to host information needed for
 /// execution of contract receive methods. The "host" in this context
@@ -264,8 +326,8 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
 /// allocated energy.
 #[doc(hidden)] // Needed in benchmarks, but generally should not be used by
                // users of the library.
-pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
-    pub energy:    InterpreterEnergy,
+pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx, A> {
+    pub energy:    InterpreterEnergy<A>,
     pub stateless: StateLessReceiveHost<ParamType, Ctx>,
     pub state:     InstanceState<'a, BackingStore>,
 }
@@ -325,6 +387,8 @@ mod host {
     //! bounds accesses occur.
     use std::convert::TryFrom;
 
+    use crate::LabelEnergy;
+
     use super::*;
     use concordium_contracts_common::{
         Cursor, EntrypointName, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE,
@@ -342,8 +406,8 @@ mod host {
     /// the smart contracts code since the arguments will be written by a
     /// smart contract. Returns `Ok(Err(OutOfEnergy))` if there is
     /// insufficient energy.
-    fn parse_call_args(
-        energy: &mut InterpreterEnergy,
+    fn parse_call_args<A: LabelEnergy>(
+        energy: &mut InterpreterEnergy<A>,
         cursor: &mut Cursor<&[u8]>,
         max_parameter_size: usize,
     ) -> ParseResult<Result<Interrupt, OutOfEnergy>> {
@@ -352,7 +416,13 @@ mod host {
         if usize::from(parameter_len) > max_parameter_size {
             return Err(ParseError {});
         }
-        if energy.tick_energy(constants::copy_parameter_cost(parameter_len.into())).is_err() {
+        if energy
+            .tick_energy_label(
+                constants::copy_parameter_cost(parameter_len.into()),
+                EnergyLabel::CopyToHost,
+            )
+            .is_err()
+        {
             return Ok(Err(OutOfEnergy));
         }
         let start = cursor.offset;
@@ -373,13 +443,15 @@ mod host {
     }
 
     /// Write to the return value.
-    fn write_return_value_helper(
+    fn write_return_value_helper<A>(
         rv: &mut ReturnValue,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         offset: u32,
         bytes: &[u8],
         limit_return_value_size: bool,
-    ) -> ExecResult<u32> {
+    ) -> ExecResult<u32>
+    where
+        A: LabelEnergy, {
         let length = bytes.len();
         let offset = offset as usize;
         ensure!(offset <= rv.len(), "Cannot write past the offset.");
@@ -392,9 +464,10 @@ mod host {
             end
         };
         if rv.len() < end {
-            energy.tick_energy(constants::additional_output_size_cost(
-                end as u64 - rv.len() as u64,
-            ))?;
+            energy.tick_energy_label(
+                constants::additional_output_size_cost(end as u64 - rv.len() as u64),
+                EnergyLabel::Output,
+            )?;
             rv.resize(end, 0u8);
         }
         let written = (&mut rv[offset..end]).write(bytes)?;
@@ -402,18 +475,20 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn write_return_value(
+    pub(crate) fn write_return_value<A>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         rv: &mut ReturnValue,
         limit_return_value_size: bool,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<()>
+    where
+        A: LabelEnergy, {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
-        energy.tick_energy(constants::write_output_cost(length))?;
+        energy.tick_energy_label(constants::write_output_cost(length), EnergyLabel::Output)?;
         let end = start + length as usize; // this cannot overflow on 64-bit machines.
         ensure!(end <= memory.len(), "Illegal memory access.");
         let res = write_return_value_helper(
@@ -429,15 +504,15 @@ mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `invoke` host function.
-    pub(crate) fn invoke(
+    pub(crate) fn invoke<A: LabelEnergy>(
         support_queries: bool,
         support_account_signature_checks: bool,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         max_parameter_size: usize,
     ) -> machine::RunResult<Option<Interrupt>> {
-        energy.tick_energy(constants::INVOKE_BASE_COST)?;
+        energy.tick_energy_label(constants::INVOKE_BASE_COST, EnergyLabel::Invoke)?;
         let length_u32 = unsafe { stack.pop_u32() }; // length of the instruction payload in memory
         let length = length_u32 as usize;
         let start = unsafe { stack.pop_u32() } as usize; // start of the instruction payload in memory
@@ -531,7 +606,13 @@ mod host {
                 );
                 // Overflow is not possible in the next line on 64-bit machines.
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
-                if energy.tick_energy(constants::copy_to_host_cost(length_u32)).is_err() {
+                if energy
+                    .tick_energy_label(
+                        constants::copy_to_host_cost(length_u32),
+                        EnergyLabel::Invoke,
+                    )
+                    .is_err()
+                {
                     bail!(OutOfEnergy);
                 }
                 let mut addr_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
@@ -585,18 +666,23 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Get the parameter section. This differs from the v0 version in that it
     /// expects an argument on the stack to indicate which parameter to use.
-    pub(crate) fn get_parameter_section(
+    pub(crate) fn get_parameter_section<A>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         parameters: &[impl AsRef<[u8]>],
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<()>
+    where
+        A: LabelEnergy, {
         let offset = unsafe { stack.pop_u32() } as usize;
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         let param_num = unsafe { stack.pop_u32() } as usize;
         // charge energy linearly in the amount of data written.
-        energy.tick_energy(constants::copy_parameter_cost(length))?;
+        energy.tick_energy_label(
+            constants::copy_parameter_cost(length),
+            EnergyLabel::ReadParameter,
+        )?;
         if let Some(param) = parameters.get(param_num) {
             let write_end = start + length as usize; // this cannot overflow on 64-bit machines.
             ensure!(write_end <= memory.len(), "Illegal memory access.");
@@ -613,16 +699,19 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_lookup_entry` host function. See
     /// [InstanceState::lookup_entry] for detailed documentation.
-    pub(crate) fn state_lookup_entry<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_lookup_entry<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
         let key_end = key_start + key_len as usize;
-        energy.tick_energy(constants::lookup_entry_cost(key_len))?;
+        energy.tick_energy_label(
+            constants::lookup_entry_cost(key_len),
+            EnergyLabel::StateOperation,
+        )?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let result = state.lookup_entry(key);
@@ -633,16 +722,19 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_create_entry` host function. See
     /// [InstanceState::create_entry] for detailed documentation.
-    pub(crate) fn state_create_entry<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_create_entry<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
         let key_end = key_start + key_len as usize;
-        energy.tick_energy(constants::create_entry_cost(key_len))?;
+        energy.tick_energy_label(
+            constants::create_entry_cost(key_len),
+            EnergyLabel::StateOperation,
+        )?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let entry_index = state.create_entry(key)?;
@@ -653,16 +745,19 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_delete_entry` host function. See
     /// [InstanceState::delete_entry] for detailed documentation.
-    pub(crate) fn state_delete_entry<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_delete_entry<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
         let key_start = unsafe { stack.pop_u32() } as usize;
         let key_end = key_start + key_len as usize;
-        energy.tick_energy(constants::delete_entry_cost(key_len))?;
+        energy.tick_energy_label(
+            constants::delete_entry_cost(key_len),
+            EnergyLabel::StateOperation,
+        )?;
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
         let result = state.delete_entry(key)?;
@@ -673,10 +768,10 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_delete_prefix` host function. See
     /// [InstanceState::delete_prefix] for detailed documentation.
-    pub(crate) fn state_delete_prefix<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_delete_prefix<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let key_len = unsafe { stack.pop_u32() };
@@ -685,7 +780,10 @@ mod host {
         // this cannot overflow on 64-bit platforms, so it is safe to just add
         ensure!(key_end <= memory.len(), "Illegal memory access.");
         let key = &memory[key_start..key_end];
-        energy.tick_energy(constants::delete_prefix_find_cost(key_len))?;
+        energy.tick_energy_label(
+            constants::delete_prefix_find_cost(key_len),
+            EnergyLabel::StateOperation,
+        )?;
         let result = state.delete_prefix(energy, key)?;
         stack.push_value(result);
         Ok(())
@@ -694,17 +792,20 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_iterator` host function. See
     /// [InstanceState::iterator] for detailed documentation.
-    pub(crate) fn state_iterator<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let prefix_len = unsafe { stack.pop_u32() };
         let prefix_start = unsafe { stack.pop_u32() } as usize;
         let prefix_end = prefix_start + prefix_len as usize;
         ensure!(prefix_end <= memory.len(), "Illegal memory access.");
-        energy.tick_energy(constants::new_iterator_cost(prefix_len))?;
+        energy.tick_energy_label(
+            constants::new_iterator_cost(prefix_len),
+            EnergyLabel::StateOperation,
+        )?;
         let prefix = &memory[prefix_start..prefix_end];
         let iterator_index = state.iterator(prefix);
         stack.push_value(u64::from(iterator_index));
@@ -714,9 +815,9 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_iterator_next` host function. See
     /// [InstanceState::iterator_next] for detailed documentation.
-    pub(crate) fn state_iterator_next<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_next<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let iter_index = unsafe { stack.pop_u64() };
@@ -727,9 +828,9 @@ mod host {
 
     /// Handle the `state_iterator_delete` host function. See
     /// [InstanceState::iterator_delete] for detailed documentation.
-    pub(crate) fn state_iterator_delete<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_delete<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let iter = unsafe { stack.pop_u64() };
@@ -741,12 +842,12 @@ mod host {
     /// Handle the `state_iterator_key_size` host function. See
     /// [InstanceState::iterator_key_size] for detailed documentation.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn state_iterator_key_size<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_key_size<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
-        energy.tick_energy(constants::ITERATOR_KEY_SIZE_COST)?;
+        energy.tick_energy_label(constants::ITERATOR_KEY_SIZE_COST, EnergyLabel::StateOperation)?;
         // the cost of this function is adequately reflected by the base cost of a
         // function call so we do not charge extra.
         let iter = unsafe { stack.pop_u64() };
@@ -757,17 +858,20 @@ mod host {
 
     /// Handle the `state_iterator_key_read` host function. See
     /// [InstanceState::iterator_key_read] for detailed documentation.
-    pub(crate) fn state_iterator_key_read<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_iterator_key_read<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         let iter = unsafe { stack.pop_u64() };
-        energy.tick_energy(constants::copy_from_host_cost(length))?;
+        energy.tick_energy_label(
+            constants::copy_from_host_cost(length),
+            EnergyLabel::StateOperation,
+        )?;
         let dest_end = start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[start..dest_end];
@@ -778,17 +882,18 @@ mod host {
 
     /// Handle the `state_entry_read` host function. See
     /// [InstanceState::entry_read] for detailed documentation.
-    pub(crate) fn state_entry_read<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_read<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let dest_start = unsafe { stack.pop_u32() } as usize;
         let entry_index = unsafe { stack.pop_u64() };
-        energy.tick_energy(constants::read_entry_cost(length))?;
+        energy
+            .tick_energy_label(constants::read_entry_cost(length), EnergyLabel::StateOperation)?;
         let dest_end = dest_start + length as usize;
         ensure!(dest_end <= memory.len(), "Illegal memory access.");
         let dest = &mut memory[dest_start..dest_end];
@@ -799,17 +904,18 @@ mod host {
 
     /// Handle the `state_entry_write` host function. See
     /// [InstanceState::entry_write] for detailed documentation.
-    pub(crate) fn state_entry_write<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_write<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let offset = unsafe { stack.pop_u32() };
         let length = unsafe { stack.pop_u32() };
         let source_start = unsafe { stack.pop_u32() } as usize;
         let entry_index = unsafe { stack.pop_u64() };
-        energy.tick_energy(constants::write_entry_cost(length))?;
+        energy
+            .tick_energy_label(constants::write_entry_cost(length), EnergyLabel::StateOperation)?;
         let source_end = source_start + length as usize;
         ensure!(source_end <= memory.len(), "Illegal memory access.");
         let source = &memory[source_start..source_end];
@@ -822,13 +928,13 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_entry_size` host function. See
     /// [InstanceState::entry_size] for detailed documentation.
-    pub(crate) fn state_entry_size<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_size<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
         let entry_index = unsafe { stack.pop_u64() };
-        energy.tick_energy(constants::ENTRY_SIZE_COST)?;
+        energy.tick_energy_label(constants::ENTRY_SIZE_COST, EnergyLabel::StateOperation)?;
         let result = state.entry_size(InstanceStateEntry::from(entry_index));
         stack.push_value(result);
         Ok(())
@@ -837,12 +943,12 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `state_entry_resize` host function. See
     /// [InstanceState::entry_resize] for detailed documentation.
-    pub(crate) fn state_entry_resize<BackingStore: BackingStoreLoad>(
+    pub(crate) fn state_entry_resize<BackingStore: BackingStoreLoad, A: LabelEnergy>(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         state: &mut InstanceState<BackingStore>,
     ) -> machine::RunResult<()> {
-        energy.tick_energy(constants::RESIZE_ENTRY_BASE_COST)?;
+        energy.tick_energy_label(constants::RESIZE_ENTRY_BASE_COST, EnergyLabel::StateOperation)?;
         let new_size = unsafe { stack.pop_u32() };
         let entry_index = unsafe { stack.pop_u64() };
         let result = state.entry_resize(energy, InstanceStateEntry::from(entry_index), new_size)?;
@@ -879,10 +985,10 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn verify_ed25519_signature(
+    pub(crate) fn verify_ed25519_signature<A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
     ) -> machine::RunResult<()> {
         let message_len = unsafe { stack.pop_u32() };
         let message_start = unsafe { stack.pop_u32() };
@@ -895,7 +1001,10 @@ mod host {
         let signature_end = signature_start as usize + 64;
         ensure!(signature_end <= memory.len(), "Illegal memory access.");
         // expensive operations start now.
-        energy.tick_energy(constants::verify_ed25519_cost(message_len))?;
+        energy.tick_energy_label(
+            constants::verify_ed25519_cost(message_len),
+            EnergyLabel::CryptographicPrimitive,
+        )?;
         let signature =
             ed25519_zebra::Signature::try_from(&memory[signature_start as usize..signature_end]);
         let message = &memory[message_start as usize..message_end];
@@ -916,10 +1025,10 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn verify_ecdsa_secp256k1_signature(
+    pub(crate) fn verify_ecdsa_secp256k1_signature<A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
     ) -> machine::RunResult<()> {
         let message_start = unsafe { stack.pop_u32() };
         let signature_start = unsafe { stack.pop_u32() };
@@ -931,7 +1040,10 @@ mod host {
         let signature_end = signature_start as usize + 64;
         ensure!(signature_end <= memory.len(), "Illegal memory access.");
         // expensive operations start now.
-        energy.tick_energy(constants::VERIFY_ECDSA_SECP256K1_COST)?;
+        energy.tick_energy_label(
+            constants::VERIFY_ECDSA_SECP256K1_COST,
+            EnergyLabel::CryptographicPrimitive,
+        )?;
         let signature = secp256k1::ecdsa::Signature::from_compact(
             &memory[signature_start as usize..signature_end],
         );
@@ -953,10 +1065,10 @@ mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn hash_sha2_256(
+    pub(crate) fn hash_sha2_256<A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
     ) -> machine::RunResult<()> {
         let output_start = unsafe { stack.pop_u32() };
         let data_len = unsafe { stack.pop_u32() };
@@ -966,17 +1078,20 @@ mod host {
         let output_end = output_start as usize + 32;
         ensure!(output_end <= memory.len(), "Illegal memory access.");
         // expensive operations start here
-        energy.tick_energy(constants::hash_sha2_256_cost(data_len))?;
+        energy.tick_energy_label(
+            constants::hash_sha2_256_cost(data_len),
+            EnergyLabel::CryptographicPrimitive,
+        )?;
         let hash = sha2::Sha256::digest(&memory[data_start as usize..data_end]);
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn hash_sha3_256(
+    pub(crate) fn hash_sha3_256<A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
     ) -> machine::RunResult<()> {
         let output_start = unsafe { stack.pop_u32() };
         let data_len = unsafe { stack.pop_u32() };
@@ -986,17 +1101,20 @@ mod host {
         let output_end = output_start as usize + 32;
         ensure!(output_end <= memory.len(), "Illegal memory access.");
         // expensive operations start here
-        energy.tick_energy(constants::hash_sha3_256_cost(data_len))?;
+        energy.tick_energy_label(
+            constants::hash_sha3_256_cost(data_len),
+            EnergyLabel::CryptographicPrimitive,
+        )?;
         let hash = sha3::Sha3_256::digest(&memory[data_start as usize..data_end]);
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn hash_keccak_256(
+    pub(crate) fn hash_keccak_256<A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
     ) -> machine::RunResult<()> {
         let output_start = unsafe { stack.pop_u32() };
         let data_len = unsafe { stack.pop_u32() };
@@ -1006,7 +1124,10 @@ mod host {
         let output_end = output_start as usize + 32;
         ensure!(output_end <= memory.len(), "Illegal memory access.");
         // expensive operations start here
-        energy.tick_energy(constants::hash_keccak_256_cost(data_len))?;
+        energy.tick_energy_label(
+            constants::hash_keccak_256_cost(data_len),
+            EnergyLabel::CryptographicPrimitive,
+        )?;
         let hash = sha3::Keccak256::digest(&memory[data_start as usize..data_end]);
         memory[output_start as usize..output_end].copy_from_slice(&hash);
         Ok(())
@@ -1014,10 +1135,10 @@ mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `upgrade` host function.
-    pub(crate) fn upgrade(
+    pub(crate) fn upgrade<A: LabelEnergy>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
     ) -> machine::RunResult<Option<Interrupt>> {
         let module_ref_start = unsafe { stack.pop_u32() } as usize;
         let module_ref_end = module_ref_start + 32;
@@ -1028,7 +1149,7 @@ mod host {
         // We tick a base action cost here and
         // tick the remaining cost in the 'Scheduler' as it knows the size
         // of the new module.
-        energy.tick_energy(constants::INVOKE_BASE_COST)?;
+        energy.tick_energy_label(constants::INVOKE_BASE_COST, EnergyLabel::Upgrade)?;
         Ok(Some(Interrupt::Upgrade {
             module_ref,
         }))
@@ -1037,8 +1158,13 @@ mod host {
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
 // prevents us doing that without ugly hacks.
-impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext>
-    machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx>
+impl<
+        'a,
+        BackingStore: BackingStoreLoad,
+        ParamType: AsRef<[u8]>,
+        Ctx: v0::HasInitContext,
+        A: LabelEnergy,
+    > machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx, A>
 {
     type Interrupt = NoInterrupt;
 
@@ -1055,7 +1181,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
+            ImportFunc::ChargeEnergy => {
+                self.energy.tick_energy_label(unsafe { stack.pop_u64() }, EnergyLabel::Operation)?
+            }
             ImportFunc::TrackCall => v0::host::track_call(&mut self.activation_frames)?,
             ImportFunc::TrackReturn => v0::host::track_return(&mut self.activation_frames),
             ImportFunc::ChargeMemoryAlloc => {
@@ -1183,8 +1311,13 @@ impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
     fn entrypoint(&self) -> ExecResult<EntrypointName> { (*self).entrypoint() }
 }
 
-impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceiveContext>
-    machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx>
+impl<
+        'a,
+        BackingStore: BackingStoreLoad,
+        ParamType: AsRef<[u8]>,
+        Ctx: HasReceiveContext,
+        A: LabelEnergy,
+    > machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx, A>
 {
     type Interrupt = Interrupt;
 
@@ -1201,7 +1334,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
+            ImportFunc::ChargeEnergy => {
+                self.energy.tick_energy_label(unsafe { stack.pop_u64() }, EnergyLabel::Operation)?
+            }
             ImportFunc::TrackCall => v0::host::track_call(&mut self.stateless.activation_frames)?,
             ImportFunc::TrackReturn => {
                 v0::host::track_return(&mut self.stateless.activation_frames)
@@ -1354,7 +1489,7 @@ pub type ParameterVec = Vec<u8>;
 
 /// Collection of information relevant to invoke a init-function.
 #[derive(Debug)]
-pub struct InitInvocation<'a> {
+pub struct InitInvocation<'a, A> {
     /// The amount included in the transaction.
     pub amount:    Amount,
     /// The name of the init function to invoke.
@@ -1362,14 +1497,14 @@ pub struct InitInvocation<'a> {
     /// A parameter to provide the init function.
     pub parameter: ParameterRef<'a>,
     /// The limit on the energy to be used for execution.
-    pub energy:    InterpreterEnergy,
+    pub energy:    InterpreterEnergy<A>,
 }
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
+pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: LabelEnergy>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     init_ctx: impl v0::HasInitContext,
-    init_invocation: InitInvocation,
+    init_invocation: InitInvocation<A>,
     limit_logs_and_return_values: bool,
     mut loader: BackingStore,
 ) -> ExecResult<InitResult> {
@@ -1579,7 +1714,7 @@ impl InvokeResponse {
 
 #[derive(Copy, Clone, Debug)]
 /// Common data used by the `invoke_*_from_artifact` family of functions.
-pub struct InvokeFromArtifactCtx<'a> {
+pub struct InvokeFromArtifactCtx<'a, A> {
     /// The source of the artifact, serialized in the format specified by the
     /// `wasm_transform` crate.
     pub artifact:  &'a [u8],
@@ -1588,13 +1723,13 @@ pub struct InvokeFromArtifactCtx<'a> {
     /// Parameter to supply to the call.
     pub parameter: ParameterRef<'a>,
     /// Energy to allow for execution.
-    pub energy:    InterpreterEnergy,
+    pub energy:    InterpreterEnergy<A>,
 }
 
 /// Invokes an init-function from a given **serialized** artifact.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
-    ctx: InvokeFromArtifactCtx,
+pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad, A: LabelEnergy>(
+    ctx: InvokeFromArtifactCtx<A>,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
@@ -1617,7 +1752,7 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
 
 #[derive(Copy, Clone, Debug)]
 /// Common data used by the `invoke_*_from_source` family of functions.
-pub struct InvokeFromSourceCtx<'a> {
+pub struct InvokeFromSourceCtx<'a, A> {
     /// The source Wasm module.
     pub source:          &'a [u8],
     /// Amount to invoke with.
@@ -1625,7 +1760,7 @@ pub struct InvokeFromSourceCtx<'a> {
     /// Parameter to supply to the call.
     pub parameter:       ParameterRef<'a>,
     /// Energy to allow for execution.
-    pub energy:          InterpreterEnergy,
+    pub energy:          InterpreterEnergy<A>,
     /// Whether the module should be processed to allow upgrades or not.
     /// Upgrades are only allowed in protocol P5 and later. If this is set to
     /// `false` then parsing and validation will reject modules that use the
@@ -1635,8 +1770,8 @@ pub struct InvokeFromSourceCtx<'a> {
 
 /// Invokes an init-function from a **serialized** Wasm module.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
-    ctx: InvokeFromSourceCtx,
+pub fn invoke_init_from_source<BackingStore: BackingStoreLoad, A: LabelEnergy>(
+    ctx: InvokeFromSourceCtx<A>,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
@@ -1668,8 +1803,8 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
-    ctx: InvokeFromSourceCtx,
+pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: LabelEnergy>(
+    ctx: InvokeFromSourceCtx<A>,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
@@ -1705,11 +1840,12 @@ fn process_receive_result<
     Art: Into<Arc<Artifact<ProcessedImports, R>>>,
     Ctx1,
     Ctx2,
+    A,
 >(
     artifact: Art,
-    host: ReceiveHost<'_, BackingStore, Param, Ctx1>,
+    host: ReceiveHost<'_, BackingStore, Param, Ctx1, A>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
-) -> ExecResult<ReceiveResult<R, Ctx2>>
+) -> ExecResult<ReceiveResult<R, A, Ctx2>>
 where
     StateLessReceiveHost<ParameterVec, Ctx2>: From<StateLessReceiveHost<Param, Ctx1>>, {
     let mut stateless = host.stateless;
@@ -1718,7 +1854,7 @@ where
             result,
             ..
         }) => {
-            let remaining_energy = host.energy.energy;
+            let remaining_energy = host.energy;
             if let Some(Value::I32(n)) = result {
                 if n >= 0 {
                     Ok(ReceiveResult::Success {
@@ -1745,7 +1881,7 @@ where
             reason,
             config,
         }) => {
-            let remaining_energy = host.energy.energy;
+            let remaining_energy = host.energy;
             // Logs are returned per section that is executed.
             // So here we set the host logs to empty and return any
             // existing logs.
@@ -1779,7 +1915,7 @@ where
             } else {
                 Ok(ReceiveResult::Trap {
                     error,
-                    remaining_energy: host.energy.energy,
+                    remaining_energy: host.energy,
                 })
             }
         }
@@ -1837,7 +1973,7 @@ impl ReceiveParams {
 
 /// Collection of information relevant to invoke a receive-function.
 #[derive(Debug)]
-pub struct ReceiveInvocation<'a> {
+pub struct ReceiveInvocation<'a, A> {
     /// The amount included in the transaction.
     pub amount:       Amount,
     /// The name of the receive function to invoke.
@@ -1845,7 +1981,7 @@ pub struct ReceiveInvocation<'a> {
     /// A parameter to provide the receive function.
     pub parameter:    ParameterRef<'a>,
     /// The limit on the energy to be used for execution.
-    pub energy:       InterpreterEnergy,
+    pub energy:       InterpreterEnergy<A>,
 }
 
 /// Invokes a receive-function from a given [artifact](Artifact).
@@ -1856,13 +1992,14 @@ pub fn invoke_receive<
     Art: Borrow<Artifact<ProcessedImports, R1>> + Into<Arc<Artifact<ProcessedImports, R2>>>,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: LabelEnergy,
 >(
     artifact: Art,
     receive_ctx: Ctx1,
-    receive_invocation: ReceiveInvocation,
+    receive_invocation: ReceiveInvocation<A>,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<R2, Ctx2>> {
+) -> ExecResult<ReceiveResult<R2, A, Ctx2>> {
     let mut host = ReceiveHost {
         energy:    receive_invocation.energy,
         stateless: StateLessReceiveHost {
@@ -1900,14 +2037,14 @@ pub fn invoke_receive<
 ///   **state changes**. Amount changes are no reflected in this.
 /// - `backing_store` gives access to any on-disk storage for the instance
 ///   state.
-pub fn resume_receive<BackingStore: BackingStoreLoad>(
+pub fn resume_receive<BackingStore: BackingStoreLoad, A: LabelEnergy>(
     interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
-    response: InvokeResponse,  // response from the call
-    energy: InterpreterEnergy, // remaining energy for execution
+    response: InvokeResponse,     // response from the call
+    energy: InterpreterEnergy<A>, // remaining energy for execution
     state_trie: &mut trie::MutableState,
     state_updated: bool,
     mut backing_store: BackingStore,
-) -> ExecResult<ReceiveResult<CompiledFunction>> {
+) -> ExecResult<ReceiveResult<CompiledFunction, A>> {
     let inner = state_trie.get_inner(&mut backing_store);
     let state = InstanceState::migrate(
         state_updated,
@@ -1981,13 +2118,14 @@ pub fn invoke_receive_from_artifact<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: LabelEnergy,
 >(
-    ctx: InvokeFromArtifactCtx<'a>,
+    ctx: InvokeFromArtifactCtx<'a, A>,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
+) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, A, Ctx2>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
     invoke_receive(
         Arc::new(artifact),
@@ -2009,14 +2147,15 @@ pub fn invoke_receive_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: LabelEnergy,
 >(
     validation_config: ValidationConfig,
-    ctx: InvokeFromSourceCtx,
+    ctx: InvokeFromSourceCtx<A>,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
+) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate(
         validation_config,
         &ConcordiumAllowedImports {
@@ -2046,14 +2185,15 @@ pub fn invoke_receive_with_metering_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: LabelEnergy,
 >(
     validation_config: ValidationConfig,
-    ctx: InvokeFromSourceCtx,
+    ctx: InvokeFromSourceCtx<A>,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
+) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
         &ConcordiumAllowedImports {

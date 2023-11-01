@@ -442,6 +442,8 @@ impl HasChainMetadata for ChainMetadata {
 /// that they may be reused between init and receive functions, as well as in
 /// future versions of contract specifications.
 pub(crate) mod host {
+    use crate::{v1::EnergyLabel, LabelEnergy};
+
     use super::*;
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn get_parameter_size(
@@ -476,12 +478,12 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn get_policy_section(
+    pub(crate) fn get_policy_section<A>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         policies: ExecResult<&[u8]>,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<()> where A: LabelEnergy {
         let offset = unsafe { stack.pop_u32() } as usize;
         let length = unsafe { stack.pop_u32() };
         // charge energy linearly in the amount of data written.
@@ -498,20 +500,20 @@ pub(crate) mod host {
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-    pub(crate) fn log_event(
+    pub(crate) fn log_event<A>(
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         logs: &mut Logs,
         limit_num_logs: bool,
-    ) -> machine::RunResult<()> {
+    ) -> machine::RunResult<()> where A: LabelEnergy{
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         let end = start + length as usize;
         ensure!(end <= memory.len(), "Illegal memory access.");
         if length <= constants::MAX_LOG_SIZE {
             // only charge if we actually log something.
-            energy.tick_energy(constants::log_event_cost(length))?;
+            energy.tick_energy_label(constants::log_event_cost(length), EnergyLabel::LogEvent)?;
             stack.push_value(logs.log_event(memory[start..end].to_vec(), limit_num_logs))
         } else {
             // otherwise the cost is adequately reflected by just the cost of a function
@@ -777,10 +779,10 @@ pub(crate) mod host {
     pub(crate) fn track_return(activation_frames: &mut u32) { *activation_frames += 1; }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    pub(crate) fn charge_memory_alloc(
+    pub(crate) fn charge_memory_alloc<A>(
         stack: &mut machine::RuntimeStack,
-        energy: &mut InterpreterEnergy,
-    ) -> machine::RunResult<()> {
+        energy: &mut InterpreterEnergy<A>,
+    ) -> machine::RunResult<()> where A: LabelEnergy {
         energy.charge_memory_alloc(unsafe { stack.peek_u32() })
     }
 }

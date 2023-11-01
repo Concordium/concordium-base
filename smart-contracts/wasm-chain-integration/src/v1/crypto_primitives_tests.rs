@@ -50,9 +50,9 @@ where
 fn test_crypto_prims() -> anyhow::Result<()> {
     let nrg = 1_000_000_000;
 
-    let start_energy = InterpreterEnergy {
-        energy: nrg * 1000,
-    };
+    let start_energy = InterpreterEnergy::<()>::new(
+        nrg * 1000,
+    );
 
     let skeleton = parse::parse_skeleton(CONTRACT_BYTES).unwrap();
     let module = {
@@ -113,7 +113,7 @@ fn test_crypto_prims() -> anyhow::Result<()> {
         };
         let inner = mutable_state.get_inner(&mut backing_store);
         let state = InstanceState::new(backing_store, inner);
-        let mut host = ReceiveHost::<_, Vec<u8>, _> {
+        let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
             energy: start_energy,
             stateless: StateLessReceiveHost {
                 activation_frames: MAX_ACTIVATION_FRAMES,

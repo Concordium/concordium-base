@@ -1,8 +1,8 @@
 use super::{
     trie::{self, MutableState},
-    Interrupt, ParameterVec, StateLessReceiveHost,
+    EnergyLabel, Interrupt, ParameterVec, StateLessReceiveHost,
 };
-use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
+use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy, LabelEnergy};
 use anyhow::{bail, ensure, Context};
 use concordium_contracts_common::OwnedEntrypointName;
 use concordium_wasm::{
@@ -146,7 +146,7 @@ pub type ReceiveInterruptedState<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> 
 
 #[derive(Debug)]
 /// Result of execution of a receive function.
-pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
+pub enum ReceiveResult<R, A, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
     /// Execution terminated.
     Success {
         /// Logs produced since the last interrupt (or beginning of execution).
@@ -158,12 +158,12 @@ pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         /// although it might be empty.
         return_value:     ReturnValue,
         /// Remaining interpreter energy.
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy<A>,
     },
     /// Execution triggered an operation.
     Interrupt {
         /// Remaining interpreter energy.
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy<A>,
         /// Whether the state has changed as a result of execution. Note that
         /// the meaning of this is "since the start of the last resume".
         state_changed:    bool,
@@ -182,13 +182,13 @@ pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         /// Return value, that may describe the error in more detail.
         return_value:     ReturnValue,
         /// Remaining interpreter energy.
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy<A>,
     },
     /// Execution stopped due to a runtime error.
     Trap {
         error:            anyhow::Error, /* this error is here so that we can print it in
                                           * cargo-concordium */
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy<A>,
     },
     /// Execution consumed all available interpreter energy.
     OutOfEnergy,
@@ -210,7 +210,7 @@ pub(crate) struct ReceiveResultExtract<R> {
     pub return_value:    Option<ReturnValue>,
 }
 
-impl<R> ReceiveResult<R> {
+impl<R, A> ReceiveResult<R, A> {
     /// Extract the result into a byte array and potentially a return value.
     /// This is only meant to be used to pass the return value to foreign code.
     /// When using this from Rust the consumer should inspect the
@@ -859,12 +859,15 @@ impl InstanceStateIteratorResultOption {
 
 pub type StateResult<A> = anyhow::Result<A>;
 
-impl trie::TraversalCounter for InterpreterEnergy {
+impl <A: LabelEnergy>trie::TraversalCounter for InterpreterEnergy<A> {
     type Err = anyhow::Error;
 
     #[inline(always)]
     fn count_key_traverse_part(&mut self, num: u64) -> Result<(), Self::Err> {
-        self.tick_energy(crate::constants::TREE_TRAVERSAL_STEP_COST * num)
+        self.tick_energy_label(
+            crate::constants::TREE_TRAVERSAL_STEP_COST * num,
+            EnergyLabel::StateOperation,
+        )
     }
 }
 
@@ -875,12 +878,15 @@ impl trie::TraversalCounter for InterpreterEnergy {
 /// when an attempt to write is made. It could be that only a small amount of
 /// data is written at the given entry, so charging just based on that would be
 /// inadequate.
-impl trie::AllocCounter<trie::Value> for InterpreterEnergy {
+impl <A: LabelEnergy>trie::AllocCounter<trie::Value> for InterpreterEnergy<A> {
     type Err = anyhow::Error;
 
     #[inline(always)]
     fn allocate(&mut self, data: &trie::Value) -> Result<(), Self::Err> {
-        self.tick_energy(constants::additional_entry_size_cost(data.len() as u64))
+        self.tick_energy_label(
+            constants::additional_entry_size_cost(data.len() as u64),
+            EnergyLabel::StateOperation,
+        )
     }
 }
 
@@ -986,9 +992,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// - 1 the tree was not locked, but nothing was deleted since the key
     ///   points to an empty part of the tree.
     /// - 2 if something was deleted.
-    pub(crate) fn delete_prefix(
+    pub(crate) fn delete_prefix<A: LabelEnergy>(
         &mut self,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         key: &[u8],
     ) -> StateResult<u32> {
         self.changed = true;
@@ -1027,12 +1033,12 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// otherwise an id of an entry.
     /// This charges energy based on how much of the tree needed to be
     /// traversed, expressed in terms of bytes of the key that changed.
-    pub(crate) fn iterator_next(
+    pub(crate) fn iterator_next<A: LabelEnergy>(
         &mut self,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         iter: InstanceStateIterator,
     ) -> StateResult<InstanceStateEntryResultOption> {
-        energy.tick_energy(constants::ITERATOR_NEXT_COST)?;
+        energy.tick_energy_label(constants::ITERATOR_NEXT_COST, EnergyLabel::StateOperation)?;
         let (gen, idx) = iter.split();
         if gen != self.current_generation {
             return Ok(InstanceStateEntryResultOption::NEW_ERR);
@@ -1055,12 +1061,13 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// - 1 if the iterator was successfully deleted
     /// - 0 if the iterator was already deleted
     /// - u32::MAX if the iterator could not be found
-    pub(crate) fn iterator_delete(
+    pub(crate) fn iterator_delete<A: LabelEnergy>(
         &mut self,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         iter: InstanceStateIterator,
     ) -> anyhow::Result<u32> {
-        energy.tick_energy(constants::DELETE_ITERATOR_BASE_COST)?;
+        energy
+            .tick_energy_label(constants::DELETE_ITERATOR_BASE_COST, EnergyLabel::StateOperation)?;
         let (gen, idx) = iter.split();
         if gen != self.current_generation {
             return Ok(u32::MAX);
@@ -1068,9 +1075,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         match self.iterators.get_mut(idx) {
             Some(iter) => match iter {
                 Some(existing_iter) => {
-                    energy.tick_energy(constants::delete_iterator_cost(
-                        existing_iter.get_key().len() as u32,
-                    ))?;
+                    energy.tick_energy_label(
+                        constants::delete_iterator_cost(existing_iter.get_key().len() as u32),
+                        EnergyLabel::StateOperation,
+                    )?;
                     // Unlock the nodes associated with this iterator.
                     self.state_trie.delete_iter(existing_iter);
                     // Finally we remove the iterator in the instance by setting it to `None`.
@@ -1154,9 +1162,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 
     /// Write a section of the entry, and return how much was written, or
     /// u32::MAX, in case the entry has already been invalidated.
-    pub(crate) fn entry_write(
+    pub(crate) fn entry_write<A: LabelEnergy>(
         &mut self,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         entry: InstanceStateEntry,
         src: &[u8],
         offset: u32,
@@ -1178,9 +1186,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                         offset.checked_add(src.len()).context("Too much data.")?,
                     );
                     if v.len() < end {
-                        energy.tick_energy(constants::additional_entry_size_cost(
-                            (end - v.len()) as u64,
-                        ))?;
+                        energy.tick_energy_label(
+                            constants::additional_entry_size_cost((end - v.len()) as u64),
+                            EnergyLabel::StateOperation,
+                        )?;
                         v.resize(end, 0u8);
                     }
                     let num_bytes_to_write = end - offset;
@@ -1226,9 +1235,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// - 0 if this was unsuccessful because the new state is too big
     /// - u32::MAX if entry was already invalidated
     /// - 1 if successful
-    pub(crate) fn entry_resize(
+    pub(crate) fn entry_resize<A: LabelEnergy>(
         &mut self,
-        energy: &mut InterpreterEnergy,
+        energy: &mut InterpreterEnergy<A>,
         entry: InstanceStateEntry,
         new_size: u32,
     ) -> StateResult<u32> {
@@ -1255,9 +1264,10 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                     // `get_mut` above charged only for the energy in case the entry
                     // was borrowed. If we are increasing the size we also must charge
                     // if the entry is owned already, to prevent excessive state growth.
-                    energy.tick_energy(constants::additional_entry_size_cost(
-                        new_size - existing_len as u64,
-                    ))?;
+                    energy.tick_energy_label(
+                        constants::additional_entry_size_cost(new_size - existing_len as u64),
+                        EnergyLabel::StateOperation,
+                    )?;
                 }
                 v.resize(new_size as usize, 0u8);
                 v.shrink_to_fit();
@@ -1279,12 +1289,12 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 /// Note that this **is only safe** in connection with using
 /// [Vec::shrink_to_fit] inside [InstanceState::entry_resize]. We must not
 /// retain excess memory.
-struct ResizeAllocateCounter<'a> {
+struct ResizeAllocateCounter<'a, A> {
     new_size: u64,
-    energy:   &'a mut InterpreterEnergy,
+    energy:   &'a mut InterpreterEnergy<A>,
 }
 
-impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
+impl<'a, A: LabelEnergy> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a, A> {
     type Err = anyhow::Error;
 
     #[inline]
@@ -1294,9 +1304,15 @@ impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
     fn allocate(&mut self, data: &trie::Value) -> Result<(), Self::Err> {
         let existing_size = data.len() as u64;
         if self.new_size > existing_size {
-            self.energy.tick_energy(constants::additional_entry_size_cost(existing_size))
+            self.energy.tick_energy_label(
+                constants::additional_entry_size_cost(existing_size),
+                EnergyLabel::StateOperation,
+            )
         } else {
-            self.energy.tick_energy(constants::additional_entry_size_cost(self.new_size))
+            self.energy.tick_energy_label(
+                constants::additional_entry_size_cost(self.new_size),
+                EnergyLabel::StateOperation,
+            )
         }
     }
 }

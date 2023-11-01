@@ -57,9 +57,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let nrg = 1000;
 
-    let start_energy = InterpreterEnergy {
-        energy: nrg * 1000,
-    };
+    let start_energy = InterpreterEnergy::<()>::new(
+        nrg * 1000,
+    );
 
     // the throughput is meant to correspond to 1NRG. The reported throughput should
     // be around 1M elements per second.
@@ -133,7 +133,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     };
                     let inner = mutable_state.get_inner(&mut backing_store);
                     let state = InstanceState::new(backing_store, inner);
-                    let mut host = ReceiveHost::<_, Vec<u8>, _> {
+                    let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
                         energy: start_energy,
                         stateless: StateLessReceiveHost {
                             activation_frames: MAX_ACTIVATION_FRAMES,
@@ -279,7 +279,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     };
                     let inner = mutable_state.get_inner(&mut backing_store);
                     let state = InstanceState::new(backing_store, inner);
-                    let mut host = ReceiveHost::<_, Vec<u8>, _> {
+                    let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
                         energy: start_energy,
                         stateless: StateLessReceiveHost {
                             activation_frames: MAX_ACTIVATION_FRAMES,
@@ -381,7 +381,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     };
                     let inner = mutable_state.get_inner(&mut backing_store);
                     let state = InstanceState::new(backing_store, inner);
-                    let mut host = ReceiveHost::<_, Vec<u8>, _> {
+                    let mut host = ReceiveHost::<_, Vec<u8>, _, _> {
                         energy: start_energy,
                         stateless: StateLessReceiveHost {
                             activation_frames: MAX_ACTIVATION_FRAMES,

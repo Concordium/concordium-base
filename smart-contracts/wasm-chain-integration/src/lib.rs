@@ -92,60 +92,71 @@ macro_rules! type_matches {
     };
 }
 pub(crate) use type_matches;
+use v1::EnergyLabel;
 
 /// Result of contract execution. This is just a wrapper around
 /// [anyhow::Result].
 pub type ExecResult<A> = anyhow::Result<A>;
 
-#[repr(transparent)]
 #[derive(Debug, Clone, Copy, From, Into, Display)]
 #[display(fmt = "{}", energy)]
-/// Interpreter energy used to count execution steps in the interpreter.
-/// This energy is converted to NRG by the scheduler.
-pub struct InterpreterEnergy {
+pub struct InterpreterEnergy<A = ()> {
     /// Energy left to use
     pub energy: u64,
+    pub labels: A,
 }
 
-impl InterpreterEnergy {
+impl From<u64> for InterpreterEnergy {
+    fn from(value: u64) -> Self {
+        Self {
+            energy: value,
+            labels: (),
+        }
+    }
+}
+
+pub trait LabelEnergy: std::fmt::Debug {
+    fn label(&mut self, value: EnergyLabel, amount: u64);
+
+    fn combine(&mut self, other: &Self);
+}
+
+impl LabelEnergy for () {
+    #[inline(always)]
+    fn label(&mut self, _value: EnergyLabel, _amount: u64) {}
+
+    #[inline(always)]
+    fn combine(&mut self, _other: &Self) {}
+}
+
+impl<A> InterpreterEnergy<A> {
+    pub fn new(energy: u64) -> Self
+    where
+        A: Default, {
+        Self {
+            energy,
+            labels: A::default(),
+        }
+    }
+
     /// Subtract the given amount from the energy, bottoming out at 0.
     pub fn subtract(self, consumed: u64) -> Self {
         Self {
             energy: self.energy.saturating_sub(consumed),
+            labels: self.labels,
         }
     }
 
     /// Saturating interpreter energy subtraction.
     ///
     /// Computes `self - rhs` bottoming out at `0` instead of underflowing.
-    pub fn saturating_sub(self, consumed: Self) -> Self {
+    pub fn saturating_sub(self, consumed: &Self) -> Self {
         Self {
             energy: self.energy.saturating_sub(consumed.energy),
+            labels: self.labels,
         }
     }
-}
 
-impl std::str::FromStr for InterpreterEnergy {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let energy = s.parse::<u64>().context("Could not parse interpreter energy.")?;
-        Ok(Self {
-            energy,
-        })
-    }
-}
-
-#[derive(Debug)]
-/// An error raised by the interpreter when no more interpreter energy remains
-/// for execution.
-pub struct OutOfEnergy;
-
-impl std::fmt::Display for OutOfEnergy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
-}
-
-impl InterpreterEnergy {
     pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
         if self.energy >= amount {
             self.energy -= amount;
@@ -156,15 +167,16 @@ impl InterpreterEnergy {
         }
     }
 
-    /// TODO: This needs more specification. At the moment it is not used, but
-    /// should be.
-    pub fn charge_stack(&mut self, amount: u64) -> ExecResult<()> {
+    pub fn tick_energy_label(&mut self, amount: u64, label: EnergyLabel) -> ExecResult<()>
+    where
+        A: LabelEnergy, {
         if self.energy >= amount {
             self.energy -= amount;
+            self.labels.label(label, amount);
             Ok(())
         } else {
             self.energy = 0;
-            bail!("Out of energy.")
+            bail!(OutOfEnergy)
         }
     }
 
@@ -178,8 +190,31 @@ impl InterpreterEnergy {
     /// actually happens, i.e., even if growing the memory would go over the
     /// maximum. This is OK since trying to allocate too much memory is likely
     /// going to lead to program failure anyhow.
-    pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()> {
+    pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()>
+    where
+        A: LabelEnergy, {
         let to_charge = u64::from(num_pages) * u64::from(constants::MEMORY_COST_FACTOR); // this cannot overflow because of the cast.
-        self.tick_energy(to_charge)
+        self.tick_energy_label(to_charge, EnergyLabel::MemoryAlloc)
     }
+}
+
+impl std::str::FromStr for InterpreterEnergy {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let energy = s.parse::<u64>().context("Could not parse interpreter energy.")?;
+        Ok(Self {
+            energy,
+            labels: (),
+        })
+    }
+}
+
+#[derive(Debug)]
+/// An error raised by the interpreter when no more interpreter energy remains
+/// for execution.
+pub struct OutOfEnergy;
+
+impl std::fmt::Display for OutOfEnergy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
 }

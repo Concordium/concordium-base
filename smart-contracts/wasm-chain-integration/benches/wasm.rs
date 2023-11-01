@@ -430,9 +430,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_function(name, move |b: &mut criterion::Bencher| {
                 b.iter(|| {
                     let mut host = MeteringHost {
-                        energy:            InterpreterEnergy {
-                            energy: nrg * 1000, // should correspond to about 1ms of execution.
-                        },
+                        energy:            InterpreterEnergy::new(
+                            nrg * 1000, // should correspond to about 1ms of execution.
+                        ),
                         activation_frames: MAX_ACTIVATION_FRAMES,
                     };
                     let r = artifact
@@ -599,9 +599,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<_>> {
             InitHost::init(
-                InterpreterEnergy {
-                    energy: nrg * 1000,
-                },
+                InterpreterEnergy::new(
+                    nrg * 1000,
+                ),
                 Parameter::empty(),
                 &init_ctx,
                 false,
@@ -610,9 +610,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let setup_receive_host = |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<_>> {
             ReceiveHost::init(
-                InterpreterEnergy {
-                    energy: nrg * 1000,
-                },
+                InterpreterEnergy::new(
+                    nrg * 1000,
+                ),
                 state,
                 param,
                 &receive_ctx,
