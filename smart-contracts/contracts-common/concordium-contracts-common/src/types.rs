@@ -785,7 +785,7 @@ impl str::FromStr for Timestamp {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let try_parse_u64 =
-            s.parse::<u64>().map(|milliseconds| Timestamp::from_timestamp_millis(milliseconds));
+            s.parse::<u64>().map(Timestamp::from_timestamp_millis);
 
         if let Ok(parsed_u64) = try_parse_u64 {
             return Ok(parsed_u64);
