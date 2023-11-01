@@ -784,8 +784,8 @@ impl str::FromStr for Timestamp {
     type Err = ParseTimestampError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let try_parse_u64 = s.parse::<u64>()
-            .map(|milliseconds| Timestamp::from_timestamp_millis(milliseconds));
+        let try_parse_u64 =
+            s.parse::<u64>().map(|milliseconds| Timestamp::from_timestamp_millis(milliseconds));
 
         if let Ok(parsed_u64) = try_parse_u64 {
             return Ok(parsed_u64);
@@ -802,10 +802,10 @@ impl str::FromStr for Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
-/// The display implementation tries to display the timestamp according to RFC3339
-/// format in the UTC time zone.
-/// If parsing to a [`chrono::DateTime<Utc>`] fails [`Timestamp`] milliseconds, [`u64`],
-/// is returned directly as a string.
+/// The display implementation tries to display the timestamp according to
+/// RFC3339 format in the UTC time zone.
+/// If parsing to a [`chrono::DateTime<Utc>`] fails [`Timestamp`] milliseconds,
+/// [`u64`], is returned directly as a string.
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use chrono::offset::TimeZone;
