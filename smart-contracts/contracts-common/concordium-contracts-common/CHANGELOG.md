@@ -2,7 +2,8 @@
 
 ## Unreleased changes
 
-- Fix `Display` implementation on `Timestamp` such that errors isn't returned but instead it defaults to an `u64` string. Also updated `FromStr` on `Timestamp` such that it can be mapped from an `u64`.
+- Fix `Display` implementation on `Timestamp` such that errors isn't returned but instead it falls back to an `u64` string.
+- Change `FromStr` for `Timestamp` such that it can also be mapped from a string with an unsigned integer (`u64`).
 
 ## concordium-contracts-common 8.1.0 (2023-10-18)
 
