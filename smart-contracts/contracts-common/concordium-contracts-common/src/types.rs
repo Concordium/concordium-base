@@ -778,8 +778,8 @@ impl fmt::Display for ParseTimestampError {
 impl std::error::Error for ParseTimestampError {}
 
 #[cfg(feature = "derive-serde")]
-/// The FromStr parses a string representing either an [`u64`] of milliseconds or
-/// the time according to RFC3339.
+/// The FromStr parses a string representing either an [`u64`] of milliseconds
+/// or the time according to RFC3339.
 impl str::FromStr for Timestamp {
     type Err = ParseTimestampError;
 
