@@ -743,19 +743,6 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
 }
 
 #[cfg(feature = "derive-serde")]
-impl TryFrom<Timestamp> for String {
-    type Error = TimestampOverflow;
-
-    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
-        if let Ok(utc) = <chrono::DateTime<chrono::Utc>>::try_from(value) {
-            Ok(utc.to_rfc3339())
-        } else {
-            Err(TimestampOverflow)
-        }
-    }
-}
-
-#[cfg(feature = "derive-serde")]
 /// Note that this is a lossy conversion from a datetime to a [`Timestamp`].
 /// Any precision above milliseconds is lost.
 impl TryFrom<chrono::DateTime<chrono::Utc>> for Timestamp {
@@ -791,11 +778,19 @@ impl fmt::Display for ParseTimestampError {
 impl std::error::Error for ParseTimestampError {}
 
 #[cfg(feature = "derive-serde")]
-/// The FromStr parses the time according to RFC3339.
+/// The FromStr parses a string representing either an [`u64`] or
+/// the time according to RFC3339.
 impl str::FromStr for Timestamp {
     type Err = ParseTimestampError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let try_parse_u64 = s.parse::<u64>()
+            .map(|milliseconds| Timestamp::from_timestamp_millis(milliseconds));
+
+        if let Ok(parsed_u64) = try_parse_u64 {
+            return Ok(parsed_u64);
+        }
+
         let datetime =
             chrono::DateTime::parse_from_rfc3339(s).map_err(ParseTimestampError::ParseError)?;
         let millis = datetime
@@ -807,11 +802,18 @@ impl str::FromStr for Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
-/// The display implementation displays the timestamp according to RFC3339
+/// The display implementation tries to display the timestamp according to RFC3339
 /// format in the UTC time zone.
+/// If parsing to a [`chrono::DateTime<Utc>`] fails [`Timestamp`] milliseconds, [`u64`],
+/// is returned directly as a string.
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let date: String = String::try_from(*self).map_err(|_| fmt::Error)?;
+        use chrono::offset::TimeZone;
+        let time = self.timestamp_millis() as i64;
+        let date = match chrono::Utc.timestamp_millis_opt(time).single() {
+            Some(date_parsed) => date_parsed.to_rfc3339(),
+            None => self.timestamp_millis().to_string(),
+        };
         write!(f, "{}", date)
     }
 }
@@ -2846,21 +2848,38 @@ mod test {
 
     #[test]
     #[cfg(feature = "derive-serde")]
-    fn test_string_from_timestamp_returns_error_when_to_far_in_future() {
-        let timestamp = Timestamp::from_timestamp_millis(100000001683508889);
-        assert!(matches!(String::try_from(timestamp), Err(TimestampOverflow)))
+    fn test_given_millis_far_in_future_when_string_to_timestamp_then_map() {
+        let millis = 100000001683508889u64;
+        if let Ok(timestamp) = Timestamp::from_str(&millis.to_string()) {
+            assert_eq!(timestamp.milliseconds, millis);
+        } else {
+            assert!(false)
+        };
     }
 
     #[test]
     #[cfg(feature = "derive-serde")]
-    fn test_string_from_timestamp() {
-        let timestamp = Timestamp::from_timestamp_millis(42);
-        let expected = "1970-01-01T00:00:00.042+00:00".to_string();
-        if let Ok(actual) = String::try_from(timestamp) {
-            assert_eq!(actual, expected)
+    fn test_given_rfc3339_format_when_string_to_timestamp_then_map() {
+        let datetime = "1970-01-01T00:00:00.042+00:00";
+        if let Ok(timestamp) = Timestamp::from_str(&datetime) {
+            assert_eq!(timestamp.milliseconds, 42);
         } else {
             assert!(false)
-        }
+        };
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_given_millis_far_in_future_when_timestamp_to_string_then_map_to_integer() {
+        let timestamp = Timestamp::from_timestamp_millis(100000001683508889u64);
+        assert_eq!(timestamp.to_string(), "100000001683508889");
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_given_millis_not_far_in_future_when_timestamp_to_string_then_map_to_rfc3339_format() {
+        let timestamp = Timestamp::from_timestamp_millis(42u64);
+        assert_eq!(timestamp.to_string(), "1970-01-01T00:00:00.042+00:00");
     }
 
     #[test]
