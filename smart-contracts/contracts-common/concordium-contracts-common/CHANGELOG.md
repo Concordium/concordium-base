@@ -2,7 +2,7 @@
 
 ## Unreleased changes
 
-- Add `TryFrom<Timestamp> for String` such that possible errors can be matched.
+- Fix `Display` implementation on `Timestamp` such that errors isn't returned but instead it default to a `u64` string. Also updated `FromStr` on `Timestamp` such that it can be mapped from a `u64`.
 
 ## concordium-contracts-common 8.1.0 (2023-10-18)
 
