@@ -802,10 +802,10 @@ impl str::FromStr for Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
-/// The display implementation tries to display the timestamp according to
-/// RFC3339 format in the UTC time zone.
-/// If parsing to a [`chrono::DateTime<Utc>`] fails [`Timestamp`] milliseconds,
-/// [`u64`], is returned directly as a string.
+/// This display implementation attempts to format the timestamp as per
+/// the RFC3339 standard, using the UTC time zone.
+/// If parsing the timestamp into a [`chrono::DateTime<Utc>`] fails, it
+/// simply returns the timestamp in milliseconds as a string.
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use chrono::offset::TimeZone;
