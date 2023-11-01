@@ -3,7 +3,7 @@
 ## Unreleased changes
 
 - Fix `Display` implementation on `Timestamp` such that it does not return an error if the timestamp is not representable in RFC3339 format, but instead it falls back to formatting as the number of milliseconds since the unix epoch.
-- Change `FromStr` for `Timestamp` such that it can also be mapped from a string with an unsigned integer (`u64`).
+- Change `FromStr` for `Timestamp` such that it also supports parsing from a number of milliseconds since the unix epoch.
 
 ## concordium-contracts-common 8.1.0 (2023-10-18)
 
