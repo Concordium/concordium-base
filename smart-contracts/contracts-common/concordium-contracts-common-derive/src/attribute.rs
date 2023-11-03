@@ -454,7 +454,7 @@ pub fn init_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStr
     // Accumulate a list of required arguments, if the function contains a
     // different number of arguments, than elements in this vector, then the
     // strings are displayed as the expected arguments.
-    let mut required_args = vec!["ctx: &impl HasInitContext"];
+    let mut required_args = vec!["ctx: &InitContext"];
 
     let (setup_fn_optional_args, fn_optional_args) = contract_function_optional_args_tokens(
         &init_attributes.optional,
@@ -463,7 +463,7 @@ pub fn init_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStr
     );
 
     let mut out = if init_attributes.optional.low_level {
-        required_args.push("state: &mut impl HasStateApi");
+        required_args.push("state: &mut StateApi");
         quote! {
             #[export_name = #wasm_export_fn_name]
             pub extern "C" fn #rust_export_fn_name(#amount_ident: concordium_std::Amount) -> i32 {
@@ -593,9 +593,9 @@ pub fn receive_worker(attr: TokenStream, item: TokenStream) -> syn::Result<Token
     // strings are displayed as the expected arguments.
     let mut required_args = vec!["ctx: &impl HasReceiveContext"];
     if receive_attributes.mutable {
-        required_args.push("host: &mut impl HasHost");
+        required_args.push("host: &mut Host");
     } else {
-        required_args.push("host: &impl HasHost");
+        required_args.push("host: &Host");
     }
 
     let (setup_fn_optional_args, fn_optional_args) = contract_function_optional_args_tokens(
@@ -742,14 +742,14 @@ fn contract_function_optional_args_tokens(
     };
 
     if optional.enable_logger {
-        required_args.push("logger: &mut impl HasLogger");
+        required_args.push("logger: &mut Logger");
         let logger_ident = format_ident!("logger");
         setup_fn_args.extend(quote!(let mut #logger_ident = concordium_std::Logger::init();));
         fn_args.push(quote!(&mut #logger_ident));
     }
 
     if optional.crypto_primitives {
-        required_args.push("crypto_primitives: &impl HasCryptoPrimitives");
+        required_args.push("crypto_primitives: &CryptoPrimitives");
         let crypto_primitives_ident = format_ident!("crypto_primitives");
         setup_fn_args
             .extend(quote!(let #crypto_primitives_ident = concordium_std::ExternCryptoPrimitives;));

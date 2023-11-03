@@ -229,10 +229,11 @@ fn serialize_derive_worker(input: TokenStream) -> syn::Result<TokenStream> {
 /// This trait should be derived for `struct`s or `enum`s that have fields with
 /// [`StateBox`](../concordium_std/struct.StateBox.html),
 /// [`StateSet`](../concordium_std/struct.StateSet.html), or
-/// [`StateMap`](../concordium_std/struct.StateMap.html). Please note that it is
-/// necessary to specify the generic parameter name for the
-/// [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic parameter.
-/// To do so, use the `#[concordium(state_parameter =
+/// [`StateMap`](../concordium_std/struct.StateMap.html).
+///
+/// Please note that it is necessary to specify the generic parameter name for
+/// the [`HasStateApi`](../concordium_std/trait.HasStateApi.html) generic
+/// parameter. To do so, use the `#[concordium(state_parameter =
 /// "NameOfGenericParameter")]` attribute on the type you are deriving
 /// `DeserialWithState` for.
 ///
@@ -240,7 +241,7 @@ fn serialize_derive_worker(input: TokenStream) -> syn::Result<TokenStream> {
 /// ``` ignore
 /// #[derive(DeserialWithState)]
 /// #[concordium(state_parameter = "S")]
-/// struct Foo<S, T> {
+/// struct Foo<S = StateApi, T> {
 ///     a: StateMap<u8, u8, S>,
 ///     #[concordium(size_length = 1)]
 ///     b: String,
@@ -425,7 +426,7 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
 /// ```
 /// ```ignore
 /// #[receive(contract = "my_contract", name = "some_receive")]
-/// fn receive<A: HasActions>(ctx: &impl HasReceiveContext, state: &mut MyState)
+/// fn receive(ctx: &ReceiveContext, host: &Host<MyState>)
 /// -> Result<A, MyError> {...}
 /// ```
 #[proc_macro_derive(Reject, attributes(from))]
@@ -457,7 +458,7 @@ pub fn reject_derive(input: TokenStream) -> TokenStream {
 /// ``` ignore
 /// #[derive(Serial, DeserialWithState, Deletable)]
 /// #[concordium(state_parameter = "S")]
-/// struct MyState<S> {
+/// struct MyState<S = StateApi> {
 ///    my_state_map: StateMap<SomeType, SomeOtherType, S>,
 /// }
 /// ```
@@ -481,10 +482,10 @@ pub fn deletable_derive(input: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[init(contract = "my_contract")]
-/// fn some_init<S: HasStateApi>(ctx: &impl HasInitContext, state_builder: &mut StateBuilder<S>,) -> InitResult<MyState> {...}
+/// fn some_init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitResult<MyState> {...}
 /// ```
 ///
-/// Where `HasInitContext`, `InitResult`, and `StateBuilder` are exposed from
+/// Where `InitContext`, `InitResult`, and `StateBuilder` are exposed from
 /// `concordium-std` and `MyState` is a user-defined type.
 ///
 /// # Optional attributes
@@ -502,27 +503,27 @@ pub fn deletable_derive(input: TokenStream) -> TokenStream {
 /// ### Example
 /// ```ignore
 /// #[init(contract = "my_contract", payable)]
-/// fn some_init<S: HasStateApi>(ctx: &impl HasInitContext, state_builder: StateBuilder<S>, amount: Amount) -> InitResult<MyState> {...}
+/// fn some_init(ctx: &InitContext, state_builder: StateBuilder, amount: Amount) -> InitResult<MyState> {...}
 /// ```
 ///
 /// ## `enable_logger`: Function can access event logging
 /// Setting the `enable_logger` attribute changes the required signature to
-/// include an extra argument `&mut impl HasLogger`, allowing the function to
+/// include an extra argument `&mut Logger`, allowing the function to
 /// log events.
 ///
 ///
 /// ### Example
 /// ```ignore
 /// #[init(contract = "my_contract", enable_logger)]
-/// fn some_init<S: HasStateApi>(ctx: &impl HasInitContext, state_builder: StateBuilder<S>, logger: &mut impl HasLogger) -> InitResult<MyState> {...}
+/// fn some_init(ctx: &InitContext, state_builder: StateBuilder, logger: &mut Logger) -> InitResult<MyState> {...}
 /// ```
 ///
 /// ## `low_level`: Manually deal with the low-level state.
 /// Setting the `low_level` attribute disables the generated code for
 /// serializing the contract state.
 ///
-/// If `low_level` is set, the `&mut StateBuilder<S>` in the signature is
-/// replaced by `&impl mut HasStateApi` found in `concordium-std`, which gives
+/// If `low_level` is set, the `&mut StateBuilder` in the signature is
+/// replaced by `&mut StateApi` found in `concordium-std`, which gives
 /// access to manipulating the low-level contract state directly. This means
 /// there is no need to return the contract state and the return type becomes
 /// `InitResult<()>`.
@@ -530,7 +531,7 @@ pub fn deletable_derive(input: TokenStream) -> TokenStream {
 /// ### Example
 /// ```ignore
 /// #[init(contract = "my_contract", low_level)]
-/// fn some_init(ctx: &impl HasInitContext, state: &mut impl HasStateApi) -> InitResult<()> {...}
+/// fn some_init(ctx: &InitContext, state: &mut StateApi) -> InitResult<()> {...}
 /// ```
 ///
 /// ## `parameter="<Param>"`: Generate schema for parameter
@@ -561,21 +562,21 @@ pub fn deletable_derive(input: TokenStream) -> TokenStream {
 /// enum MyError { ... }
 ///
 /// #[init(contract = "my_contract", parameter = "MyError")]
-/// fn some_init(ctx: &impl HasInitContext, state: &mut impl HasStateApi) -> Result<(), MyError> {...}
+/// fn some_init(ctx: &impl InitContext, state: &mut StateApi) -> Result<(), MyError> {...}
 /// ```
 ///
 /// ## `crypto_primitives`: Function can access cryptographic primitives
 /// Setting the `crypto_primitives` attribute changes the required signature to
-/// include an extra argument `&impl HasCryptoPrimitives`, which provides
+/// include an extra argument `&CryptoPrimitives`, which provides
 /// cryptographic primitives such as verifying signatures and hashing data.
 ///
 /// ### Example
 /// ```ignore
 /// #[init(contract = "my_contract", crypto_primitives)]
-/// fn some_init<S: HasStateApi>(
-///     ctx: &impl HasInitContext,
-///     state_build: StateBuilder<S>,
-///     crypto_primitives: &impl HasCryptoPrimitives,
+/// fn some_init(
+///     ctx: &InitContext,
+///     state_build: StateBuilder,
+///     crypto_primitives: &CryptoPrimitives,
 /// ) -> InitResult<MyState> {...}
 /// ```
 #[proc_macro_attribute]
@@ -601,13 +602,13 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[receive(contract = "my_contract", name = "some_receive")]
-/// fn contract_receive<S: HasStateApi>(
-///     ctx: &impl HasReceiveContext,
-///     host: &HasHost<MyState, StateApiType = S>
+/// fn contract_receive(
+///     ctx: &ReceiveContext,
+///     host: &Host<MyState>
 /// ) -> ReceiveResult<MyReturnValue> {...}
 /// ```
 ///
-/// Where the `HasStateApi`, `HasReceiveContext`, `HasHost`, and `ReceiveResult`
+/// Where the `ReceiveContext`, `Host`, and `ReceiveResult`
 /// are from `concordium-std` and `MyState` and `MyReturnValue` are user-defined
 /// types.
 ///
@@ -626,9 +627,9 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ### Example
 /// ```ignore
 /// #[receive(contract = "my_contract", name = "some_receive", payable)]
-/// fn contract_receive<S: HasStateApi>(
-///     ctx: &impl HasReceiveContext,
-///     host: &HasHost<MyState, StateApiType = S>,
+/// fn contract_receive(
+///     ctx: &ReceiveContext,
+///     host: &Host<MyState>,
 ///     amount: Amount
 /// ) -> ReceiveResult<MyReturnValue> {...}
 /// ```
@@ -645,24 +646,24 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ### Example
 /// ```ignore
 /// #[receive(contract = "my_contract", name = "some_receive", mutable)]
-/// fn contract_receive<S: HasStateApi>(
-///     ctx: &impl HasReceiveContext,
-///     host: &mut HasHost<MyState, StateApiType = S>
+/// fn contract_receive(
+///     ctx: &ReceiveContext,
+///     host: &mut Host<MyState>,
 /// ) -> ReceiveResult<MyReturnValue> {...}
 /// ```
 ///
 /// ## `enable_logger`: Function can access event logging
 /// Setting the `enable_logger` attribute changes the required signature to
-/// include an extra argument `&mut impl HasLogger`, allowing the function to
+/// include an extra argument `&mut Logger`, allowing the function to
 /// log events.
 ///
 /// ### Example
 /// ```ignore
 /// #[receive(contract = "my_contract", name = "some_receive", enable_logger)]
-/// fn contract_receive<S: HasStateApi>(
-///     ctx: &impl HasReceiveContext,
-///     host: &HasHost<MyState, StateApiType = S>,
-///     logger: &mut impl HasLogger
+/// fn contract_receive(
+///     ctx: &ReceiveContext,
+///     host: &Host<MyState>,
+///     logger: &mut Logger,
 /// ) -> ReceiveResult<MyReturnValue> {...}
 /// ```
 ///
@@ -671,16 +672,17 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// serializing the contract state. However, the return value is still
 /// serialized automatically.
 ///
-/// If `low_level` is set, the `&mut StateBuilder<S>` in the signature is
-/// replaced by `&impl mut HasStateApi` found in `concordium-std`, which gives
-/// access to manipulating the low-level contract state directly.
+/// If `low_level` is set, the `&Host<State>` in the signature is
+/// replaced by `&mut LowLevelHost` found in `concordium-std`, which gives
+/// access to manipulating the low-level contract state directly via the methods
+/// `state()` and `state_mut()`.
 ///
 /// ### Example
 /// ```ignore
 /// #[receive(contract = "my_contract", name = "some_receive", low_level)]
 /// fn contract_receive(
-///     ctx: &impl HasReceiveContext,
-///     state: &mut impl HasStateApi
+///     ctx: &ReceiveContext,
+///     state: &mut LowLevelHost,
 /// ) -> ReceiveResult<MyReturnValue> {...}
 /// ```
 ///
@@ -697,9 +699,9 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// struct MyParam { ... }
 ///
 /// #[receive(contract = "my_contract", name = "some_receive", parameter = "MyParam")]
-/// fn contract_receive<S: HasStateApi>(
-///     ctx: &impl HasReceiveContext,
-///     host: &HasHost<MyState, StateApiType = S>,
+/// fn contract_receive(
+///     ctx: &ReceiveContext,
+///     host: &Host<MyState>,
 /// ) -> ReceiveResult<A> {...}
 /// ```
 ///
@@ -717,9 +719,9 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// struct MyReturnValue { ... }
 ///
 /// #[receive(contract = "my_contract", name = "some_receive", return_value = "MyReturnValue")]
-/// fn contract_receive<S: HasStateApi>(
-///    ctx: &impl HasReceiveContext,
-///    host: &HasHost<MyState, StateApiType = S>,
+/// fn contract_receive(
+///    ctx: &ReceiveContext,
+///    host: &Host<MyState>,
 /// ) -> ReceiveResult<MyReturnValue> {...}
 /// ```
 ///
@@ -736,9 +738,9 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// enum MyError { ... }
 ///
 /// #[receive(contract = "my_contract", name = "some_receive", error = "MyError")]
-/// fn contract_receive<S: HasStateApi>(
-///     ctx: &impl HasReceiveContext,
-///     host: &HasHost<MyState, StateApiType = S>,
+/// fn contract_receive(
+///     ctx: &ReceiveContext,
+///     host: &Host<MyState>,
 /// ) -> Result<A, MyError> {...}
 /// ```
 ///
@@ -756,9 +758,9 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ### Example
 /// ```ignore
 /// #[receive(contract = "my_contract", fallback)]
-/// fn contract_receive<S: HasStateApi>(
-///    ctx: &impl HasReceiveContext,
-///    host: &HasHost<MyState, StateApiType = S>,
+/// fn contract_receive(
+///    ctx: &ReceiveContext,
+///    host: &Host<MyState>,
 /// ) -> ReceiveResult<MyReturnValue> {
 ///     let named_entrypoint = ctx.named_entrypoint();
 ///     // ...
@@ -766,16 +768,16 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 /// ## `crypto_primitives`: Function can access cryptographic primitives
 /// Setting the `crypto_primitives` attribute changes the required signature to
-/// include an extra argument `&impl HasCryptoPrimitives`, which provides
+/// include an extra argument `&CryptoPrimitives`, which provides
 /// cryptographic primitives such as verifying signatures and hashing data.
 ///
 /// ### Example
 /// ```ignore
 /// #[receive(contract = "my_contract", name = "some_receive", crypto_primitives)]
-/// fn some_receive<S: HasStateApi>(
-///     ctx: &impl HasReceiveContext,
-///     host: &impl HasHost<MyState, StateApiType = S>,
-///     crypto_primitives: &impl HasCryptoPrimitives,
+/// fn some_receive(
+///     ctx: &ReceiveContext,
+///     host: &Host<MyState>,
+///     crypto_primitives: &CryptoPrimitives,
 /// ) -> ReceiveResult<MyReturnValue> {...}
 /// ```
 #[proc_macro_attribute]
