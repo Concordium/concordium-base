@@ -49,6 +49,7 @@ import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
 import Concordium.Utils
+import qualified Concordium.Wasm as Wasm
 
 -- | Result type for @getConsensusStatus@ queries.  A number of fields are not defined when no blocks
 --  have so far been received, verified or finalized. In such cases, the values will be 'Nothing'.
@@ -1062,3 +1063,51 @@ data WinningBaker = WinningBaker
 --  record field is turned into the label @round@ in the corresponding JSON representation
 --  of the @PendingUpdate@.
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''WinningBaker)
+
+-- | A failing result of a dry run execution.
+data DryRunError
+    = -- | The current block state is undefined.
+      DryRunErrorNoState
+    | -- | The requested block was not found, so its state could not be loaded.
+      DryRunErrorBlockNotFound
+    | -- | The specified account was not found.
+      DryRunErrorAccountNotFound
+    | -- | The specified instance was not found.
+      DryRunErrorInstanceNotFound
+    | -- | The amount to mint would overflow the total CCD supply.
+      DryRunErrorAmountOverLimit {dreMaximumMintAmount :: !Amount}
+    | -- | The balance of the sender account is not sufficient to pay for the operation.
+      DryRunErrorBalanceInsufficient {dreRequiredAmount :: !Amount, dreAvailableAmount :: !Amount}
+    | -- | The energy supplied for the transaction is not sufficient to check the transaction
+      -- header.
+      DryRunErrorEnergyInsufficient {dreEnergyRequired :: !Energy}
+
+-- | A successful result of a dry run execution.
+-- These do not cover all successful results, just ones where the protobuf encoding cannot fail.
+data DryRunSuccess
+    = -- | The block state was loaded.
+      DryRunSuccessBlockStateLoaded
+        { -- | Current timestamp (taken from the block).
+          drsCurrentTimestamp :: !Timestamp,
+          -- | Block hash of the block the state was loaded from.
+          drsBlockHash :: !BlockHash,
+          -- | The protocol version determined by the block.
+          drsProtocolVersion :: !ProtocolVersion
+        }
+    | -- | The account info was successfully retrieved.
+      DryRunSuccessAccountInfo {drsAccountInfo :: !AccountInfo}
+    | -- | The smart contract instance info was successfully retrieved.
+      DryRunSuccessInstanceInfo {drsInstanceInfo :: !Wasm.InstanceInfo}
+    | -- | The current timestamp was successfully set.
+      DryRunSuccessTimestampSet
+    | -- | The requested amount was minted to the account.
+      DryRunSuccessMintedToAccount
+
+-- | A wrapper type used to provide 'ToProto' instances that target DryRunResponse.
+data DryRunResponse a = DryRunResponse
+    { -- | The result of the operation.
+      drrResponse :: !a,
+      -- | The remaining energy after executing the operation.
+      drrQuotaRemaining :: !Energy
+    }
+    deriving (Eq)
