@@ -1,7 +1,5 @@
 ## Unreleased changes
 
-## 3.1.2
-
 - Add `sign_message` function to sign a message with all `AccountKeys`. The return type is `AccountSignatures`.
 
 ## 3.1.1 (2023-10-27)
