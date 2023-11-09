@@ -28,6 +28,7 @@ use chrono::TimeZone;
 use concordium_contracts_common as concordium_std;
 pub use concordium_contracts_common::SignatureThreshold;
 use concordium_contracts_common::{AccountThreshold, ZeroSignatureThreshold};
+use concordium_std::{AccountSignatures, CredentialSignatures, SignatureEd25519};
 use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
@@ -2084,7 +2085,8 @@ impl From<InitialAccountData> for AccountKeys {
 
 impl AccountKeys {
     /// Sign the provided data with all of the keys in [`AccountKeys`].
-    /// The thresholds are ignored.
+    /// The thresholds are ignored. The return type is
+    /// [`BTreeMap<CredentialIndex, BTreeMap<KeyIndex, Signature>>`].
     pub fn sign_data(
         &self,
         msg: &[u8],
@@ -2097,6 +2099,34 @@ impl AccountKeys {
                 .map(|(ki, kp)| (*ki, kp.sign(msg)))
                 .collect::<BTreeMap<_, _>>();
             signatures.insert(*ci, cred_sigs);
+        }
+        signatures
+    }
+
+    /// Sign the provided data with all of the keys in [`AccountKeys`].
+    /// The thresholds are ignored. The return type is [`AccountSignatures`].
+    pub fn sign_message(&self, msg: &[u8]) -> AccountSignatures {
+        let mut signatures = AccountSignatures {
+            sigs: BTreeMap::<u8, CredentialSignatures>::new(),
+        };
+        for (ci, cred_keys) in self.keys.iter() {
+            let cred_sigs = cred_keys
+                .keys
+                .iter()
+                .map(|(ki, kp)| {
+                    (
+                        u8::from(*ki),
+                        concordium_contracts_common::Signature::Ed25519(SignatureEd25519(
+                            // Unwrap is safe since the conversion is between signature types
+                            // represented by byte arrays of the same length [u8, u64].
+                            kp.sign(msg).sig.try_into().unwrap(),
+                        )),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            signatures
+                .sigs
+                .insert(ci.index, CredentialSignatures { sigs: cred_sigs });
         }
         signatures
     }
@@ -2592,6 +2622,41 @@ mod tests {
             let deserialized: AccountOwnershipSignature =
                 serde_json::from_str(&serialized).unwrap();
             assert_eq!(signature, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_sign_message() {
+        let message: &[u8] = b"test";
+        let rng = &mut rand::thread_rng();
+
+        // Generate account keys that have one keypair at index 0 in both maps.
+        let keypairs = AccountKeys::singleton(rng);
+
+        // Test sign message function
+        let account_signatures: AccountSignatures = keypairs.sign_message(message);
+
+        // Get signature from map
+        let credential_signatures = &account_signatures.sigs[&0];
+        let signature = &credential_signatures.sigs[&0];
+
+        // Get public key from map
+        let credential_keys = &keypairs.keys[&CredentialIndex { index: 0 }];
+        let key_pair = &credential_keys.keys[&KeyIndex(0)];
+        let public_key = key_pair.public;
+
+        // Check that signature is valid
+        match signature {
+            concordium_std::Signature::Ed25519(signature) => {
+                public_key
+                    .verify(
+                        message,
+                        &ed25519_dalek::Signature::from_bytes(&signature.0)
+                            .expect("Should be able to convert signature"),
+                    )
+                    .expect("Should be a valid signature");
+            }
+            _ => assert!(false, "Could not get signature"),
         }
     }
 
