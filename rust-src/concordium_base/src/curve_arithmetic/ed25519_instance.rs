@@ -1,6 +1,8 @@
 
-use std::fmt::Display;
+use std::{fmt::Display, ops::MulAssign};
+use std::ops::{AddAssign, SubAssign, Neg};
 
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar, traits::Identity};
 use crate::common::{Serial, Deserial, Buffer};
 
@@ -20,7 +22,10 @@ impl Serial for RistrettoScalar {
 impl Deserial for RistrettoScalar {
 
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
-        todo!()
+        let mut buf: [u8; 32] = [0; 32];
+        source.read_exact(&mut buf)?;
+        let res = Scalar::from_canonical_bytes(buf).ok_or(anyhow::anyhow!("Deserialization failed! Not a field value!"))?;
+        Ok(res.into())
     }
 }
 
@@ -41,7 +46,9 @@ impl From<Scalar> for RistrettoScalar {
 
 impl Field for RistrettoScalar {
     fn random<R: rand_core::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
-        todo!()
+        let mut scalar_bytes = [0u8; 64];
+        rng.fill_bytes(&mut scalar_bytes);
+        Scalar::from_bytes_mod_order_wide(&scalar_bytes).into()
     }
 
     fn zero() -> Self {
@@ -49,58 +56,64 @@ impl Field for RistrettoScalar {
     }
 
     fn one() -> Self {
-        todo!()
+        Scalar::one().into()
     }
 
     fn is_zero(&self) -> bool {
-        todo!()
+        self.0 == Self::zero().0
     }
 
     fn square(&mut self) {
-        todo!()
+        self.0.mul_assign(self.0)
     }
 
     fn double(&mut self) {
-        todo!()
+        self.0.add_assign(self.0)
     }
 
     fn negate(&mut self) {
-        todo!()
+        let v = self.0.neg();
+        self.0 = v;
     }
 
     fn add_assign(&mut self, other: &Self) {
-        todo!()
+        self.0.add_assign(other.0)
     }
 
     fn sub_assign(&mut self, other: &Self) {
-        todo!()
+        self.0.sub_assign(other.0)
     }
 
     fn mul_assign(&mut self, other: &Self) {
-        todo!()
+        self.0.mul_assign(other.0)
     }
 
     fn inverse(&self) -> Option<Self> {
-        todo!()
+        if self.is_zero() {
+            None
+        } else {
+            Some(self.0.invert().into())
+        }
     }
 
-    fn frobenius_map(&mut self, power: usize) {
-        todo!()
-    }
+    //fn frobenius_map(&mut self, power: usize) {
+        //self.pow(power)
+        //todo!()
+    //}
 }
 
 impl PrimeField for RistrettoScalar {
     // TODO: check this, this numbers are here just to make the compiler happy.
-    const NUM_BITS: u32 = 64 * 4;
+    const NUM_BITS: u32 = 255;
 
     // TODO: check this, this numbers are here just to make the compiler happy.
-    const CAPACITY: u32 = 64 * 4;
+    const CAPACITY: u32 = 254;
 
     fn into_repr(self) -> Vec<u64> {
         todo!()
     }
 
-    fn from_repr(_: &[u64]) -> Result<Self, super::CurveDecodingError> {
+    fn from_repr(r: &[u64]) -> Result<Self, super::CurveDecodingError> {
         todo!()
     }
 }
@@ -113,7 +126,10 @@ impl Serial for RistrettoPoint {
 
 impl Deserial for RistrettoPoint {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
-       todo!()
+        let mut buf: [u8; 32] = [0; 32];
+        source.read_exact(&mut buf)?;
+        let res = CompressedRistretto::from_slice(&buf).decompress().ok_or(anyhow::anyhow!("Failed!"))?;
+        Ok(res)
     }
 } 
 
@@ -136,26 +152,27 @@ impl Curve for RistrettoPoint {
     }
 
     fn is_zero_point(&self) -> bool {
-        todo!()
+        self == &Self::zero_point()
     }
 
     fn inverse_point(&self) -> Self {
-        todo!()
+        -self
     }
 
     fn double_point(&self) -> Self {
-        todo!()
+        self + self
     }
 
     fn plus_point(&self, other: &Self) -> Self {
-        todo!()
+        self + other
     }
 
     fn minus_point(&self, other: &Self) -> Self {
-        todo!()
+        self - other
     }
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
+        //self * scalar.scalar()
         todo!()
     }
 
@@ -164,22 +181,27 @@ impl Curve for RistrettoPoint {
     }
 
     fn generate<R: rand::Rng>(rng: &mut R) -> Self {
-        todo!()
+        let mut uniform_bytes = [0u8; 64];
+        rng.fill_bytes(&mut uniform_bytes);
+
+        RistrettoPoint::from_uniform_bytes(&uniform_bytes)
     }
 
     fn generate_scalar<R: rand::Rng>(rng: &mut R) -> Self::Scalar {
-        todo!()
+        let mut scalar_bytes = [0u8; 64];
+        rng.fill_bytes(&mut scalar_bytes);
+        Scalar::from_bytes_mod_order_wide(&scalar_bytes).into()
     }
 
     fn scalar_from_u64(n: u64) -> Self::Scalar {
-        todo!()
+        Scalar::from(n).into()
     }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
-        todo!()
+        Scalar::hash_from_bytes::<ed25519_dalek::Sha512>(bs.as_ref()).into()
     }
 
     fn hash_to_group(m: &[u8]) -> Self {
-        todo!()
+        RistrettoPoint::hash_from_bytes::<ed25519_dalek::Sha512>(m)
     }
 }

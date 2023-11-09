@@ -61,7 +61,7 @@ pub trait Field:
 
     /// Exponentiates this element by a power of the base prime modulus via
     /// the Frobenius automorphism.
-    fn frobenius_map(&mut self, power: usize);
+    //fn frobenius_map(&mut self, power: usize);
 
     /// Exponentiates this element by a number represented with `u64` limbs,
     /// least significant digit first.
@@ -93,11 +93,11 @@ pub trait PrimeField: Field {
     /// How many bits of information can be reliably stored in the field
     /// element.
     const CAPACITY: u32;
-
-    /// Convert a biginteger representation into a prime field element
+    
+    /// Convert this prime field element into a biginteger representation.
     fn into_repr(self) -> Vec<u64>;
 
-    /// Convert this prime field element into a biginteger representation.
+    /// Convert a biginteger representation into a prime field element
     fn from_repr(_: &[u64]) -> Result<Self, CurveDecodingError>;
 }
 
