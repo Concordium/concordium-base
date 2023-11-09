@@ -2,6 +2,7 @@
 use std::{fmt::Display, ops::MulAssign};
 use std::ops::{AddAssign, SubAssign, Neg};
 
+use byteorder::{LittleEndian, ByteOrder};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar, traits::Identity};
 use crate::common::{Serial, Deserial, Buffer};
@@ -110,10 +111,16 @@ impl PrimeField for RistrettoScalar {
     const CAPACITY: u32 = 254;
 
     fn into_repr(self) -> Vec<u64> {
+        let bytes = self.0.to_bytes();
+        let limb0: [u8; 8] = bytes[0..=7].try_into().unwrap();
+        let i0 = u64::from_le_bytes(limb0);
         todo!()
     }
 
     fn from_repr(r: &[u64]) -> Result<Self, super::CurveDecodingError> {
+        let mut s_bytes = [0u8; 32];
+        let x = r[0];
+        LittleEndian::write_u64(&mut s_bytes, x);
         todo!()
     }
 }
@@ -172,8 +179,8 @@ impl Curve for RistrettoPoint {
     }
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
-        //self * scalar.scalar()
-        todo!()
+        *self * (*scalar).0
+        //todo!()
     }
 
     fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(b: &mut R) -> anyhow::Result<Self> {
