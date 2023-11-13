@@ -3,8 +3,8 @@ use std::{fmt::Display, ops::MulAssign};
 use std::ops::{AddAssign, SubAssign, Neg};
 
 use byteorder::{LittleEndian, ByteOrder};
-use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar, traits::Identity};
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::{scalar::Scalar, traits::Identity, constants::RISTRETTO_BASEPOINT_POINT};
 use crate::common::{Serial, Deserial, Buffer};
 
 use super::{Curve, Field, PrimeField};
@@ -16,7 +16,8 @@ pub struct RistrettoScalar(Scalar);
 
 impl Serial for RistrettoScalar {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        todo!()
+        let res: &[u8; 32] = self.0.as_bytes();
+        out.write_all(res).expect("Writing to a buffer should not fail.");
     }
 }
 
@@ -111,23 +112,32 @@ impl PrimeField for RistrettoScalar {
     const CAPACITY: u32 = 254;
 
     fn into_repr(self) -> Vec<u64> {
+        let mut vec: Vec<u64> = Vec::new();
         let bytes = self.0.to_bytes();
-        let limb0: [u8; 8] = bytes[0..=7].try_into().unwrap();
-        let i0 = u64::from_le_bytes(limb0);
-        todo!()
+        for chunk in bytes.chunks(8) {
+            let x : [u8; 8] = chunk.try_into().unwrap();
+            let x_64 = u64::from_le_bytes(x);
+            vec.push(x_64);
+        }
+        vec
     }
 
     fn from_repr(r: &[u64]) -> Result<Self, super::CurveDecodingError> {
+        let mut tmp: [u64; 4] = r.try_into().map_err(|e| super::CurveDecodingError::NotInField(format!("{:?}", r)))?;
         let mut s_bytes = [0u8; 32];
-        let x = r[0];
-        LittleEndian::write_u64(&mut s_bytes, x);
-        todo!()
+        for x in tmp {
+            LittleEndian::write_u64(&mut s_bytes, x);
+        }
+        let res = Scalar::from_canonical_bytes(s_bytes).ok_or(super::CurveDecodingError::NotInField(format!("{:?}", s_bytes)))?;
+        Ok(res.into())
     }
 }
 
 impl Serial for RistrettoPoint {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        todo!()
+        let compressed_point = self.compress();
+        let res: &[u8; 32] = compressed_point.as_bytes();
+        out.write_all(res).expect("Writing to a buffer should not fail.");
     }
 } 
 
@@ -155,7 +165,7 @@ impl Curve for RistrettoPoint {
     }
 
     fn one_point() -> Self {
-        todo!()
+        RISTRETTO_BASEPOINT_POINT
     }
 
     fn is_zero_point(&self) -> bool {
@@ -180,11 +190,13 @@ impl Curve for RistrettoPoint {
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
         *self * (*scalar).0
-        //todo!()
     }
 
-    fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(b: &mut R) -> anyhow::Result<Self> {
-        todo!()
+    fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(source: &mut R) -> anyhow::Result<Self> {
+        let mut buf: [u8; 32] = [0; 32];
+        source.read_exact(&mut buf)?;
+        let res = CompressedRistretto::from_slice(&buf).decompress().ok_or(anyhow::anyhow!("Failed!"))?;
+        Ok(res)
     }
 
     fn generate<R: rand::Rng>(rng: &mut R) -> Self {
