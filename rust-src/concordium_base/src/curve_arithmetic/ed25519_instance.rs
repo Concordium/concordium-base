@@ -123,7 +123,7 @@ impl PrimeField for RistrettoScalar {
     }
 
     fn from_repr(r: &[u64]) -> Result<Self, super::CurveDecodingError> {
-        let mut tmp: [u64; 4] = r.try_into().map_err(|e| super::CurveDecodingError::NotInField(format!("{:?}", r)))?;
+        let tmp: [u64; 4] = r.try_into().map_err(|_| super::CurveDecodingError::NotInField(format!("{:?}", r)))?;
         let mut s_bytes = [0u8; 32];
         for x in tmp {
             LittleEndian::write_u64(&mut s_bytes, x);
