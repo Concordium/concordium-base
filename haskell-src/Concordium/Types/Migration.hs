@@ -35,6 +35,7 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 -- Note that the authorization for the consensus parameters v0
 -- are carried over to consensus parameters v1.
 migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
+migrateAuthorizations StateMigrationParametersP6ToP7 auths = auths
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -62,6 +63,7 @@ migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
     MintDistribution{_mdMintPerSlot = CFalse, ..}
 migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 migrateMintDistribution StateMigrationParametersP5ToP6{} mint = mint
+migrateMintDistribution StateMigrationParametersP6ToP7 mint = mint
 
 -- | Apply a state migration to a 'PoolParameters' structure.
 --
@@ -78,6 +80,7 @@ migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
     P4.updatePoolParameters (P4.migrationProtocolUpdateData migration)
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
+migratePoolParameters StateMigrationParametersP6ToP7 poolParams = poolParams
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
@@ -94,6 +97,7 @@ migrateGASRewards StateMigrationParametersP2P3 gr = gr
 migrateGASRewards StateMigrationParametersP3ToP4{} gr = gr
 migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
 migrateGASRewards StateMigrationParametersP5ToP6{} GASRewards{..} = GASRewards{_gasFinalizationProof = CFalse, ..}
+migrateGASRewards StateMigrationParametersP6ToP7 gr = gr
 
 -- | Apply a state migration to a 'ChainParameters' structure.
 --
@@ -147,6 +151,7 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
   where
     RewardParameters{..} = _cpRewardParameters
     finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
+migrateChainParameters StateMigrationParametersP6ToP7 cps = cps
 
 -- | Apply a state migration to an 'AccountStake' structure.
 --
@@ -188,6 +193,7 @@ migrateAccountStake StateMigrationParametersP4ToP5 =
                       ..
                     }
 migrateAccountStake StateMigrationParametersP5ToP6{} = id
+migrateAccountStake StateMigrationParametersP6ToP7 = id
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
@@ -215,3 +221,4 @@ migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
     RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
 migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1
 migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
+migrateStakePendingChange StateMigrationParametersP6ToP7 = id

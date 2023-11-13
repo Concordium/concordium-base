@@ -39,6 +39,7 @@ import qualified Concordium.Genesis.Data.P3 as P3
 import qualified Concordium.Genesis.Data.P4 as P4
 import qualified Concordium.Genesis.Data.P5 as P5
 import qualified Concordium.Genesis.Data.P6 as P6
+import qualified Concordium.Genesis.Data.P7 as P7
 import Concordium.Genesis.Parameters
 import Concordium.Types
 import Concordium.Types.AnonymityRevokers
@@ -242,6 +243,8 @@ main =
                                 gd@(GDP5 P5.GDP5Initial{..}) -> printInitial SP5 (genesisBlockHash gd) (CGPV0 genesisCore) genesisInitialState
                             SP6 -> case gdata of
                                 gd@(GDP6 P6.GDP6Initial{..}) -> printInitial SP6 (genesisBlockHash gd) (CGPV1 genesisCore) genesisInitialState
+                            SP7 -> case gdata of
+                                gd@(GDP7 P7.GDP7Initial{..}) -> printInitial SP7 (genesisBlockHash gd) (CGPV1 genesisCore) genesisInitialState
 
 printInitial :: SProtocolVersion pv -> BlockHash -> VersionedCoreGenesisParameters -> GDBase.GenesisState pv -> IO ()
 printInitial spv gh vcgp GDBase.GenesisState{..} = do
