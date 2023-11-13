@@ -134,3 +134,7 @@ harness = false
 [package.metadata.docs.rs]
 # Expose the `encryption` feature in documentation.
 features = ["encryption"]
+
+[[bench]]
+name = "range_proof_bench"
+harness = false
