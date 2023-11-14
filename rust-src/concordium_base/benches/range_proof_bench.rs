@@ -119,5 +119,5 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve> (c: &mut Criterion) {
 criterion_group!(
     name = benchmarks;
     config = Criterion::default().measurement_time(Duration::from_millis(10000)).sample_size(10);
-    targets = prove_verify_benchmarks::<G1>, prove_verify_benchmarks::<RistrettoPoint>);
+    targets = prove_verify_benchmarks::<G1>, prove_verify_benchmarks::<RistrettoPoint>, prove_verify_benchmarks::<curve25519_dalek_ng::ristretto::RistrettoPoint>);
 criterion_main!(benchmarks);
