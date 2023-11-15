@@ -20,7 +20,6 @@ data GenesisDataP7 = GDP7Initial
     { -- | The immutable genesis parameters.
       genesisCore :: !BaseV1.CoreGenesisParametersV1,
       -- | Serialized initial block state.
-      --  NB: This block state contains some of the same values as 'genesisCore', and they should match.
       genesisInitialState :: !(Base.GenesisState 'P7)
     }
     deriving (Eq, Show)

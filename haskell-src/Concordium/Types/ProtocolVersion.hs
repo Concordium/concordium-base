@@ -464,14 +464,23 @@ protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor sp
 --  (Memos are supported in 'P2' onwards.)
 supportsMemo :: SProtocolVersion pv -> Bool
 supportsMemo SP1 = False
-supportsMemo _ = True
+supportsMemo SP2 = True
+supportsMemo SP3 = True
+supportsMemo SP4 = True
+supportsMemo SP5 = True
+supportsMemo SP6 = True
+supportsMemo SP7 = True
 
 -- | Whether the protocol version supports account aliases.
 --  (Account aliases are supported in 'P3' onwards.)
 supportsAccountAliases :: SProtocolVersion pv -> Bool
 supportsAccountAliases SP1 = False
 supportsAccountAliases SP2 = False
-supportsAccountAliases _ = True
+supportsAccountAliases SP3 = True
+supportsAccountAliases SP4 = True
+supportsAccountAliases SP5 = True
+supportsAccountAliases SP6 = True
+supportsAccountAliases SP7 = True
 
 -- | Whether the protocol version supports V1 smart contracts.
 --  (V1 contracts are supported in 'P4' onwards.)
@@ -479,7 +488,10 @@ supportsV1Contracts :: SProtocolVersion pv -> Bool
 supportsV1Contracts SP1 = False
 supportsV1Contracts SP2 = False
 supportsV1Contracts SP3 = False
-supportsV1Contracts _ = True
+supportsV1Contracts SP4 = True
+supportsV1Contracts SP5 = True
+supportsV1Contracts SP6 = True
+supportsV1Contracts SP7 = True
 
 -- | Whether the protocol version supports delegation.
 --  (Delegation is supported in 'P4' onwards.)
@@ -497,7 +509,9 @@ supportsUpgradableContracts spv = case spv of
     SP2 -> False
     SP3 -> False
     SP4 -> False
-    _ -> True
+    SP5 -> True
+    SP6 -> True
+    SP7 -> True
 
 -- | Whether the protocol version supports chain queries in smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -507,7 +521,9 @@ supportsChainQueryContracts spv = case spv of
     SP2 -> False
     SP3 -> False
     SP4 -> False
-    _ -> True
+    SP5 -> True
+    SP6 -> True
+    SP7 -> True
 
 -- | Whether the protocol version supports sign extension instructions for V1
 --  contracts. (Supported in 'P6' and onwards)
@@ -518,7 +534,8 @@ supportsSignExtensionInstructions spv = case spv of
     SP3 -> False
     SP4 -> False
     SP5 -> False
-    _ -> True
+    SP6 -> True
+    SP7 -> True
 
 -- | Whether the protocol version allows globals in data and element sections of
 --  Wasm modules for V1 contracts. (Supported before 'P6')
@@ -529,7 +546,8 @@ supportsGlobalsInInitSections spv = case spv of
     SP3 -> True
     SP4 -> True
     SP5 -> True
-    _ -> False
+    SP6 -> False
+    SP7 -> False
 
 -- | Whether the protocol version specifies that custom section should not be
 --  counted towards module size when executing V1 contracts.
@@ -546,4 +564,5 @@ supportsAccountSignatureChecks spv = case spv of
     SP3 -> False
     SP4 -> False
     SP5 -> False
-    _ -> True
+    SP6 -> True
+    SP7 -> True
