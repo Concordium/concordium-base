@@ -70,6 +70,7 @@ library
       Concordium.ID.Parameters
       Concordium.ID.Types
       Concordium.Logger
+      Concordium.MerkleProofs
       Concordium.Types
       Concordium.Types.Accounts
       Concordium.Types.Accounts.Releases
