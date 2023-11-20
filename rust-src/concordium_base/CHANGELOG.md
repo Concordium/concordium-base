@@ -1,6 +1,8 @@
 ## Unreleased changes
 
 - Add `sign_message` function to sign a message with all `AccountKeys`. The return type is `AccountSignatures`.
+- Support using `validatorId` instead of `bakerId` when parsing
+  `BakerCredentials` from JSON.
 
 ## 3.1.1 (2023-10-27)
 
