@@ -707,6 +707,7 @@ impl BakerKeyPairs {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BakerCredentials {
+    #[serde(alias = "validatorId")]
     pub baker_id: BakerId,
     #[serde(flatten)]
     pub keys:     BakerKeyPairs,
