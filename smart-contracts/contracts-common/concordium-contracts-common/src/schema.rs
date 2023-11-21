@@ -1223,7 +1223,6 @@ mod impls {
         pub fn get_event_schema(&self, contract_name: &str) -> Result<Type, VersionedSchemaError> {
             let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
 
-            
             match versioned_contract_schema {
                 VersionedContractSchema::V0(_) => Err(VersionedSchemaError::EventNotSupported)?,
                 VersionedContractSchema::V1(_) => Err(VersionedSchemaError::EventNotSupported)?,
