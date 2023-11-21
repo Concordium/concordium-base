@@ -42,16 +42,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_FMT }}
-          override: true
-          components: rustfmt
       - name: Format
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
+          rustup default ${{ env.RUST_FMT }}
+          rustup component add rustfmt
           cargo fmt -- --color=always --check
 
   "lint_doc":
@@ -69,16 +64,11 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
-          components: clippy
       - name: Format
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
+          rustup default ${{ env.RUST_CLIPPY }}
+          rustup component add rust-docs
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
   "lint_fmt_example_contracts":
@@ -99,17 +89,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_FMT }}
-          override: true
-          target: wasm32-unknown-unknown
-          components: rustfmt
       - name: Format
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
+          rustup default ${{ env.RUST_FMT }}
+          rustup component add rustfmt
           cargo fmt -- --color=always --check
 
   "lint_clippy_wasm_transform":
@@ -126,17 +110,11 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
-          components: clippy
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          rustup default ${{ env.RUST_CLIPPY }}
+          rustup component add clippy
           cargo clippy --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_wasm_chain_integration":
@@ -157,17 +135,11 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
-          components: clippy
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          rustup default ${{ env.RUST_CLIPPY }}
+          rustup component add clippy
           cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
 
   "lint_clippy_example_contracts":
@@ -188,18 +160,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
-          target: wasm32-unknown-unknown
-          components: clippy
       - name: Clippy
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          rustup default ${{ env.RUST_CLIPPY }}
+          rustup component add clippy
           cargo clippy --locked --color=always --tests -- -Dclippy::all
 
   "cargo_test":
@@ -215,15 +180,11 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
       - name: Test
         working-directory: smart-contracts/${{ matrix.build-dir }}
-        run: cargo test
+        run: |
+          rustup default ${{ env.RUST_CLIPPY }}
+          cargo test
 
   "cargo_test_example_contracts":
     name: ${{ matrix.example-contract }} cargo:test
@@ -244,16 +205,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
       - name: Test
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          rustup default ${{ env.RUST_CLIPPY }}
           cargo test --target x86_64-unknown-linux-gnu
 
   "wasm-core-spec_cargo_test":
@@ -264,14 +219,9 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_CLIPPY }}
-          override: true
       - name: Test
         working-directory: smart-contracts/wasm-test
         run: |
+          rustup default ${{ env.RUST_CLIPPY }}
           cargo build
           ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/
