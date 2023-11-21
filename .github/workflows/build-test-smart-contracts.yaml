@@ -113,6 +113,7 @@ jobs:
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           rustup default ${{ env.RUST_CLIPPY }}
           rustup component add clippy
           cargo clippy --color=always --tests --benches -- -Dclippy::all
@@ -138,6 +139,7 @@ jobs:
       - name: Clippy
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           rustup default ${{ env.RUST_CLIPPY }}
           rustup component add clippy
           cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
@@ -163,6 +165,7 @@ jobs:
       - name: Clippy
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           rustup default ${{ env.RUST_CLIPPY }}
           rustup component add clippy
           cargo clippy --locked --color=always --tests -- -Dclippy::all
@@ -208,6 +211,7 @@ jobs:
       - name: Test
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           rustup default ${{ env.RUST_CLIPPY }}
           cargo test --target x86_64-unknown-linux-gnu
 
