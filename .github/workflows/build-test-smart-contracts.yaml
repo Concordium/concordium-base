@@ -168,6 +168,7 @@ jobs:
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           rustup default ${{ env.RUST_CLIPPY }}
           rustup component add clippy
+          rustup target add wasm32-unknown-unknown
           cargo clippy --locked --color=always --tests -- -Dclippy::all
 
   "cargo_test":

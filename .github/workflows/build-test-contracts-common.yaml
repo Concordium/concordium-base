@@ -79,6 +79,7 @@ jobs:
         run: |
           rustup default ${{ env.RUST_VERSION }}
           rustup component add clippy
+          rustup target add ${{ matrix.target }}
           cargo clippy --manifest-path=concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
 
   clippy-on-derive:
