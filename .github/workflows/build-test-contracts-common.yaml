@@ -7,19 +7,25 @@ on:
     paths:
       - 'smart-contracts/contracts-common/**/*.rs'
       - 'smart-contracts/contracts-common/**/*.toml'
+      - '.github/workflows/build-test-contracts-common.yaml'
+
   pull_request:
     branches:
       - main
     paths:
       - 'smart-contracts/contracts-common/**/*.rs'
       - 'smart-contracts/contracts-common/**/*.toml'
+      - '.github/workflows/build-test-contracts-common.yaml'
 
 name: Clippy & fmt
 
 env:
   RUST_VERSION: "1.65"
   RUST_FMT: "nightly-2023-04-01"
-  WORKING_DIRECTORY: "./smart-contracts/contracts-common"
+
+defaults:
+  run:
+    working-directory: "./smart-contracts/contracts-common"
 
 jobs:
   rustfmt:
@@ -29,17 +35,10 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Install nightly toolchain with rustfmt available
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_FMT }}
-          override: true
-          components: rustfmt
-
       - name: Run cargo fmt
-        working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
+          rustup default ${{ env.RUST_FMT }}
+          rustup component add rustfmt
           cargo fmt --all --check
 
   rustdoc:
@@ -49,16 +48,10 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_VERSION }}
-          override: true
-
       - name: Run cargo doc
-        working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
+          rustup default ${{ env.RUST_VERSION }}
+          rustup component add rust-docs
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
   clippy:
@@ -82,21 +75,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Install nightly toolchain with clippy available
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_VERSION }}
-          target: ${{ matrix.target }}
-          override: true
-          components: clippy
-
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        working-directory: ${{ env.WORKING_DIRECTORY }}
-        with:
-          command: clippy
-          args: --manifest-path=concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
+        run: |
+          rustup default ${{ env.RUST_VERSION }}
+          rustup component add clippy
+          cargo clippy --manifest-path=concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
 
   clippy-on-derive:
     name: Clippy on concordium-contracts-common-derive
@@ -115,21 +98,12 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Install nightly toolchain with clippy available
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_VERSION }}
-          target: ${{ matrix.target }}
-          override: true
-          components: clippy
-
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        working-directory: ${{ env.WORKING_DIRECTORY }}
-        with:
-          command: clippy
-          args: --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
+        run: |
+          rustup default ${{ env.RUST_VERSION }}
+          rustup component add clippy
+          rustup target add ${{ matrix.target }}
+          cargo clippy --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
 
   test:
     name: x86_64 tests
@@ -138,16 +112,7 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ env.RUST_VERSION }}
-          override: true
-
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        working-directory: ${{ env.WORKING_DIRECTORY }}
-        with:
-          command: test
-          args: --workspace --all-features
+        run: |
+          rustup default ${{ env.RUST_VERSION }}
+          cargo test --workspace --all-features
