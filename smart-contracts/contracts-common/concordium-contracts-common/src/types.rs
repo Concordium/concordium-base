@@ -457,6 +457,11 @@ pub struct ZeroSignatureThreshold;
 #[repr(transparent)]
 pub struct PublicKeyEd25519(pub [u8; 32]);
 
+impl PublicKeyEd25519 {
+    /// Create a new [`PublicKeyEd25519`] from bytes.
+    pub fn from_bytes(bytes: [u8; 32]) -> Self { PublicKeyEd25519(bytes) }
+}
+
 impl fmt::Display for PublicKeyEd25519 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for b in self.0 {
