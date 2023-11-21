@@ -1465,7 +1465,9 @@ pub struct AccountAccessStructure {
     pub threshold: AccountThreshold,
 }
 
-type AccountStructure<'a> = &'a [(
+/// Input parameter containing indices, signature thresholds,
+/// and public keys for creating a new `AccountAccessStructure`.
+pub type AccountStructure<'a> = &'a [(
     CredentialIndex,
     SignatureThreshold,
     &'a [(KeyIndex, ed25519_dalek::PublicKey)],
@@ -1475,7 +1477,7 @@ impl AccountAccessStructure {
     /// Generate a new [`AccountAccessStructure`] for the thresholds, public
     /// keys, and key indices specified in the input. If there are duplicate
     /// indices then later ones override the previous ones.
-    pub fn generate(account_threshold: AccountThreshold, structure: AccountStructure) -> Self {
+    pub fn new(account_threshold: AccountThreshold, structure: AccountStructure) -> Self {
         let mut map: BTreeMap<CredentialIndex, CredentialPublicKeys> = BTreeMap::new();
 
         for credential_structure in structure {
@@ -1503,7 +1505,7 @@ impl AccountAccessStructure {
     /// Generate a new [`AccountAccessStructure`] with a single credential and
     /// public key, at credential and key indices 0.
     pub fn singleton(public_key: ed25519_dalek::PublicKey) -> Self {
-        Self::generate(AccountThreshold::ONE, &[(
+        Self::new(AccountThreshold::ONE, &[(
             0.into(),
             SignatureThreshold::ONE,
             &[(0.into(), public_key)],
