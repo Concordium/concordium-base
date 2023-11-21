@@ -1,5 +1,6 @@
 ## Unreleased changes
 
+- Export `PublicKey`, `SecretKey`, and `Signature` type from `ed25519_dalek` crate.
 - Add `sign_message` function to sign a message with all `AccountKeys`. The return type is `AccountSignatures`.
 - Support using `validatorId` instead of `bakerId` when parsing
   `BakerCredentials` from JSON.

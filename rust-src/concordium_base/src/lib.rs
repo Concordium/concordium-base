@@ -32,6 +32,8 @@ pub mod ps_sig;
 
 pub mod dodis_yampolskiy_prf;
 
+pub use ed25519_dalek::{PublicKey, SecretKey, Signature};
+
 #[cfg(feature = "ffi")]
 mod ffi_helpers;
 
