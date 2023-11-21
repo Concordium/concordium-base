@@ -1223,15 +1223,15 @@ mod impls {
         pub fn get_event_schema(&self, contract_name: &str) -> Result<Type, VersionedSchemaError> {
             let versioned_contract_schema = get_versioned_contract_schema(self, contract_name)?;
 
-            let param_event = match versioned_contract_schema {
+            
+            match versioned_contract_schema {
                 VersionedContractSchema::V0(_) => Err(VersionedSchemaError::EventNotSupported)?,
                 VersionedContractSchema::V1(_) => Err(VersionedSchemaError::EventNotSupported)?,
                 VersionedContractSchema::V2(_) => Err(VersionedSchemaError::EventNotSupported)?,
                 VersionedContractSchema::V3(contract_schema) => {
                     contract_schema.event.ok_or(VersionedSchemaError::NoEventInContract)
                 }
-            };
-            param_event
+            }
         }
 
         /// Returns a receive function's error schema from a versioned module

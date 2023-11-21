@@ -189,6 +189,7 @@ jobs:
       run: |
         rustup default ${{ matrix.plan.rust }}
         rustup component add clippy rust-docs
+        rustup target add aarch64-linux-android
 
     # Lightweight check that Rust code compiles.
     # Catching failure here avoids restoring of Haskell caches.
