@@ -52,7 +52,7 @@ impl<F: ff::Field> Field for F {
 
     fn inverse(&self) -> Option<Self> { self.inverse() }
 
-    //fn frobenius_map(&mut self, power: usize) { self.frobenius_map(power) }
+    // fn frobenius_map(&mut self, power: usize) { self.frobenius_map(power) }
 }
 
 impl From<ff::PrimeFieldDecodingError> for CurveDecodingError {
@@ -63,9 +63,7 @@ impl From<ff::PrimeFieldDecodingError> for CurveDecodingError {
 }
 
 impl PrimeField for Fr {
-
     const CAPACITY: u32 = <Fr as ff::PrimeField>::CAPACITY;
-
     const NUM_BITS: u32 = <Fr as ff::PrimeField>::NUM_BITS;
 
     fn into_repr(self) -> Vec<u64> { <Self as ff::PrimeField>::into_repr(&self).0.to_vec() }
@@ -80,9 +78,7 @@ impl PrimeField for Fr {
 }
 
 impl PrimeField for Fq {
-
     const CAPACITY: u32 = <Fq as ff::PrimeField>::CAPACITY;
-
     const NUM_BITS: u32 = <Fq as ff::PrimeField>::NUM_BITS;
 
     fn into_repr(self) -> Vec<u64> { <Self as ff::PrimeField>::into_repr(&self).0.to_vec() }
@@ -98,6 +94,7 @@ impl PrimeField for Fq {
 
 impl Curve for G2 {
     type Scalar = Fr;
+    type MultiExpType = GenericMultiExp<Self>;
 
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;
@@ -163,6 +160,7 @@ impl Curve for G2 {
 }
 
 impl Curve for G1 {
+    type MultiExpType = GenericMultiExp<Self>;
     type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 48;
@@ -229,6 +227,7 @@ impl Curve for G1 {
 }
 
 impl Curve for G1Affine {
+    type MultiExpType = GenericMultiExp<Self>;
     type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 48;
@@ -292,6 +291,7 @@ impl Curve for G1Affine {
 }
 
 impl Curve for G2Affine {
+    type MultiExpType = GenericMultiExp<Self>;
     type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 96;

@@ -13,6 +13,9 @@ homepage = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
 ff = "0.5"
+ark-ff = "0.4"
+ark-ec = "0.4"
+ark-curve25519 = "0.4.0"
 sha2 = "0.10"
 sha3 = "0.10"
 anyhow = "1.0"
@@ -34,7 +37,6 @@ rand = "0.7"
 num = "0.4"
 group = "0.2"
 curve25519-dalek = "3"
-curve25519-dalek-new = {package = "curve25519-dalek", version = "4.1.1", features = ["group"]}
 zeroize = "1.1"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
@@ -80,6 +82,7 @@ encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 [dev-dependencies]
 criterion = "0.4"
 rand = {version = "0.7", features = ["small_rng"]}
+pprof = { version = "0.11", features = ["flamegraph", "criterion"] }
 
 [[bench]]
 name = "hash_bench"
@@ -151,3 +154,5 @@ harness = false
 [[bench]]
 name = "msm_bench"
 harness = false
+[profile.release]
+debug = true

@@ -1,11 +1,13 @@
 //! Basic definitions of the curve and pairing abstractions, and implementations
 //! of these abstractions for the curves used on Concordium.
+pub mod arkworks_instances;
 mod bls12_381_g1hash;
 mod bls12_381_g2hash;
 mod bls12_381_instance;
+mod ed25519_arkworks;
 mod ed25519_instance;
 mod ed25519_ng_instance;
-//mod ed25519_new_instance;
+// mod ed25519_new_instance;
 
 pub mod secret_value;
 pub use secret_value::{Secret, Value};
@@ -63,7 +65,7 @@ pub trait Field:
 
     /// Exponentiates this element by a power of the base prime modulus via
     /// the Frobenius automorphism.
-    //fn frobenius_map(&mut self, power: usize);
+    // fn frobenius_map(&mut self, power: usize);
 
     /// Exponentiates this element by a number represented with `u64` limbs,
     /// least significant digit first.
@@ -95,7 +97,7 @@ pub trait PrimeField: Field {
     /// How many bits of information can be reliably stored in the field
     /// element.
     const CAPACITY: u32;
-    
+
     /// Convert this prime field element into a biginteger representation.
     fn into_repr(self) -> Vec<u64>;
 
@@ -111,10 +113,14 @@ pub trait Curve:
     Serialize + Copy + Clone + Sized + Send + Sync + Debug + PartialEq + Eq + 'static {
     /// The prime field of the group order size.
     type Scalar: PrimeField + Serialize;
+    type MultiExpType: MultiExp<CurvePoint = Self>;
     /// Size in bytes of elements of the [Curve::Scalar] field.
     const SCALAR_LENGTH: usize;
     /// Size in bytes of group elements when serialized.
     const GROUP_ELEMENT_LENGTH: usize;
+    fn new_multiexp<X: Borrow<Self>,  I: IntoIterator<Item = X>>(gs: I) -> Self::MultiExpType {
+        Self::MultiExpType::new(gs)
+    }
     /// Unit for the group operation.
     fn zero_point() -> Self;
     /// Chosen generator of the group.
@@ -163,6 +169,118 @@ pub trait Curve:
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
     /// Hash to a curve point from a seed. This is deterministic function.
     fn hash_to_group(m: &[u8]) -> Self;
+}
+
+pub trait MultiExp {
+    
+    type CurvePoint: Curve;
+
+    fn new<X: Borrow<Self::CurvePoint>, I: IntoIterator<Item = X>>(gs: I) -> Self;
+
+    fn multiexp_worker<X: Borrow<<Self::CurvePoint as Curve>::Scalar>, I: IntoIterator<Item = X>>(
+        &self,
+        exps: I,
+    ) -> Self::CurvePoint;
+
+    fn multiexp<X: Borrow<<Self::CurvePoint as Curve>::Scalar>, I: IntoIterator<Item = X>>(&self, exps: I) -> Self::CurvePoint {
+        self.multiexp_worker(exps)
+    }
+    
+}
+
+pub struct GenericMultiExp<C> {
+    table: Vec<Vec<C>>,
+}
+
+impl<C> GenericMultiExp<C> {
+    // This number is based on the benchmark in benches/multiexp_bench.rs
+    const WINDOW_SIZE: usize = 4;
+}
+
+impl<C: Curve> MultiExp for GenericMultiExp<C> {
+    type CurvePoint = C;
+
+    fn new<X: Borrow<C>, I: IntoIterator<Item = X>>(gs: I) -> Self {
+        let mut table = Vec::new();
+        for g in gs.into_iter() {
+            let sq = g.borrow().plus_point(g.borrow());
+            let mut tmp = *g.borrow();
+            // All of the odd exponents, between 1 and 2^w.
+            let num_exponents = 1 << (Self::WINDOW_SIZE - 1);
+            let mut exps = Vec::with_capacity(num_exponents);
+            exps.push(tmp);
+            for _ in 1..num_exponents {
+                tmp = tmp.plus_point(&sq);
+                exps.push(tmp);
+            }
+            table.push(exps);
+        }
+        GenericMultiExp { table }
+    }
+
+    fn multiexp_worker<X: Borrow<<Self::CurvePoint as Curve>::Scalar>, I: IntoIterator<Item = X>>(
+        &self,
+        exps: I,
+    ) -> Self::CurvePoint {
+        // Compute the wnaf
+
+        // assert_eq!(gs.len(), k);
+        assert!(Self::WINDOW_SIZE >= 1);
+        assert!(Self::WINDOW_SIZE < 62);
+
+        // 2^{window_size + 1}
+        let two_to_wp1: u64 = 2 << Self::WINDOW_SIZE;
+        let two_to_wp1_scalar = C::scalar_from_u64(two_to_wp1);
+        // a mask to extract the lowest window_size + 1 bits from a scalar.
+        let mask: u64 = two_to_wp1 - 1;
+        let mut wnaf = Vec::new();
+        // 1 / 2 scalar
+        let half = C::scalar_from_u64(2)
+            .inverse()
+            .expect("Field size must be at least 3.");
+
+        for c in exps.into_iter() {
+            let mut v = Vec::new();
+            let mut c = *c.borrow();
+            while !c.is_zero() {
+                let limb = c.into_repr()[0];
+                // if the first bit is set
+                if limb & 1 == 1 {
+                    let u = limb & mask;
+                    // check if window_size'th bit is set.
+                    c.sub_assign(&C::scalar_from_u64(u));
+                    if u & (1 << Self::WINDOW_SIZE) != 0 {
+                        c.add_assign(&two_to_wp1_scalar);
+                        v.push((u as i64) - (two_to_wp1 as i64));
+                    } else {
+                        v.push(u as i64);
+                    }
+                } else {
+                    v.push(0);
+                }
+                c.mul_assign(&half);
+            }
+            wnaf.push(v);
+        }
+
+        // evaluate using the precomputed table
+        let mut a = C::zero_point();
+        for j in (0..=C::Scalar::NUM_BITS as usize).rev() {
+            a = a.double_point();
+            for (wnaf_i, table_i) in wnaf.iter().zip(self.table.iter()) {
+                match wnaf_i.get(j) {
+                    Some(&ge) if ge > 0 => {
+                        a = a.plus_point(&table_i[(ge / 2) as usize]);
+                    }
+                    Some(&ge) if ge < 0 => {
+                        a = a.minus_point(&table_i[((-ge) / 2) as usize]);
+                    }
+                    _ => (),
+                }
+            }
+        }
+        a
+    }
 }
 
 /// A pairing friendly curve is a collection of two groups and a pairing
@@ -253,12 +371,21 @@ pub trait Pairing: Sized + 'static + Clone {
 }
 
 /// Like 'multiexp_worker', but computes a reasonable window size automatically.
+// #[inline(always)]
+// pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
+//     // This number is based on the benchmark in benches/multiexp_bench.rs
+//     let window_size = 4;
+//     multiexp_worker(gs, exps, window_size)
+// }
+
+/// Like 'multiexp_worker', but computes a reasonable window size automatically.
 #[inline(always)]
-pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
-    // This number is based on the benchmark in benches/multiexp_bench.rs
-    let window_size = 4;
-    multiexp_worker(gs, exps, window_size)
+pub fn multiexp<C, X>(gs: &[X], exps: &[C::Scalar]) -> C 
+where C: Curve, X: Borrow<C> {
+    let t = C::new_multiexp(gs.into_iter().map(|x| *x.borrow()));
+    t.multiexp(exps)
 }
+
 
 /// This implements the WNAF method from
 /// <https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf>

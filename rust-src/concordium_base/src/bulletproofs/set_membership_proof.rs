@@ -2,8 +2,7 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{
-        multiexp, multiexp_table, multiexp_worker_given_table, Curve, Field, },
+    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Field},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
