@@ -9,14 +9,14 @@ namespace IdissLib
     public static class Idiss
     {
         /// Import of the five C functions that are exported by the Rust library "idiss". 
-        [DllImport("libidiss")]
+        [DllImport("idiss.dll")]
         private static extern IntPtr validate_request_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, 
             out int out_length, out int out_capacity, out int out_success);
 
-        [DllImport("libidiss")]
+        [DllImport("idiss.dll")]
         private static extern IntPtr create_identity_object_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] alist, int alist_len,
@@ -25,25 +25,25 @@ namespace IdissLib
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_cdi_private_key, int ip_cdi_private_key_ptr_len,
         out int out_length, out int out_capacity, out int out_success);
 
-        [DllImport("libidiss")]
+        [DllImport("idiss.dll")]
         private static extern IntPtr validate_request_v1_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_capacity);
 
-        [DllImport("libidiss")]
+        [DllImport("idiss.dll")]
         private static extern IntPtr create_identity_object_v1_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] alist, int alist_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_private_key, int ip_private_key_ptr_len,
         out int out_length, out int out_capacity, out int out_success);
 
-        [DllImport("libidiss")]
+        [DllImport("idiss.dll")]
         private static extern IntPtr validate_recovery_request_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_capacity);
         
-        [DllImport("libidiss")]
+        [DllImport("idiss.dll")]
         private static extern IntPtr free_array_len_cap(IntPtr array_ptr,  int out_length, int out_capacity);
 
         /// The delta determining the time interval in which identity recovery requests should be accepted.
