@@ -2110,7 +2110,7 @@ Contract: MySecondContract
     #[test]
     fn test_serial_account_address() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::AccountAddress;
         let bytes =
             schema.serial_value(&json!(format!("{}", &account))).expect("Serializing failed");
@@ -2124,7 +2124,7 @@ Contract: MySecondContract
     #[test]
     fn test_serial_account_address_wrong_address_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::AccountAddress;
         let json = json!(format!("{}", &account).get(1..));
         let err = schema.serial_value(&json).expect_err("Serializing should fail");
@@ -2149,7 +2149,7 @@ Contract: MySecondContract
     #[test]
     fn test_serial_list_fails_with_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
         let json = json!([format!("{}", account), 123]);
         let err = schema.serial_value(&json).expect_err("Serializing should fail");
@@ -2170,7 +2170,7 @@ Contract: MySecondContract
     #[test]
     fn test_serial_object_fails_with_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::Struct(Fields::Named(vec![
             ("account".into(), Type::AccountAddress),
             ("contract".into(), Type::ContractAddress),
@@ -2194,7 +2194,7 @@ Contract: MySecondContract
     #[test]
     fn test_serial_fails_with_nested_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema_object = Type::Struct(Fields::Named(vec![
             ("account".into(), Type::AccountAddress),
             ("contract".into(), Type::ContractAddress),
