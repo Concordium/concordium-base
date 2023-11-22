@@ -60,9 +60,10 @@ pub fn dalek_msm_benchmarks_precompute(c: &mut Criterion) {
     use curve25519_dalek_ng::ristretto::VartimeRistrettoPrecomputation;
     let G: Vec<RistrettoPoint> = (0..N).map(|_| RistrettoPoint::random(&mut rng)).collect();
     let V: Vec<_> = (0..N).map(|_| Scalar::random(&mut rng)).collect();
-
     group.bench_function("MSM in Dalek over Ristretto curve", move |b| {
         b.iter(|| {
+            // This is very slow compared to `RistrettoPoint::vartime_multiscalar_mul(&V, &G)`.
+            // Precomputation is done inside the loop to compare with `RistrettoPoint::vartime_multiscalar_mul(&V, &G)`, which does the same, but without precomputing the point table.
             let msm = <VartimeRistrettoPrecomputation as VartimePrecomputedMultiscalarMul>::new(&G);
             msm.vartime_multiscalar_mul(&V);
         })
