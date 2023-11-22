@@ -237,7 +237,7 @@ pub unsafe extern "C" fn create_identity_object_cs(
         Err(e) => (format!("{}", e).into_bytes(), -1),
     };
     *out_length = bytes.len() as i32;
-    *out_capacity = bytes.len() as i32;
+    *out_capacity = bytes.capacity() as i32;
     *out_success = success;
     let ptr = bytes.as_mut_ptr();
     std::mem::forget(bytes);
@@ -364,7 +364,7 @@ pub unsafe extern "C" fn validate_recovery_request_cs(
         Err(e) => {
             let mut bytes = format!("{}", e).into_bytes();
             *out_length = bytes.len() as i32;
-            *out_capacity = bytes.len() as i32;
+            *out_capacity = bytes.capacity() as i32;
             let ptr = bytes.as_mut_ptr();
             std::mem::forget(bytes);
             ptr
