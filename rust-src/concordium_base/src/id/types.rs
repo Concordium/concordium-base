@@ -2064,7 +2064,7 @@ impl From<AccountKeys> for AccountPublicKeys {
             for (key_index, public_key) in credential_data.keys {
                 inner_map.insert(
                     u8::from(key_index),
-                    concordium_contracts_common::PublicKey::Ed25519(PublicKeyEd25519::from_bytes(
+                    concordium_contracts_common::PublicKey::Ed25519(PublicKeyEd25519(
                         *public_key.public.as_bytes(),
                     )),
                 );

@@ -1,7 +1,6 @@
 ## Unreleased changes
 
 - Add `From` trait to convert `AccountKeys` into `AccountPublicKeys`.
-- Add `from_bytes` method to create a new `PublicKeyEd25519` type value from bytes.
 - Add `singleton` and `new` function to `AccountAccessStructure`.
 - Export `PublicKey`, `SecretKey`, and `Signature` type from `ed25519_dalek` crate.
 - Add `sign_message` function to sign a message with all `AccountKeys`. The return type is `AccountSignatures`.
