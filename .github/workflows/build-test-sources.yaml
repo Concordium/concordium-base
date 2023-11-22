@@ -59,6 +59,12 @@ jobs:
       matrix:
         plan:
         - rust: "nightly-2023-04-01-x86_64-unknown-linux-gnu"
+        crates:
+        - rust-src
+        - rust-bins
+        - idiss
+        - mobile_wallet
+        - identity-provider-service
 
     steps:
     - name: Checkout
@@ -70,11 +76,7 @@ jobs:
       run: |
         rustup default ${{ matrix.plan.rust }}
         rustup component add rustfmt
-        cargo fmt --manifest-path rust-src/Cargo.toml --all -- --check
-        cargo fmt --manifest-path rust-bins/Cargo.toml -- --check
-        cargo fmt --manifest-path idiss/Cargo.toml -- --check
-        cargo fmt --manifest-path mobile_wallet/Cargo.toml -- --check
-        cargo fmt --manifest-path identity-provider-service/Cargo.toml -- --check
+        cargo fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
 
   rustdoc:
     runs-on: ubuntu-latest
