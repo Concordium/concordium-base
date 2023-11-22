@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.1
+  - Add dependency to feature `ffi` from `concordium_base` such that `ffi_helpers` module can be used.
+
 ## 0.6.0
   - Add functions `validate_request_v1`, `create_identity_object_v1` to support the new version 1 identity creation flow.
   - Add function `validate_recovery_request` for validating identity recovery requests.
