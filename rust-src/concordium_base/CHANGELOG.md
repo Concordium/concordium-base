@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 3.2.0 (2023-11-22)
+
 - Add `From` trait to convert `AccountKeys` into `AccountPublicKeys`.
 - Add `singleton` and `new` function to `AccountAccessStructure`.
 - Export `PublicKey`, `SecretKey`, and `Signature` type from `ed25519_dalek` crate.
