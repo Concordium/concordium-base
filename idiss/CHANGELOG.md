@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 0.7.0
   - Updated interfaces used by feature `csharp` to include a reference pointer which sets the capacity of the array returned.
   - Add dependency to feature `ffi` from `concordium_base` since `free_array_len_cap` is now exported from the `ffi_helpers` module.
 
