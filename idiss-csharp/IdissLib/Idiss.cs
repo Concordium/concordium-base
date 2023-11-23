@@ -44,7 +44,7 @@ namespace IdissLib
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_capacity);
         
         [DllImport("idiss.dll")]
-        private static extern IntPtr free_array_len_cap(IntPtr array_ptr,  int out_length, int out_capacity);
+        private static extern IntPtr free_array_len_cap(IntPtr array_ptr,  uint out_length, uint out_capacity);
 
         /// The delta determining the time interval in which identity recovery requests should be accepted.
         /// Recovery request timestamps are accepted in the interval [currentTime - TimestampDelta, currentTime + TimestampDelta].
@@ -286,7 +286,7 @@ namespace IdissLib
                 return;
             }
 
-            free_array_len_cap(outputPtr, outLength, outCapacity);
+            free_array_len_cap(outputPtr, checked((uint)outLength), checked((uint)outCapacity));
         }
     }
 }
