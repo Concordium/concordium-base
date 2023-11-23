@@ -1,3 +1,5 @@
+use std::mem::ManuallyDrop;
+
 use crate::*;
 
 /// Like [`std::slice::from_raw_parts`] but with special handling of empty
@@ -58,8 +60,9 @@ pub unsafe extern "C" fn validate_request_cs(
     request_ptr: *const u8,
     request_len: i32,
     out_length: *mut i32,
+    out_capacity: *mut i32,
     out_success: *mut i32,
-) -> *mut u8 {
+) -> *const u8 {
     let global_context_bytes = slice_from_ptr(ctx_ptr, ctx_len as usize);
     let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
     let ars_infos_bytes = slice_from_ptr(ars_infos_ptr, ars_len as usize);
@@ -74,18 +77,18 @@ pub unsafe extern "C" fn validate_request_cs(
         Ok(addr) => {
             let mut bytes = format!("{}", addr).into_bytes();
             *out_length = bytes.len() as i32;
+            *out_capacity = bytes.capacity() as i32;
             *out_success = 1;
             let ptr = bytes.as_mut_ptr();
             std::mem::forget(bytes);
             ptr
         }
         Err(e) => {
-            let mut bytes = format!("{}", e).into_bytes();
+            let bytes = format!("{}", e).into_bytes();
             *out_length = bytes.len() as i32;
             *out_success = -1;
-            let ptr = bytes.as_mut_ptr();
-            std::mem::forget(bytes);
-            ptr
+            let wrapper = ManuallyDrop::new(bytes);
+            wrapper.as_ptr()
         }
     }
 }
@@ -128,7 +131,8 @@ pub unsafe extern "C" fn validate_request_v1_cs(
     request_ptr: *const u8,
     request_len: i32,
     out_length: *mut i32,
-) -> *mut u8 {
+    out_capacity: *mut i32,
+) -> *const u8 {
     let global_context_bytes = slice_from_ptr(ctx_ptr, ctx_len as usize);
     let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
     let ars_infos_bytes = slice_from_ptr(ars_infos_ptr, ars_len as usize);
@@ -142,11 +146,11 @@ pub unsafe extern "C" fn validate_request_v1_cs(
     match result {
         Ok(()) => std::ptr::null_mut(),
         Err(e) => {
-            let mut bytes = format!("{}", e).into_bytes();
+            let bytes = format!("{}", e).into_bytes();
             *out_length = bytes.len() as i32;
-            let ptr = bytes.as_mut_ptr();
-            std::mem::forget(bytes);
-            ptr
+            *out_capacity = bytes.capacity() as i32;
+            let wrapper = ManuallyDrop::new(bytes);
+            wrapper.as_ptr()
         }
     }
 }
@@ -207,8 +211,9 @@ pub unsafe extern "C" fn create_identity_object_cs(
     ip_cdi_private_key_ptr: *const u8,
     ip_cdi_private_key_len: i32,
     out_length: *mut i32,
+    out_capacity: *mut i32,
     out_success: *mut i32,
-) -> *mut u8 {
+) -> *const u8 {
     let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
     let alist_bytes = slice_from_ptr(alist_ptr, alist_len as usize);
     let ip_private_key_bytes = slice_from_ptr(ip_private_key_ptr, ip_private_key_len as usize);
@@ -224,7 +229,7 @@ pub unsafe extern "C" fn create_identity_object_cs(
         ip_private_key_bytes,
         ip_cdi_private_key_bytes,
     );
-    let (mut bytes, success) = match response {
+    let (bytes, success) = match response {
         Ok(id_creation) => match serde_json::to_vec(&id_creation) {
             Ok(bytes) => (bytes, 1),
             Err(e) => (format!("{}", e).into_bytes(), -1),
@@ -232,10 +237,10 @@ pub unsafe extern "C" fn create_identity_object_cs(
         Err(e) => (format!("{}", e).into_bytes(), -1),
     };
     *out_length = bytes.len() as i32;
+    *out_capacity = bytes.capacity() as i32;
     *out_success = success;
-    let ptr = bytes.as_mut_ptr();
-    std::mem::forget(bytes);
-    ptr
+    let wrapper = ManuallyDrop::new(bytes);
+    wrapper.as_ptr()
 }
 
 /// This function takes pointers to bytearrays and use the library function
@@ -285,8 +290,9 @@ pub unsafe extern "C" fn create_identity_object_v1_cs(
     ip_private_key_ptr: *const u8,
     ip_private_key_len: i32,
     out_length: *mut i32,
+    out_capacity: *mut i32,
     out_success: *mut i32,
-) -> *mut u8 {
+) -> *const u8 {
     let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
     let alist_bytes = slice_from_ptr(alist_ptr, alist_len as usize);
     let ip_private_key_bytes = slice_from_ptr(ip_private_key_ptr, ip_private_key_len as usize);
@@ -298,7 +304,7 @@ pub unsafe extern "C" fn create_identity_object_v1_cs(
         request_bytes,
         ip_private_key_bytes,
     );
-    let (mut bytes, success) = match response {
+    let (bytes, success) = match response {
         Ok(id_creation) => match serde_json::to_vec(&id_creation) {
             Ok(bytes) => (bytes, 1),
             Err(e) => (format!("{}", e).into_bytes(), -1),
@@ -306,10 +312,10 @@ pub unsafe extern "C" fn create_identity_object_v1_cs(
         Err(e) => (format!("{}", e).into_bytes(), -1),
     };
     *out_length = bytes.len() as i32;
+    *out_capacity = bytes.capacity() as i32;
     *out_success = success;
-    let ptr = bytes.as_mut_ptr();
-    std::mem::forget(bytes);
-    ptr
+    let wrapper = ManuallyDrop::new(bytes);
+    wrapper.as_ptr()
 }
 
 /// This function takes pointers to bytearrays and use the library function
@@ -345,7 +351,8 @@ pub unsafe extern "C" fn validate_recovery_request_cs(
     request_ptr: *const u8,
     request_len: i32,
     out_length: *mut i32,
-) -> *mut u8 {
+    out_capacity: *mut i32,
+) -> *const u8 {
     let global_context_bytes = slice_from_ptr(ctx_ptr, ctx_len as usize);
     let ip_info_bytes = slice_from_ptr(ip_info_ptr, ip_info_len as usize);
     let request_bytes = slice_from_ptr(request_ptr, request_len as usize);
@@ -353,11 +360,11 @@ pub unsafe extern "C" fn validate_recovery_request_cs(
     match result {
         Ok(()) => std::ptr::null_mut(),
         Err(e) => {
-            let mut bytes = format!("{}", e).into_bytes();
+            let bytes = format!("{}", e).into_bytes();
             *out_length = bytes.len() as i32;
-            let ptr = bytes.as_mut_ptr();
-            std::mem::forget(bytes);
-            ptr
+            *out_capacity = bytes.capacity() as i32;
+            let wrapper = ManuallyDrop::new(bytes);
+            wrapper.as_ptr()
         }
     }
 }
