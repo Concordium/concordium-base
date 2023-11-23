@@ -8,7 +8,7 @@ extern "C" fn free_array_len(ptr: *mut u8, len: u64) {
 }
 
 #[no_mangle]
-/// Free an array that was converted to a pointer from a vector.
+/// Free a vector from its raw pointer, length and capacity.
 extern "C" fn free_array_len_cap(ptr: *mut u8, len: u64, cap: u64) {
     unsafe {
         Vec::from_raw_parts(ptr, len as usize, cap as usize);
