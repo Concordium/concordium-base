@@ -9,6 +9,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Error.Class
 import Control.Monad.State
+import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.HashMap.Strict as HM
@@ -17,8 +18,27 @@ import Data.Word
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as SHA256
+import qualified Data.FixedByteString as FBS
+import Data.Maybe
 
+-- | A generic Merkle proof is represented as a sequence of branches, each of which can be raw
+--  bytes or a sub-proof. The root has for a proof can be calculated by first calculating the
+--  hashes of any sub-proofs, then concatenating all the bytes together (where each subproof
+--  is replaced by the byte representation of its hash), and finally computing the SHA-256 hash
+--  of the byte string.
+--
+--  Note that a 'MerkleProof' can contain multiple 'RawData' chunks in sequence, which is equivalent
+--  to a single 'RawData' chunk with the 'BS.ByteString's concatenated. It can also contain
+--  'RawData' chunks with zero-length 'BS.ByteString's, which can always be omitted to produce an
+--  equivalent 'MerkleProof'. For storage and transmission, compact representations should be
+--  preferred, but functions operating on 'MerkleProof's should tolerate all representations.
+--
+--  This representation is broadly agnostic to what the proof represents, which will depend on
+--  the structure of the original Merkle tree. Moreover, a 'MerkleProof' allows multiple paths
+--  to be revealed in the same proof.
 type MerkleProof = [MerkleBranch]
+
+-- | A branch in a Merkle proof.
 data MerkleBranch = RawData BS.ByteString | SubProof MerkleProof
     deriving (Show)
 
@@ -52,6 +72,7 @@ data MerkleBody
     | Choice MerkleBody MerkleBody
     | Hashed Tag Id
     | RepeatedBE Tag Word8 MerkleBody
+    | LFMBTree Tag Word8 BS.ByteString MerkleBody
     deriving (Show)
 
 option :: MerkleBody -> MerkleBody
@@ -151,6 +172,37 @@ parseBytes len0 = Parse' $ \ParserContext{..} -> inner parserError len0 parserIn
 -- parseSubProof = Parse' $ \ParserContext{..} -> case parserInput of
 --     [] -> parserError UnexpectedEndOfInput
 
+parseSubProof ::
+    Parse' r MerkleProof ParseError (a, Builder.Builder) ->
+    Parse' r [MerkleBranch] ParseError (SHA256.Hash, Maybe a)
+parseSubProof inside = Parse' $ \pc@ParserContext{..} -> case parserInput of
+    [] -> parserError UnexpectedEndOfInput
+    (RawData bs : rest)
+        | BS.null bs -> unParse' (parseSubProof inside) pc{parserInput = rest}
+        | otherwise ->
+            unParse'
+                ( do
+                    bytes <- parseBytes 32
+                    let hsh = SHA256.Hash (FBS.fromByteString bytes)
+                    return (hsh, Nothing)
+                )
+                pc
+    (SubProof sp : rest) ->
+        unParse'
+            inside
+            pc
+                { parserInput = sp,
+                  parserCont = \(subPT, builder) remaining onErr ->
+                    if isEmpty remaining
+                        then
+                            let hsh = hashBuilder builder
+                            in  parserCont
+                                    (hsh, Just subPT)
+                                    rest
+                                    parserError
+                        else onErr ExpectedEndOfInput
+                }
+
 parseMerkleBody :: MerkleSchema -> MerkleBody -> PartialTree -> Parse' r MerkleProof ParseError (PartialTree, Builder.Builder)
 parseMerkleBody schema = inner
   where
@@ -174,44 +226,58 @@ parseMerkleBody schema = inner
     inner (Choice a b) pt = inner a pt <<|> inner b pt
     inner (Hashed tag ident) pt = addErrorContext (Context tag) $ case HM.lookup ident schema of
         Nothing -> throwError (UnknownSchemaId ident)
-        Just body -> takeSubProof
-          where
-            takeSubProof = Parse' $ \pc@ParserContext{..} -> case parserInput of
-                [] -> parserError UnexpectedEndOfInput
-                (RawData bs : rest)
-                    | BS.null bs -> unParse' takeSubProof pc{parserInput = rest}
-                    | otherwise ->
-                        unParse'
-                            ( do
-                                bytes <- parseBytes 32
-                                return (HM.insert tag (Leaf bytes) pt, Builder.byteString bytes)
-                            )
-                            pc
-                (SubProof sp : rest) ->
-                    unParse'
-                        (inner body mempty)
-                        pc
-                            { parserInput = sp,
-                              parserCont = \(subPT, builder) remaining onErr ->
-                                if isEmpty remaining
-                                    then
-                                        let hsh = SHA256.hashLazy $ Builder.toLazyByteString builder
-                                        in  parserCont
-                                                ( HM.insert tag (Node subPT) pt,
-                                                  Builder.shortByteString (SHA256.hashToShortByteString hsh)
-                                                )
-                                                rest
-                                                parserError
-                                    else onErr ExpectedEndOfInput
-                            }
+        Just body -> do
+            (subHash, mbranch) <- parseSubProof (inner body mempty)
+            let hashBS = SHA256.hashToByteString subHash
+                val = case mbranch of
+                    Nothing -> Leaf hashBS
+                    Just branch -> Node branch
+            return (HM.insert tag val pt, Builder.byteString hashBS)
     inner (RepeatedBE tag lenSize sub) pt = addErrorContext (Context tag) $ do
         lenBytes <- parseBytes (fromIntegral lenSize)
-        let len = BS.foldl' (\acc w -> acc * 256 + fromIntegral w) 0 lenBytes
+        let len = fromBE lenBytes
         let f (pt', builder) i = addErrorContext (Context (show i)) $ do
                 (pt'', builder'') <- inner sub mempty
                 return (HM.insert (show i) (Node pt'') pt', builder <> builder'')
         (pt1, builder) <- foldM f (mempty, mempty) [0 .. (len :: Integer) - 1]
         return (HM.insert tag (Node pt1) pt, builder)
+    inner (LFMBTree tag lenSize emptyBS sub) pt0 = addErrorContext (Context tag) $ do
+        lenBytes <- parseBytes (fromIntegral lenSize)
+        let len = fromBE lenBytes
+        let doTree 0 _ pt = do
+                actual <- parseBytes (BS.length emptyBS)
+                unless (actual == emptyBS) $ throwError (Expected emptyBS actual)
+                return (pt, SHA256.hash emptyBS)
+            doTree 1 base pt = do
+                (pt1, bs) <- inner sub mempty
+                return (HM.insert (show base) (Node pt1) pt, hashBuilder bs)
+            doTree size base pt = do
+                let leftSize = lowerPowerOfTwo size
+                (pt1, h1) <- doBranch leftSize base pt
+                (pt2, h2) <- doBranch (size - leftSize) (base + leftSize) pt1
+                return (pt2, SHA256.hashOfHashes h1 h2)
+            doBranch size base pt = do
+                (hsh, msubProof) <- parseSubProof ((_2 %~ builderHash) <$> doTree size base pt)
+                return (fromMaybe pt msubProof, hsh)
+        (ptSub, hsh) <- doBranch len 0 mempty
+        return (HM.insert tag (Node ptSub) pt0, builderHash hsh)
+
+hashBuilder :: Builder.Builder -> SHA256.Hash
+hashBuilder = SHA256.hashLazy . Builder.toLazyByteString
+
+builderHash :: SHA256.Hash -> Builder.Builder
+builderHash = Builder.shortByteString . SHA256.hashToShortByteString
+
+fromBE :: (Num a) => BS.ByteString -> a
+fromBE = BS.foldl' (\acc w -> acc * 256 + fromIntegral w) 0
+
+-- | Compute the nearest power of 2 less than the input value.
+--
+-- PRECONDITION: The input is at least 2.
+lowerPowerOfTwo :: Word64 -> Word64
+lowerPowerOfTwo x
+    | x < 2 = error "lowerPowerOfTwo: input must be at least 2"
+    | otherwise = bit (finiteBitSize x - countLeadingZeros (x - 1) - 1)
 
 parseMerkleProof :: MerkleSchema -> Id -> MerkleProof -> Either ParseError (PartialTree, SHA256.Hash)
 parseMerkleProof schema ident pf = case HM.lookup ident schema of
@@ -222,7 +288,7 @@ parseMerkleProof schema ident pf = case HM.lookup ident schema of
             ParserContext{parserInput = pf, parserError = Left, parserCont = cont}
   where
     cont (pt, builder) remaining onErr
-        | isEmpty remaining = Right (pt, SHA256.hashLazy $ Builder.toLazyByteString builder)
+        | isEmpty remaining = Right (pt, hashBuilder builder)
         | otherwise = onErr ExpectedEndOfInput
 
 data SchemaBuilderState = SchemaBuilderState
