@@ -93,8 +93,8 @@ impl PrimeField for Fq {
 }
 
 impl Curve for G2 {
-    type Scalar = Fr;
     type MultiExpType = GenericMultiExp<Self>;
+    type Scalar = Fr;
 
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;

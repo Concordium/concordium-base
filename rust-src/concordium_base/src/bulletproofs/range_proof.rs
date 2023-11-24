@@ -2,9 +2,7 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{
-        multiexp, multiexp_table, multiexp_worker_given_table, Curve, Field, PrimeField, Value, MultiExp,
-    },
+    curve_arithmetic::{multiexp, Curve, Field, MultiExp, PrimeField, Value},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
@@ -231,9 +229,9 @@ pub fn prove<C: Curve, T: Rng>(
     // let table = multiexp_table(&GH_B_tilde, window_size);
     // let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
     // let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
-    let multiexp_alg = C::new_multiexp(GH_B_tilde);
-    let A = multiexp_alg.multiexp(A_scalars);
-    let S = multiexp_alg.multiexp(S_scalars);
+    let multiexp_alg = C::new_multiexp(&GH_B_tilde);
+    let A = multiexp_alg.multiexp(&A_scalars);
+    let S = multiexp_alg.multiexp(&S_scalars);
     // let A = multiexp(&GH_B_tilde, &A_scalars);
     // let S = multiexp(GH_B_tilde, &S_scalars);
     // append commitments A and S to transcript

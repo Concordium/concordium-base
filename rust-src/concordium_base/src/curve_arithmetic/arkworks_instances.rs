@@ -2,7 +2,7 @@ use core::fmt;
 
 use crate::common::{Deserial, Serial};
 
-use super::{Curve, Field, PrimeField, GenericMultiExp};
+use super::{Curve, Field, GenericMultiExp, PrimeField};
 
 #[derive(PartialEq, Eq, Copy, Clone, fmt::Debug)]
 pub struct ArkField<
@@ -12,13 +12,13 @@ pub struct ArkField<
 impl<F: ark_ff::Field + Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display> Serial
     for ArkField<F>
 {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) { todo!() }
+    fn serial<B: crate::common::Buffer>(&self, _out: &mut B) { todo!() }
 }
 
 impl<F: ark_ff::Field + Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display>
     Deserial for ArkField<F>
 {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
+    fn deserial<R: byteorder::ReadBytesExt>(_source: &mut R) -> crate::common::ParseResult<Self> {
         todo!()
     }
 }
@@ -32,7 +32,7 @@ impl<F: ark_ff::Field + Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + f
 }
 
 impl<F: ark_ff::Field> Field for ArkField<F> {
-    fn random<R: rand::prelude::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self { todo!() }
+    fn random<R: rand::prelude::RngCore + ?std::marker::Sized>(_rng: &mut R) -> Self { todo!() }
 
     fn zero() -> Self { todo!() }
 
@@ -46,11 +46,11 @@ impl<F: ark_ff::Field> Field for ArkField<F> {
 
     fn negate(&mut self) { todo!() }
 
-    fn add_assign(&mut self, other: &Self) { todo!() }
+    fn add_assign(&mut self, _other: &Self) { todo!() }
 
-    fn sub_assign(&mut self, other: &Self) { todo!() }
+    fn sub_assign(&mut self, _other: &Self) { todo!() }
 
-    fn mul_assign(&mut self, other: &Self) { todo!() }
+    fn mul_assign(&mut self, _other: &Self) { todo!() }
 
     fn inverse(&self) -> Option<Self> { todo!() }
 }
@@ -73,14 +73,14 @@ impl<
         G: ark_ec::CurveGroup + Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display,
     > Serial for ArkGroup<G>
 {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) { todo!() }
+    fn serial<B: crate::common::Buffer>(&self, _out: &mut B) { todo!() }
 }
 
 impl<
         G: ark_ec::CurveGroup + Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display,
     > Deserial for ArkGroup<G>
 {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
+    fn deserial<R: byteorder::ReadBytesExt>(_source: &mut R) -> crate::common::ParseResult<Self> {
         todo!()
     }
 }
@@ -121,20 +121,17 @@ impl<G: ark_ec::CurveGroup + ark_ec::Group + CurveElementLength> Curve for ArkGr
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { ArkGroup(self.0 * scalar.0) }
 
-    fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(b: &mut R) -> anyhow::Result<Self> {
+    fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(_b: &mut R) -> anyhow::Result<Self> {
         todo!()
     }
 
-    fn generate<R: rand::prelude::Rng>(rng: &mut R) -> Self {
-        // G::ran
-        todo!()
-    }
+    fn generate<R: rand::prelude::Rng>(_rng: &mut R) -> Self { todo!() }
 
-    fn generate_scalar<R: rand::prelude::Rng>(rng: &mut R) -> Self::Scalar { todo!() }
+    fn generate_scalar<R: rand::prelude::Rng>(_rng: &mut R) -> Self::Scalar { todo!() }
 
-    fn scalar_from_u64(n: u64) -> Self::Scalar { todo!() }
+    fn scalar_from_u64(_n: u64) -> Self::Scalar { todo!() }
 
-    fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar { todo!() }
+    fn scalar_from_bytes<A: AsRef<[u8]>>(_bs: A) -> Self::Scalar { todo!() }
 
-    fn hash_to_group(m: &[u8]) -> Self { todo!() }
+    fn hash_to_group(_m: &[u8]) -> Self { todo!() }
 }

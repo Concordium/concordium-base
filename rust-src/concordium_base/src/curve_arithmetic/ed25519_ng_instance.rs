@@ -1,19 +1,18 @@
-use std::{
-    fmt::Display,
-    ops::{AddAssign, MulAssign, Neg, SubAssign}
-};
-use core::borrow::Borrow;
 use crate::common::{Buffer, Deserial, Serial};
 use byteorder::{ByteOrder, LittleEndian};
-use curve25519_dalek_ng::traits::VartimePrecomputedMultiscalarMul;
+use core::borrow::Borrow;
 use curve25519_dalek_ng::{
     constants::RISTRETTO_BASEPOINT_POINT,
     ristretto::{CompressedRistretto, RistrettoPoint, VartimeRistrettoPrecomputation},
     scalar::Scalar,
-    traits::Identity,
+    traits::{Identity, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul},
+};
+use std::{
+    fmt::Display,
+    ops::{AddAssign, MulAssign, Neg, SubAssign},
 };
 
-use super::{Curve, Field, PrimeField, MultiExp};
+use super::{Curve, Field, MultiExp, PrimeField};
 
 /// A wrapper to make it possible to implement external traits
 /// and to avoid clashes with blacket implementations.
@@ -147,7 +146,7 @@ impl Deserial for RistrettoPoint {
 }
 
 impl Curve for RistrettoPoint {
-    type MultiExpType = VartimeRistrettoPrecomputation;
+    type MultiExpType = RistrettoMultiExpNoPrecompute;
     type Scalar = RistrettoScalar;
 
     // TODO: check this.
@@ -206,17 +205,48 @@ impl Curve for RistrettoPoint {
     }
 }
 
+/// An instance of multiexp algorithm from the Dalek labrary that uses
+/// precomputed table of points. Precomputing is slow, so it makes sense to use
+/// this implementation when one wants to share the precomputed table with many
+/// subsequient computations. For our current usecases it seems not relevant.
 impl MultiExp for VartimeRistrettoPrecomputation {
     type CurvePoint = RistrettoPoint;
 
-    fn new<X: Borrow<Self::CurvePoint>, I: IntoIterator<Item = X>>(gs: I) -> Self {
-        <Self as VartimePrecomputedMultiscalarMul>::new(gs)
+    fn new<X: Borrow<Self::CurvePoint>>(gs: &[X]) -> Self {
+        <Self as VartimePrecomputedMultiscalarMul>::new(gs.into_iter().map(|p| p.borrow()))
     }
-    
-    fn multiexp_worker<X: Borrow<<Self::CurvePoint as Curve>::Scalar>, I: IntoIterator<Item = X>>(
+
+    fn multiexp<X: Borrow<<Self::CurvePoint as Curve>::Scalar>>(
         &self,
-        exps:I,
+        exps: &[X],
     ) -> Self::CurvePoint {
         self.vartime_multiscalar_mul(exps.into_iter().map(|p| p.borrow().0))
+    }
+}
+
+/// An instance of multiexp algorithm from the Dalek labrary.
+/// It is instantiated with points, but no precomutations is done.
+/// This way it follows the same interface and our generic multiexp.
+pub struct RistrettoMultiExpNoPrecompute {
+    points: Vec<RistrettoPoint>,
+}
+
+impl MultiExp for RistrettoMultiExpNoPrecompute {
+    type CurvePoint = RistrettoPoint;
+
+    fn new<X: Borrow<Self::CurvePoint>>(gs: &[X]) -> Self {
+        Self {
+            points: gs.into_iter().map(|x| *x.borrow()).collect(),
+        }
+    }
+
+    fn multiexp<X: Borrow<<Self::CurvePoint as Curve>::Scalar>>(
+        &self,
+        exps: &[X],
+    ) -> Self::CurvePoint {
+        Self::CurvePoint::vartime_multiscalar_mul(
+            exps.into_iter().map(|p| p.borrow().0),
+            &self.points,
+        )
     }
 }

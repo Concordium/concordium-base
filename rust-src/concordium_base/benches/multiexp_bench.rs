@@ -33,7 +33,7 @@ pub fn bench_multiexp(c: &mut Criterion) {
             let gsc = gs[..i].to_vec();
             let esc = es[..i].to_vec();
             group.bench_function(&format!("multiexp({})", w), move |b| {
-                b.iter(|| multiexp_worker(&gsc, &esc, w))
+                b.iter(|| GenericMultiExp::<G1>::new(&gsc, w).multiexp(&esc))
             });
         }
         group.finish();

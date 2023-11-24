@@ -12,7 +12,7 @@ use curve25519_dalek::{
     traits::Identity,
 };
 
-use super::{Curve, Field, PrimeField, GenericMultiExp};
+use super::{Curve, Field, GenericMultiExp, PrimeField};
 
 /// A wrapper to make it possible to implement external traits
 /// and to avoid clashes with blacket implementations.
