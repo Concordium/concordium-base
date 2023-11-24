@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+  - Updated interfaces used by feature `csharp` to include a reference pointer which sets the capacity of the array returned.
+  - Add dependency to feature `ffi` from `concordium_base` since `free_array_len_cap` is now exported from the `ffi_helpers` module.
+
 ## 0.6.0
   - Add functions `validate_request_v1`, `create_identity_object_v1` to support the new version 1 identity creation flow.
   - Add function `validate_recovery_request` for validating identity recovery requests.

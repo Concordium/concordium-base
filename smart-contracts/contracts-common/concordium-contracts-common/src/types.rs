@@ -2860,7 +2860,7 @@ mod test {
     #[cfg(feature = "derive-serde")]
     fn test_given_rfc3339_format_when_string_to_timestamp_then_map() {
         let datetime = "1970-01-01T00:00:00.042+00:00";
-        if let Ok(timestamp) = Timestamp::from_str(&datetime) {
+        if let Ok(timestamp) = Timestamp::from_str(datetime) {
             assert_eq!(timestamp.milliseconds, 42);
         } else {
             assert!(false)

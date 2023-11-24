@@ -59,6 +59,12 @@ jobs:
       matrix:
         plan:
         - rust: "nightly-2023-04-01-x86_64-unknown-linux-gnu"
+        crates:
+        - rust-src
+        - rust-bins
+        - idiss
+        - mobile_wallet
+        - identity-provider-service
 
     steps:
     - name: Checkout
@@ -66,21 +72,11 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: ${{ matrix.plan.rust }}
-        override: true
-        components: rustfmt
-
     - name: Run rustfmt
       run: |
-        cargo fmt --manifest-path rust-src/Cargo.toml --all -- --check
-        cargo fmt --manifest-path rust-bins/Cargo.toml -- --check
-        cargo fmt --manifest-path idiss/Cargo.toml -- --check
-        cargo fmt --manifest-path mobile_wallet/Cargo.toml -- --check
-        cargo fmt --manifest-path identity-provider-service/Cargo.toml -- --check
+        rustup default ${{ matrix.plan.rust }}
+        rustup component add rustfmt
+        cargo fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
 
   rustdoc:
     runs-on: ubuntu-latest
@@ -103,16 +99,11 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: ${{ matrix.plan.rust }}
-        override: true
-
     - name: Run cargo doc
       working-directory: ${{ matrix.crates }}
       run: |
+        rustup default ${{ matrix.plan.rust }}
+        rustup component add rust-docs
         RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
   fourmolu:
@@ -156,18 +147,9 @@ jobs:
         submodules: recursive
     # RUST #
 
-    # Set up Rust and restore dependencies and targets from cache.
-    # This must be done before checking the Rust sources.
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: ${{ matrix.plan.rust }}
-        override: true
-        components: clippy
-
     - name: Check that concordium base compiles with older Rust version.
       run: |
+        rustup default ${{ matrix.plan.rust }}
         cargo check --manifest-path rust-src/concordium_base/Cargo.toml
 
   build-test:
@@ -206,13 +188,11 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-{{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: ${{ matrix.plan.rust }}
-        override: true
-        components: clippy
-        target: aarch64-linux-android
+      run: |
+        rustup default ${{ matrix.plan.rust }}
+        rustup component add clippy rust-docs
+        rustup target add aarch64-linux-android
+
     # Lightweight check that Rust code compiles.
     # Catching failure here avoids restoring of Haskell caches.
     - name: Check that all Rust targets build

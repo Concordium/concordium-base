@@ -561,7 +561,7 @@ pub fn deletable_derive(input: TokenStream) -> TokenStream {
 /// #[derive(SchemaType)]
 /// enum MyError { ... }
 ///
-/// #[init(contract = "my_contract", parameter = "MyError")]
+/// #[init(contract = "my_contract", error = "MyError")]
 /// fn some_init(ctx: &impl InitContext, state: &mut StateApi) -> Result<(), MyError> {...}
 /// ```
 ///

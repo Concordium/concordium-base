@@ -178,6 +178,7 @@ module Concordium.Types.ProtocolVersion (
     P4Sym0,
     P5Sym0,
     P6Sym0,
+    P7Sym0,
 ) where
 
 import Control.Monad.Except (ExceptT)
@@ -204,6 +205,7 @@ $( singletons
             | P4
             | P5
             | P6
+            | P7
             deriving (Eq, Ord)
 
         data ChainParametersVersion
@@ -219,6 +221,7 @@ $( singletons
         chainParametersVersionFor P4 = ChainParametersV1
         chainParametersVersionFor P5 = ChainParametersV1
         chainParametersVersionFor P6 = ChainParametersV2
+        chainParametersVersionFor P7 = ChainParametersV2
 
         -- \* Account versions
 
@@ -241,6 +244,7 @@ $( singletons
         accountVersionFor P4 = AccountV1
         accountVersionFor P5 = AccountV2
         accountVersionFor P6 = AccountV2
+        accountVersionFor P7 = AccountV2
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
@@ -261,6 +265,7 @@ $( singletons
         transactionOutcomesVersionFor P4 = TOV0
         transactionOutcomesVersionFor P5 = TOV1
         transactionOutcomesVersionFor P6 = TOV1
+        transactionOutcomesVersionFor P7 = TOV1
 
         -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
         -- at an account version. This is intended to give more descriptive type errors in cases where the
@@ -302,6 +307,7 @@ protocolVersionToWord64 P3 = 3
 protocolVersionToWord64 P4 = 4
 protocolVersionToWord64 P5 = 5
 protocolVersionToWord64 P6 = 6
+protocolVersionToWord64 P7 = 7
 
 -- | Parse a 'Word64' as a 'ProtocolVersion'.
 protocolVersionFromWord64 :: (MonadFail m) => Word64 -> m ProtocolVersion
@@ -311,6 +317,7 @@ protocolVersionFromWord64 3 = return P3
 protocolVersionFromWord64 4 = return P4
 protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 6 = return P6
+protocolVersionFromWord64 7 = return P7
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 -- | Convert a @ChainParametersVersion@ to the corresponding 'Word64'.
@@ -344,6 +351,7 @@ promoteProtocolVersion P3 = SomeProtocolVersion SP3
 promoteProtocolVersion P4 = SomeProtocolVersion SP4
 promoteProtocolVersion P5 = SomeProtocolVersion SP5
 promoteProtocolVersion P6 = SomeProtocolVersion SP6
+promoteProtocolVersion P7 = SomeProtocolVersion SP7
 
 -- | Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
@@ -456,14 +464,23 @@ protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor sp
 --  (Memos are supported in 'P2' onwards.)
 supportsMemo :: SProtocolVersion pv -> Bool
 supportsMemo SP1 = False
-supportsMemo _ = True
+supportsMemo SP2 = True
+supportsMemo SP3 = True
+supportsMemo SP4 = True
+supportsMemo SP5 = True
+supportsMemo SP6 = True
+supportsMemo SP7 = True
 
 -- | Whether the protocol version supports account aliases.
 --  (Account aliases are supported in 'P3' onwards.)
 supportsAccountAliases :: SProtocolVersion pv -> Bool
 supportsAccountAliases SP1 = False
 supportsAccountAliases SP2 = False
-supportsAccountAliases _ = True
+supportsAccountAliases SP3 = True
+supportsAccountAliases SP4 = True
+supportsAccountAliases SP5 = True
+supportsAccountAliases SP6 = True
+supportsAccountAliases SP7 = True
 
 -- | Whether the protocol version supports V1 smart contracts.
 --  (V1 contracts are supported in 'P4' onwards.)
@@ -474,6 +491,7 @@ supportsV1Contracts SP3 = False
 supportsV1Contracts SP4 = True
 supportsV1Contracts SP5 = True
 supportsV1Contracts SP6 = True
+supportsV1Contracts SP7 = True
 
 -- | Whether the protocol version supports delegation.
 --  (Delegation is supported in 'P4' onwards.)
@@ -493,6 +511,7 @@ supportsUpgradableContracts spv = case spv of
     SP4 -> False
     SP5 -> True
     SP6 -> True
+    SP7 -> True
 
 -- | Whether the protocol version supports chain queries in smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -504,6 +523,7 @@ supportsChainQueryContracts spv = case spv of
     SP4 -> False
     SP5 -> True
     SP6 -> True
+    SP7 -> True
 
 -- | Whether the protocol version supports sign extension instructions for V1
 --  contracts. (Supported in 'P6' and onwards)
@@ -515,6 +535,7 @@ supportsSignExtensionInstructions spv = case spv of
     SP4 -> False
     SP5 -> False
     SP6 -> True
+    SP7 -> True
 
 -- | Whether the protocol version allows globals in data and element sections of
 --  Wasm modules for V1 contracts. (Supported before 'P6')
@@ -526,6 +547,7 @@ supportsGlobalsInInitSections spv = case spv of
     SP4 -> True
     SP5 -> True
     SP6 -> False
+    SP7 -> False
 
 -- | Whether the protocol version specifies that custom section should not be
 --  counted towards module size when executing V1 contracts.
@@ -543,3 +565,4 @@ supportsAccountSignatureChecks spv = case spv of
     SP4 -> False
     SP5 -> False
     SP6 -> True
+    SP7 -> True
