@@ -27,8 +27,8 @@ use byteorder::ReadBytesExt;
 use chrono::TimeZone;
 use concordium_contracts_common as concordium_std;
 pub use concordium_contracts_common::SignatureThreshold;
-use concordium_contracts_common::{AccountThreshold, ZeroSignatureThreshold};
-use concordium_std::{AccountSignatures, CredentialSignatures, SignatureEd25519};
+use concordium_contracts_common::{AccountPublicKeys, AccountThreshold, ZeroSignatureThreshold};
+use concordium_std::{AccountSignatures, CredentialSignatures, PublicKeyEd25519, SignatureEd25519};
 use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
@@ -2049,6 +2049,41 @@ pub struct AccountKeys {
     /// The account threshold.
     #[serde(rename = "threshold")]
     pub threshold: AccountThreshold,
+}
+
+/// From trait to convert `AccountKeys` into `AccountPublicKeys`.
+impl From<AccountKeys> for AccountPublicKeys {
+    fn from(account_keys: AccountKeys) -> Self {
+        let mut map: BTreeMap<u8, concordium_contracts_common::CredentialPublicKeys> =
+            BTreeMap::new();
+
+        for (credential_index, credential_data) in account_keys.keys {
+            let mut inner_map: BTreeMap<u8, concordium_contracts_common::PublicKey> =
+                BTreeMap::new();
+
+            for (key_index, public_key) in credential_data.keys {
+                inner_map.insert(
+                    u8::from(key_index),
+                    concordium_contracts_common::PublicKey::Ed25519(PublicKeyEd25519(
+                        *public_key.public.as_bytes(),
+                    )),
+                );
+            }
+
+            map.insert(
+                credential_index.index,
+                concordium_contracts_common::CredentialPublicKeys {
+                    keys:      inner_map,
+                    threshold: credential_data.threshold,
+                },
+            );
+        }
+
+        AccountPublicKeys {
+            keys:      map,
+            threshold: account_keys.threshold,
+        }
+    }
 }
 
 /// Create account keys with a single credential at index 0
