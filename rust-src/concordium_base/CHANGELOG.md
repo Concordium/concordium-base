@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+- Improve performance of `multiexp*` family of functions.
+
 ## 3.2.0 (2023-11-22)
 
 - Add `From` trait to convert `AccountKeys` into `AccountPublicKeys`.
