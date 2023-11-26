@@ -215,10 +215,10 @@ pub fn multiexp_worker_given_table<C: Curve>(
     window: usize,
 ) -> C {
     // Compute the wnaf
-    let window_size = window + 1;
+    let window_plus1 = window + 1;
     let k = exps.len();
-    // assert_eq!(gs.len(), k);
-    assert!(window_size < 62);
+    assert!(window_plus1 >= 2);
+    assert!(window_plus1 < 63);
 
     let mut wnaf = Vec::with_capacity(k);
 
@@ -228,7 +228,7 @@ pub fn multiexp_worker_given_table<C: Curve>(
     // this avoids any field arithmetic and operates directly on the bit
     // representation of the scalars, leading to a substantial performance
     // improvement.
-    let width = 1u64 << window_size;
+    let width = 1u64 << window_plus1;
     let window_mask = width - 1;
 
     for c in exps.iter() {
@@ -243,7 +243,7 @@ pub fn multiexp_worker_given_table<C: Curve>(
             let u64_idx = pos / 64;
             let bit_idx = pos % 64;
             let cur_u64 = repr_limbs[u64_idx];
-            let bit_buf = if bit_idx + window_size < 64 {
+            let bit_buf = if bit_idx + window_plus1 < 64 {
                 // This window's bits are contained in a single u64
                 cur_u64 >> bit_idx
             } else {
@@ -273,8 +273,8 @@ pub fn multiexp_worker_given_table<C: Curve>(
                         (window_val as i64).wrapping_sub(width as i64)
                     },
                 );
-                v.extend(std::iter::repeat(0).take(window_size - 1));
-                pos += window_size;
+                v.extend(std::iter::repeat(0).take(window_plus1 - 1));
+                pos += window_plus1;
             }
         }
         wnaf.push(v);
