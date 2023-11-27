@@ -4,7 +4,7 @@ pub mod arkworks_instances;
 mod bls12_381_g1hash;
 mod bls12_381_g2hash;
 mod bls12_381_instance;
-mod ed25519_arkworks;
+// mod ed25519_arkworks;
 mod ed25519_instance;
 mod ed25519_ng_instance;
 // mod ed25519_new_instance;
