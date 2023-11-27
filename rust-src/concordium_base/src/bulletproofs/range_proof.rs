@@ -224,16 +224,10 @@ pub fn prove<C: Curve, T: Rng>(
         .copied()
         .chain(once(B_tilde))
         .collect();
-    // // compute A and S comittments using multi exponentiation
-    // let window_size = 4;
-    // let table = multiexp_table(&GH_B_tilde, window_size);
-    // let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
-    // let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
+    // compute A and S comittments using multi exponentiation
     let multiexp_alg = C::new_multiexp(&GH_B_tilde);
     let A = multiexp_alg.multiexp(&A_scalars);
     let S = multiexp_alg.multiexp(&S_scalars);
-    // let A = multiexp(&GH_B_tilde, &A_scalars);
-    // let S = multiexp(GH_B_tilde, &S_scalars);
     // append commitments A and S to transcript
     transcript.append_message(b"A", &A);
     transcript.append_message(b"S", &S);
@@ -811,7 +805,7 @@ mod tests {
     /// The second check will fail.
     /// This is tested by checking if the verifier returns
     /// Err(Err(VerificationError::Second))
-    type SomeCurve = curve25519_dalek::ristretto::RistrettoPoint;
+    type SomeCurve = G1;
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
