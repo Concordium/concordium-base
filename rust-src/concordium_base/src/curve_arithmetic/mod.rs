@@ -1,13 +1,9 @@
 //! Basic definitions of the curve and pairing abstractions, and implementations
 //! of these abstractions for the curves used on Concordium.
-pub mod arkworks_instances;
 mod bls12_381_g1hash;
 mod bls12_381_g2hash;
 mod bls12_381_instance;
-// mod ed25519_arkworks;
 mod ed25519_instance;
-mod ed25519_ng_instance;
-// mod ed25519_new_instance;
 
 pub mod secret_value;
 pub use secret_value::{Secret, Value};
@@ -86,6 +82,9 @@ pub trait Field:
     }
 }
 
+/// This is an extension of the `Field` trait that adds some constants decribing
+/// the element size and operations for conveting to/from bib integer
+/// representation (an array of `u64` limbs.)
 pub trait PrimeField: Field {
     /// How many bits are needed to represent an element of this field.
     const NUM_BITS: u32;
@@ -94,10 +93,11 @@ pub trait PrimeField: Field {
     /// element.
     const CAPACITY: u32;
 
-    /// Convert this prime field element into a biginteger representation.
+    /// Get a big integer representation with least significant digit first.
     fn into_repr(self) -> Vec<u64>;
 
-    /// Convert a biginteger representation into a prime field element
+    /// Get a prime field element from its big integer representaion (least
+    /// significant digit first).
     fn from_repr(_: &[u64]) -> Result<Self, CurveDecodingError>;
 }
 

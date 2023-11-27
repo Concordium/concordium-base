@@ -5,7 +5,6 @@ extern crate criterion;
 
 use concordium_base::curve_arithmetic::*;
 use criterion::Criterion;
-use curve25519_dalek_ng::{ristretto::RistrettoPoint, traits::VartimePrecomputedMultiscalarMul};
 use pairing::bls12_381::G1;
 use rand::*;
 use std::time::Duration;
@@ -40,7 +39,9 @@ pub fn dalek_msm_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("Multi-Scalar Multiplication");
     let mut rng = &mut thread_rng();
 
-    use curve25519_dalek_ng::{scalar::Scalar, traits::VartimeMultiscalarMul};
+    use curve25519_dalek::{
+        ristretto::RistrettoPoint, scalar::Scalar, traits::VartimeMultiscalarMul,
+    };
     let G: Vec<RistrettoPoint> = (0..N).map(|_| RistrettoPoint::random(&mut rng)).collect();
     let V: Vec<_> = (0..N).map(|_| Scalar::random(&mut rng)).collect();
 
@@ -54,5 +55,5 @@ pub fn dalek_msm_benchmarks(c: &mut Criterion) {
 criterion_group!(
     name = benchmarks;
     config = Criterion::default().measurement_time(Duration::from_millis(10000)).sample_size(100);
-    targets = ccd_msm_benchmarks::<G1>, ccd_msm_benchmarks::<RistrettoPoint>, dalek_msm_benchmarks);
+    targets = ccd_msm_benchmarks::<G1>, ccd_msm_benchmarks::<curve25519_dalek::ristretto::RistrettoPoint>, dalek_msm_benchmarks);
 criterion_main!(benchmarks);

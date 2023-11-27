@@ -17,8 +17,6 @@ use pprof::criterion::Output;
 use rand::*;
 use std::time::Duration;
 
-// type SomeCurve = G1;
-
 pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     let mut group = c.benchmark_group("Range Proof");
 
@@ -125,7 +123,5 @@ criterion_group!(
     targets =
     prove_verify_benchmarks::<G1>,
     prove_verify_benchmarks::<RistrettoPoint>,
-    prove_verify_benchmarks::<curve25519_dalek_ng::ristretto::RistrettoPoint>,
-    //prove_verify_benchmarks::<ArkGroup<ark_curve25519::EdwardsProjective>>
 );
 criterion_main!(benchmarks);
