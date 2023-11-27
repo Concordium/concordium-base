@@ -1027,7 +1027,7 @@ fn display_json_template_indented(
 ///     contracts: map,
 /// });
 ///
-/// let display = "Contract:                     MyContract
+/// let display = "Contract:  MyContract
 ///   Init:
 ///     Parameter:
 ///       \"<AccountAddress>\"
@@ -1054,7 +1054,7 @@ impl Display for VersionedModuleSchema {
         match self {
             VersionedModuleSchema::V0(module_v0) => {
                 for (contract_name, contract_schema) in module_v0.contracts.iter() {
-                    out = format!("Contract: {:>11}\n", contract_name);
+                    out = format!("{}Contract: {:>11}\n", out, contract_name);
                     // State
                     if let Some(type_schema) = &contract_schema.state {
                         out = format!("{}{:>2}State:\n", out, "");
@@ -1094,7 +1094,7 @@ impl Display for VersionedModuleSchema {
             }
             VersionedModuleSchema::V1(module_v1) => {
                 for (contract_name, contract_schema) in module_v1.contracts.iter() {
-                    out = format!("Contract: {:>11}\n", contract_name);
+                    out = format!("{}Contract: {:>11}\n", out, contract_name);
                     // Init Function
                     if let Some(schema) = &contract_schema.init {
                         out = format!("{}{:>2}Init:\n", out, "");
@@ -1151,7 +1151,7 @@ impl Display for VersionedModuleSchema {
             }
             VersionedModuleSchema::V2(module_v2) => {
                 for (contract_name, contract_schema) in module_v2.contracts.iter() {
-                    out = format!("Contract: {:>11}\n", contract_name);
+                    out = format!("{}Contract: {:>11}\n", out, contract_name);
                     // Init Function
                     if let Some(FunctionV2 {
                         parameter,
@@ -1240,7 +1240,7 @@ impl Display for VersionedModuleSchema {
             }
             VersionedModuleSchema::V3(module_v3) => {
                 for (contract_name, contract_schema) in module_v3.contracts.iter() {
-                    out = format!("Contract: {:>11}\n", contract_name);
+                    out = format!("{}Contract: {:>11}\n", out, contract_name);
 
                     // Init Function
                     if let Some(FunctionV2 {
@@ -1602,6 +1602,79 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
+    #[test]
+    fn test_schema_template_display_module_version_v3_multiple_contracts() {
+        let mut receive_function_map = BTreeMap::new();
+        receive_function_map.insert(String::from("MyFunction"), FunctionV2 {
+            parameter:    Some(Type::AccountAddress),
+            error:        Some(Type::AccountAddress),
+            return_value: Some(Type::AccountAddress),
+        });
+
+        let mut map = BTreeMap::new();
+
+        map.insert(String::from("MyContract"), ContractV3 {
+            init:    Some(FunctionV2 {
+                parameter:    Some(Type::AccountAddress),
+                error:        Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            }),
+            receive: receive_function_map.clone(),
+            event:   Some(Type::AccountAddress),
+        });
+        map.insert(String::from("MySecondContract"), ContractV3 {
+            init:    Some(FunctionV2 {
+                parameter:    Some(Type::AccountAddress),
+                error:        Some(Type::AccountAddress),
+                return_value: Some(Type::AccountAddress),
+            }),
+            receive: receive_function_map,
+            event:   Some(Type::AccountAddress),
+        });
+
+        let schema = VersionedModuleSchema::V3(ModuleV3 {
+            contracts: map,
+        });
+
+        let display = "Contract:  MyContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Error:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Error:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"
+  Event:
+    \"<AccountAddress>\"
+Contract: MySecondContract
+  Init:
+    Parameter:
+      \"<AccountAddress>\"
+    Error:
+      \"<AccountAddress>\"
+    Return value:
+      \"<AccountAddress>\"
+  Methods:
+    - \"MyFunction\"
+      Parameter:
+        \"<AccountAddress>\"
+      Error:
+        \"<AccountAddress>\"
+      Return value:
+        \"<AccountAddress>\"
+  Event:
+    \"<AccountAddress>\"\n";
+        assert_eq!(display, format!("{}", schema));
+    }
+
     /// Tests schema template display of `VersionedModuleSchema::V3`
     #[test]
     fn test_schema_template_display_module_version_v3() {
@@ -1628,7 +1701,7 @@ mod tests {
             contracts: map,
         });
 
-        let display = "Contract:                     MyContract
+        let display = "Contract:  MyContract
   Init:
     Parameter:
       \"<AccountAddress>\"
@@ -1675,7 +1748,7 @@ mod tests {
             contracts: map,
         });
 
-        let display = "Contract:                     MyContract
+        let display = "Contract:  MyContract
   Init:
     Parameter:
       \"<AccountAddress>\"
@@ -1718,7 +1791,7 @@ mod tests {
             contracts: map,
         });
 
-        let display = "Contract:                     MyContract
+        let display = "Contract:  MyContract
   Init:
     Parameter:
       \"<AccountAddress>\"
@@ -1752,7 +1825,7 @@ mod tests {
             contracts: map,
         });
 
-        let display = "Contract:                     MyContract
+        let display = "Contract:  MyContract
   State:
     \"<AccountAddress>\"
   Init:
@@ -2037,7 +2110,7 @@ mod tests {
     #[test]
     fn test_serial_account_address() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::AccountAddress;
         let bytes =
             schema.serial_value(&json!(format!("{}", &account))).expect("Serializing failed");
@@ -2051,7 +2124,7 @@ mod tests {
     #[test]
     fn test_serial_account_address_wrong_address_fails() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::AccountAddress;
         let json = json!(format!("{}", &account).get(1..));
         let err = schema.serial_value(&json).expect_err("Serializing should fail");
@@ -2076,7 +2149,7 @@ mod tests {
     #[test]
     fn test_serial_list_fails_with_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::List(SizeLength::U8, Box::new(Type::AccountAddress));
         let json = json!([format!("{}", account), 123]);
         let err = schema.serial_value(&json).expect_err("Serializing should fail");
@@ -2097,7 +2170,7 @@ mod tests {
     #[test]
     fn test_serial_object_fails_with_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema = Type::Struct(Fields::Named(vec![
             ("account".into(), Type::AccountAddress),
             ("contract".into(), Type::ContractAddress),
@@ -2121,7 +2194,7 @@ mod tests {
     #[test]
     fn test_serial_fails_with_nested_trace() {
         let account_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
-        let account = AccountAddress(account_bytes.clone());
+        let account = AccountAddress(account_bytes);
         let schema_object = Type::Struct(Fields::Named(vec![
             ("account".into(), Type::AccountAddress),
             ("contract".into(), Type::ContractAddress),

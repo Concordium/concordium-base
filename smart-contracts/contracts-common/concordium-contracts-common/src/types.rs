@@ -672,7 +672,7 @@ impl quickcheck::Arbitrary for Timestamp {
 impl Timestamp {
     /// Construct timestamp from milliseconds since unix epoch.
     #[inline(always)]
-    pub fn from_timestamp_millis(milliseconds: u64) -> Self {
+    pub const fn from_timestamp_millis(milliseconds: u64) -> Self {
         Self {
             milliseconds,
         }
@@ -680,7 +680,7 @@ impl Timestamp {
 
     /// Milliseconds since the UNIX epoch.
     #[inline(always)]
-    pub fn timestamp_millis(&self) -> u64 { self.milliseconds }
+    pub const fn timestamp_millis(&self) -> u64 { self.milliseconds }
 
     /// Add duration to the timestamp. Returns `None` if the resulting timestamp
     /// is not representable, i.e., too far in the future.
@@ -778,11 +778,18 @@ impl fmt::Display for ParseTimestampError {
 impl std::error::Error for ParseTimestampError {}
 
 #[cfg(feature = "derive-serde")]
-/// The FromStr parses the time according to RFC3339.
+/// The FromStr parses a string representing either an [`u64`] of milliseconds
+/// or the time according to RFC3339.
 impl str::FromStr for Timestamp {
     type Err = ParseTimestampError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let try_parse_u64 = s.parse::<u64>().map(Timestamp::from_timestamp_millis);
+
+        if let Ok(parsed_u64) = try_parse_u64 {
+            return Ok(parsed_u64);
+        }
+
         let datetime =
             chrono::DateTime::parse_from_rfc3339(s).map_err(ParseTimestampError::ParseError)?;
         let millis = datetime
@@ -794,14 +801,19 @@ impl str::FromStr for Timestamp {
 }
 
 #[cfg(feature = "derive-serde")]
-/// The display implementation displays the timestamp according to RFC3339
-/// format in the UTC time zone.
+/// This display implementation attempts to format the timestamp as per
+/// the RFC3339 standard, using the UTC time zone.
+/// If parsing the timestamp into a [`chrono::DateTime<Utc>`] fails, it
+/// simply returns the timestamp in milliseconds as a string.
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use chrono::offset::TimeZone;
         let time = self.timestamp_millis() as i64;
-        let date = chrono::Utc.timestamp_millis_opt(time).single().ok_or(fmt::Error)?;
-        write!(f, "{}", date.to_rfc3339())
+        let date = match chrono::Utc.timestamp_millis_opt(time).single() {
+            Some(date_parsed) => date_parsed.to_rfc3339(),
+            None => self.timestamp_millis().to_string(),
+        };
+        write!(f, "{}", date)
     }
 }
 
@@ -2097,7 +2109,7 @@ impl OwnedPolicy {
     /// Serialize the policy for consumption by smart contract execution engine.
     ///
     /// This entails the following serialization scheme:
-    /// - `1`:             u8            specifying a single policy.
+    /// - `1`:             u16           specifying a single policy.
     /// - `len`:           u16           length of the inner payload
     /// - `inner payload`: `len` bytes   the serialized `OwnedPolicy`
     #[doc(hidden)]
@@ -2108,7 +2120,7 @@ impl OwnedPolicy {
         // Serialize to an inner vector.
         let inner = to_bytes(self);
         // Specify that there is only one policy.
-        out.write_u8(1)?;
+        out.write_u16(1)?;
         // Write length of the inner.
         (inner.len() as u16).serial(out)?;
         // Write the inner buffer.
@@ -2832,6 +2844,42 @@ mod serde_impl {
 mod test {
     use super::*;
     use std::str::FromStr;
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_given_millis_far_in_future_when_string_to_timestamp_then_map() {
+        let millis = 100000001683508889u64;
+        if let Ok(timestamp) = Timestamp::from_str(&millis.to_string()) {
+            assert_eq!(timestamp.milliseconds, millis);
+        } else {
+            assert!(false)
+        };
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_given_rfc3339_format_when_string_to_timestamp_then_map() {
+        let datetime = "1970-01-01T00:00:00.042+00:00";
+        if let Ok(timestamp) = Timestamp::from_str(datetime) {
+            assert_eq!(timestamp.milliseconds, 42);
+        } else {
+            assert!(false)
+        };
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_given_millis_far_in_future_when_timestamp_to_string_then_map_to_integer() {
+        let timestamp = Timestamp::from_timestamp_millis(100000001683508889u64);
+        assert_eq!(timestamp.to_string(), "100000001683508889");
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_given_millis_not_far_in_future_when_timestamp_to_string_then_map_to_rfc3339_format() {
+        let timestamp = Timestamp::from_timestamp_millis(42u64);
+        assert_eq!(timestamp.to_string(), "1970-01-01T00:00:00.042+00:00");
+    }
 
     #[test]
     fn test_duration_from_string_simple() {

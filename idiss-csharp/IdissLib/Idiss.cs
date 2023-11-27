@@ -13,7 +13,8 @@ namespace IdissLib
         private static extern IntPtr validate_request_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len,
-        [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_success);
+        [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, 
+            out int out_length, out int out_capacity, out int out_success);
 
         [DllImport("idiss.dll")]
         private static extern IntPtr create_identity_object_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
@@ -22,25 +23,28 @@ namespace IdissLib
         UInt64 expiry,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_private_key, int ip_private_key_ptr_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_cdi_private_key, int ip_cdi_private_key_ptr_len,
-        out int out_length, out int out_success);
+        out int out_length, out int out_capacity, out int out_success);
 
         [DllImport("idiss.dll")]
         private static extern IntPtr validate_request_v1_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ars_infos, int ars_infos_len,
-        [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length);
+        [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_capacity);
 
         [DllImport("idiss.dll")]
         private static extern IntPtr create_identity_object_v1_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] alist, int alist_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_private_key, int ip_private_key_ptr_len,
-        out int out_length, out int out_success);
+        out int out_length, out int out_capacity, out int out_success);
 
         [DllImport("idiss.dll")]
         private static extern IntPtr validate_recovery_request_cs([MarshalAs(UnmanagedType.LPArray)] byte[] ctx, int ctx_len,
         [MarshalAs(UnmanagedType.LPArray)] byte[] ip_info, int ip_info_len,
-        [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length);
+        [MarshalAs(UnmanagedType.LPArray)] byte[] request, int request_len, out int out_length, out int out_capacity);
+        
+        [DllImport("idiss.dll")]
+        private static extern IntPtr free_array_len_cap(IntPtr array_ptr,  ulong out_length, ulong out_capacity);
 
         /// The delta determining the time interval in which identity recovery requests should be accepted.
         /// Recovery request timestamps are accepted in the interval [currentTime - TimestampDelta, currentTime + TimestampDelta].
@@ -56,27 +60,40 @@ namespace IdissLib
         /// - throws an exception, if the request is invalid or the input is malformed.
         public static AccountAddress ValidateRequest(Versioned<GlobalContext> global, Versioned<IpInfo> ipInfo, Versioned<Dictionary<string, ArInfo>> arsInfos, IdObjectRequest request)
         {
-            byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
-            byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
-            byte[] arsInfosBytes = JsonSerializer.SerializeToUtf8Bytes(arsInfos);
-            byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
-            int outLength = 0;
-            int outSuccess = 0;
-            var resultPtr = validate_request_cs(globalBytes, globalBytes.Length, ipInfoBytes, ipInfoBytes.Length, arsInfosBytes, arsInfosBytes.Length, requestBytes, requestBytes.Length, out outLength, out outSuccess);
-            byte[] outBytes = new byte[outLength];
-            Marshal.Copy(resultPtr, outBytes, 0, outLength);
-            if (outSuccess == 1)
+            var resultPtr = IntPtr.Zero;
+            var outLength = 0;
+            var outCapacity = 0;
+            try
             {
-                return new AccountAddress(Encoding.UTF8.GetString(outBytes));
+                byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
+                byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
+                byte[] arsInfosBytes = JsonSerializer.SerializeToUtf8Bytes(arsInfos);
+                byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
+                int outSuccess = 0;
+                resultPtr = validate_request_cs(globalBytes, globalBytes.Length, ipInfoBytes, ipInfoBytes.Length,
+                    arsInfosBytes, arsInfosBytes.Length, requestBytes, requestBytes.Length, out outLength,
+                    out outCapacity,
+                    out outSuccess);
+                byte[] outBytes = new byte[outLength];
+                Marshal.Copy(resultPtr, outBytes, 0, outLength);
+
+                if (outSuccess == 1)
+                {
+                    return new AccountAddress(Encoding.UTF8.GetString(outBytes));
+                }
+                else if (outSuccess == -1)
+                {
+                    var errorString = Encoding.UTF8.GetString(outBytes);
+                    throw new RequestValidationException(errorString);
+                }
+                else
+                {
+                    throw new RequestValidationException("Unknown error");
+                }
             }
-            else if (outSuccess == -1)
+            finally
             {
-                var errorString = Encoding.UTF8.GetString(outBytes);
-                throw new RequestValidationException(errorString);
-            }
-            else
-            {
-                throw new RequestValidationException("Unknown error");
+                FreeNonZeroPtr(resultPtr, outLength, outCapacity);
             }
         }
 
@@ -90,18 +107,27 @@ namespace IdissLib
         /// - throws an exception, if the request is invalid or the input is malformed.
         public static void ValidateRequestV1(Versioned<GlobalContext> global, Versioned<IpInfo> ipInfo, Versioned<Dictionary<string, ArInfo>> arsInfos, IdObjectRequestV1 request)
         {
-            byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
-            byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
-            byte[] arsInfosBytes = JsonSerializer.SerializeToUtf8Bytes(arsInfos);
-            byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
-            int outLength = 0;
-            var resultPtr = validate_request_v1_cs(globalBytes, globalBytes.Length, ipInfoBytes, ipInfoBytes.Length, arsInfosBytes, arsInfosBytes.Length, requestBytes, requestBytes.Length, out outLength);
-            if (resultPtr != IntPtr.Zero)
+            var resultPtr = IntPtr.Zero;
+            var outLength = 0;
+            var outCapacity = 0;
+            try
             {
-                byte[] outBytes = new byte[outLength];
-                Marshal.Copy(resultPtr, outBytes, 0, outLength);
-                var errorString = Encoding.UTF8.GetString(outBytes);
-                throw new RequestValidationException(errorString);
+                byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
+                byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
+                byte[] arsInfosBytes = JsonSerializer.SerializeToUtf8Bytes(arsInfos);
+                byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
+                resultPtr = validate_request_v1_cs(globalBytes, globalBytes.Length, ipInfoBytes, ipInfoBytes.Length, arsInfosBytes, arsInfosBytes.Length, requestBytes, requestBytes.Length, out outLength, out outCapacity);
+                if (resultPtr != IntPtr.Zero)
+                {
+                    byte[] outBytes = new byte[outLength];
+                    Marshal.Copy(resultPtr, outBytes, 0, outLength);
+                    var errorString = Encoding.UTF8.GetString(outBytes);
+                    throw new RequestValidationException(errorString);
+                }
+            }
+            finally
+            {
+                FreeNonZeroPtr(resultPtr, outLength, outCapacity);
             }
         }
 
@@ -120,33 +146,42 @@ namespace IdissLib
         ///  - throws an exception, if any of the inputs are malformed. 
         public static IdentityCreation CreateIdentityObject(Versioned<IpInfo> ipInfo, AttributeList alist, IdObjectRequest request, UInt64 expiry, IpPrivateKeys ipKeys)
         {
-            var options = new JsonSerializerOptions();
-            options.Converters.Add(new DictionaryConverter());
-            options.Converters.Add(new YearMonthConverter());
-            options.Converters.Add(new AccountAddressConverter());
-            byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
-            byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
-            byte[] alistBytes = JsonSerializer.SerializeToUtf8Bytes(alist, options);
-            byte[] ipPrivateKeyBytes = Encoding.UTF8.GetBytes(ipKeys.ipPrivateKey);
-            byte[] ipCdiPrivateKeyBytes = Encoding.UTF8.GetBytes(ipKeys.ipCdiPrivateKey);
-            int idOutLength = 0;
-            int outSuccess = 0;
-            var idPtr = create_identity_object_cs(ipInfoBytes, ipInfoBytes.Length, requestBytes, requestBytes.Length, alistBytes, alistBytes.Length,
-             expiry, ipPrivateKeyBytes, ipPrivateKeyBytes.Length, ipCdiPrivateKeyBytes, ipCdiPrivateKeyBytes.Length, out idOutLength, out outSuccess);
-            byte[] idOutBytes = new byte[idOutLength];
-            Marshal.Copy(idPtr, idOutBytes, 0, idOutLength);
-            if (outSuccess == 1)
+            var resultPtr = IntPtr.Zero;
+            var outLength = 0;
+            var outCapacity = 0;
+            try
             {
-                return JsonSerializer.Deserialize<IdentityCreation>(idOutBytes, options);
+                var options = new JsonSerializerOptions();
+                options.Converters.Add(new DictionaryConverter());
+                options.Converters.Add(new YearMonthConverter());
+                options.Converters.Add(new AccountAddressConverter());
+                byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
+                byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
+                byte[] alistBytes = JsonSerializer.SerializeToUtf8Bytes(alist, options);
+                byte[] ipPrivateKeyBytes = Encoding.UTF8.GetBytes(ipKeys.ipPrivateKey);
+                byte[] ipCdiPrivateKeyBytes = Encoding.UTF8.GetBytes(ipKeys.ipCdiPrivateKey);
+                int outSuccess = 0;
+                resultPtr = create_identity_object_cs(ipInfoBytes, ipInfoBytes.Length, requestBytes, requestBytes.Length, alistBytes, alistBytes.Length,
+                    expiry, ipPrivateKeyBytes, ipPrivateKeyBytes.Length, ipCdiPrivateKeyBytes, ipCdiPrivateKeyBytes.Length, out outLength, out outCapacity, out outSuccess);
+                byte[] idOutBytes = new byte[outLength];
+                Marshal.Copy(resultPtr, idOutBytes, 0, outLength);
+                if (outSuccess == 1)
+                {
+                    return JsonSerializer.Deserialize<IdentityCreation>(idOutBytes, options);
+                }
+                else if (outSuccess == -1)
+                {
+                    var errorString = Encoding.UTF8.GetString(idOutBytes);
+                    throw new IdentityCreationException(errorString);
+                }
+                else
+                {
+                    throw new IdentityCreationException("Unkown error.");
+                }
             }
-            else if (outSuccess == -1)
+            finally
             {
-                var errorString = Encoding.UTF8.GetString(idOutBytes);
-                throw new IdentityCreationException(errorString);
-            }
-            else
-            {
-                throw new IdentityCreationException("Unkown error.");
+                FreeNonZeroPtr(resultPtr, outLength, outCapacity);
             }
         }
 
@@ -163,32 +198,42 @@ namespace IdissLib
         ///  - throws an exception, if any of the inputs are malformed. 
         public static IdentityCreationV1 CreateIdentityObjectV1(Versioned<IpInfo> ipInfo, AttributeList alist, IdObjectRequestV1 request, IpPrivateKeys ipKeys)
         {
-            var options = new JsonSerializerOptions();
-            options.Converters.Add(new DictionaryConverter());
-            options.Converters.Add(new YearMonthConverter());
-            options.Converters.Add(new AccountAddressConverter());
-            byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
-            byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
-            byte[] alistBytes = JsonSerializer.SerializeToUtf8Bytes(alist, options);
-            byte[] ipPrivateKeyBytes = Encoding.UTF8.GetBytes(ipKeys.ipPrivateKey);
-            int idOutLength = 0;
-            int outSuccess = 0;
-            var idPtr = create_identity_object_v1_cs(ipInfoBytes, ipInfoBytes.Length, requestBytes, requestBytes.Length, alistBytes, alistBytes.Length,
-             ipPrivateKeyBytes, ipPrivateKeyBytes.Length, out idOutLength, out outSuccess);
-            byte[] idOutBytes = new byte[idOutLength];
-            Marshal.Copy(idPtr, idOutBytes, 0, idOutLength);
-            if (outSuccess == 1)
+            var resultPtr = IntPtr.Zero;
+            var outLength = 0;
+            var outCapacity = 0;
+            try
             {
-                return JsonSerializer.Deserialize<IdentityCreationV1>(idOutBytes, options);
+                var options = new JsonSerializerOptions();
+                options.Converters.Add(new DictionaryConverter());
+                options.Converters.Add(new YearMonthConverter());
+                options.Converters.Add(new AccountAddressConverter());
+                byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
+                byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
+                byte[] alistBytes = JsonSerializer.SerializeToUtf8Bytes(alist, options);
+                byte[] ipPrivateKeyBytes = Encoding.UTF8.GetBytes(ipKeys.ipPrivateKey);
+                int outSuccess = 0;
+                resultPtr = create_identity_object_v1_cs(ipInfoBytes, ipInfoBytes.Length, requestBytes,
+                    requestBytes.Length, alistBytes, alistBytes.Length,
+                    ipPrivateKeyBytes, ipPrivateKeyBytes.Length, out outLength, out outCapacity, out outSuccess);
+                byte[] idOutBytes = new byte[outLength];
+                Marshal.Copy(resultPtr, idOutBytes, 0, outLength);
+                if (outSuccess == 1)
+                {
+                    return JsonSerializer.Deserialize<IdentityCreationV1>(idOutBytes, options);
+                }
+                else if (outSuccess == -1)
+                {
+                    var errorString = Encoding.UTF8.GetString(idOutBytes);
+                    throw new IdentityCreationException(errorString);
+                }
+                else
+                {
+                    throw new IdentityCreationException("Unkown error.");
+                }
             }
-            else if (outSuccess == -1)
+            finally
             {
-                var errorString = Encoding.UTF8.GetString(idOutBytes);
-                throw new IdentityCreationException(errorString);
-            }
-            else
-            {
-                throw new IdentityCreationException("Unkown error.");
+                FreeNonZeroPtr(resultPtr, outLength, outCapacity);
             }
         }
 
@@ -202,25 +247,46 @@ namespace IdissLib
         /// - throws an exception, if the request is invalid or the input is malformed.
         public static void ValidateRecoveryRequest(Versioned<GlobalContext> global, Versioned<IpInfo> ipInfo, IdRecoveryWrapper request, DateTimeOffset now)
         {
-            long nowTimestampLong = now.ToUnixTimeSeconds();
-            ulong nowTimestamp = Convert.ToUInt64(nowTimestampLong);
-            ulong proofTimestamp = request.idRecoveryRequest.value.timestamp;
-            if (proofTimestamp < nowTimestamp - TimestampDelta || proofTimestamp > nowTimestamp + TimestampDelta)
+            var resultPtr = IntPtr.Zero;
+            var outLength = 0;
+            var outCapacity = 0;
+            try
             {
-                throw new RequestValidationException("Invalid timestamp.");
+                long nowTimestampLong = now.ToUnixTimeSeconds();
+                ulong nowTimestamp = Convert.ToUInt64(nowTimestampLong);
+                ulong proofTimestamp = request.idRecoveryRequest.value.timestamp;
+                if (proofTimestamp < nowTimestamp - TimestampDelta || proofTimestamp > nowTimestamp + TimestampDelta)
+                {
+                    throw new RequestValidationException("Invalid timestamp.");
+                }
+
+                byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
+                byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
+                byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
+                resultPtr = validate_recovery_request_cs(globalBytes, globalBytes.Length, ipInfoBytes,
+                    ipInfoBytes.Length, requestBytes, requestBytes.Length, out outLength, out outCapacity);
+                if (resultPtr != IntPtr.Zero)
+                {
+                    byte[] outBytes = new byte[outLength];
+                    Marshal.Copy(resultPtr, outBytes, 0, outLength);
+                    var errorString = Encoding.UTF8.GetString(outBytes);
+                    throw new RequestValidationException(errorString);
+                }
             }
-            byte[] globalBytes = JsonSerializer.SerializeToUtf8Bytes(global);
-            byte[] requestBytes = JsonSerializer.SerializeToUtf8Bytes(request);
-            byte[] ipInfoBytes = JsonSerializer.SerializeToUtf8Bytes(ipInfo);
-            int outLength = 0;
-            var resultPtr = validate_recovery_request_cs(globalBytes, globalBytes.Length, ipInfoBytes, ipInfoBytes.Length, requestBytes, requestBytes.Length, out outLength);
-            if (resultPtr != IntPtr.Zero)
+            finally
             {
-                byte[] outBytes = new byte[outLength];
-                Marshal.Copy(resultPtr, outBytes, 0, outLength);
-                var errorString = Encoding.UTF8.GetString(outBytes);
-                throw new RequestValidationException(errorString);
+                FreeNonZeroPtr(resultPtr, outLength, outCapacity);
             }
+        }
+        
+        private static void FreeNonZeroPtr(IntPtr outputPtr, int outLength, int outCapacity)
+        {
+            if (outputPtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            free_array_len_cap(outputPtr, checked((ulong)outLength), checked((ulong)outCapacity));
         }
     }
 }

@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common-derive 4.0.1 (2023-10-18)
+
+- Replaced usage of traits in suggestion, such as `&impl HasHost<..>` with the concrete types: `&Host<..>`.
+
 ## concordium-contracts-common-derive 4.0.0 (2023-08-21)
 
 - Fix a bug in derivation macros for `Serial`, `Deserial`, `DeserialWithState`

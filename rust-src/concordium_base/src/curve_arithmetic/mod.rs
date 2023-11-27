@@ -198,7 +198,7 @@ impl<C: Curve> GenericMultiExp<C> {
     pub fn new<X: Borrow<C>>(gs: &[X], window_size: usize) -> Self {
         let k = gs.len();
         let mut table = Vec::with_capacity(k);
-        for g in gs.into_iter() {
+        for g in gs.iter() {
             let sq = g.borrow().plus_point(g.borrow());
             let mut tmp = *g.borrow();
             // All of the odd exponents, between 1 and 2^w.
@@ -234,43 +234,66 @@ impl<C: Curve> MultiExp for GenericMultiExp<C> {
         exps: &[X],
     ) -> Self::CurvePoint {
         // Compute the wnaf
-
+        let window_size_plus1 = self.window_size + 1;
         let k = exps.len();
-        assert_eq!(self.table.len(), k);
-        assert!(self.window_size >= 1);
-        assert!(self.window_size < 62);
+        assert!(window_size_plus1 >= 2);
+        assert!(window_size_plus1 < 63);
 
-        // 2^{window_size + 1}
-        let two_to_wp1: u64 = 2 << self.window_size;
-        let two_to_wp1_scalar = C::scalar_from_u64(two_to_wp1);
-        // a mask to extract the lowest window_size + 1 bits from a scalar.
-        let mask: u64 = two_to_wp1 - 1;
         let mut wnaf = Vec::with_capacity(k);
-        // 1 / 2 scalar
-        let half = C::scalar_from_u64(2)
-            .inverse()
-            .expect("Field size must be at least 3.");
 
-        for c in exps.into_iter() {
+        // The computation of the wnaf table here is a modification of the
+        // implementation in <https://github.com/zkcrypto/group>
+        // Compared to the high-level algorithm described in https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf
+        // this avoids any field arithmetic and operates directly on the bit
+        // representation of the scalars, leading to a substantial performance
+        // improvement.
+        let width = 1u64 << window_size_plus1;
+        let window_mask = width - 1;
+
+        for c in exps.iter() {
+            let mut pos = 0;
+            let mut carry = 0;
+            let repr_limbs = c.borrow().into_repr();
             let mut v = Vec::new();
-            let mut c = *c.borrow();
-            while !c.is_zero() {
-                let limb = c.into_repr()[0];
-                // if the first bit is set
-                if limb & 1 == 1 {
-                    let u = limb & mask;
-                    // check if window_size'th bit is set.
-                    c.sub_assign(&C::scalar_from_u64(u));
-                    if u & (1 << self.window_size) != 0 {
-                        c.add_assign(&two_to_wp1_scalar);
-                        v.push((u as i64) - (two_to_wp1 as i64));
-                    } else {
-                        v.push(u as i64);
-                    }
+            let num_bits = repr_limbs.len() * 64;
+            while pos < num_bits {
+                // Construct a buffer of bits of the scalar, starting at bit `pos`
+                let u64_idx = pos / 64;
+                let bit_idx = pos % 64;
+                let cur_u64 = repr_limbs[u64_idx];
+                let bit_buf = if bit_idx + window_size_plus1 < 64 {
+                    // This window's bits are contained in a single u64
+                    cur_u64 >> bit_idx
                 } else {
+                    let next_u64 = repr_limbs.get(u64_idx + 1).copied().unwrap_or(0);
+                    // Combine the current u64's bits with the bits from the next u64
+                    (cur_u64 >> bit_idx) | (next_u64 << (64 - bit_idx))
+                };
+
+                // Add the carry into the current window
+                let window_val = carry + (bit_buf & window_mask);
+
+                if window_val & 1 == 0 {
+                    // If the window value is even, preserve the carry and emit 0.
+                    // Why is the carry preserved?
+                    // If carry == 0 and window_val & 1 == 0, then the next carry should be 0
+                    // If carry == 1 and window_val & 1 == 0, then bit_buf & 1 == 1 so the next
+                    // carry should be 1
                     v.push(0);
+                    pos += 1;
+                } else {
+                    v.push(
+                        if window_val < width / 2 {
+                            carry = 0;
+                            window_val as i64
+                        } else {
+                            carry = 1;
+                            (window_val as i64).wrapping_sub(width as i64)
+                        },
+                    );
+                    v.extend(std::iter::repeat(0).take(window_size_plus1 - 1));
+                    pos += window_size_plus1;
                 }
-                c.mul_assign(&half);
             }
             wnaf.push(v);
         }

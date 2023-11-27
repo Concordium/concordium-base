@@ -134,6 +134,14 @@ pub struct WasmModule {
     pub source:  ModuleSource,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum WasmFromFileError {
+    #[error("Failed reading file: {0}")]
+    Read(#[from] std::io::Error),
+    #[error("Failed parsing module: {0}")]
+    Parse(#[from] anyhow::Error),
+}
+
 impl WasmModule {
     /// Get the identifier of the module. This identifier is used to refer to
     /// the module on the chain, e.g., when initializing a new contract
@@ -142,6 +150,25 @@ impl WasmModule {
         let mut hasher = sha2::Sha256::new();
         self.serial(&mut hasher);
         ModuleReference::from(<[u8; 32]>::from(hasher.finalize()))
+    }
+
+    /// Attempt to read a [`WasmModule`] from a file.
+    pub fn from_file(path: &std::path::Path) -> Result<Self, WasmFromFileError> {
+        Self::from_slice(&std::fs::read(path)?).map_err(WasmFromFileError::Parse)
+    }
+
+    /// Attempt to read a [`WasmModule`] from a byte slice. All of the slice is
+    /// required to be consumed.
+    pub fn from_slice(bytes: &[u8]) -> ParseResult<Self> {
+        let mut cursor = std::io::Cursor::new(bytes);
+        let module = super::common::from_bytes(&mut cursor)?;
+        let remaining = (bytes.len() as u64).saturating_sub(cursor.position());
+        anyhow::ensure!(
+            remaining == 0,
+            "There are {} remaining bytes of data.",
+            remaining
+        );
+        Ok(module)
     }
 }
 
@@ -219,5 +246,25 @@ impl std::fmt::Display for ContractEvent {
             f.write_fmt(format_args!("{:02x}", b))?
         }
         Ok(())
+    }
+}
+
+impl ContractEvent {
+    /// Try to parse the event into a type that implements
+    /// [`Deserial`](concordium_contracts_common::Deserial).
+    ///
+    /// Ensures that all the bytes in the event data are read.
+    pub fn parse<T: concordium_contracts_common::Deserial>(
+        &self,
+    ) -> concordium_contracts_common::ParseResult<T> {
+        use concordium_contracts_common::{Cursor, Get, ParseError};
+        let mut cursor = Cursor::new(self.as_ref());
+        let res = cursor.get()?;
+        // Check that all bytes have been read, as leftover bytes usually indicate
+        // errors.
+        if cursor.offset != self.as_ref().len() {
+            return Err(ParseError::default());
+        }
+        Ok(res)
     }
 }

@@ -1,4 +1,5 @@
 {-# LANGUAGE BinaryLiterals #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE EmptyCase #-}
@@ -27,6 +28,7 @@ import qualified Data.Serialize.Get as G
 import qualified Data.Serialize.Put as P
 import qualified Data.Set as Set
 import qualified Data.Text as Text
+import Lens.Micro.Platform (Lens, lens)
 
 import Data.Int (Int32)
 import Data.Word
@@ -1896,15 +1898,49 @@ data TransactionSummary' a = TransactionSummary
     }
     deriving (Eq, Show, Generic)
 
+-- | Lens for accessing the result field of a 'TransactionSummary''.
+summaryResult :: Lens (TransactionSummary' a) (TransactionSummary' b) a b
+summaryResult =
+    lens
+        tsResult
+        (\TransactionSummary{..} newRes -> TransactionSummary{tsResult = newRes, ..})
+
 -- | A transaction summary parameterized with an outcome of a valid transaction
 --  containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
+-- | An abstraction for constructing the result of a transaction.
+--  This is instantiated by both 'ValidResult' and 'ValidResultWithReturn'.
+class TransactionResult a where
+    -- | Construct a successful result.
+    --  This should be equivalent to @fromValidResult . TxSuccess@.
+    transactionSuccess :: [Event] -> a
+
+    -- | Construct a rejecting result.
+    --  This should be equivalent to @fromValidResult . TxReject@.
+    transactionReject :: RejectReason -> a
+
+    -- | Set the return value for the transaction.
+    --  @setTransactionReturnValue x@ should be equivalent to
+    --  @setTransactionReturnValue x . setTransactionReturnValue y@, as long as
+    --  @y@ is not ⊥.
+    setTransactionReturnValue :: BS.ByteString -> a -> a
+
+    -- | Construct a result from a 'ValidResult'.
+    fromValidResult :: ValidResult -> a
+
 -- | Outcomes of a valid transaction. Either a reject with a reason or a
 --  successful transaction with a list of events which occurred during execution.
 --  We also record the cost of the transaction.
+--  The 'TransactionResult' instance ignores the return value.
 data ValidResult = TxSuccess {vrEvents :: ![Event]} | TxReject {vrRejectReason :: !RejectReason}
     deriving (Show, Generic, Eq)
+
+instance TransactionResult ValidResult where
+    transactionSuccess = TxSuccess
+    transactionReject = TxReject
+    setTransactionReturnValue _ = id
+    fromValidResult = id
 
 putValidResult :: S.Putter ValidResult
 putValidResult TxSuccess{..} = S.putWord8 0 <> putListOf putEvent vrEvents
@@ -1916,6 +1952,20 @@ getValidResult spv =
         0 -> TxSuccess <$> getListOf (getEvent spv)
         1 -> TxReject <$> S.get
         n -> fail $ "Unrecognized ValidResult tag: " ++ show n
+
+-- | A 'ValidResult' with an optional return value.
+--  In the 'TransactionResult' instance, 'setTransactionReturnValue' replaces any existing return
+--  value.
+data ValidResultWithReturn = ValidResultWithReturn
+    { vrwrResult :: !ValidResult,
+      vrwrReturnValue :: !(Maybe BS.ByteString)
+    }
+
+instance TransactionResult ValidResultWithReturn where
+    transactionSuccess = flip ValidResultWithReturn Nothing . TxSuccess
+    transactionReject = flip ValidResultWithReturn Nothing . TxReject
+    setTransactionReturnValue rv res = res{vrwrReturnValue = Just rv}
+    fromValidResult = flip ValidResultWithReturn Nothing
 
 instance S.Serialize TransactionSummaryType where
     put (TSTAccountTransaction tt) = S.putWord8 0 <> putMaybe S.put tt

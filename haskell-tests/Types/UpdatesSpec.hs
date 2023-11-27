@@ -144,6 +144,7 @@ tests = parallel $ do
     versionedTests SP4
     versionedTests SP5
     versionedTests SP6
+    versionedTests SP7
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv

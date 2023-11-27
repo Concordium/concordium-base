@@ -2,6 +2,20 @@
 
 ## Unreleased changes
 
+## concordium-contracts-common 8.1.1 (2023-11-02)
+
+- Fix `Display` implementation on `Timestamp` such that it does not return an error if the timestamp is not representable in RFC3339 format, but instead it falls back to formatting as the number of milliseconds since the unix epoch.
+- Change `FromStr` for `Timestamp` such that it also supports parsing from a number of milliseconds since the unix epoch.
+
+## concordium-contracts-common 8.1.0 (2023-10-18)
+
+- Add contract event schema getter on `VersionedModuleSchema`.
+- Fix `Display` trait on `VersionedModuleSchema` when module contained multiple contracts to render all of them.
+- Fix incorrect serialization of policies in `OwnedPolicy::serial_for_smart_contract`.
+  - The method is used internally in `concordium-smart-contract-testing` and the bug caused issues when checking sender policies.
+- Make `Timestamp::from_timestamp_millis` and `Timestamp::timestamp_millis` constant methods so they can be used when declaring constants.
+- Add a new type `Hash` for representing SHA2-256 hashes.
+
 ## concordium-contracts-common 8.0.0 (2023-08-21)
 
 - Add signature and key types to `concordium-contracts-common`.

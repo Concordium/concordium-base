@@ -1,6 +1,24 @@
 ## Unreleased changes
 
+- Improve performance of `multiexp*` family of functions.
+
+## 3.2.0 (2023-11-22)
+
+- Add `From` trait to convert `AccountKeys` into `AccountPublicKeys`.
+- Add `singleton` and `new` function to `AccountAccessStructure`.
+- Export `PublicKey`, `SecretKey`, and `Signature` type from `ed25519_dalek` crate.
+- Add `sign_message` function to sign a message with all `AccountKeys`. The return type is `AccountSignatures`.
+- Support using `validatorId` instead of `bakerId` when parsing
+  `BakerCredentials` from JSON.
+
+## 3.1.1 (2023-10-27)
+
+- Add helpers `from_file` and `from_slice` to construct a `WasmModule`.
+
+## 3.1.0 (2023-10-18)
+
 - Fix `Display` implementation of `Web3IdAttribute::Timestamp` attribute.
+- Add helper method `parse` to `ContractEvent` for deserializing into types that implement `concordium_contracts_common::Deserial`.
 
 ## 3.0.1 (2023-08-28)
 

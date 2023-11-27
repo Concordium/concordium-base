@@ -5,7 +5,7 @@ extern crate criterion;
 
 use concordium_base::{
     bulletproofs::{range_proof::*, utils::Generators},
-    curve_arithmetic::{arkworks_instances::*, *},
+    curve_arithmetic::*,
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,

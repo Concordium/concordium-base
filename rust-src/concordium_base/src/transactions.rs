@@ -24,6 +24,7 @@ use crate::{
     smart_contracts, updates,
 };
 use concordium_contracts_common as concordium_std;
+use concordium_std::SignatureThreshold;
 use derive_more::*;
 use rand::{CryptoRng, Rng};
 use sha2::Digest;
@@ -1343,6 +1344,32 @@ pub trait ExactSizeTransactionSigner: TransactionSigner {
     fn num_keys(&self) -> u32;
 }
 
+impl<S: TransactionSigner> TransactionSigner for std::sync::Arc<S> {
+    fn sign_transaction_hash(
+        &self,
+        hash_to_sign: &hashes::TransactionSignHash,
+    ) -> TransactionSignature {
+        self.as_ref().sign_transaction_hash(hash_to_sign)
+    }
+}
+
+impl<S: ExactSizeTransactionSigner> ExactSizeTransactionSigner for std::sync::Arc<S> {
+    fn num_keys(&self) -> u32 { self.as_ref().num_keys() }
+}
+
+impl<S: TransactionSigner> TransactionSigner for std::rc::Rc<S> {
+    fn sign_transaction_hash(
+        &self,
+        hash_to_sign: &hashes::TransactionSignHash,
+    ) -> TransactionSignature {
+        self.as_ref().sign_transaction_hash(hash_to_sign)
+    }
+}
+
+impl<S: ExactSizeTransactionSigner> ExactSizeTransactionSigner for std::rc::Rc<S> {
+    fn num_keys(&self) -> u32 { self.as_ref().num_keys() }
+}
+
 /// This signs with the first `threshold` credentials and for each
 /// credential with the first threshold keys for that credential.
 impl TransactionSigner for AccountKeys {
@@ -1436,6 +1463,54 @@ pub struct AccountAccessStructure {
     pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
     /// The number of credentials that needed to sign a transaction.
     pub threshold: AccountThreshold,
+}
+
+/// Input parameter containing indices, signature thresholds,
+/// and public keys for creating a new `AccountAccessStructure`.
+pub type AccountStructure<'a> = &'a [(
+    CredentialIndex,
+    SignatureThreshold,
+    &'a [(KeyIndex, ed25519_dalek::PublicKey)],
+)];
+
+impl AccountAccessStructure {
+    /// Generate a new [`AccountAccessStructure`] for the thresholds, public
+    /// keys, and key indices specified in the input. If there are duplicate
+    /// indices then later ones override the previous ones.
+    pub fn new(account_threshold: AccountThreshold, structure: AccountStructure) -> Self {
+        let mut map: BTreeMap<CredentialIndex, CredentialPublicKeys> = BTreeMap::new();
+
+        for credential_structure in structure {
+            let mut inner_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();
+
+            for key_structure in credential_structure.2 {
+                inner_map.insert(
+                    key_structure.0,
+                    VerifyKey::Ed25519VerifyKey(key_structure.1),
+                );
+            }
+
+            map.insert(credential_structure.0, CredentialPublicKeys {
+                keys:      inner_map,
+                threshold: credential_structure.1,
+            });
+        }
+
+        AccountAccessStructure {
+            keys:      map,
+            threshold: account_threshold,
+        }
+    }
+
+    /// Generate a new [`AccountAccessStructure`] with a single credential and
+    /// public key, at credential and key indices 0.
+    pub fn singleton(public_key: ed25519_dalek::PublicKey) -> Self {
+        Self::new(AccountThreshold::ONE, &[(
+            0.into(),
+            SignatureThreshold::ONE,
+            &[(0.into(), public_key)],
+        )])
+    }
 }
 
 impl From<&AccountKeys> for AccountAccessStructure {

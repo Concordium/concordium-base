@@ -8,7 +8,7 @@ use rand::*;
 
 pub fn bench_multiexp(c: &mut Criterion) {
     let mut csprng = thread_rng();
-    let m = 10;
+    let m = 3;
     let ns = (1..=m).map(|x| x * x);
     let mut gs = Vec::with_capacity(m * m);
     let mut es = Vec::with_capacity(m * m);
@@ -21,7 +21,7 @@ pub fn bench_multiexp(c: &mut Criterion) {
         let gsc = gs[..i].to_vec();
         let esc = es[..i].to_vec();
         let mut group = c.benchmark_group(format!("Group({})", i));
-        group.bench_function("Baseline", move |b| {
+        group.bench_function(format!("{}: Baseline", module_path!()), move |b| {
             b.iter(|| {
                 let mut a = G1::zero_point();
                 for (g, e) in gsc.iter().zip(esc.iter()) {
@@ -32,9 +32,10 @@ pub fn bench_multiexp(c: &mut Criterion) {
         for w in 2..=8 {
             let gsc = gs[..i].to_vec();
             let esc = es[..i].to_vec();
-            group.bench_function(&format!("multiexp({})", w), move |b| {
-                b.iter(|| GenericMultiExp::<G1>::new(&gsc, w).multiexp(&esc))
-            });
+            group.bench_function(
+                &format!("{}: Multiexp (window = {w})", module_path!()),
+                move |b| b.iter(|| GenericMultiExp::new(&gsc, w).multiexp(&esc)),
+            );
         }
         group.finish();
     }

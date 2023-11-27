@@ -1,12 +1,15 @@
-//! Various utilities for testing and extraction of schemas.
+//! Various utilities for testing and extraction of schemas and build
+//! information.
 
 use crate::ExecResult;
 use anyhow::{anyhow, bail, ensure, Context};
-use concordium_contracts_common::{from_bytes, schema, Cursor, Deserial};
+use concordium_contracts_common::{
+    self as concordium_std, from_bytes, hashes, schema, Cursor, Deserial,
+};
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
-    parse::{parse_custom, parse_skeleton},
+    parse::{parse_custom, parse_skeleton, Skeleton},
     types::{ExportDescription, Module, Name},
     utils,
     validate::{self, ValidationConfig},
@@ -582,6 +585,80 @@ pub fn get_embedded_schema_v1(bytes: &[u8]) -> ExecResult<schema::VersionedModul
     } else {
         bail!("No schema found in the module")
     }
+}
+
+/// The build information that will be embedded as a custom section to
+/// support reproducible builds.
+#[derive(Debug, Clone, concordium_contracts_common::Serialize)]
+pub struct BuildInfo {
+    /// The SHA256 hash of the tar file used to build.
+    /// Note that this is the hash of the **tar** file alone, not of any
+    /// compressed version.
+    pub archive_hash:  hashes::Hash,
+    /// The link to where the source code will be located.
+    pub source_link:   Option<String>,
+    /// The build image that was used.
+    pub image:         String,
+    /// The exact command invocation inside the image that was used to produce
+    /// the contract.
+    pub build_command: Vec<String>,
+}
+
+/// A versioned build information. This is the information that is embedded in a
+/// custom section. Currently there is one version, but the format supports
+/// future evolution.
+///
+/// The value is embedded in a custom section serialized using the smart
+/// contract serialization format
+/// ([`Serial`](concordium_contracts_common::Serial) trait).
+#[derive(Debug, Clone, concordium_contracts_common::Serialize)]
+pub enum VersionedBuildInfo {
+    V0(BuildInfo),
+}
+
+/// Name of the custom section that contains the build information of the
+/// module.
+pub const BUILD_INFO_SECTION_NAME: &str = "concordium-build-info";
+
+#[derive(Debug, thiserror::Error)]
+pub enum CustomSectionLookupError {
+    #[error("Custom section with a provided name is not present.")]
+    Missing,
+    #[error("Multiple custom sections with the given name are present.")]
+    Multiple,
+    #[error("Parse error: {0}.")]
+    MalformedData(#[from] anyhow::Error),
+}
+
+impl CustomSectionLookupError {
+    /// Returns whether the value is of the [`Missing`](Self::Missing) variant.
+    pub fn is_missing(&self) -> bool { matches!(self, Self::Missing) }
+}
+
+/// Extract the embedded [`VersionedBuildInfo`] from a Wasm module.
+pub fn get_build_info(bytes: &[u8]) -> Result<VersionedBuildInfo, CustomSectionLookupError> {
+    let skeleton = parse_skeleton(bytes)?;
+    get_build_info_from_skeleton(&skeleton)
+}
+
+/// Extract the embedded [`VersionedBuildInfo`] from a [`Skeleton`].
+pub fn get_build_info_from_skeleton(
+    skeleton: &Skeleton,
+) -> Result<VersionedBuildInfo, CustomSectionLookupError> {
+    let mut build_context_section = None;
+    for ucs in skeleton.custom.iter() {
+        let cs = parse_custom(ucs)?;
+        if cs.name.as_ref() == BUILD_INFO_SECTION_NAME
+            && build_context_section.replace(cs).is_some()
+        {
+            return Err(CustomSectionLookupError::Multiple);
+        }
+    }
+    let Some(cs) = build_context_section else {
+        return Err(CustomSectionLookupError::Missing)
+    };
+    let info: VersionedBuildInfo = from_bytes(cs.contents).context("Failed parsing build info")?;
+    Ok(info)
 }
 
 #[cfg(test)]
