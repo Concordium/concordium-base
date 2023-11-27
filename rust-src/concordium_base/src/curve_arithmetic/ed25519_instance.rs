@@ -168,7 +168,7 @@ impl Curve for RistrettoPoint {
 
     fn minus_point(&self, other: &Self) -> Self { self - other }
 
-    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { *self * (*scalar).0 }
+    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { self * scalar.0 }
 
     fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(
         source: &mut R,

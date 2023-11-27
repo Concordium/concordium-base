@@ -168,7 +168,7 @@ impl Curve for RistrettoPoint {
 
     fn minus_point(&self, other: &Self) -> Self { self - other }
 
-    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { *self * (*scalar).0 }
+    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { self * scalar.0 }
 
     fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(
         source: &mut R,
@@ -213,14 +213,14 @@ impl MultiExp for VartimeRistrettoPrecomputation {
     type CurvePoint = RistrettoPoint;
 
     fn new<X: Borrow<Self::CurvePoint>>(gs: &[X]) -> Self {
-        <Self as VartimePrecomputedMultiscalarMul>::new(gs.into_iter().map(|p| p.borrow()))
+        <Self as VartimePrecomputedMultiscalarMul>::new(gs.iter().map(|p| p.borrow()))
     }
 
     fn multiexp<X: Borrow<<Self::CurvePoint as Curve>::Scalar>>(
         &self,
         exps: &[X],
     ) -> Self::CurvePoint {
-        self.vartime_multiscalar_mul(exps.into_iter().map(|p| p.borrow().0))
+        self.vartime_multiscalar_mul(exps.iter().map(|p| p.borrow().0))
     }
 }
 
@@ -236,7 +236,7 @@ impl MultiExp for RistrettoMultiExpNoPrecompute {
 
     fn new<X: Borrow<Self::CurvePoint>>(gs: &[X]) -> Self {
         Self {
-            points: gs.into_iter().map(|x| *x.borrow()).collect(),
+            points: gs.iter().map(|x| *x.borrow()).collect(),
         }
     }
 
@@ -245,7 +245,7 @@ impl MultiExp for RistrettoMultiExpNoPrecompute {
         exps: &[X],
     ) -> Self::CurvePoint {
         Self::CurvePoint::vartime_multiscalar_mul(
-            exps.into_iter().map(|p| p.borrow().0),
+            exps.iter().map(|p| p.borrow().0),
             &self.points,
         )
     }
