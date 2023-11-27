@@ -3,7 +3,6 @@
 use criterion::*;
 use pprof::criterion::{Output, PProfProfiler};
 use rand::Rng;
-// use rand::*;
 use rand_core::*;
 use std::time::Duration;
 
