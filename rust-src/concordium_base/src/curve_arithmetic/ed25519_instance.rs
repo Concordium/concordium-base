@@ -142,7 +142,7 @@ impl Deserial for RistrettoPoint {
 }
 
 impl Curve for RistrettoPoint {
-    type MultiExpType = GenericMultiExp<Self>;
+    type MultiExpType = RistrettoMultiExpNoPrecompute;
     type Scalar = RistrettoScalar;
 
     // TODO: check this.
