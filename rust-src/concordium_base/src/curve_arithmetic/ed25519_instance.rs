@@ -146,7 +146,7 @@ impl Curve for RistrettoPoint {
     type Scalar = RistrettoScalar;
 
     // TODO: check this.
-    const GROUP_ELEMENT_LENGTH: usize = 64;
+    const GROUP_ELEMENT_LENGTH: usize = 32;
     // TODO: check this.
     const SCALAR_LENGTH: usize = 32;
 
@@ -204,7 +204,7 @@ impl Curve for RistrettoPoint {
 /// An instance of multiexp algorithm from the Dalek library that uses
 /// precomputed table of points. Precomputing is slow, so it makes sense to use
 /// this implementation when one wants to share the precomputed table with many
-/// subsequient computations. For our current usecases it seems not relevant.
+/// subsequent computations. For our current use cases it seems not relevant.
 impl MultiExp for VartimeRistrettoPrecomputation {
     type CurvePoint = RistrettoPoint;
 
