@@ -387,7 +387,6 @@ dependencies = [
  "concordium-contracts-common",
  "concordium_base_derive",
  "curve25519-dalek",
- "curve25519-dalek-ng",
  "derive_more",
  "ed25519-dalek",
  "either",
