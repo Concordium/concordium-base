@@ -3,9 +3,18 @@
 #[macro_use]
 extern crate criterion;
 
+use ark_ec::{
+    hashing::{
+        curve_maps::wb::{WBConfig, WBMap},
+        map_to_curve_hasher::MapToCurveBasedHasher,
+        HashToCurve,
+    },
+    short_weierstrass::Projective,
+};
+use ark_ff::field_hashers::DefaultFieldHasher;
 use concordium_base::{
     bulletproofs::{range_proof::*, utils::Generators},
-    curve_arithmetic::*,
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
@@ -126,6 +135,6 @@ criterion_group!(
     prove_verify_benchmarks::<G1>,
     prove_verify_benchmarks::<RistrettoPoint>,
     prove_verify_benchmarks::<curve25519_dalek_ng::ristretto::RistrettoPoint>,
-    //prove_verify_benchmarks::<ArkGroup<ark_curve25519::EdwardsProjective>>
+    //prove_verify_benchmarks::<ArkGroup<ark_bls12_381::G1Projective>>
 );
 criterion_main!(benchmarks);

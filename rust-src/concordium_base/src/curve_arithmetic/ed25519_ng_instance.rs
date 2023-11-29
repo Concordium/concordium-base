@@ -244,9 +244,6 @@ impl MultiExp for RistrettoMultiExpNoPrecompute {
         &self,
         exps: &[X],
     ) -> Self::CurvePoint {
-        Self::CurvePoint::vartime_multiscalar_mul(
-            exps.iter().map(|p| p.borrow().0),
-            &self.points,
-        )
+        Self::CurvePoint::vartime_multiscalar_mul(exps.iter().map(|p| p.borrow().0), &self.points)
     }
 }
