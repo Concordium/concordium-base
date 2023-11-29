@@ -31,6 +31,7 @@
   The representable timestamps are between `-262144-01-01T00:00:00Z` and
   `+262143-12-31T23:59:59.999Z`
 
+
 ## 3.0.0 (2023-08-21)
 
 - Remove the constant `MAX_ALLOWED_INVOKE_ENERGY` since it was no longer
