@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use criterion::*;
-use pprof::criterion::{Output, PProfProfiler};
 use rand::Rng;
 use rand_core::*;
 use std::time::Duration;
@@ -51,8 +50,6 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
 
 criterion_group!(
     name = benchmarks;
-    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10).with_profiler(
-        PProfProfiler::new(100, Output::Flamegraph(None))
-    );
+    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
     targets = prove_verify_benchmarks);
 criterion_main!(benchmarks);

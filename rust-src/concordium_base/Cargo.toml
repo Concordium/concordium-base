@@ -78,7 +78,7 @@ encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 [dev-dependencies]
 criterion = "0.4"
 rand = {version = "0.7", features = ["small_rng"]}
-pprof = { version = "0.11", features = ["flamegraph", "criterion"] }
+curve25519-dalek-ng = "3"
 
 [[bench]]
 name = "hash_bench"

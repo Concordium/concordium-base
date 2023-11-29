@@ -13,7 +13,6 @@ use concordium_base::{
 use criterion::Criterion;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use pairing::bls12_381::G1;
-use pprof::criterion::Output;
 use rand::*;
 use std::time::Duration;
 
@@ -117,9 +116,7 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
 
 criterion_group!(
     name = benchmarks;
-    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10).with_profiler(
-        pprof::criterion::PProfProfiler::new(100, Output::Flamegraph(None))
-    );
+    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
     targets =
     prove_verify_benchmarks::<G1>,
     prove_verify_benchmarks::<RistrettoPoint>,
