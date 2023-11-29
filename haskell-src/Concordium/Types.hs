@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 
 -- | Basic blockchain types.
 module Concordium.Types (
@@ -121,8 +122,10 @@ module Concordium.Types (
     BlockNonce,
     BlockSignature,
     BlockProof,
+    BlockStateHash (..),
     StateHashV0 (..),
     StateHash,
+    makeStateHashBHV0,
     BlockHash (..),
     BlockHeight (..),
     Slot (..),
@@ -1060,6 +1063,15 @@ newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
     deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 type StateHash = StateHashV0
+
+-- | Hash of a block's state.
+newtype BlockStateHash = BlockStateHash {theBlockStateHash :: Hash.Hash}
+    deriving (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
+
+-- | For protocol version prior to P7, the state hash is simply the block state hash.
+makeStateHashBHV0 :: (BlockHashingVersionFor pv ~ 'BHV0) => SProtocolVersion pv -> BlockStateHash -> StateHash
+makeStateHashBHV0 sProtocolVersion = case sBlockHashingVersionFor sProtocolVersion of
+  SBHV0 -> StateHashV0 . theBlockStateHash
 
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
