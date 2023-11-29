@@ -4,6 +4,7 @@
 - Support `P7` protocol version.
 - The `Debug` implementation for `ContractEvent` displays the value in `hex`.
   The alternate formatter (using `#`) displays it as a list of bytes.
+- Add `FromStr` and `Display` instances to `dodis_yampolskiy_prf::SecretKey`.
 
 ## 3.2.0 (2023-11-22)
 
@@ -29,7 +30,6 @@
 - Fix the epoch when converting Web3ID attributes from Unix epoch to `-262144-01-01T00:00:00Z`.
   The representable timestamps are between `-262144-01-01T00:00:00Z` and
   `+262143-12-31T23:59:59.999Z`
-
 
 ## 3.0.0 (2023-08-21)
 
