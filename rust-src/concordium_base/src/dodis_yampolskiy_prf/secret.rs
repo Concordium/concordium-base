@@ -74,6 +74,30 @@ impl<C: Curve> SecretKey<C> {
     }
 }
 
+impl<C: Curve> std::fmt::Display for SecretKey<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", base16_encode_string(self))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SecretKeyFromStrError {
+    #[error("Invalid secret key: {0}")]
+    InvalidKey(#[from] anyhow::Error),
+    #[error("Invalid hex string: {0}")]
+    InvalidHex(#[from] hex::FromHexError),
+}
+
+impl<C: Curve> std::str::FromStr for SecretKey<C> {
+    type Err = SecretKeyFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut bytes = std::io::Cursor::new(hex::decode(s)?);
+        let key = from_bytes(&mut bytes)?;
+        Ok(key)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
