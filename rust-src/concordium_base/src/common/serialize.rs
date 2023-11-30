@@ -1,4 +1,3 @@
-pub use super::impls::*;
 use anyhow::{bail, ensure, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use concordium_contracts_common::{Duration, ExchangeRate};
