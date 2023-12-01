@@ -598,21 +598,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         };
 
         let setup_init_host = || -> InitHost<Parameter<'_>, &InitContext<_>> {
-            InitHost::init(
-                InterpreterEnergy::new(
-                    nrg * 1000,
-                ),
-                Parameter::empty(),
-                &init_ctx,
-                false,
-            )
+            InitHost::init(InterpreterEnergy::new(nrg * 1000), Parameter::empty(), &init_ctx, false)
         };
 
         let setup_receive_host = |state, param| -> ReceiveHost<Parameter<'_>, &ReceiveContext<_>> {
             ReceiveHost::init(
-                InterpreterEnergy::new(
-                    nrg * 1000,
-                ),
+                InterpreterEnergy::new(nrg * 1000),
                 state,
                 param,
                 &receive_ctx,

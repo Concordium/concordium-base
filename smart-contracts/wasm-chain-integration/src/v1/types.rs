@@ -2,7 +2,9 @@ use super::{
     trie::{self, MutableState},
     EnergyLabel, Interrupt, ParameterVec, StateLessReceiveHost,
 };
-use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy, LabelEnergy};
+use crate::{
+    constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy, LabelEnergy,
+};
 use anyhow::{bail, ensure, Context};
 use concordium_contracts_common::OwnedEntrypointName;
 use concordium_wasm::{
@@ -859,7 +861,7 @@ impl InstanceStateIteratorResultOption {
 
 pub type StateResult<A> = anyhow::Result<A>;
 
-impl <A: LabelEnergy>trie::TraversalCounter for InterpreterEnergy<A> {
+impl<A: LabelEnergy> trie::TraversalCounter for InterpreterEnergy<A> {
     type Err = anyhow::Error;
 
     #[inline(always)]
@@ -878,7 +880,7 @@ impl <A: LabelEnergy>trie::TraversalCounter for InterpreterEnergy<A> {
 /// when an attempt to write is made. It could be that only a small amount of
 /// data is written at the given entry, so charging just based on that would be
 /// inadequate.
-impl <A: LabelEnergy>trie::AllocCounter<trie::Value> for InterpreterEnergy<A> {
+impl<A: LabelEnergy> trie::AllocCounter<trie::Value> for InterpreterEnergy<A> {
     type Err = anyhow::Error;
 
     #[inline(always)]

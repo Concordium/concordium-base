@@ -50,9 +50,7 @@ where
 fn test_crypto_prims() -> anyhow::Result<()> {
     let nrg = 1_000_000_000;
 
-    let start_energy = InterpreterEnergy::<()>::new(
-        nrg * 1000,
-    );
+    let start_energy = InterpreterEnergy::<()>::new(nrg * 1000);
 
     let skeleton = parse::parse_skeleton(CONTRACT_BYTES).unwrap();
     let module = {

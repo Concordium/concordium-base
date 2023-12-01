@@ -57,9 +57,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let nrg = 1000;
 
-    let start_energy = InterpreterEnergy::<()>::new(
-        nrg * 1000,
-    );
+    let start_energy = InterpreterEnergy::<()>::new(nrg * 1000);
 
     // the throughput is meant to correspond to 1NRG. The reported throughput should
     // be around 1M elements per second.

@@ -483,7 +483,9 @@ pub(crate) mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy<A>,
         policies: ExecResult<&[u8]>,
-    ) -> machine::RunResult<()> where A: LabelEnergy {
+    ) -> machine::RunResult<()>
+    where
+        A: LabelEnergy, {
         let offset = unsafe { stack.pop_u32() } as usize;
         let length = unsafe { stack.pop_u32() };
         // charge energy linearly in the amount of data written.
@@ -506,7 +508,9 @@ pub(crate) mod host {
         energy: &mut InterpreterEnergy<A>,
         logs: &mut Logs,
         limit_num_logs: bool,
-    ) -> machine::RunResult<()> where A: LabelEnergy{
+    ) -> machine::RunResult<()>
+    where
+        A: LabelEnergy, {
         let length = unsafe { stack.pop_u32() };
         let start = unsafe { stack.pop_u32() } as usize;
         let end = start + length as usize;
@@ -782,7 +786,9 @@ pub(crate) mod host {
     pub(crate) fn charge_memory_alloc<A>(
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy<A>,
-    ) -> machine::RunResult<()> where A: LabelEnergy {
+    ) -> machine::RunResult<()>
+    where
+        A: LabelEnergy, {
         energy.charge_memory_alloc(unsafe { stack.peek_u32() })
     }
 }
