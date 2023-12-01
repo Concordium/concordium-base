@@ -14,10 +14,8 @@ module Concordium.Types.Queries where
 
 import Data.Aeson
 import Data.Aeson.TH
-import Data.Aeson.Types (Parser)
 import Data.Char (isLower)
 import qualified Data.Map as Map
-import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
@@ -45,10 +43,10 @@ import Concordium.Types.Parameters (
     TimeoutParameters,
     TransactionFeeDistribution,
  )
-import Concordium.Types.Transactions (SpecialTransactionOutcome)
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
 import Concordium.Utils
+import qualified Concordium.Wasm as Wasm
 
 -- | Result type for @getConsensusStatus@ queries.  A number of fields are not defined when no blocks
 --  have so far been received, verified or finalized. In such cases, the values will be 'Nothing'.
@@ -246,73 +244,6 @@ data FinalizationSummary = FinalizationSummary
     deriving (Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''FinalizationSummary)
-
--- | Detailed information about a block.
-data BlockSummary = forall pv.
-      (IsProtocolVersion pv) =>
-    BlockSummary
-    { -- | Details of transactions in the block
-      bsTransactionSummaries :: !(Vec.Vector TransactionSummary),
-      -- | Details of special events in the block
-      bsSpecialEvents :: !(Seq.Seq SpecialTransactionOutcome),
-      -- | Details of the finalization record in the block (if any)
-      bsFinalizationData :: !(Maybe FinalizationSummary),
-      -- | Details of the update queues and chain parameters as of the block
-      bsUpdates :: !(UQ.Updates pv),
-      -- | Protocol version proxy
-      bsProtocolVersion :: SProtocolVersion pv
-    }
-
--- | Get 'Updates' from 'BlockSummary', with continuation to avoid "escaped type variables".
-{-# INLINE bsWithUpdates #-}
-bsWithUpdates :: BlockSummary -> (forall pv. (IsProtocolVersion pv) => SProtocolVersion pv -> UQ.Updates pv -> a) -> a
-bsWithUpdates BlockSummary{..} = \k -> k bsProtocolVersion bsUpdates
-
-instance Show BlockSummary where
-    showsPrec prec BlockSummary{..} = do
-        showParen (prec > 11) $
-            showString "BlockSummary "
-                . showString " {bsTransactionSummaries = "
-                . shows bsTransactionSummaries
-                . showString ",bsSpecialEvents = "
-                . shows bsSpecialEvents
-                . showString ",bsFinalizationData = "
-                . shows bsFinalizationData
-                . showString ",bsUpdates = "
-                . shows bsUpdates
-                . showString ",bsProtocolVersion = "
-                . shows (demoteProtocolVersion bsProtocolVersion)
-                . showString "}"
-
-instance ToJSON BlockSummary where
-    toJSON BlockSummary{..} =
-        object
-            [ "transactionSummaries" .= bsTransactionSummaries,
-              "specialEvents" .= bsSpecialEvents,
-              "finalizationData" .= bsFinalizationData,
-              "updates" .= bsUpdates,
-              "protocolVersion" .= demoteProtocolVersion bsProtocolVersion
-            ]
-
-instance FromJSON BlockSummary where
-    parseJSON =
-        withObject "BlockSummary" $ \v -> do
-            -- We have added the "protocolVersion" field in protocol version 4, so in order to parse
-            -- blocks summaries from older protocols, we allow this field to not exist. If the field
-            -- does not exist, then we proceed like the previous protocol (version 3).
-            mpv <- v .:? "protocolVersion"
-            case mpv of
-                Nothing -> parse (promoteProtocolVersion P3) v
-                Just pv -> parse (promoteProtocolVersion pv) v
-      where
-        parse :: SomeProtocolVersion -> Object -> Parser BlockSummary
-        parse (SomeProtocolVersion (spv :: SProtocolVersion pv)) v =
-            BlockSummary
-                <$> v .: "transactionSummaries"
-                <*> v .: "specialEvents"
-                <*> v .: "finalizationData"
-                <*> (v .: "updates" :: Parser (UQ.Updates pv))
-                <*> pure spv
 
 -- | Status of the reward accounts. The type parameter determines the type used to represent time.
 data RewardStatus' t
@@ -1062,3 +993,51 @@ data WinningBaker = WinningBaker
 --  record field is turned into the label @round@ in the corresponding JSON representation
 --  of the @PendingUpdate@.
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''WinningBaker)
+
+-- | A failing result of a dry run execution.
+data DryRunError
+    = -- | The current block state is undefined.
+      DryRunErrorNoState
+    | -- | The requested block was not found, so its state could not be loaded.
+      DryRunErrorBlockNotFound
+    | -- | The specified account was not found.
+      DryRunErrorAccountNotFound
+    | -- | The specified instance was not found.
+      DryRunErrorInstanceNotFound
+    | -- | The amount to mint would overflow the total CCD supply.
+      DryRunErrorAmountOverLimit {dreMaximumMintAmount :: !Amount}
+    | -- | The balance of the sender account is not sufficient to pay for the operation.
+      DryRunErrorBalanceInsufficient {dreRequiredAmount :: !Amount, dreAvailableAmount :: !Amount}
+    | -- | The energy supplied for the transaction is not sufficient to check the transaction
+      -- header.
+      DryRunErrorEnergyInsufficient {dreEnergyRequired :: !Energy}
+
+-- | A successful result of a dry run execution.
+-- These do not cover all successful results, just ones where the protobuf encoding cannot fail.
+data DryRunSuccess
+    = -- | The block state was loaded.
+      DryRunSuccessBlockStateLoaded
+        { -- | Current timestamp (taken from the block).
+          drsCurrentTimestamp :: !Timestamp,
+          -- | Block hash of the block the state was loaded from.
+          drsBlockHash :: !BlockHash,
+          -- | The protocol version determined by the block.
+          drsProtocolVersion :: !ProtocolVersion
+        }
+    | -- | The account info was successfully retrieved.
+      DryRunSuccessAccountInfo {drsAccountInfo :: !AccountInfo}
+    | -- | The smart contract instance info was successfully retrieved.
+      DryRunSuccessInstanceInfo {drsInstanceInfo :: !Wasm.InstanceInfo}
+    | -- | The current timestamp was successfully set.
+      DryRunSuccessTimestampSet
+    | -- | The requested amount was minted to the account.
+      DryRunSuccessMintedToAccount
+
+-- | A wrapper type used to provide 'ToProto' instances that target DryRunResponse.
+data DryRunResponse a = DryRunResponse
+    { -- | The result of the operation.
+      drrResponse :: !a,
+      -- | The remaining energy after executing the operation.
+      drrQuotaRemaining :: !Energy
+    }
+    deriving (Eq)

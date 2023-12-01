@@ -267,6 +267,7 @@ instance ToProto ProtocolVersion where
     toProto P4 = Proto.PROTOCOL_VERSION_4
     toProto P5 = Proto.PROTOCOL_VERSION_5
     toProto P6 = Proto.PROTOCOL_VERSION_6
+    toProto P7 = Proto.PROTOCOL_VERSION_7
 
 instance ToProto QueryTypes.NextAccountNonce where
     type Output QueryTypes.NextAccountNonce = Proto.NextAccountSequenceNumber
@@ -1500,7 +1501,8 @@ convertAccountTransaction ty cost sender result = case ty of
     mkNone rr = Proto.make $ do
         ProtoFields.cost .= toProto cost
         ProtoFields.sender .= toProto sender
-        ProtoFields.effects . ProtoFields.none
+        ProtoFields.effects
+            . ProtoFields.none
             .= ( Proto.make $ do
                     ProtoFields.rejectReason .= toProto rr
                     case ty of
@@ -2240,3 +2242,125 @@ instance ToProto WinningBaker where
         ProtoFields.round .= toProto wbRound
         ProtoFields.winner .= toProto wbWinner
         ProtoFields.present .= wbPresent
+
+instance ToProto DryRunError where
+    type Output DryRunError = Proto.DryRunErrorResponse
+    toProto DryRunErrorNoState =
+        Proto.make $ ProtoFields.noState .= Proto.defMessage
+    toProto DryRunErrorBlockNotFound =
+        Proto.make $ ProtoFields.blockNotFound .= Proto.defMessage
+    toProto DryRunErrorAccountNotFound =
+        Proto.make $ ProtoFields.accountNotFound .= Proto.defMessage
+    toProto DryRunErrorInstanceNotFound =
+        Proto.make $ ProtoFields.instanceNotFound .= Proto.defMessage
+    toProto DryRunErrorAmountOverLimit{..} =
+        Proto.make $ ProtoFields.amountOverLimit .= Proto.build (ProtoFields.amountLimit .~ toProto dreMaximumMintAmount)
+    toProto DryRunErrorBalanceInsufficient{..} =
+        Proto.make $
+            ProtoFields.balanceInsufficient
+                .= Proto.make
+                    ( do
+                        ProtoFields.requiredAmount .= toProto dreRequiredAmount
+                        ProtoFields.availableAmount .= toProto dreAvailableAmount
+                    )
+    toProto DryRunErrorEnergyInsufficient{..} =
+        Proto.make $
+            ProtoFields.energyInsufficient
+                .= Proto.make
+                    (ProtoFields.energyRequired .= toProto dreEnergyRequired)
+
+instance ToProto DryRunSuccess where
+    type Output DryRunSuccess = Proto.DryRunSuccessResponse
+    toProto DryRunSuccessBlockStateLoaded{..} =
+        Proto.make $ do
+            ProtoFields.blockStateLoaded
+                .= Proto.make
+                    ( do
+                        ProtoFields.currentTimestamp .= toProto drsCurrentTimestamp
+                        ProtoFields.blockHash .= toProto drsBlockHash
+                        ProtoFields.protocolVersion .= toProto drsProtocolVersion
+                    )
+    toProto DryRunSuccessAccountInfo{..} =
+        Proto.make $ ProtoFields.accountInfo .= toProto drsAccountInfo
+    toProto DryRunSuccessInstanceInfo{..} =
+        Proto.make $ ProtoFields.instanceInfo .= toProto drsInstanceInfo
+    toProto DryRunSuccessTimestampSet =
+        Proto.make $ ProtoFields.timestampSet .= Proto.defMessage
+    toProto DryRunSuccessMintedToAccount =
+        Proto.make $ ProtoFields.mintedToAccount .= Proto.defMessage
+
+instance ToProto (DryRunResponse DryRunSuccess) where
+    type Output (DryRunResponse DryRunSuccess) = Proto.DryRunResponse
+    toProto (DryRunResponse{..}) = Proto.make $ do
+        ProtoFields.success .= toProto drrResponse
+        ProtoFields.quotaRemaining .= toProto drrQuotaRemaining
+
+instance ToProto (DryRunResponse DryRunError) where
+    type Output (DryRunResponse DryRunError) = Proto.DryRunResponse
+    toProto (DryRunResponse{..}) = Proto.make $ do
+        ProtoFields.error .= toProto drrResponse
+        ProtoFields.quotaRemaining .= toProto drrQuotaRemaining
+
+instance ToProto (DryRunResponse InvokeContract.InvokeContractResult) where
+    -- Since this is a conversion that may fail we use Either in the output type
+    -- here so that we can forward errors, which is not in-line with other
+    -- instances which are not fallible. The caller is meant to catch the error.
+    type
+        Output (DryRunResponse InvokeContract.InvokeContractResult) =
+            Either ConversionError Proto.DryRunResponse
+    toProto (DryRunResponse InvokeContract.Failure{..} quotaRem) =
+        return $
+            Proto.make $ do
+                ProtoFields.error
+                    .= Proto.make
+                        ( ProtoFields.invokeFailed
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.maybe'returnValue .= rcrReturnValue
+                                    ProtoFields.usedEnergy .= toProto rcrUsedEnergy
+                                    ProtoFields.reason .= toProto rcrReason
+                                )
+                        )
+                ProtoFields.quotaRemaining .= toProto quotaRem
+    toProto (DryRunResponse InvokeContract.Success{..} quotaRem) = do
+        effects <- mapM convertContractRelatedEvents rcrEvents
+        return $
+            Proto.make $ do
+                ProtoFields.success
+                    .= Proto.make
+                        ( ProtoFields.invokeSucceeded
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.maybe'returnValue .= rcrReturnValue
+                                    ProtoFields.usedEnergy .= toProto rcrUsedEnergy
+                                    ProtoFields.effects .= effects
+                                )
+                        )
+                ProtoFields.quotaRemaining .= toProto quotaRem
+
+instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) where
+    type
+        Output (DryRunResponse (TransactionSummary' ValidResultWithReturn)) =
+            Either ConversionError Proto.DryRunResponse
+    toProto (DryRunResponse TransactionSummary{..} quotaRem) = case tsType of
+        TSTAccountTransaction tty -> do
+            sender <- case tsSender of
+                Nothing -> Left CEInvalidTransactionResult
+                Just acc -> Right acc
+            details <- convertAccountTransaction tty tsCost sender (vrwrResult tsResult)
+            Right . Proto.make $ do
+                ProtoFields.success
+                    .= Proto.make
+                        ( ProtoFields.transactionExecuted
+                            .= Proto.make
+                                ( do
+                                    mapM_ (ProtoFields.returnValue .=) $ vrwrReturnValue tsResult
+                                    ProtoFields.energyCost .= toProto tsEnergyCost
+                                    ProtoFields.details .= details
+                                )
+                        )
+                ProtoFields.quotaRemaining .= toProto quotaRem
+        _ -> do
+            -- Since only account transactions can be executed in a dry run, we should not have
+            -- other transaction summary types.
+            Left CEInvalidTransactionResult

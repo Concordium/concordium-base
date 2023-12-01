@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "8.1.0"
+version = "8.1.1"
 dependencies = [
  "base64",
  "bs58",
@@ -356,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "concordium_base"
-version = "3.1.1"
+version = "3.2.0"
 dependencies = [
  "anyhow",
  "bs58",
