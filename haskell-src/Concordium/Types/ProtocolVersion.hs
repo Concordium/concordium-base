@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
@@ -127,8 +128,11 @@ module Concordium.Types.ProtocolVersion (
     --    * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
     --      All the contents of the transaction summaries are used for computing the hash.
     --
-    --    * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+    --    * 'TOV1' is used in P5 and onwards. The hash is computed via a merkle tree and the
     --      exact reject reasons for failed transactions are omitted from the hash.
+    --
+    --    * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
+    --      except the merkle trees are hashed to include the size.
     TransactionOutcomesVersion (..),
     -- | Singleton type corresponding to 'TransactionOutcomesVersion'.
     STransactionOutcomesVersion (..),
@@ -158,6 +162,14 @@ module Concordium.Types.ProtocolVersion (
     PVSupportsDelegation,
     delegationSupport,
     protocolSupportsDelegation,
+
+    -- * Block hash version
+    BlockHashVersion (..),
+    SBlockHashVersion (..),
+    blockHashVersionFor,
+    BlockHashVersionFor,
+    sBlockHashVersionFor,
+    IsBlockHashVersion,
 
     -- * Feature guards
     supportsMemo,
@@ -251,11 +263,14 @@ $( singletons
         -- to the hashing scheme.
         -- \* 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
         -- All the contents of the transaction summaries are used for computing the hash.
-        -- \* 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+        -- \* 'TOV1' is used in P5 and P6. The hash is computed via a merkle tree and the
         -- exact reject reasons for failed transactions are omitted from the hash.
+        -- \* 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
+        -- except the merkle trees are hashed to include the size.
         data TransactionOutcomesVersion
             = TOV0
             | TOV1
+            | TOV2
 
         -- \|Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
         transactionOutcomesVersionFor :: ProtocolVersion -> TransactionOutcomesVersion
@@ -265,7 +280,7 @@ $( singletons
         transactionOutcomesVersionFor P4 = TOV0
         transactionOutcomesVersionFor P5 = TOV1
         transactionOutcomesVersionFor P6 = TOV1
-        transactionOutcomesVersionFor P7 = TOV1
+        transactionOutcomesVersionFor P7 = TOV2
 
         -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
         -- at an account version. This is intended to give more descriptive type errors in cases where the
@@ -289,6 +304,19 @@ $( singletons
         supportsDelegation AccountV0 = DelegationNotSupported AccountV0
         supportsDelegation AccountV1 = DelegationSupported AccountV1
         supportsDelegation AccountV2 = DelegationSupported AccountV2
+
+        data BlockHashVersion
+            = BlockHashVersion0
+            | BlockHashVersion1
+
+        blockHashVersionFor :: ProtocolVersion -> BlockHashVersion
+        blockHashVersionFor P1 = BlockHashVersion0
+        blockHashVersionFor P2 = BlockHashVersion0
+        blockHashVersionFor P3 = BlockHashVersion0
+        blockHashVersionFor P4 = BlockHashVersion0
+        blockHashVersionFor P5 = BlockHashVersion0
+        blockHashVersionFor P6 = BlockHashVersion0
+        blockHashVersionFor P7 = BlockHashVersion1
         |]
  )
 
@@ -369,6 +397,8 @@ type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv
 --  'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). (An alias for 'SingI'.)
 type IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) = SingI tov
 
+type IsBlockHashVersion (bhv :: BlockHashVersion) = SingI bhv
+
 -- | Constraint on a type level 'ProtocolVersion' that can be used to get a corresponding
 --  'SProtocolVersion' (see 'protocolVersion'). This wraps 'SingI', but also
 --  has constraints on the 'ChainParametersVersionFor', 'AccountVersionFor' and
@@ -382,7 +412,8 @@ class
     ( SingI pv,
       IsChainParametersVersion (ChainParametersVersionFor pv),
       IsAccountVersion (AccountVersionFor pv),
-      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
+      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
+      IsBlockHashVersion (BlockHashVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 
@@ -390,7 +421,8 @@ instance
     ( SingI pv,
       IsChainParametersVersion (ChainParametersVersionFor pv),
       IsAccountVersion (AccountVersionFor pv),
-      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv)
+      IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
+      IsBlockHashVersion (BlockHashVersionFor pv)
     ) =>
     IsProtocolVersion (pv :: ProtocolVersion)
 

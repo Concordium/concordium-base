@@ -18,23 +18,18 @@ import Data.Aeson (FromJSON (..), ToJSON (..))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import qualified Data.ByteString as BS
-import Data.Hashable
+import Data.List (foldl')
 import qualified Data.Map.Strict as Map
-import qualified Data.Sequence as Seq
 import qualified Data.Serialize as S
-import Lens.Micro.Internal
-import Lens.Micro.Platform
+import Data.Word
 
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.Crypto.SignatureScheme as SigScheme
-import Data.List (foldl')
 
 import qualified Data.Vector as Vec
-import Data.Word
 
 import Concordium.ID.Types
 import Concordium.Types
-import Concordium.Types.Execution
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
 import Concordium.Utils
@@ -863,69 +858,3 @@ instance S.Serialize SpecialTransactionOutcome where
                 stoFinalizationReward <- S.get
                 return PaydayPoolReward{..}
             _ -> fail "Invalid SpecialTransactionOutcome type"
-
--- | Outcomes of transactions. The vector of outcomes must have the same size as the
---  number of transactions in the block, and ordered in the same way.
-data TransactionOutcomes = TransactionOutcomes
-    { outcomeValues :: !(Vec.Vector TransactionSummary),
-      _outcomeSpecial :: !(Seq.Seq SpecialTransactionOutcome)
-    }
-
-makeLenses ''TransactionOutcomes
-
-instance Show TransactionOutcomes where
-    show (TransactionOutcomes v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
-
-putTransactionOutcomes :: S.Putter TransactionOutcomes
-putTransactionOutcomes TransactionOutcomes{..} = do
-    putListOf putTransactionSummary (Vec.toList outcomeValues)
-    S.put _outcomeSpecial
-
-getTransactionOutcomes :: SProtocolVersion pv -> S.Get TransactionOutcomes
-getTransactionOutcomes spv = TransactionOutcomes <$> (Vec.fromList <$> getListOf (getTransactionSummary spv)) <*> S.get
-
-instance HashableTo TransactionOutcomesHash TransactionOutcomes where
-    getHash transactionoutcomes = TransactionOutcomesHash $ H.hash $ S.runPut $ putTransactionOutcomes transactionoutcomes
-
--- | A simple wrapper around a `Hash`.
---  No matter the strategy for deriving the 'TransactionOutcomesHash' we will
---  always end up with a value of this type.
-newtype TransactionOutcomesHash = TransactionOutcomesHash {tohGet :: H.Hash}
-    deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
-
-emptyTransactionOutcomesV0 :: TransactionOutcomes
-emptyTransactionOutcomesV0 = TransactionOutcomes Vec.empty Seq.empty
-
-{-# NOINLINE emptyTransactionOutcomesHashV1 #-}
-
--- | Hash of the empty V1 transaction outcomes structure. This transaction outcomes
---  structure is used starting in protocol version 5.
---
---  This is not the ideal location here, since the merkle structures that define
---  it are defined in the global state modules, however any other place leads to
---  problematic module dependencies. We should ideally restructure those so that
---  we do not have this duplication here.
-emptyTransactionOutcomesHashV1 :: TransactionOutcomesHash
-emptyTransactionOutcomesHashV1 =
-    TransactionOutcomesHash $
-        H.hashShort
-            ( "TransactionOutcomesHashV1"
-                <> H.hashToShortByteString (H.hash "EmptyLFMBTree")
-                <> H.hashToShortByteString (H.hash "EmptyLFMBTree")
-            )
-
-transactionOutcomesV0FromList :: [TransactionSummary] -> TransactionOutcomes
-transactionOutcomesV0FromList l =
-    let outcomeValues = Vec.fromList l
-        _outcomeSpecial = Seq.empty
-    in  TransactionOutcomes{..}
-
-type instance Index TransactionOutcomes = TransactionIndex
-type instance IxValue TransactionOutcomes = TransactionSummary
-
-instance Ixed TransactionOutcomes where
-    ix idx f outcomes@TransactionOutcomes{..} =
-        let x = fromIntegral idx
-        in  if x >= length outcomeValues
-                then pure outcomes
-                else ix x f outcomeValues <&> (\ov -> TransactionOutcomes{outcomeValues = ov, ..})
