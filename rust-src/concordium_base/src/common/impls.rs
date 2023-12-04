@@ -158,45 +158,30 @@ impl Serial for Fq12 {
 
 use ed25519_dalek::*;
 
-impl Deserial for PublicKey {
+impl Deserial for VerifyingKey {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; PUBLIC_KEY_LENGTH];
         source.read_exact(&mut buf)?;
-        Ok(PublicKey::from_bytes(&buf)?)
+        Ok(VerifyingKey::from_bytes(&buf)?)
     }
 }
 
-impl Serial for PublicKey {
+impl Serial for VerifyingKey {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_all(self.as_bytes())
             .expect("Writing to buffer should succeed.");
     }
 }
 
-impl Deserial for SecretKey {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        let mut buf = [0u8; SECRET_KEY_LENGTH];
-        source.read_exact(&mut buf)?;
-        Ok(SecretKey::from_bytes(&buf)?)
-    }
-}
-
-impl Serial for SecretKey {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        out.write_all(self.as_bytes())
-            .expect("Writing to buffer should succeed.");
-    }
-}
-
-impl Deserial for Keypair {
+impl Deserial for SigningKey {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; KEYPAIR_LENGTH];
         source.read_exact(&mut buf)?;
-        Ok(Keypair::from_bytes(&buf)?)
+        Ok(SigningKey::from_keypair_bytes(&buf)?)
     }
 }
 
-impl Serial for Keypair {
+impl Serial for SigningKey {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.write_all(&self.to_bytes())
             .expect("Writing to buffer should succeed.");

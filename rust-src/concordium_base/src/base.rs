@@ -21,6 +21,7 @@ pub use concordium_contracts_common::{
     ZeroSignatureThreshold,
 };
 use derive_more::{Add, Display, From, FromStr, Into, Sub};
+use ed25519_dalek::Signer;
 use rand::{CryptoRng, Rng};
 use std::{
     convert::{TryFrom, TryInto},
@@ -605,7 +606,7 @@ impl BakerSignatureSignKey {
     /// Generate a fresh key using the provided random number generator.
     pub fn generate<T: CryptoRng + Rng>(csprng: &mut T) -> Self {
         Self {
-            sign_key: ed25519_dalek::SecretKey::generate(csprng),
+            sign_key: csprng.gen(),
         }
     }
 }
@@ -614,13 +615,13 @@ impl BakerSignatureSignKey {
 #[derive(SerdeBase16Serialize, Serialize, Clone, Debug, PartialEq, Eq)]
 /// A public key that corresponds to [`BakerSignatureVerifyKey`].
 pub struct BakerSignatureVerifyKey {
-    pub(crate) verify_key: ed25519_dalek::PublicKey,
+    pub(crate) verify_key: ed25519_dalek::VerifyingKey,
 }
 
 impl From<&BakerSignatureSignKey> for BakerSignatureVerifyKey {
     fn from(secret: &BakerSignatureSignKey) -> Self {
         Self {
-            verify_key: ed25519_dalek::PublicKey::from(&secret.sign_key),
+            verify_key: ed25519_dalek::SigningKey::from(&secret.sign_key).verifying_key(),
         }
     }
 }
@@ -777,46 +778,82 @@ pub struct UpdatePublicKey {
 /// A ed25519 keypair. This is available in the `ed25519::dalek` crate, but the
 /// JSON serialization there is not compatible with what we use, so we redefine
 /// it there.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, derive_more::AsRef, Clone)]
+#[serde(
+    try_from = "update_key_pair_json::UpdateKeyPair",
+    into = "update_key_pair_json::UpdateKeyPair"
+)]
 pub struct UpdateKeyPair {
-    #[serde(
-        rename = "signKey",
-        serialize_with = "crate::common::base16_encode",
-        deserialize_with = "crate::common::base16_decode"
-    )]
-    pub secret: ed25519_dalek::SecretKey,
-    #[serde(flatten)]
-    pub public: UpdatePublicKey,
+    inner: ed25519_dalek::SigningKey,
 }
 
-impl UpdateKeyPair {
-    /// Generate a fresh key pair using the provided random number generator.
-    pub fn generate<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
-        let kp = ed25519_dalek::Keypair::generate(rng);
-        Self {
-            secret: kp.secret,
-            public: UpdatePublicKey {
-                public: VerifyKey::Ed25519VerifyKey(kp.public),
-            },
+mod update_key_pair_json {
+    use crate::id::types::SchemeId;
+
+    use super::*;
+    /// A ed25519 keypair. This is available in the `ed25519::dalek` crate, but
+    /// the JSON serialization there is not compatible with what we use, so
+    /// we redefine it there.
+    #[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+    pub struct UpdateKeyPair {
+        #[serde(
+            rename = "signKey",
+            serialize_with = "crate::common::base16_encode_array",
+            deserialize_with = "crate::common::base16_decode_array"
+        )]
+        pub secret: ed25519_dalek::SecretKey,
+        #[serde(
+            rename = "verifyKey",
+            serialize_with = "crate::common::base16_encode",
+            deserialize_with = "crate::common::base16_decode"
+        )]
+        pub public: ed25519_dalek::VerifyingKey,
+        pub schema: Option<SchemeId>,
+    }
+
+    impl TryFrom<UpdateKeyPair> for super::UpdateKeyPair {
+        type Error = ed25519_dalek::SignatureError;
+
+        fn try_from(value: UpdateKeyPair) -> Result<Self, Self::Error> {
+            let inner = ed25519_dalek::SigningKey::from_bytes(&value.secret);
+            if inner.verifying_key() != value.public {
+                Err(ed25519_dalek::SignatureError::from_source(
+                    "Public key does not match secret key.",
+                ))
+            } else {
+                Ok(Self { inner })
+            }
         }
     }
 
-    /// Sign the message with the keypair.
-    pub fn sign(&self, msg: &[u8]) -> Signature {
-        let expanded = ed25519_dalek::ExpandedSecretKey::from(&self.secret);
-        match self.public.public {
-            VerifyKey::Ed25519VerifyKey(vf) => {
-                let sig = expanded.sign(msg, &vf);
-                Signature {
-                    sig: sig.to_bytes().to_vec(),
-                }
+    impl From<super::UpdateKeyPair> for UpdateKeyPair {
+        fn from(value: super::UpdateKeyPair) -> Self {
+            Self {
+                secret: value.inner.to_bytes(),
+                public: value.inner.verifying_key(),
+                schema: Some(SchemeId::Ed25519),
             }
         }
     }
 }
 
+impl UpdateKeyPair {
+    /// Generate a fresh key pair using the provided random number generator.
+    pub fn generate<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
+        let inner = ed25519_dalek::SigningKey::generate(rng);
+        Self { inner }
+    }
+
+    /// Sign the message with the keypair.
+    pub fn sign(&self, msg: &[u8]) -> Signature { self.inner.sign(msg).into() }
+}
+
 impl From<&UpdateKeyPair> for UpdatePublicKey {
-    fn from(kp: &UpdateKeyPair) -> Self { kp.public.clone() }
+    fn from(kp: &UpdateKeyPair) -> Self {
+        UpdatePublicKey {
+            public: kp.inner.verifying_key().into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, SerdeSerialize, SerdeDeserialize, Serialize, Into, Display)]

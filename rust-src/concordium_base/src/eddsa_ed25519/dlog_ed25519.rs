@@ -72,7 +72,7 @@ fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     Scalar::from_bits(bits)
 }
 
-fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
+fn point_from_public_key(public_key: &VerifyingKey) -> Option<EdwardsPoint> {
     let bytes = public_key.to_bytes();
     CompressedEdwardsY::from_slice(&bytes).decompress()
 }
@@ -115,7 +115,7 @@ pub fn prove_dlog_ed25519<R: Rng + CryptoRng>(
 
 pub fn verify_dlog_ed25519(
     ro: &mut RandomOracle,
-    public_key: &PublicKey,
+    public_key: &VerifyingKey,
     proof: &Ed25519DlogProof,
 ) -> bool {
     match point_from_public_key(public_key) {

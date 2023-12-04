@@ -12,6 +12,7 @@ use concordium_contracts_common::{
 };
 pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
 use derive_more::{Display, From, FromStr, Into};
+use ed25519_dalek::Signer;
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
 /// Index of an account key that is to be used.
 #[derive(
@@ -308,6 +309,14 @@ pub struct Signature {
     pub sig: Vec<u8>,
 }
 
+impl From<ed25519_dalek::Signature> for Signature {
+    fn from(value: ed25519_dalek::Signature) -> Self {
+        Self {
+            sig: value.to_vec(),
+        }
+    }
+}
+
 impl Serial for Signature {
     fn serial<B: Buffer>(&self, out: &mut B) {
         (self.sig.len() as u16).serial(out);
@@ -472,58 +481,78 @@ impl FromStr for Timestamp {
     }
 }
 
-/// A ed25519 keypair. This is available in the `ed25519::dalek` crate, but the
+/// A ed25519 keypair. This is available in the `ed25519_dalek` crate, but the
 /// JSON serialization there is not compatible with what we use, so we redefine
 /// it there.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(
+    Debug,
+    SerdeSerialize,
+    SerdeDeserialize,
+    derive_more::AsRef,
+    derive_more::From,
+    derive_more::Into,
+    Clone,
+)]
+#[serde(try_from = "key_pair_json::KeyPair", into = "key_pair_json::KeyPair")]
 pub struct KeyPair {
-    #[serde(
-        rename = "signKey",
-        serialize_with = "crate::common::base16_encode",
-        deserialize_with = "crate::common::base16_decode"
-    )]
-    pub secret: ed25519_dalek::SecretKey,
-    #[serde(
-        rename = "verifyKey",
-        serialize_with = "crate::common::base16_encode",
-        deserialize_with = "crate::common::base16_decode"
-    )]
-    pub public: ed25519_dalek::PublicKey,
+    inner: ed25519_dalek::SigningKey,
+}
+
+impl KeyPair {
+    pub fn public(&self) -> ed25519_dalek::VerifyingKey {
+        self.inner.verifying_key()
+    }
+}
+
+mod key_pair_json {
+    #[derive(Debug, super::SerdeSerialize, super::SerdeDeserialize)]
+    pub struct KeyPair {
+        #[serde(
+            rename = "signKey",
+            serialize_with = "crate::common::base16_encode_array",
+            deserialize_with = "crate::common::base16_decode_array"
+        )]
+        pub secret: ed25519_dalek::SecretKey,
+        #[serde(
+            rename = "verifyKey",
+            serialize_with = "crate::common::base16_encode",
+            deserialize_with = "crate::common::base16_decode"
+        )]
+        pub public: ed25519_dalek::VerifyingKey,
+    }
+
+    impl TryFrom<KeyPair> for super::KeyPair {
+        type Error = ed25519_dalek::SignatureError;
+
+        fn try_from(value: KeyPair) -> Result<Self, Self::Error> {
+            let inner = ed25519_dalek::SigningKey::from_bytes(&value.secret);
+            if inner.verifying_key() != value.public {
+                Err(Self::Error::from_source("Public/secret key mismatch."))
+            } else {
+                Ok(Self { inner })
+            }
+        }
+    }
+
+    impl From<super::KeyPair> for KeyPair {
+        fn from(value: super::KeyPair) -> Self {
+            Self {
+                secret: value.inner.to_bytes(),
+                public: value.inner.verifying_key(),
+            }
+        }
+    }
 }
 
 impl KeyPair {
     pub fn generate<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
-        Self::from(ed25519_dalek::Keypair::generate(rng))
-    }
-}
-
-impl From<ed25519_dalek::Keypair> for KeyPair {
-    fn from(kp: ed25519_dalek::Keypair) -> Self {
-        Self {
-            secret: kp.secret,
-            public: kp.public,
-        }
+        Self::from(ed25519_dalek::SigningKey::generate(rng))
     }
 }
 
 impl KeyPair {
     /// Sign the given message with the keypair.
-    pub fn sign(&self, msg: &[u8]) -> Signature {
-        let expanded = ed25519_dalek::ExpandedSecretKey::from(&self.secret);
-        let sig = expanded.sign(msg, &self.public);
-        Signature {
-            sig: sig.to_bytes().to_vec(),
-        }
-    }
-}
-
-impl From<KeyPair> for ed25519_dalek::Keypair {
-    fn from(kp: KeyPair) -> ed25519_dalek::Keypair {
-        ed25519_dalek::Keypair {
-            secret: kp.secret,
-            public: kp.public,
-        }
-    }
+    pub fn sign(&self, msg: &[u8]) -> ed25519_dalek::Signature { self.inner.sign(msg) }
 }
 
 #[cfg(test)]
