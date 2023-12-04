@@ -60,7 +60,7 @@ data RegenesisDataV1 = RegenesisDataV1
       --  This is taken from the old protocol version, and should be the state hash of the terminal
       --  block. [Note, in consensus version 0, modifications were applied to the state before
       --  migration. From consensus version 1, we will apply such modifications during migration.]
-      genesisStateHash :: !BlockStateHash
+      genesisStateHash :: !StateHash
     }
     deriving (Eq, Show)
 

@@ -205,7 +205,7 @@ data BlockInfo = BlockInfo
       -- | The size of the transactions
       biTransactionsSize :: !Int,
       -- | The hash of the block state
-      biBlockStateHash :: !BlockStateHash,
+      biBlockStateHash :: !StateHash,
       -- | Protocol version that the block belongs to.
       biProtocolVersion :: !ProtocolVersion,
       -- | The round of the block. Present from protocol version 6.

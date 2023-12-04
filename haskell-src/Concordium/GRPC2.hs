@@ -1597,8 +1597,8 @@ instance ToProto Slot where
     type Output Slot = Proto.Slot
     toProto = mkWord64
 
-instance ToProto BlockStateHash where
-    type Output BlockStateHash = Proto.StateHash
+instance ToProto StateHash where
+    type Output StateHash = Proto.StateHash
     toProto = mkSerialize
 
 instance ToProto QueryTypes.BlockInfo where
