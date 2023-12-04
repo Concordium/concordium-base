@@ -30,6 +30,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 use ptree::TreeBuilder;
 use sha2::Digest;
 use std::{
+    collections::BTreeMap,
     iter::FusedIterator,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -84,6 +85,16 @@ impl PersistentState {
                 buf.write_u8(1)?;
                 node.store_update_buf(backing_store, buf)
             }
+        }
+    }
+
+    /// Compute the statistics about node distribution in the tree.
+    /// The return value is a map mapping branching factor to the number of
+    /// nodes with that branching factor.
+    pub fn branch_statistics<S: BackingStoreLoad>(&self, loader: &mut S) -> BTreeMap<u8, usize> {
+        match self {
+            PersistentState::Empty => BTreeMap::new(),
+            PersistentState::Root(node) => node.get(loader).to_owned().branch_statistics(loader),
         }
     }
 
