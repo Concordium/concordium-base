@@ -135,6 +135,6 @@ criterion_group!(
     prove_verify_benchmarks::<G1>,
     prove_verify_benchmarks::<RistrettoPoint>,
     prove_verify_benchmarks::<curve25519_dalek_ng::ristretto::RistrettoPoint>,
-    //prove_verify_benchmarks::<ArkGroup<ark_bls12_381::G1Projective>>
+    prove_verify_benchmarks::<ArkGroup<ark_bls12_381::G1Projective>>
 );
 criterion_main!(benchmarks);

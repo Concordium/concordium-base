@@ -13,9 +13,11 @@ homepage = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
 ff = "0.5"
-ark-ff = "0.4"
-ark-ec = "0.4"
-ark-bls12-381 = "0.4.0"
+ark-ff = { path = "../../../ark-algebra/ff", version = "0.4"}
+ark-ec = { path = "../../../ark-algebra/ec", version = "0.4"}
+ark-serialize = { path = "../../../ark-algebra/serialize", version = "0.4"}
+ark-std = { path = "../../../ark-std", version = "0.4"}
+ark-bls12-381 = { path = "../../../ark-curves/bls12_381", version = "0.4"}
 sha2 = "0.10"
 sha3 = "0.10"
 anyhow = "1.0"

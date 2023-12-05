@@ -803,6 +803,8 @@ pub fn verify_in_range<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
     use pairing::bls12_381::G1;
 
@@ -811,7 +813,10 @@ mod tests {
     /// The second check will fail.
     /// This is tested by checking if the verifier returns
     /// Err(Err(VerificationError::Second))
-    type SomeCurve = curve25519_dalek::ristretto::RistrettoPoint;
+
+    // type SomeCurve = curve25519_dalek::ristretto::RistrettoPoint;
+    type SomeCurve = ArkGroup<ark_bls12_381::G1Projective>;
+
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
@@ -983,6 +988,7 @@ mod tests {
         for &v in v_vec.iter().take(m.into()) {
             let r = Randomness::generate(rng);
             let v_scalar = SomeCurve::scalar_from_u64(v);
+            // println!("{:?}", v);
             let v_value = Value::<SomeCurve>::new(v_scalar);
             let com = keys.hide(&v_value, &r);
             randomness.push(r);
@@ -1000,6 +1006,7 @@ mod tests {
             &keys,
             &randomness,
         );
+        println!("{:?}", proof);
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();
