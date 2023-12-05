@@ -144,10 +144,6 @@ name = "range_proof_bench"
 harness = false
 
 [[bench]]
-name = "range_proof_dalek_bench"
-harness = false
-
-[[bench]]
 name = "msm_bench"
 harness = false
 [profile.release]
