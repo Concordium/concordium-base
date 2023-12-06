@@ -142,9 +142,3 @@ features = ["encryption"]
 [[bench]]
 name = "range_proof_bench"
 harness = false
-
-[[bench]]
-name = "msm_bench"
-harness = false
-[profile.release]
-debug = true
