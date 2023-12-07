@@ -929,7 +929,7 @@ dependencies = [
 
 [[package]]
 name = "key_derivation"
-version = "1.3.0"
+version = "2.0.0"
 dependencies = [
  "concordium_base",
  "ed25519-dalek",
@@ -940,6 +940,7 @@ dependencies = [
  "pbkdf2 0.10.1",
  "serde",
  "sha2 0.10.7",
+ "thiserror",
 ]
 
 [[package]]
