@@ -16,6 +16,7 @@ use hmac::Hmac;
 use keygen_bls::keygen_bls;
 use sha2::Sha512;
 use std::fmt;
+use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize)]
 pub enum Net {
@@ -37,25 +38,42 @@ impl fmt::Display for Net {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.net_code()) }
 }
 
+#[derive(Debug, Error)]
+pub enum MnemonicLengthError {
+    #[error("Invalid mnemonic length. The length must be 12, 15, 18, 21 or 24.")]
+    InvalidLength,
+}
+
 fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <ArCurve as Curve>::Scalar {
     keygen_bls(&key_seed, b"").expect("All the inputs are of the correct length, this cannot fail.")
 }
 
-/// Convert 24 BIP-39 words to a 64 bytes seed.
+/// Convert 12, 15, 18, 21 or 24 BIP-39 words to a 64 bytes seed.
 /// As described in <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>,
 /// but with an empty passphrase.
-pub fn words_to_seed(words: &str) -> [u8; 64] { words_to_seed_with_passphrase(words, "") }
+pub fn words_to_seed(words: &str) -> Result<[u8; 64], MnemonicLengthError> {
+    words_to_seed_with_passphrase(words, "")
+}
 
-/// Convert 24 BIP-39 words to a 64 bytes seed.
+/// Convert 12, 15, 18, 21 or 24 BIP-39 words to a 64 bytes seed.
 /// As described in <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>.
-pub fn words_to_seed_with_passphrase(words: &str, passphrase: &str) -> [u8; 64] {
+pub fn words_to_seed_with_passphrase(
+    words: &str,
+    passphrase: &str,
+) -> Result<[u8; 64], MnemonicLengthError> {
+    let words_count = words.split(' ').collect::<Vec<&str>>().len();
+    let allowed_word_counts: [usize; 5] = [12, 15, 18, 21, 24];
+    if !allowed_word_counts.contains(&words_count) {
+        return Err(MnemonicLengthError::InvalidLength);
+    }
+
     let mut salt_string: String = "mnemonic".to_owned();
     salt_string.push_str(passphrase);
     let salt = salt_string.as_bytes();
 
     let mut seed = [0u8; 64];
     pbkdf2::pbkdf2::<Hmac<Sha512>>(words.as_bytes(), salt, 2048, &mut seed);
-    seed
+    Ok(seed)
 }
 
 /// A structure that is used to derive private key material and randomness
@@ -68,8 +86,7 @@ pub fn words_to_seed_with_passphrase(words: &str, passphrase: &str) -> [u8; 64] 
 pub struct ConcordiumHdWallet {
     /// The seed used as the basis for deriving keys. As all private keys are
     /// derived from this seed it means that it should be considered private
-    /// and kept secret. The size is 64 bytes which corresponds to the seed
-    /// that is given by a 24-word BIP39 seed phrase.
+    /// and kept secret. The size is 64 bytes.
     #[serde(
         rename = "seed",
         serialize_with = "base16_encode",
@@ -110,13 +127,13 @@ impl ConcordiumHdWallet {
     ///
     /// See also [`from_words`](Self::from_words) which ensures a canonical
     /// representation of the list of words, and is thus less error prone.
-    pub fn from_seed_phrase(phrase: &str, net: Net) -> Self {
-        let seed = words_to_seed(phrase);
-        Self { seed, net }
+    pub fn from_seed_phrase(phrase: &str, net: Net) -> Result<Self, MnemonicLengthError> {
+        let seed = words_to_seed(phrase)?;
+        Ok(Self { seed, net })
     }
 
     /// Construct [`ConcordiumHdWallet`](Self) from a list of words.
-    pub fn from_words(words: &[&str], net: Net) -> Self {
+    pub fn from_words(words: &[&str], net: Net) -> Result<Self, MnemonicLengthError> {
         Self::from_seed_phrase(&words.join(" "), net)
     }
 
@@ -364,7 +381,8 @@ mod tests {
 
     /// Used to verify test vectors from https://github.com/trezor/python-mnemonic/blob/master/vectors.json.
     fn check_seed_vector(words: &str, expected_seed: &str) {
-        let seed = words_to_seed_with_passphrase(words, PASSPHRASE);
+        let seed = words_to_seed_with_passphrase(words, PASSPHRASE)
+            .expect("Will not fail on proper word length input.");
         assert_eq!(hex::encode(seed), expected_seed);
     }
 
@@ -537,6 +555,230 @@ mod tests {
             base16_encode_string(&attribute_commitment_randomness),
             "409fa90314ec8fb4a2ae812fd77fe58bfac81765cad3990478ff7a73ba6d88ae"
         );
+    }
+
+    #[test]
+    pub fn words_to_seed_less_than_12_words_fail() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon";
+        let seed = words_to_seed_with_passphrase(mnemonic, PASSPHRASE);
+        assert_eq!(seed.is_err(), true);
+    }
+
+    #[test]
+    pub fn words_to_seed_more_than_24_words_fail() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon abandon abandon abandon abandon abandon";
+        let seed = words_to_seed_with_passphrase(mnemonic, PASSPHRASE);
+        assert_eq!(seed.is_err(), true);
+    }
+
+    #[test]
+    pub fn words_to_seed_13_words_fail() {
+        let mnemonic_13_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_13_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_14_words_fail() {
+        let mnemonic_14_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_14_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_16_words_fail() {
+        let mnemonic_16_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon abandon abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_16_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_17_words_fail() {
+        let mnemonic_17_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_17_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_19_words_fail() {
+        let mnemonic_19_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_19_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_20_words_fail() {
+        let mnemonic_20_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_20_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_22_words_fail() {
+        let mnemonic_22_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_22_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_23_words_fail() {
+        let mnemonic_23_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon abandon abandon \
+                                 abandon abandon abandon abandon abandon abandon abandon";
+        assert_eq!(
+            words_to_seed_with_passphrase(mnemonic_23_words, PASSPHRASE).is_err(),
+            true
+        );
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_1() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon about";
+        check_seed_vector(mnemonic, "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04");
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_2() {
+        let mnemonic =
+            "legal winner thank year wave sausage worth useful legal winner thank yellow";
+        check_seed_vector(mnemonic, "2e8905819b8723fe2c1d161860e5ee1830318dbf49a83bd451cfb8440c28bd6fa457fe1296106559a3c80937a1c1069be3a3a5bd381ee6260e8d9739fce1f607");
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_3() {
+        let mnemonic =
+            "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+        check_seed_vector(mnemonic, "d71de856f81a8acc65e6fc851a38d4d7ec216fd0796d0a6827a3ad6ed5511a30fa280f12eb2e47ed2ac03b5c462a0358d18d69fe4f985ec81778c1b370b652a8");
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_4() {
+        let mnemonic = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+        check_seed_vector(mnemonic, "ac27495480225222079d7be181583751e86f571027b0497b5b5d11218e0a8a13332572917f0f8e5a589620c6f15b11c61dee327651a14c34e18231052e48c069");
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_5() {
+        let mnemonic =
+            "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic";
+        check_seed_vector(mnemonic, "274ddc525802f7c828d8ef7ddbcdc5304e87ac3535913611fbbfa986d0c9e5476c91689f9c8a54fd55bd38606aa6a8595ad213d4c9c9f9aca3fb217069a41028");
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_6() {
+        let mnemonic = "scheme spot photo card baby mountain device kick cradle pact join borrow";
+        check_seed_vector(mnemonic, "ea725895aaae8d4c1cf682c1bfd2d358d52ed9f0f0591131b559e2724bb234fca05aa9c02c57407e04ee9dc3b454aa63fbff483a8b11de949624b9f1831a9612");
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_7() {
+        let mnemonic = "cat swing flag economy stadium alone churn speed unique patch report train";
+        check_seed_vector(mnemonic, "deb5f45449e615feff5640f2e49f933ff51895de3b4381832b3139941c57b59205a42480c52175b6efcffaa58a2503887c1e8b363a707256bdd2b587b46541f5");
+    }
+
+    #[test]
+    pub fn words_to_seed_12_words_vector_8() {
+        let mnemonic =
+            "vessel ladder alter error federal sibling chat ability sun glass valve picture";
+        check_seed_vector(mnemonic, "2aaa9242daafcee6aa9d7269f17d4efe271e1b9a529178d7dc139cd18747090bf9d60295d0ce74309a78852a9caadf0af48aae1c6253839624076224374bc63f");
+    }
+
+    #[test]
+    pub fn words_to_seed_15_words() {
+        let mnemonic = "impose cliff file course grab shift accuse feel head butter link trim \
+                        wine convince entire";
+        check_seed_vector(mnemonic, "b3b42d645dab8feda3a00c0f726b872c8f97d43066e32c7ee5fa0f04390ef4f3de038e3024c6d8460d4b3085292daaa86bcd6f121e7fe2470a6b7eeb41e35c64");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_1() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon abandon abandon abandon abandon abandon abandon agent";
+        check_seed_vector(mnemonic, "035895f2f481b1b0f01fcf8c289c794660b289981a78f8106447707fdd9666ca06da5a9a565181599b79f53b844d8a71dd9f439c52a3d7b3e8a79c906ac845fa");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_2() {
+        let mnemonic = "legal winner thank year wave sausage worth useful legal winner thank year \
+                        wave sausage worth useful legal will";
+        check_seed_vector(mnemonic, "f2b94508732bcbacbcc020faefecfc89feafa6649a5491b8c952cede496c214a0c7b3c392d168748f2d4a612bada0753b52a1c7ac53c1e93abd5c6320b9e95dd");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_3() {
+        let mnemonic = "letter advice cage absurd amount doctor acoustic avoid letter advice cage \
+                        absurd amount doctor acoustic avoid letter always";
+        check_seed_vector(mnemonic, "107d7c02a5aa6f38c58083ff74f04c607c2d2c0ecc55501dadd72d025b751bc27fe913ffb796f841c49b1d33b610cf0e91d3aa239027f5e99fe4ce9e5088cd65");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_4() {
+        let mnemonic = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo when";
+        check_seed_vector(mnemonic, "0cd6e5d827bb62eb8fc1e262254223817fd068a74b5b449cc2f667c3f1f985a76379b43348d952e2265b4cd129090758b3e3c2c49103b5051aac2eaeb890a528");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_5() {
+        let mnemonic = "gravity machine north sort system female filter attitude volume fold club \
+                        stay feature office ecology stable narrow fog";
+        check_seed_vector(mnemonic, "628c3827a8823298ee685db84f55caa34b5cc195a778e52d45f59bcf75aba68e4d7590e101dc414bc1bbd5737666fbbef35d1f1903953b66624f910feef245ac");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_6() {
+        let mnemonic = "horn tenant knee talent sponsor spell gate clip pulse soap slush warm \
+                        silver nephew swap uncle crack brave";
+        check_seed_vector(mnemonic, "fd579828af3da1d32544ce4db5c73d53fc8acc4ddb1e3b251a31179cdb71e853c56d2fcb11aed39898ce6c34b10b5382772db8796e52837b54468aeb312cfc3d");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_7() {
+        let mnemonic = "light rule cinnamon wrap drastic word pride squirrel upgrade then income \
+                        fatal apart sustain crack supply proud access";
+        check_seed_vector(mnemonic, "4cbdff1ca2db800fd61cae72a57475fdc6bab03e441fd63f96dabd1f183ef5b782925f00105f318309a7e9c3ea6967c7801e46c8a58082674c860a37b93eda02");
+    }
+
+    #[test]
+    pub fn words_to_seed_18_words_vector_8() {
+        let mnemonic = "scissors invite lock maple supreme raw rapid void congress muscle digital \
+                        elegant little brisk hair mango congress clump";
+        check_seed_vector(mnemonic, "7b4a10be9d98e6cba265566db7f136718e1398c71cb581e1b2f464cac1ceedf4f3e274dc270003c670ad8d02c4558b2f8e39edea2775c9e232c7cb798b069e88");
+    }
+
+    #[test]
+    pub fn words_to_seed_21_words() {
+        let mnemonic = "half scissors snack noble such gasp fiscal oxygen news mention twenty \
+                        record vault novel race chunk junior leisure stamp novel must";
+        check_seed_vector(mnemonic, "63ade55fc2d4b76b439b57cbb575a81daec28f210599ff3c624fb02239f8f36a4dbeeb03e3d89b9e7a0b2b114ef4e579b77a6d8bd86030b9a22e45b86cca09a6");
     }
 
     #[test]
