@@ -39,10 +39,8 @@ impl fmt::Display for Net {
 }
 
 #[derive(Debug, Error)]
-pub enum MnemonicLengthError {
-    #[error("Invalid mnemonic length. The length must be 12, 15, 18, 21 or 24.")]
-    InvalidLength,
-}
+#[error("Invalid mnemonic length. The length must be 12, 15, 18, 21 or 24.")]
+pub struct MnemonicLengthError;
 
 fn bls_key_bytes_from_seed(key_seed: [u8; 32]) -> <ArCurve as Curve>::Scalar {
     keygen_bls(&key_seed, b"").expect("All the inputs are of the correct length, this cannot fail.")
@@ -64,7 +62,7 @@ pub fn words_to_seed_with_passphrase(
     let words_count = words.split(' ').collect::<Vec<&str>>().len();
     let allowed_word_counts: [usize; 5] = [12, 15, 18, 21, 24];
     if !allowed_word_counts.contains(&words_count) {
-        return Err(MnemonicLengthError::InvalidLength);
+        return Err(MnemonicLengthError);
     }
 
     let mut salt_string: String = "mnemonic".to_owned();
