@@ -1521,6 +1521,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-wasm-bindgen"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3b143e2833c57ab9ad3ea280d21fd34e285a42837aeb0ee301f4f41890fa00e"
+dependencies = [
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1784,6 +1795,27 @@ checksum = "d71d857dc86794ca4c280d616f7da00d2dbfd8cd788846559a6813e6aa4b54ee"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wallet_library"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "concordium_base",
+ "ed25519-dalek",
+ "ed25519_hd_key_derivation",
+ "either",
+ "hex",
+ "hmac",
+ "key_derivation",
+ "keygen_bls",
+ "pbkdf2 0.10.1",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "sha2 0.10.7",
+ "thiserror",
 ]
 
 [[package]]

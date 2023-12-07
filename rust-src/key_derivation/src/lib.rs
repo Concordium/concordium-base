@@ -16,8 +16,9 @@ use hmac::Hmac;
 use keygen_bls::keygen_bls;
 use sha2::Sha512;
 use std::fmt;
+use std::str::FromStr;
 
-#[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize, PartialEq)]
 pub enum Net {
     Mainnet,
     Testnet,
@@ -29,6 +30,17 @@ impl Net {
         match self {
             Net::Mainnet => 919,
             Net::Testnet => 1,
+        }
+    }
+}
+
+impl FromStr for Net {
+    type Err = String;
+    fn from_str(input: &str) -> Result<Net, Self::Err> {
+        match input {
+            "Mainnet" => Ok(Net::Mainnet),
+            "Testnet" => Ok(Net::Testnet),
+            _      => Err(format!("'{}' is not a valid value for Net", input)),
         }
     }
 }
@@ -708,4 +720,23 @@ mod tests {
              match.",
         );
     }
+
+    #[test]
+    fn mainnet_mapped_correctly() {
+        let result = Net::from_str(&"Mainnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Mainnet);
+    }
+
+    #[test]
+    fn testnet_mapped_correctly() {
+        let result = Net::from_str(&"Testnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Testnet);
+    }
+
+    #[test]
+    fn testnet_mapped_correctly() {
+        let result = Net::from_str(&"Testnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Testnet);
+    }
+
 }
