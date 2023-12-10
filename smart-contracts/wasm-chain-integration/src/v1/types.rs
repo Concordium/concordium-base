@@ -1,9 +1,9 @@
 use super::{
     trie::{self, MutableState},
-    EnergyLabel, Interrupt, ParameterVec, StateLessReceiveHost,
+    Interrupt, ParameterVec, StateLessReceiveHost,
 };
 use crate::{
-    constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy, LabelEnergy,
+    constants, resumption::InterruptedState, type_matches, v0, DebugInfo, InterpreterEnergy,
 };
 use anyhow::{bail, ensure, Context};
 use concordium_contracts_common::OwnedEntrypointName;
@@ -24,7 +24,7 @@ pub type ReturnValue = Vec<u8>;
 
 #[derive(Debug)]
 /// Result of execution of the contract's init function.
-pub enum InitResult {
+pub enum InitResult<A> {
     /// Execution succeeded and a new instance is to be created.
     Success {
         /// Logs produced by the execution.
@@ -35,6 +35,8 @@ pub enum InitResult {
         remaining_energy: InterpreterEnergy,
         /// Initial state of the contract.
         state:            MutableState,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution failed due to the initialization function's logic.
     Reject {
@@ -46,6 +48,8 @@ pub enum InitResult {
         return_value:     ReturnValue,
         /// The remaining interpreter energy after execution.
         remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution stopped due to a runtime error.
     Trap {
@@ -54,12 +58,17 @@ pub enum InitResult {
                                           * cargo-concordium */
         /// The remaining interpreter energy after execution.
         remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution exceeded its allocated energy bound and was terminated.
-    OutOfEnergy,
+    OutOfEnergy {
+        /// Debug trace.
+        trace: A,
+    },
 }
 
-impl InitResult {
+impl InitResult<()> {
     /// Extract the result into a byte array and potentially a return value.
     /// This is only meant to be used to pass the return value to foreign code.
     /// When using this from Rust the consumer should inspect the [InitResult]
@@ -148,7 +157,7 @@ pub type ReceiveInterruptedState<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> 
 
 #[derive(Debug)]
 /// Result of execution of a receive function.
-pub enum ReceiveResult<R, A, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
+pub enum ReceiveResult<R, A: DebugInfo, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
     /// Execution terminated.
     Success {
         /// Logs produced since the last interrupt (or beginning of execution).
@@ -160,12 +169,14 @@ pub enum ReceiveResult<R, A, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         /// although it might be empty.
         return_value:     ReturnValue,
         /// Remaining interpreter energy.
-        remaining_energy: InterpreterEnergy<A>,
+        remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution triggered an operation.
     Interrupt {
         /// Remaining interpreter energy.
-        remaining_energy: InterpreterEnergy<A>,
+        remaining_energy: InterpreterEnergy,
         /// Whether the state has changed as a result of execution. Note that
         /// the meaning of this is "since the start of the last resume".
         state_changed:    bool,
@@ -175,6 +186,8 @@ pub enum ReceiveResult<R, A, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         config:           Box<ReceiveInterruptedState<R, Ctx>>,
         /// The operation that needs to be handled.
         interrupt:        Interrupt,
+        /// Debug trace.
+        trace:            A,
     },
     /// Contract execution terminated with a "logic error", i.e., contract
     /// decided to signal an error.
@@ -184,16 +197,23 @@ pub enum ReceiveResult<R, A, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         /// Return value, that may describe the error in more detail.
         return_value:     ReturnValue,
         /// Remaining interpreter energy.
-        remaining_energy: InterpreterEnergy<A>,
+        remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution stopped due to a runtime error.
     Trap {
         error:            anyhow::Error, /* this error is here so that we can print it in
                                           * cargo-concordium */
-        remaining_energy: InterpreterEnergy<A>,
+        remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution consumed all available interpreter energy.
-    OutOfEnergy,
+    OutOfEnergy {
+        /// Debug trace.
+        trace: A,
+    },
 }
 
 #[cfg(feature = "enable-ffi")]
@@ -212,7 +232,7 @@ pub(crate) struct ReceiveResultExtract<R> {
     pub return_value:    Option<ReturnValue>,
 }
 
-impl<R, A> ReceiveResult<R, A> {
+impl<R, A: DebugInfo> ReceiveResult<R, A> {
     /// Extract the result into a byte array and potentially a return value.
     /// This is only meant to be used to pass the return value to foreign code.
     /// When using this from Rust the consumer should inspect the
@@ -295,10 +315,10 @@ impl<R, A> ReceiveResult<R, A> {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialOrd, Ord, Eq, PartialEq, Clone, Copy, Debug)]
 /// An enumeration of functions that can be used both by init and receive
 /// methods.
-pub(crate) enum CommonFunc {
+pub enum CommonFunc {
     GetParameterSize,
     GetParameterSection,
     GetPolicySection,
@@ -324,19 +344,22 @@ pub(crate) enum CommonFunc {
     HashSHA2_256,
     HashSHA3_256,
     HashKeccak256,
+    /// Record a debug string together with its location. Only available in
+    /// debug mode.
+    DebugPrint,
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialOrd, Ord, Eq, PartialEq, Clone, Copy, Debug)]
 /// An enumeration of functions that can be used only by init methods.
-pub(crate) enum InitOnlyFunc {
+pub enum InitOnlyFunc {
     GetInitOrigin,
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialOrd, Ord, Eq, PartialEq, Clone, Copy, Debug)]
 /// An enumeration of functions that can be used only by receive methods.
-pub(crate) enum ReceiveOnlyFunc {
+pub enum ReceiveOnlyFunc {
     Invoke,
     GetReceiveInvoker,
     GetReceiveSelfAddress,
@@ -351,7 +374,7 @@ pub(crate) enum ReceiveOnlyFunc {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 /// Enumeration of allowed imports.
-pub(crate) enum ImportFunc {
+pub enum ImportFunc {
     /// Charge for execution cost.
     ChargeEnergy,
     /// Track calling a function, increasing the activation frame count.
@@ -411,6 +434,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             34 => Ok(ImportFunc::Common(CommonFunc::HashSHA2_256)),
             35 => Ok(ImportFunc::Common(CommonFunc::HashSHA3_256)),
             36 => Ok(ImportFunc::Common(CommonFunc::HashKeccak256)),
+            255 => Ok(ImportFunc::Common(CommonFunc::DebugPrint)),
             37 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Upgrade)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
@@ -449,6 +473,7 @@ impl Output for ImportFunc {
                 CommonFunc::HashSHA2_256 => 34,
                 CommonFunc::HashSHA3_256 => 35,
                 CommonFunc::HashKeccak256 => 36,
+                CommonFunc::DebugPrint => 255,
             },
             ImportFunc::InitOnly(io) => match io {
                 InitOnlyFunc::GetInitOrigin => 23,
@@ -505,6 +530,9 @@ pub struct ConcordiumAllowedImports {
     /// Whether to allow the `upgrade` function. This is supported in protocol
     /// P5 and up, but not before.
     pub support_upgrade: bool,
+    /// Allow host functions to enable debugging support. This is intended for
+    /// off-chain use.
+    pub enable_debug:    bool,
 }
 
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
@@ -558,6 +586,10 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "hash_keccak_256" => type_matches!(ty => [I32, I32, I32]),
                 // Upgrade is only available from P5.
                 "upgrade" => self.support_upgrade && type_matches!(ty => [I32]; I64),
+                // Only allow this in debug mode.
+                "debug_print" => {
+                    self.enable_debug && type_matches!(ty => [I32, I32, I32, I32, I32, I32])
+                }
                 _ => false,
             }
         } else {
@@ -660,6 +692,7 @@ impl TryFromImport for ProcessedImports {
                 "hash_sha3_256" => ImportFunc::Common(CommonFunc::HashSHA3_256),
                 "hash_keccak_256" => ImportFunc::Common(CommonFunc::HashKeccak256),
                 "upgrade" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Upgrade),
+                "debug_print" => ImportFunc::Common(CommonFunc::DebugPrint),
                 name => bail!("Unsupported import {}.", name),
             }
         } else {
@@ -861,15 +894,12 @@ impl InstanceStateIteratorResultOption {
 
 pub type StateResult<A> = anyhow::Result<A>;
 
-impl<A: LabelEnergy> trie::TraversalCounter for InterpreterEnergy<A> {
+impl trie::TraversalCounter for InterpreterEnergy {
     type Err = anyhow::Error;
 
     #[inline(always)]
     fn count_key_traverse_part(&mut self, num: u64) -> Result<(), Self::Err> {
-        self.tick_energy_label(
-            crate::constants::TREE_TRAVERSAL_STEP_COST * num,
-            EnergyLabel::StateOperation,
-        )
+        self.tick_energy(crate::constants::TREE_TRAVERSAL_STEP_COST * num)
     }
 }
 
@@ -880,15 +910,12 @@ impl<A: LabelEnergy> trie::TraversalCounter for InterpreterEnergy<A> {
 /// when an attempt to write is made. It could be that only a small amount of
 /// data is written at the given entry, so charging just based on that would be
 /// inadequate.
-impl<A: LabelEnergy> trie::AllocCounter<trie::Value> for InterpreterEnergy<A> {
+impl trie::AllocCounter<trie::Value> for InterpreterEnergy {
     type Err = anyhow::Error;
 
     #[inline(always)]
     fn allocate(&mut self, data: &trie::Value) -> Result<(), Self::Err> {
-        self.tick_energy_label(
-            constants::additional_entry_size_cost(data.len() as u64),
-            EnergyLabel::StateOperation,
-        )
+        self.tick_energy(constants::additional_entry_size_cost(data.len() as u64))
     }
 }
 
@@ -994,9 +1021,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// - 1 the tree was not locked, but nothing was deleted since the key
     ///   points to an empty part of the tree.
     /// - 2 if something was deleted.
-    pub(crate) fn delete_prefix<A: LabelEnergy>(
+    pub(crate) fn delete_prefix(
         &mut self,
-        energy: &mut InterpreterEnergy<A>,
+        energy: &mut InterpreterEnergy,
         key: &[u8],
     ) -> StateResult<u32> {
         self.changed = true;
@@ -1035,12 +1062,12 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// otherwise an id of an entry.
     /// This charges energy based on how much of the tree needed to be
     /// traversed, expressed in terms of bytes of the key that changed.
-    pub(crate) fn iterator_next<A: LabelEnergy>(
+    pub(crate) fn iterator_next(
         &mut self,
-        energy: &mut InterpreterEnergy<A>,
+        energy: &mut InterpreterEnergy,
         iter: InstanceStateIterator,
     ) -> StateResult<InstanceStateEntryResultOption> {
-        energy.tick_energy_label(constants::ITERATOR_NEXT_COST, EnergyLabel::StateOperation)?;
+        energy.tick_energy(constants::ITERATOR_NEXT_COST)?;
         let (gen, idx) = iter.split();
         if gen != self.current_generation {
             return Ok(InstanceStateEntryResultOption::NEW_ERR);
@@ -1063,13 +1090,12 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// - 1 if the iterator was successfully deleted
     /// - 0 if the iterator was already deleted
     /// - u32::MAX if the iterator could not be found
-    pub(crate) fn iterator_delete<A: LabelEnergy>(
+    pub(crate) fn iterator_delete(
         &mut self,
-        energy: &mut InterpreterEnergy<A>,
+        energy: &mut InterpreterEnergy,
         iter: InstanceStateIterator,
     ) -> anyhow::Result<u32> {
-        energy
-            .tick_energy_label(constants::DELETE_ITERATOR_BASE_COST, EnergyLabel::StateOperation)?;
+        energy.tick_energy(constants::DELETE_ITERATOR_BASE_COST)?;
         let (gen, idx) = iter.split();
         if gen != self.current_generation {
             return Ok(u32::MAX);
@@ -1077,10 +1103,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
         match self.iterators.get_mut(idx) {
             Some(iter) => match iter {
                 Some(existing_iter) => {
-                    energy.tick_energy_label(
-                        constants::delete_iterator_cost(existing_iter.get_key().len() as u32),
-                        EnergyLabel::StateOperation,
-                    )?;
+                    energy.tick_energy(constants::delete_iterator_cost(
+                        existing_iter.get_key().len() as u32,
+                    ))?;
                     // Unlock the nodes associated with this iterator.
                     self.state_trie.delete_iter(existing_iter);
                     // Finally we remove the iterator in the instance by setting it to `None`.
@@ -1164,9 +1189,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 
     /// Write a section of the entry, and return how much was written, or
     /// u32::MAX, in case the entry has already been invalidated.
-    pub(crate) fn entry_write<A: LabelEnergy>(
+    pub(crate) fn entry_write(
         &mut self,
-        energy: &mut InterpreterEnergy<A>,
+        energy: &mut InterpreterEnergy,
         entry: InstanceStateEntry,
         src: &[u8],
         offset: u32,
@@ -1188,10 +1213,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                         offset.checked_add(src.len()).context("Too much data.")?,
                     );
                     if v.len() < end {
-                        energy.tick_energy_label(
-                            constants::additional_entry_size_cost((end - v.len()) as u64),
-                            EnergyLabel::StateOperation,
-                        )?;
+                        energy.tick_energy(constants::additional_entry_size_cost(
+                            (end - v.len()) as u64,
+                        ))?;
                         v.resize(end, 0u8);
                     }
                     let num_bytes_to_write = end - offset;
@@ -1237,9 +1261,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
     /// - 0 if this was unsuccessful because the new state is too big
     /// - u32::MAX if entry was already invalidated
     /// - 1 if successful
-    pub(crate) fn entry_resize<A: LabelEnergy>(
+    pub(crate) fn entry_resize(
         &mut self,
-        energy: &mut InterpreterEnergy<A>,
+        energy: &mut InterpreterEnergy,
         entry: InstanceStateEntry,
         new_size: u32,
     ) -> StateResult<u32> {
@@ -1266,10 +1290,9 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
                     // `get_mut` above charged only for the energy in case the entry
                     // was borrowed. If we are increasing the size we also must charge
                     // if the entry is owned already, to prevent excessive state growth.
-                    energy.tick_energy_label(
-                        constants::additional_entry_size_cost(new_size - existing_len as u64),
-                        EnergyLabel::StateOperation,
-                    )?;
+                    energy.tick_energy(constants::additional_entry_size_cost(
+                        new_size - existing_len as u64,
+                    ))?;
                 }
                 v.resize(new_size as usize, 0u8);
                 v.shrink_to_fit();
@@ -1291,12 +1314,12 @@ impl<'a, BackingStore: trie::BackingStoreLoad> InstanceState<'a, BackingStore> {
 /// Note that this **is only safe** in connection with using
 /// [Vec::shrink_to_fit] inside [InstanceState::entry_resize]. We must not
 /// retain excess memory.
-struct ResizeAllocateCounter<'a, A> {
+struct ResizeAllocateCounter<'a> {
     new_size: u64,
-    energy:   &'a mut InterpreterEnergy<A>,
+    energy:   &'a mut InterpreterEnergy,
 }
 
-impl<'a, A: LabelEnergy> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a, A> {
+impl<'a> trie::AllocCounter<trie::Value> for ResizeAllocateCounter<'a> {
     type Err = anyhow::Error;
 
     #[inline]
@@ -1306,15 +1329,9 @@ impl<'a, A: LabelEnergy> trie::AllocCounter<trie::Value> for ResizeAllocateCount
     fn allocate(&mut self, data: &trie::Value) -> Result<(), Self::Err> {
         let existing_size = data.len() as u64;
         if self.new_size > existing_size {
-            self.energy.tick_energy_label(
-                constants::additional_entry_size_cost(existing_size),
-                EnergyLabel::StateOperation,
-            )
+            self.energy.tick_energy(constants::additional_entry_size_cost(existing_size))
         } else {
-            self.energy.tick_energy_label(
-                constants::additional_entry_size_cost(self.new_size),
-                EnergyLabel::StateOperation,
-            )
+            self.energy.tick_energy(constants::additional_entry_size_cost(self.new_size))
         }
     }
 }

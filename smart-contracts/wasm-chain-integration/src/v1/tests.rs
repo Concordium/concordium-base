@@ -145,7 +145,7 @@ fn test_overflowing_write_resize() -> anyhow::Result<()> {
             == overflowing_buffer.len() - 1,
         "Only 2^31 bytes should be read."
     );
-    let mut energy_supplied = crate::InterpreterEnergy::<()>::new(u64::MAX);
+    let mut energy_supplied = crate::InterpreterEnergy::new(u64::MAX);
 
     let resize_status = state
         .entry_resize(&mut energy_supplied, entry, 0)
@@ -215,7 +215,7 @@ fn test_size_of_invalid_entry() -> anyhow::Result<()> {
         state.lookup_entry(&[42]) == InstanceStateEntryOption::NEW_NONE,
         "Lookup on non existent entry should return None."
     );
-    let mut energy_supplied = crate::InterpreterEnergy::<()>::new(u64::MAX);
+    let mut energy_supplied = crate::InterpreterEnergy::new(u64::MAX);
     let res = state
         .delete_prefix(&mut energy_supplied, &[42])
         .context("Delete prefix on non existent part of state should not return None.")?;
@@ -264,7 +264,7 @@ fn prop_entry_write_resizing() {
                 k,
                 v.len()
             );
-            let mut energy_supplied = crate::InterpreterEnergy::<()>::new(u64::MAX);
+            let mut energy_supplied = crate::InterpreterEnergy::new(u64::MAX);
             let resize_status = state
                 .entry_resize(&mut energy_supplied, entry, (v.len() * k.len()) as u32)
                 .context("Rezising failed")?;
@@ -291,7 +291,7 @@ fn test_prefix_removal_fails_if_out_of_energy() -> anyhow::Result<()> {
             .context(format!("The entry should've been created {:?}", k))?;
         ensure!(entry.convert().is_some(), "Entry should be valid");
     }
-    let mut energy_supplied = crate::InterpreterEnergy::<()>::new(
+    let mut energy_supplied = crate::InterpreterEnergy::new(
         // 2 = 1 step from root + 1 for removing the actual node.
         crate::constants::TREE_TRAVERSAL_STEP_COST * 2 - 1,
     );
@@ -386,7 +386,7 @@ fn prop_iterators() {
                     "Creating a new entry in a locked part of the tree should return none."
                 );
 
-                let mut energy_supplied = crate::InterpreterEnergy::<()>::new(u64::MAX);
+                let mut energy_supplied = crate::InterpreterEnergy::new(u64::MAX);
                 let res = state
                     .delete_prefix(&mut energy_supplied, k)
                     .context("Deleting prefix of locked subtree should not return Err")?;
@@ -413,7 +413,7 @@ fn prop_iterators() {
                             k
                         );
                     } else {
-                        let mut energy_supplied = crate::InterpreterEnergy::<()>::new(u64::MAX);
+                        let mut energy_supplied = crate::InterpreterEnergy::new(u64::MAX);
                         ensure!(
                             state.delete_prefix(&mut energy_supplied, k).is_ok(),
                             "The entry {:?} should have been prefix deleted.",
@@ -471,7 +471,7 @@ fn prop_iterator_traversing() {
 
         for (k, _) in &inputs {
             if prefixes.is_or_has_prefix(k) {
-                let mut energy_supplied = crate::InterpreterEnergy::<()>::new(u64::MAX);
+                let mut energy_supplied = crate::InterpreterEnergy::new(u64::MAX);
                 let iter = state.iterator(k).convert().context("Cannot create iterator.")?;
                 ensure!(
                     state.iterator_next(&mut energy_supplied, iter).is_ok(),
@@ -515,7 +515,7 @@ fn test_iterator_errors() -> anyhow::Result<()> {
 
     let iter = state.iterator(&[0]).convert().context("Iterator should have been created.")?;
 
-    let mut energy_supplied = crate::InterpreterEnergy::<()>::new(0);
+    let mut energy_supplied = crate::InterpreterEnergy::new(0);
     ensure!(
         state.iterator_next(&mut energy_supplied, iter).is_err(),
         "Traversing with zero energy should yield an Err"

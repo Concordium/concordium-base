@@ -56,6 +56,7 @@ fn init_data_with_global_offset() {
         ValidationConfig::V0,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
+            enable_debug:    false,
         },
         &contract,
     );
@@ -64,6 +65,7 @@ fn init_data_with_global_offset() {
         ValidationConfig::V1,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
+            enable_debug:    false,
         },
         &contract,
     );
@@ -80,6 +82,7 @@ fn init_element_with_global_offset() {
         ValidationConfig::V0,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
+            enable_debug:    false,
         },
         &contract,
     );
@@ -88,6 +91,7 @@ fn init_element_with_global_offset() {
         ValidationConfig::V1,
         &crate::v1::ConcordiumAllowedImports {
             support_upgrade: true,
+            enable_debug:    false,
         },
         &contract,
     );

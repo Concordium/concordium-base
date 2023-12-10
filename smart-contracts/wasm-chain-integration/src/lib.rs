@@ -52,7 +52,7 @@ pub mod v0;
 pub mod v1;
 #[cfg(test)]
 mod validation_tests;
-use anyhow::{bail, Context};
+use anyhow::bail;
 use derive_more::{Display, From, Into};
 
 /// Re-export the underlying Wasm execution engine used by Concordium.
@@ -95,24 +95,42 @@ pub(crate) use type_matches;
 use v1::EnergyLabel;
 
 /// Result of contract execution. This is just a wrapper around
-/// [anyhow::Result].
+/// [`anyhow::Result`].
 pub type ExecResult<A> = anyhow::Result<A>;
 
-#[derive(Debug, Clone, Copy, From, Into, Display)]
-#[display(fmt = "{}", energy)]
-pub struct InterpreterEnergy<A = ()> {
-    /// Energy left to use
-    pub energy: u64,
-    pub labels: A,
+pub trait DebugInfo {
+    const ENABLE_DEBUG: bool;
+
+    fn empty_trace() -> Self;
+
+    fn trace_host_call(&mut self, f: v1::ImportFunc, energy_used: InterpreterEnergy);
+
+    fn combine(&mut self, other: Self);
 }
 
-impl From<u64> for InterpreterEnergy {
-    fn from(value: u64) -> Self {
-        Self {
-            energy: value,
-            labels: (),
-        }
+impl DebugInfo for () {
+    const ENABLE_DEBUG: bool = false;
+
+    #[inline(always)]
+    fn empty_trace() -> Self {}
+
+    #[inline(always)]
+    fn trace_host_call(&mut self, _f: v1::ImportFunc, _energy_used: InterpreterEnergy) {
+        // do nothing
     }
+
+    #[inline(always)]
+    fn combine(&mut self, _other: Self) {
+        // do nothing
+    }
+}
+
+#[derive(Debug, Clone, Copy, From, Into, Display, derive_more::FromStr)]
+#[display(fmt = "{}", energy)]
+#[repr(transparent)]
+pub struct InterpreterEnergy {
+    /// Energy left to use
+    pub energy: u64,
 }
 
 pub trait LabelEnergy: std::fmt::Debug {
@@ -129,21 +147,13 @@ impl LabelEnergy for () {
     fn combine(&mut self, _other: &Self) {}
 }
 
-impl<A> InterpreterEnergy<A> {
-    pub fn new(energy: u64) -> Self
-    where
-        A: Default, {
-        Self {
-            energy,
-            labels: A::default(),
-        }
-    }
+impl InterpreterEnergy {
+    pub fn new(energy: u64) -> Self { Self::from(energy) }
 
     /// Subtract the given amount from the energy, bottoming out at 0.
     pub fn subtract(self, consumed: u64) -> Self {
         Self {
             energy: self.energy.saturating_sub(consumed),
-            labels: self.labels,
         }
     }
 
@@ -153,26 +163,12 @@ impl<A> InterpreterEnergy<A> {
     pub fn saturating_sub(self, consumed: &Self) -> Self {
         Self {
             energy: self.energy.saturating_sub(consumed.energy),
-            labels: self.labels,
         }
     }
 
     pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
         if self.energy >= amount {
             self.energy -= amount;
-            Ok(())
-        } else {
-            self.energy = 0;
-            bail!(OutOfEnergy)
-        }
-    }
-
-    pub fn tick_energy_label(&mut self, amount: u64, label: EnergyLabel) -> ExecResult<()>
-    where
-        A: LabelEnergy, {
-        if self.energy >= amount {
-            self.energy -= amount;
-            self.labels.label(label, amount);
             Ok(())
         } else {
             self.energy = 0;
@@ -190,23 +186,9 @@ impl<A> InterpreterEnergy<A> {
     /// actually happens, i.e., even if growing the memory would go over the
     /// maximum. This is OK since trying to allocate too much memory is likely
     /// going to lead to program failure anyhow.
-    pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()>
-    where
-        A: LabelEnergy, {
+    pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()> {
         let to_charge = u64::from(num_pages) * u64::from(constants::MEMORY_COST_FACTOR); // this cannot overflow because of the cast.
-        self.tick_energy_label(to_charge, EnergyLabel::MemoryAlloc)
-    }
-}
-
-impl std::str::FromStr for InterpreterEnergy {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let energy = s.parse::<u64>().context("Could not parse interpreter energy.")?;
-        Ok(Self {
-            energy,
-            labels: (),
-        })
+        self.tick_energy(to_charge)
     }
 }
 
