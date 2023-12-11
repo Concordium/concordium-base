@@ -147,8 +147,12 @@ impl<C: Curve> VecCommitmentKey<C> {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1Affine, G2Affine, G1, G2};
+    use ark_bls12_381::{G1Projective, G2Projective};
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
 
     macro_rules! macro_test_key_byte_conversion {
         ($function_name:ident, $curve_type:path) => {
@@ -166,9 +170,11 @@ mod tests {
         };
     }
 
-    macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g1_affine, G1Affine);
+    // NOTE: ArkWorks doesn't provide `CurveGroup` instances for the affine
+    // representation
+    macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g1_projective, G1);
 
-    macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g2_affine, G2Affine);
+    macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g2_projective, G2);
 
     macro_rules! macro_test_commit_open {
         ($function_name:ident, $curve_type:path) => {
@@ -217,15 +223,15 @@ mod tests {
         };
     }
 
-    macro_test_commit_open!(commit_open_bls12_381_g1_affine, G1Affine);
+    // macro_test_commit_open!(commit_open_bls12_381_g1_affine, G1Affine);
     macro_test_commit_open!(commit_open_bls12_381_g1_projectitve, G1);
 
-    macro_test_commit_open!(commit_open_bls12_381_g2_affine, G2Affine);
+    // macro_test_commit_open!(commit_open_bls12_381_g2_affine, G2Affine);
     macro_test_commit_open!(commit_open_bls12_381_g2_projective, G2);
 
-    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_affine, G1Affine);
+    // macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_affine, G1Affine);
     macro_test_commit_open_vec!(vec_commit_open_bls12_381_g1_projective, G1);
 
-    macro_test_commit_open_vec!(vec_commit_open_bls12_381_g2_affine, G2Affine);
+    // macro_test_commit_open_vec!(vec_commit_open_bls12_381_g2_affine, G2Affine);
     macro_test_commit_open_vec!(vec_commit_open_bls12_381_g2_projective, G2);
 }

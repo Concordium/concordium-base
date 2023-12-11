@@ -806,7 +806,6 @@ mod tests {
     use crate::curve_arithmetic::arkworks_instances::ArkGroup;
 
     use super::*;
-    use pairing::bls12_381::G1;
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.

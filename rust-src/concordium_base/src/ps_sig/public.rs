@@ -103,7 +103,7 @@ impl<C: Pairing> From<&SecretKey<C>> for PublicKey<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::Bls12;
+    type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
 
     macro_rules! macro_test_public_key_to_byte_conversion {
         ($function_name:ident, $pairing_type:path) => {

@@ -163,8 +163,13 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1, G2};
+    use ark_bls12_381::{G1Projective, G2Projective};
+
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
 
     #[test]
     pub fn test_com_eq_diff_grps_correctness() {

@@ -78,10 +78,17 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::curve_arithmetic::Value;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, G1};
+    use crate::curve_arithmetic::{
+        arkworks_instances::{ArkField, ArkGroup},
+        Value,
+    };
     use rand::*;
+
+    use ark_bls12_381::G1Projective;
+    use std::str::FromStr;
+
+    type G1 = ArkGroup<G1Projective>;
+    type Fr = ArkField<ark_bls12_381::Fr>;
 
     pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
         // length of the challenge

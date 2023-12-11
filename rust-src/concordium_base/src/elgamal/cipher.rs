@@ -109,8 +109,10 @@ pub fn multicombine<C: Curve>(ciphers: &[Cipher<C>], scalars: &[C::Scalar]) -> C
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1, G2};
+    use ark_bls12_381::{G1Projective, G2Projective};
 
     macro_rules! macro_test_cipher_to_byte_conversion {
         ($function_name:ident, $curve_type:path) => {
@@ -127,6 +129,6 @@ mod tests {
         };
     }
 
-    macro_test_cipher_to_byte_conversion!(key_to_cipher_conversion_g1, G1);
-    macro_test_cipher_to_byte_conversion!(key_to_cipher_conversion_g2, G2);
+    macro_test_cipher_to_byte_conversion!(key_to_cipher_conversion_g1, ArkGroup<G1Projective>);
+    macro_test_cipher_to_byte_conversion!(key_to_cipher_conversion_g2, ArkGroup<G2Projective>);
 }

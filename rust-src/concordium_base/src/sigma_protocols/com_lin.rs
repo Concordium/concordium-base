@@ -217,12 +217,16 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
 #[allow(non_snake_case)]
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::{ArkField, ArkGroup};
+
     use super::*;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, G1};
-    // use pairing::bls12_381::G1;
+    use crate::curve_arithmetic::PrimeField;
+    use ark_bls12_381::G1Projective;
     use rand::thread_rng;
-    // use std::convert::TryInto;
+    use std::str::FromStr;
+
+    type G1 = ArkGroup<G1Projective>;
+    type Fr = ArkField<ark_bls12_381::Fr>;
 
     #[test]
     pub fn test_com_lin_correctness() {

@@ -119,9 +119,13 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
     use rand::{thread_rng, Rng};
+
+    type G1 = ArkGroup<G1Projective>;
 
     #[test]
     pub fn test_aggregate_dlog_correctness() {

@@ -685,7 +685,6 @@ mod tests {
         id::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*},
         pedersen_commitment::{CommitmentKey, Value as PedersenValue},
     };
-    use ff::Field;
     use std::collections::btree_map::BTreeMap;
 
     const EXPIRY: TransactionTime = TransactionTime {

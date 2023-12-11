@@ -12,6 +12,8 @@ use std::{
     ops::{AddAssign, MulAssign, Neg, SubAssign},
 };
 
+use sha2_old::Sha512;
+
 use super::{Curve, Field, MultiExp, PrimeField};
 
 /// A wrapper to make it possible to implement external traits
@@ -52,7 +54,7 @@ impl From<Scalar> for RistrettoScalar {
 }
 
 impl Field for RistrettoScalar {
-    fn random<R: rand_core::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
+    fn random<R: rand::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
         let mut scalar_bytes = [0u8; 64];
         rng.fill_bytes(&mut scalar_bytes);
         Scalar::from_bytes_mod_order_wide(&scalar_bytes).into()
@@ -197,12 +199,10 @@ impl Curve for RistrettoPoint {
     fn scalar_from_u64(n: u64) -> Self::Scalar { Scalar::from(n).into() }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
-        Scalar::hash_from_bytes::<ed25519_dalek::Sha512>(bs.as_ref()).into()
+        Scalar::hash_from_bytes::<Sha512>(bs.as_ref()).into()
     }
 
-    fn hash_to_group(m: &[u8]) -> Self {
-        RistrettoPoint::hash_from_bytes::<ed25519_dalek::Sha512>(m)
-    }
+    fn hash_to_group(m: &[u8]) -> Self { RistrettoPoint::hash_from_bytes::<Sha512>(m) }
 }
 
 /// An instance of multiexp algorithm from the Dalek labrary that uses

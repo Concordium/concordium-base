@@ -99,8 +99,11 @@ impl<C: Curve> Value<C> {
 
 #[cfg(test)]
 mod tests {
+    use ark_bls12_381::{G1Projective, G2Projective};
+
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1Affine, G2Affine};
     macro_rules! macro_test_value_to_byte_conversion {
         ($function_name:ident, $curve_type:path) => {
             #[test]
@@ -117,7 +120,17 @@ mod tests {
         };
     }
 
-    macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g1_affine, G1Affine);
+    // TODO: the code used to be diefined using the affine representation, but
+    // ArkWorks' BLS does not implement `CurveGroup` for the affine representation.
+    // Is it important that it's the affine representation? For now, the BLS
+    // projective representation will be used here.
+    macro_test_value_to_byte_conversion!(
+        value_to_byte_conversion_bls12_381_g1_affine,
+        ArkGroup<G1Projective>
+    );
 
-    macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g2_affine, G2Affine);
+    macro_test_value_to_byte_conversion!(
+        value_to_byte_conversion_bls12_381_g2_affine,
+        ArkGroup<G2Projective>
+    );
 }

@@ -60,7 +60,7 @@ pub fn test_create_ars<T: Rng>(
 }
 
 /// Create identity provider with #num_ars ARs to be used by tests
-pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
+pub fn test_create_ip_info<T: Rng + rand::CryptoRng>(
     csprng: &mut T,
     num_ars: u8,
     max_attrs: u8,

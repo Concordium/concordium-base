@@ -40,9 +40,14 @@ impl<C: Curve> std::borrow::Borrow<C> for Commitment<C> {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1, G2};
+    use ark_bls12_381::{G1Projective, G2Projective};
     use rand::*;
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
+
     impl<C: Curve> Commitment<C> {
         pub fn generate<T: Rng>(csprng: &mut T) -> Commitment<C> { Commitment(C::generate(csprng)) }
     }

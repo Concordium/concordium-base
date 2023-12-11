@@ -324,15 +324,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::to_bytes;
-    use pairing::bls12_381::Fr;
+    use crate::{common::to_bytes, curve_arithmetic::arkworks_instances::ArkField};
+    use ark_bls12_381::Fr;
     use rand::{thread_rng, Rng};
     use std::collections::BTreeMap;
 
     #[test]
     pub fn test_last_bit() {
         let ars = (1..10).map(ArIdentity::new).collect::<BTreeSet<_>>();
-        let encoded = encode_ars::<Fr>(&ars).expect("Encodign should succeed.");
+        let encoded = encode_ars::<ArkField<Fr>>(&ars).expect("Encodign should succeed.");
         // Field size of Fr is 254 bits, so what we expect is to have two scalars
         assert_eq!(encoded.len(), 2, "Encoded ARs should fit into two scalars.");
         let s1 = to_bytes(&encoded[0]);
@@ -357,7 +357,7 @@ mod tests {
                 *x = ArIdentity::new(csprng.gen_range(1, 100));
             }
             let set = xs.iter().copied().collect::<BTreeSet<_>>();
-            let encoded = encode_ars::<Fr>(&set).expect("Encoding should succeed.");
+            let encoded = encode_ars::<ArkField<Fr>>(&set).expect("Encoding should succeed.");
             if let Some(set_ex) = seen.insert(encoded.clone(), set.clone()) {
                 assert_eq!(set, set_ex);
             }

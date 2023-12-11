@@ -131,9 +131,14 @@ pub fn verify_com_ineq<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::{ArkField, ArkGroup};
+
     use super::*;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, G1};
+    use ark_bls12_381::G1Projective;
+    use std::str::FromStr;
+
+    type G1 = ArkGroup<G1Projective>;
+    type Fr = ArkField<ark_bls12_381::Fr>;
 
     #[test]
     fn test_com_ineq_correctness() {

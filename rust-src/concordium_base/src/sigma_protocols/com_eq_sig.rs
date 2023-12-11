@@ -292,9 +292,17 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
 
 #[cfg(test)]
 mod tests {
+
+    use ark_bls12_381::G1Projective;
+
     use super::*;
-    use crate::ps_sig::{SecretKey as PsSigSecretKey, Signature};
-    use pairing::bls12_381::{Bls12, G1};
+    use crate::{
+        curve_arithmetic::arkworks_instances::ArkGroup,
+        ps_sig::{SecretKey as PsSigSecretKey, Signature},
+    };
+
+    type G1 = ArkGroup<G1Projective>;
+    type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
 
     #[test]
     #[allow(non_snake_case)]

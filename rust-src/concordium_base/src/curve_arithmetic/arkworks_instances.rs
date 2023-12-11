@@ -1,4 +1,5 @@
 use core::fmt;
+use std::str::FromStr;
 
 use crate::common::{Deserial, Serial};
 
@@ -6,8 +7,8 @@ use super::{Curve, CurveDecodingError, Field, GenericMultiExp, PrimeField};
 use anyhow::anyhow;
 use ark_ec::{hashing::HashToCurve, AffineRepr};
 
-#[derive(PartialEq, Eq, Copy, Clone, fmt::Debug)]
-pub struct ArkField<F>(F);
+#[derive(PartialOrd, Ord, PartialEq, Eq, Copy, Clone, fmt::Debug)]
+pub struct ArkField<F>(pub(crate) F);
 
 impl<F> From<F> for ArkField<F> {
     fn from(value: F) -> Self { ArkField(value) }
@@ -82,7 +83,11 @@ impl<F: ark_ff::PrimeField> PrimeField for ArkField<F> {
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, fmt::Debug)]
-pub struct ArkGroup<G>(G);
+pub struct ArkGroup<G>(pub(crate) G);
+
+impl<G: ark_ec::CurveGroup> ArkGroup<G> {
+    pub fn into_ark(&self) -> &G { &self.0 }
+}
 
 impl<G: ark_ec::CurveGroup> Serial for ArkGroup<G> {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
@@ -112,7 +117,7 @@ pub(crate) trait ArkCurveConfig<G: ark_ec::CurveGroup> {
 
 impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G> {
     type MultiExpType = GenericMultiExp<Self>;
-    type Scalar = ArkField<G::ScalarField>;
+    type Scalar = ArkField<<G as ark_ec::PrimeGroup>::ScalarField>;
 
     const GROUP_ELEMENT_LENGTH: usize = G::GROUP_ELEMENT_LENGTH;
     const SCALAR_LENGTH: usize = G::SCALAR_LENGTH;
@@ -163,4 +168,10 @@ impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G> {
         let res = G::Hasher::hash(&hasher, &m).expect("Expected successful hashing to curve");
         ArkGroup(res.into())
     }
+}
+
+impl<F: FromStr> FromStr for ArkField<F> {
+    type Err = F::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> { F::from_str(s).map(|x| x.into()) }
 }

@@ -1,9 +1,9 @@
 //! Basic definitions of the curve and pairing abstractions, and implementations
 //! of these abstractions for the curves used on Concordium.
 pub mod arkworks_instances;
-mod bls12_381_g1hash;
-mod bls12_381_g2hash;
-mod bls12_381_instance;
+// mod bls12_381_g1hash;
+// mod bls12_381_g2hash;
+// mod bls12_381_instance;
 // mod ed25519_arkworks;
 mod bls12_381_arkworks;
 mod ed25519_instance;
@@ -419,8 +419,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use pairing::bls12_381::G1;
+    use super::{arkworks_instances::ArkGroup, *};
+    use ark_bls12_381::G1Projective;
+
+    type SomeCurve = ArkGroup<G1Projective>;
 
     #[test]
     pub fn test_multiscalar() {
@@ -429,10 +431,10 @@ mod tests {
             let mut gs = Vec::with_capacity(l);
             let mut es = Vec::with_capacity(l);
             for _ in 0..l {
-                gs.push(G1::generate(&mut csprng));
-                es.push(G1::generate_scalar(&mut csprng));
+                gs.push(SomeCurve::generate(&mut csprng));
+                es.push(SomeCurve::generate_scalar(&mut csprng));
             }
-            let mut goal = G1::zero_point();
+            let mut goal = SomeCurve::zero_point();
             // Naive multiply + add method.
             for (g, e) in gs.iter().zip(es.iter()) {
                 goal = goal.plus_point(&g.mul_by_scalar(e))

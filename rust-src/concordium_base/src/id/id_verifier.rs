@@ -328,15 +328,18 @@ mod tests {
     use super::*;
     use crate::{
         common::types::{KeyIndex, KeyPair},
+        curve_arithmetic::arkworks_instances::ArkGroup,
         id::{constants::AttributeKind, id_prover::*},
     };
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
     use rand::*;
     use std::{
         collections::{btree_map::BTreeMap, BTreeSet},
         convert::TryFrom,
         marker::PhantomData,
     };
+
+    type G1 = ArkGroup<G1Projective>;
 
     #[test]
     fn test_verify_account_ownership() {

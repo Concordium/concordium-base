@@ -280,13 +280,16 @@ fn hash_message(m: &[u8]) -> Output<Sha512> { Sha512::digest(m) }
 
 #[cfg(test)]
 mod test {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::Bls12;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
     use std::convert::TryFrom;
 
     const SIGNERS: usize = 500;
     const TEST_ITERATIONS: usize = 10;
+
+    type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are
     // corresponding secret and public key

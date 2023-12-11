@@ -167,8 +167,12 @@ impl<C: Curve> SecretKey<C> {
 
 #[cfg(test)]
 mod tests {
+    use ark_bls12_381::{G1Projective, G2Projective};
+
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1, G2};
+
     macro_rules! macro_test_secret_key_to_byte_conversion {
         ($function_name:ident, $curve_type:path) => {
             #[test]
@@ -185,8 +189,14 @@ mod tests {
         };
     }
 
-    macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_g1, G1);
-    macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_g2, G2);
+    macro_test_secret_key_to_byte_conversion!(
+        secret_key_to_byte_conversion_g1,
+        ArkGroup<G1Projective>
+    );
+    macro_test_secret_key_to_byte_conversion!(
+        secret_key_to_byte_conversion_g2,
+        ArkGroup<G2Projective>
+    );
 
     // Test serialiation of baby-step-giant-step since it is implemented manually.
     #[test]
@@ -194,7 +204,10 @@ mod tests {
         let mut csprng = thread_rng();
         let m = 1 << 16;
         for _ in 0..10 {
-            let bsgs = BabyStepGiantStep::<G1>::new(&G1::generate(&mut csprng), m);
+            let bsgs = BabyStepGiantStep::<ArkGroup<G1Projective>>::new(
+                &<ArkGroup<G1Projective>>::generate(&mut csprng),
+                m,
+            );
             let res = serialize_deserialize(&bsgs);
             assert!(
                 res.is_ok(),

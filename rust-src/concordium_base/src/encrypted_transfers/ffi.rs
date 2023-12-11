@@ -3,11 +3,12 @@
 //! scheduler, and the mobile wallet.
 
 use super::*;
-use crate::{common::*, elgamal, ffi_helpers::*};
+use crate::{common::*, curve_arithmetic::arkworks_instances::ArkGroup, elgamal, ffi_helpers::*};
+use ark_bls12_381::G1Projective;
 use rand::prelude::StdRng;
 use std::io::Cursor;
 
-type Group = pairing::bls12_381::G1;
+type Group = ArkGroup<G1Projective>;
 
 /// # Safety
 /// This function is safe if the pointers are all non-null, and produced

@@ -364,11 +364,14 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
 mod tests {
     use super::*;
     use crate::{
+        curve_arithmetic::arkworks_instances::ArkGroup,
         elgamal::{PublicKey, Randomness, SecretKey},
         pedersen_commitment::{Commitment, CommitmentKey},
     };
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
     use rand::Rng;
+
+    type G1 = ArkGroup<G1Projective>;
 
     impl<C: Curve> EncTrans<C> {
         fn with_valid_data<R: Rng>(

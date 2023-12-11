@@ -8,12 +8,13 @@ use super::{
 use crate::{
     bulletproofs::utils::Generators,
     common::{size_t, types::TransactionTime, *},
+    curve_arithmetic::arkworks_instances::ArkGroup,
     ffi_helpers::*,
     pedersen_commitment::CommitmentKey as PedersenKey,
 };
 use anyhow::Context;
+use ark_bls12_381::G1Projective;
 use either::Either::{Left, Right};
-use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
 use std::{
     collections::BTreeMap,
@@ -21,6 +22,9 @@ use std::{
     io::Cursor,
     str::from_utf8,
 };
+
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
+type G1 = ArkGroup<G1Projective>;
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

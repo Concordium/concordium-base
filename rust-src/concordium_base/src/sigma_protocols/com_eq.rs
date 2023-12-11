@@ -153,8 +153,13 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
 
 #[cfg(test)]
 mod test {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1, G2};
+    use ark_bls12_381::{G1Projective, G2Projective};
+
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
 
     #[test]
     pub fn test_com_eq_correctness() {

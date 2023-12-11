@@ -197,9 +197,13 @@ pub fn reveal_in_group<P: Into<u64> + Copy, C: Curve>(shares: &[(P, C)]) -> C {
 
 #[cfg(test)]
 mod test {
+    use crate::curve_arithmetic::arkworks_instances::{ArkField, ArkGroup};
+
     use super::*;
-    use pairing::bls12_381::{Fr, G1};
+    use ark_bls12_381::{Fr, G1Projective};
     use rand::seq::SliceRandom;
+
+    type G1 = ArkGroup<G1Projective>;
 
     // Test Lagrange interpolation polynomials at x={0,1}
     #[test]
@@ -278,7 +282,7 @@ mod test {
                 .iter()
                 .map(|(n, s)| (*n, generator.mul_by_scalar(s)))
                 .collect::<Vec<(u8, G1)>>();
-            let revealed_data: Fr = reveal::<_, G1>(sufficient_sample);
+            let revealed_data: ArkField<Fr> = reveal::<_, G1>(sufficient_sample);
             assert_eq!(revealed_data, secret);
             let revealed_data_point: G1 = reveal_in_group::<_, G1>(&sufficient_sample_points);
             assert_eq!(revealed_data_point, secret_point);
@@ -300,7 +304,7 @@ mod test {
             let rand_elm = shares.choose_mut(&mut csprng).unwrap();
             rand_elm.1 = crate::curve_arithmetic::Value::generate(&mut csprng);
 
-            let revealed_data: Fr = reveal::<_, G1>(&shares);
+            let revealed_data: ArkField<Fr> = reveal::<_, G1>(&shares);
             assert_ne!(revealed_data, secret);
             let sufficient_points_err = shares
                 .iter()
@@ -327,7 +331,7 @@ mod test {
                 .iter()
                 .map(|(n, s)| (*n, generator.mul_by_scalar(s)))
                 .collect::<Vec<(u8, G1)>>();
-            let revealed_data: Fr = reveal::<_, G1>(insufficient_sample);
+            let revealed_data: ArkField<Fr> = reveal::<_, G1>(insufficient_sample);
             assert_ne!(revealed_data, secret);
             let revealed_data_point: G1 = reveal_in_group::<_, G1>(&insufficient_sample_points);
             assert_ne!(revealed_data_point, secret_point);
