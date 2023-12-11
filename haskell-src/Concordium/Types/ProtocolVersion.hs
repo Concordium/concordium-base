@@ -159,9 +159,9 @@ module Concordium.Types.ProtocolVersion (
     delegationSupport,
     protocolSupportsDelegation,
 
-    -- * Block hashing version
+    -- * Block hash version
 
-    -- | The version of the block hashing structured.
+    -- | The version of the block hashing structure.
     BlockHashVersion (..),
     -- | Singleton type corresponding to 'BlockHashVersion'.
     SBlockHashVersion (..),

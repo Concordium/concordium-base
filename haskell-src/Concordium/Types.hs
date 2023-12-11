@@ -1066,7 +1066,7 @@ type StateHash = StateHashV0
 -- information.
 -- This was first introduced as part of protocol version 7.
 newtype BlockResultHash = BlockResultHash {theBlockResultHash :: Hash.Hash}
-    deriving (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
+    deriving newtype (Eq, Ord, Show, S.Serialize, Read)
 
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
