@@ -10,7 +10,7 @@ use std::convert::TryInto;
 
 type HexString = String;
 
-fn get_wallet(seed_as_hex: HexString, net: Net) -> Result<ConcordiumHdWallet, Error> {
+pub fn get_wallet(seed_as_hex: HexString, net: Net) -> Result<ConcordiumHdWallet, Error> {
     let seed_decoded = hex::decode(&seed_as_hex)?;
     let seed: [u8; 64] = match seed_decoded.try_into() {
         Ok(s) => s,

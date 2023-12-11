@@ -16,6 +16,8 @@ use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::{json, to_string};
 use std::{collections::BTreeMap, convert::TryInto};
 
+use crate::wallet::get_wallet;
+
 type JsonString = String;
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -137,8 +139,6 @@ pub struct IdRecoveryRequestInput {
     ip_info:        IpInfo<constants::IpPairing>,
     global_context: GlobalContext<constants::ArCurve>,
     id_cred_sec:    PedersenValue<ArCurve>,
-    net:            Net,
-    identity_index: u32,
     timestamp:      u64,
 }
 
@@ -171,6 +171,21 @@ pub fn create_identity_recovery_request_aux(input: IdRecoveryRequestInput) -> Re
         "idRecoveryRequest": Versioned::new(VERSION_0, request),
     });
     Ok(to_string(&response)?)
+}
+
+pub fn create_identity_recovery_request_with_seed_aux(
+    input: IdRecoveryRequestInputWithSeed,
+) -> Result<JsonString> {
+    let wallet = get_wallet(input.seed_as_hex, input.net)?;
+    let id_cred_sec = wallet.get_id_cred_sec(input.ip_info.ip_identity.0, input.identity_index)?;
+
+    let input_2 = IdRecoveryRequestInput {
+        global_context: input.global_context,
+        ip_info:        input.ip_info,
+        timestamp:      input.timestamp,
+        id_cred_sec:    PedersenValue::new(id_cred_sec),
+    };
+    create_identity_recovery_request_aux(input_2)
 }
 
 #[cfg(test)]
@@ -305,13 +320,33 @@ mod tests {
         let input = IdRecoveryRequestInput {
             id_cred_sec,
             timestamp: 0,
-            net: Net::Testnet,
-            identity_index: 0,
             global_context: global,
             ip_info,
         };
 
         let request_string = create_identity_recovery_request_aux(input).unwrap();
+        let request: IdRecoveryRequestOut = serde_json::from_str(&request_string).unwrap();
+        let id_cred_pub: String =
+            base16_encode_string(&request.id_recovery_request.value.id_cred_pub);
+
+        assert_eq!(id_cred_pub, "b23e360b21cb8baad1fb1f9a593d1115fc678cb9b7c1a5b5631f82e088092d79d34b6a6c8520c06c41002a666adf792f");
+    }
+
+    #[test]
+    pub fn create_id_recovery_request_with_seed() {
+        let global = read_global();
+        let ip_info = read_ip_info();
+
+        let input: IdRecoveryRequestInputWithSeed = IdRecoveryRequestInputWithSeed {
+            seed_as_hex: TEST_SEED_1.to_string(),
+            identity_index: 0,
+            net: Net::Testnet,
+            timestamp: 0,
+            global_context: global,
+            ip_info,
+        };
+
+        let request_string = create_identity_recovery_request_with_seed_aux(input).unwrap();
         let request: IdRecoveryRequestOut = serde_json::from_str(&request_string).unwrap();
         let id_cred_pub: String =
             base16_encode_string(&request.id_recovery_request.value.id_cred_pub);
