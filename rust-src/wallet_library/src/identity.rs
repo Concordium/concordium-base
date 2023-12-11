@@ -10,7 +10,7 @@ use concordium_base::{
 use key_derivation::{ConcordiumHdWallet, Net};
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::{json, to_string};
-use std::{collections::BTreeMap, convert::TryInto, str::FromStr};
+use std::{collections::BTreeMap, convert::TryInto};
 
 type JsonString = String;
 
@@ -26,7 +26,7 @@ pub struct IdRequestCommon {
     ip_info:        IpInfo<constants::IpPairing>,
     global_context: GlobalContext<constants::ArCurve>,
     ars_infos:      BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
-    net:            String,
+    net:            Net,
     identity_index: u32,
     ar_threshold:   u8,
 }
@@ -102,11 +102,7 @@ pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
         Err(_) => bail!("The provided seed {} was not 64 bytes", input.seed),
     };
 
-    let net = match Net::from_str(&input.common.net) {
-        Ok(n) => n,
-        Err(e) => bail!(e),
-    };
-    let wallet: ConcordiumHdWallet = ConcordiumHdWallet { seed, net };
+    let wallet: ConcordiumHdWallet = ConcordiumHdWallet { seed, net: input.common.net };
 
     let identity_provider_index = input.common.ip_info.ip_identity.0;
     let prf_key: prf::SecretKey<ArCurve> =
@@ -135,7 +131,7 @@ mod tests {
 
     const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
 
-    fn read_test_data(ar_threshold: u8, identity_index: u32, net: String) -> IdRequestCommon {
+    fn read_test_data(ar_threshold: u8, identity_index: u32, net: Net) -> IdRequestCommon {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("resources");
         let base_path = d
@@ -175,7 +171,7 @@ mod tests {
     #[test]
     pub fn create_id_request_with_seed_phrase() {
         let ar_threshold = 2;
-        let test_data = read_test_data(ar_threshold.clone(), 0, "Testnet".to_string());
+        let test_data = read_test_data(ar_threshold.clone(), 0, Net::Testnet);
 
         let input: IdRequestInput = IdRequestInput {
             common: test_data,
@@ -200,7 +196,7 @@ mod tests {
     #[test]
     pub fn create_id_request_with_individual_keys() {
         let ar_threshold = 2;
-        let test_data = read_test_data(ar_threshold.clone(), 0, "Testnet".to_string());
+        let test_data = read_test_data(ar_threshold.clone(), 0, Net::Testnet);
 
         let input: IdRequestInputWithKeys = IdRequestInputWithKeys {
             common:              test_data,
