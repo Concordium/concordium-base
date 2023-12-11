@@ -76,9 +76,10 @@ impl InitResult<()> {
     #[cfg(feature = "enable-ffi")]
     pub(crate) fn extract(self) -> (Vec<u8>, Option<MutableState>, Option<ReturnValue>) {
         match self {
-            InitResult::OutOfEnergy => (vec![0], None, None),
+            InitResult::OutOfEnergy{                trace: () } => (vec![0], None, None),
             InitResult::Trap {
                 remaining_energy,
+                trace: (),
                 .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
@@ -89,6 +90,7 @@ impl InitResult<()> {
                 reason,
                 return_value,
                 remaining_energy,
+                trace: (),
             } => {
                 let mut out = Vec::with_capacity(13);
                 out.push(2);
@@ -101,6 +103,7 @@ impl InitResult<()> {
                 return_value,
                 remaining_energy,
                 state,
+                trace: (),
             } => {
                 let mut out = Vec::with_capacity(5 + 8);
                 out.push(3);
@@ -232,7 +235,7 @@ pub(crate) struct ReceiveResultExtract<R> {
     pub return_value:    Option<ReturnValue>,
 }
 
-impl<R, A: DebugInfo> ReceiveResult<R, A> {
+impl<R> ReceiveResult<R, ()> {
     /// Extract the result into a byte array and potentially a return value.
     /// This is only meant to be used to pass the return value to foreign code.
     /// When using this from Rust the consumer should inspect the
@@ -241,7 +244,9 @@ impl<R, A: DebugInfo> ReceiveResult<R, A> {
     pub(crate) fn extract(self) -> ReceiveResultExtract<R> {
         use ReceiveResult::*;
         match self {
-            OutOfEnergy => ReceiveResultExtract{
+            OutOfEnergy {
+                trace: ()
+            } => ReceiveResultExtract{
                 status: vec![0],
                 state_changed: false,
                 interrupt_state: None,
@@ -264,6 +269,7 @@ impl<R, A: DebugInfo> ReceiveResult<R, A> {
                 reason,
                 return_value,
                 remaining_energy,
+                trace: (),
             } => {
                 let mut out = Vec::with_capacity(13);
                 out.push(2);
@@ -281,10 +287,11 @@ impl<R, A: DebugInfo> ReceiveResult<R, A> {
                 state_changed,
                 return_value,
                 remaining_energy,
+                trace: (),
             } => {
                 let mut out = vec![3];
                 out.extend_from_slice(&logs.to_bytes());
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 ReceiveResultExtract{
                     status: out,
                     state_changed,
@@ -298,6 +305,7 @@ impl<R, A: DebugInfo> ReceiveResult<R, A> {
                 logs,
                 config,
                 interrupt,
+                trace: (),
             } => {
                 let mut out = vec![4];
                 out.extend_from_slice(&remaining_energy.to_be_bytes());

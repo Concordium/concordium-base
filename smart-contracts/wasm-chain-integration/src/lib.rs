@@ -157,6 +157,10 @@ impl InterpreterEnergy {
         }
     }
 
+    #[cfg(feature = "enable-ffi")]
+    /// Serialized in big-endian representation.
+    pub fn to_be_bytes(self) -> [u8; 8] { self.energy.to_be_bytes() }
+
     /// Saturating interpreter energy subtraction.
     ///
     /// Computes `self - rhs` bottoming out at `0` instead of underflowing.
