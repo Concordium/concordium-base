@@ -1605,10 +1605,10 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: DebugInfo
                     })
                 }
             } else {
-                return Err(InvalidReturnCodeError {
+                Err(InvalidReturnCodeError {
                     value:       None,
                     debug_trace: trace,
-                });
+                })
             }
         }
         Ok(ExecutionOutcome::Interrupted {
@@ -1939,10 +1939,10 @@ where
                     })
                 }
             } else {
-                return Err(InvalidReturnCodeError {
+                Err(InvalidReturnCodeError {
                     value:       None,
                     debug_trace: host.trace,
-                });
+                })
             }
         }
         Ok(ExecutionOutcome::Interrupted {
