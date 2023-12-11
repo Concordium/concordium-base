@@ -2,9 +2,13 @@ use anyhow::{bail, ensure, Result};
 use concordium_base::{
     common::*,
     id::{
-        account_holder::generate_pio_v1, constants, constants::ArCurve,
-        dodis_yampolskiy_prf as prf, pedersen_commitment::Value as PedersenValue,
-        secret_sharing::Threshold, types::*,
+        account_holder::{generate_id_recovery_request, generate_pio_v1},
+        constants,
+        constants::ArCurve,
+        dodis_yampolskiy_prf as prf,
+        pedersen_commitment::Value as PedersenValue,
+        secret_sharing::Threshold,
+        types::*,
     },
 };
 use key_derivation::{ConcordiumHdWallet, Net};
@@ -102,7 +106,10 @@ pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
         Err(_) => bail!("The provided seed {} was not 64 bytes", input.seed),
     };
 
-    let wallet: ConcordiumHdWallet = ConcordiumHdWallet { seed, net: input.common.net };
+    let wallet: ConcordiumHdWallet = ConcordiumHdWallet {
+        seed,
+        net: input.common.net,
+    };
 
     let identity_provider_index = input.common.ip_info.ip_identity.0;
     let prf_key: prf::SecretKey<ArCurve> =
@@ -124,6 +131,48 @@ pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
     create_id_request_with_keys_v1_aux(input)
 }
 
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdRecoveryRequestInput {
+    ip_info:        IpInfo<constants::IpPairing>,
+    global_context: GlobalContext<constants::ArCurve>,
+    id_cred_sec:    PedersenValue<ArCurve>,
+    net:            Net,
+    identity_index: u32,
+    timestamp:      u64,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdRecoveryRequestInputWithSeed {
+    ip_info:        IpInfo<constants::IpPairing>,
+    global_context: GlobalContext<constants::ArCurve>,
+    seed_as_hex:    String,
+    net:            Net,
+    identity_index: u32,
+    timestamp:      u64,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdRecoveryRequestOut {
+    id_recovery_request: Versioned<IdRecoveryRequest<ArCurve>>,
+}
+
+pub fn create_identity_recovery_request_aux(input: IdRecoveryRequestInput) -> Result<JsonString> {
+    let request = generate_id_recovery_request(
+        &input.ip_info,
+        &input.global_context,
+        &input.id_cred_sec,
+        input.timestamp,
+    );
+
+    let response = json!({
+        "idRecoveryRequest": Versioned::new(VERSION_0, request),
+    });
+    Ok(to_string(&response)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,32 +180,48 @@ mod tests {
 
     const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
 
-    fn read_test_data(ar_threshold: u8, identity_index: u32, net: Net) -> IdRequestCommon {
+    fn base_path() -> String {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("resources");
-        let base_path = d
+        let base_path = &d
             .as_path()
             .as_os_str()
             .to_str()
             .expect("Should be able to get base path.");
+        base_path.to_string()
+    }
 
+    fn read_ip_info() -> IpInfo<constants::IpPairing> {
+        let base_path = base_path();
         let contents = fs::read_to_string(format!("{}/{}", &base_path, "ip_info.json"))
             .expect("Should have been able to read the file");
         let ip_info_versioned: Versioned<IpInfo<constants::IpPairing>> =
             serde_json::from_str(contents.as_str()).unwrap();
         let ip_info = ip_info_versioned.value;
+        ip_info
+    }
 
+    fn read_global() -> GlobalContext<constants::ArCurve> {
+        let base_path = base_path();
+        let global_contents = fs::read_to_string(format!("{}/{}", &base_path, "global.json"))
+            .expect("Should have been able to read the file");
+        let global_versioned: Versioned<GlobalContext<constants::ArCurve>> =
+            serde_json::from_str(&global_contents).unwrap();
+        let global_context = global_versioned.value;
+        global_context
+    }
+
+    fn read_test_data(ar_threshold: u8, identity_index: u32, net: Net) -> IdRequestCommon {
+        let ip_info = read_ip_info();
+
+        let base_path = base_path();
         let ar_info_contents = fs::read_to_string(format!("{}/{}", &base_path, "ars_infos.json"))
             .expect("Should have been able to read the file");
         let ar_info_versioned: Versioned<BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>> =
             serde_json::from_str(&ar_info_contents).unwrap();
         let ars_infos = ar_info_versioned.value;
 
-        let global_contents = fs::read_to_string(format!("{}/{}", &base_path, "global.json"))
-            .expect("Should have been able to read the file");
-        let global_versioned: Versioned<GlobalContext<constants::ArCurve>> =
-            serde_json::from_str(&global_contents).unwrap();
-        let global_context = global_versioned.value;
+        let global_context = read_global();
 
         IdRequestCommon {
             ip_info,
@@ -213,7 +278,8 @@ mod tests {
         };
         let request_string = create_id_request_with_keys_v1_aux(input).unwrap();
         let request: IdentityObjectRequestV1 = serde_json::from_str(&request_string).unwrap();
-        let id_cred_pub = base16_encode_string(&request.id_object_request.value.id_cred_pub);
+        let id_cred_pub: String =
+            base16_encode_string(&request.id_object_request.value.id_cred_pub);
 
         assert_eq!(id_cred_pub, "b23e360b21cb8baad1fb1f9a593d1115fc678cb9b7c1a5b5631f82e088092d79d34b6a6c8520c06c41002a666adf792f");
         assert_eq!(
@@ -225,5 +291,31 @@ mod tests {
                 .0,
             ar_threshold
         );
+    }
+
+    #[test]
+    pub fn create_id_recovery_request_with_individual_keys() {
+        let id_cred_sec: PedersenValue<ArCurve> = base16_decode_string(
+            "7392eb0b4840c8a6f9314e99a8dd3e2c3663a1e615d8820851e3abd2965fab18",
+        )
+        .unwrap();
+        let global = read_global();
+        let ip_info = read_ip_info();
+
+        let input = IdRecoveryRequestInput {
+            id_cred_sec,
+            timestamp: 0,
+            net: Net::Testnet,
+            identity_index: 0,
+            global_context: global,
+            ip_info,
+        };
+
+        let request_string = create_identity_recovery_request_aux(input).unwrap();
+        let request: IdRecoveryRequestOut = serde_json::from_str(&request_string).unwrap();
+        let id_cred_pub: String =
+            base16_encode_string(&request.id_recovery_request.value.id_cred_pub);
+
+        assert_eq!(id_cred_pub, "b23e360b21cb8baad1fb1f9a593d1115fc678cb9b7c1a5b5631f82e088092d79d34b6a6c8520c06c41002a666adf792f");
     }
 }
