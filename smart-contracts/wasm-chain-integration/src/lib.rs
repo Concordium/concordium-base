@@ -92,7 +92,6 @@ macro_rules! type_matches {
     };
 }
 pub(crate) use type_matches;
-use v1::EnergyLabel;
 
 /// Result of contract execution. This is just a wrapper around
 /// [`anyhow::Result`].
@@ -131,20 +130,6 @@ impl DebugInfo for () {
 pub struct InterpreterEnergy {
     /// Energy left to use
     pub energy: u64,
-}
-
-pub trait LabelEnergy: std::fmt::Debug {
-    fn label(&mut self, value: EnergyLabel, amount: u64);
-
-    fn combine(&mut self, other: &Self);
-}
-
-impl LabelEnergy for () {
-    #[inline(always)]
-    fn label(&mut self, _value: EnergyLabel, _amount: u64) {}
-
-    #[inline(always)]
-    fn combine(&mut self, _other: &Self) {}
 }
 
 impl InterpreterEnergy {

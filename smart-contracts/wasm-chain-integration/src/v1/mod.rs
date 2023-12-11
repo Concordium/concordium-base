@@ -257,18 +257,6 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>, A: DebugInfo>
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum EnergyLabel {
-    Operation,
-    LogEvent,
-    StateOperation,
-    Output,
-    Invoke,
-    ReadParameter,
-    CryptographicPrimitive,
-    MemoryAlloc,
-}
-
 #[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug)]
 pub enum HostFunctionV1 {
     /// Functions allowed both in `init` and `receive` functions.
