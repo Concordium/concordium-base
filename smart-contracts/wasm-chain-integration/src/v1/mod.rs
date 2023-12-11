@@ -265,7 +265,7 @@ pub enum HostFunctionV1 {
     Receive(ReceiveOnlyFunc),
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Debug)]
 pub struct DebugTracker {
     pub operation:       u64,
     pub memory_alloc:    u64,
