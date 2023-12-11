@@ -191,51 +191,13 @@ pub fn create_identity_recovery_request_with_seed_aux(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, path::PathBuf};
+    use crate::test_helpers::{read_ars_infos, read_global, read_ip_info};
 
     const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
 
-    fn base_path() -> String {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("resources");
-        let base_path = &d
-            .as_path()
-            .as_os_str()
-            .to_str()
-            .expect("Should be able to get base path.");
-        base_path.to_string()
-    }
-
-    fn read_ip_info() -> IpInfo<constants::IpPairing> {
-        let base_path = base_path();
-        let contents = fs::read_to_string(format!("{}/{}", &base_path, "ip_info.json"))
-            .expect("Should have been able to read the file");
-        let ip_info_versioned: Versioned<IpInfo<constants::IpPairing>> =
-            serde_json::from_str(contents.as_str()).unwrap();
-        let ip_info = ip_info_versioned.value;
-        ip_info
-    }
-
-    fn read_global() -> GlobalContext<constants::ArCurve> {
-        let base_path = base_path();
-        let global_contents = fs::read_to_string(format!("{}/{}", &base_path, "global.json"))
-            .expect("Should have been able to read the file");
-        let global_versioned: Versioned<GlobalContext<constants::ArCurve>> =
-            serde_json::from_str(&global_contents).unwrap();
-        let global_context = global_versioned.value;
-        global_context
-    }
-
     fn read_test_data(ar_threshold: u8, identity_index: u32, net: Net) -> IdRequestCommon {
         let ip_info = read_ip_info();
-
-        let base_path = base_path();
-        let ar_info_contents = fs::read_to_string(format!("{}/{}", &base_path, "ars_infos.json"))
-            .expect("Should have been able to read the file");
-        let ar_info_versioned: Versioned<BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>> =
-            serde_json::from_str(&ar_info_contents).unwrap();
-        let ars_infos = ar_info_versioned.value;
-
+        let ars_infos = read_ars_infos();
         let global_context = read_global();
 
         IdRequestCommon {
