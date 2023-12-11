@@ -15,8 +15,7 @@ use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden}
 use hmac::Hmac;
 use keygen_bls::keygen_bls;
 use sha2::Sha512;
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 #[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize, PartialEq)]
 pub enum Net {
@@ -36,11 +35,12 @@ impl Net {
 
 impl FromStr for Net {
     type Err = String;
+
     fn from_str(input: &str) -> Result<Net, Self::Err> {
         match input {
             "Mainnet" => Ok(Net::Mainnet),
             "Testnet" => Ok(Net::Testnet),
-            _      => Err(format!("'{}' is not a valid value for Net", input)),
+            _ => Err(format!("'{}' is not a valid value for Net", input)),
         }
     }
 }
@@ -722,21 +722,20 @@ mod tests {
     }
 
     #[test]
-    fn mainnet_mapped_correctly() {
+    fn mainnet_net_mapped_correctly() {
         let result = Net::from_str(&"Mainnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Mainnet);
     }
 
     #[test]
-    fn testnet_mapped_correctly() {
+    fn testnet_net_mapped_correctly() {
         let result = Net::from_str(&"Testnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Testnet);
     }
 
     #[test]
-    fn testnet_mapped_correctly() {
-        let result = Net::from_str(&"Testnet").expect("Should not fail on valid input");
-        assert_eq!(result, Net::Testnet);
+    fn invalid_net_input_fails() {
+        let result = Net::from_str(&"Stagenet");
+        assert_eq!(result.is_err(), true);
     }
-
 }
