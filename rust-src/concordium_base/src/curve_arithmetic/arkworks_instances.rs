@@ -117,7 +117,7 @@ pub(crate) trait ArkCurveConfig<G: ark_ec::CurveGroup> {
 
 impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G> {
     type MultiExpType = GenericMultiExp<Self>;
-    type Scalar = ArkField<<G as ark_ec::PrimeGroup>::ScalarField>;
+    type Scalar = ArkField<<G as ark_ec::Group>::ScalarField>;
 
     const GROUP_ELEMENT_LENGTH: usize = G::GROUP_ELEMENT_LENGTH;
     const SCALAR_LENGTH: usize = G::SCALAR_LENGTH;

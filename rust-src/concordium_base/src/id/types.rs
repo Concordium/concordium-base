@@ -1079,7 +1079,7 @@ pub struct IpInfo<P: Pairing> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub ip_cdi_verify_key: ed25519::PublicKey,
+    pub ip_cdi_verify_key: ed25519::VerifyingKey,
 }
 
 /// Collection of identity providers.
@@ -1370,9 +1370,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, Attri
     }
 }
 
-#[derive(Debug, PartialEq, Eq, concordium_std::Serialize)]
+#[derive(Debug, PartialEq, Eq, concordium_std::Serialize, serde::Serialize, serde::Deserialize)]
 /// Which signature scheme is being used. Currently only one is supported.
 pub enum SchemeId {
+    #[serde(rename = "Ed25519")]
     Ed25519,
 }
 
@@ -1380,7 +1381,7 @@ pub enum SchemeId {
 /// Public AKA verification key for a given scheme. Only ed25519 is currently
 /// supported.
 pub enum VerifyKey {
-    Ed25519VerifyKey(ed25519::PublicKey),
+    Ed25519VerifyKey(ed25519::VerifyingKey),
 }
 
 impl concordium_std::Serial for VerifyKey {
@@ -1400,7 +1401,7 @@ impl concordium_std::Deserial for VerifyKey {
         if tag == 0 {
             let bytes: [u8; ed25519::PUBLIC_KEY_LENGTH] =
                 concordium_std::Deserial::deserial(source)?;
-            let pk = ed25519::PublicKey::from_bytes(&bytes)
+            let pk = ed25519::VerifyingKey::from_bytes(&bytes)
                 .map_err(|_| concordium_std::ParseError {})?;
             Ok(Self::Ed25519VerifyKey(pk))
         } else {
@@ -1475,16 +1476,16 @@ impl<'de> SerdeDeserialize<'de> for VerifyKey {
     }
 }
 
-impl From<ed25519::PublicKey> for VerifyKey {
-    fn from(pk: ed25519::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
+impl From<ed25519::VerifyingKey> for VerifyKey {
+    fn from(pk: ed25519::VerifyingKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
 }
 
-impl From<&ed25519::Keypair> for VerifyKey {
-    fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+impl From<&ed25519::SigningKey> for VerifyKey {
+    fn from(kp: &ed25519::SigningKey) -> Self { VerifyKey::Ed25519VerifyKey(kp.verifying_key()) }
 }
 
 impl From<&KeyPair> for VerifyKey {
-    fn from(kp: &KeyPair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+    fn from(kp: &KeyPair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public()) }
 }
 
 /// Compare byte representation.
@@ -2064,7 +2065,7 @@ impl From<AccountKeys> for AccountPublicKeys {
                 inner_map.insert(
                     u8::from(key_index),
                     concordium_contracts_common::PublicKey::Ed25519(PublicKeyEd25519(
-                        *public_key.public.as_bytes(),
+                        *public_key.public().as_bytes(),
                     )),
                 );
             }
@@ -2130,7 +2131,7 @@ impl AccountKeys {
             let cred_sigs = cred_keys
                 .keys
                 .iter()
-                .map(|(ki, kp)| (*ki, kp.sign(msg)))
+                .map(|(ki, kp)| (*ki, kp.sign(msg).into()))
                 .collect::<BTreeMap<_, _>>();
             signatures.insert(*ci, cred_sigs);
         }
@@ -2153,7 +2154,7 @@ impl AccountKeys {
                         concordium_contracts_common::Signature::Ed25519(SignatureEd25519(
                             // Unwrap is safe since the conversion is between signature types
                             // represented by byte arrays of the same length [u8, u64].
-                            kp.sign(msg).sig.try_into().unwrap(),
+                            kp.sign(msg).to_bytes().try_into().unwrap(),
                         )),
                     )
                 })
@@ -2222,7 +2223,7 @@ impl PublicCredentialData for CredentialData {
     fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
             .iter()
-            .map(|(&idx, kp)| (idx, VerifyKey::Ed25519VerifyKey(kp.public)))
+            .map(|(&idx, kp)| (idx, kp.into()))
             .collect()
     }
 }
@@ -2241,8 +2242,7 @@ impl CredentialDataWithSigning for CredentialData {
         self.keys
             .iter()
             .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(&to_sign, &kp.public).into())
+                (idx, kp.sign(&to_sign).into())
             })
             .collect()
     }
@@ -2263,7 +2263,7 @@ impl PublicInitialAccountData for InitialAccountData {
     fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
             .iter()
-            .map(|(&idx, kp)| (idx, VerifyKey::Ed25519VerifyKey(kp.public)))
+            .map(|(&idx, kp)| (idx, kp.into()))
             .collect()
     }
 }
@@ -2277,8 +2277,7 @@ impl InitialAccountDataWithSigning for InitialAccountData {
         self.keys
             .iter()
             .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(&to_sign, &kp.public).into())
+                (idx, kp.sign(&to_sign).into())
             })
             .collect()
     }

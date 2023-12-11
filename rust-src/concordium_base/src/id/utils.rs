@@ -354,7 +354,7 @@ mod tests {
         for n in 1..50 {
             let mut xs = vec![ArIdentity::new(1); n];
             for x in xs.iter_mut() {
-                *x = ArIdentity::new(csprng.gen_range(1, 100));
+                *x = ArIdentity::new(csprng.gen_range(1..100));
             }
             let set = xs.iter().copied().collect::<BTreeSet<_>>();
             let encoded = encode_ars::<ArkField<Fr>>(&set).expect("Encoding should succeed.");

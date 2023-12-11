@@ -1,14 +1,10 @@
 //! Basic definitions of the curve and pairing abstractions, and implementations
 //! of these abstractions for the curves used on Concordium.
 pub mod arkworks_instances;
-// mod bls12_381_g1hash;
-// mod bls12_381_g2hash;
-// mod bls12_381_instance;
 // mod ed25519_arkworks;
 mod bls12_381_arkworks;
-mod ed25519_instance;
+// mod ed25519_instance;
 mod ed25519_ng_instance;
-// mod ed25519_new_instance;
 
 pub mod secret_value;
 pub use secret_value::{Secret, Value};

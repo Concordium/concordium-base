@@ -10,6 +10,7 @@ use crate::{
     random_oracle::RandomOracle,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
 };
+use ed25519_dalek::Signer as _;
 use rand::*;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -567,9 +568,9 @@ fn sign_initial_cred_values<
     hasher.update(&to_bytes(&expiry));
     hasher.update(&to_bytes(&initial_cred_values));
     let to_sign = hasher.finalize();
-    let expanded_sk = ed25519_dalek::ExpandedSecretKey::from(ip_cdi_secret_key);
-    expanded_sk
-        .sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key)
+    let signing_key = ed25519_dalek::SigningKey::from(ip_cdi_secret_key);
+    signing_key
+        .sign(to_sign.as_ref())
         .into()
 }
 
@@ -708,7 +709,7 @@ mod tests {
         let ck = CommitmentKey::<ArCurve>::generate(&mut csprng);
 
         // Make degree-d polynomial
-        let d = csprng.gen_range(1, 10);
+        let d = csprng.gen_range(1..10);
         let mut coeffs = Vec::new();
         let mut rands = Vec::new();
         let mut values = Vec::new();

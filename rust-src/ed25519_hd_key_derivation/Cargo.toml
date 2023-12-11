@@ -10,7 +10,7 @@ hex = "0.4.3"
 hmac = "0.12.1"
 sha2 = "0.10.2"
 regex = "1.5.5"
-ed25519-dalek = "=1.0"
+ed25519-dalek = "2.0"
 thiserror = "1.0"
 
 [lib]

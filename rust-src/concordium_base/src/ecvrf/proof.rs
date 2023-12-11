@@ -61,9 +61,9 @@ impl Deserial for Proof {
         let compressed_point = CompressedEdwardsY(point_bytes);
         match compressed_point.decompress() {
             None => Err(ProofError(InternalError::PointDecompression).into()),
-            Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1) {
+            Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1).into() {
                 None => Err(ProofError(InternalError::ScalarFormat).into()),
-                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2) {
+                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2).into() {
                     None => Err(ProofError(InternalError::ScalarFormat).into()),
                     Some(s2) => Ok(Proof(p, s1, s2)),
                 },

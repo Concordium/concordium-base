@@ -1144,7 +1144,7 @@ fn handle_create_credential(cc: CreateCredential) {
             };
             let cred_data = {
                 let mut keys = std::collections::BTreeMap::new();
-                let public = ed25519::PublicKey::from(&secret);
+                let public = ed25519::VerifyingKey::from(&secret);
                 keys.insert(KeyIndex(0), KeyPair { secret, public });
 
                 CredentialData {

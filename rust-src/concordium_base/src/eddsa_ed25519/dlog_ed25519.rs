@@ -33,9 +33,9 @@ impl Deserial for Ed25519DlogProof {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0; 32];
         source.read_exact(&mut buf)?;
-        if let Some(challenge) = Scalar::from_canonical_bytes(buf) {
+        if let Some(challenge) = Scalar::from_canonical_bytes(buf).into() {
             source.read_exact(&mut buf)?;
-            if let Some(response) = Scalar::from_canonical_bytes(buf) {
+            if let Some(response) = Scalar::from_canonical_bytes(buf).into() {
                 Ok(Ed25519DlogProof {
                     challenge,
                     response,
@@ -61,20 +61,19 @@ pub enum PointDecodingError {
 
 fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     let mut h = Sha512::new();
+    // inspired by this https://docs.rs/ed25519-dalek/latest/src/ed25519_dalek/hazmat.rs.html#61-76
     let mut hash: [u8; 64] = [0u8; 64];
-    let mut bits: [u8; 32] = [0u8; 32];
+    let mut scalar_bytes: [u8; 32] = [0u8; 32];
     h.update(secret_key);
     hash.copy_from_slice(h.finalize().as_slice());
-    bits.copy_from_slice(&hash[..32]);
-    bits[0] &= 248;
-    bits[31] &= 127;
-    bits[31] |= 64;
-    Scalar::from_bits(bits)
+    scalar_bytes.copy_from_slice(&hash[..32]);
+    Scalar::from_bytes_mod_order(clamp_integer(scalar_bytes))
 }
 
-fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
+fn point_from_public_key(public_key: &VerifyingKey) -> Option<EdwardsPoint> {
     let bytes = public_key.to_bytes();
-    CompressedEdwardsY::from_slice(&bytes).decompress()
+    let res = CompressedEdwardsY::from_slice(&bytes).ok()?;
+    res.decompress()
 }
 
 /// Construct a proof of knowledge of secret key.
@@ -99,7 +98,7 @@ pub fn prove_dlog_ed25519<R: Rng + CryptoRng>(
 
     let rand_scalar = Scalar::random(csprng);
 
-    let randomised_point = &rand_scalar * &constants::ED25519_BASEPOINT_TABLE;
+    let randomised_point = &rand_scalar * constants::ED25519_BASEPOINT_TABLE;
 
     ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
     let challenge_bytes = ro.split().result();
@@ -115,14 +114,14 @@ pub fn prove_dlog_ed25519<R: Rng + CryptoRng>(
 
 pub fn verify_dlog_ed25519(
     ro: &mut RandomOracle,
-    public_key: &PublicKey,
+    public_key: &VerifyingKey,
     proof: &Ed25519DlogProof,
 ) -> bool {
     match point_from_public_key(public_key) {
         None => false,
         Some(public) => {
             let randomised_point =
-                public * proof.challenge + &proof.response * &constants::ED25519_BASEPOINT_TABLE;
+                public * proof.challenge + &proof.response * constants::ED25519_BASEPOINT_TABLE;
             ro.append_message(b"dlog_ed25519", public_key);
             ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
 
@@ -143,7 +142,7 @@ mod tests {
 
     fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
         // length of the challenge
-        let l = csprng.gen_range(0, 1000);
+        let l = csprng.gen_range(0..1000);
         let mut challenge_prefix = vec![0; l];
         for v in challenge_prefix.iter_mut() {
             *v = csprng.gen();
@@ -155,8 +154,10 @@ mod tests {
     pub fn test_ed25519_dlog() {
         let mut csprng = thread_rng();
         for _ in 0..10000 {
-            let secret = SecretKey::generate(&mut csprng);
-            let public = PublicKey::from(&secret);
+            let mut secret: SecretKey = [0u8; 32];
+            csprng.fill_bytes(&mut secret);
+            let signing = SigningKey::from_bytes(&secret);
+            let public = signing.verifying_key();
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let mut ro = RandomOracle::domain(&challenge_prefix);
             let proof = prove_dlog_ed25519(&mut csprng, &mut ro.split(), &public, &secret);
@@ -176,8 +177,10 @@ mod tests {
     pub fn test_ed25519_dlog_proof_serialization() {
         let mut csprng = thread_rng();
         for _ in 0..10000 {
-            let secret = SecretKey::generate(&mut csprng);
-            let public = PublicKey::from(&secret);
+            let mut secret: SecretKey = [0u8; 32];
+            csprng.fill_bytes(&mut secret);
+            let signing = SigningKey::from_bytes(&secret);
+            let public = signing.verifying_key();
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let proof = prove_dlog_ed25519(
                 &mut csprng,

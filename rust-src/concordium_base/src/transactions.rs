@@ -1391,7 +1391,7 @@ impl TransactionSigner for AccountKeys {
         for (ci, cred_keys) in iter {
             let cred_sigs = cred_keys
                 .into_iter()
-                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref())))
+                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref()).into()))
                 .collect::<BTreeMap<_, _>>();
             signatures.insert(*ci, cred_sigs);
         }
@@ -1418,7 +1418,7 @@ impl TransactionSigner for BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>
         for (ci, cred_keys) in self {
             let cred_sigs = cred_keys
                 .iter()
-                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref())))
+                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref()).into()))
                 .collect::<BTreeMap<_, _>>();
             signatures.insert(*ci, cred_sigs);
         }
@@ -1470,7 +1470,7 @@ pub struct AccountAccessStructure {
 pub type AccountStructure<'a> = &'a [(
     CredentialIndex,
     SignatureThreshold,
-    &'a [(KeyIndex, ed25519_dalek::PublicKey)],
+    &'a [(KeyIndex, ed25519_dalek::VerifyingKey)],
 )];
 
 impl AccountAccessStructure {
@@ -1504,7 +1504,7 @@ impl AccountAccessStructure {
 
     /// Generate a new [`AccountAccessStructure`] with a single credential and
     /// public key, at credential and key indices 0.
-    pub fn singleton(public_key: ed25519_dalek::PublicKey) -> Self {
+    pub fn singleton(public_key: ed25519_dalek::VerifyingKey) -> Self {
         Self::new(AccountThreshold::ONE, &[(
             0.into(),
             SignatureThreshold::ONE,
@@ -1525,7 +1525,7 @@ impl From<&AccountKeys> for AccountAccessStructure {
                         keys:      v
                             .keys
                             .iter()
-                            .map(|(ki, kp)| (*ki, VerifyKey::Ed25519VerifyKey(kp.public)))
+                            .map(|(ki, kp)| (*ki, VerifyKey::Ed25519VerifyKey(kp.as_ref().verifying_key())))
                             .collect(),
                         threshold: v.threshold,
                     })

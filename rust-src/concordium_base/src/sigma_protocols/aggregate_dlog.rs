@@ -156,7 +156,7 @@ mod tests {
                     prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
 
                 // Construct invalid parameters
-                let index_wrong_coeff: usize = csprng.gen_range(0, i);
+                let index_wrong_coeff: usize = csprng.gen_range(0..i);
 
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 let wrong_public = G1::generate(csprng);

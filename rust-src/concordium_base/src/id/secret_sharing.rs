@@ -237,7 +237,7 @@ mod test {
         xs.shuffle(&mut csprng);
 
         // select random threshold;
-        let t = csprng.gen_range(1, xs.len() + 1);
+        let t = csprng.gen_range(1..xs.len() + 1);
 
         let shared = share::<G1, _, _, _>(&secret, xs.into_iter(), Threshold(t as u8), &mut csprng);
 
@@ -259,7 +259,7 @@ mod test {
                 .mul_by_scalar(&<G1 as Curve>::generate_non_zero_scalar(&mut csprng));
             let secret = <G1 as Curve>::generate_scalar(&mut csprng);
             let secret_point = generator.mul_by_scalar(&secret);
-            let threshold = csprng.gen_range(1, i + 1);
+            let threshold = csprng.gen_range(1..i + 1);
 
             let mut xs = (1..=i).collect::<Vec<_>>();
             xs.shuffle(&mut csprng);
