@@ -1,6 +1,8 @@
 ## Unreleased changes
 
 - Improve performance of `multiexp*` family of functions.
+- The `Debug` implementation for `ContractEvent` displays the value in `hex`.
+  The alternate formatter (using `#`) displays it as a list of bytes.
 
 ## 3.2.0 (2023-11-22)
 

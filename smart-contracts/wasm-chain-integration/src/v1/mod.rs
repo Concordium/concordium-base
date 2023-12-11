@@ -53,6 +53,31 @@ use std::{borrow::Borrow, collections::BTreeMap, io::Write, sync::Arc};
 use trie::BackingStoreLoad;
 pub use types::*;
 
+#[derive(thiserror::Error, Debug)]
+/// An invalid return value was returned by the call.
+/// Allowed return values are either 0 for success, or negative for signalling
+/// errors.
+#[error("Unexpected return value from the invocation: {value:?}")]
+pub struct InvalidReturnCodeError<Debug> {
+    pub value:       Option<i32>,
+    pub debug_trace: Debug,
+}
+
+impl<R, Debug: DebugInfo, Ctx> From<InvalidReturnCodeError<Debug>>
+    for types::ReceiveResult<R, Debug, Ctx>
+{
+    fn from(value: InvalidReturnCodeError<Debug>) -> Self {
+        Self::Trap {
+            error:            anyhow::anyhow!("Invalid return code: {:?}", value.value),
+            remaining_energy: 0.into(), // We consume all energy in case of protocol violation.
+            trace:            value.debug_trace,
+        }
+    }
+}
+
+/// An alias for the return type of the `invoke_*` family of functions.
+pub type InvokeResult<A, Debug> = Result<A, InvalidReturnCodeError<Debug>>;
+
 /// Interrupt triggered by the smart contract to execute an instruction on the
 /// host, either an account transfer, a smart contract call or an upgrade
 /// instruction.
@@ -265,17 +290,29 @@ pub enum HostFunctionV1 {
     Receive(ReceiveOnlyFunc),
 }
 
+impl std::fmt::Display for HostFunctionV1 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HostFunctionV1::Common(c) => c.fmt(f),
+            HostFunctionV1::Init(io) => io.fmt(f),
+            HostFunctionV1::Receive(ro) => ro.fmt(f),
+        }
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct DebugTracker {
     pub operation:       u64,
     pub memory_alloc:    u64,
-    pub host_call_trace: Vec<(HostFunctionV1, InterpreterEnergy)>,
+    pub host_call_trace: Vec<(usize, HostFunctionV1, InterpreterEnergy)>,
+    pub emitted_events:  Vec<(usize, EmittedDebugStatement)>,
+    pub next_index:      usize,
 }
 
 impl DebugTracker {
     pub fn host_call_summary(&self) -> BTreeMap<HostFunctionV1, InterpreterEnergy> {
         let mut out = BTreeMap::new();
-        for (k, v) in self.host_call_trace.iter() {
+        for (_, k, v) in self.host_call_trace.iter() {
             let nrg = out.entry(*k).or_insert(InterpreterEnergy {
                 energy: 0,
             });
@@ -292,27 +329,31 @@ impl crate::DebugInfo for DebugTracker {
 
     fn trace_host_call(&mut self, f: self::ImportFunc, energy_used: InterpreterEnergy) {
         let nrg = energy_used;
+        let next_idx = self.next_index;
         match f {
             ImportFunc::ChargeEnergy => self.operation += nrg.energy,
             ImportFunc::TrackCall => (),
             ImportFunc::TrackReturn => (),
             ImportFunc::ChargeMemoryAlloc => self.memory_alloc += nrg.energy,
             ImportFunc::Common(c) => {
-                self.host_call_trace.push((HostFunctionV1::Common(c), nrg));
+                self.next_index += 1;
+                self.host_call_trace.push((next_idx, HostFunctionV1::Common(c), nrg));
             }
             ImportFunc::InitOnly(io) => {
-                self.host_call_trace.push((HostFunctionV1::Init(io), nrg));
+                self.next_index += 1;
+                self.host_call_trace.push((next_idx, HostFunctionV1::Init(io), nrg));
             }
             ImportFunc::ReceiveOnly(ro) => {
-                self.host_call_trace.push((HostFunctionV1::Receive(ro), nrg));
+                self.next_index += 1;
+                self.host_call_trace.push((next_idx, HostFunctionV1::Receive(ro), nrg));
             }
         }
     }
 
-    fn combine(&mut self, other: Self) {
-        self.operation += other.operation;
-        self.memory_alloc += other.memory_alloc;
-        self.host_call_trace.extend(other.host_call_trace)
+    fn emit_debug_event(&mut self, event: EmittedDebugStatement) {
+        let next_idx = self.next_index;
+        self.next_index += 1;
+        self.emitted_events.push((next_idx, event));
     }
 }
 
@@ -372,9 +413,10 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
 }
 
 /// An event emitted by the `debug_print` host function in debug mode.
-pub struct DebugEvent {
+#[derive(Debug)]
+pub struct EmittedDebugStatement {
     /// File in which the debug macro was used.
-    pub filename:         u32,
+    pub filename:         String,
     /// The line inside the file.
     pub line:             u32,
     /// An the column.
@@ -385,9 +427,13 @@ pub struct DebugEvent {
     pub remaining_energy: InterpreterEnergy,
 }
 
-impl std::fmt::Display for DebugEvent {
+impl std::fmt::Display for EmittedDebugStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}:{}", self.filename, self.line, self.column, self.msg)
+        write!(
+            f,
+            "{}:{}:{}:@{}:{}",
+            self.filename, self.line, self.column, self.remaining_energy, self.msg
+        )
     }
 }
 
@@ -997,7 +1043,8 @@ mod host {
         Ok(())
     }
 
-    pub(crate) fn debug_print(
+    pub(crate) fn debug_print<Debug: DebugInfo>(
+        debug: &mut Debug,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
@@ -1014,8 +1061,13 @@ mod host {
         let filename =
             std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
                 .to_owned();
-        eprintln!("{}:{}:{}:{}", filename, line, column, msg);
-        println!("{energy:?}");
+        debug.emit_debug_event(EmittedDebugStatement {
+            filename,
+            line,
+            column,
+            msg,
+            remaining_energy: *energy,
+        });
         Ok(())
     }
 
@@ -1242,7 +1294,9 @@ impl<
                 CommonFunc::VerifySecp256k1 => {
                     host::verify_ecdsa_secp256k1_signature(memory, stack, &mut self.energy)
                 }
-                CommonFunc::DebugPrint => host::debug_print(memory, stack, &mut self.energy),
+                CommonFunc::DebugPrint => {
+                    host::debug_print(&mut self.trace, memory, stack, &mut self.energy)
+                }
                 CommonFunc::HashSHA2_256 => host::hash_sha2_256(memory, stack, &mut self.energy),
                 CommonFunc::HashSHA3_256 => host::hash_sha3_256(memory, stack, &mut self.energy),
                 CommonFunc::HashKeccak256 => host::hash_keccak_256(memory, stack, &mut self.energy),
@@ -1255,7 +1309,7 @@ impl<
             }
         }
         let energy_after: InterpreterEnergy = self.energy;
-        self.trace.trace_host_call(f.tag, energy_after.saturating_sub(&energy_before));
+        self.trace.trace_host_call(f.tag, energy_before.saturating_sub(&energy_after));
         Ok(None)
     }
 }
@@ -1318,6 +1372,7 @@ impl<
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<Self::Interrupt>> {
+        let energy_before = self.energy;
         match f.tag {
             ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
             ImportFunc::TrackCall => v0::host::track_call(&mut self.stateless.activation_frames)?,
@@ -1405,14 +1460,16 @@ impl<
                 CommonFunc::VerifySecp256k1 => {
                     host::verify_ecdsa_secp256k1_signature(memory, stack, &mut self.energy)
                 }
-                CommonFunc::DebugPrint => host::debug_print(memory, stack, &mut self.energy),
+                CommonFunc::DebugPrint => {
+                    host::debug_print(&mut self.trace, memory, stack, &mut self.energy)
+                }
                 CommonFunc::HashSHA2_256 => host::hash_sha2_256(memory, stack, &mut self.energy),
                 CommonFunc::HashSHA3_256 => host::hash_sha3_256(memory, stack, &mut self.energy),
                 CommonFunc::HashKeccak256 => host::hash_keccak_256(memory, stack, &mut self.energy),
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
-                    return host::invoke(
+                    let invoke = host::invoke(
                         self.stateless.params.support_queries,
                         self.stateless.params.support_account_signature_checks,
                         memory,
@@ -1420,6 +1477,9 @@ impl<
                         &mut self.energy,
                         self.stateless.params.max_parameter_size,
                     );
+                    let energy_after: InterpreterEnergy = self.energy;
+                    self.trace.trace_host_call(f.tag, energy_before.saturating_sub(&energy_after));
+                    return invoke;
                 }
                 ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
                     memory,
@@ -1458,6 +1518,8 @@ impl<
                 bail!("Not implemented for receive.");
             }
         }
+        let energy_after: InterpreterEnergy = self.energy;
+        self.trace.trace_host_call(f.tag, energy_before.saturating_sub(&energy_after));
         Ok(None)
     }
 }
@@ -1491,7 +1553,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: DebugInfo
     init_invocation: InitInvocation,
     limit_logs_and_return_values: bool,
     mut loader: BackingStore,
-) -> ExecResult<InitResult<A>> {
+) -> InvokeResult<InitResult<A>, A> {
     let mut initial_state = trie::MutableState::initial_state();
     let inner = initial_state.get_inner(&mut loader);
     let state_ref = InstanceState::new(loader, inner);
@@ -1534,15 +1596,19 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: DebugInfo
                         trace,
                     })
                 } else {
+                    let (reason, trace) = reason_from_wasm_error_code(n, trace)?;
                     Ok(InitResult::Reject {
-                        reason: reason_from_wasm_error_code(n)?,
+                        reason,
                         return_value,
                         remaining_energy: remaining_energy.into(),
                         trace,
                     })
                 }
             } else {
-                bail!("Wasm module should return a value.")
+                return Err(InvalidReturnCodeError {
+                    value:       None,
+                    debug_trace: trace,
+                });
             }
         }
         Ok(ExecutionOutcome::Interrupted {
@@ -1605,7 +1671,10 @@ impl InvokeFailure {
     /// Encode the failure kind in a format that is expected from a host
     /// function. If the return value is present it is pushed to the supplied
     /// vector of parameters.
-    pub(crate) fn encode_as_u64(self, parameters: &mut Vec<ParameterVec>) -> anyhow::Result<u64> {
+    pub(crate) fn encode_as_u64<Debug>(
+        self,
+        parameters: &mut Vec<ParameterVec>,
+    ) -> ResumeResult<u64, Debug> {
         Ok(match self {
             InvokeFailure::ContractReject {
                 code,
@@ -1613,7 +1682,7 @@ impl InvokeFailure {
             } => {
                 let len = parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
-                    bail!("Too many calls.")
+                    return Err(ResumeError::TooManyInterrupts);
                 }
                 parameters.push(data);
                 (len as u64) << 40 | (code as u32 as u64)
@@ -1727,7 +1796,7 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad, A: DebugInfo>(
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult<A>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
-    invoke_init(
+    let r = invoke_init(
         artifact,
         init_ctx,
         InitInvocation {
@@ -1738,7 +1807,8 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad, A: DebugInfo>(
         },
         limit_logs_and_return_values,
         loader,
-    )
+    )?;
+    Ok(r)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1778,7 +1848,7 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
         ctx.source,
     )?
     .artifact;
-    invoke_init(
+    let r = invoke_init(
         artifact,
         init_ctx,
         InitInvocation {
@@ -1789,7 +1859,8 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
         },
         limit_logs_and_return_values,
         loader,
-    )
+    )?;
+    Ok(r)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
@@ -1812,7 +1883,7 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: 
         ctx.source,
     )?
     .artifact;
-    invoke_init(
+    let r = invoke_init(
         artifact,
         init_ctx,
         InitInvocation {
@@ -1823,7 +1894,8 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: 
         },
         limit_logs_and_return_values,
         loader,
-    )
+    )?;
+    Ok(r)
 }
 
 fn process_receive_result<
@@ -1838,7 +1910,7 @@ fn process_receive_result<
     artifact: Art,
     host: ReceiveHost<'_, BackingStore, Param, Ctx1, A>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
-) -> ExecResult<ReceiveResult<R, A, Ctx2>>
+) -> InvokeResult<ReceiveResult<R, A, Ctx2>, A>
 where
     StateLessReceiveHost<ParameterVec, Ctx2>: From<StateLessReceiveHost<Param, Ctx1>>, {
     let mut stateless = host.stateless;
@@ -1858,18 +1930,19 @@ where
                         trace: host.trace,
                     })
                 } else {
+                    let (reason, trace) = reason_from_wasm_error_code(n, host.trace)?;
                     Ok(ReceiveResult::Reject {
-                        reason: reason_from_wasm_error_code(n)?,
+                        reason,
                         return_value: stateless.return_value,
                         remaining_energy,
-                        trace: host.trace,
+                        trace,
                     })
                 }
             } else {
-                bail!(
-                    "Invalid return. Expected a value, but receive nothing. This should not \
-                     happen for well-formed modules"
-                );
+                return Err(InvalidReturnCodeError {
+                    value:       None,
+                    debug_trace: host.trace,
+                });
             }
         }
         Ok(ExecutionOutcome::Interrupted {
@@ -1999,7 +2072,7 @@ pub fn invoke_receive<
     receive_invocation: ReceiveInvocation,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<R2, A, Ctx2>> {
+) -> InvokeResult<ReceiveResult<R2, A, Ctx2>, A> {
     let mut host = ReceiveHost {
         energy:    receive_invocation.energy,
         stateless: StateLessReceiveHost {
@@ -2019,6 +2092,38 @@ pub fn invoke_receive<
             Value::I64(receive_invocation.amount.micro_ccd() as i64),
         ]);
     process_receive_result(artifact, host, result)
+}
+
+pub type ResumeResult<A, Debug> = Result<A, ResumeError<Debug>>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ResumeError<Debug> {
+    /// There have been too many interrupts during this contract execution.
+    #[error("Too many interrupts in a contract call.")]
+    TooManyInterrupts,
+    #[error("Invalid return value from a contract call: {error:?}")]
+    InvalidReturn {
+        #[from]
+        error: InvalidReturnCodeError<Debug>,
+    },
+}
+
+impl<R, Debug: DebugInfo, Ctx> From<ResumeError<Debug>> for types::ReceiveResult<R, Debug, Ctx> {
+    fn from(value: ResumeError<Debug>) -> Self {
+        match value {
+            ResumeError::TooManyInterrupts => {
+                Self::Trap {
+                    error:            anyhow::anyhow!("Too many interrupts in a contract call."),
+                    remaining_energy: 0.into(), /* Protocol violations lead to consuming all
+                                                 * energy. */
+                    trace:            Debug::empty_trace(), // nothing was executed, so no trace.
+                }
+            }
+            ResumeError::InvalidReturn {
+                error,
+            } => error.into(),
+        }
+    }
 }
 
 /// Resume execution of the receive method after handling the interrupt.
@@ -2045,7 +2150,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad, A: DebugInfo>(
     state_trie: &mut trie::MutableState,
     state_updated: bool,
     mut backing_store: BackingStore,
-) -> ExecResult<ReceiveResult<CompiledFunction, A>> {
+) -> ResumeResult<ReceiveResult<CompiledFunction, A>, A> {
     let inner = state_trie.get_inner(&mut backing_store);
     let state = InstanceState::migrate(
         state_updated,
@@ -2078,7 +2183,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad, A: DebugInfo>(
             if let Some(data) = data {
                 let len = host.stateless.parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
-                    bail!("Too many calls.")
+                    return Err(ResumeError::TooManyInterrupts);
                 }
                 host.stateless.parameters.push(data);
                 // return the index of the parameter to retrieve.
@@ -2099,18 +2204,24 @@ pub fn resume_receive<BackingStore: BackingStoreLoad, A: DebugInfo>(
     let mut config = interrupted_state.config;
     config.push_value(response);
     let result = interrupted_state.artifact.run_config(&mut host, config);
-    process_receive_result(interrupted_state.artifact, host, result)
+    let r = process_receive_result(interrupted_state.artifact, host, result)?;
+    Ok(r)
 }
 
 /// Returns the passed Wasm error code if it is negative.
 /// This function should only be called on negative numbers.
-fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
-    ensure!(
-        n < 0,
-        "Wasm return value of {} is treated as an error. Only negative should be treated as error.",
-        n
-    );
-    Ok(n)
+fn reason_from_wasm_error_code<A>(
+    n: i32,
+    debug_trace: A,
+) -> Result<(i32, A), InvalidReturnCodeError<A>> {
+    if n < 0 {
+        Ok((n, debug_trace))
+    } else {
+        Err(InvalidReturnCodeError {
+            value: Some(n),
+            debug_trace,
+        })
+    }
 }
 
 /// Invokes a receive-function from a given **serialized** artifact.
@@ -2129,7 +2240,7 @@ pub fn invoke_receive_from_artifact<
     params: ReceiveParams,
 ) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, A, Ctx2>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
-    invoke_receive(
+    let r = invoke_receive(
         Arc::new(artifact),
         receive_ctx,
         ReceiveInvocation {
@@ -2140,7 +2251,8 @@ pub fn invoke_receive_from_artifact<
         },
         instance_state,
         params,
-    )
+    )?;
+    Ok(r)
 }
 
 /// Invokes a receive-function from a given **serialized** Wasm module.
@@ -2167,7 +2279,7 @@ pub fn invoke_receive_from_source<
         ctx.source,
     )?
     .artifact;
-    invoke_receive(
+    let r = invoke_receive(
         Arc::new(artifact),
         receive_ctx,
         ReceiveInvocation {
@@ -2178,7 +2290,8 @@ pub fn invoke_receive_from_source<
         },
         instance_state,
         params,
-    )
+    )?;
+    Ok(r)
 }
 
 /// Invokes a receive-function from a given **serialized** Wasm module. Before
@@ -2206,7 +2319,7 @@ pub fn invoke_receive_with_metering_from_source<
         ctx.source,
     )?
     .artifact;
-    invoke_receive(
+    let r = invoke_receive(
         Arc::new(artifact),
         receive_ctx,
         ReceiveInvocation {
@@ -2217,5 +2330,6 @@ pub fn invoke_receive_with_metering_from_source<
         },
         instance_state,
         params,
-    )
+    )?;
+    Ok(r)
 }

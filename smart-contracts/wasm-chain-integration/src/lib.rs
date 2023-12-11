@@ -97,14 +97,14 @@ pub(crate) use type_matches;
 /// [`anyhow::Result`].
 pub type ExecResult<A> = anyhow::Result<A>;
 
-pub trait DebugInfo {
+pub trait DebugInfo: Send + Sync + std::fmt::Debug + 'static {
     const ENABLE_DEBUG: bool;
 
     fn empty_trace() -> Self;
 
     fn trace_host_call(&mut self, f: v1::ImportFunc, energy_used: InterpreterEnergy);
 
-    fn combine(&mut self, other: Self);
+    fn emit_debug_event(&mut self, event: v1::EmittedDebugStatement);
 }
 
 impl DebugInfo for () {
@@ -119,12 +119,14 @@ impl DebugInfo for () {
     }
 
     #[inline(always)]
-    fn combine(&mut self, _other: Self) {
+    fn emit_debug_event(&mut self, _event: v1::EmittedDebugStatement) {
         // do nothing
     }
 }
 
-#[derive(Debug, Clone, Copy, From, Into, Display, derive_more::FromStr)]
+#[derive(
+    PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy, From, Into, Display, derive_more::FromStr,
+)]
 #[display(fmt = "{}", energy)]
 #[repr(transparent)]
 pub struct InterpreterEnergy {
@@ -132,8 +134,22 @@ pub struct InterpreterEnergy {
     pub energy: u64,
 }
 
+impl PartialEq<u64> for InterpreterEnergy {
+    fn eq(&self, other: &u64) -> bool { self.energy.eq(other) }
+}
+
+impl PartialOrd<u64> for InterpreterEnergy {
+    fn partial_cmp(&self, other: &u64) -> Option<std::cmp::Ordering> {
+        self.energy.partial_cmp(other)
+    }
+}
+
 impl InterpreterEnergy {
-    pub fn new(energy: u64) -> Self { Self::from(energy) }
+    pub const fn new(energy: u64) -> Self {
+        Self {
+            energy,
+        }
+    }
 
     /// Subtract the given amount from the energy, bottoming out at 0.
     pub fn subtract(self, consumed: u64) -> Self {

@@ -206,6 +206,23 @@ pub enum ContractTraceElement {
     },
 }
 
+impl ContractTraceElement {
+    /// Get the contract address that this event relates to.
+    /// This means the `address` field for all variant except `Transferred`,
+    /// where it returns the `from`.
+    pub fn affected_address(&self) -> ContractAddress {
+        match self {
+            ContractTraceElement::Interrupted { address, .. } => *address,
+            ContractTraceElement::Resumed { address, .. } => *address,
+            ContractTraceElement::Upgraded { address, .. } => *address,
+            ContractTraceElement::Updated {
+                data: InstanceUpdatedEvent { address, .. },
+            } => *address,
+            ContractTraceElement::Transferred { from, .. } => *from,
+        }
+    }
+}
+
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 /// Data generated as part of updating a single contract instance.
@@ -231,7 +248,7 @@ pub struct InstanceUpdatedEvent {
     pub events:           Vec<ContractEvent>,
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, AsRef, Into, From, PartialEq, Eq)]
+#[derive(SerdeSerialize, SerdeDeserialize, Clone, AsRef, Into, From, PartialEq, Eq)]
 #[serde(transparent)]
 /// An event logged by a smart contract initialization.
 pub struct ContractEvent {
@@ -246,6 +263,20 @@ impl std::fmt::Display for ContractEvent {
             f.write_fmt(format_args!("{:02x}", b))?
         }
         Ok(())
+    }
+}
+
+/// Display the entire event in hex.
+impl std::fmt::Debug for ContractEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if f.alternate() {
+            self.bytes.fmt(f)
+        } else {
+            for b in &self.bytes {
+                f.write_fmt(format_args!("{:02x}", b))?
+            }
+            Ok(())
+        }
     }
 }
 

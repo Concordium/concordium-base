@@ -1579,8 +1579,21 @@ impl OwnedEntrypointName {
 
 /// Parameter to the init function or entrypoint.
 #[repr(transparent)]
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, Default)]
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Default)]
 pub struct Parameter<'a>(pub(crate) &'a [u8]);
+
+impl<'a> fmt::Debug for Parameter<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            self.0.fmt(f)
+        } else {
+            for b in self.0 {
+                f.write_fmt(format_args!("{:02x}", b))?
+            }
+            Ok(())
+        }
+    }
+}
 
 impl<'a> AsRef<[u8]> for Parameter<'a> {
     #[inline(always)]
@@ -1631,12 +1644,26 @@ impl<'a> Parameter<'a> {
 
 /// Parameter to the init function or entrypoint. Owned version.
 #[repr(transparent)]
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
+#[derive(Eq, PartialEq, Clone, Hash, Default)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 pub struct OwnedParameter(
     #[cfg_attr(feature = "derive-serde", serde(with = "serde_impl::byte_array_hex"))]
     pub(crate)  Vec<u8>,
 );
+
+// Output as a hex string.
+impl fmt::Debug for OwnedParameter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            self.0.fmt(f)
+        } else {
+            for b in &self.0 {
+                f.write_fmt(format_args!("{:02x}", b))?
+            }
+            Ok(())
+        }
+    }
+}
 
 #[derive(Debug)]
 #[cfg_attr(feature = "derive-serde", derive(thiserror::Error))]

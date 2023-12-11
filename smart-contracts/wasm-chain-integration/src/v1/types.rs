@@ -357,11 +357,52 @@ pub enum CommonFunc {
     DebugPrint,
 }
 
+impl std::fmt::Display for CommonFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            CommonFunc::GetParameterSize => "get_parameter_size",
+            CommonFunc::GetParameterSection => "get_parameter_section",
+            CommonFunc::GetPolicySection => "get_policy_section",
+            CommonFunc::LogEvent => "log_event",
+            CommonFunc::GetSlotTime => "get_slot_time",
+            CommonFunc::WriteOutput => "write_output",
+            CommonFunc::StateLookupEntry => "state_lookup_entry",
+            CommonFunc::StateCreateEntry => "state_create_entry",
+            CommonFunc::StateDeleteEntry => "state_delete_entry",
+            CommonFunc::StateDeletePrefix => "state_delete_prefix",
+            CommonFunc::StateIteratePrefix => "state_iterate_prefix",
+            CommonFunc::StateIteratorNext => "state_iterator_next",
+            CommonFunc::StateIteratorDelete => "state_iterator_delete",
+            CommonFunc::StateIteratorKeySize => "state_iterator_key_size",
+            CommonFunc::StateIteratorKeyRead => "state_iterator_key_read",
+            CommonFunc::StateEntryRead => "state_entry_read",
+            CommonFunc::StateEntryWrite => "state_entry_write",
+            CommonFunc::StateEntrySize => "state_entry_size",
+            CommonFunc::StateEntryResize => "state_entry_resize",
+            CommonFunc::VerifyEd25519 => "verify_ed25519_signature",
+            CommonFunc::VerifySecp256k1 => "verify_ecdsa_secp256k1_signature",
+            CommonFunc::HashSHA2_256 => "hash_sha2_256",
+            CommonFunc::HashSHA3_256 => "hash_sha3_256",
+            CommonFunc::HashKeccak256 => "hash_keccak_256",
+            CommonFunc::DebugPrint => "debug_print",
+        };
+        f.write_str(s)
+    }
+}
+
 #[repr(u8)]
 #[derive(PartialOrd, Ord, Eq, PartialEq, Clone, Copy, Debug)]
 /// An enumeration of functions that can be used only by init methods.
 pub enum InitOnlyFunc {
     GetInitOrigin,
+}
+
+impl std::fmt::Display for InitOnlyFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InitOnlyFunc::GetInitOrigin => f.write_str("get_init_origin"),
+        }
+    }
 }
 
 #[repr(u8)]
@@ -377,6 +418,23 @@ pub enum ReceiveOnlyFunc {
     GetReceiveEntrypointSize,
     GetReceiveEntryPoint,
     Upgrade,
+}
+
+impl std::fmt::Display for ReceiveOnlyFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ReceiveOnlyFunc::Invoke => "invoke",
+            ReceiveOnlyFunc::GetReceiveInvoker => "get_receive_invoker",
+            ReceiveOnlyFunc::GetReceiveSelfAddress => "get_receive_self_address",
+            ReceiveOnlyFunc::GetReceiveSelfBalance => "get_receive_self_balance",
+            ReceiveOnlyFunc::GetReceiveSender => "get_receive_sender",
+            ReceiveOnlyFunc::GetReceiveOwner => "get_receive_owner",
+            ReceiveOnlyFunc::GetReceiveEntrypointSize => "get_receive_entrypoint_size",
+            ReceiveOnlyFunc::GetReceiveEntryPoint => "get_receive_entrypoint",
+            ReceiveOnlyFunc::Upgrade => "upgrade",
+        };
+        f.write_str(s)
+    }
 }
 
 #[repr(u8)]
