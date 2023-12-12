@@ -1,6 +1,6 @@
 use anyhow::{bail, Error, Result};
 use concordium_base::{
-    common::{base16_decode_string, base16_encode_string, to_bytes},
+    common::{base16_decode_string, base16_encode_string},
     contracts_common::ContractAddress,
     id::{constants, types::AttributeTag},
     pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value},
@@ -33,7 +33,7 @@ pub fn get_account_signing_key_aux(
         identity_index,
         credential_counter,
     )?;
-    Ok(hex::encode(key))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_account_public_key_aux(
@@ -49,7 +49,7 @@ pub fn get_account_public_key_aux(
         identity_index,
         credential_counter,
     )?;
-    Ok(hex::encode(key))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_prf_key_aux(
@@ -60,7 +60,7 @@ pub fn get_prf_key_aux(
 ) -> Result<HexString> {
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_prf_key(identity_provider_index, identity_index)?;
-    Ok(hex::encode(to_bytes(&key)))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_id_cred_sec_aux(
@@ -71,7 +71,7 @@ pub fn get_id_cred_sec_aux(
 ) -> Result<HexString> {
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_id_cred_sec(identity_provider_index, identity_index)?;
-    Ok(hex::encode(to_bytes(&key)))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_signature_blinding_randomness_aux(
@@ -82,7 +82,7 @@ pub fn get_signature_blinding_randomness_aux(
 ) -> Result<HexString> {
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
-    Ok(hex::encode(to_bytes(&key)))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_attribute_commitment_randomness_aux(
@@ -100,7 +100,7 @@ pub fn get_attribute_commitment_randomness_aux(
         credential_counter,
         AttributeTag(attribute),
     )?;
-    Ok(hex::encode(to_bytes(&key)))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_verifiable_credential_signing_key_aux(
@@ -113,7 +113,7 @@ pub fn get_verifiable_credential_signing_key_aux(
     let issuer: ContractAddress = ContractAddress::new(issuer_index, issuer_subindex);
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_verifiable_credential_signing_key(issuer, verifiable_credential_index)?;
-    Ok(hex::encode(key.as_bytes()))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_verifiable_credential_public_key_aux(
@@ -126,7 +126,7 @@ pub fn get_verifiable_credential_public_key_aux(
     let issuer: ContractAddress = ContractAddress::new(issuer_index, issuer_subindex);
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_verifiable_credential_public_key(issuer, verifiable_credential_index)?;
-    Ok(hex::encode(key.as_bytes()))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_verifiable_credential_backup_encryption_key_aux(
@@ -135,7 +135,7 @@ pub fn get_verifiable_credential_backup_encryption_key_aux(
 ) -> Result<HexString> {
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_verifiable_credential_backup_encryption_key()?;
-    Ok(hex::encode(key.as_bytes()))
+    Ok(base16_encode_string(&key))
 }
 
 pub fn get_credential_id_aux(
