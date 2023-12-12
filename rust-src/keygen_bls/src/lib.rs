@@ -26,7 +26,7 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::Inv
     // 452312848583266388373324160190187140051835877600158453279131187530910662656 =
     // 2^248 = 2^(31*8)
     let shift = <ArkField<Fr>>::from_repr(&[0, 0, 0, 72057594037927936]).unwrap();
-    println!("Shift {:?}", shift);
+    println!("Shift {:}", shift);
     let mut salt = Sha256::digest(&salt[..]);
     while sk.is_zero() {
         let (_, h) = Hkdf::<Sha256>::extract(Some(&salt), &ikm);
@@ -48,9 +48,9 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::Inv
         let slice_y2 = &mut y2_vec[0..okm.len() - slice_y1.len()];
         slice_y2.clone_from_slice(&okm[31..]);
         let y1 = G1::scalar_from_bytes(y1_vec);
-        println!("y1 {:?}", y1);
+        println!("y1 {:}", y1);
         let mut y2 = G1::scalar_from_bytes(y2_vec);
-        println!("y2 {:?}", y2);
+        println!("y2 {:}", y2);
         y2.mul_assign(&shift);
         sk = y1;
         sk.add_assign(&y2);

@@ -29,12 +29,6 @@ impl<F: ark_ff::Field> Deserial for ArkField<F> {
     }
 }
 
-impl<F: fmt::Display> fmt::Display for ArkField<F> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        <F as fmt::Display>::fmt(&self.0, f)
-    }
-}
-
 impl<F: ark_ff::Field> Field for ArkField<F> {
     fn random<R: rand::prelude::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
         F::rand(rng).into()

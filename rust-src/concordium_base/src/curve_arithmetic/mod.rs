@@ -26,7 +26,7 @@ pub enum CurveDecodingError {
 
 /// This trait represents an element of a field.
 pub trait Field:
-    Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display + 'static {
+    Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + 'static {
     /// Returns an element chosen uniformly at random using a user-provided RNG.
     fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self;
 

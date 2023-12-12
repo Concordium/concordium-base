@@ -1,3 +1,5 @@
+use core::fmt;
+
 use ark_bls12_381::*;
 use ark_ec::{
     bls12::{G1Prepared, G2Prepared},
@@ -6,7 +8,7 @@ use ark_ec::{
     short_weierstrass::Projective,
     CurveGroup,
 };
-use ark_ff::{field_hashers::DefaultFieldHasher, BigInt};
+use ark_ff::{field_hashers::DefaultFieldHasher, BigInt, PrimeField};
 use sha2::Sha256;
 
 use crate::common::{Buffer, Serial};
@@ -109,4 +111,14 @@ impl Pairing for Bls12 {
     fn generate_scalar<T: rand::Rng>(csprng: &mut T) -> Self::ScalarField {
         <Fr as ark_std::UniformRand>::rand(csprng).into()
     }
+}
+
+impl fmt::Display for ArkField<Fr> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "0x")?;
+                for i in self.0.into_bigint().0.iter().rev() {
+                    write!(f, "{:016x}", *i)?;
+                }
+                Ok(())
+            }
 }
