@@ -217,7 +217,6 @@ mod tests {
             attribute_randomness.insert(tag, randomness);
         }
 
-        // TODO Fix typo 'sig_retrievel...'
         UnsignedCredentialInput {
             ars_infos,
             ip_info,
