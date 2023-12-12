@@ -559,7 +559,7 @@ fn ip_info_create_helper(
     // Identity provider CDI verify key.
     let ip_cdi_verify_key = {
         let ed_buf = &mut slice_from_c_bytes!(cdi_verify_key_ptr, cdi_verify_key_len);
-        from_bytes::<ed25519_dalek::PublicKey, &[u8]>(ed_buf)
+        from_bytes::<ed25519_dalek::VerifyingKey, &[u8]>(ed_buf)
             .context("Unable to create PublicKey instance from byte array at cdi_verify_key_ptr.")?
     };
 

@@ -27,19 +27,6 @@ impl ArkCurveConfig<G1Projective> for Projective<g1::Config> {
     const GROUP_ELEMENT_LENGTH: usize = 48;
     const SCALAR_LENGTH: usize = 32;
 }
-
-// impl ArkCurveConfig<G1Prepared<g1::Config>> for
-// Projective<G1Prepared<g1::Config>> {     type Hasher = MapToCurveBasedHasher<
-//         Projective<G1Prepared<g1::Config>>,
-//         DefaultFieldHasher<Sha256, 128>,
-//         WBMap<G1Prepared<g1::Config>>,
-//     >;
-
-//     const DOMAIN_STRING: &'static str = "BLS12381G1";
-//     const GROUP_ELEMENT_LENGTH: usize = 48;
-//     const SCALAR_LENGTH: usize = 32;
-// }
-
 impl ArkCurveConfig<G2Projective> for Projective<g2::Config> {
     type Hasher =
         MapToCurveBasedHasher<G2Projective, DefaultFieldHasher<Sha256, 128>, WBMap<g2::Config>>;

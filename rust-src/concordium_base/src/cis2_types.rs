@@ -1125,7 +1125,10 @@ mod test {
 
     #[test]
     fn test_serialize_random_token_amount() {
-        let seed = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let seed = [
+            1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 32,
+        ];
         let mut rng = SmallRng::from_seed(seed);
 
         for n in (0..1000).map(|_| rng.next_u64()) {
@@ -1146,7 +1149,10 @@ mod test {
             "Incorrect amount parse."
         );
 
-        let seed = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let seed = [
+            1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 32,
+        ];
         let mut rng = SmallRng::from_seed(seed);
 
         for n in (0..1000).map(|_| rng.next_u64()) {

@@ -441,10 +441,10 @@ mod test {
             let mut ms: Vec<[u8; 8]> = (0..signers).map(|x| x.to_le_bytes()).collect();
 
             // Make a duplication in the messages
-            let random_idx1: usize = rng.gen_range(0, SIGNERS);
-            let mut random_idx2: usize = rng.gen_range(0, SIGNERS);
+            let random_idx1: usize = rng.gen_range(0..SIGNERS);
+            let mut random_idx2: usize = rng.gen_range(0..SIGNERS);
             while random_idx1 == random_idx2 {
-                random_idx2 = rng.gen_range(0, SIGNERS)
+                random_idx2 = rng.gen_range(0..SIGNERS)
             }
             ms[random_idx1] = ms[random_idx2];
             let vs: Vec<(&[u8], ())> = ms.iter().map(|x| (&x[..], ())).collect();

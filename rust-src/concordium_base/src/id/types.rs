@@ -2241,9 +2241,7 @@ impl CredentialDataWithSigning for CredentialData {
         );
         self.keys
             .iter()
-            .map(|(&idx, kp)| {
-                (idx, kp.sign(&to_sign).into())
-            })
+            .map(|(&idx, kp)| (idx, kp.sign(&to_sign).into()))
             .collect()
     }
 }
@@ -2276,9 +2274,7 @@ impl InitialAccountDataWithSigning for InitialAccountData {
         let to_sign = Sha256::digest(to_bytes(pub_info_for_ip));
         self.keys
             .iter()
-            .map(|(&idx, kp)| {
-                (idx, kp.sign(&to_sign).into())
-            })
+            .map(|(&idx, kp)| (idx, kp.sign(&to_sign).into()))
             .collect()
     }
 }
@@ -2647,7 +2643,7 @@ mod tests {
         use rand::thread_rng;
 
         let mut csprng = thread_rng();
-        let keypair = ed25519::Keypair::generate(&mut csprng);
+        let keypair = ed25519::SigningKey::generate(&mut csprng);
         for _ in 0..1000 {
             let message: &[u8] = b"test";
             let signature: AccountOwnershipSignature = keypair.sign(message).into();
@@ -2676,17 +2672,13 @@ mod tests {
         // Get public key from map
         let credential_keys = &keypairs.keys[&CredentialIndex { index: 0 }];
         let key_pair = &credential_keys.keys[&KeyIndex(0)];
-        let public_key = key_pair.public;
+        let public_key = key_pair.public();
 
         // Check that signature is valid
         match signature {
             concordium_std::Signature::Ed25519(signature) => {
                 public_key
-                    .verify(
-                        message,
-                        &ed25519_dalek::Signature::from_bytes(&signature.0)
-                            .expect("Should be able to convert signature"),
-                    )
+                    .verify(message, &ed25519_dalek::Signature::from_bytes(&signature.0))
                     .expect("Should be a valid signature");
             }
             _ => assert!(false, "Could not get signature"),

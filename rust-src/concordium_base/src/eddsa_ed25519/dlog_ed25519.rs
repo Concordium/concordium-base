@@ -61,7 +61,7 @@ pub enum PointDecodingError {
 
 fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     let mut h = Sha512::new();
-    // inspired by this https://docs.rs/ed25519-dalek/latest/src/ed25519_dalek/hazmat.rs.html#61-76
+    // inspired by this https://docs.rs/ed25519-dalek/2.1.0/src/ed25519_dalek/hazmat.rs.html#61-76
     let mut hash: [u8; 64] = [0u8; 64];
     let mut scalar_bytes: [u8; 32] = [0u8; 32];
     h.update(secret_key);

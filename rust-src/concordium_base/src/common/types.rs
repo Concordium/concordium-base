@@ -499,9 +499,7 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
-    pub fn public(&self) -> ed25519_dalek::VerifyingKey {
-        self.inner.verifying_key()
-    }
+    pub fn public(&self) -> ed25519_dalek::VerifyingKey { self.inner.verifying_key() }
 }
 
 mod key_pair_json {
@@ -576,7 +574,7 @@ mod tests {
                     let num_elems = rng.gen_range(0..200);
                     let sig = Signature {
                         sig: Uniform::new_inclusive(0, 255u8)
-                            .sample_iter(rng)
+                            .sample_iter(rng.clone())
                             .take(num_elems)
                             .collect(),
                     };

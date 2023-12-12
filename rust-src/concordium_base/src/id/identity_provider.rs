@@ -569,9 +569,7 @@ fn sign_initial_cred_values<
     hasher.update(&to_bytes(&initial_cred_values));
     let to_sign = hasher.finalize();
     let signing_key = ed25519_dalek::SigningKey::from(ip_cdi_secret_key);
-    signing_key
-        .sign(to_sign.as_ref())
-        .into()
+    signing_key.sign(to_sign.as_ref()).into()
 }
 
 pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(

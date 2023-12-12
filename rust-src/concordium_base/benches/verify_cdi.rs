@@ -1,8 +1,10 @@
+use ark_bls12_381::G1Projective;
 use concordium_base::{
     common::{
         types::{KeyIndex, KeyPair, TransactionTime},
         *,
     },
+    curve_arithmetic::arkworks_instances::ArkGroup,
     dodis_yampolskiy_prf as prf,
     elgamal::{PublicKey, SecretKey},
     id::{
@@ -18,9 +20,11 @@ use concordium_base::{
 use criterion::*;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
-use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom, io::Cursor};
+
+type G1 = ArkGroup<G1Projective>;
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 
 type ExampleAttribute = AttributeKind;
 
@@ -35,7 +39,7 @@ fn bench_parts(c: &mut Criterion) {
 
     let ip_secret_key = concordium_base::ps_sig::SecretKey::<Bls12>::generate(20, &mut csprng);
     let ip_public_key = concordium_base::ps_sig::PublicKey::from(&ip_secret_key);
-    let keypair = ed25519::Keypair::generate(&mut csprng);
+    let keypair = ed25519::SigningKey::generate(&mut csprng);
 
     let ah_info = CredentialHolderInfo::<ArCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
@@ -83,7 +87,7 @@ fn bench_parts(c: &mut Criterion) {
         ip_identity:       IpIdentity(88),
         ip_description:    mk_dummy_description("IP88".to_string()),
         ip_verify_key:     ip_public_key,
-        ip_cdi_verify_key: keypair.public,
+        ip_cdi_verify_key: keypair.verifying_key(),
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -148,7 +152,7 @@ fn bench_parts(c: &mut Criterion) {
         &alist,
         EXPIRY,
         &ip_secret_key,
-        &keypair.secret,
+        &keypair.to_bytes(),
     );
 
     let (ip_sig, initial_cdi) = ver_ok.unwrap();
@@ -263,7 +267,7 @@ fn bench_parts(c: &mut Criterion) {
                 &id_object.alist,
                 EXPIRY,
                 &ip_secret_key,
-                &keypair.secret,
+                &keypair.to_bytes(),
             )
             .unwrap()
         })

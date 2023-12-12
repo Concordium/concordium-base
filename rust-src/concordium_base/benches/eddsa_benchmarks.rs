@@ -9,17 +9,13 @@ use rand::*;
 
 pub fn bench_from_bytes(c: &mut Criterion) {
     let mut csprng = thread_rng();
-    let n = 32;
-    let mut a: Vec<u8> = Vec::with_capacity(n);
-    for _ in 0..n {
-        a.push(csprng.gen::<u8>());
-    }
-    let ca = a.clone();
-    c.bench_function("PublicKey::from_bytes {}", move |b| {
-        b.iter(|| PublicKey::from_bytes(&a).is_ok())
+    let mut a = [0u8; 32];
+    csprng.fill_bytes(&mut a);
+    c.bench_function("VerifyingKey::from_bytes {}", move |b| {
+        b.iter(|| VerifyingKey::from_bytes(&a).is_ok())
     });
-    c.bench_function("SecretKey::from_bytes {}", move |b| {
-        b.iter(|| SecretKey::from_bytes(&ca).is_ok())
+    c.bench_function("SigningKey::from_bytes {}", move |b| {
+        b.iter(|| SigningKey::from_bytes(&a))
     });
 }
 
@@ -32,13 +28,10 @@ pub fn bench_sign(c: &mut Criterion) {
     }
     let d = a.clone();
 
-    let sk = SecretKey::generate(&mut csprng);
-    let pk = PublicKey::from(&sk);
-    let expanded_sk = ExpandedSecretKey::from(&sk);
-    let sig = expanded_sk.sign(a.as_slice(), &pk);
-    c.bench_function("sign {}", move |b| {
-        b.iter(|| expanded_sk.sign(a.as_slice(), &pk))
-    });
+    let signing = SigningKey::generate(&mut csprng);
+    let pk = signing.verifying_key();
+    let sig = signing.sign(a.as_slice());
+    c.bench_function("sign {}", move |b| b.iter(|| signing.sign(a.as_slice())));
     c.bench_function("verify{}", move |b| {
         b.iter(|| pk.verify(d.as_slice(), &sig))
     });

@@ -363,7 +363,7 @@ mod tests {
         let pk_receiver = PublicKey::from(&sk_receiver);
         let s: u64 = csprng.gen(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;
@@ -409,7 +409,7 @@ mod tests {
         let pk_sender = PublicKey::from(&sk_sender);
         let s: u64 = csprng.gen(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;

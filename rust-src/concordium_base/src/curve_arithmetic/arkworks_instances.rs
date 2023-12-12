@@ -1,5 +1,5 @@
 use core::fmt;
-use std::str::FromStr;
+use std::{str::FromStr};
 
 use crate::common::{Deserial, Serial};
 
@@ -61,6 +61,10 @@ impl<F: ark_ff::Field> Field for ArkField<F> {
     fn inverse(&self) -> Option<Self> { self.0.inverse().map(|x| x.into()) }
 }
 
+impl<F: ark_ff::Field> ArkField<F> {
+    pub fn into_ark(&self) -> &F { &self.0 }
+}
+
 impl<F: ark_ff::PrimeField> PrimeField for ArkField<F> {
     const CAPACITY: u32 = Self::NUM_BITS - 1;
     const NUM_BITS: u32 = F::MODULUS_BIT_SIZE;
@@ -68,7 +72,7 @@ impl<F: ark_ff::PrimeField> PrimeField for ArkField<F> {
     fn into_repr(self) -> Vec<u64> { self.0.into_bigint().as_ref().to_vec() }
 
     fn from_repr(repr: &[u64]) -> Result<Self, super::CurveDecodingError> {
-        let mut buffer = Vec::new();
+        let mut buffer = Vec::with_capacity(8 * repr.len());
         for u in repr {
             buffer.extend(u.to_le_bytes());
         }
@@ -159,7 +163,25 @@ impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G> {
     fn scalar_from_u64(n: u64) -> Self::Scalar { ArkField(G::ScalarField::from(n)) }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
-        <G::ScalarField as ark_ff::PrimeField>::from_le_bytes_mod_order(bs.as_ref()).into()
+        // Traverse at most 4 8-byte chunks, for a total of 256 bits.
+        // The top-most two bits in the last chunk are set to 0.
+        let s = num::integer::div_ceil(Self::Scalar::CAPACITY, 8);
+        println!("{:?}", Self::Scalar::NUM_BITS);
+        println!("{:?}", Self::Scalar::CAPACITY);
+        println!("{:?}", s);
+        let mut fr = Vec::with_capacity(s as usize);
+        for chunk in bs.as_ref().chunks(8).take(s as usize) {
+            let mut v = [0u8; 8];
+            v[..chunk.len()].copy_from_slice(chunk);
+            println!("{:?}", v);
+            fr.push(u64::from_le_bytes(v));
+        }
+        // unset two topmost bits in the last read u64.
+        *fr.last_mut().expect("Non empty vector expected") &= !(1u64 << 63 | 1u64 << 62);
+        // fr[3] &= !(1u64 << 63 | 1u64 << 62);
+        <Self::Scalar>::from_repr(&fr)
+            .expect("The scalar with top two bits erased should be valid.")
+
     }
 
     fn hash_to_group(m: &[u8]) -> Self {

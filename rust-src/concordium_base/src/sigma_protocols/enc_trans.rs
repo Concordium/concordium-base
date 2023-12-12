@@ -394,7 +394,7 @@ mod tests {
                 coeff:  [S.0, encr_exp_base],
             };
 
-            let a = rng.gen_range(0, s); // amount to send
+            let a = rng.gen_range(0..s); // amount to send
             let s_prime = s - a;
             let a_chunks = CHUNK_SIZE.u64_to_chunks(a);
             let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
@@ -478,7 +478,7 @@ mod tests {
 
     fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
         // length of the challenge
-        let l = csprng.gen_range(0, 1000);
+        let l = csprng.gen_range(0..1000);
         let mut challenge_prefix = vec![0; l];
         for v in challenge_prefix.iter_mut() {
             *v = csprng.gen();

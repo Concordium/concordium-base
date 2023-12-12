@@ -903,7 +903,9 @@ pub(crate) fn base16_decode_array<'de, D: Deserializer<'de>, const N: usize>(
 
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
             let bytes = decode(v).map_err(de::Error::custom)?;
-            bytes.try_into().map_err(|_|de::Error::custom("Unexpected array length."))
+            bytes
+                .try_into()
+                .map_err(|_| de::Error::custom("Unexpected array length."))
         }
     }
 

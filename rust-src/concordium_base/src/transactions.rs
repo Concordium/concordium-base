@@ -1525,7 +1525,12 @@ impl From<&AccountKeys> for AccountAccessStructure {
                         keys:      v
                             .keys
                             .iter()
-                            .map(|(ki, kp)| (*ki, VerifyKey::Ed25519VerifyKey(kp.as_ref().verifying_key())))
+                            .map(|(ki, kp)| {
+                                (
+                                    *ki,
+                                    VerifyKey::Ed25519VerifyKey(kp.as_ref().verifying_key()),
+                                )
+                            })
                             .collect(),
                         threshold: v.threshold,
                     })
@@ -3179,11 +3184,11 @@ mod tests {
     fn test_transaction_signature_check() {
         let mut rng = rand::thread_rng();
         let mut keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
-        let bound: usize = rng.gen_range(1, 20);
+        let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
             let c_idx = CredentialIndex::from(rng.gen::<u8>());
             if keys.get(&c_idx).is_none() {
-                let inner_bound: usize = rng.gen_range(1, 20);
+                let inner_bound: usize = rng.gen_range(1..20);
                 let mut cred_keys = BTreeMap::new();
                 for _ in 0..inner_bound {
                     let k_idx = KeyIndex::from(rng.gen::<u8>());
@@ -3195,12 +3200,12 @@ mod tests {
         let hash = TransactionSignHash::new(rng.gen());
         let sig = keys.sign_transaction_hash(&hash);
         let threshold =
-            AccountThreshold::try_from(rng.gen_range(1, (keys.len() + 1) as u8)).unwrap();
+            AccountThreshold::try_from(rng.gen_range(1..(keys.len() + 1) as u8)).unwrap();
         let pub_keys = keys
             .iter()
             .map(|(&ci, keys)| {
                 let threshold =
-                    SignatureThreshold::try_from(rng.gen_range(1, keys.len() + 1) as u8).unwrap();
+                    SignatureThreshold::try_from(rng.gen_range(1..keys.len() + 1) as u8).unwrap();
                 let keys = keys
                     .iter()
                     .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))

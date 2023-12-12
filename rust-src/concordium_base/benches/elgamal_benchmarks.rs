@@ -1,3 +1,4 @@
+use ark_bls12_381::G1Projective;
 use rand::*;
 
 #[macro_use]
@@ -5,12 +6,17 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-use concordium_base::elgamal::*;
+use concordium_base::{
+    curve_arithmetic::{
+        arkworks_instances::{ArkField, ArkGroup},
+        Curve,
+    },
+    elgamal::*,
+};
+use std::{str::FromStr, time::Duration};
 
-use concordium_base::curve_arithmetic::Curve;
-use ff::PrimeField;
-use pairing::bls12_381::{Fr, G1};
-use std::time::Duration;
+type G1 = ArkGroup<G1Projective>;
+type Fr = ArkField<ark_bls12_381::Fr>;
 
 pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
     let mut csprng = thread_rng();

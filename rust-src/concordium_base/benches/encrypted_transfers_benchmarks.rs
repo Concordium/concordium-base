@@ -1,3 +1,4 @@
+use ark_bls12_381::G1Projective;
 use rand::*;
 
 #[macro_use]
@@ -5,19 +6,20 @@ extern crate criterion;
 
 use concordium_base::{
     common::types::Amount,
-    curve_arithmetic::Value,
+    curve_arithmetic::{arkworks_instances::ArkGroup, Value},
     elgamal::{PublicKey, SecretKey},
     encrypted_transfers::proofs::*,
     id::types::GlobalContext,
     random_oracle::*,
 };
 use criterion::Criterion;
-use pairing::bls12_381::G1;
 use std::time::Duration;
+
+type G1 = ArkGroup<G1Projective>;
 
 pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
     // length of the challenge
-    let l = csprng.gen_range(0, 1000);
+    let l = csprng.gen_range(0..1000);
     let mut challenge_prefix = vec![0; l];
     for v in challenge_prefix.iter_mut() {
         *v = csprng.gen();
@@ -35,7 +37,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let pk_receiver = PublicKey::from(&sk_receiver);
     let s = csprng.gen::<u64>(); // amount on account.
 
-    let a = csprng.gen_range(0, s); // amount to send
+    let a = csprng.gen_range(0..s); // amount to send
 
     let m = 2; // 2 chunks
     let n = 32;
@@ -53,6 +55,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
 
     let context_clone = context.clone();
     let sk_clone = sk_sender.clone();
+    let mut csprng_clone = csprng.clone();
     c.bench_function(
         &format!("{}: Create transaction with proofs", module_path!()),
         move |b| {
@@ -67,7 +70,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
                     &S,
                     Amount::from_micro_ccd(s),
                     Amount::from_micro_ccd(a),
-                    &mut csprng,
+                    &mut csprng_clone,
                 )
                 .expect("Could not produce proof.");
             })
@@ -121,7 +124,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let pk = PublicKey::from(&sk);
     let s = csprng.gen::<u64>(); // amount on account.
 
-    let a = csprng.gen_range(0, s); // amount to send
+    let a = csprng.gen_range(0..s); // amount to send
 
     let m = 2; // 2 chunks
     let n = 32;
@@ -139,6 +142,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
 
     let context_clone = context.clone();
     let sk_clone = sk.clone();
+    let mut csprng_clone = csprng.clone();
     c.bench_function(
         &format!(
             "{}: Create sec to pub transaction with proofs",
@@ -155,7 +159,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
                     &S,
                     Amount::from_micro_ccd(s),
                     Amount::from_micro_ccd(a),
-                    &mut csprng,
+                    &mut csprng_clone,
                 )
                 .expect("Could not produce proof.");
             })

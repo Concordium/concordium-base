@@ -317,8 +317,8 @@ mod tests {
             i += 1;
         }
         let wrong_comm = Commitment::generate(csprng);
-        let index_wrong_comm: IndexType = csprng.gen_range(0, 6);
-        let index_wrong_gi: usize = csprng.gen_range(0, 10);
+        let index_wrong_comm: IndexType = csprng.gen_range(0..6);
+        let index_wrong_gi: usize = csprng.gen_range(0..10);
         let mut wrong_comms = comms.clone();
         wrong_comms.insert(index_wrong_comm, wrong_comm);
         let mut wrong_gis = gis.clone();

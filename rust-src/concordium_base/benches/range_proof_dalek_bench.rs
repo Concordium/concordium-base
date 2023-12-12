@@ -2,9 +2,7 @@
 
 use criterion::*;
 use pprof::criterion::{Output, PProfProfiler};
-use rand::Rng;
-// use rand::*;
-use rand_core::*;
+use rand::{rngs::OsRng, Rng};
 use std::time::Duration;
 
 use bulletproofs::{BulletproofGens, PedersenGens, RangeProof};
@@ -33,7 +31,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let bp_gens = BulletproofGens::new(n, m);
     let mut rng = rand::thread_rng();
     let (min, max) = (0u64, ((1u128 << n) - 1) as u64);
-    let values: Vec<u64> = (0..m).map(|_| rng.gen_range(min, max)).collect();
+    let values: Vec<u64> = (0..m).map(|_| rng.gen_range(min..max)).collect();
     let blindings: Vec<Scalar> = (0..m).map(|_| Scalar::random(&mut rng)).collect();
     let mut transcript = Transcript::new(b"AggregateRangeProofBenchmark");
     let (proof, value_commitments) =

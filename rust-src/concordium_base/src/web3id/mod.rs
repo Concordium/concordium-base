@@ -1014,7 +1014,9 @@ impl Web3IdSigner for crate::common::types::KeyPair {
 }
 
 impl Web3IdSigner for ed25519_dalek::SecretKey {
-    fn id(&self) -> ed25519_dalek::VerifyingKey { ed25519_dalek::SigningKey::from(self).verifying_key() }
+    fn id(&self) -> ed25519_dalek::VerifyingKey {
+        ed25519_dalek::SigningKey::from(self).verifying_key()
+    }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         let expanded: ed25519_dalek::SigningKey = self.into();
@@ -1164,8 +1166,9 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
             anyhow::bail!("Only Web3 credentials are supported.")
         };
         anyhow::ensure!(entrypoint == "credentialEntry", "Incorrect entrypoint.");
-        let holder_id =
-            CredentialHolderId::new(ed25519_dalek::VerifyingKey::from_bytes(parameter.as_ref().try_into()?)?);
+        let holder_id = CredentialHolderId::new(ed25519_dalek::VerifyingKey::from_bytes(
+            parameter.as_ref().try_into()?,
+        )?);
 
         // Just validate the issuer field.
         {
@@ -1782,6 +1785,7 @@ mod tests {
     };
     use anyhow::Context;
     use chrono::TimeZone;
+    use ed25519_dalek::ed25519::signature::Keypair;
     use rand::Rng;
     use std::marker::PhantomData;
 
@@ -1810,7 +1814,7 @@ mod tests {
                 .collect(),
                 network:    Network::Testnet,
                 contract:   contract_1,
-                credential: CredentialHolderId::new(signer_1.public),
+                credential: CredentialHolderId::new(signer_1.verifying_key()),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1845,7 +1849,7 @@ mod tests {
                 .collect(),
                 network:    Network::Testnet,
                 contract:   contract_2,
-                credential: CredentialHolderId::new(signer_2.public),
+                credential: CredentialHolderId::new(signer_2.verifying_key()),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1908,7 +1912,7 @@ mod tests {
             &params,
             &values_1,
             &randomness_1,
-            &CredentialHolderId::new(signer_1.public),
+            &CredentialHolderId::new(signer_1.verifying_key()),
             &issuer_1,
             contract_1,
         )
@@ -1948,7 +1952,7 @@ mod tests {
             &params,
             &values_2,
             &randomness_2,
-            &CredentialHolderId::new(signer_2.public),
+            &CredentialHolderId::new(signer_2.verifying_key()),
             &issuer_2,
             contract_2,
         )
@@ -1967,10 +1971,10 @@ mod tests {
 
         let public = vec![
             CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.public.into(),
+                issuer_pk: issuer_1.verifying_key().into(),
             },
             CredentialsInputs::Web3 {
-                issuer_pk: issuer_2.public.into(),
+                issuer_pk: issuer_2.verifying_key().into(),
             },
         ];
         anyhow::ensure!(
@@ -2005,8 +2009,8 @@ mod tests {
         let params = GlobalContext::generate("Test".into());
         let cred_id_exp = ArCurve::generate_scalar(&mut rng);
         let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
-        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
-        let issuer_1 = ed25519_dalek::Keypair::generate(&mut rng);
+        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
         let contract_1 = ContractAddress::new(1337, 42);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
@@ -2019,7 +2023,7 @@ mod tests {
                 .collect(),
                 network:    Network::Testnet,
                 contract:   contract_1,
-                credential: CredentialHolderId::new(signer_1.public),
+                credential: CredentialHolderId::new(signer_1.verifying_key()),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -2096,7 +2100,7 @@ mod tests {
             &params,
             &values_1,
             &randomness_1,
-            &CredentialHolderId::new(signer_1.public),
+            &CredentialHolderId::new(signer_1.verifying_key()),
             &issuer_1,
             contract_1,
         )
@@ -2151,7 +2155,7 @@ mod tests {
 
         let public = vec![
             CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.public.into(),
+                issuer_pk: issuer_1.verifying_key().into(),
             },
             CredentialsInputs::Account {
                 commitments: commitments_2,
@@ -2185,8 +2189,8 @@ mod tests {
     /// Basic test that conversion of Web3IdCredential from/to JSON works.
     fn test_credential_json() {
         let mut rng = rand::thread_rng();
-        let signer = ed25519_dalek::Keypair::generate(&mut rng);
-        let issuer = ed25519_dalek::Keypair::generate(&mut rng);
+        let signer = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer = ed25519_dalek::SigningKey::generate(&mut rng);
         let mut randomness = BTreeMap::new();
         randomness.insert(
             0.to_string(),
@@ -2213,7 +2217,7 @@ mod tests {
         );
 
         let cred = Web3IdCredential::<ArCurve, Web3IdAttribute> {
-            holder_id: signer.public.into(),
+            holder_id: signer.verifying_key().into(),
             network: Network::Testnet,
             registry: ContractAddress::new(3, 17),
             credential_type: [
@@ -2224,7 +2228,7 @@ mod tests {
             .into_iter()
             .collect(),
             credential_schema: "http://link/to/schema".into(),
-            issuer_key: issuer.public.into(),
+            issuer_key: issuer.verifying_key().into(),
             valid_from: chrono::Utc.timestamp_millis_opt(17).unwrap(),
             valid_until: chrono::Utc.timestamp_millis_opt(12345).earliest(),
             values,

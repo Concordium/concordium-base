@@ -250,7 +250,7 @@ mod tests {
         let sk: SecretKey<C> = SecretKey::generate_all(&mut csprng);
         let pk = PublicKey::from(&sk);
         for _i in 1..10 {
-            let n = csprng.gen_range(0, 1000);
+            let n = csprng.gen_range(0..1000);
             let mut e = <C as Curve>::Scalar::zero();
             let one_scalar = Value::<C>::new(<C as Curve>::Scalar::one());
             for _ in 0..n {
@@ -284,7 +284,7 @@ mod tests {
 
         for _i in 1..10 {
             let scalar = Value::<C>::generate(&mut csprng);
-            let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
+            let chunk_size_index: usize = csprng.gen_range(0..possible_chunk_sizes.len());
             let chunk_size = possible_chunk_sizes[chunk_size_index];
             let chunks = value_to_chunks::<C>(&scalar, chunk_size);
             let retrieved_scalar = chunks_to_value::<C>(&chunks, chunk_size);
@@ -308,7 +308,7 @@ mod tests {
 
         for _i in 1..2 {
             let scalar = Value::<C>::generate(&mut csprng);
-            let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
+            let chunk_size_index: usize = csprng.gen_range(0..possible_chunk_sizes.len());
             let chunk_size = possible_chunk_sizes[chunk_size_index];
             let m = 1 << (u8::from(chunk_size) - 1);
             let cipher_pairs =

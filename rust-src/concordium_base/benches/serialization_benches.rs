@@ -3,13 +3,16 @@
 #[macro_use]
 extern crate criterion;
 
+use ark_bls12_381::{G1Projective, G2Projective};
 use concordium_base::{
     common::{Deserial, Serial},
-    curve_arithmetic::*,
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
 };
 use criterion::Criterion;
-use pairing::bls12_381::{G1, G2};
 use rand::*;
+
+type G1 = ArkGroup<G1Projective>;
+type G2 = ArkGroup<G2Projective>;
 
 pub fn bench_serialize_g1(c: &mut Criterion) {
     let mut csprng = thread_rng();

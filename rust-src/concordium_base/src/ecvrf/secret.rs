@@ -3,7 +3,10 @@
 use super::{constants::*, errors::*, public::*};
 use crate::common::*;
 use core::fmt::Debug;
-use curve25519_dalek::{constants, scalar::Scalar};
+use curve25519_dalek::{
+    constants,
+    scalar::{clamp_integer, Scalar},
+};
 use rand::{CryptoRng, Rng};
 use sha2::{digest::Digest, Sha512};
 use subtle::{Choice, ConstantTimeEq};
@@ -123,12 +126,10 @@ impl From<&SecretKey> for ExpandedSecretKey {
         lower.copy_from_slice(&hash[00..32]);
         upper.copy_from_slice(&hash[32..64]);
 
-        lower[0] &= 0b_1111_1000;
-        lower[31] &= 0b_0111_1111;
-        lower[31] |= 0b_0100_0000;
+        let scalar = Scalar::from_bytes_mod_order(clamp_integer(lower));
 
         ExpandedSecretKey {
-            key:   Scalar::from_bits(lower),
+            key:   scalar,
             nonce: upper,
         }
     }

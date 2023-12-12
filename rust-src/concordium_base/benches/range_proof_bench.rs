@@ -3,14 +3,8 @@
 #[macro_use]
 extern crate criterion;
 
-use ark_ec::{
-    hashing::{
-        curve_maps::wb::{WBConfig, WBMap},
-        map_to_curve_hasher::MapToCurveBasedHasher,
-        HashToCurve,
-    },
-    short_weierstrass::Projective,
-};
+use ark_bls12_381::G1Projective;
+use ark_ec::hashing::HashToCurve;
 use ark_ff::field_hashers::DefaultFieldHasher;
 use concordium_base::{
     bulletproofs::{range_proof::*, utils::Generators},
@@ -21,12 +15,9 @@ use concordium_base::{
 };
 use criterion::Criterion;
 use curve25519_dalek::ristretto::RistrettoPoint;
-use pairing::bls12_381::G1;
 use pprof::criterion::Output;
 use rand::*;
 use std::time::Duration;
-
-// type SomeCurve = G1;
 
 pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     let mut group = c.benchmark_group("Range Proof");
@@ -132,8 +123,8 @@ criterion_group!(
         pprof::criterion::PProfProfiler::new(100, Output::Flamegraph(None))
     );
     targets =
-    prove_verify_benchmarks::<G1>,
-    prove_verify_benchmarks::<RistrettoPoint>,
+    prove_verify_benchmarks::<ArkGroup<G1Projective>>,
+    // prove_verify_benchmarks::<RistrettoPoint>,
     prove_verify_benchmarks::<curve25519_dalek_ng::ristretto::RistrettoPoint>,
     prove_verify_benchmarks::<ArkGroup<ark_bls12_381::G1Projective>>
 );

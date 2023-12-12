@@ -9,7 +9,7 @@ use concordium_base::{
     },
     ps_sig::SigRetrievalRandomness,
 };
-use ed25519_dalek::{PublicKey, SecretKey};
+use ed25519_dalek::{SecretKey, VerifyingKey, SignatureError, SigningKey};
 pub use ed25519_hd_key_derivation::DeriveError;
 use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden};
 use hmac::Hmac;
@@ -136,14 +136,13 @@ impl ConcordiumHdWallet {
             credential_counter,
         ])?;
         let keys = derive_from_parsed_path(&path, &self.seed)?;
-        Ok(SecretKey::from_bytes(&keys.private_key)
-            .expect("The byte array has correct length, so this cannot fail."))
+        Ok(keys.private_key)
     }
 
     /// Get the public key corresponding for the identity provider
     /// `identity_provider_index`, identity `identity_index` and credential
     /// `credential_counter`. Note that this is just a convenience
-    /// wrapper. The same can be achieved by using [`PublicKey::from`] on
+    /// wrapper. The same can be achieved by using [`VerifyingKey::from`] on
     /// the result of
     /// [`get_account_signing_key`](Self::get_account_signing_key).
     pub fn get_account_public_key(
@@ -151,13 +150,14 @@ impl ConcordiumHdWallet {
         identity_provider_index: u32,
         identity_index: u32,
         credential_counter: u32,
-    ) -> Result<PublicKey, DeriveError> {
+    ) -> Result<VerifyingKey, DeriveError> {
         let secret_key = self.get_account_signing_key(
             identity_provider_index,
             identity_index,
             credential_counter,
         )?;
-        let public_key = PublicKey::from(&secret_key);
+        let signing = SigningKey::from_bytes(&secret_key);
+        let public_key = signing.verifying_key();
         Ok(public_key)
     }
 
@@ -250,24 +250,24 @@ impl ConcordiumHdWallet {
             0,
         ])?;
         let keys = derive_from_parsed_path(&path, &self.seed)?;
-        Ok(SecretKey::from_bytes(&keys.private_key)
-            .expect("The byte array has correct length, so this cannot fail."))
+        Ok(keys.private_key)
     }
 
     /// Get the public key for the verifiable credential with the given index.
     /// The public key is used to identify the specific verifiable credential
     /// within the registry contract.
     /// Note that this is just a convenience wrapper. The same can be achieved
-    /// by using [`PublicKey::from`] on the result of
+    /// by using [`VerifyingKey::from`] on the result of
     /// [`get_verifiable_credential_signing_key`](Self::get_verifiable_credential_signing_key)
     pub fn get_verifiable_credential_public_key(
         &self,
         issuer: ContractAddress,
         verifiable_credential_index: u32,
-    ) -> Result<PublicKey, DeriveError> {
+    ) -> Result<VerifyingKey, DeriveError> {
         let signing_key =
             self.get_verifiable_credential_signing_key(issuer, verifiable_credential_index)?;
-        let public_key = PublicKey::from(&signing_key);
+        let signing = SigningKey::from_bytes(&signing_key);
+        let public_key = signing.verifying_key();
         Ok(public_key)
     }
 
@@ -280,8 +280,7 @@ impl ConcordiumHdWallet {
     ) -> Result<SecretKey, DeriveError> {
         let path = self.make_verifiable_credential_path(&[1])?;
         let keys = derive_from_parsed_path(&path, &self.seed)?;
-        Ok(SecretKey::from_bytes(&keys.private_key)
-            .expect("The byte array has correct length, so this cannot fail."))
+        Ok(keys.private_key)
     }
 }
 
@@ -398,10 +397,10 @@ mod tests {
         let signing_key = create_wallet(Net::Mainnet, TEST_SEED_1)
             .get_account_signing_key(0, 0, 0)
             .unwrap();
-        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+        let expanded_sk = SigningKey::from_bytes(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
-        let signature = expanded_sk.sign(&data_to_sign, &pk);
+        let signature = expanded_sk.sign(&data_to_sign);
 
         pk.verify(&data_to_sign, &signature).expect(
             "The public key should be able to verify the signature, otherwise the keys do not \
@@ -484,10 +483,10 @@ mod tests {
             .get_account_signing_key(0, 0, 0)
             .unwrap();
 
-        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+        let expanded_sk = SigningKey::from_bytes(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
-        let signature = expanded_sk.sign(&data_to_sign, &pk);
+        let signature = expanded_sk.sign(&data_to_sign);
 
         pk.verify(&data_to_sign, &signature).expect(
             "The public key should be able to verify the signature, otherwise the keys do not \
@@ -633,10 +632,10 @@ mod tests {
         let signing_key = wallet
             .get_verifiable_credential_signing_key(ContractAddress::new(1337, 0), 0)
             .unwrap();
-        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+        let expanded_sk = SigningKey::from_bytes(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
-        let signature = expanded_sk.sign(&data_to_sign, &public_key);
+        let signature = expanded_sk.sign(&data_to_sign);
 
         public_key.verify(&data_to_sign, &signature).expect(
             "The public key should be able to verify the signature, otherwise the keys do not \
@@ -698,10 +697,10 @@ mod tests {
         let signing_key = wallet
             .get_verifiable_credential_signing_key(ContractAddress::new(13, 0), 0)
             .unwrap();
-        let expanded_sk = ExpandedSecretKey::from(&signing_key);
+        let expanded_sk = SigningKey::from_bytes(&signing_key);
 
         let data_to_sign = hex::decode("abcd1234abcd5678").unwrap();
-        let signature = expanded_sk.sign(&data_to_sign, &public_key);
+        let signature = expanded_sk.sign(&data_to_sign);
 
         public_key.verify(&data_to_sign, &signature).expect(
             "The public key should be able to verify the signature, otherwise the keys do not \

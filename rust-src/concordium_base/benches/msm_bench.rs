@@ -3,12 +3,14 @@
 #[macro_use]
 extern crate criterion;
 
-use concordium_base::curve_arithmetic::*;
+use ark_bls12_381::G1Projective;
+use concordium_base::curve_arithmetic::{arkworks_instances::ArkGroup, *};
 use criterion::Criterion;
 use curve25519_dalek_ng::{ristretto::RistrettoPoint, traits::VartimePrecomputedMultiscalarMul};
-use pairing::bls12_381::G1;
 use rand::*;
 use std::time::Duration;
+
+type G1 = ArkGroup<G1Projective>;
 
 const N: usize = 512;
 

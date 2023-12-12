@@ -15,7 +15,7 @@ use concordium_base::{
         types::*,
     },
 };
-use ed25519_dalek::{ExpandedSecretKey, PublicKey};
+//use ed25519_dalek::{ExpandedSecretKey, PublicKey};
 use log::{error, info, warn};
 use reqwest::Client;
 use serde_json::{from_str, json, to_value};

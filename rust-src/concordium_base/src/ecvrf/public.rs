@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use curve25519_dalek::{
     constants,
     edwards::{CompressedEdwardsY, EdwardsPoint},
-    scalar::Scalar,
+    scalar::{clamp_integer, Scalar},
 };
 use sha2::{Digest, Sha512};
 
@@ -94,11 +94,9 @@ impl PublicKey {
     fn mangle_scalar_bits_and_multiply_by_basepoint_to_produce_public_key(
         bits: &mut [u8; 32],
     ) -> PublicKey {
-        bits[0] &= 0b_1111_1000;
-        bits[31] &= 0b_0111_1111;
-        bits[31] |= 0b_0100_0000;
+        let scalar = Scalar::from_bytes_mod_order(clamp_integer(*bits));
 
-        let point = &Scalar::from_bits(*bits) * &constants::ED25519_BASEPOINT_TABLE;
+        let point = &scalar * constants::ED25519_BASEPOINT_TABLE;
         let compressed = point.compress();
 
         PublicKey(compressed, point)
@@ -145,7 +143,7 @@ impl PublicKey {
                                          // generated nonce and x is the secret key
                                          // self should be equal y=b^x
 
-            let b_to_s = s * &constants::ED25519_BASEPOINT_TABLE; // should be equal to b^(k+cx)
+            let b_to_s = s * constants::ED25519_BASEPOINT_TABLE; // should be equal to b^(k+cx)
             let y_to_c = c * self.1; // y_to_c should be equal to b^(cx)
             let u = b_to_s - y_to_c; // should equal b^k
 

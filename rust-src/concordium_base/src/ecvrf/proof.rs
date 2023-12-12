@@ -34,14 +34,16 @@ pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 impl Serial for Proof {
     #[inline]
     fn serial<B: Buffer>(&self, x: &mut B) {
-        let c = &self.1.reduce().to_bytes();
+        // The scalar is already reduced https://docs.rs/curve25519-dalek/4.1.1/src/curve25519_dalek/scalar.rs.html#211,
+        // so we just convert it to bytes.
+        let c = &self.1.to_bytes();
         // assert c is within range
         assert_eq!(c[16..32], [0u8; 16]);
         x.write_all(&self.0.compress().to_bytes()[..])
             .expect("Writing to buffer should succeed.");
         x.write_all(&c[..16])
             .expect("Writing to buffer should succeed.");
-        x.write_all(&self.2.reduce().to_bytes()[..])
+        x.write_all(&self.2.to_bytes()[..])
             .expect("Writing to buffer should succeed.");
     }
 }

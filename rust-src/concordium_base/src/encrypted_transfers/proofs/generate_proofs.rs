@@ -666,7 +666,7 @@ mod test {
     // Copied from common.rs in sigma_protocols since apparently it is not available
     pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
         // length of the challenge
-        let l = csprng.gen_range(0, 1000);
+        let l = csprng.gen_range(0..1000);
         let mut challenge_prefix = vec![0; l];
         for v in challenge_prefix.iter_mut() {
             *v = csprng.gen();
@@ -685,7 +685,7 @@ mod test {
         let pk_receiver = PublicKey::from(&sk_receiver);
         let s = csprng.gen::<u64>(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;
@@ -735,7 +735,7 @@ mod test {
         let pk = PublicKey::from(&sk);
         let s = csprng.gen::<u64>(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;

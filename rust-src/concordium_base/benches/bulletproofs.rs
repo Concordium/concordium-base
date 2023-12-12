@@ -3,21 +3,23 @@
 #[macro_use]
 extern crate criterion;
 
+use ark_bls12_381::{Fr, G1Projective};
 use concordium_base::{
     bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators},
-    curve_arithmetic::*,
+    curve_arithmetic::{
+        arkworks_instances::{ArkField, ArkGroup},
+        *,
+    },
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
 use criterion::Criterion;
-use ff::Field;
-use pairing::bls12_381::{Fr, G1};
 use rand::*;
 use std::time::Duration;
 
-type SomeCurve = G1;
-type SomeField = Fr;
+type SomeCurve = ArkGroup<G1Projective>;
+type SomeField = ArkField<Fr>;
 
 pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("Range Proof");

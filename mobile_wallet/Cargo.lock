@@ -1043,6 +1043,7 @@ dependencies = [
 name = "keygen_bls"
 version = "2.0.0"
 dependencies = [
+ "ark-bls12-381",
  "concordium_base",
  "ff",
  "hex",
