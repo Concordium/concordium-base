@@ -14,33 +14,10 @@ use key_derivation::Net;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
 use std::collections::BTreeMap;
-use thiserror::Error;
 
 use crate::wallet::get_wallet;
 
 type JsonString = String;
-
-#[derive(Debug, Error)]
-pub enum AttributeError {
-    #[error("Missing randomness for given attribute tag.")]
-    NotFound,
-}
-
-struct AttributeRandomness(BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>);
-
-impl HasAttributeRandomness<ArCurve> for AttributeRandomness {
-    type ErrorType = AttributeError;
-
-    fn get_attribute_commitment_randomness(
-        &self,
-        attribute_tag: &AttributeTag,
-    ) -> Result<PedersenRandomness<ArCurve>, Self::ErrorType> {
-        match self.0.get(attribute_tag) {
-            Some(v) => Ok(v.clone()),
-            None => Err(AttributeError::NotFound),
-        }
-    }
-}
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
@@ -137,7 +114,7 @@ pub fn create_unsigned_credential_v1_aux(
         policy,
         common.credential_public_keys,
         None,
-        &AttributeRandomness(common.attribute_randomness),
+        &common.attribute_randomness,
     )?;
 
     let response = json!({"unsignedCdi": cdi, "randomness": rand});
