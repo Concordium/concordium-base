@@ -51,6 +51,8 @@ pub struct UnsignedCredentialInputWithSeed {
     identity_index:          u32,
 }
 
+/// Creates unsigned credential deployment information and the corresponding
+/// randomness where the secrets are derived from the provided seed.
 pub fn create_unsigned_credential_v1_with_seed_aux(
     input: UnsignedCredentialInputWithSeed,
 ) -> Result<JsonString> {
@@ -75,6 +77,8 @@ pub fn create_unsigned_credential_v1_with_seed_aux(
     create_unsigned_credential_v1_aux(input_with_keys)
 }
 
+/// Creates unsigned credential deployment information and the corresponding
+/// randomness where the secrets are provided directly as input.
 pub fn create_unsigned_credential_v1_aux(
     input: UnsignedCredentialInputWithKeys,
 ) -> Result<JsonString> {

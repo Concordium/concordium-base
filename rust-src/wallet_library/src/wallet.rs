@@ -10,6 +10,11 @@ use std::convert::TryInto;
 
 type HexString = String;
 
+/// Helper function for constructing a [ConcordiumHdWallet] from a
+/// seed encoded as hex and a supplied [Net].
+/// ### Errors
+/// - Will fail if the provided seed is not hex, or is not representing exactly
+///   64 bytes.
 pub fn get_wallet(seed_as_hex: HexString, net: Net) -> Result<ConcordiumHdWallet, Error> {
     let seed_decoded = hex::decode(&seed_as_hex)?;
     let seed: [u8; 64] = match seed_decoded.try_into() {
@@ -20,6 +25,9 @@ pub fn get_wallet(seed_as_hex: HexString, net: Net) -> Result<ConcordiumHdWallet
     Ok(ConcordiumHdWallet { seed, net })
 }
 
+/// Get the hex encoded account signing key for the seed `seed_as_hex`, the net
+/// `net`, identity provider `identity_provider_index`, identity
+/// `identity_index` and credential `credential_counter`.
 pub fn get_account_signing_key_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -36,6 +44,9 @@ pub fn get_account_signing_key_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded account public key for the seed `seed_as_hex`, the net
+/// `net`, identity provider `identity_provider_index`, identity
+/// `identity_index` and credential `credential_counter`.
 pub fn get_account_public_key_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -52,6 +63,8 @@ pub fn get_account_public_key_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded PRF-key for the seed `seed_as_hex`, the net `net`,
+/// identity provider `identity_provider_index` and identity `identity_index`.
 pub fn get_prf_key_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -63,6 +76,8 @@ pub fn get_prf_key_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded IdCredSec for the seed `seed_as_hex`, the net `net`,
+/// identity provider `identity_provider_index` and identity `identity_index`.
 pub fn get_id_cred_sec_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -74,6 +89,9 @@ pub fn get_id_cred_sec_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded signature blinding randomness for the seed
+/// `seed_as_hex`, the net `net`, identity provider `identity_provider_index`
+/// and identity `identity_index`.
 pub fn get_signature_blinding_randomness_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -85,6 +103,10 @@ pub fn get_signature_blinding_randomness_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded attribute commitment randomness for the seed
+/// `seed_as_hex`, the net `net`, identity provider `identity_provider_index`,
+/// identity `identity_index`, credential counter `credential_counter` and the
+/// provided attribute `attribute`.
 pub fn get_attribute_commitment_randomness_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -103,6 +125,10 @@ pub fn get_attribute_commitment_randomness_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded verifiable credential signing key for seed
+/// `seed_as_hex`, net `net`, issuer index `issuer_index`, issuer subindex
+/// `issuer_subindex` and verifiable credential
+/// index `verifiable_credential_index`.
 pub fn get_verifiable_credential_signing_key_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -116,6 +142,9 @@ pub fn get_verifiable_credential_signing_key_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded verifiable credential public key for seed `seed_as_hex`,
+/// net `net`, issuer index `issuer_index`, issuer subindex `issuer_subindex`
+/// and verifiable credential index `verifiable_credential_index`.
 pub fn get_verifiable_credential_public_key_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -129,6 +158,8 @@ pub fn get_verifiable_credential_public_key_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded verifiable credential backup encryption key for
+/// seed `seed_as_hex` and net `net`.
 pub fn get_verifiable_credential_backup_encryption_key_aux(
     seed_as_hex: HexString,
     net: Net,
@@ -138,6 +169,10 @@ pub fn get_verifiable_credential_backup_encryption_key_aux(
     Ok(base16_encode_string(&key))
 }
 
+/// Get the hex encoded credential id for seed `seed_as_hex`, net `net`,
+/// identity provider index `identity_provider_index`, identity index
+/// `identity_index`, credential `credential_counter` and the on chain
+/// commitment key `raw_on_chain_commitment_key`.
 pub fn get_credential_id_aux(
     seed_as_hex: HexString,
     net: Net,

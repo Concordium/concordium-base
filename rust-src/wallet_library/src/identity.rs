@@ -54,6 +54,8 @@ pub struct IdRequestInputWithKeys {
     blinding_randomness: String,
 }
 
+/// Creates an identity object request where the secret keys are provided
+/// directly.
 pub fn create_id_request_with_keys_v1_aux(input: IdRequestInputWithKeys) -> Result<JsonString> {
     let prf_key: prf::SecretKey<ArCurve> = input.prf_key;
     let id_cred_sec: PedersenValue<ArCurve> = input.id_cred_sec;
@@ -100,7 +102,7 @@ pub fn create_id_request_with_keys_v1_aux(input: IdRequestInputWithKeys) -> Resu
 }
 
 /// Creates an identity object request where the supplied seed phrase is
-/// used to derive the keys.
+/// used to derive the required keys.
 pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
     let seed_decoded = hex::decode(&input.seed)?;
     let seed: [u8; 64] = match seed_decoded.try_into() {
@@ -159,6 +161,7 @@ pub struct IdRecoveryRequestOut {
     id_recovery_request: Versioned<IdRecoveryRequest<ArCurve>>,
 }
 
+/// Create an identity recovery request taking the secret as directy input.
 pub fn create_identity_recovery_request_aux(input: IdRecoveryRequestInput) -> Result<JsonString> {
     let request = generate_id_recovery_request(
         &input.ip_info,
@@ -173,6 +176,8 @@ pub fn create_identity_recovery_request_aux(input: IdRecoveryRequestInput) -> Re
     Ok(to_string(&response)?)
 }
 
+/// Create an identity recovery request using a seed phrase to
+/// generate the secret.
 pub fn create_identity_recovery_request_with_seed_aux(
     input: IdRecoveryRequestInputWithSeed,
 ) -> Result<JsonString> {
