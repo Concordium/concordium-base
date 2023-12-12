@@ -1,7 +1,7 @@
 //! Various utilities for testing and extraction of schemas and build
 //! information.
 
-use crate::ExecResult;
+use crate::{v1::EmittedDebugStatement, ExecResult};
 use anyhow::{anyhow, bail, ensure, Context};
 use concordium_contracts_common::{
     self as concordium_std, from_bytes, hashes, schema, Cursor, Deserial,
@@ -73,17 +73,20 @@ impl<I> machine::Host<I> for TrapHost {
 /// generator.
 pub struct TestHost<R> {
     /// A RNG for randomised testing.
-    rng:      Option<R>,
+    rng:              Option<R>,
     /// A flag set to `true` if the RNG was used.
-    rng_used: bool,
+    rng_used:         bool,
+    /// Debug statements in the order they were emitted.
+    pub debug_events: Vec<EmittedDebugStatement>,
 }
 
 impl TestHost<SmallRng> {
     /// Create a new `TestHost` instance without a RNG instance.
     pub const fn uninitialized() -> Self {
         TestHost {
-            rng:      None,
-            rng_used: false,
+            rng:          None,
+            rng_used:     false,
+            debug_events: Vec::new(),
         }
     }
 }
@@ -93,8 +96,9 @@ impl<R: RngCore> TestHost<R> {
     /// unused.
     pub fn new(rng: R) -> Self {
         TestHost {
-            rng:      Some(rng),
-            rng_used: false,
+            rng:          Some(rng),
+            rng_used:     false,
+            debug_events: Vec::new(),
         }
     }
 }
@@ -157,6 +161,24 @@ impl std::fmt::Display for ReportError {
     }
 }
 
+fn extract_debug(
+    memory: &mut Vec<u8>,
+    stack: &mut machine::RuntimeStack,
+) -> anyhow::Result<(String, u32, u32, String)> {
+    let column = unsafe { stack.pop_u32() };
+    let line = unsafe { stack.pop_u32() };
+    let filename_length = unsafe { stack.pop_u32() } as usize;
+    let filename_start = unsafe { stack.pop_u32() } as usize;
+    let msg_length = unsafe { stack.pop_u32() } as usize;
+    let msg_start = unsafe { stack.pop_u32() } as usize;
+    ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
+    ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
+    let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?.to_owned();
+    let filename =
+        std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?.to_owned();
+    Ok((filename, line, column, msg))
+}
+
 impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
     type Interrupt = NoInterrupt;
 
@@ -172,18 +194,7 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         if f.matches("concordium", "report_error") {
-            let column = unsafe { stack.pop_u32() };
-            let line = unsafe { stack.pop_u32() };
-            let filename_length = unsafe { stack.pop_u32() } as usize;
-            let filename_start = unsafe { stack.pop_u32() } as usize;
-            let msg_length = unsafe { stack.pop_u32() } as usize;
-            let msg_start = unsafe { stack.pop_u32() } as usize;
-            ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
-            ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
-            let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?.to_owned();
-            let filename =
-                std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
-                    .to_owned();
+            let (filename, line, column, msg) = extract_debug(memory, stack)?;
             bail!(ReportError::Reported {
                 filename,
                 line,
@@ -204,6 +215,16 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
                     bail!("Expected an initialized RNG.");
                 }
             }
+        } else if f.matches("concordium", "debug_print") {
+            let (filename, line, column, msg) = extract_debug(memory, stack)?;
+            self.debug_events.push(EmittedDebugStatement {
+                filename,
+                line,
+                column,
+                msg,
+                remaining_energy: 0.into(), // debug host does not have energy.
+            });
+            Ok(None)
         } else {
             bail!("Unsupported host function call.")
         }
@@ -211,11 +232,16 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
 }
 
 /// The type of results returned after running a test.
-/// The value is a pair (test_name, result). The result is None if the test
-/// passed, or an error message and a boolean flag if it failed. The error
-/// message is the one reported to by report_error, or some internal invariant
-/// violation. The flag shows whether randomness was used.
-type TestResult = (String, Option<(ReportError, bool)>);
+pub struct TestResult {
+    /// The name of the test that is being reported.
+    pub test_name:    String,
+    /// The result of the test. [`None`] if the test passed.
+    /// In case of failure the `bool` flag indicates whether randomness was used
+    /// or not.
+    pub result:       Option<(ReportError, bool)>,
+    /// Any debug events emitted as part of the test.
+    pub debug_events: Vec<EmittedDebugStatement>,
+}
 
 /// Instantiates the module with an external function to report back errors and
 /// a seed that is used to instantiate a RNG for randomized testing. Then tries
@@ -235,20 +261,34 @@ pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestRe
             let mut test_host = TestHost::new(SmallRng::seed_from_u64(seed));
             let res = artifact.run(&mut test_host, name, &[]);
             match res {
-                Ok(_) => out.push((test_name.to_owned(), None)),
+                Ok(_) => {
+                    let result = TestResult {
+                        test_name:    test_name.to_owned(),
+                        result:       None,
+                        debug_events: test_host.debug_events,
+                    };
+                    out.push(result);
+                }
                 Err(msg) => {
                     if let Some(err) = msg.downcast_ref::<ReportError>() {
-                        out.push((test_name.to_owned(), Some((err.clone(), test_host.rng_used))));
+                        let result = TestResult {
+                            test_name:    test_name.to_owned(),
+                            result:       Some((err.clone(), test_host.rng_used)),
+                            debug_events: test_host.debug_events,
+                        };
+                        out.push(result);
                     } else {
-                        out.push((
-                            test_name.to_owned(),
-                            Some((
+                        let result = TestResult {
+                            test_name:    test_name.to_owned(),
+                            result:       Some((
                                 ReportError::Other {
                                     msg: msg.to_string(),
                                 },
                                 test_host.rng_used,
                             )),
-                        ))
+                            debug_events: test_host.debug_events,
+                        };
+                        out.push(result);
                     }
                 }
             };

@@ -310,13 +310,14 @@ pub struct DebugTracker {
 }
 
 impl DebugTracker {
-    pub fn host_call_summary(&self) -> BTreeMap<HostFunctionV1, InterpreterEnergy> {
+    pub fn host_call_summary(&self) -> BTreeMap<HostFunctionV1, (usize, InterpreterEnergy)> {
         let mut out = BTreeMap::new();
         for (_, k, v) in self.host_call_trace.iter() {
-            let nrg = out.entry(*k).or_insert(InterpreterEnergy {
+            let summary = out.entry(*k).or_insert((0, InterpreterEnergy {
                 energy: 0,
-            });
-            *nrg = (nrg.energy + v.energy).into();
+            }));
+            summary.0 += 1;
+            summary.1.energy += v.energy;
         }
         out
     }
