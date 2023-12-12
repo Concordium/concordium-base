@@ -1180,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "key_derivation"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "concordium_base",
  "ed25519-dalek",
