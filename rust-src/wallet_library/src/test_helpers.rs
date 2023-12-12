@@ -1,8 +1,8 @@
 use concordium_base::{
     common::Versioned,
     id::{
-        constants::{self},
-        types::{ArIdentity, ArInfo, GlobalContext, IpInfo},
+        constants::{self, AttributeKind},
+        types::{ArIdentity, ArInfo, GlobalContext, IdentityObjectV1, IpInfo},
     },
 };
 use std::{collections::BTreeMap, fs, path::PathBuf};
@@ -47,4 +47,17 @@ pub fn read_ars_infos() -> BTreeMap<ArIdentity, ArInfo<constants::ArCurve>> {
     let ar_info_versioned: Versioned<BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>> =
         serde_json::from_str(&ar_info_contents).unwrap();
     ar_info_versioned.value
+}
+
+#[cfg(test)]
+pub fn read_identity_object(
+) -> IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind> {
+    let base_path = base_path();
+    let identity_object_contents =
+        fs::read_to_string(format!("{}/{}", &base_path, "identity-object.json"))
+            .expect("Should have been able to read the file");
+    let identity_object_versioned: Versioned<
+        IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
+    > = serde_json::from_str(&identity_object_contents).unwrap();
+    identity_object_versioned.value
 }
