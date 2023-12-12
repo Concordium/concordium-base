@@ -158,6 +158,11 @@ impl InterpreterEnergy {
         }
     }
 
+    /// Compute the difference of two energy amounts.
+    pub fn signed_diff(self, other: Self) -> i128 {
+        i128::from(self.energy) - i128::from(other.energy)
+    }
+
     #[cfg(feature = "enable-ffi")]
     /// Serialized in big-endian representation.
     pub fn to_be_bytes(self) -> [u8; 8] { self.energy.to_be_bytes() }
