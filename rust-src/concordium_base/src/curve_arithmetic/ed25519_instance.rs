@@ -16,7 +16,7 @@ use super::{Curve, Field, MultiExp, PrimeField};
 
 /// A wrapper to make it possible to implement external traits
 /// and to avoid clashes with blacket implementations.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, derive_more::From)]
 pub struct RistrettoScalar(Scalar);
 
 impl Serial for RistrettoScalar {
@@ -36,12 +36,6 @@ impl Deserial for RistrettoScalar {
         ))?;
         Ok(res.into())
     }
-}
-
-// Since we use a wrapper type, it is convenient to use `into()` to convert from
-// Scalar.
-impl From<Scalar> for RistrettoScalar {
-    fn from(value: Scalar) -> Self { RistrettoScalar(value) }
 }
 
 impl Field for RistrettoScalar {
@@ -89,8 +83,11 @@ impl PrimeField for RistrettoScalar {
 
     fn into_repr(self) -> Vec<u64> {
         let mut vec: Vec<u64> = Vec::new();
-        let bytes = self.0.to_bytes();
-        for chunk in bytes.chunks(8) {
+        let bytes: [u8; 32] = self.0.to_bytes();
+        for chunk in bytes.chunks_exact(8) {
+            // The chunk size is always 8 and there is no remider after chunking, since the
+            // the the representation is a 32-byte array. That is why it is safe to unwrap
+            // here.
             let x: [u8; 8] = chunk.try_into().unwrap();
             let x_64 = u64::from_le_bytes(x);
             vec.push(x_64);
@@ -138,7 +135,6 @@ impl Curve for RistrettoPoint {
     type Scalar = RistrettoScalar;
 
     const GROUP_ELEMENT_LENGTH: usize = 32;
-
     const SCALAR_LENGTH: usize = 32;
 
     fn zero_point() -> Self { Self::identity() }
