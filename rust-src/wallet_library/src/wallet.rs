@@ -6,7 +6,7 @@ use concordium_base::{
     pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value},
 };
 use key_derivation::{ConcordiumHdWallet, Net};
-use std::convert::TryInto;
+use std::{convert::TryInto, str::FromStr};
 
 type HexString = String;
 
@@ -25,16 +25,24 @@ pub fn get_wallet(seed_as_hex: HexString, net: Net) -> Result<ConcordiumHdWallet
     Ok(ConcordiumHdWallet { seed, net })
 }
 
+fn get_net(net_as_str: &str) -> Result<Net> {
+    match Net::from_str(net_as_str) {
+        Ok(n) => Ok(n),
+        Err(e) => bail!(e),
+    }
+}
+
 /// Get the hex encoded account signing key for the seed `seed_as_hex`, the net
 /// `net`, identity provider `identity_provider_index`, identity
 /// `identity_index` and credential `credential_counter`.
 pub fn get_account_signing_key_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     identity_provider_index: u32,
     identity_index: u32,
     credential_counter: u32,
 ) -> Result<String> {
+    let net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_account_signing_key(
         identity_provider_index,
@@ -49,11 +57,12 @@ pub fn get_account_signing_key_aux(
 /// `identity_index` and credential `credential_counter`.
 pub fn get_account_public_key_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     identity_provider_index: u32,
     identity_index: u32,
     credential_counter: u32,
 ) -> Result<HexString> {
+    let net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_account_public_key(
         identity_provider_index,
@@ -67,10 +76,11 @@ pub fn get_account_public_key_aux(
 /// identity provider `identity_provider_index` and identity `identity_index`.
 pub fn get_prf_key_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     identity_provider_index: u32,
     identity_index: u32,
 ) -> Result<HexString> {
+    let net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_prf_key(identity_provider_index, identity_index)?;
     Ok(base16_encode_string(&key))
@@ -80,10 +90,11 @@ pub fn get_prf_key_aux(
 /// identity provider `identity_provider_index` and identity `identity_index`.
 pub fn get_id_cred_sec_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     identity_provider_index: u32,
     identity_index: u32,
 ) -> Result<HexString> {
+    let net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_id_cred_sec(identity_provider_index, identity_index)?;
     Ok(base16_encode_string(&key))
@@ -94,10 +105,11 @@ pub fn get_id_cred_sec_aux(
 /// and identity `identity_index`.
 pub fn get_signature_blinding_randomness_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     identity_provider_index: u32,
     identity_index: u32,
 ) -> Result<HexString> {
+    let net: Net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
     Ok(base16_encode_string(&key))
@@ -109,12 +121,13 @@ pub fn get_signature_blinding_randomness_aux(
 /// provided attribute `attribute`.
 pub fn get_attribute_commitment_randomness_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     identity_provider_index: u32,
     identity_index: u32,
     credential_counter: u32,
     attribute: u8,
 ) -> Result<HexString> {
+    let net: Net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_attribute_commitment_randomness(
         identity_provider_index,
@@ -131,11 +144,12 @@ pub fn get_attribute_commitment_randomness_aux(
 /// index `verifiable_credential_index`.
 pub fn get_verifiable_credential_signing_key_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     issuer_index: u64,
     issuer_subindex: u64,
     verifiable_credential_index: u32,
 ) -> Result<HexString> {
+    let net = get_net(net_as_str)?;
     let issuer: ContractAddress = ContractAddress::new(issuer_index, issuer_subindex);
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_verifiable_credential_signing_key(issuer, verifiable_credential_index)?;
@@ -147,11 +161,12 @@ pub fn get_verifiable_credential_signing_key_aux(
 /// and verifiable credential index `verifiable_credential_index`.
 pub fn get_verifiable_credential_public_key_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     issuer_index: u64,
     issuer_subindex: u64,
     verifiable_credential_index: u32,
 ) -> Result<HexString> {
+    let net = get_net(net_as_str)?;
     let issuer: ContractAddress = ContractAddress::new(issuer_index, issuer_subindex);
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_verifiable_credential_public_key(issuer, verifiable_credential_index)?;
@@ -162,8 +177,9 @@ pub fn get_verifiable_credential_public_key_aux(
 /// seed `seed_as_hex` and net `net`.
 pub fn get_verifiable_credential_backup_encryption_key_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
 ) -> Result<HexString> {
+    let net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let key = wallet.get_verifiable_credential_backup_encryption_key()?;
     Ok(base16_encode_string(&key))
@@ -175,12 +191,13 @@ pub fn get_verifiable_credential_backup_encryption_key_aux(
 /// commitment key `raw_on_chain_commitment_key`.
 pub fn get_credential_id_aux(
     seed_as_hex: HexString,
-    net: Net,
+    net_as_str: &str,
     identity_provider_index: u32,
     identity_index: u32,
     credential_counter: u8,
     raw_on_chain_commitment_key: &str,
 ) -> Result<HexString> {
+    let net = get_net(net_as_str)?;
     let wallet = get_wallet(seed_as_hex, net)?;
     let prf_key = wallet.get_prf_key(identity_provider_index, identity_index)?;
 
@@ -201,20 +218,19 @@ mod tests {
     use super::*;
 
     const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
+    const MAINNET: &str = "Mainnet";
 
     #[test]
     pub fn mainnet_credential_id() {
-        let credential_id = get_credential_id_aux(TEST_SEED_1.to_string(), Net::Mainnet, 10, 50, 5, "b14cbfe44a02c6b1f78711176d5f437295367aa4f2a8c2551ee10d25a03adc69d61a332a058971919dad7312e1fc94c5a8d45e64b6f917c540eee16c970c3d4b7f3caf48a7746284878e2ace21c82ea44bf84609834625be1f309988ac523fac").unwrap();
+        let credential_id = get_credential_id_aux(TEST_SEED_1.to_string(), MAINNET, 10, 50, 5, "b14cbfe44a02c6b1f78711176d5f437295367aa4f2a8c2551ee10d25a03adc69d61a332a058971919dad7312e1fc94c5a8d45e64b6f917c540eee16c970c3d4b7f3caf48a7746284878e2ace21c82ea44bf84609834625be1f309988ac523fac").unwrap();
         assert_eq!(credential_id, "8a3a87f3f38a7a507d1e85dc02a92b8bcaa859f5cf56accb3c1bc7c40e1789b4933875a38dd4c0646ca3e940a02c42d8");
     }
 
     #[test]
     pub fn mainnet_verifiable_credential_backup_encryption_key() {
-        let key = get_verifiable_credential_backup_encryption_key_aux(
-            TEST_SEED_1.to_string(),
-            Net::Mainnet,
-        )
-        .unwrap();
+        let key =
+            get_verifiable_credential_backup_encryption_key_aux(TEST_SEED_1.to_string(), MAINNET)
+                .unwrap();
         assert_eq!(
             key,
             "5032086037b639f116642752460bf2e2b89d7278fe55511c028b194ba77192a1"
@@ -225,7 +241,7 @@ mod tests {
     pub fn mainnet_verifiable_credential_public_key() {
         let public_key = get_verifiable_credential_public_key_aux(
             TEST_SEED_1.to_string(),
-            Net::Mainnet,
+            MAINNET,
             3,
             1232,
             341,
@@ -239,14 +255,9 @@ mod tests {
 
     #[test]
     pub fn mainnet_verifiable_credential_signing_key() {
-        let signing_key = get_verifiable_credential_signing_key_aux(
-            TEST_SEED_1.to_string(),
-            Net::Mainnet,
-            1,
-            2,
-            1,
-        )
-        .unwrap();
+        let signing_key =
+            get_verifiable_credential_signing_key_aux(TEST_SEED_1.to_string(), MAINNET, 1, 2, 1)
+                .unwrap();
         assert_eq!(
             &signing_key,
             "670d904509ce09372deb784e702d4951d4e24437ad3879188d71ae6db51f3301"
@@ -255,15 +266,9 @@ mod tests {
 
     #[test]
     pub fn attribute_commitment_randomness() {
-        let attribute_commitment_randomness = get_attribute_commitment_randomness_aux(
-            TEST_SEED_1.to_string(),
-            Net::Mainnet,
-            5,
-            0,
-            4,
-            0,
-        )
-        .unwrap();
+        let attribute_commitment_randomness =
+            get_attribute_commitment_randomness_aux(TEST_SEED_1.to_string(), MAINNET, 5, 0, 4, 0)
+                .unwrap();
         assert_eq!(
             attribute_commitment_randomness,
             "6ef6ba6490fa37cd517d2b89a12b77edf756f89df5e6f5597440630cd4580b8f"
@@ -273,7 +278,7 @@ mod tests {
     #[test]
     pub fn blinding_randomness() {
         let blinding_randomness =
-            get_signature_blinding_randomness_aux(TEST_SEED_1.to_string(), Net::Mainnet, 4, 5713)
+            get_signature_blinding_randomness_aux(TEST_SEED_1.to_string(), MAINNET, 4, 5713)
                 .unwrap();
         assert_eq!(
             blinding_randomness,
@@ -283,8 +288,7 @@ mod tests {
 
     #[test]
     pub fn id_cred_sec() {
-        let id_cred_sec =
-            get_id_cred_sec_aux(TEST_SEED_1.to_string(), Net::Mainnet, 2, 115).unwrap();
+        let id_cred_sec = get_id_cred_sec_aux(TEST_SEED_1.to_string(), MAINNET, 2, 115).unwrap();
         assert_eq!(
             &id_cred_sec,
             "33b9d19b2496f59ed853eb93b9d374482d2e03dd0a12e7807929d6ee54781bb1"
@@ -293,7 +297,7 @@ mod tests {
 
     #[test]
     pub fn prf_key() {
-        let prf_key = get_prf_key_aux(TEST_SEED_1.to_string(), Net::Mainnet, 3, 35).unwrap();
+        let prf_key = get_prf_key_aux(TEST_SEED_1.to_string(), MAINNET, 3, 35).unwrap();
         assert_eq!(
             &prf_key,
             "4409e2e4acffeae641456b5f7406ecf3e1e8bd3472e2df67a9f1e8574f211bc5"
@@ -303,7 +307,7 @@ mod tests {
     #[test]
     pub fn account_public_key() {
         let public_key =
-            get_account_public_key_aux(TEST_SEED_1.to_string(), Net::Mainnet, 1, 341, 9).unwrap();
+            get_account_public_key_aux(TEST_SEED_1.to_string(), MAINNET, 1, 341, 9).unwrap();
         assert_eq!(
             &public_key,
             "d54aab7218fc683cbd4d822f7c2b4e7406c41ae08913012fab0fa992fa008e98"
@@ -313,7 +317,7 @@ mod tests {
     #[test]
     pub fn account_signing_key() {
         let signing_key =
-            get_account_signing_key_aux(TEST_SEED_1.to_string(), Net::Mainnet, 0, 55, 7).unwrap();
+            get_account_signing_key_aux(TEST_SEED_1.to_string(), MAINNET, 0, 55, 7).unwrap();
         assert_eq!(
             &signing_key,
             "e4d1693c86eb9438feb9cbc3d561fbd9299e3a8b3a676eb2483b135f8dbf6eb1"
