@@ -117,7 +117,10 @@ pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
 
 #[allow(non_snake_case)]
 fn compare_inner_product_proof<SomeCurve: Curve>(c: &mut Criterion) {
-    let bench_group_name = format!("Inner-Product Proof for {}", std::any::type_name::<SomeCurve>());
+    let bench_group_name = format!(
+        "Inner-Product Proof for {}",
+        std::any::type_name::<SomeCurve>()
+    );
     let mut group = c.benchmark_group(bench_group_name);
 
     // Testing with n = 4
