@@ -2,7 +2,6 @@ use std::{
     borrow::Borrow,
     ops::{AddAssign, MulAssign, Neg, SubAssign},
 };
-
 use crate::common::{Buffer, Deserial, Serial};
 use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::{
@@ -11,7 +10,6 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
-
 use super::{Curve, Field, MultiExp, PrimeField};
 
 /// A wrapper to make it possible to implement external traits
