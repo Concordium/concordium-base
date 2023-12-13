@@ -283,13 +283,18 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>, A: DebugInfo>
 }
 
 #[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug)]
+/// Host functions supported by V1 contracts.
 pub enum HostFunctionV1 {
     /// Functions allowed both in `init` and `receive` functions.
     Common(CommonFunc),
+    /// Functions allowed only in `init` methods.
     Init(InitOnlyFunc),
+    /// Functions allowed only in `receive` methods.
     Receive(ReceiveOnlyFunc),
 }
 
+/// The [`Display`](std::fmt::Display) implementation renders the function in
+/// the same way that it is expected to be named in the imports.
 impl std::fmt::Display for HostFunctionV1 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -301,14 +306,30 @@ impl std::fmt::Display for HostFunctionV1 {
 }
 
 #[derive(Default, Debug)]
+/// A type that implements [`DebugInfo`] and can be used for collecting
+/// execution information during execution.
 pub struct DebugTracker {
+    /// The amount of interpreter energy used by pure Wasm instruction
+    /// execution.
     pub operation:       InterpreterEnergy,
+    /// The amount of interpreter energy charged due to additional memory
+    /// allocation in Wasm linear memory.
     pub memory_alloc:    InterpreterEnergy,
+    /// The list of host calls in the order they appeared. The first component
+    /// is the event index which is shared between the host trace calls and
+    /// the `emitted_events` field below so that it is possible to reconstruct
+    /// one global order of events.
     pub host_call_trace: Vec<(usize, HostFunctionV1, InterpreterEnergy)>,
+    /// Events emitted by calls to `debug_print` host function. The first
+    /// component is the event index shared with the `host_call_trace` value.
     pub emitted_events:  Vec<(usize, EmittedDebugStatement)>,
-    pub next_index:      usize,
+    /// Internal tracker to assign event indices.
+    next_index:          usize,
 }
 
+/// The [`Display`](std::fmt::Display) implementation renders all public fields
+/// of the type in **multiple lines**. The host cgalls and emitted events are
+/// interleaved so that they appear in the order that they occurred.
 impl std::fmt::Display for DebugTracker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let DebugTracker {
