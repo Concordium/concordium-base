@@ -125,7 +125,18 @@ impl DebugInfo for () {
 }
 
 #[derive(
-    PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy, From, Into, Display, derive_more::FromStr,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Clone,
+    Copy,
+    From,
+    Into,
+    Display,
+    derive_more::FromStr,
 )]
 #[display(fmt = "{}", energy)]
 #[repr(transparent)]
@@ -175,6 +186,9 @@ impl InterpreterEnergy {
             energy: self.energy.saturating_sub(consumed.energy),
         }
     }
+
+    /// Internal helper to add amount when we know it will not overflow.
+    fn add(&mut self, other: Self) { self.energy += other.energy; }
 
     pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
         if self.energy >= amount {

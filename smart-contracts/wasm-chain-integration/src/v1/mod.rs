@@ -302,8 +302,8 @@ impl std::fmt::Display for HostFunctionV1 {
 
 #[derive(Default, Debug)]
 pub struct DebugTracker {
-    pub operation:       u64,
-    pub memory_alloc:    u64,
+    pub operation:       InterpreterEnergy,
+    pub memory_alloc:    InterpreterEnergy,
     pub host_call_trace: Vec<(usize, HostFunctionV1, InterpreterEnergy)>,
     pub emitted_events:  Vec<(usize, EmittedDebugStatement)>,
     pub next_index:      usize,
@@ -368,10 +368,10 @@ impl crate::DebugInfo for DebugTracker {
         let nrg = energy_used;
         let next_idx = self.next_index;
         match f {
-            ImportFunc::ChargeEnergy => self.operation += nrg.energy,
+            ImportFunc::ChargeEnergy => self.operation.add(nrg),
             ImportFunc::TrackCall => (),
             ImportFunc::TrackReturn => (),
-            ImportFunc::ChargeMemoryAlloc => self.memory_alloc += nrg.energy,
+            ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(nrg),
             ImportFunc::Common(c) => {
                 self.next_index += 1;
                 self.host_call_trace.push((next_idx, HostFunctionV1::Common(c), nrg));
