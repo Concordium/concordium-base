@@ -145,9 +145,8 @@ impl Curve for RistrettoPoint {
     type MultiExpType = RistrettoMultiExpNoPrecompute;
     type Scalar = RistrettoScalar;
 
-    // TODO: check this.
     const GROUP_ELEMENT_LENGTH: usize = 32;
-    // TODO: check this.
+    
     const SCALAR_LENGTH: usize = 32;
 
     fn zero_point() -> Self { Self::identity() }
