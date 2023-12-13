@@ -1,6 +1,5 @@
 use std::{
     borrow::Borrow,
-    fmt::Display,
     ops::{AddAssign, MulAssign, Neg, SubAssign},
 };
 
@@ -36,13 +35,6 @@ impl Deserial for RistrettoScalar {
             "Deserialization failed! Not a field value!"
         ))?;
         Ok(res.into())
-    }
-}
-
-impl Display for RistrettoScalar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Use Debug as Display for now
-        std::fmt::Debug::fmt(self, f)
     }
 }
 
@@ -146,7 +138,7 @@ impl Curve for RistrettoPoint {
     type Scalar = RistrettoScalar;
 
     const GROUP_ELEMENT_LENGTH: usize = 32;
-    
+
     const SCALAR_LENGTH: usize = 32;
 
     fn zero_point() -> Self { Self::identity() }
