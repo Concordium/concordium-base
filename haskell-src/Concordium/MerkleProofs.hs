@@ -18,8 +18,12 @@ import Data.Word
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as SHA256
+import Control.Monad.Reader
 import qualified Data.FixedByteString as FBS
+import Data.Foldable
 import Data.Maybe
+
+-- * Merkle proofs
 
 -- | A generic Merkle proof is represented as a sequence of branches, each of which can be raw
 --  bytes or a sub-proof. The root has for a proof can be calculated by first calculating the
@@ -39,21 +43,33 @@ import Data.Maybe
 type MerkleProof = [MerkleBranch]
 
 -- | A branch in a Merkle proof.
-data MerkleBranch = RawData BS.ByteString | SubProof MerkleProof
+data MerkleBranch
+    = -- | Raw bytes that are concatenated as-is when computing the root hash.
+      RawData !BS.ByteString
+    | -- | A subproof that is reduced to a hash before concatenating when computing the root hash.
+      SubProof !MerkleProof
     deriving (Show)
 
+-- | Determine if a Merkle proof is empty (it contains no bytes).
 isEmpty :: MerkleProof -> Bool
 isEmpty [] = True
 isEmpty (RawData bytes : rest) = BS.null bytes && isEmpty rest
 isEmpty _ = False
 
+-- | Compute the root hash represented by a Merkle proof.
 toRootHash :: MerkleProof -> SHA256.Hash
 toRootHash l = SHA256.hashLazy $ Builder.toLazyByteString $ mconcat $ merkleBuilder <$> l
 
+-- | A helper function for constructing a 'Builder.Builder' from a 'MerkleBranch'.
+-- This is used for managing branches for the purposes of computing root hashes.
 merkleBuilder :: MerkleBranch -> Builder.Builder
 merkleBuilder (RawData bytes) = Builder.byteString bytes
 merkleBuilder (SubProof sp) = Builder.shortByteString (SHA256.hashToShortByteString $ toRootHash sp)
 
+-- * Parsing Merkle proofs
+
+-- | A schematic type that describes how some data item is represented in a Merkle proof.
+-- We do not fully parse data, but just tokenise it to fixed or variable length byte strings.
 data MerkleData
     = -- | A byte string of the given fixed length.
       FixedLengthBytes Word64
@@ -62,72 +78,102 @@ data MerkleData
       VariableLengthBytesBE Word8
     deriving (Show)
 
+-- | Tag type used to label branches in the parse tree of a Merkle proof.
 type Tag = String
-type Id = Int
 
+-- | Identifier type used to identify non-terminals in a Merkle schema.
+type NonTerminal = Int
+
+-- | The body of a rewrite rule from a 'MerkleSchema'.
 data MerkleBody
-    = LiteralBytes BS.ByteString
-    | Tagged Tag MerkleData
-    | Sequence [MerkleBody]
-    | Choice MerkleBody MerkleBody
-    | Hashed Tag Id
-    | RepeatedBE Tag Word8 MerkleBody
-    | LFMBTree Tag Word8 BS.ByteString MerkleBody
+    = -- | The provided 'ByteString' should appear literally.
+      LiteralBytes BS.ByteString
+    | -- | Some particular data should appear. When parsed, it will be identified by the given tag.
+      Tagged Tag MerkleData
+    | -- | A sequence of tokens should appear.
+      Sequence [MerkleBody]
+    | -- | Either the left or right branch should appear.
+      --  In general, the branches should be defined such that there is no proof that can match both.
+      Choice MerkleBody MerkleBody
+    | -- | A sub-proof should appear. When parsed, the sub-proof will be identified by the given tag.
+      Hashed Tag NonTerminal
+    | -- | The given body should appear a number of times, preceded by the number of times it
+      --  appears. The 'Word8' argument specifies how many bytes represent the number of
+      -- repetitions. When parsed, the array will appear under the given tag, and beneath that,
+      -- each element will be tagged "0", "1", etc. according to the index in the array.
+      RepeatedBE Tag Word8 MerkleBody
+    | -- | An array of tokens should appear as a left-full Merkle binary tree.
+      -- The size of the tree should appear at the root (the 'Word8' specifies how many bytes
+      -- represent the size). An empty LFMB-tree is represented by the hash of the 'BS.ByteString'.
+      -- The contents of the array are tagged as in the case of 'RepeatedBE'.
+      LFMBTree Tag Word8 BS.ByteString MerkleBody
     deriving (Show)
 
-option :: MerkleBody -> MerkleBody
-option = Choice (LiteralBytes BS.empty)
+-- | A schema that defines how a Merkle proof should be parsed into a 'PartialTree'.
+-- The schema defines production rules for each non-terminal symbol. There should be a production
+-- rule for every 'NonTerminal' that occurs in a 'MerkleBody'.
+-- It is important in general that a schema should not allow ambiguity.
+type MerkleSchema = HM.HashMap NonTerminal MerkleBody
 
-type MerkleSchema = HM.HashMap Id MerkleBody
-
+-- | The representation of a parsed Merkle proof as a tree, where leaves are data values (as raw
+-- bytes) and branches are labelled by 'Tag's.
 type PartialTree = HM.HashMap Tag PartialBranch
 
-data PartialBranch = Leaf BS.ByteString | Node PartialTree
+-- | A branch in a 'PartialTree'.
+data PartialBranch
+    = -- | A leaf branch, containing a raw data value.
+      Leaf BS.ByteString
+    | -- | A sub-tree.
+      Node PartialTree
     deriving (Show)
 
-data ParseError
-    = UnexpectedEndOfInput
-    | UnexpectedSubProof
-    | Expected BS.ByteString BS.ByteString
-    | UnknownSchemaId Id
-    | ExpectedEndOfInput
-    | Context Tag ParseError
-    deriving (Show)
+-- ** Parser monad
 
-data Parse e r
-    = TakeBytes Word64 (Parse e r)
-    | Fail e
-    | Done r
-    | Alt (Parse e r) (Parse e r)
-
-data ParserContext r d e a = ParserContext
-    { parserInput :: d,
+-- | The context for the 'Parse' monad.
+data ParserContext r d c e a = ParserContext
+    { -- | The remaining input data to parse.
+      parserInput :: d,
+      -- | The reader context. Typically used to provide context for errors.
+      parserReaderContext :: c,
+      -- | Error continuation. This takes an error value and produces a value.
       parserError :: e -> r,
-      parserCont :: a -> d -> (e -> r) -> r
+      -- | Success continuation. This takes a result value, the remaining input, and the reader
+      -- context. (The continuation is parametrised by the reader context to support the
+      -- implementation of 'local', which modifies the reader context for a sub-computation, but
+      -- restores it for the continuation.)
+      parserCont :: a -> d -> c -> r
     }
 
-newtype Parse' r d e a = Parse' {unParse' :: ParserContext r d e a -> r}
+-- | A generic monad for parsing. This is implemented using continuations. The type parameters are:
+--
+--   * @r@ - the ultimate result type
+--   * @d@ - the type of the data being parsed
+--   * @c@ - the type of reader data
+--   * @e@ - the type of parser errors
+--   * @a@ - the return type
+newtype Parse r d c e a = Parse {unParse :: ParserContext r d c e a -> r}
 
-instance Functor (Parse' r d e) where
-    fmap f (Parse' z) = Parse' (\ParserContext{..} -> z ParserContext{parserCont = parserCont . f, ..})
+instance Functor (Parse r d c e) where
+    fmap f (Parse z) = Parse (\ParserContext{..} -> z ParserContext{parserCont = parserCont . f, ..})
 
-instance Applicative (Parse' r d e) where
-    pure res = Parse' $ \ParserContext{..} -> parserCont res parserInput parserError
+instance Applicative (Parse r d c e) where
+    pure res = Parse $ \ParserContext{..} -> parserCont res parserInput parserReaderContext
     m1 <*> m2 = m1 >>= (\x1 -> m2 >>= (pure . x1))
 
-instance Monad (Parse' r d e) where
-    Parse' a >>= cont =
-        Parse'
+instance Monad (Parse r d c e) where
+    Parse a >>= cont =
+        Parse
             ( \ParserContext{..} ->
                 a
                     ParserContext
                         { parserCont =
-                            \x inp err ->
-                                unParse'
+                            \x inp errCtx ->
+                                unParse
                                     (cont x)
                                     ParserContext
                                         { parserInput = inp,
-                                          parserError = err,
+                                          parserReaderContext = errCtx,
+                                          parserError,
                                           parserCont
                                         },
                           ..
@@ -136,84 +182,134 @@ instance Monad (Parse' r d e) where
 
 -- | Try to parse with the first parser, falling back to the second on a failure.
 --  If both parsers fail, the error from the first parser is used.
-(<<|>) :: Parse' r d e a -> Parse' r d e a -> Parse' r d e a
-Parse' a <<|> Parse' b = Parse' $ \pc ->
+(<<|>) :: Parse r d c e a -> Parse r d c e a -> Parse r d c e a
+Parse a <<|> Parse b = Parse $ \pc ->
     a pc{parserError = \e -> b pc{parserError = \_ -> parserError pc e}}
 
-(<|>>) :: Parse' r d e a -> Parse' r d e a -> Parse' r d e a
-Parse' a <|>> Parse' b = Parse' $ \pc ->
+-- | Try to parse with the first parser, falling back to the second on a failure.
+--  If both parsers fail, the error from the second parser is used.
+(<|>>) :: Parse r d c e a -> Parse r d c e a -> Parse r d c e a
+Parse a <|>> Parse b = Parse $ \pc ->
     a pc{parserError = \_ -> b pc}
 
-instance (Monoid e) => Alternative (Parse' r d e) where
-    empty = Parse' $ \pc -> parserError pc mempty
-    Parse' a <|> Parse' b = Parse' $ \pc ->
+instance (Monoid e) => Alternative (Parse r d c e) where
+    empty = Parse $ \pc -> parserError pc mempty
+    Parse a <|> Parse b = Parse $ \pc ->
         a pc{parserError = \e1 -> b pc{parserError = \e2 -> parserError pc (e1 <> e2)}}
 
-instance MonadError e (Parse' r d e) where
-    throwError e = Parse' $ \pc -> parserError pc e
-    catchError (Parse' tryBlock) catchBlock = Parse' $ \pc ->
-        tryBlock (pc{parserError = \e -> unParse' (catchBlock e) pc})
+instance MonadError e (Parse r d c e) where
+    throwError e = Parse $ \pc -> parserError pc e
+    catchError (Parse tryBlock) catchBlock = Parse $ \pc ->
+        tryBlock (pc{parserError = \e -> unParse (catchBlock e) pc})
 
-addErrorContext :: (e -> e) -> Parse' r d e a -> Parse' r d e a
-addErrorContext f (Parse' a) = Parse' $ \pc -> a pc{parserError = parserError pc . f}
-
-parseBytes :: Int -> Parse' r MerkleProof ParseError BS.ByteString
-parseBytes len0 = Parse' $ \ParserContext{..} -> inner parserError len0 parserInput parserCont
-  where
-    inner parserError 0 inp cont = cont BS.empty inp parserError
-    inner parserError _ [] _ = parserError UnexpectedEndOfInput
-    inner parserError len (RawData bytes : rest) cont = case compare (BS.length bytes) len of
-        LT -> inner parserError (len - BS.length bytes) rest (cont . (bytes <>))
-        EQ -> cont bytes rest parserError
-        GT -> let (b0, b1) = BS.splitAt len bytes in cont b0 (RawData b1 : rest) parserError
-    inner parserError _ (SubProof _ : _) _ = parserError UnexpectedSubProof
-
--- parseSubProof :: Parse' r MerkleProof ParseError a -> Parse' r MerkleProof ParseError a
--- parseSubProof = Parse' $ \ParserContext{..} -> case parserInput of
---     [] -> parserError UnexpectedEndOfInput
-
-parseSubProof ::
-    Parse' r MerkleProof ParseError (a, Builder.Builder) ->
-    Parse' r [MerkleBranch] ParseError (SHA256.Hash, Maybe a)
-parseSubProof inside = Parse' $ \pc@ParserContext{..} -> case parserInput of
-    [] -> parserError UnexpectedEndOfInput
-    (RawData bs : rest)
-        | BS.null bs -> unParse' (parseSubProof inside) pc{parserInput = rest}
-        | otherwise ->
-            unParse'
-                ( do
-                    bytes <- parseBytes 32
-                    let hsh = SHA256.Hash (FBS.fromByteString bytes)
-                    return (hsh, Nothing)
-                )
-                pc
-    (SubProof sp : rest) ->
-        unParse'
-            inside
+instance MonadReader c (Parse r d c e) where
+    ask = Parse $ \ParserContext{..} ->
+        parserCont parserReaderContext parserInput parserReaderContext
+    local f (Parse a) = Parse $ \pc ->
+        a
             pc
-                { parserInput = sp,
-                  parserCont = \(subPT, builder) remaining onErr ->
-                    if isEmpty remaining
-                        then
-                            let hsh = hashBuilder builder
-                            in  parserCont
-                                    (hsh, Just subPT)
-                                    rest
-                                    parserError
-                        else onErr ExpectedEndOfInput
+                { parserReaderContext = f (parserReaderContext pc),
+                  parserCont = \res d _ -> parserCont pc res d (parserReaderContext pc)
                 }
 
-parseMerkleBody :: MerkleSchema -> MerkleBody -> PartialTree -> Parse' r MerkleProof ParseError (PartialTree, Builder.Builder)
+-- ** Parsing for schemas
+
+-- | Error type for parsing a Merkle proof according to a schema.
+data ParseError
+    = -- | Data was expected, but none remains.
+      UnexpectedEndOfInput
+    | -- | A sub-proof is present, but raw data is expected by the schema.
+      UnexpectedSubProof
+    | -- | A literal byte string was expected, but a different one was found.
+      Expected BS.ByteString BS.ByteString
+    | -- | Attempted to parse a  'NonTerminal' that has no production rule in the schema.
+      UnknownSchemaId NonTerminal
+    | -- | There should be no more data, but there still is.
+      ExpectedEndOfInput
+    | -- | The error occurred while attempting to parse the given tag.
+      Context Tag ParseError
+    deriving (Show)
+
+-- | Apply a context of tags to a 'ParseError'.
+-- The context is treated as a stack, and the first tag is applied at the innermost level.
+applyErrorContext :: [Tag] -> ParseError -> ParseError
+applyErrorContext ctx pe = foldl' (flip Context) pe ctx
+
+-- | Throw a 'ParseError' using the context.
+throwParseError :: ParseError -> Parse r d [Tag] ParseError a
+throwParseError e = Parse $ \pc -> parserError pc $ applyErrorContext (parserReaderContext pc) e
+
+-- | Parse a specified number of bytes of data. The data cannot be a subproof.
+parseBytes :: Int -> Parse r MerkleProof [Tag] ParseError BS.ByteString
+parseBytes len0 = Parse $ \ParserContext{..} ->
+    inner
+        (parserError . applyErrorContext parserReaderContext)
+        parserReaderContext
+        len0
+        parserInput
+        parserCont
+  where
+    inner _ ctx 0 inp cont = cont BS.empty inp ctx
+    inner parserError _ _ [] _ = parserError UnexpectedEndOfInput
+    inner parserError ctx len (RawData bytes : rest) cont = case compare (BS.length bytes) len of
+        LT -> inner parserError ctx (len - BS.length bytes) rest (cont . (bytes <>))
+        EQ -> cont bytes rest ctx
+        GT -> let (b0, b1) = BS.splitAt len bytes in cont b0 (RawData b1 : rest) ctx
+    inner parserError _ _ (SubProof _ : _) _ = parserError UnexpectedSubProof
+
+-- | Given a parser for a sub-proof, parse that sub-proof as part of a larger proof.
+--  The sub-proof parser should return (when successful) a builder for the byte string that should
+--  be hashed to give the root hash of the sub-proof.
+--  If a sub-proof is not next in the input, then the parser will take the next 32 bytes as a hash
+--  instead, treating the sub-proof as absent. If neither sub-proof nor 32 bytes are available, this
+--  will raise a 'ParseError'.
+--  The return value is the root hash of the subproof, and, if the sub-proof was parsed, the parse
+--  result of the sub-proof.
+parseSubProof ::
+    Parse r MerkleProof [Tag] ParseError (a, Builder.Builder) ->
+    Parse r [MerkleBranch] [Tag] ParseError (SHA256.Hash, Maybe a)
+parseSubProof inside = Parse $ \pc@ParserContext{..} ->
+    let err = parserError . applyErrorContext parserReaderContext
+    in  case parserInput of
+            [] -> err UnexpectedEndOfInput
+            (RawData bs : rest)
+                | BS.null bs -> unParse (parseSubProof inside) pc{parserInput = rest}
+                | otherwise ->
+                    unParse
+                        ( do
+                            bytes <- parseBytes 32
+                            let hsh = SHA256.Hash (FBS.fromByteString bytes)
+                            return (hsh, Nothing)
+                        )
+                        pc
+            (SubProof sp : rest) ->
+                unParse
+                    inside
+                    pc
+                        { parserInput = sp,
+                          parserCont = \(subPT, builder) remaining ctx ->
+                            if isEmpty remaining
+                                then
+                                    let hsh = hashBuilder builder
+                                    in  parserCont
+                                            (hsh, Just subPT)
+                                            rest
+                                            parserReaderContext
+                                else parserError (applyErrorContext ctx ExpectedEndOfInput)
+                        }
+
+-- | Parse a Merkle proof given a schema and the to parse.
+parseMerkleBody :: MerkleSchema -> MerkleBody -> PartialTree -> Parse r MerkleProof [Tag] ParseError (PartialTree, Builder.Builder)
 parseMerkleBody schema = inner
   where
     inner (LiteralBytes expect) pt = do
         actual <- parseBytes (BS.length expect)
-        unless (expect == actual) $ throwError (Expected expect actual)
+        unless (expect == actual) $ throwParseError (Expected expect actual)
         return (pt, Builder.byteString actual)
-    inner (Tagged tag (FixedLengthBytes len)) pt = addErrorContext (Context tag) $ do
+    inner (Tagged tag (FixedLengthBytes len)) pt = local (tag :) $ do
         bytes <- parseBytes (fromIntegral len)
         return (HM.insert tag (Leaf bytes) pt, Builder.byteString bytes)
-    inner (Tagged tag (VariableLengthBytesBE lenSize)) pt = addErrorContext (Context tag) $ do
+    inner (Tagged tag (VariableLengthBytesBE lenSize)) pt = local (tag :) $ do
         lenBytes <- parseBytes (fromIntegral lenSize)
         let len = BS.foldl' (\acc w -> acc * 256 + fromIntegral w) 0 lenBytes
         bytes <- parseBytes len
@@ -224,8 +320,8 @@ parseMerkleBody schema = inner
                 return (pt'', builder <> builder'')
         foldM f (pt, mempty) l
     inner (Choice a b) pt = inner a pt <<|> inner b pt
-    inner (Hashed tag ident) pt = addErrorContext (Context tag) $ case HM.lookup ident schema of
-        Nothing -> throwError (UnknownSchemaId ident)
+    inner (Hashed tag ident) pt = local (tag :) $ case HM.lookup ident schema of
+        Nothing -> throwParseError (UnknownSchemaId ident)
         Just body -> do
             (subHash, mbranch) <- parseSubProof (inner body mempty)
             let hashBS = SHA256.hashToByteString subHash
@@ -233,20 +329,20 @@ parseMerkleBody schema = inner
                     Nothing -> Leaf hashBS
                     Just branch -> Node branch
             return (HM.insert tag val pt, Builder.byteString hashBS)
-    inner (RepeatedBE tag lenSize sub) pt = addErrorContext (Context tag) $ do
+    inner (RepeatedBE tag lenSize sub) pt = local (tag :) $ do
         lenBytes <- parseBytes (fromIntegral lenSize)
         let len = fromBE lenBytes
-        let f (pt', builder) i = addErrorContext (Context (show i)) $ do
+        let f (pt', builder) i = local (show i :) $ do
                 (pt'', builder'') <- inner sub mempty
                 return (HM.insert (show i) (Node pt'') pt', builder <> builder'')
         (pt1, builder) <- foldM f (mempty, mempty) [0 .. (len :: Integer) - 1]
         return (HM.insert tag (Node pt1) pt, builder)
-    inner (LFMBTree tag lenSize emptyBS sub) pt0 = addErrorContext (Context tag) $ do
+    inner (LFMBTree tag lenSize emptyBS sub) pt0 = local (tag :) $ do
         lenBytes <- parseBytes (fromIntegral lenSize)
         let len = fromBE lenBytes
         let doTree 0 _ pt = do
                 actual <- parseBytes (BS.length emptyBS)
-                unless (actual == emptyBS) $ throwError (Expected emptyBS actual)
+                unless (actual == emptyBS) $ throwParseError (Expected emptyBS actual)
                 return (pt, SHA256.hash emptyBS)
             doTree 1 base pt = do
                 (pt1, bs) <- inner sub mempty
@@ -262,12 +358,15 @@ parseMerkleBody schema = inner
         (ptSub, hsh) <- doBranch len 0 mempty
         return (HM.insert tag (Node ptSub) pt0, builderHash hsh)
 
+-- | Compute a hash from a 'Builder.Builder'.
 hashBuilder :: Builder.Builder -> SHA256.Hash
 hashBuilder = SHA256.hashLazy . Builder.toLazyByteString
 
+-- | Construct a 'Builder.Builder' from a 'SHA256.Hash'.
 builderHash :: SHA256.Hash -> Builder.Builder
 builderHash = Builder.shortByteString . SHA256.hashToShortByteString
 
+-- | Convert bytes into a number, parsing it big endian.
 fromBE :: (Num a) => BS.ByteString -> a
 fromBE = BS.foldl' (\acc w -> acc * 256 + fromIntegral w) 0
 
@@ -279,47 +378,60 @@ lowerPowerOfTwo x
     | x < 2 = error "lowerPowerOfTwo: input must be at least 2"
     | otherwise = bit (finiteBitSize x - countLeadingZeros (x - 1) - 1)
 
-parseMerkleProof :: MerkleSchema -> Id -> MerkleProof -> Either ParseError (PartialTree, SHA256.Hash)
+-- | Parse a Merkle proof according to a schema, given the schema and root non-terminal.
+-- On success, this returns the partial tree parsing of the proof and the computed root hash.
+-- On failure, this returns the error that occurred during parsing.
+parseMerkleProof :: MerkleSchema -> NonTerminal -> MerkleProof -> Either ParseError (PartialTree, SHA256.Hash)
 parseMerkleProof schema ident pf = case HM.lookup ident schema of
     Nothing -> Left (UnknownSchemaId ident)
     Just body ->
-        unParse'
+        unParse
             (parseMerkleBody schema body HM.empty)
-            ParserContext{parserInput = pf, parserError = Left, parserCont = cont}
+            ParserContext{parserInput = pf, parserReaderContext = [], parserError = Left, parserCont = cont}
   where
-    cont (pt, builder) remaining onErr
+    cont (pt, builder) remaining ctx
         | isEmpty remaining = Right (pt, hashBuilder builder)
-        | otherwise = onErr ExpectedEndOfInput
+        | otherwise = Left $ applyErrorContext ctx ExpectedEndOfInput
 
+-- | State used for building a 'MerkleSchema'.
 data SchemaBuilderState = SchemaBuilderState
-    { _builderSchema :: !MerkleSchema,
-      _builderNextIdent :: !Id
+    { -- | The current schema under construction.
+      _builderSchema :: !MerkleSchema,
+      -- | The next free non-terminal symbol.
+      _builderNextNonTerminal :: !NonTerminal
     }
 
 makeLenses ''SchemaBuilderState
 
+-- | The empty 'SchemaBuilderState'.
 emptySchemaBuilderState :: SchemaBuilderState
 emptySchemaBuilderState = SchemaBuilderState HM.empty 0
 
-freshIdent :: (MonadState SchemaBuilderState m) => m Id
-freshIdent = builderNextIdent <<%= (+ 1)
+-- | Generate a fresh non-terminal symbol.
+freshIdent :: (MonadState SchemaBuilderState m) => m NonTerminal
+freshIdent = builderNextNonTerminal <<%= (+ 1)
 
-schemaAt :: Id -> Lens' SchemaBuilderState (Maybe MerkleBody)
+-- | Lens for the 'MerkleBody' corresponding to a given non-terminal symbol.
+schemaAt :: NonTerminal -> Lens' SchemaBuilderState (Maybe MerkleBody)
 schemaAt ident = builderSchema . at ident
 
-setFresh :: (MonadState SchemaBuilderState m) => MerkleBody -> m Id
+-- | Set the 'MerkleBody' at a fresh non-terminal symbol.
+setFresh :: (MonadState SchemaBuilderState m) => MerkleBody -> m NonTerminal
 setFresh body = do
     newIdent <- freshIdent
     schemaAt newIdent ?= body
     return newIdent
 
-setFreshRec :: (MonadState SchemaBuilderState m) => (Id -> MerkleBody) -> m Id
+-- | Set the 'MerkleBody' at a fresh non-terminal symbol, where the body is parametrised by the
+--  non-terminal itself. (For defining recursive grammars.)
+setFreshRec :: (MonadState SchemaBuilderState m) => (NonTerminal -> MerkleBody) -> m NonTerminal
 setFreshRec body = do
     newIdent <- freshIdent
     schemaAt newIdent ?= body newIdent
     return newIdent
 
-blockSchema :: (Id, MerkleSchema)
+-- | The Merkle schema for a block hash.
+blockSchema :: (NonTerminal, MerkleSchema)
 blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
   where
     u64 = FixedLengthBytes 8
@@ -414,88 +526,8 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
         schemaAt blockHash ?= Sequence [Hashed "header" blockHeaderHash, Hashed "quasi" blockQuasiHash]
         return blockHash
 
-rawHash :: BS.ByteString -> MerkleBranch
-rawHash = RawData . S.encode . SHA256.hash
-
-testProof1 :: [MerkleBranch]
-testProof1 =
-    [ SubProof [RawData $ S.runPut (S.putWord64be 2 >> S.putWord64be 0 >> S.put (SHA256.hash ""))],
-      rawHash "asb"
-    ]
-
-testProof2 :: [MerkleBranch]
-testProof2 =
-    [ rawHash "abc",
-      SubProof
-        [ SubProof
-            [ SubProof
-                [ SubProof
-                    [ RawData . S.runPut $ do
-                        -- Timestamp
-                        S.putWord64be 123456
-                        -- BakerID
-                        S.putWord64be 256
-                    ],
-                  rawHash "asdf"
-                ],
-              rawHash "qwerty"
-            ],
-          rawHash "asdff"
-        ]
-    ]
-
-testProof3 :: [MerkleBranch]
-testProof3 =
-    [ SubProof [RawData $ S.runPut (S.putWord64be 2 >> S.putWord64be 0 >> S.put (SHA256.hash ""))],
-      SubProof
-        [ SubProof
-            [ SubProof
-                [ SubProof
-                    [ RawData . S.runPut $ do
-                        -- Timestamp
-                        S.putWord64be 123456
-                        -- BakerID
-                        S.putWord64be 256
-                    ],
-                  rawHash "asdf"
-                ],
-              rawHash "qwerty"
-            ],
-          rawHash "asdff"
-        ]
-    ]
-
-testProof4 :: [MerkleBranch]
-testProof4 =
-    [ SubProof
-        [ RawData "\NUL\NUL\NUL\NUL\NUL)K_\NUL\NUL\NUL\NUL\NUL\NUL\180\148\238\SO\182yU/\249\ENQ\169[\235\206\129\SYNdQP6s\NUL\SOH\ENQ\219\STX`\250\157d\239\ESC\255\128"
-        ],
-      SubProof
-        [ SubProof
-            [ SubProof
-                [ SubProof [RawData "\NUL\NUL\SOH\139\164\234r\CAN\NUL\NUL\NUL\NUL\NUL\NUL\NUL\STX"],
-                  SubProof
-                    [ SubProof [RawData "D\SUB\142D\133\247\168\237\212M\251\176\153\229\STX\244\175\&6\202\218\144:u\226\207\US\196\133\194tH\132\149D\SOH]\vz\217\147SR\147U\196\242\242\220%u!\DC2~\RS\187\STX\b\234\180\SI\163\227\SUB\182h\226/\173\179rF_\ENQ\157\203\b \SI\207\a"]
-                    ]
-                ],
-              SubProof
-                [ SubProof
-                    [RawData "\238\SO\182yU/\249\ENQ\169[\235\206\129\SYNdQP6s\NUL\SOH\ENQ\219\STX`\250\157d\239\ESC\255\128\NUL\NUL\NUL\NUL\NUL)K^\NUL\NUL\NUL\NUL\NUL\NUL\180\147\130\199\202\NAKn\DC4K\140)\STX=\167\134/\242c\249Z\168\133\SI\143\tmP<e\214\173\131\220\239\191,\232\224\230`\US\ETB\181\165\208\156\210\ESCX\166\NUL\NUL\NUL\SOH\GS"],
-                  SubProof
-                    [ SubProof [RawData "\NUL"],
-                      SubProof [RawData "\SOH/\ENQ\ENQ\201\131.\132Hl\171\&7\245\179\198\134\226\236\183\252j\NAKc\130\246\218\162\ACKL\152\&9\rA\NUL\NUL\NUL\NUL\NUL)K]\NUL\NUL\NUL\NUL\NUL\NUL\180\147\173R\225\NUL\193\FS\194\SI\255_\246\185\156\a\bJ\203\199\240_\147\231\SUB\177\222Z\225Q\v\170X\135o\213B\199J\249\186\138~\188\155Lb\146\222\249\NUL\NUL\NUL\SOH\ETB\130\199\202\NAKn\DC4K\140)\STX=\167\134/\242c\249Z\168\133\SI\143\tmP<e\214\173\131\220\239\191,\232\224\230`\US\ETB\181\165\208\156\210\ESCX\166\NUL\NUL\NUL\SOH\GS@\235\213\&0\157H\233\216f]\247\141\173O\235\235\&2\149(C\138\254]\221@!6\159\EM\133\245\219"]
-                    ]
-                ]
-            ],
-          SubProof
-            [ SubProof
-                [ SubProof [RawData "\227\176\196B\152\252\FS\DC4\154\251\244\200\153o\185$'\174A\228d\155\147L\164\149\153\ESCxR\184U"],
-                  SubProof [RawData "\ENQ[}H\222.w\136\t\227\&6\224q\US\188\240b\SYN\188\231\158\ESC>\152\167\179\EOTE\CAN\170\DLE\197"]
-                ],
-              SubProof [RawData "\RSp\GS(\251\191\221\157\185\247\&2\214L\151zt\254\DC1\148r\225\215\199\184\148\ACK\210\148\ACK\159\244\212"]
-            ]
-        ]
-    ]
-
+-- | A class for types that can produce 'MerkleProof's.
 class MerkleProvable m t where
+    -- | Build a 'MerkleProof', unwrapping sub-proofs where the predicate holds for the chain
+    -- of tags.
     buildMerkleProof :: ([Tag] -> Bool) -> t -> m MerkleProof
