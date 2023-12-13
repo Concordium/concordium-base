@@ -309,7 +309,43 @@ pub struct DebugTracker {
     pub next_index:      usize,
 }
 
+impl std::fmt::Display for DebugTracker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let DebugTracker {
+            operation,
+            memory_alloc,
+            host_call_trace,
+            emitted_events,
+            next_index: _,
+        } = self;
+        writeln!(f, "Wasm instruction cost: {operation}")?;
+        writeln!(f, "Memory alocation cost: {memory_alloc}")?;
+        let mut iter1 = host_call_trace.iter().peekable();
+        let mut iter2 = emitted_events.iter().peekable();
+        while let (Some((i1, hf, energy)), Some((i2, event))) = (iter1.peek(), iter2.peek()) {
+            if i1 < i2 {
+                iter1.next();
+                writeln!(f, "{hf} used {energy} interpreter energy")?;
+            } else {
+                iter2.next();
+                writeln!(f, "{event}")?;
+            }
+        }
+        while let Some((_, hf, energy)) = iter1.next() {
+            writeln!(f, "{hf} used {energy} interpreter energy")?;
+        }
+        while let Some((_, event)) = iter2.next() {
+            writeln!(f, "{event}")?;
+        }
+        Ok(())
+    }
+}
+
 impl DebugTracker {
+    /// Summarize all the host calls, grouping them by the host function. The
+    /// value at each host function is the pair of the number of times the
+    /// host function was called, and the sum of interpreter energy those
+    /// calls consumed.
     pub fn host_call_summary(&self) -> BTreeMap<HostFunctionV1, (usize, InterpreterEnergy)> {
         let mut out = BTreeMap::new();
         for (_, k, v) in self.host_call_trace.iter() {
