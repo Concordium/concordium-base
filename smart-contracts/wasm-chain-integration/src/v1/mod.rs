@@ -331,10 +331,10 @@ impl std::fmt::Display for DebugTracker {
                 writeln!(f, "{event}")?;
             }
         }
-        while let Some((_, hf, energy)) = iter1.next() {
+        for (_, hf, energy) in iter1 {
             writeln!(f, "{hf} used {energy} interpreter energy")?;
         }
-        while let Some((_, event)) = iter2.next() {
+        for (_, event) in iter2 {
             writeln!(f, "{event}")?;
         }
         Ok(())
