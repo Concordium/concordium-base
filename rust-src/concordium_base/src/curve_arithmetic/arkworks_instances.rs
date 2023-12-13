@@ -1,7 +1,7 @@
 use core::fmt;
-use std::{str::FromStr};
+use std::str::FromStr;
 
-use crate::common::{Deserial, Serial};
+use crate::common::{Deserial, Serial, Serialize};
 
 use super::{Curve, CurveDecodingError, Field, GenericMultiExp, PrimeField};
 use anyhow::anyhow;
@@ -14,22 +14,33 @@ impl<F> From<F> for ArkField<F> {
     fn from(value: F) -> Self { ArkField(value) }
 }
 
-impl<F: ark_ff::Field> Serial for ArkField<F> {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-        self.0
-            .serialize_compressed(out)
-            .expect("Serialzation expected to succeed")
-    }
+// impl<F: ark_ff::Field> Serial for ArkField<F> {
+//     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
+//         self.0
+//             .serialize_compressed(out)
+//             .expect("Serialzation expected to succeed")
+//     }
+// }
+
+// impl<F: ark_ff::Field> Deserial for ArkField<F> {
+//     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) ->
+// crate::common::ParseResult<Self> {         let res =
+// F::deserialize_compressed(source)?;         Ok(res.into())
+//     }
+// }
+
+impl<F: Serialize> Serial for ArkField<F> {
+    fn serial<B: crate::common::Buffer>(&self, out: &mut B) { self.0.serial(out) }
 }
 
-impl<F: ark_ff::Field> Deserial for ArkField<F> {
+impl<F: Serialize> Deserial for ArkField<F> {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
-        let res = F::deserialize_compressed(source)?;
+        let res = F::deserial(source)?;
         Ok(res.into())
     }
 }
 
-impl<F: ark_ff::Field> Field for ArkField<F> {
+impl<F: ark_ff::Field + Serialize> Field for ArkField<F> {
     fn random<R: rand::prelude::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
         F::rand(rng).into()
     }
@@ -59,7 +70,7 @@ impl<F: ark_ff::Field> ArkField<F> {
     pub fn into_ark(&self) -> &F { &self.0 }
 }
 
-impl<F: ark_ff::PrimeField> PrimeField for ArkField<F> {
+impl<F: ark_ff::PrimeField + Serialize> PrimeField for ArkField<F> {
     const CAPACITY: u32 = Self::NUM_BITS - 1;
     const NUM_BITS: u32 = F::MODULUS_BIT_SIZE;
 
@@ -113,7 +124,10 @@ pub(crate) trait ArkCurveConfig<G: ark_ec::CurveGroup> {
     type Hasher: ark_ec::hashing::HashToCurve<G>;
 }
 
-impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G> {
+impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G>
+where
+    <G as ark_ec::Group>::ScalarField: Serialize,
+{
     type MultiExpType = GenericMultiExp<Self>;
     type Scalar = ArkField<<G as ark_ec::Group>::ScalarField>;
 
@@ -175,7 +189,6 @@ impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G> {
         // fr[3] &= !(1u64 << 63 | 1u64 << 62);
         <Self::Scalar>::from_repr(&fr)
             .expect("The scalar with top two bits erased should be valid.")
-
     }
 
     fn hash_to_group(m: &[u8]) -> Self {

@@ -56,6 +56,7 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::Inv
         sk.add_assign(&y2);
         salt = Sha256::digest(salt);
     }
+    println!("sk: {:}", sk);
     Ok(sk)
 }
 

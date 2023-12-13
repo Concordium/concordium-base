@@ -1,5 +1,6 @@
 use core::fmt;
 
+use anyhow::anyhow;
 use ark_bls12_381::*;
 use ark_ec::{
     bls12::{G1Prepared, G2Prepared},
@@ -9,9 +10,11 @@ use ark_ec::{
     CurveGroup,
 };
 use ark_ff::{field_hashers::DefaultFieldHasher, BigInt, PrimeField};
+use byteorder::ReadBytesExt;
+use num_bigint::BigUint;
 use sha2::Sha256;
 
-use crate::common::{Buffer, Serial};
+use crate::common::{Buffer, Deserial, ParseResult, Serial};
 
 use super::{
     arkworks_instances::{ArkCurveConfig, ArkField, ArkGroup},
@@ -29,6 +32,7 @@ impl ArkCurveConfig<G1Projective> for Projective<g1::Config> {
     const GROUP_ELEMENT_LENGTH: usize = 48;
     const SCALAR_LENGTH: usize = 32;
 }
+
 impl ArkCurveConfig<G2Projective> for Projective<g2::Config> {
     type Hasher =
         MapToCurveBasedHasher<G2Projective, DefaultFieldHasher<Sha256, 128>, WBMap<g2::Config>>;
@@ -36,6 +40,28 @@ impl ArkCurveConfig<G2Projective> for Projective<g2::Config> {
     const DOMAIN_STRING: &'static str = "BLS12381G2";
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;
+}
+
+impl Deserial for Fr {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Fr> {
+        let mut buf = [0u8; 32];
+        source.read(&mut buf)?;
+        let big_int: BigInt<4> = BigUint::from_bytes_be(&buf)
+            .try_into()
+            .map_err(|_| anyhow!("Cannot convert to bigint"))?;
+        let res = Fr::from_bigint(big_int)
+            .ok_or(anyhow!("Cannot convert from bigint to a field element"))?;
+        Ok(res)
+    }
+}
+
+impl Serial for Fr {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let frpr: BigInt<4> = self.0;
+        for a in frpr.0.iter().rev() {
+            a.serial(out);
+        }
+    }
 }
 
 /// This implementation is ad-hoc, using the fact that Fq12 is defined
@@ -65,6 +91,13 @@ impl Serial for Fq12 {
         }
     }
 }
+
+impl Deserial for Fq12 {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        todo!()
+    }
+}
+
 
 type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 
@@ -115,10 +148,10 @@ impl Pairing for Bls12 {
 
 impl fmt::Display for ArkField<Fr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "0x")?;
-                for i in self.0.into_bigint().0.iter().rev() {
-                    write!(f, "{:016x}", *i)?;
-                }
-                Ok(())
-            }
+        write!(f, "0x")?;
+        for i in self.0.into_bigint().0.iter().rev() {
+            write!(f, "{:016x}", *i)?;
+        }
+        Ok(())
+    }
 }
