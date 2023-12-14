@@ -33,14 +33,24 @@ impl Net {
     }
 }
 
+#[derive(Debug, Error)]
+#[error("{value} is not a valid value for Net")]
+pub struct NetFromStrError {
+    value: String,
+}
+
 impl FromStr for Net {
-    type Err = String;
+    type Err = NetFromStrError;
 
     fn from_str(input: &str) -> Result<Net, Self::Err> {
         match input {
             "Mainnet" => Ok(Net::Mainnet),
+            "mainnet" => Ok(Net::Mainnet),
             "Testnet" => Ok(Net::Testnet),
-            _ => Err(format!("'{}' is not a valid value for Net", input)),
+            "testnet" => Ok(Net::Testnet),
+            _ => Err(NetFromStrError {
+                value: input.to_string(),
+            }),
         }
     }
 }
@@ -961,14 +971,26 @@ mod tests {
     }
 
     #[test]
-    fn mainnet_net_mapped_correctly() {
+    fn capitalized_mainnet_net_mapped_correctly() {
         let result = Net::from_str(&"Mainnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Mainnet);
     }
 
     #[test]
-    fn testnet_net_mapped_correctly() {
+    fn capitalized_testnet_net_mapped_correctly() {
         let result = Net::from_str(&"Testnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Testnet);
+    }
+
+    #[test]
+    fn mainnet_net_mapped_correctly() {
+        let result = Net::from_str(&"mainnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Mainnet);
+    }
+
+    #[test]
+    fn testnet_net_mapped_correctly() {
+        let result = Net::from_str(&"testnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Testnet);
     }
 

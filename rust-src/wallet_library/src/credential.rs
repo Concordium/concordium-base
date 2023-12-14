@@ -19,6 +19,9 @@ use crate::wallet::get_wallet;
 
 type JsonString = String;
 
+/// The shared unsigned credential input that is independent of
+/// whether or not the credential is going to be created by supplying
+/// a seed or the secret key material directly.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsignedCredentialInput {
@@ -32,6 +35,8 @@ pub struct UnsignedCredentialInput {
     cred_number:            u8,
 }
 
+/// Required input for generating an unsigned credential where the private keys
+/// are supplied directly.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsignedCredentialInputWithKeys {
@@ -41,24 +46,34 @@ pub struct UnsignedCredentialInputWithKeys {
     blinding_randomness: String,
 }
 
+/// Required input for generating an unsigned credential from where the
+/// private keys are derived from a seed and an identity index.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsignedCredentialInputWithSeed {
-    common:                  UnsignedCredentialInput,
-    seed_as_hex:             String,
-    net:                     Net,
-    identity_provider_index: u32,
-    identity_index:          u32,
+    common:         UnsignedCredentialInput,
+    seed_as_hex:    String,
+    net:            Net,
+    identity_index: u32,
+}
+
+/// Defines the JSON structure that matches the output of the function
+/// generating the unsigned credential deployment information and randomness.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+struct UnsignedCredentialDeploymentInfoWithRandomness {
+    unsigned_cdi: UnsignedCredentialDeploymentInfo<constants::IpPairing, ArCurve, AttributeKind>,
+    randomness:   CommitmentsRandomness<ArCurve>,
 }
 
 /// Creates unsigned credential deployment information and the corresponding
 /// randomness where the secrets are derived from the provided seed.
-pub fn create_unsigned_credential_v1_with_seed_aux(
+pub fn create_unsigned_credential_with_seed_v1_aux(
     input: UnsignedCredentialInputWithSeed,
 ) -> Result<JsonString> {
     let wallet = get_wallet(input.seed_as_hex, input.net)?;
 
-    let identity_provider_index = input.identity_provider_index;
+    let identity_provider_index = input.common.ip_info.ip_identity.0;
     let identity_index = input.identity_index;
     let id_cred_sec =
         PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
@@ -74,12 +89,12 @@ pub fn create_unsigned_credential_v1_with_seed_aux(
         blinding_randomness: encoded_blinding_randomness,
     };
 
-    create_unsigned_credential_v1_aux(input_with_keys)
+    create_unsigned_credential_with_keys_v1_aux(input_with_keys)
 }
 
 /// Creates unsigned credential deployment information and the corresponding
 /// randomness where the secrets are provided directly as input.
-pub fn create_unsigned_credential_v1_aux(
+pub fn create_unsigned_credential_with_keys_v1_aux(
     input: UnsignedCredentialInputWithKeys,
 ) -> Result<JsonString> {
     let chi = CredentialHolderInfo::<constants::ArCurve> {
@@ -121,7 +136,11 @@ pub fn create_unsigned_credential_v1_aux(
         &common.attribute_randomness,
     )?;
 
-    let response = json!({"unsignedCdi": cdi, "randomness": rand});
+    let result = UnsignedCredentialDeploymentInfoWithRandomness {
+        unsigned_cdi: cdi,
+        randomness:   rand,
+    };
+    let response = json!(result);
 
     Ok(response.to_string())
 }
@@ -146,15 +165,6 @@ fn build_policy(
         policy_vec,
         _phantom: Default::default(),
     })
-}
-
-/// Represents the JSON structure that matches the output of the function
-/// generating the unsigned credential deployment information and randomness.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
-struct UnsignedCredentialDeploymentInfoWithRandomness {
-    unsigned_cdi: UnsignedCredentialDeploymentInfo<constants::IpPairing, ArCurve, AttributeKind>,
-    randomness:   CommitmentsRandomness<ArCurve>,
 }
 
 #[cfg(test)]
@@ -244,7 +254,7 @@ mod tests {
             blinding_randomness,
         };
 
-        let result_str = create_unsigned_credential_v1_aux(input).unwrap();
+        let result_str = create_unsigned_credential_with_keys_v1_aux(input).unwrap();
         let result: UnsignedCredentialDeploymentInfoWithRandomness =
             serde_json::from_str(&result_str).unwrap();
 
@@ -257,12 +267,11 @@ mod tests {
         let input = UnsignedCredentialInputWithSeed {
             common,
             identity_index: 0,
-            identity_provider_index: 0,
             net: Net::Testnet,
             seed_as_hex: TEST_SEED_1.to_string(),
         };
 
-        let result_str = create_unsigned_credential_v1_with_seed_aux(input).unwrap();
+        let result_str = create_unsigned_credential_with_seed_v1_aux(input).unwrap();
         let result: UnsignedCredentialDeploymentInfoWithRandomness =
             serde_json::from_str(&result_str).unwrap();
 

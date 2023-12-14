@@ -20,37 +20,49 @@ use crate::wallet::get_wallet;
 
 type JsonString = String;
 
+/// Defines the JSON structure that matches the output of the function
+/// generating the identity objcect request.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct IdentityObjectRequestV1 {
     id_object_request: Versioned<PreIdentityObjectV1<constants::IpPairing, ArCurve>>,
 }
 
+/// The shared identity creation request input that is independent
+/// of whether or not the request is going to be created
+/// by supplying a seed phrase or the secret key material
+/// directly.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdRequestCommon {
+pub struct IdRequestCommonInput {
     ip_info:        IpInfo<constants::IpPairing>,
     global_context: GlobalContext<constants::ArCurve>,
     ars_infos:      BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
     net:            Net,
-    identity_index: u32,
     ar_threshold:   u8,
 }
 
+/// Required input for generating an identity object request from a seed. The
+/// required private keys will be derived from the seed.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdRequestInput {
-    common: IdRequestCommon,
-    seed:   String,
+pub struct IdRequestInputWithSeed {
+    common:         IdRequestCommonInput,
+    seed_as_hex:    String,
+    identity_index: u32,
 }
 
+/// Required input for generating an identity object request. This input
+/// contains the private keys and they will be used to generate the request
+/// directly.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdRequestInputWithKeys {
-    common:              IdRequestCommon,
+    common:              IdRequestCommonInput,
     prf_key:             prf::SecretKey<ArCurve>,
     id_cred_sec:         PedersenValue<ArCurve>,
-    // This does not have serde serializers / deserializers.
+    // The blinding_randomness does not have a serde serializer / deserializer. Therefore
+    // it is just a String here and manually handled.
     blinding_randomness: String,
 }
 
@@ -97,17 +109,20 @@ pub fn create_id_request_with_keys_v1_aux(input: IdRequestInputWithKeys) -> Resu
         }
     };
 
-    let response = json!({ "idObjectRequest": Versioned::new(VERSION_0, pio) });
+    let result = IdentityObjectRequestV1 {
+        id_object_request: Versioned::new(VERSION_0, pio),
+    };
+    let response = json!(result);
     Ok(to_string(&response)?)
 }
 
 /// Creates an identity object request where the supplied seed phrase is
 /// used to derive the required keys.
-pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
-    let seed_decoded = hex::decode(&input.seed)?;
+pub fn create_id_request_with_seed_v1_aux(input: IdRequestInputWithSeed) -> Result<JsonString> {
+    let seed_decoded = hex::decode(&input.seed_as_hex)?;
     let seed: [u8; 64] = match seed_decoded.try_into() {
         Ok(s) => s,
-        Err(_) => bail!("The provided seed {} was not 64 bytes", input.seed),
+        Err(_) => bail!("The provided seed {} was not 64 bytes", input.seed_as_hex),
     };
 
     let wallet: ConcordiumHdWallet = ConcordiumHdWallet {
@@ -116,14 +131,14 @@ pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
     };
 
     let identity_provider_index = input.common.ip_info.ip_identity.0;
+    let identity_index = input.identity_index;
     let prf_key: prf::SecretKey<ArCurve> =
-        wallet.get_prf_key(identity_provider_index, input.common.identity_index)?;
-    let id_cred_sec: PedersenValue<ArCurve> = PedersenValue::new(
-        wallet.get_id_cred_sec(identity_provider_index, input.common.identity_index)?,
-    );
+        wallet.get_prf_key(identity_provider_index, identity_index)?;
+    let id_cred_sec: PedersenValue<ArCurve> =
+        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
     let blinding_randomness: concordium_base::id::ps_sig::SigRetrievalRandomness<
         constants::IpPairing,
-    > = wallet.get_blinding_randomness(identity_provider_index, input.common.identity_index)?;
+    > = wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
 
     let input = IdRequestInputWithKeys {
         common: input.common,
@@ -135,24 +150,37 @@ pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
     create_id_request_with_keys_v1_aux(input)
 }
 
+/// The shared identity recovery request input that is independent
+/// of whether or not the request is going to be created
+/// by supplying a seed phrase or the secret key material
+/// directly.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdRecoveryRequestInput {
+pub struct IdRecoveryRequestCommonInput {
     ip_info:        IpInfo<constants::IpPairing>,
     global_context: GlobalContext<constants::ArCurve>,
-    id_cred_sec:    PedersenValue<ArCurve>,
     timestamp:      u64,
 }
 
+/// Required input for generating an identity recovery request. This input
+/// contains the private key which will be used directly to generate
+/// the request.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdRecoveryRequestInputWithKeys {
+    common:      IdRecoveryRequestCommonInput,
+    id_cred_sec: PedersenValue<ArCurve>,
+}
+
+/// Required input for generating an identity recovery request from a seed. The
+/// required private key will be derived from the seed.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdRecoveryRequestInputWithSeed {
-    ip_info:        IpInfo<constants::IpPairing>,
-    global_context: GlobalContext<constants::ArCurve>,
+    common:         IdRecoveryRequestCommonInput,
     seed_as_hex:    String,
     net:            Net,
     identity_index: u32,
-    timestamp:      u64,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
@@ -162,12 +190,14 @@ pub struct IdRecoveryRequestOut {
 }
 
 /// Create an identity recovery request taking the secret as directy input.
-pub fn create_identity_recovery_request_aux(input: IdRecoveryRequestInput) -> Result<JsonString> {
+pub fn create_identity_recovery_request_aux(
+    input: IdRecoveryRequestInputWithKeys,
+) -> Result<JsonString> {
     let request = generate_id_recovery_request(
-        &input.ip_info,
-        &input.global_context,
+        &input.common.ip_info,
+        &input.common.global_context,
         &input.id_cred_sec,
-        input.timestamp,
+        input.common.timestamp,
     );
 
     let response = json!({
@@ -182,13 +212,12 @@ pub fn create_identity_recovery_request_with_seed_aux(
     input: IdRecoveryRequestInputWithSeed,
 ) -> Result<JsonString> {
     let wallet = get_wallet(input.seed_as_hex, input.net)?;
-    let id_cred_sec = wallet.get_id_cred_sec(input.ip_info.ip_identity.0, input.identity_index)?;
+    let id_cred_sec =
+        wallet.get_id_cred_sec(input.common.ip_info.ip_identity.0, input.identity_index)?;
 
-    let input_2 = IdRecoveryRequestInput {
-        global_context: input.global_context,
-        ip_info:        input.ip_info,
-        timestamp:      input.timestamp,
-        id_cred_sec:    PedersenValue::new(id_cred_sec),
+    let input_2 = IdRecoveryRequestInputWithKeys {
+        common:      input.common,
+        id_cred_sec: PedersenValue::new(id_cred_sec),
     };
     create_identity_recovery_request_aux(input_2)
 }
@@ -200,17 +229,16 @@ mod tests {
 
     const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
 
-    fn read_test_data(ar_threshold: u8, identity_index: u32, net: Net) -> IdRequestCommon {
+    fn read_test_data(ar_threshold: u8, net: Net) -> IdRequestCommonInput {
         let ip_info = read_ip_info();
         let ars_infos = read_ars_infos();
         let global_context = read_global();
 
-        IdRequestCommon {
+        IdRequestCommonInput {
             ip_info,
             ars_infos,
             global_context,
             ar_threshold,
-            identity_index,
             net,
         }
     }
@@ -218,13 +246,14 @@ mod tests {
     #[test]
     pub fn create_id_request_with_seed_phrase() {
         let ar_threshold = 2;
-        let test_data = read_test_data(ar_threshold.clone(), 0, Net::Testnet);
+        let test_data = read_test_data(ar_threshold.clone(), Net::Testnet);
 
-        let input: IdRequestInput = IdRequestInput {
-            common: test_data,
-            seed:   TEST_SEED_1.to_string(),
+        let input: IdRequestInputWithSeed = IdRequestInputWithSeed {
+            common:         test_data,
+            seed_as_hex:    TEST_SEED_1.to_string(),
+            identity_index: 0,
         };
-        let request_string = create_id_request_v1_aux(input).unwrap();
+        let request_string = create_id_request_with_seed_v1_aux(input).unwrap();
         let request: IdentityObjectRequestV1 = serde_json::from_str(&request_string).unwrap();
         let id_cred_pub = base16_encode_string(&request.id_object_request.value.id_cred_pub);
 
@@ -243,7 +272,7 @@ mod tests {
     #[test]
     pub fn create_id_request_with_individual_keys() {
         let ar_threshold = 2;
-        let test_data = read_test_data(ar_threshold.clone(), 0, Net::Testnet);
+        let test_data = read_test_data(ar_threshold.clone(), Net::Testnet);
 
         let input: IdRequestInputWithKeys = IdRequestInputWithKeys {
             common:              test_data,
@@ -284,11 +313,13 @@ mod tests {
         let global = read_global();
         let ip_info = read_ip_info();
 
-        let input = IdRecoveryRequestInput {
+        let input = IdRecoveryRequestInputWithKeys {
+            common: IdRecoveryRequestCommonInput {
+                ip_info,
+                global_context: global,
+                timestamp: 0,
+            },
             id_cred_sec,
-            timestamp: 0,
-            global_context: global,
-            ip_info,
         };
 
         let request_string = create_identity_recovery_request_aux(input).unwrap();
@@ -305,12 +336,14 @@ mod tests {
         let ip_info = read_ip_info();
 
         let input: IdRecoveryRequestInputWithSeed = IdRecoveryRequestInputWithSeed {
-            seed_as_hex: TEST_SEED_1.to_string(),
+            common:         IdRecoveryRequestCommonInput {
+                ip_info,
+                global_context: global,
+                timestamp: 0,
+            },
+            seed_as_hex:    TEST_SEED_1.to_string(),
             identity_index: 0,
-            net: Net::Testnet,
-            timestamp: 0,
-            global_context: global,
-            ip_info,
+            net:            Net::Testnet,
         };
 
         let request_string = create_identity_recovery_request_with_seed_aux(input).unwrap();

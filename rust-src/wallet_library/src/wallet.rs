@@ -6,12 +6,12 @@ use concordium_base::{
     pedersen_commitment::{CommitmentKey as PedersenKey, Randomness as PedersenRandomness, Value},
 };
 use key_derivation::{ConcordiumHdWallet, Net};
-use std::{convert::TryInto, str::FromStr};
+use std::convert::TryInto;
 
 type HexString = String;
 
-/// Helper function for constructing a [ConcordiumHdWallet] from a
-/// seed encoded as hex and a supplied [Net].
+/// Helper function for constructing a [`ConcordiumHdWallet`] from a
+/// seed encoded as hex and a supplied [`Net`].
 /// ### Errors
 /// - Will fail if the provided seed is not hex, or is not representing exactly
 ///   64 bytes.
@@ -26,7 +26,7 @@ pub fn get_wallet(seed_as_hex: HexString, net: Net) -> Result<ConcordiumHdWallet
 }
 
 fn get_net(net_as_str: &str) -> Result<Net> {
-    match Net::from_str(net_as_str) {
+    match net_as_str.parse() {
         Ok(n) => Ok(n),
         Err(e) => bail!(e),
     }
