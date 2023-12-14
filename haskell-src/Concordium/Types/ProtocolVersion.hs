@@ -164,12 +164,25 @@ module Concordium.Types.ProtocolVersion (
     protocolSupportsDelegation,
 
     -- * Block hash version
+
+    -- | The version of the block hashing structure.
     BlockHashVersion (..),
+    -- | Singleton type corresponding to 'BlockHashVersion'.
     SBlockHashVersion (..),
-    blockHashVersionFor,
-    BlockHashVersionFor,
-    sBlockHashVersionFor,
     IsBlockHashVersion,
+    blockHashVersion,
+    -- | The block hash version for a given protocol version.
+    blockHashVersionFor,
+    -- | The block hash version for a given protocol version (at the type level).
+    BlockHashVersionFor,
+    -- | The block hash version for a given protocol version (on singletons).
+    sBlockHashVersionFor,
+    -- | Whether the block state hash is tracked as part of the block metadata.
+    blockStateHashInMetadata,
+    -- | Whether the block state hash is tracked as part of the block metadata (at the type level).
+    BlockStateHashInMetadata,
+    -- | Whether the block state hash is tracked as part of the block metadata (on singletons).
+    sBlockStateHashInMetadata,
 
     -- * Feature guards
     supportsMemo,
@@ -305,10 +318,15 @@ $( singletons
         supportsDelegation AccountV1 = DelegationSupported AccountV1
         supportsDelegation AccountV2 = DelegationSupported AccountV2
 
+        -- \| A type representing the different hashing structures used for the block hash depending on
+        -- the protocol version.
         data BlockHashVersion
-            = BlockHashVersion0
-            | BlockHashVersion1
+            = -- \| Block hashing version 0, used for P1 to P6.
+              BlockHashVersion0
+            | -- \| Block hashing version 1, used for P7.
+              BlockHashVersion1
 
+        -- \| Projection of 'ProtocolVersion' to 'BlockHashVersion'.
         blockHashVersionFor :: ProtocolVersion -> BlockHashVersion
         blockHashVersionFor P1 = BlockHashVersion0
         blockHashVersionFor P2 = BlockHashVersion0
@@ -317,6 +335,11 @@ $( singletons
         blockHashVersionFor P5 = BlockHashVersion0
         blockHashVersionFor P6 = BlockHashVersion0
         blockHashVersionFor P7 = BlockHashVersion1
+
+        -- \| Whether the block state hash is tracked as part of the block metadata.
+        blockStateHashInMetadata :: BlockHashVersion -> Bool
+        blockStateHashInMetadata BlockHashVersion0 = False
+        blockStateHashInMetadata BlockHashVersion1 = True
         |]
  )
 
@@ -397,6 +420,8 @@ type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv
 --  'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). (An alias for 'SingI'.)
 type IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) = SingI tov
 
+-- | Constraint on a type level 'BlockHashVersion' that can be used to get a corresponding
+--  'SBlockHashVersion' (see 'blockHashVersion'). (An alias for 'SingI'.)
 type IsBlockHashVersion (bhv :: BlockHashVersion) = SingI bhv
 
 -- | Constraint on a type level 'ProtocolVersion' that can be used to get a corresponding
@@ -461,6 +486,10 @@ transactionOutcomesVersion = sing
 -- | Demote a singleton 'SChainParametersVersion' to a 'ChainParametersVersion'.
 demoteChainParameterVersion :: SChainParametersVersion cpv -> ChainParametersVersion
 demoteChainParameterVersion = fromSing
+
+-- | Produce the singleton 'SBlockHashVersion' from an 'IsBlockHashVersion' constraint.
+blockHashVersion :: (IsBlockHashVersion bhv) => SBlockHashVersion bhv
+blockHashVersion = sing
 
 -- | Constraint that an account version supports delegation.
 --
