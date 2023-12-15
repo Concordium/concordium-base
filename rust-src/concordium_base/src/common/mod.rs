@@ -1,5 +1,6 @@
 //! Common types and operations used throughout the Concordium chain
 //! development.
+#[cfg(test)]
 mod helpers;
 mod impls;
 mod serde_impls;
@@ -7,7 +8,9 @@ mod serialize;
 pub mod types;
 mod version;
 
-pub use self::{helpers::*, impls::*, serialize::*, version::*};
+#[cfg(test)]
+pub use self::helpers::serialize_deserialize;
+pub use self::{serialize::*, version::*};
 
 // Reexport for ease of use.
 pub use byteorder::{ReadBytesExt, WriteBytesExt};

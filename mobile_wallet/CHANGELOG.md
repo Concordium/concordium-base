@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.1
+
+- Updated the internal library key_derivation to 2.0.0. This enforces that the seed phrase input must be 12, 15, 18, 21 or 24 words.
+
 ## 0.25.0
 - Added a function `get_verifiable_credential_keys` for deriving the keys for a verifiable credential.
 
