@@ -161,7 +161,9 @@ impl std::fmt::Display for ReportError {
     }
 }
 
-fn extract_debug(
+/// Extract debug information from the memory and stack. This is used when
+/// handling `report_error` and `debug_print` functions.
+pub(crate) fn extract_debug(
     memory: &mut Vec<u8>,
     stack: &mut machine::RuntimeStack,
 ) -> anyhow::Result<(String, u32, u32, String)> {

@@ -1138,18 +1138,7 @@ mod host {
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
-        let column = unsafe { stack.pop_u32() };
-        let line = unsafe { stack.pop_u32() };
-        let filename_length = unsafe { stack.pop_u32() } as usize;
-        let filename_start = unsafe { stack.pop_u32() } as usize;
-        let msg_length = unsafe { stack.pop_u32() } as usize;
-        let msg_start = unsafe { stack.pop_u32() } as usize;
-        ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
-        ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
-        let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?.to_owned();
-        let filename =
-            std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
-                .to_owned();
+        let (filename, line, column, msg) = crate::utils::extract_debug(memory, stack)?;
         debug.emit_debug_event(EmittedDebugStatement {
             filename,
             line,
