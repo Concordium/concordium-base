@@ -26,7 +26,7 @@ import Data.Maybe
 -- * Merkle proofs
 
 -- | A generic Merkle proof is represented as a sequence of branches, each of which can be raw
---  bytes or a sub-proof. The root has for a proof can be calculated by first calculating the
+--  bytes or a sub-proof. The root hash for a proof can be calculated by first calculating the
 --  hashes of any sub-proofs, then concatenating all the bytes together (where each subproof
 --  is replaced by the byte representation of its hash), and finally computing the SHA-256 hash
 --  of the byte string.
@@ -263,7 +263,7 @@ parseBytes len0 = Parse $ \ParserContext{..} ->
 --  If a sub-proof is not next in the input, then the parser will take the next 32 bytes as a hash
 --  instead, treating the sub-proof as absent. If neither sub-proof nor 32 bytes are available, this
 --  will raise a 'ParseError'.
---  The return value is the root hash of the subproof, and, if the sub-proof was parsed, the parse
+--  The return value is the root hash of the subproof, and, if the sub-proof was parsed, the parsed
 --  result of the sub-proof.
 parseSubProof ::
     Parse r MerkleProof [Tag] ParseError (a, Builder.Builder) ->
@@ -298,8 +298,15 @@ parseSubProof inside = Parse $ \pc@ParserContext{..} ->
                                 else parserError (applyErrorContext ctx ExpectedEndOfInput)
                         }
 
--- | Parse a Merkle proof given a schema and the to parse.
-parseMerkleBody :: MerkleSchema -> MerkleBody -> PartialTree -> Parse r MerkleProof [Tag] ParseError (PartialTree, Builder.Builder)
+-- | Parse a Merkle proof given a schema and the expanded non-terminal to parse.
+parseMerkleBody ::
+    -- | The schema to use for parsing.
+    MerkleSchema ->
+    -- | The pattern to parse.
+    MerkleBody ->
+    -- | The current accumulated parsed tree.
+    PartialTree ->
+    Parse r MerkleProof [Tag] ParseError (PartialTree, Builder.Builder)
 parseMerkleBody schema = inner
   where
     inner (LiteralBytes expect) pt = do
