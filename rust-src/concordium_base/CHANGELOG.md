@@ -1,6 +1,7 @@
 ## Unreleased changes
 
 - Improve performance of `multiexp*` family of functions.
+- Support `P7` protocol version.
 
 ## 3.2.0 (2023-11-22)
 
