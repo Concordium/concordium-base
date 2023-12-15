@@ -929,7 +929,7 @@ dependencies = [
 
 [[package]]
 name = "key_derivation"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "concordium_base",
  "ed25519-dalek",
@@ -1785,6 +1785,20 @@ checksum = "d71d857dc86794ca4c280d616f7da00d2dbfd8cd788846559a6813e6aa4b54ee"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wallet_library"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "concordium_base",
+ "ed25519-dalek",
+ "hex",
+ "key_derivation",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

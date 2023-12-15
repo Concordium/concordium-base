@@ -10,15 +10,14 @@ use concordium_base::{
     ps_sig::SigRetrievalRandomness,
 };
 use ed25519_dalek::{PublicKey, SecretKey};
-pub use ed25519_hd_key_derivation::DeriveError;
-use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden};
+use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden, DeriveError};
 use hmac::Hmac;
 use keygen_bls::keygen_bls;
 use sha2::Sha512;
-use std::fmt;
+use std::{fmt, str::FromStr};
 use thiserror::Error;
 
-#[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize)]
+#[derive(Copy, Clone, Debug, SerdeSerialize, SerdeDeserialize, PartialEq)]
 pub enum Net {
     Mainnet,
     Testnet,
@@ -30,6 +29,28 @@ impl Net {
         match self {
             Net::Mainnet => 919,
             Net::Testnet => 1,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("{value} is not a valid value for Net")]
+pub struct NetFromStrError {
+    value: String,
+}
+
+impl FromStr for Net {
+    type Err = NetFromStrError;
+
+    fn from_str(input: &str) -> Result<Net, Self::Err> {
+        match input {
+            "Mainnet" => Ok(Net::Mainnet),
+            "mainnet" => Ok(Net::Mainnet),
+            "Testnet" => Ok(Net::Testnet),
+            "testnet" => Ok(Net::Testnet),
+            _ => Err(NetFromStrError {
+                value: input.to_string(),
+            }),
         }
     }
 }
@@ -947,5 +968,35 @@ mod tests {
             "The public key should be able to verify the signature, otherwise the keys do not \
              match.",
         );
+    }
+
+    #[test]
+    fn capitalized_mainnet_net_mapped_correctly() {
+        let result = Net::from_str(&"Mainnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Mainnet);
+    }
+
+    #[test]
+    fn capitalized_testnet_net_mapped_correctly() {
+        let result = Net::from_str(&"Testnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Testnet);
+    }
+
+    #[test]
+    fn mainnet_net_mapped_correctly() {
+        let result = Net::from_str(&"mainnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Mainnet);
+    }
+
+    #[test]
+    fn testnet_net_mapped_correctly() {
+        let result = Net::from_str(&"testnet").expect("Should not fail on valid input");
+        assert_eq!(result, Net::Testnet);
+    }
+
+    #[test]
+    fn invalid_net_input_fails() {
+        let result = Net::from_str(&"Stagenet");
+        assert_eq!(result.is_err(), true);
     }
 }

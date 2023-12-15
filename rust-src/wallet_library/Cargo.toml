@@ -1,0 +1,28 @@
+[package]
+name = "wallet_library"
+version = "0.1.0"
+authors = ["Concordium AG <developers@concordium.com>"]
+edition = "2021"
+license-file = "../../LICENSE"
+
+[dependencies]
+serde = "1"
+anyhow = "1.0"
+hex = "0.4"
+serde_json = "1.0"
+thiserror = "1.0"
+
+[dependencies.key_derivation]
+path = "../key_derivation"
+version = "2.0.1"
+
+[dependencies.concordium_base]
+path = "../concordium_base"
+version = "*"
+
+[lib]
+name = "wallet_library"
+crate-type = ["rlib"]
+
+[dev-dependencies]
+ed25519-dalek = "1.0.0"
