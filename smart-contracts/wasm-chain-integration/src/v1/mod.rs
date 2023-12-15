@@ -305,6 +305,15 @@ impl std::fmt::Display for HostFunctionV1 {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+/// A record of a host call in the [`DebugTracker`].
+pub struct HostCall {
+    /// The host function that was called.
+    pub host_function:   HostFunctionV1,
+    /// The amount of energy consumed by the call.
+    pub energy_consumed: InterpreterEnergy,
+}
+
 #[derive(Default, Debug)]
 /// A type that implements [`DebugInfo`] and can be used for collecting
 /// execution information during execution.
@@ -319,7 +328,7 @@ pub struct DebugTracker {
     /// is the event index which is shared between the host trace calls and
     /// the `emitted_events` field below so that it is possible to reconstruct
     /// one global order of events.
-    pub host_call_trace: Vec<(usize, HostFunctionV1, InterpreterEnergy)>,
+    pub host_call_trace: Vec<(usize, HostCall)>,
     /// Events emitted by calls to `debug_print` host function. The first
     /// component is the event index shared with the `host_call_trace` value.
     pub emitted_events:  Vec<(usize, EmittedDebugStatement)>,
@@ -343,17 +352,28 @@ impl std::fmt::Display for DebugTracker {
         writeln!(f, "Memory alocation cost: {memory_alloc}")?;
         let mut iter1 = host_call_trace.iter().peekable();
         let mut iter2 = emitted_events.iter().peekable();
-        while let (Some((i1, hf, energy)), Some((i2, event))) = (iter1.peek(), iter2.peek()) {
+        while let (Some((i1, call)), Some((i2, event))) = (iter1.peek(), iter2.peek()) {
             if i1 < i2 {
                 iter1.next();
-                writeln!(f, "{hf} used {energy} interpreter energy")?;
+                writeln!(
+                    f,
+                    "{} used {} interpreter energy",
+                    call.host_function, call.energy_consumed
+                )?;
             } else {
                 iter2.next();
                 writeln!(f, "{event}")?;
             }
         }
-        for (_, hf, energy) in iter1 {
-            writeln!(f, "{hf} used {energy} interpreter energy")?;
+        for (
+            _,
+            HostCall {
+                host_function,
+                energy_consumed,
+            },
+        ) in iter1
+        {
+            writeln!(f, "{host_function} used {energy_consumed} interpreter energy")?;
         }
         for (_, event) in iter2 {
             writeln!(f, "{event}")?;
@@ -369,12 +389,19 @@ impl DebugTracker {
     /// calls consumed.
     pub fn host_call_summary(&self) -> BTreeMap<HostFunctionV1, (usize, InterpreterEnergy)> {
         let mut out = BTreeMap::new();
-        for (_, k, v) in self.host_call_trace.iter() {
-            let summary = out.entry(*k).or_insert((0, InterpreterEnergy {
+        for (
+            _,
+            HostCall {
+                host_function,
+                energy_consumed,
+            },
+        ) in self.host_call_trace.iter()
+        {
+            let summary = out.entry(*host_function).or_insert((0, InterpreterEnergy {
                 energy: 0,
             }));
             summary.0 += 1;
-            summary.1.energy += v.energy;
+            summary.1.energy += energy_consumed.energy;
         }
         out
     }
@@ -385,25 +412,33 @@ impl crate::DebugInfo for DebugTracker {
 
     fn empty_trace() -> Self { Self::default() }
 
-    fn trace_host_call(&mut self, f: self::ImportFunc, energy_used: InterpreterEnergy) {
-        let nrg = energy_used;
+    fn trace_host_call(&mut self, f: self::ImportFunc, energy_consumed: InterpreterEnergy) {
         let next_idx = self.next_index;
         match f {
-            ImportFunc::ChargeEnergy => self.operation.add(nrg),
+            ImportFunc::ChargeEnergy => self.operation.add(energy_consumed),
             ImportFunc::TrackCall => (),
             ImportFunc::TrackReturn => (),
-            ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(nrg),
+            ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(energy_consumed),
             ImportFunc::Common(c) => {
                 self.next_index += 1;
-                self.host_call_trace.push((next_idx, HostFunctionV1::Common(c), nrg));
+                self.host_call_trace.push((next_idx, HostCall {
+                    host_function: HostFunctionV1::Common(c),
+                    energy_consumed,
+                }));
             }
             ImportFunc::InitOnly(io) => {
                 self.next_index += 1;
-                self.host_call_trace.push((next_idx, HostFunctionV1::Init(io), nrg));
+                self.host_call_trace.push((next_idx, HostCall {
+                    host_function: HostFunctionV1::Init(io),
+                    energy_consumed,
+                }));
             }
             ImportFunc::ReceiveOnly(ro) => {
                 self.next_index += 1;
-                self.host_call_trace.push((next_idx, HostFunctionV1::Receive(ro), nrg));
+                self.host_call_trace.push((next_idx, HostCall {
+                    host_function: HostFunctionV1::Receive(ro),
+                    energy_consumed,
+                }));
             }
         }
     }
