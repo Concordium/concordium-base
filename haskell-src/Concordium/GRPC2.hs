@@ -50,6 +50,7 @@ import Concordium.Crypto.SHA256 (Hash)
 import Concordium.Crypto.SignatureScheme (Signature (..), VerifyKey (..))
 import qualified Concordium.ID.AnonymityRevoker as ArInfo
 import qualified Concordium.ID.IdentityProvider as IpInfo
+import qualified Concordium.MerkleProofs as MerkleProofs
 import Concordium.Types.Accounts.Releases
 import Concordium.Types.Block (AbsoluteBlockHeight (..))
 import Concordium.Types.Execution
@@ -2364,3 +2365,14 @@ instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) wh
             -- Since only account transactions can be executed in a dry run, we should not have
             -- other transaction summary types.
             Left CEInvalidTransactionResult
+
+instance ToProto MerkleProofs.MerkleProof where
+    type Output MerkleProofs.MerkleProof = Proto.MerkleProof
+    toProto l = Proto.make $ ProtoFields.branches .= (toProto <$> l)
+
+instance ToProto MerkleProofs.MerkleBranch where
+    type Output MerkleProofs.MerkleBranch = Proto.MerkleBranch
+    toProto (MerkleProofs.RawData bs) =
+        Proto.make $ ProtoFields.rawData .= bs
+    toProto (MerkleProofs.SubProof sp) =
+        Proto.make $ ProtoFields.subProof .= toProto sp
