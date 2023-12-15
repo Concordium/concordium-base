@@ -309,9 +309,9 @@ impl std::fmt::Display for HostFunctionV1 {
 /// A record of a host call in the [`DebugTracker`].
 pub struct HostCall {
     /// The host function that was called.
-    pub host_function:   HostFunctionV1,
+    pub host_function: HostFunctionV1,
     /// The amount of energy consumed by the call.
-    pub energy_consumed: InterpreterEnergy,
+    pub energy_used:   InterpreterEnergy,
 }
 
 #[derive(Default, Debug)]
@@ -355,11 +355,7 @@ impl std::fmt::Display for DebugTracker {
         while let (Some((i1, call)), Some((i2, event))) = (iter1.peek(), iter2.peek()) {
             if i1 < i2 {
                 iter1.next();
-                writeln!(
-                    f,
-                    "{} used {} interpreter energy",
-                    call.host_function, call.energy_consumed
-                )?;
+                writeln!(f, "{} used {} interpreter energy", call.host_function, call.energy_used)?;
             } else {
                 iter2.next();
                 writeln!(f, "{event}")?;
@@ -369,11 +365,11 @@ impl std::fmt::Display for DebugTracker {
             _,
             HostCall {
                 host_function,
-                energy_consumed,
+                energy_used,
             },
         ) in iter1
         {
-            writeln!(f, "{host_function} used {energy_consumed} interpreter energy")?;
+            writeln!(f, "{host_function} used {energy_used} interpreter energy")?;
         }
         for (_, event) in iter2 {
             writeln!(f, "{event}")?;
@@ -393,7 +389,7 @@ impl DebugTracker {
             _,
             HostCall {
                 host_function,
-                energy_consumed,
+                energy_used,
             },
         ) in self.host_call_trace.iter()
         {
@@ -401,7 +397,7 @@ impl DebugTracker {
                 energy: 0,
             }));
             summary.0 += 1;
-            summary.1.energy += energy_consumed.energy;
+            summary.1.energy += energy_used.energy;
         }
         out
     }
@@ -412,32 +408,32 @@ impl crate::DebugInfo for DebugTracker {
 
     fn empty_trace() -> Self { Self::default() }
 
-    fn trace_host_call(&mut self, f: self::ImportFunc, energy_consumed: InterpreterEnergy) {
+    fn trace_host_call(&mut self, f: self::ImportFunc, energy_used: InterpreterEnergy) {
         let next_idx = self.next_index;
         match f {
-            ImportFunc::ChargeEnergy => self.operation.add(energy_consumed),
+            ImportFunc::ChargeEnergy => self.operation.add(energy_used),
             ImportFunc::TrackCall => (),
             ImportFunc::TrackReturn => (),
-            ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(energy_consumed),
+            ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(energy_used),
             ImportFunc::Common(c) => {
                 self.next_index += 1;
                 self.host_call_trace.push((next_idx, HostCall {
                     host_function: HostFunctionV1::Common(c),
-                    energy_consumed,
+                    energy_used,
                 }));
             }
             ImportFunc::InitOnly(io) => {
                 self.next_index += 1;
                 self.host_call_trace.push((next_idx, HostCall {
                     host_function: HostFunctionV1::Init(io),
-                    energy_consumed,
+                    energy_used,
                 }));
             }
             ImportFunc::ReceiveOnly(ro) => {
                 self.next_index += 1;
                 self.host_call_trace.push((next_idx, HostCall {
                     host_function: HostFunctionV1::Receive(ro),
-                    energy_consumed,
+                    energy_used,
                 }));
             }
         }
