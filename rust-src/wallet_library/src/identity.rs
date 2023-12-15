@@ -38,7 +38,6 @@ pub struct IdRequestCommonInput {
     ip_info:        IpInfo<constants::IpPairing>,
     global_context: GlobalContext<constants::ArCurve>,
     ars_infos:      BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
-    net:            Net,
     ar_threshold:   u8,
 }
 
@@ -49,6 +48,7 @@ pub struct IdRequestCommonInput {
 pub struct IdRequestInputWithSeed {
     common:         IdRequestCommonInput,
     seed_as_hex:    String,
+    net:            Net,
     identity_index: u32,
 }
 
@@ -127,7 +127,7 @@ pub fn create_id_request_with_seed_v1_aux(input: IdRequestInputWithSeed) -> Resu
 
     let wallet: ConcordiumHdWallet = ConcordiumHdWallet {
         seed,
-        net: input.common.net,
+        net: input.net,
     };
 
     let identity_provider_index = input.common.ip_info.ip_identity.0;
@@ -190,7 +190,7 @@ pub struct IdRecoveryRequestOut {
 }
 
 /// Create an identity recovery request taking the secret as directy input.
-pub fn create_identity_recovery_request_aux(
+pub fn create_identity_recovery_request_with_keys_aux(
     input: IdRecoveryRequestInputWithKeys,
 ) -> Result<JsonString> {
     let request = generate_id_recovery_request(
@@ -219,7 +219,7 @@ pub fn create_identity_recovery_request_with_seed_aux(
         common:      input.common,
         id_cred_sec: PedersenValue::new(id_cred_sec),
     };
-    create_identity_recovery_request_aux(input_2)
+    create_identity_recovery_request_with_keys_aux(input_2)
 }
 
 #[cfg(test)]
@@ -229,7 +229,7 @@ mod tests {
 
     const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
 
-    fn read_test_data(ar_threshold: u8, net: Net) -> IdRequestCommonInput {
+    fn read_test_data(ar_threshold: u8) -> IdRequestCommonInput {
         let ip_info = read_ip_info();
         let ars_infos = read_ars_infos();
         let global_context = read_global();
@@ -239,18 +239,18 @@ mod tests {
             ars_infos,
             global_context,
             ar_threshold,
-            net,
         }
     }
 
     #[test]
     pub fn create_id_request_with_seed_phrase() {
         let ar_threshold = 2;
-        let test_data = read_test_data(ar_threshold.clone(), Net::Testnet);
+        let test_data = read_test_data(ar_threshold.clone());
 
         let input: IdRequestInputWithSeed = IdRequestInputWithSeed {
             common:         test_data,
             seed_as_hex:    TEST_SEED_1.to_string(),
+            net:            Net::Testnet,
             identity_index: 0,
         };
         let request_string = create_id_request_with_seed_v1_aux(input).unwrap();
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     pub fn create_id_request_with_individual_keys() {
         let ar_threshold = 2;
-        let test_data = read_test_data(ar_threshold.clone(), Net::Testnet);
+        let test_data = read_test_data(ar_threshold.clone());
 
         let input: IdRequestInputWithKeys = IdRequestInputWithKeys {
             common:              test_data,
@@ -322,7 +322,7 @@ mod tests {
             id_cred_sec,
         };
 
-        let request_string = create_identity_recovery_request_aux(input).unwrap();
+        let request_string = create_identity_recovery_request_with_keys_aux(input).unwrap();
         let request: IdRecoveryRequestOut = serde_json::from_str(&request_string).unwrap();
         let id_cred_pub: String =
             base16_encode_string(&request.id_recovery_request.value.id_cred_pub);
