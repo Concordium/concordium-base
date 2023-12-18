@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use concordium_base::{
-    common::base16_encode_string,
+    common::{base16_encode_string, types::KeyIndex},
+    contracts_common::NonZeroThresholdU8,
     id::{
         account_holder::create_unsigned_credential,
         constants,
@@ -13,7 +14,7 @@ use concordium_base::{
 use key_derivation::Net;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 use crate::wallet::get_wallet;
 
@@ -25,14 +26,12 @@ type JsonString = String;
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsignedCredentialInput {
-    ip_info:                IpInfo<constants::IpPairing>,
-    global_context:         GlobalContext<constants::ArCurve>,
-    ars_infos:              BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
-    id_object: IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
-    credential_public_keys: CredentialPublicKeys,
-    attribute_randomness:   BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>,
-    revealed_attributes:    Vec<AttributeTag>,
-    cred_number:            u8,
+    ip_info:             IpInfo<constants::IpPairing>,
+    global_context:      GlobalContext<constants::ArCurve>,
+    ars_infos:           BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
+    id_object:           IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
+    revealed_attributes: Vec<AttributeTag>,
+    cred_number:         u8,
 }
 
 /// Required input for generating an unsigned credential where the private keys
@@ -40,10 +39,12 @@ pub struct UnsignedCredentialInput {
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsignedCredentialInputWithKeys {
-    common:              UnsignedCredentialInput,
-    id_cred_sec:         PedersenValue<ArCurve>,
-    prf_key:             prf::SecretKey<ArCurve>,
-    blinding_randomness: String,
+    common:                 UnsignedCredentialInput,
+    id_cred_sec:            PedersenValue<ArCurve>,
+    prf_key:                prf::SecretKey<ArCurve>,
+    blinding_randomness:    String,
+    attribute_randomness:   BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>,
+    credential_public_keys: CredentialPublicKeys,
 }
 
 /// Required input for generating an unsigned credential from where the
@@ -82,11 +83,37 @@ pub fn create_unsigned_credential_with_seed_v1_aux(
         wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
     let encoded_blinding_randomness = base16_encode_string(&blinding_randomness);
 
+    let mut attribute_randomness = BTreeMap::new();
+    for attribute_name in ATTRIBUTE_NAMES.iter() {
+        let tag = AttributeTag::from_str(attribute_name).unwrap();
+        let randomness: PedersenRandomness<ArCurve> = wallet.get_attribute_commitment_randomness(
+            identity_provider_index,
+            identity_index,
+            input.common.cred_number.into(),
+            tag,
+        )?;
+        attribute_randomness.insert(tag, randomness);
+    }
+
+    let key = wallet.get_account_public_key(
+        identity_provider_index,
+        identity_index,
+        input.common.cred_number.into(),
+    )?;
+    let mut key_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();
+    key_map.insert(KeyIndex(0), VerifyKey::Ed25519VerifyKey(key));
+    let credential_public_keys: CredentialPublicKeys = CredentialPublicKeys {
+        threshold: NonZeroThresholdU8::ONE,
+        keys:      key_map,
+    };
+
     let input_with_keys = UnsignedCredentialInputWithKeys {
         common: input.common,
         id_cred_sec,
         prf_key,
         blinding_randomness: encoded_blinding_randomness,
+        credential_public_keys,
+        attribute_randomness,
     };
 
     create_unsigned_credential_with_keys_v1_aux(input_with_keys)
@@ -131,9 +158,9 @@ pub fn create_unsigned_credential_with_keys_v1_aux(
         &id_use_data,
         common.cred_number,
         policy,
-        common.credential_public_keys,
+        input.credential_public_keys,
         None,
-        &common.attribute_randomness,
+        &input.attribute_randomness,
     )?;
 
     let result = UnsignedCredentialDeploymentInfoWithRandomness {
@@ -186,28 +213,6 @@ mod tests {
         let ars_infos = read_ars_infos();
         let identity_object = read_identity_object();
 
-        let key = ed25519::PublicKey::from_bytes(
-            hex::decode("29723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b1")
-                .unwrap()
-                .as_slice(),
-        )
-        .unwrap();
-        let mut key_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();
-        key_map.insert(KeyIndex(0), VerifyKey::Ed25519VerifyKey(key));
-
-        let credential_keys_threshold = NonZeroThresholdU8::ONE;
-        let credential_keys: CredentialPublicKeys = CredentialPublicKeys {
-            threshold: credential_keys_threshold,
-            keys:      key_map,
-        };
-
-        let mut attribute_randomness = BTreeMap::new();
-        for attribute_name in ATTRIBUTE_NAMES.iter() {
-            let tag = AttributeTag::from_str(attribute_name).unwrap();
-            let randomness: PedersenRandomness<ArCurve> = PedersenRandomness::zero();
-            attribute_randomness.insert(tag, randomness);
-        }
-
         UnsignedCredentialInput {
             ars_infos,
             ip_info,
@@ -215,8 +220,6 @@ mod tests {
             id_object: identity_object,
             cred_number: 1,
             revealed_attributes: Vec::new(),
-            credential_public_keys: credential_keys,
-            attribute_randomness,
         }
     }
 
@@ -246,12 +249,37 @@ mod tests {
         .unwrap();
         let blinding_randomness =
             "575851a4e0558d589a57544a4a9f5ad1bd8467126c1b6767d32f633ea03380e6".to_string();
+
+        let mut attribute_randomness = BTreeMap::new();
+        for attribute_name in ATTRIBUTE_NAMES.iter() {
+            let tag = AttributeTag::from_str(attribute_name).unwrap();
+            let randomness: PedersenRandomness<ArCurve> = PedersenRandomness::zero();
+            attribute_randomness.insert(tag, randomness);
+        }
+
+        let key = ed25519::PublicKey::from_bytes(
+            hex::decode("29723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b1")
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+        let mut key_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();
+        key_map.insert(KeyIndex(0), VerifyKey::Ed25519VerifyKey(key));
+
+        let credential_keys_threshold = NonZeroThresholdU8::ONE;
+        let credential_public_keys: CredentialPublicKeys = CredentialPublicKeys {
+            threshold: credential_keys_threshold,
+            keys:      key_map,
+        };
+
         let common = create_test_input();
         let input = UnsignedCredentialInputWithKeys {
             common,
             id_cred_sec,
             prf_key,
             blinding_randomness,
+            attribute_randomness,
+            credential_public_keys,
         };
 
         let result_str = create_unsigned_credential_with_keys_v1_aux(input).unwrap();
