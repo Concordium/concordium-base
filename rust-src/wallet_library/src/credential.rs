@@ -69,6 +69,8 @@ struct UnsignedCredentialDeploymentInfoWithRandomness {
 
 /// Creates unsigned credential deployment information and the corresponding
 /// randomness where the secrets are derived from the provided seed.
+/// Note that this hardcodes both the key threshold and the number of keys
+/// on the credential to 1.
 pub fn create_unsigned_credential_with_seed_v1_aux(
     input: UnsignedCredentialInputWithSeed,
 ) -> Result<JsonString> {
