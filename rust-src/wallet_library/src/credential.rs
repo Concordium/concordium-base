@@ -14,7 +14,7 @@ use concordium_base::{
 use key_derivation::Net;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
-use std::{collections::BTreeMap, str::FromStr};
+use std::collections::BTreeMap;
 
 use crate::wallet::get_wallet;
 
@@ -83,16 +83,21 @@ pub fn create_unsigned_credential_with_seed_v1_aux(
         wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
     let encoded_blinding_randomness = base16_encode_string(&blinding_randomness);
 
+    let identity_attributes_iter = input.common.id_object.get_attribute_list().alist.iter();
+    let revealed_attributes = &input.common.revealed_attributes;
+
     let mut attribute_randomness = BTreeMap::new();
-    for attribute_name in ATTRIBUTE_NAMES.iter() {
-        let tag = AttributeTag::from_str(attribute_name).unwrap();
-        let randomness: PedersenRandomness<ArCurve> = wallet.get_attribute_commitment_randomness(
-            identity_provider_index,
-            identity_index,
-            input.common.cred_number.into(),
-            tag,
-        )?;
-        attribute_randomness.insert(tag, randomness);
+    for (tag, _kind) in identity_attributes_iter {
+        if !revealed_attributes.contains(tag) {
+            let randomness: PedersenRandomness<ArCurve> = wallet
+                .get_attribute_commitment_randomness(
+                    identity_provider_index,
+                    identity_index,
+                    input.common.cred_number.into(),
+                    *tag,
+                )?;
+            attribute_randomness.insert(*tag, randomness);
+        }
     }
 
     let key = wallet.get_account_public_key(
