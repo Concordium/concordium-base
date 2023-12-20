@@ -165,7 +165,7 @@ pub trait Curve:
     fn hash_to_group(m: &[u8]) -> Self;
 }
 
-/// An abstraction over a multiexp algoritm.
+/// An abstraction over a multiexp algorithm.
 pub trait MultiExp {
     type CurvePoint: Curve;
 
@@ -176,7 +176,7 @@ pub trait MultiExp {
     // concrete implementation to take additional configuration parameters.
     fn new<X: Borrow<Self::CurvePoint>>(gs: &[X]) -> Self;
 
-    /// Multiexp algoritm that uses points provided at the instantiation step
+    /// Multiexp algorithm that uses points provided at the instantiation step
     /// and scalars provided as a parameter.
     fn multiexp<X: Borrow<<Self::CurvePoint as Curve>::Scalar>>(
         &self,

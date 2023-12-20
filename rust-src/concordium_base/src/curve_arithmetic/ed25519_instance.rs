@@ -207,7 +207,7 @@ impl MultiExp for VartimeRistrettoPrecomputation {
 }
 
 /// An instance of multiexp algorithm from the Dalek library.
-/// It is instantiated with points, but no precomutations is done.
+/// It is instantiated with points, but no precomputations is done.
 /// This way, it follows the same interface as our generic multiexp.
 pub struct RistrettoMultiExpNoPrecompute {
     points: Vec<RistrettoPoint>,
