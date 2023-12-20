@@ -82,7 +82,7 @@ pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug {
 }
 
 /// This is an extension of the `Field` trait that adds some constants decribing
-/// the element size and operations for conveting to/from bib integer
+/// the element size and operations for converting to/from big integer
 /// representation (an array of `u64` limbs.)
 pub trait PrimeField: Field {
     /// How many bits are needed to represent an element of this field.
@@ -172,7 +172,7 @@ pub trait MultiExp {
     /// Create new algorithm instance by providing initial points.
     /// Can be used to precompute a lookup table.
     // NOTE: this method does not take `window_size` as a parameter.
-    // Some libraries do not provide expose `window_size`, so it is left to a
+    // Some libraries do not expose `window_size`, so it is left to a
     // concrete implementation to take additional configuration parameters.
     fn new<X: Borrow<Self::CurvePoint>>(gs: &[X]) -> Self;
 
