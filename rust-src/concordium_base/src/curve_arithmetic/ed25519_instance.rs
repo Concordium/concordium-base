@@ -83,8 +83,8 @@ impl PrimeField for RistrettoScalar {
         let mut vec: Vec<u64> = Vec::new();
         let bytes: [u8; 32] = self.0.to_bytes();
         for chunk in bytes.chunks_exact(8) {
-            // The chunk size is always 8 and there is no remider after chunking, since the
-            // the the representation is a 32-byte array. That is why it is safe to unwrap
+            // The chunk size is always 8 and there is no remainder after chunking, since the
+            // representation is a 32-byte array. That is why it is safe to unwrap
             // here.
             let x: [u8; 8] = chunk.try_into().unwrap();
             let x_64 = u64::from_le_bytes(x);
@@ -217,7 +217,7 @@ impl MultiExp for VartimeRistrettoPrecomputation {
 }
 
 /// An instance of multiexp algorithm from the Dalek library.
-/// It is instantiated with points, but no precomutations is done.
+/// It is instantiated with points, but no precomputations is done.
 /// This way, it follows the same interface as our generic multiexp.
 pub struct RistrettoMultiExpNoPrecompute {
     points: Vec<RistrettoPoint>,
