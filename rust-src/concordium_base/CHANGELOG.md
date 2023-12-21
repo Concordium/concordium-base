@@ -1,6 +1,7 @@
 ## Unreleased changes
 
 - Improve performance of `multiexp*` family of functions.
+- Support `P7` protocol version.
 - The `Debug` implementation for `ContractEvent` displays the value in `hex`.
   The alternate formatter (using `#`) displays it as a list of bytes.
 

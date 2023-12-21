@@ -2,6 +2,9 @@
 
 ## Unreleased changes
 
+- Add a `branch_statistics` function to get insight into smart contract state
+  tree structure.
+
 ## concordium-smart-contract-engine 3.1.0 (2023-10-18)
 
 - Add `get_build_info` and `get_build_info_from_skeleton` utility functions for

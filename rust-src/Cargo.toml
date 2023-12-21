@@ -7,5 +7,6 @@ members=[
    "ed25519_hd_key_derivation",
    "key_derivation",
    "concordium_base",
-   "concordium_base_derive"
+   "concordium_base_derive",
+   "wallet_library"
 ]
