@@ -396,15 +396,17 @@ mod tests {
             let n = <Fr as Field>::random(&mut rng);
             let mut bytes = to_bytes(&n);
             bytes.reverse();
+            println!("bytes: {:?}", bytes[31]);
             let m = scalar_from_bytes_helper(&bytes);
-            // make sure that n and m only differ in the topmost bit.
+            // Make sure that n and m only differ in the topmost bits;
+            // `scalar_from_bytes_helper` resets the topmost bits to zeros.
             let n = n.into_repr();
             let m = m.into_repr();
             let mask = !(1u64 << 63 | 1u64 << 62);
             assert_eq!(n[0], m[0], "First limb.");
             assert_eq!(n[1], m[1], "Second limb.");
             assert_eq!(n[2], m[2], "Third limb.");
-            assert_eq!(n[3] & mask, m[3] & mask, "Fourth limb with top bit masked.");
+            assert_eq!(n[3] & mask, m[3], "Fourth limb with top bit masked.");
         }
     }
 

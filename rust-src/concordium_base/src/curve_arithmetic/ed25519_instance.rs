@@ -172,14 +172,24 @@ impl Curve for RistrettoPoint {
         RistrettoPoint::from_uniform_bytes(&uniform_bytes)
     }
 
-    fn generate_scalar<R: rand::Rng>(rng: &mut R) -> Self::Scalar {
-        Self::Scalar::random(rng)
-    }
+    fn generate_scalar<R: rand::Rng>(rng: &mut R) -> Self::Scalar { Self::Scalar::random(rng) }
 
     fn scalar_from_u64(n: u64) -> Self::Scalar { Scalar::from(n).into() }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
-        Scalar::hash_from_bytes::<ed25519_dalek::Sha512>(bs.as_ref()).into()
+        // Traverse at most 4 8-byte chunks, for a total of 256 bits.
+        // The top-most four bits in the last chunk are set to 0.
+        let mut fr = [0u64; 4];
+        for (i, chunk) in bs.as_ref().chunks(8).take(4).enumerate() {
+            let mut v = [0u8; 8];
+            v[..chunk.len()].copy_from_slice(chunk);
+            fr[i] = u64::from_le_bytes(v);
+        }
+        // unset four topmost bits in the last read u64.
+        fr[3] &= !(1u64 << 63 | 1u64 << 62 | 1u64 << 61 | 1u64 << 60);
+        <RistrettoScalar as PrimeField>::from_repr(&fr)
+            .expect("The scalar with top two bits erased should be valid.")
+        // Scalar::hash_from_bytes::<ed25519_dalek::Sha512>(bs.as_ref()).into()
     }
 
     fn hash_to_group(m: &[u8]) -> Self {
@@ -237,7 +247,7 @@ pub(crate) mod tests {
     use curve25519_dalek::ristretto::RistrettoPoint;
     use std::io::Cursor;
 
-    // Test serialization for scalars
+    /// Test serialization for scalars
     #[test]
     fn test_scalar_serialization() {
         let mut csprng = rand::thread_rng();
@@ -251,7 +261,7 @@ pub(crate) mod tests {
         }
     }
 
-    // Test serialization for curve points
+    /// Test serialization for curve points
     #[test]
     fn test_point_serialization() {
         let mut csprng = rand::thread_rng();
@@ -265,7 +275,7 @@ pub(crate) mod tests {
         }
     }
 
-    // Turn scalar elements into representations and back again, and compare.
+    /// Turn scalar elements into representations and back again, and compare.
     #[test]
     fn test_into_from_rep() {
         let mut csprng = rand::thread_rng();
@@ -278,7 +288,7 @@ pub(crate) mod tests {
         }
     }
 
-    // Turn curve points into representations and back again, and compare.
+    /// Turn curve points into representations and back again, and compare.
     #[test]
     fn test_point_byte_conversion_unchecked() {
         let mut csprng = rand::thread_rng();
@@ -288,6 +298,57 @@ pub(crate) mod tests {
             let point_res = RistrettoPoint::bytes_to_curve_unchecked(&mut Cursor::new(&bytes));
             assert!(point_res.is_ok());
             assert_eq!(point, point_res.unwrap());
+        }
+    }
+
+    /// Test that `into_repr()` correclty converts a scalar constructed from a
+    /// byte array to an array of limbs with least significant digits first.
+    #[test]
+    fn test_into() {
+        let s: RistrettoScalar = Scalar::from_canonical_bytes([
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255,
+            0, 0, 0, 0, 0, 0, 0, 0,
+        ])
+        .expect("Expected a valid scalar")
+        .into();
+        assert_eq!(s.into_repr(), [1u64, 0u64, u64::MAX - 1, 0u64]);
+    }
+
+    // Check that scalar_from_bytes for ed25519 works on small values.
+    #[test]
+    fn scalar_from_bytes_small() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            let n = <RistrettoScalar as Field>::random(&mut rng);
+            let bytes = to_bytes(&n);
+            let m = <RistrettoPoint as Curve>::scalar_from_bytes(&bytes);
+            // Make sure that n and m only differ in the topmost bits;
+            // `scalar_from_bytes_helper` resets the topmost bits to zeros.
+            let n = n.into_repr();
+            let m = m.into_repr();
+            let mask = !(1u64 << 63 | 1u64 << 62 | 1u64 << 61 | 1u64 << 60);
+            assert_eq!(n[0], m[0], "First limb.");
+            assert_eq!(n[1], m[1], "Second limb.");
+            assert_eq!(n[2], m[2], "Third limb.");
+            assert_eq!(n[3] & mask, m[3], "Fourth limb with top bit masked.");
+        }
+    }
+
+    /// Test that everything that exeeds `PrimeField::CAPACITY` is ignored by
+    /// `Curve::scalar_from_bytes()`
+    #[test]
+    fn test_scalar_from_bytes_cut_at_max_capacity() {
+        for n in 1..16 {
+            let fits_capacity = <RistrettoPoint as Curve>::scalar_from_bytes([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 15,
+            ]);
+            let extend = 15 + (n << 4);
+            let over_capacity = <RistrettoPoint as Curve>::scalar_from_bytes([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, extend,
+            ]);
+            assert_eq!(fits_capacity, over_capacity);
         }
     }
 }
