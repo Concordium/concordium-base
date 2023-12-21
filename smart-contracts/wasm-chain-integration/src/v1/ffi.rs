@@ -403,6 +403,7 @@ unsafe extern "C" fn validate_and_process_v1(
         },
         &ConcordiumAllowedImports {
             support_upgrade: support_upgrade == 1,
+            enable_debug:    false, // we don't allow debugging when running as part of the chain.
         },
         wasm_bytes,
     ) {

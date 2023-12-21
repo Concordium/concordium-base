@@ -2,7 +2,9 @@ use super::{
     trie::{self, MutableState},
     Interrupt, ParameterVec, StateLessReceiveHost,
 };
-use crate::{constants, resumption::InterruptedState, type_matches, v0, InterpreterEnergy};
+use crate::{
+    constants, resumption::InterruptedState, type_matches, v0, DebugInfo, InterpreterEnergy,
+};
 use anyhow::{bail, ensure, Context};
 use concordium_contracts_common::OwnedEntrypointName;
 use concordium_wasm::{
@@ -22,7 +24,7 @@ pub type ReturnValue = Vec<u8>;
 
 #[derive(Debug)]
 /// Result of execution of the contract's init function.
-pub enum InitResult {
+pub enum InitResult<A> {
     /// Execution succeeded and a new instance is to be created.
     Success {
         /// Logs produced by the execution.
@@ -33,6 +35,8 @@ pub enum InitResult {
         remaining_energy: InterpreterEnergy,
         /// Initial state of the contract.
         state:            MutableState,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution failed due to the initialization function's logic.
     Reject {
@@ -44,6 +48,8 @@ pub enum InitResult {
         return_value:     ReturnValue,
         /// The remaining interpreter energy after execution.
         remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution stopped due to a runtime error.
     Trap {
@@ -52,12 +58,17 @@ pub enum InitResult {
                                           * cargo-concordium */
         /// The remaining interpreter energy after execution.
         remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution exceeded its allocated energy bound and was terminated.
-    OutOfEnergy,
+    OutOfEnergy {
+        /// Debug trace.
+        trace: A,
+    },
 }
 
-impl InitResult {
+impl InitResult<()> {
     /// Extract the result into a byte array and potentially a return value.
     /// This is only meant to be used to pass the return value to foreign code.
     /// When using this from Rust the consumer should inspect the [InitResult]
@@ -65,9 +76,10 @@ impl InitResult {
     #[cfg(feature = "enable-ffi")]
     pub(crate) fn extract(self) -> (Vec<u8>, Option<MutableState>, Option<ReturnValue>) {
         match self {
-            InitResult::OutOfEnergy => (vec![0], None, None),
+            InitResult::OutOfEnergy{                trace: () } => (vec![0], None, None),
             InitResult::Trap {
                 remaining_energy,
+                trace: (),
                 .. // ignore the error since it is not needed in ffi
             } => {
                 let mut out = vec![1; 9];
@@ -78,6 +90,7 @@ impl InitResult {
                 reason,
                 return_value,
                 remaining_energy,
+                trace: (),
             } => {
                 let mut out = Vec::with_capacity(13);
                 out.push(2);
@@ -90,6 +103,7 @@ impl InitResult {
                 return_value,
                 remaining_energy,
                 state,
+                trace: (),
             } => {
                 let mut out = Vec::with_capacity(5 + 8);
                 out.push(3);
@@ -146,7 +160,7 @@ pub type ReceiveInterruptedState<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> 
 
 #[derive(Debug)]
 /// Result of execution of a receive function.
-pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
+pub enum ReceiveResult<R, A: DebugInfo, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
     /// Execution terminated.
     Success {
         /// Logs produced since the last interrupt (or beginning of execution).
@@ -158,12 +172,14 @@ pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         /// although it might be empty.
         return_value:     ReturnValue,
         /// Remaining interpreter energy.
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution triggered an operation.
     Interrupt {
         /// Remaining interpreter energy.
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy,
         /// Whether the state has changed as a result of execution. Note that
         /// the meaning of this is "since the start of the last resume".
         state_changed:    bool,
@@ -173,6 +189,8 @@ pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         config:           Box<ReceiveInterruptedState<R, Ctx>>,
         /// The operation that needs to be handled.
         interrupt:        Interrupt,
+        /// Debug trace.
+        trace:            A,
     },
     /// Contract execution terminated with a "logic error", i.e., contract
     /// decided to signal an error.
@@ -182,16 +200,23 @@ pub enum ReceiveResult<R, Ctx = ReceiveContext<v0::OwnedPolicyBytes>> {
         /// Return value, that may describe the error in more detail.
         return_value:     ReturnValue,
         /// Remaining interpreter energy.
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution stopped due to a runtime error.
     Trap {
         error:            anyhow::Error, /* this error is here so that we can print it in
                                           * cargo-concordium */
-        remaining_energy: u64,
+        remaining_energy: InterpreterEnergy,
+        /// Debug trace.
+        trace:            A,
     },
     /// Execution consumed all available interpreter energy.
-    OutOfEnergy,
+    OutOfEnergy {
+        /// Debug trace.
+        trace: A,
+    },
 }
 
 #[cfg(feature = "enable-ffi")]
@@ -210,7 +235,7 @@ pub(crate) struct ReceiveResultExtract<R> {
     pub return_value:    Option<ReturnValue>,
 }
 
-impl<R> ReceiveResult<R> {
+impl<R> ReceiveResult<R, ()> {
     /// Extract the result into a byte array and potentially a return value.
     /// This is only meant to be used to pass the return value to foreign code.
     /// When using this from Rust the consumer should inspect the
@@ -219,7 +244,9 @@ impl<R> ReceiveResult<R> {
     pub(crate) fn extract(self) -> ReceiveResultExtract<R> {
         use ReceiveResult::*;
         match self {
-            OutOfEnergy => ReceiveResultExtract{
+            OutOfEnergy {
+                trace: ()
+            } => ReceiveResultExtract{
                 status: vec![0],
                 state_changed: false,
                 interrupt_state: None,
@@ -242,6 +269,7 @@ impl<R> ReceiveResult<R> {
                 reason,
                 return_value,
                 remaining_energy,
+                trace: (),
             } => {
                 let mut out = Vec::with_capacity(13);
                 out.push(2);
@@ -259,10 +287,11 @@ impl<R> ReceiveResult<R> {
                 state_changed,
                 return_value,
                 remaining_energy,
+                trace: (),
             } => {
                 let mut out = vec![3];
                 out.extend_from_slice(&logs.to_bytes());
-                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out.extend_from_slice(&remaining_energy.energy.to_be_bytes());
                 ReceiveResultExtract{
                     status: out,
                     state_changed,
@@ -276,6 +305,7 @@ impl<R> ReceiveResult<R> {
                 logs,
                 config,
                 interrupt,
+                trace: (),
             } => {
                 let mut out = vec![4];
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
@@ -293,10 +323,10 @@ impl<R> ReceiveResult<R> {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialOrd, Ord, Eq, PartialEq, Clone, Copy, Debug)]
 /// An enumeration of functions that can be used both by init and receive
 /// methods.
-pub(crate) enum CommonFunc {
+pub enum CommonFunc {
     GetParameterSize,
     GetParameterSection,
     GetPolicySection,
@@ -322,19 +352,63 @@ pub(crate) enum CommonFunc {
     HashSHA2_256,
     HashSHA3_256,
     HashKeccak256,
+    /// Record a debug string together with its location. Only available in
+    /// debug mode.
+    DebugPrint,
+}
+
+impl std::fmt::Display for CommonFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            CommonFunc::GetParameterSize => "get_parameter_size",
+            CommonFunc::GetParameterSection => "get_parameter_section",
+            CommonFunc::GetPolicySection => "get_policy_section",
+            CommonFunc::LogEvent => "log_event",
+            CommonFunc::GetSlotTime => "get_slot_time",
+            CommonFunc::WriteOutput => "write_output",
+            CommonFunc::StateLookupEntry => "state_lookup_entry",
+            CommonFunc::StateCreateEntry => "state_create_entry",
+            CommonFunc::StateDeleteEntry => "state_delete_entry",
+            CommonFunc::StateDeletePrefix => "state_delete_prefix",
+            CommonFunc::StateIteratePrefix => "state_iterate_prefix",
+            CommonFunc::StateIteratorNext => "state_iterator_next",
+            CommonFunc::StateIteratorDelete => "state_iterator_delete",
+            CommonFunc::StateIteratorKeySize => "state_iterator_key_size",
+            CommonFunc::StateIteratorKeyRead => "state_iterator_key_read",
+            CommonFunc::StateEntryRead => "state_entry_read",
+            CommonFunc::StateEntryWrite => "state_entry_write",
+            CommonFunc::StateEntrySize => "state_entry_size",
+            CommonFunc::StateEntryResize => "state_entry_resize",
+            CommonFunc::VerifyEd25519 => "verify_ed25519_signature",
+            CommonFunc::VerifySecp256k1 => "verify_ecdsa_secp256k1_signature",
+            CommonFunc::HashSHA2_256 => "hash_sha2_256",
+            CommonFunc::HashSHA3_256 => "hash_sha3_256",
+            CommonFunc::HashKeccak256 => "hash_keccak_256",
+            CommonFunc::DebugPrint => "debug_print",
+        };
+        f.write_str(s)
+    }
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialOrd, Ord, Eq, PartialEq, Clone, Copy, Debug)]
 /// An enumeration of functions that can be used only by init methods.
-pub(crate) enum InitOnlyFunc {
+pub enum InitOnlyFunc {
     GetInitOrigin,
 }
 
+impl std::fmt::Display for InitOnlyFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InitOnlyFunc::GetInitOrigin => f.write_str("get_init_origin"),
+        }
+    }
+}
+
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialOrd, Ord, Eq, PartialEq, Clone, Copy, Debug)]
 /// An enumeration of functions that can be used only by receive methods.
-pub(crate) enum ReceiveOnlyFunc {
+pub enum ReceiveOnlyFunc {
     Invoke,
     GetReceiveInvoker,
     GetReceiveSelfAddress,
@@ -346,10 +420,27 @@ pub(crate) enum ReceiveOnlyFunc {
     Upgrade,
 }
 
+impl std::fmt::Display for ReceiveOnlyFunc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ReceiveOnlyFunc::Invoke => "invoke",
+            ReceiveOnlyFunc::GetReceiveInvoker => "get_receive_invoker",
+            ReceiveOnlyFunc::GetReceiveSelfAddress => "get_receive_self_address",
+            ReceiveOnlyFunc::GetReceiveSelfBalance => "get_receive_self_balance",
+            ReceiveOnlyFunc::GetReceiveSender => "get_receive_sender",
+            ReceiveOnlyFunc::GetReceiveOwner => "get_receive_owner",
+            ReceiveOnlyFunc::GetReceiveEntrypointSize => "get_receive_entrypoint_size",
+            ReceiveOnlyFunc::GetReceiveEntryPoint => "get_receive_entrypoint",
+            ReceiveOnlyFunc::Upgrade => "upgrade",
+        };
+        f.write_str(s)
+    }
+}
+
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 /// Enumeration of allowed imports.
-pub(crate) enum ImportFunc {
+pub enum ImportFunc {
     /// Charge for execution cost.
     ChargeEnergy,
     /// Track calling a function, increasing the activation frame count.
@@ -409,6 +500,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             34 => Ok(ImportFunc::Common(CommonFunc::HashSHA2_256)),
             35 => Ok(ImportFunc::Common(CommonFunc::HashSHA3_256)),
             36 => Ok(ImportFunc::Common(CommonFunc::HashKeccak256)),
+            255 => Ok(ImportFunc::Common(CommonFunc::DebugPrint)),
             37 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Upgrade)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
         }
@@ -447,6 +539,7 @@ impl Output for ImportFunc {
                 CommonFunc::HashSHA2_256 => 34,
                 CommonFunc::HashSHA3_256 => 35,
                 CommonFunc::HashKeccak256 => 36,
+                CommonFunc::DebugPrint => 255,
             },
             ImportFunc::InitOnly(io) => match io {
                 InitOnlyFunc::GetInitOrigin => 23,
@@ -503,6 +596,9 @@ pub struct ConcordiumAllowedImports {
     /// Whether to allow the `upgrade` function. This is supported in protocol
     /// P5 and up, but not before.
     pub support_upgrade: bool,
+    /// Allow host functions to enable debugging support. This is intended for
+    /// off-chain use.
+    pub enable_debug:    bool,
 }
 
 impl validate::ValidateImportExport for ConcordiumAllowedImports {
@@ -556,6 +652,10 @@ impl validate::ValidateImportExport for ConcordiumAllowedImports {
                 "hash_keccak_256" => type_matches!(ty => [I32, I32, I32]),
                 // Upgrade is only available from P5.
                 "upgrade" => self.support_upgrade && type_matches!(ty => [I32]; I64),
+                // Only allow this in debug mode.
+                "debug_print" => {
+                    self.enable_debug && type_matches!(ty => [I32, I32, I32, I32, I32, I32])
+                }
                 _ => false,
             }
         } else {
@@ -658,6 +758,7 @@ impl TryFromImport for ProcessedImports {
                 "hash_sha3_256" => ImportFunc::Common(CommonFunc::HashSHA3_256),
                 "hash_keccak_256" => ImportFunc::Common(CommonFunc::HashKeccak256),
                 "upgrade" => ImportFunc::ReceiveOnly(ReceiveOnlyFunc::Upgrade),
+                "debug_print" => ImportFunc::Common(CommonFunc::DebugPrint),
                 name => bail!("Unsupported import {}.", name),
             }
         } else {
