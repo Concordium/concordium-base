@@ -19,7 +19,7 @@ use crossterm::{
 use dialoguer::{Confirm, Input, MultiSelect, Select};
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use key_derivation::{words_to_seed, ConcordiumHdWallet, CredentialContext, Net};
+use key_derivation::{ConcordiumHdWallet, CredentialContext, Net};
 use rand::*;
 use serde_json::{json, to_value};
 use std::{collections::btree_map::BTreeMap, convert::TryFrom, path::PathBuf};
@@ -277,6 +277,21 @@ fn main() -> anyhow::Result<()> {
         StartIpV1(ip) => handle_start_ip_v1(ip),
         CreateCredentialV1(cc) => handle_create_credential_v1(cc),
         GenerateIdRecoveryRequest(girr) => handle_recovery(girr),
+    }
+}
+
+fn get_concordium_wallet(
+    words_str: &str,
+    use_mainnet: bool,
+) -> anyhow::Result<ConcordiumHdWallet, anyhow::Error> {
+    let net = if use_mainnet {
+        Net::Mainnet
+    } else {
+        Net::Testnet
+    };
+    match ConcordiumHdWallet::from_seed_phrase(words_str, net) {
+        Ok(s) => Ok(s),
+        Err(e) => bail!(format!("An invalid seed phrase was provided. Error: {}", e)),
     }
 }
 
@@ -609,14 +624,7 @@ fn handle_start_ip_v1(sip: StartIpV1) -> anyhow::Result<()> {
         randomized_words.join(" ")
     };
 
-    let wallet = ConcordiumHdWallet {
-        seed: words_to_seed(&words_str),
-        net:  if use_mainnet {
-            Net::Mainnet
-        } else {
-            Net::Testnet
-        },
-    };
+    let wallet = get_concordium_wallet(&words_str, use_mainnet)?;
     let identity_provider_index = ip_info.ip_identity.0;
     let identity_index = Input::new()
         .with_prompt("Identity index")
@@ -716,14 +724,8 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
         input_words.join(" ")
     };
 
-    let wallet = ConcordiumHdWallet {
-        seed: words_to_seed(&words_str),
-        net:  if use_mainnet {
-            Net::Mainnet
-        } else {
-            Net::Testnet
-        },
-    };
+    let wallet = get_concordium_wallet(&words_str, use_mainnet)?;
+
     // We ask what identity and regid index they would like to use.
     let identity_index = Input::new()
         .with_prompt("Identity index")
@@ -1144,14 +1146,7 @@ fn handle_recovery(girr: GenerateIdRecoveryRequest) -> anyhow::Result<()> {
         input_words.join(" ")
     };
 
-    let wallet = ConcordiumHdWallet {
-        seed: words_to_seed(&words_str),
-        net:  if use_mainnet {
-            Net::Mainnet
-        } else {
-            Net::Testnet
-        },
-    };
+    let wallet = get_concordium_wallet(&words_str, use_mainnet)?;
     // We ask what identity and regid index they would like to use.
     let identity_index = Input::new()
         .with_prompt("Identity index")

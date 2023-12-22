@@ -52,7 +52,7 @@ pub mod v0;
 pub mod v1;
 #[cfg(test)]
 mod validation_tests;
-use anyhow::{bail, Context};
+use anyhow::bail;
 use derive_more::{Display, From, Into};
 
 /// Re-export the underlying Wasm execution engine used by Concordium.
@@ -94,20 +94,74 @@ macro_rules! type_matches {
 pub(crate) use type_matches;
 
 /// Result of contract execution. This is just a wrapper around
-/// [anyhow::Result].
+/// [`anyhow::Result`].
 pub type ExecResult<A> = anyhow::Result<A>;
 
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, From, Into, Display)]
+pub trait DebugInfo: Send + Sync + std::fmt::Debug + 'static {
+    const ENABLE_DEBUG: bool;
+
+    fn empty_trace() -> Self;
+
+    fn trace_host_call(&mut self, f: v1::ImportFunc, energy_used: InterpreterEnergy);
+
+    fn emit_debug_event(&mut self, event: v1::EmittedDebugStatement);
+}
+
+impl DebugInfo for () {
+    const ENABLE_DEBUG: bool = false;
+
+    #[inline(always)]
+    fn empty_trace() -> Self {}
+
+    #[inline(always)]
+    fn trace_host_call(&mut self, _f: v1::ImportFunc, _energy_used: InterpreterEnergy) {
+        // do nothing
+    }
+
+    #[inline(always)]
+    fn emit_debug_event(&mut self, _event: v1::EmittedDebugStatement) {
+        // do nothing
+    }
+}
+
+#[derive(
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Clone,
+    Copy,
+    From,
+    Into,
+    Display,
+    derive_more::FromStr,
+)]
 #[display(fmt = "{}", energy)]
-/// Interpreter energy used to count execution steps in the interpreter.
-/// This energy is converted to NRG by the scheduler.
+#[repr(transparent)]
 pub struct InterpreterEnergy {
     /// Energy left to use
     pub energy: u64,
 }
 
+impl PartialEq<u64> for InterpreterEnergy {
+    fn eq(&self, other: &u64) -> bool { self.energy.eq(other) }
+}
+
+impl PartialOrd<u64> for InterpreterEnergy {
+    fn partial_cmp(&self, other: &u64) -> Option<std::cmp::Ordering> {
+        self.energy.partial_cmp(other)
+    }
+}
+
 impl InterpreterEnergy {
+    pub const fn new(energy: u64) -> Self {
+        Self {
+            energy,
+        }
+    }
+
     /// Subtract the given amount from the energy, bottoming out at 0.
     pub fn subtract(self, consumed: u64) -> Self {
         Self {
@@ -115,37 +169,27 @@ impl InterpreterEnergy {
         }
     }
 
+    /// Compute the difference of two energy amounts.
+    pub fn signed_diff(self, other: Self) -> i128 {
+        i128::from(self.energy) - i128::from(other.energy)
+    }
+
+    #[cfg(feature = "enable-ffi")]
+    /// Serialized in big-endian representation.
+    pub fn to_be_bytes(self) -> [u8; 8] { self.energy.to_be_bytes() }
+
     /// Saturating interpreter energy subtraction.
     ///
     /// Computes `self - rhs` bottoming out at `0` instead of underflowing.
-    pub fn saturating_sub(self, consumed: Self) -> Self {
+    pub fn saturating_sub(self, consumed: &Self) -> Self {
         Self {
             energy: self.energy.saturating_sub(consumed.energy),
         }
     }
-}
 
-impl std::str::FromStr for InterpreterEnergy {
-    type Err = anyhow::Error;
+    /// Internal helper to add amount when we know it will not overflow.
+    fn add(&mut self, other: Self) { self.energy += other.energy; }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let energy = s.parse::<u64>().context("Could not parse interpreter energy.")?;
-        Ok(Self {
-            energy,
-        })
-    }
-}
-
-#[derive(Debug)]
-/// An error raised by the interpreter when no more interpreter energy remains
-/// for execution.
-pub struct OutOfEnergy;
-
-impl std::fmt::Display for OutOfEnergy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
-}
-
-impl InterpreterEnergy {
     pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
         if self.energy >= amount {
             self.energy -= amount;
@@ -153,18 +197,6 @@ impl InterpreterEnergy {
         } else {
             self.energy = 0;
             bail!(OutOfEnergy)
-        }
-    }
-
-    /// TODO: This needs more specification. At the moment it is not used, but
-    /// should be.
-    pub fn charge_stack(&mut self, amount: u64) -> ExecResult<()> {
-        if self.energy >= amount {
-            self.energy -= amount;
-            Ok(())
-        } else {
-            self.energy = 0;
-            bail!("Out of energy.")
         }
     }
 
@@ -182,4 +214,13 @@ impl InterpreterEnergy {
         let to_charge = u64::from(num_pages) * u64::from(constants::MEMORY_COST_FACTOR); // this cannot overflow because of the cast.
         self.tick_energy(to_charge)
     }
+}
+
+#[derive(Debug)]
+/// An error raised by the interpreter when no more interpreter energy remains
+/// for execution.
+pub struct OutOfEnergy;
+
+impl std::fmt::Display for OutOfEnergy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
 }

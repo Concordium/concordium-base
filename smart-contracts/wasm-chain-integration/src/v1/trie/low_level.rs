@@ -44,7 +44,7 @@ use ptree::TreeBuilder;
 use sha2::Digest;
 use slab::Slab;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fmt::{self, Debug, Display, Formatter, LowerHex},
     io::{Read, Write},
     iter::once,
@@ -1555,6 +1555,28 @@ impl Hashed<Node> {
             hash: self.hash,
             data: inner,
         })
+    }
+
+    /// Compute the distribution of the number of nodes split by the branching
+    /// factor.
+    pub(crate) fn branch_statistics<S: BackingStoreLoad>(
+        &self,
+        loader: &mut S,
+    ) -> std::collections::BTreeMap<u8, usize> {
+        let node = Link::new(CachedRef::Memory {
+            value: self.clone(),
+        });
+        let mut out = BTreeMap::new();
+        let mut stack = vec![node];
+        while let Some(node) = stack.pop() {
+            let node = node.borrow();
+            let node = node.get(loader);
+            for (_, child) in node.data.children.iter() {
+                stack.push(child.to_owned());
+            }
+            *out.entry(node.data.children.len() as u8).or_default() += 1;
+        }
+        out
     }
 }
 

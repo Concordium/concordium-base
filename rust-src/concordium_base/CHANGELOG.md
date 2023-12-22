@@ -4,6 +4,9 @@
 - Add traits `Field` and `PrimeField` with implementations for the underlying field of the `BLS12-381`` curve.
 - Add `MultiExp` trait that allows to have different `multiexp` algorithm implementations for different curves.
 - Add implementations of `Field`, `PrimeField` and `Curve` for the Ristretto representation of `curve25519`.
+- Support `P7` protocol version.
+- The `Debug` implementation for `ContractEvent` displays the value in `hex`.
+  The alternate formatter (using `#`) displays it as a list of bytes.
 
 ## 3.2.0 (2023-11-22)
 
