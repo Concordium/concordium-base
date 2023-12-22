@@ -83,9 +83,9 @@ impl PrimeField for RistrettoScalar {
         let mut vec: Vec<u64> = Vec::new();
         let bytes: [u8; 32] = self.0.to_bytes();
         for chunk in bytes.chunks_exact(8) {
-            // The chunk size is always 8 and there is no remainder after chunking, since the
-            // representation is a 32-byte array. That is why it is safe to unwrap
-            // here.
+            // The chunk size is always 8 and there is no remainder after chunking, since
+            // the representation is a 32-byte array. That is why it is safe to
+            // unwrap here.
             let x: [u8; 8] = chunk.try_into().unwrap();
             let x_64 = u64::from_le_bytes(x);
             vec.push(x_64);
@@ -245,6 +245,8 @@ pub(crate) mod tests {
     use super::{RistrettoScalar, *};
     use crate::common::*;
     use curve25519_dalek::ristretto::RistrettoPoint;
+    use rand::Rng;
+    use rand_core::RngCore;
     use std::io::Cursor;
 
     /// Test serialization for scalars
@@ -316,7 +318,7 @@ pub(crate) mod tests {
 
     // Check that scalar_from_bytes for ed25519 works on small values.
     #[test]
-    fn scalar_from_bytes_small() {
+    fn test_scalar_from_bytes_small() {
         let mut rng = rand::thread_rng();
         for _ in 0..1000 {
             let n = <RistrettoScalar as Field>::random(&mut rng);
@@ -330,24 +332,39 @@ pub(crate) mod tests {
             assert_eq!(n[0], m[0], "First limb.");
             assert_eq!(n[1], m[1], "Second limb.");
             assert_eq!(n[2], m[2], "Third limb.");
+            // It is unlikely that the limbs will differ even without masking, because the
+            // difference between the max number for `RistrettoScalar::CAPACITY` and the
+            // curve order is quite small. We, however, keep the mask here,
+            // because we're interesed in lower bytes in this test.
             assert_eq!(n[3] & mask, m[3], "Fourth limb with top bit masked.");
         }
     }
 
-    /// Test that everything that exeeds `PrimeField::CAPACITY` is ignored by
-    /// `Curve::scalar_from_bytes()`
+    /// Test that everything that exeeds `RistrettoScalar::CAPACITY` is ignored
+    /// by `Curve::scalar_from_bytes()`
     #[test]
-    fn test_scalar_from_bytes_cut_at_max_capacity() {
-        for n in 1..16 {
-            let fits_capacity = <RistrettoPoint as Curve>::scalar_from_bytes([
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 15,
-            ]);
-            let extend = 15 + (n << 4);
-            let over_capacity = <RistrettoPoint as Curve>::scalar_from_bytes([
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, extend,
-            ]);
+    fn test_scalar_from_bytes_big() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            // First, we generate 31 random bytes.
+            let mut lower_bytes: [u8; 31] = [0u8; 31];
+            rng.fill_bytes(&mut lower_bytes);
+            let mut fits_capacity_bytes = [0u8; 32];
+            // Next, we create a byte array that is filled with random lower bytes, the last
+            // byte is in [0; 15], that is, of the form 0b0000XXXX (big-endian).
+            fits_capacity_bytes[0..31].copy_from_slice(&lower_bytes);
+            let n = rng.gen_range(0, 16);
+            fits_capacity_bytes[31] = n;
+            let fits_capacity = <RistrettoPoint as Curve>::scalar_from_bytes(fits_capacity_bytes);
+            let i = rng.gen_range(1, 16);
+            // Now, we create a byte array from lower bytes with the last byte being number
+            // that is guaranteed to exceed `RistrettoScalar::CAPACITY`.
+            let mut bytes: [u8; 32] = [0u8; 32];
+            bytes[0..31].copy_from_slice(&lower_bytes);
+            // Add 0bXXXX0000 that leaves the first four bits untouched.
+            bytes[31] = n + (i << 4);
+            let over_capacity = <RistrettoPoint as Curve>::scalar_from_bytes(bytes);
+            // Check that four topmost bits are ignored.
             assert_eq!(fits_capacity, over_capacity);
         }
     }
