@@ -240,6 +240,10 @@ impl MultiExp for RistrettoMultiExpNoPrecompute {
     }
 }
 
+/// In the tests we focus on the functionality related to conversion form/to
+/// bytes or other representations. We do not test field/group operations here
+/// since we delegate this functionality to the `curve25519-dalek`
+/// implementation, which features its own test suite.
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{RistrettoScalar, *};
