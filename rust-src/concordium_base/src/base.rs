@@ -415,9 +415,15 @@ pub enum ProtocolVersion {
     /// accounts.
     P5,
     #[display(fmt = "P6")]
-    /// Protocol `P6` is a future protocol update that will introduce a new
-    /// consensus.
+    /// Protocol `P6` uses a new ConcordiumBFT consensus protocol. It also fixes
+    /// state rollback behaviour for version 1 smart contracts, adds support for
+    /// Wasm instructions, and adds host functions for supporting sponsored
+    /// transactions.
     P6,
+    #[display(fmt = "P7")]
+    /// Protocol `P7` modifies hashing to better support light clients, and
+    /// implements tokenomics changes.
+    P7,
 }
 
 #[derive(Debug, Error, Display)]
@@ -439,6 +445,7 @@ impl TryFrom<u64> for ProtocolVersion {
             4 => Ok(ProtocolVersion::P4),
             5 => Ok(ProtocolVersion::P5),
             6 => Ok(ProtocolVersion::P6),
+            7 => Ok(ProtocolVersion::P7),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -453,6 +460,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P4 => 4,
             ProtocolVersion::P5 => 5,
             ProtocolVersion::P6 => 6,
+            ProtocolVersion::P7 => 7,
         }
     }
 }
