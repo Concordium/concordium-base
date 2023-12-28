@@ -1,6 +1,5 @@
 use core::fmt;
 
-use anyhow::anyhow;
 use ark_bls12_381::*;
 use ark_ec::{
     bls12::{G1Prepared, G2Prepared},
@@ -15,6 +14,8 @@ use num_bigint::BigUint;
 use sha2::Sha256;
 
 use crate::common::{Buffer, Deserial, ParseResult, Serial};
+
+use anyhow::anyhow;
 
 use super::{
     arkworks_instances::{ArkCurveConfig, ArkField, ArkGroup},
@@ -46,6 +47,7 @@ impl Deserial for Fr {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Fr> {
         let mut buf = [0u8; 32];
         source.read(&mut buf)?;
+        // Construct the scalar from big endian bytes.
         let big_int: BigInt<4> = BigUint::from_bytes_be(&buf)
             .try_into()
             .map_err(|_| anyhow!("Cannot convert to bigint"))?;
@@ -57,7 +59,10 @@ impl Deserial for Fr {
 
 impl Serial for Fr {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let frpr: BigInt<4> = self.0;
+        // Note that it is crucial to use `into_bigint()` here.
+        // The internal representation is accessible direclty, but it's NOT the same
+        // (it's a Montgomery representation optimized for modular arithmetic)
+        let frpr = self.into_bigint();
         for a in frpr.0.iter().rev() {
             a.serial(out);
         }
@@ -91,13 +96,6 @@ impl Serial for Fq12 {
         }
     }
 }
-
-impl Deserial for Fq12 {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
-        todo!()
-    }
-}
-
 
 type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 
@@ -154,4 +152,139 @@ impl fmt::Display for ArkField<Fr> {
         }
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        common::*,
+        curve_arithmetic::{Curve, Field, PrimeField},
+    };
+    use num_bigint::BigUint;
+    use rand::thread_rng;
+    use std::io::Cursor;
+
+    const SCALAR_BYTES_LE: [u8; 32] = [
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255, 0,
+        0, 0, 0, 0, 0, 0, 0,
+    ];
+
+    // Check that scalar_from_bytes_helper works on small values.
+    #[test]
+    fn scalar_from_bytes_small() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            let n = <ArkField<Fr>>::random(&mut rng);
+            let mut bytes = to_bytes(&n);
+            bytes.reverse();
+            let m = <ArkGroup<G1Projective> as Curve>::scalar_from_bytes(&bytes);
+            // make sure that n and m only differ in the topmost bit.
+            let n = n.into_repr();
+            let m = m.into_repr();
+            let mask = !(1u64 << 63 | 1u64 << 62);
+            assert_eq!(n[0], m[0], "First limb.");
+            assert_eq!(n[1], m[1], "Second limb.");
+            assert_eq!(n[2], m[2], "Third limb.");
+            assert_eq!(n[3] & mask, m[3] & mask, "Fourth limb with top bit masked.");
+        }
+    }
+
+    /// Test that `into_repr()` correclty converts a scalar constructed from a
+    /// byte array to an array of limbs with least significant digits first.
+    #[test]
+    fn test_into() {
+        let bigint: BigUint = BigUint::from_bytes_le(&SCALAR_BYTES_LE);
+        let s: ArkField<Fr> = Fr::try_from(bigint)
+            .expect("Expected a valid scalar")
+            .into();
+        assert_eq!(s.into_repr(), [1u64, 0u64, u64::MAX - 1, 0u64]);
+    }
+
+    /// Turn scalar elements into representations and back again, and compare.
+    #[test]
+    fn test_into_from_rep() {
+        let mut csprng = rand::thread_rng();
+        for _ in 0..1000 {
+            let scalar = <ArkField<Fr>>::random(&mut csprng);
+            let scalar_vec64 = scalar.into_repr();
+            let scalar_res = <ArkField<Fr>>::from_repr(&scalar_vec64);
+            assert!(scalar_res.is_ok());
+            assert_eq!(scalar, scalar_res.unwrap());
+        }
+    }
+
+    #[test]
+    fn test_scalar_serialize_big_endian() {
+        let bigint: BigUint = BigUint::from_bytes_le(&SCALAR_BYTES_LE);
+        let b: BigInt<4> = bigint
+            .try_into()
+            .expect("Expeted valid biguint representing a fired element");
+        let s: ArkField<Fr> = <Fr as ark_ff::PrimeField>::from_bigint(b)
+            .expect("Expected a valid scalar")
+            .into();
+        let mut out = Vec::new();
+        s.serial(&mut out);
+        let scalar_bytes_be: Vec<u8> = SCALAR_BYTES_LE.into_iter().rev().collect();
+        assert_eq!(scalar_bytes_be, out);
+    }
+
+    macro_rules! macro_test_scalar_byte_conversion {
+        ($function_name:ident, $p:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _ in 0..1000 {
+                    let scalar = <$p>::generate_scalar(&mut csprng);
+                    let scalar_res = serialize_deserialize(&scalar);
+                    assert!(scalar_res.is_ok());
+                    assert_eq!(scalar, scalar_res.unwrap());
+                }
+            }
+        };
+    }
+
+    macro_rules! macro_test_group_byte_conversion {
+        ($function_name:ident, $p:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _ in 0..1000 {
+                    let curve = <$p>::generate(&mut csprng);
+                    let curve_res = serialize_deserialize(&curve);
+                    assert!(curve_res.is_ok());
+                    assert_eq!(curve, curve_res.unwrap());
+                }
+            }
+        };
+    }
+
+    macro_rules! macro_test_group_byte_conversion_unchecked {
+        ($function_name:ident, $p:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _ in 0..1000 {
+                    let curve = <$p>::generate(&mut csprng);
+                    let bytes = to_bytes(&curve);
+                    let curve_res = <$p>::bytes_to_curve_unchecked(&mut Cursor::new(&bytes));
+                    assert!(curve_res.is_ok());
+                    assert_eq!(curve, curve_res.unwrap());
+                }
+            }
+        };
+    }
+
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
+
+    macro_test_scalar_byte_conversion!(sc_bytes_conv_g1, G1);
+    macro_test_scalar_byte_conversion!(sc_bytes_conv_g2, G2);
+    macro_test_scalar_byte_conversion!(sc_bytes_conv_bls12, Bls12);
+
+    macro_test_group_byte_conversion!(curve_bytes_conv_g1, G1);
+    macro_test_group_byte_conversion!(curve_bytes_conv_g2, G2);
+
+    macro_test_group_byte_conversion_unchecked!(u_curve_bytes_conv_g1, G1);
+    macro_test_group_byte_conversion_unchecked!(u_curve_bytes_conv_g2, G2);
 }

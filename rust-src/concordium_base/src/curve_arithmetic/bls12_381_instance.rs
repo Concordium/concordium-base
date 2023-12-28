@@ -51,8 +51,6 @@ impl<F: ff::Field> Field for F {
     fn mul_assign(&mut self, other: &Self) { self.mul_assign(other) }
 
     fn inverse(&self) -> Option<Self> { self.inverse() }
-
-    // fn frobenius_map(&mut self, power: usize) { self.frobenius_map(power) }
 }
 
 impl From<ff::PrimeFieldDecodingError> for CurveDecodingError {

@@ -5,7 +5,8 @@ use crate::common::{Deserial, Serial, Serialize};
 
 use super::{Curve, CurveDecodingError, Field, GenericMultiExp, PrimeField};
 use anyhow::anyhow;
-use ark_ec::{hashing::HashToCurve, AffineRepr};
+use ark_ec::hashing::HashToCurve;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 #[derive(PartialOrd, Ord, PartialEq, Eq, Copy, Clone, fmt::Debug)]
 pub struct ArkField<F>(pub(crate) F);
@@ -29,18 +30,18 @@ impl<F> From<F> for ArkField<F> {
 //     }
 // }
 
-impl<F: Serialize> Serial for ArkField<F> {
+impl<F: Serial> Serial for ArkField<F> {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) { self.0.serial(out) }
 }
 
-impl<F: Serialize> Deserial for ArkField<F> {
+impl<F: Deserial> Deserial for ArkField<F> {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
         let res = F::deserial(source)?;
         Ok(res.into())
     }
 }
 
-impl<F: ark_ff::Field + Serialize> Field for ArkField<F> {
+impl<F: ark_ff::Field> Field for ArkField<F> {
     fn random<R: rand::prelude::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
         F::rand(rng).into()
     }
@@ -78,6 +79,7 @@ impl<F: ark_ff::PrimeField + Serialize> PrimeField for ArkField<F> {
 
     fn from_repr(repr: &[u64]) -> Result<Self, super::CurveDecodingError> {
         let mut buffer = Vec::with_capacity(8 * repr.len());
+
         for u in repr {
             buffer.extend(u.to_le_bytes());
         }
@@ -85,8 +87,10 @@ impl<F: ark_ff::PrimeField + Serialize> PrimeField for ArkField<F> {
         let big_int = num_bigint::BigUint::from_bytes_le(&buffer)
             .try_into()
             .map_err(|_| CurveDecodingError::NotInField(format!("{:?}", repr)))?;
+
         let res =
             F::from_bigint(big_int).ok_or(CurveDecodingError::NotInField(format!("{:?}", repr)))?;
+
         Ok(res.into())
     }
 }
@@ -101,15 +105,16 @@ impl<G: ark_ec::CurveGroup> ArkGroup<G> {
 impl<G: ark_ec::CurveGroup> Serial for ArkGroup<G> {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         self.0
+            .into_affine()
             .serialize_compressed(out)
-            .expect("Serialzation expected to succeed")
+            .expect("Serialzation expected to succeed");
     }
 }
 
 impl<G: ark_ec::CurveGroup> Deserial for ArkGroup<G> {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
-        let res = G::deserialize_compressed(source)?;
-        Ok(ArkGroup(res))
+        let res = G::Affine::deserialize_compressed(source)?;
+        Ok(ArkGroup(res.into()))
     }
 }
 
@@ -151,14 +156,10 @@ where
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { ArkGroup(self.0 * scalar.0) }
 
     fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(b: &mut R) -> anyhow::Result<Self> {
-        // TODO: this implementation is not efficient.
-        let mut buffer = Vec::new();
-        b.read(&mut buffer)?;
-        // In fact, `from_random_bytes` checks if the bytes correspond to a valid group
-        // element. It seems like there is no unchecked methods exposed through
-        // ark traits.
-        let res = G::Affine::from_random_bytes(&buffer)
-            .ok_or(anyhow!("Expected a valid group element"))?;
+        // TODO: this is not the most efficient implementation, since there might be
+        // some additional checks durind deserialization. However, it seems
+        // there are no unchecked methods available through traits.
+        let res = G::Affine::deserialize_compressed(b).map_err(|e| anyhow!(e))?;
         Ok(ArkGroup(res.into()))
     }
 
@@ -174,9 +175,6 @@ where
         // Traverse at most 4 8-byte chunks, for a total of 256 bits.
         // The top-most two bits in the last chunk are set to 0.
         let s = num::integer::div_ceil(Self::Scalar::CAPACITY, 8);
-        println!("{:?}", Self::Scalar::NUM_BITS);
-        println!("{:?}", Self::Scalar::CAPACITY);
-        println!("{:?}", s);
         let mut fr = Vec::with_capacity(s as usize);
         for chunk in bs.as_ref().chunks(8).take(s as usize) {
             let mut v = [0u8; 8];

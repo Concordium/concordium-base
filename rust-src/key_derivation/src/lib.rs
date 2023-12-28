@@ -9,7 +9,7 @@ use concordium_base::{
     },
     ps_sig::SigRetrievalRandomness,
 };
-use ed25519_dalek::{SecretKey, SignatureError, SigningKey, VerifyingKey};
+use ed25519_dalek::{SecretKey, SigningKey, VerifyingKey};
 pub use ed25519_hd_key_derivation::DeriveError;
 use ed25519_hd_key_derivation::{checked_harden, derive_from_parsed_path, harden};
 use hmac::Hmac;

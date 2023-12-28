@@ -1261,17 +1261,17 @@ mod tests {
     use crate::{
         common::types::{KeyIndex, KeyPair},
         curve_arithmetic::{
-            arkworks_instances::{ArkField, ArkGroup},
+            arkworks_instances::ArkGroup,
             Curve,
         },
         id::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*},
         pedersen_commitment::CommitmentKey as PedersenKey,
     };
-    use ark_bls12_381::{g1, Fr, G1Projective};
+    use ark_bls12_381::g1;
     use ark_ec::short_weierstrass::Projective;
     use either::Either::Left;
 
-    type ExampleCurve = ArkGroup<Projective<g1::Config>>; // ArkGroup<G1Projective>;
+    type ExampleCurve = ArkGroup<Projective<g1::Config>>;
 
     const EXPIRY: TransactionTime = TransactionTime {
         seconds: 111111111111111111,

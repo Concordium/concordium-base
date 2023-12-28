@@ -7,7 +7,7 @@ use crate::{
         Serial,
     },
     curve_arithmetic::{
-        arkworks_instances::{ArkField, ArkGroup},
+        arkworks_instances::ArkGroup,
         Curve, Pairing,
     },
 };

@@ -280,8 +280,6 @@ fn hash_message(m: &[u8]) -> Output<Sha512> { Sha512::digest(m) }
 
 #[cfg(test)]
 mod test {
-    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
-
     use super::*;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
     use std::convert::TryFrom;

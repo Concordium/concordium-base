@@ -38,23 +38,24 @@ pub fn ccd_msm_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     });
 }
 
-pub fn dalek_msm_benchmarks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Multi-Scalar Multiplication");
-    let mut rng = &mut thread_rng();
+// pub fn dalek_msm_benchmarks(c: &mut Criterion) {
+//     let mut group = c.benchmark_group("Multi-Scalar Multiplication");
+//     let mut rng = &mut thread_rng();
 
-    use curve25519_dalek_ng::{scalar::Scalar, traits::VartimeMultiscalarMul};
-    let G: Vec<RistrettoPoint> = (0..N).map(|_| RistrettoPoint::random(&mut rng)).collect();
-    let V: Vec<_> = (0..N).map(|_| Scalar::random(&mut rng)).collect();
+//     use curve25519_dalek_ng::{scalar::Scalar, traits::VartimeMultiscalarMul};
+//     let G: Vec<RistrettoPoint> = (0..N).map(|_| RistrettoPoint::random(&mut
+// rng)).collect();     let V: Vec<_> = (0..N).map(|_| Scalar::random(&mut
+// rng)).collect();
 
-    group.bench_function("MSM in Dalek over Ristretto curve", move |b| {
-        b.iter(|| {
-            RistrettoPoint::vartime_multiscalar_mul(&V, &G);
-        })
-    });
-}
+//     group.bench_function("MSM in Dalek over Ristretto curve", move |b| {
+//         b.iter(|| {
+//             RistrettoPoint::vartime_multiscalar_mul(&V, &G);
+//         })
+//     });
+// }
 
 criterion_group!(
     name = benchmarks;
     config = Criterion::default().measurement_time(Duration::from_millis(10000)).sample_size(100);
-    targets = ccd_msm_benchmarks::<G1>, ccd_msm_benchmarks::<RistrettoPoint>, dalek_msm_benchmarks);
+    targets = ccd_msm_benchmarks::<G1>, ccd_msm_benchmarks::<RistrettoPoint>);
 criterion_main!(benchmarks);

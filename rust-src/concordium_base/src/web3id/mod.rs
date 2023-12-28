@@ -682,7 +682,7 @@ impl<Role> TryFrom<&str> for Ed25519PublicKey<Role> {
     type Error = Ed25519PublicKeyFromStrError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let bytes: [u8; 32] = hex::decode(value)?.try_into().map_err(|e| {
+        let bytes: [u8; 32] = hex::decode(value)?.try_into().map_err(|_| {
             Self::Error::InvalidBytes(ed25519_dalek::SignatureError::from_source(
                 "Incorrect public key length.",
             ))
@@ -1785,7 +1785,6 @@ mod tests {
     };
     use anyhow::Context;
     use chrono::TimeZone;
-    use ed25519_dalek::ed25519::signature::Keypair;
     use rand::Rng;
     use std::marker::PhantomData;
 

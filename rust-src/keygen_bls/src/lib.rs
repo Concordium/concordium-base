@@ -48,15 +48,12 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::Inv
         let slice_y2 = &mut y2_vec[0..okm.len() - slice_y1.len()];
         slice_y2.clone_from_slice(&okm[31..]);
         let y1 = G1::scalar_from_bytes(y1_vec);
-        println!("y1 {:}", y1);
         let mut y2 = G1::scalar_from_bytes(y2_vec);
-        println!("y2 {:}", y2);
         y2.mul_assign(&shift);
         sk = y1;
         sk.add_assign(&y2);
         salt = Sha256::digest(salt);
     }
-    println!("sk: {:}", sk);
     Ok(sk)
 }
 
