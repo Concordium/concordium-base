@@ -10,7 +10,7 @@ use rand::*;
 use std::rc::Rc;
 
 /// A PRF key.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 pub struct SecretKey<C: Curve>(Rc<Secret<C::Scalar>>);
 
 /// This trait allows automatic conversion of `&SecretKey<C>` to `&C::Scalar`.
@@ -76,7 +76,13 @@ impl<C: Curve> SecretKey<C> {
 
 impl<C: Curve> std::fmt::Display for SecretKey<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", base16_encode_string(self))
+        write!(f, "<Dodis Yampolskiy SecretKey>")
+    }
+}
+
+impl<C: Curve> std::fmt::Debug for SecretKey<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "<Dodis Yampolskiy SecretKey>")
     }
 }
 

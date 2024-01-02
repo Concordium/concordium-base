@@ -5,6 +5,7 @@
 - The `Debug` implementation for `ContractEvent` displays the value in `hex`.
   The alternate formatter (using `#`) displays it as a list of bytes.
 - Add `FromStr` and `Display` instances to `dodis_yampolskiy_prf::SecretKey`.
+- Change `Debug` instance of `dodis_yampolskiy_prf::SecretKey` to hide the value.
 
 ## 3.2.0 (2023-11-22)
 
