@@ -11,9 +11,10 @@ use concordium_base::{
     },
 };
 use dialoguer::Input;
-use pairing::bls12_381::Bls12;
 use std::{collections::btree_map::BTreeMap, path::PathBuf};
 use structopt::StructOpt;
+
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 
 #[derive(StructOpt)]
 #[structopt(

@@ -550,7 +550,7 @@ dependencies = [
  "chrono",
  "concordium-contracts-common",
  "concordium_base_derive",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "curve25519-dalek-ng",
  "derive_more",
  "ed25519-dalek",
@@ -707,19 +707,6 @@ checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
 dependencies = [
  "generic-array",
  "typenum",
-]
-
-[[package]]
-name = "curve25519-dalek"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -882,6 +869,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60f6d271ca33075c88028be6f04d502853d63a5ece419d269c15315d4fc1cf1d"
 dependencies = [
  "pkcs8",
+ "serde",
  "signature",
 ]
 
@@ -891,7 +879,7 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "ed25519",
  "rand_core 0.6.4",
  "serde",
@@ -1570,13 +1558,15 @@ version = "2.0.1"
 dependencies = [
  "aes",
  "anyhow",
+ "ark-bls12-381",
+ "ark-ec",
  "base64",
  "bitvec",
  "chrono",
  "clap",
  "concordium_base",
  "crossterm",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek",
  "dialoguer",
  "ed25519-dalek",
  "ed25519_hd_key_derivation",
@@ -1588,9 +1578,8 @@ dependencies = [
  "key_derivation",
  "keygen_bls",
  "openssl-sys",
- "pairing",
  "pbkdf2 0.11.0",
- "rand 0.7.3",
+ "rand 0.8.5",
  "reqwest",
  "rpassword",
  "serde",

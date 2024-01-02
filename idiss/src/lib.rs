@@ -1,7 +1,8 @@
 use anyhow::Context;
+use ark_bls12_381::G1Projective;
 use concordium_base::{
     common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0},
-    curve_arithmetic::*,
+    curve_arithmetic::{*, arkworks_instances::ArkGroup},
     id,
     id::{
         constants::{ArCurve, AttributeKind},
@@ -14,10 +15,12 @@ use concordium_base::{
     },
     ps_sig,
 };
-use pairing::bls12_381::{Bls12, G1};
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "nodejs")]
 use serde_json::ser::to_string;
+
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
+type G1 = ArkGroup<G1Projective>;
 
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;

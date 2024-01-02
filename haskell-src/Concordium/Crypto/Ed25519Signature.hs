@@ -25,7 +25,7 @@ import System.IO.Unsafe
 
 foreign import ccall unsafe "eddsa_priv_key" genPrivateKey :: IO (Ptr SignKey)
 foreign import ccall unsafe "eddsa_pub_key" derivePublicFFI :: Ptr SignKey -> IO (Ptr VerifyKey)
-foreign import ccall unsafe "eddsa_sign" signFFI :: Ptr Word8 -> Word32 -> Ptr SignKey -> Ptr VerifyKey -> Ptr Word8 -> IO ()
+foreign import ccall unsafe "eddsa_sign" signFFI :: Ptr Word8 -> Word32 -> Ptr SignKey -> Ptr Word8 -> IO ()
 foreign import ccall unsafe "eddsa_verify" verifyFFI :: Ptr Word8 -> Word32 -> Ptr VerifyKey -> Ptr Word8 -> CSize -> IO Int32
 foreign import ccall unsafe "&eddsa_public_free" freeVerifyKey :: FunPtr (Ptr VerifyKey -> IO ())
 foreign import ccall unsafe "eddsa_public_to_bytes" toBytesVerifyKey :: Ptr VerifyKey -> Ptr CSize -> IO (Ptr Word8)

@@ -71,9 +71,8 @@ pub fn test_create_ip_info<T: Rng + rand::CryptoRng>(
     let ps_len = (5 + num_ars + max_attrs) as usize;
     let ip_secret_key = crate::ps_sig::SecretKey::<IpPairing>::generate(ps_len, csprng);
     let ip_verify_key = crate::ps_sig::PublicKey::from(&ip_secret_key);
-    let mut secret = [0u8; 32];
-    csprng.fill_bytes(&mut secret);
-    let signing = SigningKey::from_bytes(&secret);
+    let signing = SigningKey::generate(csprng);
+    let secret = signing.to_bytes();
     let ip_cdi_verify_key = signing.verifying_key();
     let ip_cdi_secret_key = secret;
 

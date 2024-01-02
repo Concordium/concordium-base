@@ -1260,10 +1260,7 @@ mod tests {
 
     use crate::{
         common::types::{KeyIndex, KeyPair},
-        curve_arithmetic::{
-            arkworks_instances::ArkGroup,
-            Curve,
-        },
+        curve_arithmetic::{arkworks_instances::ArkGroup, Curve},
         id::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*},
         pedersen_commitment::CommitmentKey as PedersenKey,
     };

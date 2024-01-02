@@ -547,21 +547,16 @@ pub fn create_initial_cdi<
         cred_account: pub_info_for_ip.vk_acc,
     };
 
-    let sig = sign_initial_cred_values(&cred_values, expiry, ip_info, ip_cdi_secret_key);
+    let sig = sign_initial_cred_values(&cred_values, expiry, ip_cdi_secret_key);
     InitialCredentialDeploymentInfo {
         values: cred_values,
         sig,
     }
 }
 
-fn sign_initial_cred_values<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
->(
+fn sign_initial_cred_values<C: Curve, AttributeType: Attribute<C::Scalar>>(
     initial_cred_values: &InitialCredentialDeploymentValues<C, AttributeType>,
     expiry: TransactionTime,
-    ip_info: &IpInfo<P>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> IpCdiSignature {
     let mut hasher = Sha256::new();

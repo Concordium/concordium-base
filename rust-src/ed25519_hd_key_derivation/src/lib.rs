@@ -1,4 +1,3 @@
-use ed25519_dalek::SignatureError;
 use hmac::{Hmac, Mac};
 use regex::Regex;
 use sha2::Sha512;

@@ -154,9 +154,8 @@ mod tests {
     pub fn test_ed25519_dlog() {
         let mut csprng = thread_rng();
         for _ in 0..10000 {
-            let mut secret: SecretKey = [0u8; 32];
-            csprng.fill_bytes(&mut secret);
-            let signing = SigningKey::from_bytes(&secret);
+            let signing = SigningKey::generate(&mut csprng);
+            let secret = signing.to_bytes();
             let public = signing.verifying_key();
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let mut ro = RandomOracle::domain(&challenge_prefix);
@@ -177,8 +176,8 @@ mod tests {
     pub fn test_ed25519_dlog_proof_serialization() {
         let mut csprng = thread_rng();
         for _ in 0..10000 {
-            let mut secret: SecretKey = [0u8; 32];
-            csprng.fill_bytes(&mut secret);
+            let signing = SigningKey::generate(&mut csprng);
+            let secret = signing.to_bytes();
             let signing = SigningKey::from_bytes(&secret);
             let public = signing.verifying_key();
             let challenge_prefix = generate_challenge_prefix(&mut csprng);

@@ -1,13 +1,17 @@
+use ark_bls12_381::{G1Projective, G2Projective};
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
-    common::*, curve_arithmetic::Curve, elgamal::PublicKey, id::types::*, ps_sig,
+    common::*, curve_arithmetic::{Curve, arkworks_instances::ArkGroup}, elgamal::PublicKey, id::types::*, ps_sig,
 };
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use pairing::bls12_381::{Bls12, G1, G2};
 use sha2::{Digest, Sha512};
 use std::{fs, path::PathBuf};
 use structopt::StructOpt;
+
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
+type G1 = ArkGroup<G1Projective>;
+type G2 = ArkGroup<G2Projective>;
 
 #[derive(StructOpt)]
 struct KeygenIp {
@@ -196,7 +200,7 @@ pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::PublicKey<Bls12> {
 /// The difference is that this one does not concatenate the input
 /// to Sha512 with the single octet values 0 and 1, and neither does it
 /// concatenate with a public key.
-pub fn hash_to_ed25519(msg: &[u8]) -> Option<ed25519_dalek::PublicKey> {
+pub fn hash_to_ed25519(msg: &[u8]) -> Option<ed25519_dalek::VerifyingKey> {
     let mut p_candidate_bytes = [0u8; 32];
     let mut h: Sha512 = Sha512::new();
     h.update(b"concordium_genesis_ed25519");
@@ -212,7 +216,7 @@ pub fn hash_to_ed25519(msg: &[u8]) -> Option<ed25519_dalek::PublicKey> {
             // not be 0 after multiplying by cofactor.
             if !ed_point.is_small_order() {
                 return Some(
-                    ed25519_dalek::PublicKey::from_bytes(
+                    ed25519_dalek::VerifyingKey::from_bytes(
                         &ed_point.mul_by_cofactor().compress().to_bytes(),
                     )
                     .unwrap(),

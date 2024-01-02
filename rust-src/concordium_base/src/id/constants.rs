@@ -6,10 +6,7 @@ use crate::{
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial,
     },
-    curve_arithmetic::{
-        arkworks_instances::ArkGroup,
-        Curve, Pairing,
-    },
+    curve_arithmetic::{arkworks_instances::ArkGroup, Curve, Pairing},
 };
 use anyhow::bail;
 use ark_bls12_381::{g1, G1Projective};

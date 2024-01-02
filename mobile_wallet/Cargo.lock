@@ -1120,6 +1120,8 @@ name = "mobile_wallet"
 version = "0.25.0"
 dependencies = [
  "anyhow",
+ "ark-bls12-381",
+ "ark-ec",
  "base64",
  "byteorder",
  "chrono",
@@ -1127,13 +1129,11 @@ dependencies = [
  "ed25519-dalek",
  "ed25519_hd_key_derivation",
  "either",
- "ff",
  "hex",
  "jni",
  "key_derivation",
  "libc",
- "pairing",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "sha2 0.10.6",
