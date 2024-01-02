@@ -10,9 +10,8 @@ pub use secret_value::{Secret, Value};
 
 use crate::common::{Serial, Serialize};
 use byteorder::ReadBytesExt;
-use std::fmt;
 use rand::*;
-use std::{borrow::Borrow, fmt::Debug};
+use std::{borrow::Borrow, fmt, fmt::Debug};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -24,6 +23,7 @@ pub enum CurveDecodingError {
 }
 
 /// This trait represents an element of a field.
+/// The trait essentially copies `ff::Field` from `v0.5`.
 pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug {
     /// Returns an element chosen uniformly at random using a user-provided RNG.
     fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self;
@@ -59,21 +59,20 @@ pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug {
     fn inverse(&self) -> Option<Self>;
 
     /// Exponentiates this element by a number represented with `u64` limbs,
-    /// least significant digit first.
+    /// least significant digit first. This operation is variable time with
+    /// respect to `self`, for all exponent.
     fn pow<S: AsRef<[u64]>>(&self, exp: S) -> Self {
+        // Note: this implementations is
+        // copied the `ff` crate trait method `ff::Field::pow_vartime()`.
+        // https://docs.rs/ff/0.13.0/src/ff/lib.rs.html#178-191
         let mut res = Self::one();
-
-        let mut found_one = false;
-
-        for i in ff::BitIterator::new(exp) {
-            if found_one {
+        for e in exp.as_ref().iter().rev() {
+            for i in (0..64).rev() {
                 res.square();
-            } else {
-                found_one = i;
-            }
 
-            if i {
-                res.mul_assign(self);
+                if ((*e >> i) & 1) == 1 {
+                    res.mul_assign(self);
+                }
             }
         }
 
