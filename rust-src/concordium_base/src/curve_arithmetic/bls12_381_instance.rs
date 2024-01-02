@@ -23,7 +23,7 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
         v[..chunk.len()].copy_from_slice(chunk);
         fr[i] = u64::from_le_bytes(v);
     }
-    // unset two topmost bits in the last read u64.
+    // unset two topmost bits in the last u64 limb.
     fr[3] &= !(1u64 << 63 | 1u64 << 62);
     <Fr as ff::PrimeField>::from_repr(FrRepr(fr))
         .expect("The scalar with top two bits erased should be valid.")

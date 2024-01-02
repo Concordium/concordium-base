@@ -185,7 +185,7 @@ impl Curve for RistrettoPoint {
             v[..chunk.len()].copy_from_slice(chunk);
             fr[i] = u64::from_le_bytes(v);
         }
-        // unset four topmost bits in the last read u64.
+        // unset four topmost bits in the last u64 limb.
         fr[3] &= !(1u64 << 63 | 1u64 << 62 | 1u64 << 61 | 1u64 << 60);
         <RistrettoScalar as PrimeField>::from_repr(&fr)
             .expect("The scalar with top two bits erased should be valid.")
