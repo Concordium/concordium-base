@@ -10,7 +10,7 @@ pub use secret_value::{Secret, Value};
 
 use crate::common::{Serial, Serialize};
 use byteorder::ReadBytesExt;
-use core::fmt;
+use std::fmt;
 use rand::*;
 use std::{borrow::Borrow, fmt::Debug};
 use thiserror::Error;
@@ -405,7 +405,7 @@ pub trait Pairing: Sized + 'static + Clone {
 }
 
 /// Calls a multiexp algorithm for a curve.
-/// The function combines instantiation of an algorith implementation and
+/// The function combines instantiation of an algorithm implementation and
 /// computation.
 #[inline(always)]
 pub fn multiexp<C, X>(gs: &[X], exps: &[C::Scalar]) -> C
