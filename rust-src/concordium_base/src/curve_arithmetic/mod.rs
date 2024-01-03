@@ -3,17 +3,16 @@
 pub mod arkworks_instances;
 // mod ed25519_arkworks;
 mod bls12_381_arkworks;
-// mod ed25519_instance;
-mod ed25519_ng_instance;
+mod ed25519_instance;
+mod field_adapters;
 
 pub mod secret_value;
 pub use secret_value::{Secret, Value};
 
 use crate::common::{Serial, Serialize};
 use byteorder::ReadBytesExt;
-use core::fmt;
 use rand::*;
-use std::{borrow::Borrow, fmt::Debug};
+use std::{borrow::Borrow, fmt, fmt::Debug};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -25,7 +24,8 @@ pub enum CurveDecodingError {
 }
 
 /// This trait represents an element of a field.
-pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + 'static {
+/// The trait essentially copies `ff::Field` from `v0.5`.
+pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug {
     /// Returns an element chosen uniformly at random using a user-provided RNG.
     fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self;
 
@@ -60,21 +60,20 @@ pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + 'static 
     fn inverse(&self) -> Option<Self>;
 
     /// Exponentiates this element by a number represented with `u64` limbs,
-    /// least significant digit first.
+    /// least significant digit first. This operation is variable time with
+    /// respect to `self`, for all exponent.
     fn pow<S: AsRef<[u64]>>(&self, exp: S) -> Self {
+        // Note: this implementations is
+        // copied from the `ff` crate's trait method `ff::Field::pow_vartime()`.
+        // https://docs.rs/ff/0.13.0/src/ff/lib.rs.html#178-191
         let mut res = Self::one();
-
-        let mut found_one = false;
-
-        for i in ff::BitIterator::new(exp) {
-            if found_one {
+        for e in exp.as_ref().iter().rev() {
+            for i in (0..64).rev() {
                 res.square();
-            } else {
-                found_one = i;
-            }
 
-            if i {
-                res.mul_assign(self);
+                if ((*e >> i) & 1) == 1 {
+                    res.mul_assign(self);
+                }
             }
         }
 
@@ -82,6 +81,9 @@ pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + 'static 
     }
 }
 
+/// This is an extension of the `Field` trait that adds some constants decribing
+/// the element size and operations for converting to/from big integer
+/// representation (an array of `u64` limbs.)
 pub trait PrimeField: Field {
     /// How many bits are needed to represent an element of this field.
     const NUM_BITS: u32;
@@ -90,10 +92,11 @@ pub trait PrimeField: Field {
     /// element.
     const CAPACITY: u32;
 
-    /// Convert this prime field element into a biginteger representation.
+    /// Get a big integer representation with least significant digit first.
     fn into_repr(self) -> Vec<u64>;
 
-    /// Convert a biginteger representation into a prime field element
+    /// Get a prime field element from its big integer representaion (least
+    /// significant digit first).
     fn from_repr(_: &[u64]) -> Result<Self, CurveDecodingError>;
 }
 
@@ -162,18 +165,18 @@ pub trait Curve:
     fn hash_to_group(m: &[u8]) -> Self;
 }
 
-/// An abstraction over a multiexp algoritm.
+/// An abstraction over a multiexp algorithm.
 pub trait MultiExp {
     type CurvePoint: Curve;
 
     /// Create new algorithm instance by providing initial points.
     /// Can be used to precompute a lookup table.
     // NOTE: this method does not take `window_size` as a parameter.
-    // Some libraries do not provide expose `window_size`, so it is left to a
+    // Some libraries do not expose `window_size`, so it is left to a
     // concrete implementation to take additional configuration parameters.
     fn new<X: Borrow<Self::CurvePoint>>(gs: &[X]) -> Self;
 
-    /// Multiexp algoritm that uses points provided at the instantiation step
+    /// Multiexp algorithm that uses points provided at the instantiation step
     /// and scalars provided as a parameter.
     fn multiexp<X: Borrow<<Self::CurvePoint as Curve>::Scalar>>(
         &self,
@@ -402,7 +405,7 @@ pub trait Pairing: Sized + 'static + Clone {
 }
 
 /// Calls a multiexp algorithm for a curve.
-/// The function combines instantiation of an algorith implementation and
+/// The function combines instantiation of an algorithm implementation and
 /// computation.
 #[inline(always)]
 pub fn multiexp<C, X>(gs: &[X], exps: &[C::Scalar]) -> C

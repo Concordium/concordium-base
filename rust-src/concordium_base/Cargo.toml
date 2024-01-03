@@ -12,7 +12,7 @@ repository = "https://github.com/Concordium/concordium-base"
 homepage = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
-ff = "0.5"
+ff = "0.13"
 ark-ff = { version = "0.4"}
 ark-ec = { version = "0.4"}
 ark-serialize = { version = "0.4"}
@@ -37,7 +37,7 @@ thiserror = "1.0"
 rand = "0.8"
 num = "0.4"
 group = "0.2"
-curve25519-dalek = { version = "4", features = ["rand_core"]}
+curve25519-dalek = { version = "4", features = ["rand_core", "group"]}
 zeroize = "1.1"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
@@ -55,10 +55,6 @@ base64 = { version = "0.21", optional = true }
 pbkdf2 = { version  = "0.11", optional = true }
 hmac = { version  = "0.12", optional = true }
 nom = "7.1.3"
-
-bulletproofs = "3.0.0"
-merlin = { version = "2", default-features = false }
-curve25519-dalek-ng = "3"
 
 [lib]
 crate-type = ["rlib", "staticlib", "cdylib"]
@@ -83,7 +79,6 @@ encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 [dev-dependencies]
 criterion = "0.4"
 rand = {version = "0.8", features = ["small_rng"]}
-pprof = { version = "0.11", features = ["flamegraph", "criterion"] }
 
 [[bench]]
 name = "hash_bench"
@@ -143,13 +138,3 @@ harness = false
 [package.metadata.docs.rs]
 # Expose the `encryption` feature in documentation.
 features = ["encryption"]
-
-[[bench]]
-name = "range_proof_bench"
-harness = false
-
-[[bench]]
-name = "msm_bench"
-harness = false
-[profile.release]
-debug = true

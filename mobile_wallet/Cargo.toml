@@ -1,6 +1,6 @@
 [package]
 name = "mobile_wallet"
-version = "0.25.0"
+version = "0.25.1"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE-APACHE"
@@ -26,7 +26,7 @@ ark-ec = { version = "0.4"}
 
 [dependencies.key_derivation]
 path = "../rust-src/key_derivation"
-version = "1.2.0"
+version = "2.0.0"
 
 [dependencies.ed25519_hd_key_derivation]
 path = "../rust-src/ed25519_hd_key_derivation"

@@ -1338,9 +1338,13 @@ fn handle_create_hd_wallet(chw: CreateHdWallet) {
     } else {
         Net::Mainnet
     };
-    let wallet = ConcordiumHdWallet {
-        seed: words_to_seed(&words_str),
-        net,
+
+    let wallet = match ConcordiumHdWallet::from_seed_phrase(&words_str, net) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("An invalid seed phrase was provided. Error: {}", e);
+            return;
+        }
     };
 
     if let Some(filepath) = chw.out {

@@ -35,7 +35,7 @@ mod ffi;
 pub mod trie;
 mod types;
 
-use crate::{constants, v0, ExecResult, InterpreterEnergy, OutOfEnergy};
+use crate::{constants, v0, DebugInfo, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
 use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
@@ -49,9 +49,34 @@ use concordium_wasm::{
 };
 use machine::Value;
 use sha3::Digest;
-use std::{borrow::Borrow, io::Write, sync::Arc};
+use std::{borrow::Borrow, collections::BTreeMap, io::Write, sync::Arc};
 use trie::BackingStoreLoad;
 pub use types::*;
+
+#[derive(thiserror::Error, Debug)]
+/// An invalid return value was returned by the call.
+/// Allowed return values are either 0 for success, or negative for signalling
+/// errors.
+#[error("Unexpected return value from the invocation: {value:?}")]
+pub struct InvalidReturnCodeError<Debug> {
+    pub value:       Option<i32>,
+    pub debug_trace: Debug,
+}
+
+impl<R, Debug: DebugInfo, Ctx> From<InvalidReturnCodeError<Debug>>
+    for types::ReceiveResult<R, Debug, Ctx>
+{
+    fn from(value: InvalidReturnCodeError<Debug>) -> Self {
+        Self::Trap {
+            error:            anyhow::anyhow!("Invalid return code: {:?}", value.value),
+            remaining_energy: 0.into(), // We consume all energy in case of protocol violation.
+            trace:            value.debug_trace,
+        }
+    }
+}
+
+/// An alias for the return type of the `invoke_*` family of functions.
+pub type InvokeResult<A, Debug> = Result<A, InvalidReturnCodeError<Debug>>;
 
 /// Interrupt triggered by the smart contract to execute an instruction on the
 /// host, either an account transfer, a smart contract call or an upgrade
@@ -216,7 +241,7 @@ impl Interrupt {
 /// This keeps track of the current state and logs, gives access to the context,
 /// and makes sure that execution stays within resource bounds dictated by
 /// allocated energy.
-pub(crate) struct InitHost<'a, BackingStore, ParamType, Ctx> {
+pub(crate) struct InitHost<'a, BackingStore, ParamType, Ctx, A: DebugInfo> {
     /// Remaining energy for execution.
     pub energy:                   InterpreterEnergy,
     /// Remaining amount of activation frames.
@@ -235,13 +260,14 @@ pub(crate) struct InitHost<'a, BackingStore, ParamType, Ctx> {
     /// Whether there is a limit on the number of logs and sizes of return
     /// values. Limit removed in P5.
     limit_logs_and_return_values: bool,
+    pub trace:                    A,
 }
 
-impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
-    From<InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>>
-    for InitHost<'b, BackingStore, ParameterVec, Ctx2>
+impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>, A: DebugInfo>
+    From<InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1, A>>
+    for InitHost<'b, BackingStore, ParameterVec, Ctx2, A>
 {
-    fn from(host: InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1>) -> Self {
+    fn from(host: InitHost<'b, BackingStore, ParameterRef<'a>, Ctx1, A>) -> Self {
         Self {
             energy: host.energy,
             activation_frames: host.activation_frames,
@@ -251,7 +277,172 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
             parameter: host.parameter.into(),
             init_ctx: host.init_ctx.into(),
             limit_logs_and_return_values: host.limit_logs_and_return_values,
+            trace: host.trace,
         }
+    }
+}
+
+#[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug)]
+/// Host functions supported by V1 contracts.
+pub enum HostFunctionV1 {
+    /// Functions allowed both in `init` and `receive` functions.
+    Common(CommonFunc),
+    /// Functions allowed only in `init` methods.
+    Init(InitOnlyFunc),
+    /// Functions allowed only in `receive` methods.
+    Receive(ReceiveOnlyFunc),
+}
+
+/// The [`Display`](std::fmt::Display) implementation renders the function in
+/// the same way that it is expected to be named in the imports.
+impl std::fmt::Display for HostFunctionV1 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HostFunctionV1::Common(c) => c.fmt(f),
+            HostFunctionV1::Init(io) => io.fmt(f),
+            HostFunctionV1::Receive(ro) => ro.fmt(f),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+/// A record of a host call in the [`DebugTracker`].
+pub struct HostCall {
+    /// The host function that was called.
+    pub host_function: HostFunctionV1,
+    /// The amount of energy consumed by the call.
+    pub energy_used:   InterpreterEnergy,
+}
+
+#[derive(Default, Debug)]
+/// A type that implements [`DebugInfo`] and can be used for collecting
+/// execution information during execution.
+pub struct DebugTracker {
+    /// The amount of interpreter energy used by pure Wasm instruction
+    /// execution.
+    pub operation:       InterpreterEnergy,
+    /// The amount of interpreter energy charged due to additional memory
+    /// allocation in Wasm linear memory.
+    pub memory_alloc:    InterpreterEnergy,
+    /// The list of host calls in the order they appeared. The first component
+    /// is the event index which is shared between the host trace calls and
+    /// the `emitted_events` field below so that it is possible to reconstruct
+    /// one global order of events.
+    pub host_call_trace: Vec<(usize, HostCall)>,
+    /// Events emitted by calls to `debug_print` host function. The first
+    /// component is the event index shared with the `host_call_trace` value.
+    pub emitted_events:  Vec<(usize, EmittedDebugStatement)>,
+    /// Internal tracker to assign event indices.
+    next_index:          usize,
+}
+
+/// The [`Display`](std::fmt::Display) implementation renders all public fields
+/// of the type in **multiple lines**. The host cgalls and emitted events are
+/// interleaved so that they appear in the order that they occurred.
+impl std::fmt::Display for DebugTracker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let DebugTracker {
+            operation,
+            memory_alloc,
+            host_call_trace,
+            emitted_events,
+            next_index: _,
+        } = self;
+        writeln!(f, "Wasm instruction cost: {operation}")?;
+        writeln!(f, "Memory alocation cost: {memory_alloc}")?;
+        let mut iter1 = host_call_trace.iter().peekable();
+        let mut iter2 = emitted_events.iter().peekable();
+        while let (Some((i1, call)), Some((i2, event))) = (iter1.peek(), iter2.peek()) {
+            if i1 < i2 {
+                iter1.next();
+                writeln!(f, "{} used {} interpreter energy", call.host_function, call.energy_used)?;
+            } else {
+                iter2.next();
+                writeln!(f, "{event}")?;
+            }
+        }
+        for (
+            _,
+            HostCall {
+                host_function,
+                energy_used,
+            },
+        ) in iter1
+        {
+            writeln!(f, "{host_function} used {energy_used} interpreter energy")?;
+        }
+        for (_, event) in iter2 {
+            writeln!(f, "{event}")?;
+        }
+        Ok(())
+    }
+}
+
+impl DebugTracker {
+    /// Summarize all the host calls, grouping them by the host function. The
+    /// value at each host function is the pair of the number of times the
+    /// host function was called, and the sum of interpreter energy those
+    /// calls consumed.
+    pub fn host_call_summary(&self) -> BTreeMap<HostFunctionV1, (usize, InterpreterEnergy)> {
+        let mut out = BTreeMap::new();
+        for (
+            _,
+            HostCall {
+                host_function,
+                energy_used,
+            },
+        ) in self.host_call_trace.iter()
+        {
+            let summary = out.entry(*host_function).or_insert((0, InterpreterEnergy {
+                energy: 0,
+            }));
+            summary.0 += 1;
+            summary.1.energy += energy_used.energy;
+        }
+        out
+    }
+}
+
+impl crate::DebugInfo for DebugTracker {
+    const ENABLE_DEBUG: bool = true;
+
+    fn empty_trace() -> Self { Self::default() }
+
+    fn trace_host_call(&mut self, f: self::ImportFunc, energy_used: InterpreterEnergy) {
+        let next_idx = self.next_index;
+        match f {
+            ImportFunc::ChargeEnergy => self.operation.add(energy_used),
+            ImportFunc::TrackCall => (),
+            ImportFunc::TrackReturn => (),
+            ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(energy_used),
+            ImportFunc::Common(c) => {
+                self.next_index += 1;
+                self.host_call_trace.push((next_idx, HostCall {
+                    host_function: HostFunctionV1::Common(c),
+                    energy_used,
+                }));
+            }
+            ImportFunc::InitOnly(io) => {
+                self.next_index += 1;
+                self.host_call_trace.push((next_idx, HostCall {
+                    host_function: HostFunctionV1::Init(io),
+                    energy_used,
+                }));
+            }
+            ImportFunc::ReceiveOnly(ro) => {
+                self.next_index += 1;
+                self.host_call_trace.push((next_idx, HostCall {
+                    host_function: HostFunctionV1::Receive(ro),
+                    energy_used,
+                }));
+            }
+        }
+    }
+
+    fn emit_debug_event(&mut self, event: EmittedDebugStatement) {
+        let next_idx = self.next_index;
+        self.next_index += 1;
+        self.emitted_events.push((next_idx, event));
     }
 }
 
@@ -264,10 +455,11 @@ impl<'a, 'b, BackingStore, Ctx2, Ctx1: Into<Ctx2>>
 /// allocated energy.
 #[doc(hidden)] // Needed in benchmarks, but generally should not be used by
                // users of the library.
-pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx> {
+pub struct ReceiveHost<'a, BackingStore, ParamType, Ctx, A: DebugInfo> {
     pub energy:    InterpreterEnergy,
     pub stateless: StateLessReceiveHost<ParamType, Ctx>,
     pub state:     InstanceState<'a, BackingStore>,
+    pub trace:     A,
 }
 
 #[derive(Debug)]
@@ -306,6 +498,31 @@ impl<'a, Ctx2, Ctx1: Into<Ctx2>> From<StateLessReceiveHost<ParameterRef<'a>, Ctx
             receive_ctx:       host.receive_ctx.into(),
             params:            host.params,
         }
+    }
+}
+
+/// An event emitted by the `debug_print` host function in debug mode.
+#[derive(Debug)]
+pub struct EmittedDebugStatement {
+    /// File in which the debug macro was used.
+    pub filename:         String,
+    /// The line inside the file.
+    pub line:             u32,
+    /// An the column.
+    pub column:           u32,
+    /// The message that was emitted.
+    pub msg:              String,
+    /// Remaining **interpreter energy** energy left for execution.
+    pub remaining_energy: InterpreterEnergy,
+}
+
+impl std::fmt::Display for EmittedDebugStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}:{}:@{}:{}",
+            self.filename, self.line, self.column, self.remaining_energy, self.msg
+        )
     }
 }
 
@@ -915,6 +1132,23 @@ mod host {
         Ok(())
     }
 
+    pub(crate) fn debug_print<Debug: DebugInfo>(
+        debug: &mut Debug,
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+        energy: &mut InterpreterEnergy,
+    ) -> machine::RunResult<()> {
+        let (filename, line, column, msg) = crate::utils::extract_debug(memory, stack)?;
+        debug.emit_debug_event(EmittedDebugStatement {
+            filename,
+            line,
+            column,
+            msg,
+            remaining_energy: *energy,
+        });
+        Ok(())
+    }
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn verify_ecdsa_secp256k1_signature(
         memory: &mut Vec<u8>,
@@ -1037,8 +1271,13 @@ mod host {
 
 // The use of Vec<u8> is ugly, and we really should have [u8] there, but FFI
 // prevents us doing that without ugly hacks.
-impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasInitContext>
-    machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx>
+impl<
+        'a,
+        BackingStore: BackingStoreLoad,
+        ParamType: AsRef<[u8]>,
+        Ctx: v0::HasInitContext,
+        A: DebugInfo,
+    > machine::Host<ProcessedImports> for InitHost<'a, BackingStore, ParamType, Ctx, A>
 {
     type Interrupt = NoInterrupt;
 
@@ -1054,6 +1293,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<Self::Interrupt>> {
+        let energy_before = self.energy;
         match f.tag {
             ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
             ImportFunc::TrackCall => v0::host::track_call(&mut self.activation_frames)?,
@@ -1132,6 +1372,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
                 CommonFunc::VerifySecp256k1 => {
                     host::verify_ecdsa_secp256k1_signature(memory, stack, &mut self.energy)
                 }
+                CommonFunc::DebugPrint => {
+                    host::debug_print(&mut self.trace, memory, stack, &mut self.energy)
+                }
                 CommonFunc::HashSHA2_256 => host::hash_sha2_256(memory, stack, &mut self.energy),
                 CommonFunc::HashSHA3_256 => host::hash_sha3_256(memory, stack, &mut self.energy),
                 CommonFunc::HashKeccak256 => host::hash_keccak_256(memory, stack, &mut self.energy),
@@ -1143,6 +1386,8 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: v0::HasIni
                 bail!("Not implemented for init {:#?}.", f);
             }
         }
+        let energy_after: InterpreterEnergy = self.energy;
+        self.trace.trace_host_call(f.tag, energy_before.saturating_sub(&energy_after));
         Ok(None)
     }
 }
@@ -1183,8 +1428,13 @@ impl<'a, X: HasReceiveContext> HasReceiveContext for &'a X {
     fn entrypoint(&self) -> ExecResult<EntrypointName> { (*self).entrypoint() }
 }
 
-impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceiveContext>
-    machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx>
+impl<
+        'a,
+        BackingStore: BackingStoreLoad,
+        ParamType: AsRef<[u8]>,
+        Ctx: HasReceiveContext,
+        A: DebugInfo,
+    > machine::Host<ProcessedImports> for ReceiveHost<'a, BackingStore, ParamType, Ctx, A>
 {
     type Interrupt = Interrupt;
 
@@ -1200,6 +1450,7 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<Self::Interrupt>> {
+        let energy_before = self.energy;
         match f.tag {
             ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
             ImportFunc::TrackCall => v0::host::track_call(&mut self.stateless.activation_frames)?,
@@ -1287,13 +1538,16 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                 CommonFunc::VerifySecp256k1 => {
                     host::verify_ecdsa_secp256k1_signature(memory, stack, &mut self.energy)
                 }
+                CommonFunc::DebugPrint => {
+                    host::debug_print(&mut self.trace, memory, stack, &mut self.energy)
+                }
                 CommonFunc::HashSHA2_256 => host::hash_sha2_256(memory, stack, &mut self.energy),
                 CommonFunc::HashSHA3_256 => host::hash_sha3_256(memory, stack, &mut self.energy),
                 CommonFunc::HashKeccak256 => host::hash_keccak_256(memory, stack, &mut self.energy),
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
-                    return host::invoke(
+                    let invoke = host::invoke(
                         self.stateless.params.support_queries,
                         self.stateless.params.support_account_signature_checks,
                         memory,
@@ -1301,6 +1555,9 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                         &mut self.energy,
                         self.stateless.params.max_parameter_size,
                     );
+                    let energy_after: InterpreterEnergy = self.energy;
+                    self.trace.trace_host_call(f.tag, energy_before.saturating_sub(&energy_after));
+                    return invoke;
                 }
                 ReceiveOnlyFunc::GetReceiveInvoker => v0::host::get_receive_invoker(
                     memory,
@@ -1339,6 +1596,8 @@ impl<'a, BackingStore: BackingStoreLoad, ParamType: AsRef<[u8]>, Ctx: HasReceive
                 bail!("Not implemented for receive.");
             }
         }
+        let energy_after: InterpreterEnergy = self.energy;
+        self.trace.trace_host_call(f.tag, energy_before.saturating_sub(&energy_after));
         Ok(None)
     }
 }
@@ -1366,17 +1625,17 @@ pub struct InitInvocation<'a> {
 }
 
 /// Invokes an init-function from a given artifact
-pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
+pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode, A: DebugInfo>(
     artifact: impl Borrow<Artifact<ProcessedImports, R>>,
     init_ctx: impl v0::HasInitContext,
     init_invocation: InitInvocation,
     limit_logs_and_return_values: bool,
     mut loader: BackingStore,
-) -> ExecResult<InitResult> {
+) -> InvokeResult<InitResult<A>, A> {
     let mut initial_state = trie::MutableState::initial_state();
     let inner = initial_state.get_inner(&mut loader);
     let state_ref = InstanceState::new(loader, inner);
-    let mut host = InitHost {
+    let mut host = InitHost::<_, _, _, A> {
         energy: init_invocation.energy,
         activation_frames: constants::MAX_ACTIVATION_FRAMES,
         logs: v0::Logs::new(),
@@ -1385,6 +1644,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
         parameter: init_invocation.parameter,
         limit_logs_and_return_values,
         init_ctx,
+        trace: A::empty_trace(),
     };
     let result = artifact.borrow().run(&mut host, init_invocation.init_name, &[Value::I64(
         init_invocation.amount.micro_ccd() as i64,
@@ -1392,6 +1652,7 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
     let return_value = std::mem::take(&mut host.return_value);
     let remaining_energy = host.energy.energy;
     let logs = std::mem::take(&mut host.logs);
+    let trace = std::mem::replace(&mut host.trace, A::empty_trace());
     // release lock on the state
     drop(host);
     match result {
@@ -1410,16 +1671,22 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
                         return_value,
                         remaining_energy: remaining_energy.into(),
                         state: initial_state,
+                        trace,
                     })
                 } else {
+                    let (reason, trace) = reason_from_wasm_error_code(n, trace)?;
                     Ok(InitResult::Reject {
-                        reason: reason_from_wasm_error_code(n)?,
+                        reason,
                         return_value,
                         remaining_energy: remaining_energy.into(),
+                        trace,
                     })
                 }
             } else {
-                bail!("Wasm module should return a value.")
+                Err(InvalidReturnCodeError {
+                    value:       None,
+                    debug_trace: trace,
+                })
             }
         }
         Ok(ExecutionOutcome::Interrupted {
@@ -1428,11 +1695,14 @@ pub fn invoke_init<BackingStore: BackingStoreLoad, R: RunnableCode>(
         }) => match reason {},
         Err(error) => {
             if error.downcast_ref::<OutOfEnergy>().is_some() {
-                Ok(InitResult::OutOfEnergy)
+                Ok(InitResult::OutOfEnergy {
+                    trace,
+                })
             } else {
                 Ok(InitResult::Trap {
                     error,
                     remaining_energy: remaining_energy.into(),
+                    trace,
                 })
             }
         }
@@ -1479,7 +1749,10 @@ impl InvokeFailure {
     /// Encode the failure kind in a format that is expected from a host
     /// function. If the return value is present it is pushed to the supplied
     /// vector of parameters.
-    pub(crate) fn encode_as_u64(self, parameters: &mut Vec<ParameterVec>) -> anyhow::Result<u64> {
+    pub(crate) fn encode_as_u64<Debug>(
+        self,
+        parameters: &mut Vec<ParameterVec>,
+    ) -> ResumeResult<u64, Debug> {
         Ok(match self {
             InvokeFailure::ContractReject {
                 code,
@@ -1487,7 +1760,7 @@ impl InvokeFailure {
             } => {
                 let len = parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
-                    bail!("Too many calls.")
+                    return Err(ResumeError::TooManyInterrupts);
                 }
                 parameters.push(data);
                 (len as u64) << 40 | (code as u32 as u64)
@@ -1593,15 +1866,15 @@ pub struct InvokeFromArtifactCtx<'a> {
 
 /// Invokes an init-function from a given **serialized** artifact.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
+pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad, A: DebugInfo>(
     ctx: InvokeFromArtifactCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
     limit_logs_and_return_values: bool,
-) -> ExecResult<InitResult> {
+) -> ExecResult<InitResult<A>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
-    invoke_init(
+    let r = invoke_init(
         artifact,
         init_ctx,
         InitInvocation {
@@ -1612,7 +1885,8 @@ pub fn invoke_init_from_artifact<BackingStore: BackingStoreLoad>(
         },
         limit_logs_and_return_values,
         loader,
-    )
+    )?;
+    Ok(r)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1635,23 +1909,24 @@ pub struct InvokeFromSourceCtx<'a> {
 
 /// Invokes an init-function from a **serialized** Wasm module.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
+pub fn invoke_init_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
     ctx: InvokeFromSourceCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
     validation_config: ValidationConfig,
     limit_logs_and_return_values: bool,
-) -> ExecResult<InitResult> {
+) -> ExecResult<InitResult<A>> {
     let artifact = utils::instantiate(
         validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
+            enable_debug:    A::ENABLE_DEBUG,
         },
         ctx.source,
     )?
     .artifact;
-    invoke_init(
+    let r = invoke_init(
         artifact,
         init_ctx,
         InitInvocation {
@@ -1662,29 +1937,31 @@ pub fn invoke_init_from_source<BackingStore: BackingStoreLoad>(
         },
         limit_logs_and_return_values,
         loader,
-    )
+    )?;
+    Ok(r)
 }
 
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
-pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
+pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: DebugInfo>(
     ctx: InvokeFromSourceCtx,
     init_ctx: impl v0::HasInitContext,
     init_name: &str,
     loader: BackingStore,
     validation_config: ValidationConfig,
     limit_logs_and_return_values: bool,
-) -> ExecResult<InitResult> {
+) -> ExecResult<InitResult<A>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
+            enable_debug:    A::ENABLE_DEBUG,
         },
         ctx.source,
     )?
     .artifact;
-    invoke_init(
+    let r = invoke_init(
         artifact,
         init_ctx,
         InitInvocation {
@@ -1695,7 +1972,8 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad>(
         },
         limit_logs_and_return_values,
         loader,
-    )
+    )?;
+    Ok(r)
 }
 
 fn process_receive_result<
@@ -1705,11 +1983,12 @@ fn process_receive_result<
     Art: Into<Arc<Artifact<ProcessedImports, R>>>,
     Ctx1,
     Ctx2,
+    A: DebugInfo,
 >(
     artifact: Art,
-    host: ReceiveHost<'_, BackingStore, Param, Ctx1>,
+    host: ReceiveHost<'_, BackingStore, Param, Ctx1, A>,
     result: machine::RunResult<ExecutionOutcome<Interrupt>>,
-) -> ExecResult<ReceiveResult<R, Ctx2>>
+) -> InvokeResult<ReceiveResult<R, A, Ctx2>, A>
 where
     StateLessReceiveHost<ParameterVec, Ctx2>: From<StateLessReceiveHost<Param, Ctx1>>, {
     let mut stateless = host.stateless;
@@ -1718,7 +1997,7 @@ where
             result,
             ..
         }) => {
-            let remaining_energy = host.energy.energy;
+            let remaining_energy = host.energy;
             if let Some(Value::I32(n)) = result {
                 if n >= 0 {
                     Ok(ReceiveResult::Success {
@@ -1726,26 +2005,29 @@ where
                         state_changed: host.state.changed,
                         return_value: stateless.return_value,
                         remaining_energy,
+                        trace: host.trace,
                     })
                 } else {
+                    let (reason, trace) = reason_from_wasm_error_code(n, host.trace)?;
                     Ok(ReceiveResult::Reject {
-                        reason: reason_from_wasm_error_code(n)?,
+                        reason,
                         return_value: stateless.return_value,
                         remaining_energy,
+                        trace,
                     })
                 }
             } else {
-                bail!(
-                    "Invalid return. Expected a value, but receive nothing. This should not \
-                     happen for well-formed modules"
-                );
+                Err(InvalidReturnCodeError {
+                    value:       None,
+                    debug_trace: host.trace,
+                })
             }
         }
         Ok(ExecutionOutcome::Interrupted {
             reason,
             config,
         }) => {
-            let remaining_energy = host.energy.energy;
+            let remaining_energy = host.energy;
             // Logs are returned per section that is executed.
             // So here we set the host logs to empty and return any
             // existing logs.
@@ -1755,6 +2037,7 @@ where
                 v0::Logs::new()
             };
             let state_changed = host.state.changed;
+            let trace = host.trace;
             let host = SavedHost {
                 stateless:          stateless.into(),
                 current_generation: host.state.current_generation,
@@ -1771,15 +2054,19 @@ where
                     config,
                 }),
                 interrupt: reason,
+                trace,
             })
         }
         Err(error) => {
             if error.downcast_ref::<OutOfEnergy>().is_some() {
-                Ok(ReceiveResult::OutOfEnergy)
+                Ok(ReceiveResult::OutOfEnergy {
+                    trace: host.trace,
+                })
             } else {
                 Ok(ReceiveResult::Trap {
                     error,
-                    remaining_energy: host.energy.energy,
+                    remaining_energy: host.energy,
+                    trace: host.trace,
                 })
             }
         }
@@ -1856,13 +2143,14 @@ pub fn invoke_receive<
     Art: Borrow<Artifact<ProcessedImports, R1>> + Into<Arc<Artifact<ProcessedImports, R2>>>,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: DebugInfo,
 >(
     artifact: Art,
     receive_ctx: Ctx1,
     receive_invocation: ReceiveInvocation,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<R2, Ctx2>> {
+) -> InvokeResult<ReceiveResult<R2, A, Ctx2>, A> {
     let mut host = ReceiveHost {
         energy:    receive_invocation.energy,
         stateless: StateLessReceiveHost {
@@ -1874,6 +2162,7 @@ pub fn invoke_receive<
             params,
         },
         state:     instance_state,
+        trace:     A::empty_trace(),
     };
 
     let result =
@@ -1881,6 +2170,38 @@ pub fn invoke_receive<
             Value::I64(receive_invocation.amount.micro_ccd() as i64),
         ]);
     process_receive_result(artifact, host, result)
+}
+
+pub type ResumeResult<A, Debug> = Result<A, ResumeError<Debug>>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ResumeError<Debug> {
+    /// There have been too many interrupts during this contract execution.
+    #[error("Too many interrupts in a contract call.")]
+    TooManyInterrupts,
+    #[error("Invalid return value from a contract call: {error:?}")]
+    InvalidReturn {
+        #[from]
+        error: InvalidReturnCodeError<Debug>,
+    },
+}
+
+impl<R, Debug: DebugInfo, Ctx> From<ResumeError<Debug>> for types::ReceiveResult<R, Debug, Ctx> {
+    fn from(value: ResumeError<Debug>) -> Self {
+        match value {
+            ResumeError::TooManyInterrupts => {
+                Self::Trap {
+                    error:            anyhow::anyhow!("Too many interrupts in a contract call."),
+                    remaining_energy: 0.into(), /* Protocol violations lead to consuming all
+                                                 * energy. */
+                    trace:            Debug::empty_trace(), // nothing was executed, so no trace.
+                }
+            }
+            ResumeError::InvalidReturn {
+                error,
+            } => error.into(),
+        }
+    }
 }
 
 /// Resume execution of the receive method after handling the interrupt.
@@ -1900,14 +2221,14 @@ pub fn invoke_receive<
 ///   **state changes**. Amount changes are no reflected in this.
 /// - `backing_store` gives access to any on-disk storage for the instance
 ///   state.
-pub fn resume_receive<BackingStore: BackingStoreLoad>(
+pub fn resume_receive<BackingStore: BackingStoreLoad, A: DebugInfo>(
     interrupted_state: Box<ReceiveInterruptedState<CompiledFunction>>,
     response: InvokeResponse,  // response from the call
     energy: InterpreterEnergy, // remaining energy for execution
     state_trie: &mut trie::MutableState,
     state_updated: bool,
     mut backing_store: BackingStore,
-) -> ExecResult<ReceiveResult<CompiledFunction>> {
+) -> ResumeResult<ReceiveResult<CompiledFunction, A>, A> {
     let inner = state_trie.get_inner(&mut backing_store);
     let state = InstanceState::migrate(
         state_updated,
@@ -1921,6 +2242,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
         stateless: interrupted_state.host.stateless,
         energy,
         state,
+        trace: A::empty_trace(),
     };
     let response = match response {
         InvokeResponse::Success {
@@ -1939,7 +2261,7 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
             if let Some(data) = data {
                 let len = host.stateless.parameters.len();
                 if len > 0b0111_1111_1111_1111_1111_1111 {
-                    bail!("Too many calls.")
+                    return Err(ResumeError::TooManyInterrupts);
                 }
                 host.stateless.parameters.push(data);
                 // return the index of the parameter to retrieve.
@@ -1960,18 +2282,24 @@ pub fn resume_receive<BackingStore: BackingStoreLoad>(
     let mut config = interrupted_state.config;
     config.push_value(response);
     let result = interrupted_state.artifact.run_config(&mut host, config);
-    process_receive_result(interrupted_state.artifact, host, result)
+    let r = process_receive_result(interrupted_state.artifact, host, result)?;
+    Ok(r)
 }
 
 /// Returns the passed Wasm error code if it is negative.
 /// This function should only be called on negative numbers.
-fn reason_from_wasm_error_code(n: i32) -> ExecResult<i32> {
-    ensure!(
-        n < 0,
-        "Wasm return value of {} is treated as an error. Only negative should be treated as error.",
-        n
-    );
-    Ok(n)
+fn reason_from_wasm_error_code<A>(
+    n: i32,
+    debug_trace: A,
+) -> Result<(i32, A), InvalidReturnCodeError<A>> {
+    if n < 0 {
+        Ok((n, debug_trace))
+    } else {
+        Err(InvalidReturnCodeError {
+            value: Some(n),
+            debug_trace,
+        })
+    }
 }
 
 /// Invokes a receive-function from a given **serialized** artifact.
@@ -1981,15 +2309,16 @@ pub fn invoke_receive_from_artifact<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: DebugInfo,
 >(
     ctx: InvokeFromArtifactCtx<'a>,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, Ctx2>> {
+) -> ExecResult<ReceiveResult<CompiledFunctionBytes<'a>, A, Ctx2>> {
     let artifact = utils::parse_artifact(ctx.artifact)?;
-    invoke_receive(
+    let r = invoke_receive(
         Arc::new(artifact),
         receive_ctx,
         ReceiveInvocation {
@@ -2000,7 +2329,8 @@ pub fn invoke_receive_from_artifact<
         },
         instance_state,
         params,
-    )
+    )?;
+    Ok(r)
 }
 
 /// Invokes a receive-function from a given **serialized** Wasm module.
@@ -2009,6 +2339,7 @@ pub fn invoke_receive_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: DebugInfo,
 >(
     validation_config: ValidationConfig,
     ctx: InvokeFromSourceCtx,
@@ -2016,16 +2347,17 @@ pub fn invoke_receive_from_source<
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
+) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate(
         validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
+            enable_debug:    A::ENABLE_DEBUG,
         },
         ctx.source,
     )?
     .artifact;
-    invoke_receive(
+    let r = invoke_receive(
         Arc::new(artifact),
         receive_ctx,
         ReceiveInvocation {
@@ -2036,7 +2368,8 @@ pub fn invoke_receive_from_source<
         },
         instance_state,
         params,
-    )
+    )?;
+    Ok(r)
 }
 
 /// Invokes a receive-function from a given **serialized** Wasm module. Before
@@ -2046,6 +2379,7 @@ pub fn invoke_receive_with_metering_from_source<
     BackingStore: BackingStoreLoad,
     Ctx1: HasReceiveContext,
     Ctx2: From<Ctx1>,
+    A: DebugInfo,
 >(
     validation_config: ValidationConfig,
     ctx: InvokeFromSourceCtx,
@@ -2053,16 +2387,17 @@ pub fn invoke_receive_with_metering_from_source<
     receive_name: ReceiveName,
     instance_state: InstanceState<BackingStore>,
     params: ReceiveParams,
-) -> ExecResult<ReceiveResult<CompiledFunction, Ctx2>> {
+) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
+            enable_debug:    A::ENABLE_DEBUG,
         },
         ctx.source,
     )?
     .artifact;
-    invoke_receive(
+    let r = invoke_receive(
         Arc::new(artifact),
         receive_ctx,
         ReceiveInvocation {
@@ -2073,5 +2408,6 @@ pub fn invoke_receive_with_metering_from_source<
         },
         instance_state,
         params,
-    )
+    )?;
+    Ok(r)
 }

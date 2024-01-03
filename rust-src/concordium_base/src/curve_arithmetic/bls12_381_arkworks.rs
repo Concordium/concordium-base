@@ -29,7 +29,7 @@ impl ArkCurveConfig<G1Projective> for Projective<g1::Config> {
         WBMap<g1::Config>,
     >;
 
-    const DOMAIN_STRING: &'static str = "BLS12381G1";
+    const DOMAIN_STRING: &'static str = "CONCORDIUM-hashtoG1-with-BLS12381G1_XMD:SHA-256_SSWU_RO";
     const GROUP_ELEMENT_LENGTH: usize = 48;
     const SCALAR_LENGTH: usize = 32;
 }
@@ -38,7 +38,7 @@ impl ArkCurveConfig<G2Projective> for Projective<g2::Config> {
     type Hasher =
         MapToCurveBasedHasher<G2Projective, DefaultFieldHasher<Sha256, 128>, WBMap<g2::Config>>;
 
-    const DOMAIN_STRING: &'static str = "BLS12381G2";
+    const DOMAIN_STRING: &'static str = "CONCORDIUM-hashtoG2-with-BLS12381G2_XMD:SHA-256_SSWU_RO";
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;
 }
