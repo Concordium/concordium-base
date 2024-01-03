@@ -7,10 +7,9 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     random_oracle::{Challenge, RandomOracle},
 };
-use ff::Field;
 use itertools::izip;
 use std::rc::Rc;
 

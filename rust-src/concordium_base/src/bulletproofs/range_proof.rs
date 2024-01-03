@@ -2,12 +2,11 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value},
+    curve_arithmetic::{multiexp, Curve, Field, MultiExp, PrimeField, Value},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
-use ff::{Field, PrimeField};
 use rand::*;
 use std::iter::once;
 
@@ -92,7 +91,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
     let mut v_integers = Vec::with_capacity(v_vec.len());
     for &v in v_vec {
         let rep = v.into_repr();
-        let r = rep.as_ref()[0];
+        let r = rep[0];
         v_integers.push(r);
     }
 
@@ -226,10 +225,9 @@ pub fn prove<C: Curve, T: Rng>(
         .chain(once(B_tilde))
         .collect();
     // compute A and S comittments using multi exponentiation
-    let window_size = 4;
-    let table = multiexp_table(&GH_B_tilde, window_size);
-    let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
-    let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
+    let multiexp_alg = C::new_multiexp(&GH_B_tilde);
+    let A = multiexp_alg.multiexp(&A_scalars);
+    let S = multiexp_alg.multiexp(&S_scalars);
     // append commitments A and S to transcript
     transcript.append_message(b"A", &A);
     transcript.append_message(b"S", &S);

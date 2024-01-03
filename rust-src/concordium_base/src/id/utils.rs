@@ -7,14 +7,13 @@ use crate::{
         types::{KeyIndex, TransactionTime},
         ParseResult,
     },
-    curve_arithmetic::{multiexp, Curve, Pairing, Value},
+    curve_arithmetic::{multiexp, Curve, Field, Pairing, PrimeField, Value},
     elgamal::*,
     pedersen_commitment::Commitment,
 };
 use anyhow::bail;
 use ed25519_dalek::Verifier;
 use either::Either;
-use ff::{Field, PrimeField};
 use rand::*;
 use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, BTreeSet};
@@ -128,8 +127,8 @@ pub fn encode_tags<'a, F: PrimeField, I: std::iter::IntoIterator<Item = &'a Attr
     // Since F is supposed to be a field, its capacity must be at least 1, hence the
     // next line is safe. Maximum tag that can be stored.
     let max_tag = F::CAPACITY - 1;
-    let mut f = F::zero().into_repr();
-    let limbs = f.as_mut(); // this is an array of 64 bit limbs, with least significant digit first
+    let f = F::zero();
+    let mut limbs = f.into_repr().to_vec(); // this is an array of 64 bit limbs, with least significant digit first
     for &AttributeTag(tag) in i.into_iter() {
         let idx = tag / 64;
         let place = tag % 64;
@@ -145,7 +144,7 @@ pub fn encode_tags<'a, F: PrimeField, I: std::iter::IntoIterator<Item = &'a Attr
     }
     // This should not fail (since we check capacity), but in case it does we just
     // propagate the error.
-    Ok(F::from_repr(f)?)
+    Ok(F::from_repr(limbs.as_slice())?)
 }
 
 /// Encode anonymity revokers into a list of scalars.
@@ -182,9 +181,9 @@ pub fn encode_ars<F: PrimeField>(ars: &BTreeSet<ArIdentity>) -> Option<Vec<F>> {
             } else {
                 u64::from(ar_id) << 32
             };
-            f.as_mut()[i / 2] |= x;
+            f[i / 2] |= x;
         }
-        let mut scalar = F::from_repr(f).ok()?;
+        let mut scalar = F::from_repr(f.as_slice()).ok()?;
         // shift one bit left.
         scalar.mul_assign(&two);
         scalars.push(scalar)
@@ -213,10 +212,10 @@ pub fn encode_public_credential_values<F: PrimeField>(
     let ca: u32 = created_at.into();
     let vt: u32 = valid_to.into();
     let s = u64::from(vt) << 32 | u64::from(ca);
-    f.as_mut()[0] = s; // limbs in as_mut are little endian.
+    f[0] = s; // limbs are little endian.
     let threshold: u8 = threshold.into();
-    f.as_mut()[1] = u64::from(threshold);
-    Ok(F::from_repr(f)?)
+    f[1] = u64::from(threshold);
+    Ok(F::from_repr(f.as_slice())?)
 }
 
 /// This function verifies that the signature inside

@@ -1,6 +1,8 @@
 //! Shared functions used by the proofs in this crate
-use crate::{common::*, curve_arithmetic::Curve};
-use ff::Field;
+use crate::{
+    common::*,
+    curve_arithmetic::{Curve, Field},
+};
 #[cfg(test)]
 use rand::Rng;
 /// Struct containing generators G and H needed for range proofs

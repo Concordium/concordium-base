@@ -4,11 +4,10 @@ mod ffi;
 
 use crate::{
     common::{SerdeBase16Serialize, Serialize, *},
-    curve_arithmetic::{Curve, Pairing, Value},
+    curve_arithmetic::{Curve, Field, Pairing, Value},
     random_oracle::RandomOracle,
     sigma_protocols::{common::*, dlog::*},
 };
-use ff::Field;
 use rand::Rng;
 use rayon::iter::*;
 use sha2::{digest::Output, Digest, Sha512};

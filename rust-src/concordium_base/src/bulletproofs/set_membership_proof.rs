@@ -2,12 +2,11 @@
 use super::{inner_product_proof::*, utils::*};
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve},
+    curve_arithmetic::{multiexp, Curve, Field, MultiExp},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
-use ff::Field;
 use rand::*;
 use std::{convert::TryInto, iter::once};
 
@@ -169,10 +168,9 @@ pub fn prove<C: Curve, R: Rng>(
         .chain(once(B_tilde))
         .collect();
     // compute A and S commitments using multi exponentiation
-    let window_size = 4;
-    let table = multiexp_table(&GH_B_tilde, window_size);
-    let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
-    let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
+    let mexp = C::new_multiexp(&GH_B_tilde);
+    let A = mexp.multiexp(&A_scalars);
+    let S = mexp.multiexp(&S_scalars);
     // append commitments A and S to transcript
     transcript.append_message(b"A", &A);
     transcript.append_message(b"S", &S);

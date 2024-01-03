@@ -3,9 +3,8 @@
 use super::errors::{InternalError::DivisionByZero, *};
 use crate::{
     common::*,
-    curve_arithmetic::{Curve, Secret, Value},
+    curve_arithmetic::{Curve, Field, Secret, Value},
 };
-use ff::Field;
 use rand::*;
 use std::rc::Rc;
 

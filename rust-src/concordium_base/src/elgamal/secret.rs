@@ -4,10 +4,9 @@
 use super::{cipher::*, message::*};
 use crate::{
     common::*,
-    curve_arithmetic::{Curve, Value},
+    curve_arithmetic::{Curve, Field, Value},
 };
 use anyhow::{bail, Result};
-use ff::Field;
 use rand::*;
 use std::collections::HashMap;
 
@@ -127,9 +126,9 @@ impl<C: Curve> SecretKey<C> {
 
     pub fn decrypt_exponent_slow(&self, c: &Cipher<C>) -> Value<C> {
         let m = self.decrypt(c).value;
-        let mut a = <C::Scalar as Field>::zero();
+        let mut a = C::Scalar::zero();
         let mut i = C::zero_point();
-        let field_one = <C::Scalar as Field>::one();
+        let field_one = C::Scalar::one();
         while m != i {
             i = i.plus_point(&self.generator);
             a.add_assign(&field_one);

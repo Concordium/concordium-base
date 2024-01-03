@@ -8,11 +8,10 @@
 
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     random_oracle::{Challenge, RandomOracle},
     sigma_protocols::{aggregate_dlog::*, common::*, dlog::*},
 };
-use ff::Field;
 use itertools::izip;
 use std::rc::Rc;
 
