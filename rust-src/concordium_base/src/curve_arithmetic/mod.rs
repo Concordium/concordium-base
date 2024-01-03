@@ -63,7 +63,7 @@ pub trait Field: Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug {
     /// respect to `self`, for all exponent.
     fn pow<S: AsRef<[u64]>>(&self, exp: S) -> Self {
         // Note: this implementations is
-        // copied the `ff` crate trait method `ff::Field::pow_vartime()`.
+        // copied from the `ff` crate's trait method `ff::Field::pow_vartime()`.
         // https://docs.rs/ff/0.13.0/src/ff/lib.rs.html#178-191
         let mut res = Self::one();
         for e in exp.as_ref().iter().rev() {

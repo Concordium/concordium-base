@@ -146,6 +146,10 @@ impl Curve for RistrettoPoint {
 
     fn inverse_point(&self) -> Self { -self }
 
+    // A doubling operation on the Ristretto representation is not available
+    // directly. Moreover, v4.1.1 of `curve25519-dalek` implements `double()`
+    // using addition.
+    // https://docs.rs/curve25519-dalek/4.1.1/src/curve25519_dalek/ristretto.rs.html#1203-1205
     fn double_point(&self) -> Self { self + self }
 
     fn plus_point(&self, other: &Self) -> Self { self + other }
@@ -189,7 +193,6 @@ impl Curve for RistrettoPoint {
         fr[3] &= !(1u64 << 63 | 1u64 << 62 | 1u64 << 61 | 1u64 << 60);
         <RistrettoScalar as PrimeField>::from_repr(&fr)
             .expect("The scalar with top two bits erased should be valid.")
-        // Scalar::hash_from_bytes::<ed25519_dalek::Sha512>(bs.as_ref()).into()
     }
 
     fn hash_to_group(m: &[u8]) -> Self {
