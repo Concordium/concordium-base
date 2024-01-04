@@ -67,7 +67,7 @@ fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     h.update(secret_key);
     hash.copy_from_slice(h.finalize().as_slice());
     scalar_bytes.copy_from_slice(&hash[..32]);
-    Scalar::from_bytes_mod_order(clamp_integer(scalar_bytes))
+    Scalar::from_bits(clamp_integer(scalar_bytes))
 }
 
 fn point_from_public_key(public_key: &VerifyingKey) -> Option<EdwardsPoint> {

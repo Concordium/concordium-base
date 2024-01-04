@@ -94,7 +94,7 @@ impl PublicKey {
     fn mangle_scalar_bits_and_multiply_by_basepoint_to_produce_public_key(
         bits: &mut [u8; 32],
     ) -> PublicKey {
-        let scalar = Scalar::from_bytes_mod_order(clamp_integer(*bits));
+        let scalar = Scalar::from_bits(clamp_integer(*bits));
 
         let point = &scalar * constants::ED25519_BASEPOINT_TABLE;
         let compressed = point.compress();

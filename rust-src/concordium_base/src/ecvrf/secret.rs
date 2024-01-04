@@ -126,7 +126,7 @@ impl From<&SecretKey> for ExpandedSecretKey {
         lower.copy_from_slice(&hash[00..32]);
         upper.copy_from_slice(&hash[32..64]);
 
-        let scalar = Scalar::from_bytes_mod_order(clamp_integer(lower));
+        let scalar = Scalar::from_bits(clamp_integer(lower));
 
         ExpandedSecretKey {
             key:   scalar,

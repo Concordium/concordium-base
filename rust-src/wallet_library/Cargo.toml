@@ -25,4 +25,4 @@ name = "wallet_library"
 crate-type = ["rlib"]
 
 [dev-dependencies]
-ed25519-dalek = "1.0.0"
+ed25519-dalek = "2.0.0"

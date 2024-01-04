@@ -514,9 +514,9 @@ dependencies = [
  "concordium-contracts-common",
  "concordium_base_derive",
  "criterion",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "derive_more",
- "ed25519-dalek 2.0.0",
+ "ed25519-dalek",
  "either",
  "ff 0.13.0",
  "group 0.2.0",
@@ -671,19 +671,6 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
 version = "4.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
@@ -812,35 +799,12 @@ dependencies = [
 
 [[package]]
 name = "ed25519"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
-dependencies = [
- "signature 1.6.4",
-]
-
-[[package]]
-name = "ed25519"
 version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60f6d271ca33075c88028be6f04d502853d63a5ece419d269c15315d4fc1cf1d"
 dependencies = [
  "pkcs8",
- "signature 2.1.0",
-]
-
-[[package]]
-name = "ed25519-dalek"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
-dependencies = [
- "curve25519-dalek 3.2.0",
- "ed25519 1.5.3",
- "rand 0.7.3",
- "serde",
- "sha2 0.9.9",
- "zeroize",
+ "signature",
 ]
 
 [[package]]
@@ -849,8 +813,8 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
- "curve25519-dalek 4.1.1",
- "ed25519 2.2.2",
+ "curve25519-dalek",
+ "ed25519",
  "rand_core 0.6.4",
  "serde",
  "sha2 0.10.7",
@@ -861,7 +825,7 @@ dependencies = [
 name = "ed25519_hd_key_derivation"
 version = "1.0.0"
 dependencies = [
- "ed25519-dalek 2.0.0",
+ "ed25519-dalek",
  "hex",
  "hmac",
  "regex",
@@ -1163,7 +1127,7 @@ name = "key_derivation"
 version = "2.1.0"
 dependencies = [
  "concordium_base",
- "ed25519-dalek 2.0.0",
+ "ed25519-dalek",
  "ed25519_hd_key_derivation",
  "hex",
  "hmac",
@@ -1859,12 +1823,6 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-
-[[package]]
-name = "signature"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
@@ -2053,7 +2011,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "concordium_base",
- "ed25519-dalek 1.0.1",
+ "ed25519-dalek",
  "hex",
  "key_derivation",
  "serde",
