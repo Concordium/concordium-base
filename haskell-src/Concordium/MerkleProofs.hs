@@ -146,7 +146,7 @@ data ParserContext r d c e a = ParserContext
 
 -- | A generic monad for parsing. This is implemented using continuations. The type parameters are:
 --
---   * @r@ - the ultimate result type
+--   * @r@ - the ultimate result type of the continuation
 --   * @d@ - the type of the data being parsed
 --   * @c@ - the type of reader data
 --   * @e@ - the type of parser errors
