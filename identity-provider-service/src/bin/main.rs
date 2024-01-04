@@ -15,7 +15,7 @@ use concordium_base::{
         types::*,
     },
 };
-use ed25519_dalek::{SigningKey, Signer};
+use ed25519_dalek::{Signer, SigningKey};
 use log::{error, info, warn};
 use reqwest::Client;
 use serde_json::{from_str, json, to_value};
@@ -962,10 +962,8 @@ async fn save_validated_request(
 
     // Sign the id_cred_pub so that the identity verifier can verify that the given
     // id_cred_pub matches a valid identity creation request.
-    let expanded_secret_key =
-        SigningKey::from(&server_config.ip_data.ip_cdi_secret_key);
-    let signature_on_id_cred_pub =
-        expanded_secret_key.sign(id_cred_pub_hash.as_slice());
+    let expanded_secret_key = SigningKey::from(&server_config.ip_data.ip_cdi_secret_key);
+    let signature_on_id_cred_pub = expanded_secret_key.sign(id_cred_pub_hash.as_slice());
     let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
 
     ok_or_500!(
@@ -1001,8 +999,7 @@ async fn save_validated_request_v1(
     // id_cred_pub matches a valid identity creation request.
     let expanded_secret_key: SigningKey =
         SigningKey::from(&server_config.ip_data.ip_cdi_secret_key);
-    let signature_on_id_cred_pub =
-        expanded_secret_key.sign(id_cred_pub_hash.as_slice());
+    let signature_on_id_cred_pub = expanded_secret_key.sign(id_cred_pub_hash.as_slice());
     let serialized_signature = base16_encode_string(&signature_on_id_cred_pub);
 
     ok_or_500!(

@@ -1,7 +1,10 @@
 //! Generate a private key in a deterministic way from a secret seed and key
 //! description.
-use ark_bls12_381::{G1Projective, Fr};
-use concordium_base::curve_arithmetic::{Curve, Field, PrimeField, arkworks_instances::{ArkField, ArkGroup}};
+use ark_bls12_381::{Fr, G1Projective};
+use concordium_base::curve_arithmetic::{
+    arkworks_instances::{ArkField, ArkGroup},
+    Curve, Field, PrimeField,
+};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
 
@@ -63,7 +66,10 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::Inv
 /// an integer modulo r. It therefore does not follow the standard (cf. <https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-2.3>),
 /// but is still secure.
 /// This function is needed for backwards compatibility.
-pub fn keygen_bls_deprecated(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::InvalidLength> {
+pub fn keygen_bls_deprecated(
+    ikm: &[u8],
+    key_info: &[u8],
+) -> Result<ArkField<Fr>, hkdf::InvalidLength> {
     let mut ikm = ikm.to_vec();
     ikm.push(0);
     let l = 48; // = 48 for G1; r is

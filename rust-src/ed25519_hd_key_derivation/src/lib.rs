@@ -179,7 +179,7 @@ pub fn derive_from_parsed_path(parsed_path: &[u32], seed: &[u8]) -> Result<HdKey
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek::{SigningKey, ed25519::signature::Keypair};
+    use ed25519_dalek::{ed25519::signature::Keypair, SigningKey};
 
     use super::*;
 
