@@ -6,10 +6,7 @@ extern crate criterion;
 use ark_bls12_381::{Fr, G1Projective};
 use concordium_base::{
     bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators},
-    curve_arithmetic::{
-        arkworks_instances::ArkGroup,
-        *,
-    },
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,

@@ -31,7 +31,6 @@ impl Deserial for Scalar {
     }
 }
 
-
 impl PrimeField for FFField<Scalar> {
     const CAPACITY: u32 = <Scalar as ff::PrimeField>::CAPACITY;
     const NUM_BITS: u32 = <Scalar as ff::PrimeField>::NUM_BITS;
@@ -205,7 +204,10 @@ impl MultiExp for RistrettoMultiExpNoPrecompute {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{common::*, curve_arithmetic::{field_adapters::FFField, Field}};
+    use crate::{
+        common::*,
+        curve_arithmetic::{field_adapters::FFField, Field},
+    };
     use curve25519_dalek::{ristretto::RistrettoPoint, Scalar};
     use rand::{Rng, RngCore};
     use std::io::Cursor;

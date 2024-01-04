@@ -1,3 +1,6 @@
+//! Trait implementations for the BLS12-381 curve from `arkworks`.
+//! Include configuration for `G1` and `G2`, `Pairing`, and serialization for
+//! the target group elements.
 use core::fmt;
 
 use ark_bls12_381::*;
@@ -170,7 +173,7 @@ mod tests {
         0, 0, 0, 0, 0, 0, 0,
     ];
 
-    // Check that scalar_from_bytes_helper works on small values.
+    /// Check that scalar_from_bytes_helper works on small values.
     #[test]
     fn scalar_from_bytes_small() {
         let mut rng = rand::thread_rng();
@@ -214,6 +217,7 @@ mod tests {
         }
     }
 
+    /// Test that the scalar serialization produces big-endian bytes.
     #[test]
     fn test_scalar_serialize_big_endian() {
         let bigint: BigUint = BigUint::from_bytes_le(&SCALAR_BYTES_LE);
@@ -229,6 +233,8 @@ mod tests {
         assert_eq!(scalar_bytes_be, out);
     }
 
+    /// A macro for testing that serializing a scalar and deserializing it back
+    /// gives the same scalar.
     macro_rules! macro_test_scalar_byte_conversion {
         ($function_name:ident, $p:path) => {
             #[test]
@@ -244,6 +250,8 @@ mod tests {
         };
     }
 
+    /// A macro for testing that serializing a point and deserializing it back
+    /// gives the same point.
     macro_rules! macro_test_group_byte_conversion {
         ($function_name:ident, $p:path) => {
             #[test]
@@ -259,6 +267,8 @@ mod tests {
         };
     }
 
+    /// A macro for testing that serializing a point and converting it back
+    /// using `bytes_to_curve_unchecked` gives the same point.
     macro_rules! macro_test_group_byte_conversion_unchecked {
         ($function_name:ident, $p:path) => {
             #[test]

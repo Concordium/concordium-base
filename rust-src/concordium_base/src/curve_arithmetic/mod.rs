@@ -1,7 +1,6 @@
 //! Basic definitions of the curve and pairing abstractions, and implementations
 //! of these abstractions for the curves used on Concordium.
 pub mod arkworks_instances;
-// mod ed25519_arkworks;
 mod bls12_381_arkworks;
 mod ed25519_instance;
 mod field_adapters;

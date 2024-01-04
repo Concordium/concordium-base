@@ -1,3 +1,5 @@
+//! Wrapper types and blanket implementations serving as adapters from
+//! `arkworks` field/curve traits.
 use core::fmt;
 use std::str::FromStr;
 
@@ -8,32 +10,18 @@ use anyhow::anyhow;
 use ark_ec::hashing::HashToCurve;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-#[derive(PartialOrd, Ord, PartialEq, Eq, Copy, Clone, fmt::Debug)]
+/// A wrapper type for `arkworks` field types.
+#[derive(PartialOrd, Ord, PartialEq, Eq, Copy, Clone, fmt::Debug, derive_more::From)]
 pub struct ArkField<F>(pub(crate) F);
 
-impl<F> From<F> for ArkField<F> {
-    fn from(value: F) -> Self { ArkField(value) }
-}
-
-// impl<F: ark_ff::Field> Serial for ArkField<F> {
-//     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
-//         self.0
-//             .serialize_compressed(out)
-//             .expect("Serialzation expected to succeed")
-//     }
-// }
-
-// impl<F: ark_ff::Field> Deserial for ArkField<F> {
-//     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) ->
-// crate::common::ParseResult<Self> {         let res =
-// F::deserialize_compressed(source)?;         Ok(res.into())
-//     }
-// }
-
+/// Serialization is implemented by delegating the functionality to the wrapped
+/// type.
 impl<F: Serial> Serial for ArkField<F> {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) { self.0.serial(out) }
 }
 
+/// Deserialization is implemented by delegating the functionality to the
+/// wrapped type.
 impl<F: Deserial> Deserial for ArkField<F> {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
         let res = F::deserial(source)?;
@@ -41,6 +29,9 @@ impl<F: Deserial> Deserial for ArkField<F> {
     }
 }
 
+/// A blanket implementation of the `Field` trait using the functionality of
+/// `ark_ff::Field`. This gives an implementation of our `Field` trait for
+/// `ArkField<F>` for any `F` that implements `ark_ff::Field`.
 impl<F: ark_ff::Field> Field for ArkField<F> {
     fn random<R: rand::prelude::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
         F::rand(rng).into()
@@ -71,7 +62,10 @@ impl<F: ark_ff::Field> ArkField<F> {
     pub fn into_ark(&self) -> &F { &self.0 }
 }
 
-impl<F: ark_ff::PrimeField + Serialize> PrimeField for ArkField<F> {
+/// A blanket implementation of the `PrimeField` trait using the functionality
+/// of `ark_ff::PrimeField`. This gives an implementation of our `PrimeField`
+/// trait for `ArkField<F>` for any `F` that implements `ark_ff::PrimeField`.
+impl<F: ark_ff::PrimeField> PrimeField for ArkField<F> {
     const CAPACITY: u32 = Self::NUM_BITS - 1;
     const NUM_BITS: u32 = F::MODULUS_BIT_SIZE;
 
@@ -95,13 +89,16 @@ impl<F: ark_ff::PrimeField + Serialize> PrimeField for ArkField<F> {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, fmt::Debug)]
+/// A wrapper type for `arkworks` group types.
+#[derive(PartialEq, Eq, Copy, Clone, fmt::Debug, derive_more::From)]
 pub struct ArkGroup<G>(pub(crate) G);
 
 impl<G: ark_ec::CurveGroup> ArkGroup<G> {
     pub fn into_ark(&self) -> &G { &self.0 }
 }
 
+/// Serialization is implemented by delegating the functionality to the
+/// compressed affine representation of `ark_ec:CurveGroup`.
 impl<G: ark_ec::CurveGroup> Serial for ArkGroup<G> {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
         self.0
@@ -111,6 +108,8 @@ impl<G: ark_ec::CurveGroup> Serial for ArkGroup<G> {
     }
 }
 
+/// Deserialization is implemented by delegating the functionality to the
+/// compressed affine representation of `ark_ec:CurveGroup`.
 impl<G: ark_ec::CurveGroup> Deserial for ArkGroup<G> {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
         let res = G::Affine::deserialize_compressed(source)?;
@@ -118,10 +117,10 @@ impl<G: ark_ec::CurveGroup> Deserial for ArkGroup<G> {
     }
 }
 
-impl<G> From<G> for ArkGroup<G> {
-    fn from(value: G) -> Self { ArkGroup(value) }
-}
-
+/// Curve configuration.
+///
+/// These parameters cannot be taken from the `arkworks` traits. Each `arkworks`
+/// curve should come with an implementation of this configuration trait.
 pub(crate) trait ArkCurveConfig<G: ark_ec::CurveGroup> {
     const SCALAR_LENGTH: usize;
     const GROUP_ELEMENT_LENGTH: usize;
@@ -129,6 +128,11 @@ pub(crate) trait ArkCurveConfig<G: ark_ec::CurveGroup> {
     type Hasher: ark_ec::hashing::HashToCurve<G>;
 }
 
+/// A blanket implementation of the `Curve` trait using the functionality of
+/// `ark_ec::CurveGroup` and curve configuration `ArkCurveConfig`. This gives an
+/// implementation of our `Curve` trait for `ArkGroup<F>` for any `F` that
+/// implements `ark_ec::CurveGroup`, provided an instance of `ArkCurveConfig`
+/// for that curve.
 impl<G: ark_ec::CurveGroup + ArkCurveConfig<G>> Curve for ArkGroup<G>
 where
     <G as ark_ec::Group>::ScalarField: Serialize,
@@ -157,7 +161,7 @@ where
 
     fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(b: &mut R) -> anyhow::Result<Self> {
         // TODO: this is not the most efficient implementation, since there might be
-        // some additional checks durind deserialization. However, it seems
+        // some additional checks during deserialization. However, it seems
         // there are no unchecked methods available through traits.
         let res = G::Affine::deserialize_compressed(b).map_err(|e| anyhow!(e))?;
         Ok(ArkGroup(res.into()))

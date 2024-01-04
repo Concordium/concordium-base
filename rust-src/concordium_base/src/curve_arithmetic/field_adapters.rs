@@ -1,3 +1,5 @@
+//! Wrapper types and blanket implementations serving as adapters from
+//! the `ff` crate `Field`.
 use ff;
 use rand::RngCore;
 
@@ -5,13 +7,18 @@ use crate::common::{Deserial, Serial};
 
 use super::Field;
 
+/// A wrapper type for `ff` field types.
 #[derive(derive_more::From, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FFField<F>(pub(crate) F);
 
+/// Serialization is implemented by delegating the functionality to the wrapped
+/// type.
 impl<F: Serial> Serial for FFField<F> {
     fn serial<B: crate::common::Buffer>(&self, out: &mut B) { self.0.serial(out) }
 }
 
+/// Deserialization is implemented by delegating the functionality to the
+/// wrapped type.
 impl<F: Deserial> Deserial for FFField<F> {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
         let res = F::deserial(source)?;
@@ -19,6 +26,9 @@ impl<F: Deserial> Deserial for FFField<F> {
     }
 }
 
+/// A blanket implementation of the `Field` trait using the functionality of
+/// `ff::Field`. This gives an implementation of our `Field` trait for
+/// `FFField<F>` for any `F` that implements `ff::Field`.
 impl<F: ff::Field> Field for FFField<F> {
     fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self { F::random(rng).into() }
 
