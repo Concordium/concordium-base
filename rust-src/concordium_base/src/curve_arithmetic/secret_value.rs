@@ -3,7 +3,6 @@
 //! A thin wrapper around a scalar to indicate that it is a secret value.
 
 use crate::{common::*, curve_arithmetic::*};
-use ff::Field;
 use rand::*;
 use std::{
     ops::{Deref, Drop},
@@ -15,7 +14,7 @@ use std::{
 /// A generic wrapper for a secret that implements a zeroize on drop.
 /// Other types are expected to wrap this in more convenient interfaces.
 /// Ideally the constraint would be Default, but fields we have do not implement
-/// it, so we cannot use it at the moment. Hence the temporary hack of 'F:
+/// it, so we cannot use it at the moment. Hence the temporary hack of 'T:
 /// Field'.
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Serialize)]

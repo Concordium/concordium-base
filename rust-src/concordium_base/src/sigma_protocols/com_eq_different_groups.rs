@@ -6,11 +6,10 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     pedersen_commitment::{Commitment, CommitmentKey, Randomness, Value},
     random_oracle::RandomOracle,
 };
-use ff::Field;
 use rand::*;
 
 #[derive(Debug)]

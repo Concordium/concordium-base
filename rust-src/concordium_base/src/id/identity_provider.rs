@@ -4,13 +4,12 @@ use super::{id_proof_types::ProofVersion, secret_sharing::Threshold, types::*, u
 use crate::{
     bulletproofs::range_proof::verify_efficient,
     common::{to_bytes, types::TransactionTime},
-    curve_arithmetic::{multiexp, Curve, Pairing},
+    curve_arithmetic::{multiexp, Curve, Field, Pairing},
     elgamal::multicombine,
     pedersen_commitment::{Commitment, CommitmentKey},
     random_oracle::RandomOracle,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
 };
-use ff::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};

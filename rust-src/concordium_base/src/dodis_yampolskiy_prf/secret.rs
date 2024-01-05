@@ -3,14 +3,13 @@
 use super::errors::{InternalError::DivisionByZero, *};
 use crate::{
     common::*,
-    curve_arithmetic::{Curve, Secret, Value},
+    curve_arithmetic::{Curve, Field, Secret, Value},
 };
-use ff::Field;
 use rand::*;
 use std::rc::Rc;
 
 /// A PRF key.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 pub struct SecretKey<C: Curve>(Rc<Secret<C::Scalar>>);
 
 /// This trait allows automatic conversion of `&SecretKey<C>` to `&C::Scalar`.
@@ -71,6 +70,36 @@ impl<C: Curve> SecretKey<C> {
     where
         T: Rng, {
         SecretKey::new(C::generate_scalar(csprng))
+    }
+}
+
+impl<C: Curve> std::fmt::Display for SecretKey<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "<Dodis Yampolskiy SecretKey>")
+    }
+}
+
+impl<C: Curve> std::fmt::Debug for SecretKey<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "<Dodis Yampolskiy SecretKey>")
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SecretKeyFromStrError {
+    #[error("Invalid secret key: {0}")]
+    InvalidKey(#[from] anyhow::Error),
+    #[error("Invalid hex string: {0}")]
+    InvalidHex(#[from] hex::FromHexError),
+}
+
+impl<C: Curve> std::str::FromStr for SecretKey<C> {
+    type Err = SecretKeyFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut bytes = std::io::Cursor::new(hex::decode(s)?);
+        let key = from_bytes(&mut bytes)?;
+        Ok(key)
     }
 }
 

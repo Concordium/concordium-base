@@ -2,10 +2,9 @@
 //! this crate
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     random_oracle::RandomOracle,
 };
-use ff::Field;
 
 /// Inner product proof
 #[derive(Clone, Serialize, Debug)]

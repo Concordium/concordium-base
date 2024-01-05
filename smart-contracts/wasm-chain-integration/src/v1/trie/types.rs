@@ -154,7 +154,7 @@ impl<V> Collector<V> for EmptyCollector {
 
 /// A [`Collector`] that keeps track of how much additional data will be
 /// required to store the tree.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SizeCollector {
     num_bytes: u64,
 }

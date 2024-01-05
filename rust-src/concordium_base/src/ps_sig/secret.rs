@@ -10,8 +10,6 @@ use super::{
 };
 use crate::{common::*, curve_arithmetic::*};
 
-use ff::Field;
-
 use rand::*;
 
 /// A secret key

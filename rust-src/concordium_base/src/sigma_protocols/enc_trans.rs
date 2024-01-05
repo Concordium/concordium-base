@@ -54,13 +54,12 @@ use super::{
 };
 use crate::{
     common::*,
-    curve_arithmetic::{multiexp, Curve},
+    curve_arithmetic::{multiexp, Curve, Field},
     elgamal::ChunkSize,
     encrypted_transfers::types::CHUNK_SIZE,
     pedersen_commitment::{Randomness as PedersenRandomness, Value},
     random_oracle::{Challenge, RandomOracle},
 };
-use ff::Field;
 use itertools::izip;
 use std::rc::Rc;
 

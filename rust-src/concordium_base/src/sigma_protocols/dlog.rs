@@ -5,10 +5,9 @@
 use super::common::*;
 use crate::{
     common::*,
-    curve_arithmetic::{Curve, Value},
+    curve_arithmetic::{Curve, Field, Value},
     random_oracle::{Challenge, RandomOracle},
 };
-use ff::Field;
 
 pub struct Dlog<C: Curve> {
     /// Evaluated point.

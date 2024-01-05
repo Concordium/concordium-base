@@ -53,23 +53,26 @@ pub fn enc_trans_bench(c: &mut Criterion) {
 
     let context_clone = context.clone();
     let sk_clone = sk_sender.clone();
-    c.bench_function("Create transaction with proofs", move |b| {
-        b.iter(|| {
-            gen_enc_trans(
-                &context_clone,
-                &mut ro.split(),
-                &pk_sender,
-                &sk_clone,
-                &pk_receiver,
-                index,
-                &S,
-                Amount::from_micro_ccd(s),
-                Amount::from_micro_ccd(a),
-                &mut csprng,
-            )
-            .expect("Could not produce proof.");
-        })
-    });
+    c.bench_function(
+        &format!("{}: Create transaction with proofs", module_path!()),
+        move |b| {
+            b.iter(|| {
+                gen_enc_trans(
+                    &context_clone,
+                    &mut ro.split(),
+                    &pk_sender,
+                    &sk_clone,
+                    &pk_receiver,
+                    index,
+                    &S,
+                    Amount::from_micro_ccd(s),
+                    Amount::from_micro_ccd(a),
+                    &mut csprng,
+                )
+                .expect("Could not produce proof.");
+            })
+        },
+    );
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
@@ -89,22 +92,25 @@ pub fn enc_trans_bench(c: &mut Criterion) {
         &mut csprng,
     )
     .expect("Could not produce proof.");
-    c.bench_function("Verify transaction and proofs", move |b| {
-        b.iter(|| {
-            let mut ro = RandomOracle::domain(&challenge_prefix);
-            assert_eq!(
-                verify_enc_trans(
-                    &context,
-                    &mut ro,
-                    &transaction,
-                    &pk_sender,
-                    &pk_receiver,
-                    &S,
-                ),
-                Ok(())
-            )
-        })
-    });
+    c.bench_function(
+        &format!("{}: Verify transaction and proofs", module_path!()),
+        move |b| {
+            b.iter(|| {
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                assert_eq!(
+                    verify_enc_trans(
+                        &context,
+                        &mut ro,
+                        &transaction,
+                        &pk_sender,
+                        &pk_receiver,
+                        &S,
+                    ),
+                    Ok(())
+                )
+            })
+        },
+    );
 }
 
 #[allow(non_snake_case)]
@@ -133,22 +139,28 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
 
     let context_clone = context.clone();
     let sk_clone = sk.clone();
-    c.bench_function("Create sec to pub transaction with proofs", move |b| {
-        b.iter(|| {
-            gen_sec_to_pub_trans(
-                &context_clone,
-                &mut ro.split(),
-                &pk,
-                &sk_clone,
-                index,
-                &S,
-                Amount::from_micro_ccd(s),
-                Amount::from_micro_ccd(a),
-                &mut csprng,
-            )
-            .expect("Could not produce proof.");
-        })
-    });
+    c.bench_function(
+        &format!(
+            "{}: Create sec to pub transaction with proofs",
+            module_path!()
+        ),
+        move |b| {
+            b.iter(|| {
+                gen_sec_to_pub_trans(
+                    &context_clone,
+                    &mut ro.split(),
+                    &pk,
+                    &sk_clone,
+                    index,
+                    &S,
+                    Amount::from_micro_ccd(s),
+                    Amount::from_micro_ccd(a),
+                    &mut csprng,
+                )
+                .expect("Could not produce proof.");
+            })
+        },
+    );
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
@@ -167,22 +179,28 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
         &mut csprng,
     )
     .expect("Could not produce proof.");
-    c.bench_function("Verify sec to pub transaction and proofs", move |b| {
-        b.iter(|| {
-            let mut ro = RandomOracle::domain(&challenge_prefix);
-            assert_eq!(
-                verify_sec_to_pub_trans(&context, &mut ro, &transaction, &pk, &S,),
-                Ok(())
-            )
-        })
-    });
+    c.bench_function(
+        &format!(
+            "{}: Verify sec to pub transaction and proofs",
+            module_path!()
+        ),
+        move |b| {
+            b.iter(|| {
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                assert_eq!(
+                    verify_sec_to_pub_trans(&context, &mut ro, &transaction, &pk, &S,),
+                    Ok(())
+                )
+            })
+        },
+    );
 }
 
 criterion_group! {
-    name = elgamal_benches;
+    name = encrypted_transfer_benches;
     config = Criterion::default().measurement_time(Duration::from_millis(100000)).sample_size(20);
     targets =
         enc_trans_bench
 }
 
-criterion_main!(elgamal_benches);
+criterion_main!(encrypted_transfer_benches);

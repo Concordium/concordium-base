@@ -11,16 +11,14 @@ use concordium_base::{
     random_oracle::RandomOracle,
 };
 use criterion::Criterion;
-use ff::Field;
-use pairing::bls12_381::{Fr, G1};
+use curve25519_dalek::ristretto::RistrettoPoint;
+use pairing::bls12_381::G1;
 use rand::*;
 use std::time::Duration;
 
-type SomeCurve = G1;
-type SomeField = Fr;
-
-pub fn prove_verify_benchmarks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Range Proof");
+pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
+    let bench_group_name = "Range Proof for ".to_owned() + std::any::type_name::<SomeCurve>();
+    let mut group = c.benchmark_group(bench_group_name);
 
     let rng = &mut thread_rng();
     let n: u8 = 32;
@@ -118,8 +116,12 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
 }
 
 #[allow(non_snake_case)]
-fn compare_inner_product_proof(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Inner-Product Proof");
+fn compare_inner_product_proof<SomeCurve: Curve>(c: &mut Criterion) {
+    let bench_group_name = format!(
+        "Inner-Product Proof for {}",
+        std::any::type_name::<SomeCurve>()
+    );
+    let mut group = c.benchmark_group(bench_group_name);
 
     // Testing with n = 4
     let rng = &mut thread_rng();
@@ -145,7 +147,7 @@ fn compare_inner_product_proof(c: &mut Criterion) {
     let H = H_vec.clone();
     let mut H_prime: Vec<SomeCurve> = Vec::with_capacity(n);
     let y_inv = y.inverse().unwrap();
-    let mut H_prime_scalars: Vec<SomeField> = Vec::with_capacity(n);
+    let mut H_prime_scalars: Vec<<SomeCurve as Curve>::Scalar> = Vec::with_capacity(n);
     let mut transcript = RandomOracle::empty();
     let G_vec_p = G_vec.clone();
     let H_vec_p = H_vec.clone();
@@ -153,7 +155,7 @@ fn compare_inner_product_proof(c: &mut Criterion) {
     let b_vec_p = b_vec.clone();
     group.bench_function("Naive inner product proof", move |b| {
         b.iter(|| {
-            let mut y_inv_i = SomeField::one();
+            let mut y_inv_i = <SomeCurve as Curve>::Scalar::one();
             for h in H.iter().take(n) {
                 H_prime.push(h.mul_by_scalar(&y_inv_i));
                 y_inv_i.mul_assign(&y_inv);
@@ -164,7 +166,7 @@ fn compare_inner_product_proof(c: &mut Criterion) {
     let mut transcript = RandomOracle::empty();
     group.bench_function("Better inner product proof with scalars", move |b| {
         b.iter(|| {
-            let mut y_inv_i = SomeField::one();
+            let mut y_inv_i = <SomeCurve as Curve>::Scalar::one();
             for _ in 0..n {
                 H_prime_scalars.push(y_inv_i);
                 y_inv_i.mul_assign(&y_inv);
@@ -185,5 +187,5 @@ fn compare_inner_product_proof(c: &mut Criterion) {
 criterion_group!(
     name = benchmarks;
     config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
-    targets = prove_verify_benchmarks, compare_inner_product_proof);
+    targets = prove_verify_benchmarks::<G1>, prove_verify_benchmarks::<RistrettoPoint>, compare_inner_product_proof::<G1>, compare_inner_product_proof::<RistrettoPoint>);
 criterion_main!(benchmarks);

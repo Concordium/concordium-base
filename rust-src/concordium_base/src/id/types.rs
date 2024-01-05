@@ -33,7 +33,6 @@ use derive_more::*;
 use ed25519_dalek as ed25519;
 use ed25519_dalek::Verifier;
 use either::Either;
-use ff::Field;
 use hex::{decode, encode};
 use serde::{
     de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
