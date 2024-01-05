@@ -2,7 +2,7 @@ use anyhow::Context;
 use ark_bls12_381::G1Projective;
 use concordium_base::{
     common::{base16_decode_string, types::TransactionTime, Versioned, VERSION_0},
-    curve_arithmetic::{*, arkworks_instances::ArkGroup},
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
     id,
     id::{
         constants::{ArCurve, AttributeKind},
