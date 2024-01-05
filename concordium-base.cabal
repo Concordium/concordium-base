@@ -304,6 +304,7 @@ test-suite test
       ConcordiumTests.Crypto.VRF
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
+      ConcordiumTests.MerkleProofs
       ConcordiumTests.Utils.Encryption
       ConcordiumTests.Utils.InterpolationSearch
       Generators

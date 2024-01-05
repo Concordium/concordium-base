@@ -3,6 +3,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+-- | Definitions for working with Merkle proofs.
+-- This module defines a raw format for a Merkle proof (namely 'MerkleProof') that can be used to
+-- represent very generic Merkle proof formats.
+-- Beyond this, it provides a framework for parsing Merkle proofs into path-value mappings
+-- (represented as 'PartialTree') based on schemas (represented as 'MerkleSchema').
 module Concordium.MerkleProofs where
 
 import Control.Applicative
@@ -68,14 +73,25 @@ merkleBuilder (SubProof sp) = Builder.shortByteString (SHA256.hashToShortByteStr
 
 -- * Parsing Merkle proofs
 
+-- | How a size is encoded in a Merkle proof.
+-- (All sizes are unsigned, since a negative size is meaningless.)
+data SizeEncoding
+    = -- | 16-bit big-endian
+      SizeU16BE
+    | -- | 32-bit big-endian
+      SizeU32BE
+    | -- | 64-bit big-endian
+      SizeU64BE
+    deriving (Eq, Show)
+
 -- | A schematic type that describes how some data item is represented in a Merkle proof.
 -- We do not fully parse data, but just tokenise it to fixed or variable length byte strings.
 data MerkleData
     = -- | A byte string of the given fixed length.
       FixedLengthBytes Word64
-    | -- | A variable length string of bytes prefixed by its length, encoded big-endian as a
-      --  fixed number of bytes.
-      VariableLengthBytesBE Word8
+    | -- | A variable length string of bytes prefixed by its length, encoded based on the size
+      -- encoding.
+      VariableLengthBytes SizeEncoding
     deriving (Show)
 
 -- | Tag type used to label branches in the parse tree of a Merkle proof.
@@ -98,15 +114,15 @@ data MerkleBody
     | -- | A sub-proof should appear. When parsed, the sub-proof will be identified by the given tag.
       Hashed Tag NonTerminal
     | -- | The given body should appear a number of times, preceded by the number of times it
-      --  appears. The 'Word8' argument specifies how many bytes represent the number of
-      -- repetitions. When parsed, the array will appear under the given tag, and beneath that,
+      --  appears. The 'SizeEncoding' argument specifies how the number of repetitions is encoded.
+      -- When parsed, the array will appear under the given tag, and beneath that,
       -- each element will be tagged "0", "1", etc. according to the index in the array.
-      RepeatedBE Tag Word8 MerkleBody
+      RepeatedBE Tag SizeEncoding MerkleBody
     | -- | An array of tokens should appear as a left-full Merkle binary tree.
-      -- The size of the tree should appear at the root (the 'Word8' specifies how many bytes
-      -- represent the size). An empty LFMB-tree is represented by the hash of the 'BS.ByteString'.
+      -- The size of the tree should appear at the root (the 'SizeEncoding' specifies how the size
+      -- is represented). An empty LFMB-tree is represented by the hash of the 'BS.ByteString'.
       -- The contents of the array are tagged as in the case of 'RepeatedBE'.
-      LFMBTree Tag Word8 BS.ByteString MerkleBody
+      LFMBTree Tag SizeEncoding BS.ByteString MerkleBody
     deriving (Show)
 
 -- | A schema that defines how a Merkle proof should be parsed into a 'PartialTree'.
@@ -125,7 +141,7 @@ data PartialBranch
       Leaf BS.ByteString
     | -- | A sub-tree.
       Node PartialTree
-    deriving (Show)
+    deriving (Eq, Show)
 
 -- ** Parser monad
 
@@ -228,7 +244,7 @@ data ParseError
       ExpectedEndOfInput
     | -- | The error occurred while attempting to parse the given tag.
       Context Tag ParseError
-    deriving (Show)
+    deriving (Eq, Show)
 
 -- | Apply a context of tags to a 'ParseError'.
 -- The context is treated as a stack, and the first tag is applied at the innermost level.
@@ -298,6 +314,19 @@ parseSubProof inside = Parse $ \pc@ParserContext{..} ->
                                 else parserError (applyErrorContext ctx ExpectedEndOfInput)
                         }
 
+parseSize ::
+    (Num b) =>
+    SizeEncoding ->
+    Parse r MerkleProof [Tag] ParseError (BS.ByteString, b)
+parseSize sizeEncoding = do
+    bytes <- parseBytes sizeBytes
+    return (bytes, fromBE bytes)
+  where
+    sizeBytes = case sizeEncoding of
+        SizeU16BE -> 2
+        SizeU32BE -> 4
+        SizeU64BE -> 8
+
 -- | Parse a Merkle proof given a schema and the expanded non-terminal to parse.
 parseMerkleBody ::
     -- | The schema to use for parsing.
@@ -316,9 +345,8 @@ parseMerkleBody schema = inner
     inner (Tagged tag (FixedLengthBytes len)) pt = local (tag :) $ do
         bytes <- parseBytes (fromIntegral len)
         return (HM.insert tag (Leaf bytes) pt, Builder.byteString bytes)
-    inner (Tagged tag (VariableLengthBytesBE lenSize)) pt = local (tag :) $ do
-        lenBytes <- parseBytes (fromIntegral lenSize)
-        let len = BS.foldl' (\acc w -> acc * 256 + fromIntegral w) 0 lenBytes
+    inner (Tagged tag (VariableLengthBytes lenEncoding)) pt = local (tag :) $ do
+        (lenBytes, len) <- parseSize lenEncoding
         bytes <- parseBytes len
         return (HM.insert tag (Leaf bytes) pt, Builder.byteString lenBytes <> Builder.byteString bytes)
     inner (Sequence l) pt = do
@@ -336,17 +364,15 @@ parseMerkleBody schema = inner
                     Nothing -> Leaf hashBS
                     Just branch -> Node branch
             return (HM.insert tag val pt, Builder.byteString hashBS)
-    inner (RepeatedBE tag lenSize sub) pt = local (tag :) $ do
-        lenBytes <- parseBytes (fromIntegral lenSize)
-        let len = fromBE lenBytes
+    inner (RepeatedBE tag lenEncoding sub) pt = local (tag :) $ do
+        (_, len) <- parseSize lenEncoding
         let f (pt', builder) i = local (show i :) $ do
                 (pt'', builder'') <- inner sub mempty
                 return (HM.insert (show i) (Node pt'') pt', builder <> builder'')
         (pt1, builder) <- foldM f (mempty, mempty) [0 .. (len :: Integer) - 1]
         return (HM.insert tag (Node pt1) pt, builder)
-    inner (LFMBTree tag lenSize emptyBS sub) pt0 = local (tag :) $ do
-        lenBytes <- parseBytes (fromIntegral lenSize)
-        let len = fromBE lenBytes
+    inner (LFMBTree tag lenEncoding emptyBS sub) pt0 = local (tag :) $ do
+        (_, len) <- parseSize lenEncoding
         let doTree 0 _ pt = do
                 actual <- parseBytes (BS.length emptyBS)
                 unless (actual == emptyBS) $ throwParseError (Expected emptyBS actual)
@@ -388,8 +414,8 @@ lowerPowerOfTwo x
 -- | Parse a Merkle proof according to a schema, given the schema and root non-terminal.
 -- On success, this returns the partial tree parsing of the proof and the computed root hash.
 -- On failure, this returns the error that occurred during parsing.
-parseMerkleProof :: MerkleSchema -> NonTerminal -> MerkleProof -> Either ParseError (PartialTree, SHA256.Hash)
-parseMerkleProof schema ident pf = case HM.lookup ident schema of
+parseMerkleProof :: NonTerminal -> MerkleSchema -> MerkleProof -> Either ParseError (PartialTree, SHA256.Hash)
+parseMerkleProof ident schema pf = case HM.lookup ident schema of
     Nothing -> Left (UnknownSchemaId ident)
     Just body ->
         unParse
@@ -461,7 +487,7 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                   Tagged "round" u64,
                   Tagged "epoch" u64,
                   Tagged "aggregateSignature" (FixedLengthBytes 48),
-                  Tagged "signatories" (VariableLengthBytesBE 4)
+                  Tagged "signatories" (VariableLengthBytes SizeU32BE)
                 ]
         timeoutCertificateHash <-
             setFresh $
@@ -475,15 +501,15 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                         [ LiteralBytes (S.encode (1 :: Word8)),
                           Tagged "round" u64,
                           Tagged "minEpoch" u64,
-                          RepeatedBE "finalizerQCRoundsFirstEpoch" 4 $
+                          RepeatedBE "finalizerQCRoundsFirstEpoch" SizeU32BE $
                             Sequence
                                 [ Tagged "round" u64,
-                                  Tagged "finalizers" (VariableLengthBytesBE 4)
+                                  Tagged "finalizers" (VariableLengthBytes SizeU32BE)
                                 ],
-                          RepeatedBE "finalizerQCRoundsSecondEpoch" 4 $
+                          RepeatedBE "finalizerQCRoundsSecondEpoch" SizeU32BE $
                             Sequence
                                 [ Tagged "round" u64,
-                                  Tagged "finalizers" (VariableLengthBytesBE 4)
+                                  Tagged "finalizers" (VariableLengthBytes SizeU32BE)
                                 ],
                           Tagged "aggregateSignature" (FixedLengthBytes 48)
                         ]
@@ -502,9 +528,9 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                           Tagged "finalizedRound" u64,
                           Tagged "epoch" u64,
                           Tagged "finalizedAggregateSignature" (FixedLengthBytes 48),
-                          Tagged "finalizedSignatories" (VariableLengthBytesBE 4),
+                          Tagged "finalizedSignatories" (VariableLengthBytes SizeU32BE),
                           Tagged "successorAggregateSignature" (FixedLengthBytes 48),
-                          Tagged "successorSignatories" (VariableLengthBytesBE 4),
+                          Tagged "successorSignatories" (VariableLengthBytes SizeU32BE),
                           Tagged "successorProof" opaqueHash
                         ]
                     )
