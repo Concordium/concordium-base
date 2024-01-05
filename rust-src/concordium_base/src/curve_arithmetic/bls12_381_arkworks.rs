@@ -87,8 +87,8 @@ impl Serial for Fq12 {
             c0_6.c2, c0_6.c1, c0_6.c0,
         ];
         for p in coeffs.iter() {
-            let repr_c1: BigInt<6> = Fq::from(p.c1).into();
-            let repr_c0: BigInt<6> = Fq::from(p.c0).into();
+            let repr_c1: BigInt<6> = p.c1.into_bigint();
+            let repr_c0: BigInt<6> = p.c0.into_bigint();
             for d in repr_c1.0.iter() {
                 d.serial(out);
             }
