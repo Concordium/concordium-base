@@ -6,6 +6,7 @@ use concordium_base::{
         types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
         *,
     },
+    curve_arithmetic::arkworks_instances::ArkGroup,
     dodis_yampolskiy_prf as prf,
     elgamal::{self, PublicKey, SecretKey},
     id::{
@@ -18,7 +19,7 @@ use concordium_base::{
         types::*,
     },
     pedersen_commitment::Value as PedersenValue,
-    ps_sig, curve_arithmetic::arkworks_instances::ArkGroup,
+    ps_sig,
 };
 use dialoguer::{Input, MultiSelect, Select};
 use ed25519_dalek as ed25519;

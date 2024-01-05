@@ -6,7 +6,7 @@ use concordium_base::{
         types::{KeyIndex, KeyPair, TransactionTime},
         *,
     },
-    curve_arithmetic::{Curve, Pairing, arkworks_instances::ArkGroup},
+    curve_arithmetic::{arkworks_instances::ArkGroup, Curve, Pairing},
     dodis_yampolskiy_prf as prf,
     id::{
         account_holder::*,

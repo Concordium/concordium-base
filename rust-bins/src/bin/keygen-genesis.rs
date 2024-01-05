@@ -2,7 +2,11 @@ use ark_bls12_381::{G1Projective, G2Projective};
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
-    common::*, curve_arithmetic::{Curve, arkworks_instances::ArkGroup}, elgamal::PublicKey, id::types::*, ps_sig,
+    common::*,
+    curve_arithmetic::{arkworks_instances::ArkGroup, Curve},
+    elgamal::PublicKey,
+    id::types::*,
+    ps_sig,
 };
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use sha2::{Digest, Sha512};

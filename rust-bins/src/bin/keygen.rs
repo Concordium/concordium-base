@@ -3,7 +3,10 @@ use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
     common::*,
-    curve_arithmetic::{Curve, arkworks_instances::{ArkField, ArkGroup}},
+    curve_arithmetic::{
+        arkworks_instances::{ArkField, ArkGroup},
+        Curve,
+    },
     elgamal::{PublicKey, SecretKey},
     id::types::*,
     ps_sig,
@@ -673,11 +676,7 @@ pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
 
 /// It generates a ed25519_dalek secret key given a seed, using the `keygen_ed`
 /// above.
-pub fn generate_ed_sk(
-    seed: &[u8],
-) -> ed25519_dalek::SecretKey {
-    keygen_ed(seed)
-}
+pub fn generate_ed_sk(seed: &[u8]) -> ed25519_dalek::SecretKey { keygen_ed(seed) }
 
 #[cfg(test)]
 mod tests {
