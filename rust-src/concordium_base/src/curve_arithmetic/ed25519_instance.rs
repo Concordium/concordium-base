@@ -24,10 +24,9 @@ impl Deserial for Scalar {
         let mut buf: [u8; 32] = [0; 32];
         source.read_exact(&mut buf)?;
         let res: Option<_> = Scalar::from_canonical_bytes(buf).into();
-        let scalar: Scalar = res.ok_or(anyhow::anyhow!(
+        res.ok_or(anyhow::anyhow!(
             "Deserialization failed! Not a field value!"
-        ))?;
-        Ok(scalar.into())
+        ))
     }
 }
 

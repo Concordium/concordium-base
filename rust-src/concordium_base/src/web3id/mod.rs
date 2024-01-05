@@ -494,7 +494,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     serde_json::from_value(get_field(&mut proof, "proofValue")?)?;
 
                 anyhow::ensure!(proof_value.len() == statement.len());
-                let proofs = statement.into_iter().zip(proof_value.into_iter()).collect();
+                let proofs = statement.into_iter().zip(proof_value).collect();
                 Ok(Self::Account {
                     created,
                     network: issuer.network,
@@ -540,7 +540,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     serde_json::from_value(get_field(&mut proof, "proofValue")?)?;
 
                 anyhow::ensure!(proof_value.len() == statement.len());
-                let proofs = statement.into_iter().zip(proof_value.into_iter()).collect();
+                let proofs = statement.into_iter().zip(proof_value).collect();
 
                 Ok(Self::Web3Id {
                     created,

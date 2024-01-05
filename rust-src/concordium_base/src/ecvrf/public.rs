@@ -94,6 +94,14 @@ impl PublicKey {
     fn mangle_scalar_bits_and_multiply_by_basepoint_to_produce_public_key(
         bits: &mut [u8; 32],
     ) -> PublicKey {
+        // It seems like `from_bits` is the only way to construct an unreduced scalar
+        // that can potentially be grater than the field's order.
+
+        // TODO: we use a
+        // deprecated `from_bits` here, this also requires enabling the
+        // `legacy_compatibility` feature for the `ed25519-dalek` dependency. Maybe ther
+        // is a different way of implementing this.
+        #[allow(deprecated)]
         let scalar = Scalar::from_bits(clamp_integer(*bits));
 
         let point = &scalar * constants::ED25519_BASEPOINT_TABLE;

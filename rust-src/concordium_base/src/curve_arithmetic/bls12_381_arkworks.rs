@@ -5,7 +5,6 @@ use core::fmt;
 
 use ark_bls12_381::*;
 use ark_ec::{
-    bls12::{G1Prepared, G2Prepared},
     hashing::{curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher},
     pairing::MillerLoopOutput,
     short_weierstrass::Projective,
@@ -49,7 +48,7 @@ impl ArkCurveConfig<G2Projective> for Projective<g2::Config> {
 impl Deserial for Fr {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Fr> {
         let mut buf = [0u8; 32];
-        source.read(&mut buf)?;
+        source.read_exact(&mut buf)?;
         // Construct the scalar from big endian bytes.
         let big_int: BigInt<4> = BigUint::from_bytes_be(&buf)
             .try_into()
@@ -111,25 +110,19 @@ impl Pairing for Bls12 {
     type TargetField = ArkField<<Bls12 as ark_ec::pairing::Pairing>::TargetField>;
 
     #[inline(always)]
-    fn g1_prepare(g: &Self::G1) -> Self::G1Prepared {
-        let res: G1Prepared<_> = g.into_ark().into_affine().into();
-        res.into()
-    }
+    fn g1_prepare(g: &Self::G1) -> Self::G1Prepared { g.into_ark().into_affine().into() }
 
     #[inline(always)]
-    fn g2_prepare(g: &Self::G2) -> Self::G2Prepared {
-        let res: G2Prepared<_> = g.into_ark().into_affine().into();
-        res.into()
-    }
+    fn g2_prepare(g: &Self::G2) -> Self::G2Prepared { g.into_ark().into_affine().into() }
 
     #[inline(always)]
     fn miller_loop<'a, I>(i: I) -> Self::TargetField
     where
         I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>, {
-        let (xs, ys): (Vec<_>, Vec<_>) = i.into_iter().map(|x| *x).unzip();
+        let (xs, ys): (Vec<_>, Vec<_>) = i.into_iter().copied().unzip();
         let res = <Bls12 as ark_ec::pairing::Pairing>::multi_miller_loop(
-            xs.into_iter().map(|x| x.clone()),
-            ys.into_iter().map(|x| x.clone()),
+            xs.into_iter().cloned(),
+            ys.into_iter().cloned(),
         )
         .0;
         res.into()

@@ -67,6 +67,15 @@ fn scalar_from_secret_key(secret_key: &impl AsRef<[u8]>) -> Scalar {
     h.update(secret_key);
     hash.copy_from_slice(h.finalize().as_slice());
     scalar_bytes.copy_from_slice(&hash[..32]);
+
+    // It seems like `from_bits` is the only way to construct an unreduced scalar
+    // that can potentially be grater than the field's order.
+
+    // TODO: we use a
+    // deprecated `from_bits` here, this also requires enabling the
+    // `legacy_compatibility` feature for the `ed25519-dalek` dependency. Maybe ther
+    // is a different way of implementing this.
+    #[allow(deprecated)]
     Scalar::from_bits(clamp_integer(scalar_bytes))
 }
 

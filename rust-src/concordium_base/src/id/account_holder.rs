@@ -142,7 +142,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.response.r1.r2.responses.into_iter())
+        .zip(proof.response.r1.r2.responses)
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
@@ -216,7 +216,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.response.r2.responses.into_iter())
+        .zip(proof.response.r2.responses)
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 

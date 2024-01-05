@@ -2152,9 +2152,7 @@ impl AccountKeys {
                     (
                         u8::from(*ki),
                         concordium_contracts_common::Signature::Ed25519(SignatureEd25519(
-                            // Unwrap is safe since the conversion is between signature types
-                            // represented by byte arrays of the same length [u8, u64].
-                            kp.sign(msg).to_bytes().try_into().unwrap(),
+                            kp.sign(msg).to_bytes(),
                         )),
                     )
                 })

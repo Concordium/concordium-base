@@ -196,7 +196,7 @@ where
     fn hash_to_group(m: &[u8]) -> Self {
         let hasher = G::Hasher::new(G::DOMAIN_STRING.as_ref())
             .expect("Expected valid domain separation string");
-        let res = G::Hasher::hash(&hasher, &m).expect("Expected successful hashing to curve");
+        let res = G::Hasher::hash(&hasher, m).expect("Expected successful hashing to curve");
         ArkGroup(res.into())
     }
 }
