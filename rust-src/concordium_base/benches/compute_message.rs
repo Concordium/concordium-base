@@ -1,6 +1,7 @@
+use ark_bls12_381::G1Projective;
 use concordium_base::{
     common::types::*,
-    curve_arithmetic::*,
+    curve_arithmetic::{*, arkworks_instances::ArkGroup},
     id,
     id::{
         constants::*,
@@ -13,13 +14,15 @@ use concordium_base::{
     ps_sig,
 };
 use criterion::*;
-use pairing::bls12_381::{G1, *};
 use rand::*;
 use serde_json::from_str;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
 };
+
+type G1 = ArkGroup<G1Projective>;
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 
 fn bench_compute_message(c: &mut Criterion) {
     let mut csprng = thread_rng();
