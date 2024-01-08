@@ -980,7 +980,6 @@ mod tests {
         for &v in v_vec.iter().take(m.into()) {
             let r = Randomness::generate(rng);
             let v_scalar = SomeCurve::scalar_from_u64(v);
-            // println!("{:?}", v);
             let v_value = Value::<SomeCurve>::new(v_scalar);
             let com = keys.hide(&v_value, &r);
             randomness.push(r);
@@ -998,7 +997,6 @@ mod tests {
             &keys,
             &randomness,
         );
-        println!("{:?}", proof);
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = RandomOracle::empty();

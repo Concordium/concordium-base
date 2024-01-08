@@ -183,7 +183,6 @@ where
         for chunk in bs.as_ref().chunks(8).take(s as usize) {
             let mut v = [0u8; 8];
             v[..chunk.len()].copy_from_slice(chunk);
-            println!("{:?}", v);
             fr.push(u64::from_le_bytes(v));
         }
         // unset two topmost bits in the last read u64.

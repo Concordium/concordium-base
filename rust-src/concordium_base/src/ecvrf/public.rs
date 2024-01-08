@@ -97,8 +97,7 @@ impl PublicKey {
         // It seems like `from_bits` is the only way to construct an unreduced scalar
         // that can potentially be grater than the field's order.
 
-        // TODO: we use a
-        // deprecated `from_bits` here, this also requires enabling the
+        // TODO: we use deprecated `from_bits` here, this also requires enabling the
         // `legacy_compatibility` feature for the `ed25519-dalek` dependency. Maybe ther
         // is a different way of implementing this.
         #[allow(deprecated)]
