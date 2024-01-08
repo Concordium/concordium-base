@@ -10,10 +10,29 @@ use std::{io::Cursor, marker::PhantomData};
 ///
 /// It is a vector of branches which are all concatenated when computing the
 /// root hash.
-pub type GenericMerkleProof = Vec<MerkleBranch>;
+#[derive(Debug, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct GenericMerkleProof {
+    pub branches: Vec<MerkleBranch>,
+}
+
+impl GenericMerkleProof {
+    pub fn new(branches: Vec<MerkleBranch>) -> Self { GenericMerkleProof { branches } }
+
+    fn with_two_branches(&self) -> Result<(&MerkleBranch, &MerkleBranch), ConvertMerkleProofError> {
+        if self.branches.len() != 2 {
+            Err(ConvertMerkleProofError::InvalidBranchLength {
+                expected: 2,
+                actual:   self.branches.len(),
+            })
+        } else {
+            Ok((&self.branches[0], &self.branches[1]))
+        }
+    }
+}
 
 /// Branch in a generic merkle proof.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MerkleBranch {
     /// Data bytes which can be deserialized into a value, such as information
     /// or hashes.
@@ -21,6 +40,40 @@ pub enum MerkleBranch {
     /// A sub merkle proof where the hash of this subproof should be used when
     /// computing the root hash.
     SubProof(GenericMerkleProof),
+}
+
+impl MerkleBranch {
+    /// Get the raw data from the branch, producing an error if the branch
+    /// contains a subproof.
+    fn raw_data(&self) -> Result<&Vec<u8>, ConvertMerkleProofError> {
+        if let MerkleBranch::RawData(data) = self {
+            Ok(data)
+        } else {
+            Err(ConvertMerkleProofError::ExpectedRawData)
+        }
+    }
+
+    /// Get and deserialize the data from the branch, producing an error if the
+    /// branch contains a subproof.
+    fn deserial_data<A: Deserial>(&self) -> Result<A, ConvertMerkleProofError> {
+        let data = A::deserial(&mut Cursor::new(self.raw_data()?))?;
+        Ok(data)
+    }
+
+    /// Get sub proof from the branch, producing an error if the branch contains
+    /// raw data.
+    fn sub_proof(&self) -> Result<&GenericMerkleProof, ConvertMerkleProofError> {
+        if let MerkleBranch::SubProof(sub_proof) = self {
+            Ok(sub_proof)
+        } else {
+            Err(ConvertMerkleProofError::ExpectedSubProof)
+        }
+    }
+
+    #[cfg(test)]
+    fn make_raw_data<A: crate::common::Serial>(a: &A) -> MerkleBranch {
+        MerkleBranch::RawData(crate::common::to_bytes(a))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,14 +116,14 @@ impl<M> MerkleProof<M> {
 
     /// Compute the block hash (root hash) of the merkle proof.
     pub fn compute_block_hash(&self) -> BlockHash {
-        let mut stack = vec![(Sha256::new(), self.proof.iter())];
+        let mut stack = vec![(Sha256::new(), self.proof.branches.iter())];
         loop {
             // Unwrap is safe, since loop should break before the stack becomes empty.
             let (hasher, iter) = stack.last_mut().unwrap();
             match iter.next() {
                 Some(MerkleBranch::RawData(data)) => hasher.update(data),
-                Some(MerkleBranch::SubProof(branches)) => {
-                    stack.push((Sha256::new(), branches.iter()));
+                Some(MerkleBranch::SubProof(sub_proof)) => {
+                    stack.push((Sha256::new(), sub_proof.branches.iter()));
                 }
                 None => {
                     let (hasher, _) = stack.pop().unwrap();
@@ -131,6 +184,31 @@ pub struct FinalizerInfo {
     pub bls_verify_key: BakerAggregationVerifyKey,
 }
 
+impl TryFrom<&GenericMerkleProof> for FinalizationCommittee {
+    type Error = ConvertMerkleProofError;
+
+    fn try_from(proof: &GenericMerkleProof) -> Result<Self, Self::Error> {
+        type Structure = LfmbtU32<FinalizerInfo>;
+        let parsed = Structure::try_from(proof)?;
+        Ok(FinalizationCommittee {
+            members: parsed.items,
+        })
+    }
+}
+
+impl TryFrom<&GenericMerkleProof> for FinalizerInfo {
+    type Error = ConvertMerkleProofError;
+
+    fn try_from(proof: &GenericMerkleProof) -> Result<Self, Self::Error> {
+        type Structure = Node2<Data<u64>, Data<BakerAggregationVerifyKey>>;
+        let parsed = Structure::try_from(proof)?;
+        Ok(FinalizerInfo {
+            weight:         parsed.left.value,
+            bls_verify_key: parsed.right.value,
+        })
+    }
+}
+
 /// Marked merkle proof type representing a light block merkle proof.
 /// See [`LightBlockCommitteesInfo`] for the information provided in the proof.
 pub type LightBlockCommitteeMerkleProof = MerkleProof<LightBlockCommitteesInfo>;
@@ -160,8 +238,8 @@ impl LightBlockCommitteeMerkleProof {
                 .sub_proof;
             Ok(LightBlockCommitteesInfo {
                 protocol_version: parsed.left.value,
-                current:          committees.left.value,
-                next:             committees.right.value,
+                current:          committees.left.sub_proof,
+                next:             committees.right.sub_proof,
             })
         } else {
             Err(MerkleProofError::UnexpectedBlockHash {
@@ -189,15 +267,16 @@ type Metadata = MerkleHash;
 type BlockData = SubProof<Node2<Transactions, BlockResult>>;
 type Transactions = MerkleHash;
 type BlockResult = SubProof<Node2<Outcomes, LightBlockInfo>>;
-type Outcomes = SubProof<Node2<TransactionOutcomes, BlockState>>;
-type TransactionOutcomes = MerkleHash;
-type BlockState = MerkleHash;
+type Outcomes = MerkleHash;
+// type Outcomes =  SubProof<Node2<TransactionOutcomes, BlockState>>;
+// type TransactionOutcomes = MerkleHash;
+// type BlockState = MerkleHash;
 type LightBlockInfo = SubProof<Node2<BlockHeightInfo, CurrentAndNextFinalizationCommittee>>;
 type BlockHeightInfo = MerkleHash;
 type CurrentAndNextFinalizationCommittee =
     SubProof<Node2<CurrentFinalizationCommittee, NextFinalizationCommittee>>;
-type CurrentFinalizationCommittee = Data<FinalizationCommittee>;
-type NextFinalizationCommittee = Data<FinalizationCommittee>;
+type CurrentFinalizationCommittee = SubProof<FinalizationCommittee>;
+type NextFinalizationCommittee = SubProof<FinalizationCommittee>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConvertMerkleProofError {
@@ -211,10 +290,17 @@ pub enum ConvertMerkleProofError {
         /// The actual len of the vector containing branches.
         actual:   usize,
     },
-    #[error("Unexpected sub proof, expected raw data.")]
-    UnexpectedSubProof,
-    #[error("Unexpected raw data, expected sub proof.")]
-    UnexpectedRawData,
+    #[error("Failed to convert branch {index}:\n{error}")]
+    InvalidBranch {
+        index: usize,
+        error: Box<ConvertMerkleProofError>,
+    },
+    #[error("Failed to convert LFMBT (u32):\n{error}")]
+    InvalidLfbtU32 { error: Box<ConvertMerkleProofError> },
+    #[error("Expected raw data.")]
+    ExpectedRawData,
+    #[error("Expected a sub proof.")]
+    ExpectedSubProof,
     #[error("Failed to parse raw data")]
     InvalidRawData(#[from] anyhow::Error),
 }
@@ -230,7 +316,7 @@ type MerkleHash = HashBytes<MerkleHashMarker>;
 ///
 /// This type is a helper for defining the structure of a merkle proof needed
 /// for validation and to parse out the content of the proof.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Node2<Left, Right> {
     left:  Left,
     right: Right,
@@ -240,7 +326,7 @@ struct Node2<Left, Right> {
 ///
 /// This type is a helper for defining the structure of a merkle proof needed
 /// for validation and to parse out the content of the proof.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 struct SubProof<A> {
     sub_proof: A,
@@ -250,10 +336,18 @@ struct SubProof<A> {
 ///
 /// This type is a helper for defining the structure of a merkle proof needed
 /// for validation and to parse out the content of the proof.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 struct Data<A> {
     value: A,
+}
+
+/// Merkle proof constructed from a LFMBT hashed list, prefixed with a length
+/// using a u32 (BE).
+#[derive(Debug, Clone)]
+#[repr(transparent)]
+struct LfmbtU32<A> {
+    items: Vec<A>,
 }
 
 impl<'a, L, R> TryFrom<&'a GenericMerkleProof> for Node2<L, R>
@@ -263,15 +357,19 @@ where
 {
     type Error = ConvertMerkleProofError;
 
-    fn try_from(value: &'a GenericMerkleProof) -> Result<Self, Self::Error> {
-        if value.len() != 2 {
-            return Err(ConvertMerkleProofError::InvalidBranchLength {
-                expected: 2,
-                actual:   value.len(),
-            });
-        }
-        let left = L::try_from(&value[0])?;
-        let right = R::try_from(&value[1])?;
+    fn try_from(proof: &'a GenericMerkleProof) -> Result<Self, Self::Error> {
+        let (left_branch, right_branch) = proof.with_two_branches()?;
+
+        let left =
+            L::try_from(left_branch).map_err(|error| ConvertMerkleProofError::InvalidBranch {
+                index: 0,
+                error: Box::new(error),
+            })?;
+        let right =
+            R::try_from(right_branch).map_err(|error| ConvertMerkleProofError::InvalidBranch {
+                index: 1,
+                error: Box::new(error),
+            })?;
         Ok(Node2 { left, right })
     }
 }
@@ -279,10 +377,7 @@ where
 impl TryFrom<&MerkleBranch> for MerkleHash {
     type Error = ConvertMerkleProofError;
 
-    fn try_from(value: &MerkleBranch) -> Result<Self, Self::Error> {
-        let v = Data::<MerkleHash>::try_from(value)?;
-        Ok(v.value)
-    }
+    fn try_from(value: &MerkleBranch) -> Result<Self, Self::Error> { value.deserial_data() }
 }
 
 impl<'a, A> TryFrom<&'a MerkleBranch> for SubProof<A>
@@ -293,7 +388,7 @@ where
 
     fn try_from(value: &'a MerkleBranch) -> Result<Self, Self::Error> {
         let MerkleBranch::SubProof(sub_proof) = value else {
-            return Err(ConvertMerkleProofError::UnexpectedRawData);
+            return Err(ConvertMerkleProofError::ExpectedSubProof);
         };
         let sub_proof = A::try_from(sub_proof)?;
         Ok(Self { sub_proof })
@@ -306,12 +401,79 @@ where
 {
     type Error = ConvertMerkleProofError;
 
-    fn try_from(value: &MerkleBranch) -> Result<Self, Self::Error> {
-        let MerkleBranch::RawData(data) = value else {
-            return Err(ConvertMerkleProofError::UnexpectedSubProof);
-        };
-        let value = A::deserial(&mut Cursor::new(&data))?;
+    fn try_from(branch: &MerkleBranch) -> Result<Self, Self::Error> {
+        let value = branch.deserial_data()?;
         Ok(Self { value })
+    }
+}
+
+impl<'a, A> TryFrom<&'a GenericMerkleProof> for LfmbtU32<A>
+where
+    A: TryFrom<&'a GenericMerkleProof, Error = ConvertMerkleProofError>,
+{
+    type Error = ConvertMerkleProofError;
+
+    fn try_from(proof: &'a GenericMerkleProof) -> Result<Self, Self::Error> {
+        let (size_branch, values_branch) = proof.with_two_branches()?;
+
+        let size: u32 =
+            size_branch
+                .deserial_data()
+                .map_err(|err| ConvertMerkleProofError::InvalidLfbtU32 {
+                    error: Box::new(err),
+                })?;
+
+        let mut items = Vec::new();
+        let mut stack = vec![(size, values_branch)];
+        while let Some((size, branch)) = stack.pop() {
+            if size == 0 {
+                // Ensure the branch contains a hash in this case.
+                let _: MerkleHash = branch.deserial_data().map_err(|err| {
+                    ConvertMerkleProofError::InvalidLfbtU32 {
+                        error: Box::new(err),
+                    }
+                })?;
+            } else if size == 1 {
+                let item_proof =
+                    branch
+                        .sub_proof()
+                        .map_err(|err| ConvertMerkleProofError::InvalidLfbtU32 {
+                            error: Box::new(err),
+                        })?;
+                let item = A::try_from(item_proof)?;
+                items.push(item);
+            } else {
+                let (left_branch, right_branch) = branch
+                    .sub_proof()
+                    .map_err(|err| ConvertMerkleProofError::InvalidLfbtU32 {
+                        error: Box::new(err),
+                    })?
+                    .with_two_branches()
+                    .map_err(|err| ConvertMerkleProofError::InvalidLfbtU32 {
+                        error: Box::new(err),
+                    })?;
+
+                let left_size = lower_power_of_two(size);
+                let right_size = size - left_size;
+
+                // Notice we push the right size first and left last here, this is to ensure the
+                // next in the loop is the left branch, thus traversing the tree in left most
+                // depth first. This is nescessary to ensure the right order of the items.
+                stack.push((right_size, right_branch));
+                stack.push((left_size, left_branch));
+            }
+        }
+        Ok(Self { items })
+    }
+}
+
+/// Compute the power of two which is one lower than the one needed for
+/// representing the provided value.
+fn lower_power_of_two(value: u32) -> u32 {
+    if let Some(power) = value.checked_next_power_of_two() {
+        power - 1
+    } else {
+        32
     }
 }
 
@@ -324,10 +486,10 @@ mod tests {
     fn test_verify_protocol_version() {
         use MerkleBranch::*;
         let actual_protocol_version = ProtocolVersion::P7;
-        let proof = ProtocolVersionMerkleProof::new(vec![
+        let proof = ProtocolVersionMerkleProof::new(GenericMerkleProof::new(vec![
             RawData(to_bytes(&actual_protocol_version)),
             RawData([0u8; 32].to_vec()),
-        ]);
+        ]));
 
         let expected = "72f3eb9aeaf8283011ce6e437fdecd65eace8f52cc4b1a06a4bc9b8f112c570d"
             .parse()
@@ -346,33 +508,51 @@ mod tests {
         let actual_protocol_version = ProtocolVersion::P7;
         let actual_current_committee = FinalizationCommittee { members: vec![] };
         let actual_next_committee = FinalizationCommittee { members: vec![] };
-        let proof = LightBlockCommitteeMerkleProof::new(vec![
+        let proof = LightBlockCommitteeMerkleProof::new(GenericMerkleProof::new(vec![
             RawData(to_bytes(&actual_protocol_version)),
-            SubProof(vec![
-                RawData([0u8; 32].to_vec()),
-                SubProof(vec![
-                    RawData([0u8; 32].to_vec()),
-                    SubProof(vec![
-                        RawData([0u8; 32].to_vec()),
-                        SubProof(vec![
-                            RawData([0u8; 32].to_vec()),
-                            SubProof(vec![
-                                RawData([0u8; 32].to_vec()),
-                                SubProof(vec![
-                                    RawData(to_bytes(&actual_current_committee)),
-                                    RawData(to_bytes(&actual_next_committee)),
-                                ]),
-                            ]),
-                        ]),
-                    ]),
-                ]),
-            ]),
-        ]);
+            SubProof(GenericMerkleProof::new(vec![
+                // HeaderQuasi
+                RawData([0u8; 32].to_vec()), // Header
+                SubProof(GenericMerkleProof::new(vec![
+                    // Quasi
+                    RawData([0u8; 32].to_vec()), // Metadata
+                    SubProof(GenericMerkleProof::new(vec![
+                        // BlockData
+                        RawData([0u8; 32].to_vec()), // Transactions
+                        SubProof(GenericMerkleProof::new(vec![
+                            // BlockResult
+                            RawData([0u8; 32].to_vec()), // Outcomes
+                            SubProof(GenericMerkleProof::new(vec![
+                                // LightBlockInfo
+                                RawData([0u8; 32].to_vec()), // BlockHeightInfo
+                                SubProof(GenericMerkleProof::new(vec![
+                                    // CurrentAndNextFinalizationCommittee
+                                    SubProof(GenericMerkleProof::new(vec![
+                                        MerkleBranch::make_raw_data(&0u32), // Tree length
+                                        RawData([0u8; 32].to_vec()),        // Empty tree hash
+                                    ])),
+                                    SubProof(GenericMerkleProof::new(vec![
+                                        MerkleBranch::make_raw_data(&0u32), // Tree length
+                                        RawData([0u8; 32].to_vec()),        // Empty tree hash
+                                    ])),
+                                ])),
+                            ])),
+                        ])),
+                    ])),
+                ])),
+            ])),
+        ]));
 
-        let expected = "2336a45ff212539c0df454bffa3f1b090489cb11faf24326d18074d7a032fc06"
+        println!("{}", proof.compute_block_hash());
+
+        let expected = "3bd669908f5f8f5051495d0b8d2e5f544d2d61c726da976f4c2d952a6503ccf6"
             .parse()
             .expect("Failed to parse block hash");
-        let proof_content = proof.verify(expected).expect("Unable to verify proof.");
+
+        let proof_content = proof
+            .verify(expected)
+            .map_err(|err| err.to_string())
+            .expect("Unable to verify proof.");
 
         assert_eq!(
             proof_content.protocol_version, actual_protocol_version,
