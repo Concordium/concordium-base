@@ -142,7 +142,7 @@ toScheme n
     | otherwise = Nothing
 
 sign :: KeyPair -> ByteString -> Signature
-sign KeyPairEd25519{..} = Signature . Ed25519.sign signKey verifyKey
+sign KeyPairEd25519{..} = Signature . Ed25519.sign signKey
 
 verify :: VerifyKey -> ByteString -> Signature -> Bool
 verify (VerifyKeyEd25519 vfKey) bs (Signature s) = Ed25519.verify vfKey bs s

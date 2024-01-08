@@ -122,15 +122,14 @@ newKeyPair = do
     let verifyKey = deriveVerifyKey signKey
     return (signKey, verifyKey)
 
-sign :: SignKey -> VerifyKey -> ByteString -> BSS.ShortByteString
-sign signKey verifyKey m = unsafePerformIO $
+sign :: SignKey -> ByteString -> BSS.ShortByteString
+sign signKey m = unsafePerformIO $
     withSignKey signKey $ \signKeyPtr ->
-        withVerifyKey verifyKey $ \verifyKeyPtr ->
-            BS.unsafeUseAsCStringLen m $ \(m', mlen) -> do
-                -- this use of unsafe is fine because the sign function
-                -- checks the length before dereferencing the data pointer
-                ((), s) <- withAllocatedShortByteString signatureSize $ signFFI (castPtr m') (fromIntegral mlen) signKeyPtr verifyKeyPtr
-                return s
+        BS.unsafeUseAsCStringLen m $ \(m', mlen) -> do
+            -- this use of unsafe is fine because the sign function
+            -- checks the length before dereferencing the data pointer
+            ((), s) <- withAllocatedShortByteString signatureSize $ signFFI (castPtr m') (fromIntegral mlen) signKeyPtr
+            return s
 
 verify :: VerifyKey -> ByteString -> BSS.ShortByteString -> Bool
 verify vf m sig = (BSS.length sig == signatureSize) && (suc > 0)
