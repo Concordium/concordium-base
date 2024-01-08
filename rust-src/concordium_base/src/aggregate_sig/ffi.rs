@@ -1,10 +1,7 @@
 #![cfg(feature = "ffi")]
 
 use super::*;
-use crate::{
-    common::*, curve_arithmetic::arkworks_instances::ArkGroup, ffi_helpers::*,
-    random_oracle::RandomOracle, sigma_protocols::dlog,
-};
+use crate::{common::*, ffi_helpers::*, random_oracle::RandomOracle, sigma_protocols::dlog};
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use std::{cmp::Ordering, slice};
 
