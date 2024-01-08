@@ -1,7 +1,7 @@
 use ark_bls12_381::G1Projective;
 use concordium_base::{
     common::types::*,
-    curve_arithmetic::{*, arkworks_instances::ArkGroup},
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
     id,
     id::{
         constants::*,
