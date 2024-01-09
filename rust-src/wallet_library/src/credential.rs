@@ -1,61 +1,34 @@
 use anyhow::{bail, Result};
-use concordium_base::{
-    common::{base16_encode_string, types::KeyIndex},
-    contracts_common::NonZeroThresholdU8,
-    id::{
-        account_holder::create_unsigned_credential,
-        constants,
-        constants::{ArCurve, AttributeKind},
-        dodis_yampolskiy_prf as prf,
-        pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue, Value},
-        types::*,
-    },
+use concordium_base::id::{
+    account_holder::create_unsigned_credential,
+    constants,
+    constants::{ArCurve, AttributeKind},
+    dodis_yampolskiy_prf as prf,
+    pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue, Value},
+    types::*,
 };
-use key_derivation::Net;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
 use std::collections::BTreeMap;
 
-use crate::wallet::get_wallet;
-
 type JsonString = String;
-
-/// The shared unsigned credential input that is independent of
-/// whether or not the credential is going to be created by supplying
-/// a seed or the secret key material directly.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnsignedCredentialInput {
-    ip_info:             IpInfo<constants::IpPairing>,
-    global_context:      GlobalContext<constants::ArCurve>,
-    ars_infos:           BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
-    id_object:           IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
-    revealed_attributes: Vec<AttributeTag>,
-    cred_number:         u8,
-}
 
 /// Required input for generating an unsigned credential where the private keys
 /// are supplied directly.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UnsignedCredentialInputWithKeys {
-    common:                 UnsignedCredentialInput,
+pub struct UnsignedCredentialInput {
+    ip_info:                IpInfo<constants::IpPairing>,
+    global_context:         GlobalContext<constants::ArCurve>,
+    ars_infos:              BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
+    id_object: IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
+    revealed_attributes:    Vec<AttributeTag>,
+    cred_number:            u8,
     id_cred_sec:            PedersenValue<ArCurve>,
     prf_key:                prf::SecretKey<ArCurve>,
     blinding_randomness:    String,
     attribute_randomness:   BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>,
     credential_public_keys: CredentialPublicKeys,
-}
-
-/// Required input for generating an unsigned credential from where the
-/// private keys are derived from a seed and an identity index.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnsignedCredentialInputWithSeed {
-    common:         UnsignedCredentialInput,
-    seed_as_hex:    String,
-    net:            Net,
-    identity_index: u32,
 }
 
 /// Defines the JSON structure that matches the output of the function
@@ -68,69 +41,8 @@ struct UnsignedCredentialDeploymentInfoWithRandomness {
 }
 
 /// Creates unsigned credential deployment information and the corresponding
-/// randomness where the secrets are derived from the provided seed.
-/// Note that this hardcodes both the key threshold and the number of keys
-/// on the credential to 1.
-pub fn create_unsigned_credential_with_seed_v1_aux(
-    input: UnsignedCredentialInputWithSeed,
-) -> Result<JsonString> {
-    let wallet = get_wallet(input.seed_as_hex, input.net)?;
-
-    let identity_provider_index = input.common.ip_info.ip_identity.0;
-    let identity_index = input.identity_index;
-    let id_cred_sec =
-        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
-    let prf_key = wallet.get_prf_key(identity_provider_index, identity_index)?;
-    let blinding_randomness =
-        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
-    let encoded_blinding_randomness = base16_encode_string(&blinding_randomness);
-
-    let identity_attributes_iter = input.common.id_object.get_attribute_list().alist.iter();
-    let revealed_attributes = &input.common.revealed_attributes;
-
-    let mut attribute_randomness = BTreeMap::new();
-    for (tag, _kind) in identity_attributes_iter {
-        if !revealed_attributes.contains(tag) {
-            let randomness: PedersenRandomness<ArCurve> = wallet
-                .get_attribute_commitment_randomness(
-                    identity_provider_index,
-                    identity_index,
-                    input.common.cred_number.into(),
-                    *tag,
-                )?;
-            attribute_randomness.insert(*tag, randomness);
-        }
-    }
-
-    let key = wallet.get_account_public_key(
-        identity_provider_index,
-        identity_index,
-        input.common.cred_number.into(),
-    )?;
-    let mut key_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();
-    key_map.insert(KeyIndex(0), VerifyKey::Ed25519VerifyKey(key));
-    let credential_public_keys: CredentialPublicKeys = CredentialPublicKeys {
-        threshold: NonZeroThresholdU8::ONE,
-        keys:      key_map,
-    };
-
-    let input_with_keys = UnsignedCredentialInputWithKeys {
-        common: input.common,
-        id_cred_sec,
-        prf_key,
-        blinding_randomness: encoded_blinding_randomness,
-        credential_public_keys,
-        attribute_randomness,
-    };
-
-    create_unsigned_credential_with_keys_v1_aux(input_with_keys)
-}
-
-/// Creates unsigned credential deployment information and the corresponding
 /// randomness where the secrets are provided directly as input.
-pub fn create_unsigned_credential_with_keys_v1_aux(
-    input: UnsignedCredentialInputWithKeys,
-) -> Result<JsonString> {
+pub fn create_unsigned_credential_v1_aux(input: UnsignedCredentialInput) -> Result<JsonString> {
     let chi = CredentialHolderInfo::<constants::ArCurve> {
         id_cred: IdCredentials {
             id_cred_sec: input.id_cred_sec,
@@ -153,17 +65,15 @@ pub fn create_unsigned_credential_with_keys_v1_aux(
             ),
     };
 
-    let common = input.common;
+    let context = IpContext::new(&input.ip_info, &input.ars_infos, &input.global_context);
 
-    let context = IpContext::new(&common.ip_info, &common.ars_infos, &common.global_context);
-
-    let policy = build_policy(&common.id_object.alist, common.revealed_attributes)?;
+    let policy = build_policy(&input.id_object.alist, input.revealed_attributes)?;
 
     let (cdi, rand) = create_unsigned_credential(
         context,
-        &common.id_object,
+        &input.id_object,
         &id_use_data,
-        common.cred_number,
+        input.cred_number,
         policy,
         input.credential_public_keys,
         None,
@@ -212,24 +122,6 @@ mod tests {
     use ed25519_dalek as ed25519;
     use std::str::FromStr;
 
-    const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
-
-    fn create_test_input() -> UnsignedCredentialInput {
-        let ip_info = read_ip_info();
-        let global = read_global();
-        let ars_infos = read_ars_infos();
-        let identity_object = read_identity_object();
-
-        UnsignedCredentialInput {
-            ars_infos,
-            ip_info,
-            global_context: global,
-            id_object: identity_object,
-            cred_number: 1,
-            revealed_attributes: Vec::new(),
-        }
-    }
-
     fn assert_unsigned_credential(values: CredentialDeploymentValues<ArCurve, AttributeKind>) {
         let cred_id = values.cred_id;
         let verify_key = values.cred_key_info.keys.get(&KeyIndex(0)).unwrap();
@@ -245,7 +137,14 @@ mod tests {
     }
 
     #[test]
-    pub fn create_unsigned_credential_with_keys_test() {
+    pub fn create_unsigned_credential_test() {
+        let cred_number = 1;
+        let revealed_attributes = Vec::new();
+        let ip_info = read_ip_info();
+        let global_context = read_global();
+        let ars_infos = read_ars_infos();
+        let id_object = read_identity_object();
+
         let id_cred_sec: PedersenValue<ArCurve> = base16_decode_string(
             "7392eb0b4840c8a6f9314e99a8dd3e2c3663a1e615d8820851e3abd2965fab18",
         )
@@ -279,9 +178,13 @@ mod tests {
             keys:      key_map,
         };
 
-        let common = create_test_input();
-        let input = UnsignedCredentialInputWithKeys {
-            common,
+        let input = UnsignedCredentialInput {
+            ars_infos,
+            cred_number,
+            global_context,
+            id_object,
+            ip_info,
+            revealed_attributes,
             id_cred_sec,
             prf_key,
             blinding_randomness,
@@ -289,24 +192,7 @@ mod tests {
             credential_public_keys,
         };
 
-        let result_str = create_unsigned_credential_with_keys_v1_aux(input).unwrap();
-        let result: UnsignedCredentialDeploymentInfoWithRandomness =
-            serde_json::from_str(&result_str).unwrap();
-
-        assert_unsigned_credential(result.unsigned_cdi.values);
-    }
-
-    #[test]
-    pub fn create_unsigned_credential_with_seed_test() {
-        let common = create_test_input();
-        let input = UnsignedCredentialInputWithSeed {
-            common,
-            identity_index: 0,
-            net: Net::Testnet,
-            seed_as_hex: TEST_SEED_1.to_string(),
-        };
-
-        let result_str = create_unsigned_credential_with_seed_v1_aux(input).unwrap();
+        let result_str = create_unsigned_credential_v1_aux(input).unwrap();
         let result: UnsignedCredentialDeploymentInfoWithRandomness =
             serde_json::from_str(&result_str).unwrap();
 
