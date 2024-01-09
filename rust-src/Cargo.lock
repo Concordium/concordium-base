@@ -113,7 +113,7 @@ dependencies = [
  "derivative",
  "digest 0.10.7",
  "itertools",
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-traits",
  "paste",
  "rustc_version",
@@ -136,7 +136,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7abe79b0e4288889c4574159ab790824d0033b9fdcb2a112a3182fac2e514565"
 dependencies = [
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-traits",
  "proc-macro2",
  "quote",
@@ -165,7 +165,7 @@ dependencies = [
  "ark-serialize-derive",
  "ark-std",
  "digest 0.10.7",
- "num-bigint 0.4.4",
+ "num-bigint",
 ]
 
 [[package]]
@@ -477,7 +477,7 @@ dependencies = [
  "fnv",
  "hashbrown 0.11.2",
  "hex",
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-integer",
  "num-traits",
  "rust_decimal",
@@ -527,7 +527,7 @@ dependencies = [
  "libc",
  "nom",
  "num",
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-traits",
  "pbkdf2 0.11.0",
  "rand 0.8.5",
@@ -852,7 +852,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4530da57967e140ee0b44e0143aa66b5cb42bd9c503dbe316a15d5b0be65713e"
 dependencies = [
  "byteorder",
- "ff_derive",
  "rand_core 0.5.1",
 ]
 
@@ -865,20 +864,6 @@ dependencies = [
  "bitvec",
  "rand_core 0.6.4",
  "subtle",
-]
-
-[[package]]
-name = "ff_derive"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5796e7d62ca01a00ed3a649b0da1ffa1ac8f06bcad40339df09dbdd69a05ba9"
-dependencies = [
- "num-bigint 0.2.6",
- "num-integer",
- "num-traits",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -1147,7 +1132,6 @@ dependencies = [
  "ff 0.5.2",
  "hex",
  "hkdf",
- "pairing",
  "sha2 0.10.7",
 ]
 
@@ -1212,22 +1196,11 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
 dependencies = [
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-complex",
  "num-integer",
  "num-iter",
  "num-rational",
- "num-traits",
-]
-
-[[package]]
-name = "num-bigint"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
-dependencies = [
- "autocfg",
- "num-integer",
  "num-traits",
 ]
 
@@ -1279,7 +1252,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
 dependencies = [
  "autocfg",
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-integer",
  "num-traits",
 ]
@@ -1326,18 +1299,6 @@ name = "os_str_bytes"
 version = "6.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d5d9eb14b174ee9aa2ef96dc2b94637a2d4b6e7cb873c7e171f0c20c6cf3eac"
-
-[[package]]
-name = "pairing"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94c40534479a28199cd5109da27fe2fc4a4728e4fc701d9e9c1bded78f3271e4"
-dependencies = [
- "byteorder",
- "ff 0.5.2",
- "group 0.2.0",
- "rand_core 0.5.1",
-]
 
 [[package]]
 name = "password-hash"
