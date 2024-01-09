@@ -121,6 +121,7 @@ module Concordium.Types (
     BlockNonce,
     BlockSignature,
     BlockProof,
+    BlockResultHash (..),
     StateHashV0 (..),
     StateHash,
     BlockHash (..),
@@ -1060,6 +1061,12 @@ newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
     deriving newtype (Eq, Ord, Show, S.Serialize, ToJSON, FromJSON, FromJSONKey, ToJSONKey, Read, Hashable)
 
 type StateHash = StateHashV0
+
+-- | Hash computed from the results in a block, such as block state, transaction outcomes and height
+-- information.
+-- This was first introduced as part of protocol version 7.
+newtype BlockResultHash = BlockResultHash {theBlockResultHash :: Hash.Hash}
+    deriving newtype (Eq, Ord, Show, S.Serialize, Read)
 
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
