@@ -82,9 +82,11 @@ impl PublicKey {
     #[inline]
     pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
 
-    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.1.1>
+    /// Implements <https://https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf_encode_to_curve_try_a>
     /// The failure should not happen in practice, expected number of iterations
     /// is 2.
+    // TODO: Check whether it still implements the algorithm after the RFC draft was
+    // converted to a "stable" RFC version.
     pub fn hash_to_curve(&self, message: &[u8]) -> Option<EdwardsPoint> {
         let mut p_candidate_bytes = [0u8; 32];
         let mut h: Sha512 = Sha512::new();
@@ -115,7 +117,7 @@ impl PublicKey {
 
     pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
 
-    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.3>
+    /// Implements <https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-verifying>
     #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: &Proof, message: &[u8]) -> bool {
         if let Some(h) = self.hash_to_curve(message) {

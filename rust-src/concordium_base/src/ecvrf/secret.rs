@@ -136,7 +136,7 @@ use super::proof::*;
 
 impl ExpandedSecretKey {
     /// VRF proof with expanded secret key
-    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1>
+    /// Implements <https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-proving>
     pub fn prove(&self, public_key: &PublicKey, alpha: &[u8]) -> Proof {
         let x = self.key;
         let h = public_key
@@ -159,7 +159,7 @@ impl ExpandedSecretKey {
         Proof(gamma, c, k_plus_cx)
     }
 
-    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.2.2>
+    /// Implements <https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-nonce-generation-from->
     fn nonce_generation(&self, h_string: &[u8]) -> Scalar {
         let digest = Sha512::new()
             .chain_update(self.nonce)
