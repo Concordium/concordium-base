@@ -96,7 +96,7 @@ pub struct IdentityRecoveryRequestInput {
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdentityRecoveryRequestOut {
+pub struct IdentityRecoveryRequestOutput {
     id_recovery_request: Versioned<IdRecoveryRequest<ArCurve>>,
 }
 
@@ -180,7 +180,7 @@ mod tests {
         };
 
         let request_string = create_identity_recovery_request_aux(input).unwrap();
-        let request: IdentityRecoveryRequestOut = serde_json::from_str(&request_string).unwrap();
+        let request: IdentityRecoveryRequestOutput = serde_json::from_str(&request_string).unwrap();
         let id_cred_pub: String =
             base16_encode_string(&request.id_recovery_request.value.id_cred_pub);
 
