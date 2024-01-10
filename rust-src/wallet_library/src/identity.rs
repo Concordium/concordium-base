@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 type JsonString = String;
 
 /// Defines the JSON structure that matches the output of the function
-/// generating the identity objcect request.
+/// generating the identity object request.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct IdentityObjectRequestV1 {
@@ -28,7 +28,7 @@ struct IdentityObjectRequestV1 {
 /// Required input for generating an identity object request.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdRequestInput {
+pub struct IdentityObjectRequestInput {
     ip_info:             IpInfo<constants::IpPairing>,
     global_context:      GlobalContext<constants::ArCurve>,
     ars_infos:           BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
@@ -41,7 +41,9 @@ pub struct IdRequestInput {
 }
 
 /// Creates an identity object request.
-pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
+pub fn create_identity_object_request_v1_aux(
+    input: IdentityObjectRequestInput,
+) -> Result<JsonString> {
     let prf_key: prf::SecretKey<ArCurve> = input.prf_key;
     let id_cred_sec: PedersenValue<ArCurve> = input.id_cred_sec;
     let id_cred: IdCredentials<ArCurve> = IdCredentials { id_cred_sec };
@@ -85,7 +87,7 @@ pub fn create_id_request_v1_aux(input: IdRequestInput) -> Result<JsonString> {
 /// Required input for generating an identity recovery request.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdRecoveryRequestInput {
+pub struct IdentityRecoveryRequestInput {
     ip_info:        IpInfo<constants::IpPairing>,
     global_context: GlobalContext<constants::ArCurve>,
     timestamp:      u64,
@@ -94,12 +96,14 @@ pub struct IdRecoveryRequestInput {
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IdRecoveryRequestOut {
+pub struct IdentityRecoveryRequestOut {
     id_recovery_request: Versioned<IdRecoveryRequest<ArCurve>>,
 }
 
 /// Create an identity recovery request.
-pub fn create_identity_recovery_request_aux(input: IdRecoveryRequestInput) -> Result<JsonString> {
+pub fn create_identity_recovery_request_aux(
+    input: IdentityRecoveryRequestInput,
+) -> Result<JsonString> {
     let request = generate_id_recovery_request(
         &input.ip_info,
         &input.global_context,
@@ -126,7 +130,7 @@ mod tests {
         let ars_infos = read_ars_infos();
         let global_context = read_global();
 
-        let input: IdRequestInput = IdRequestInput {
+        let input: IdentityObjectRequestInput = IdentityObjectRequestInput {
             ar_threshold,
             ars_infos,
             global_context,
@@ -142,7 +146,7 @@ mod tests {
             blinding_randomness: "575851a4e0558d589a57544a4a9f5ad1bd8467126c1b6767d32f633ea03380e6"
                 .to_string(),
         };
-        let request_string = create_id_request_v1_aux(input).unwrap();
+        let request_string = create_identity_object_request_v1_aux(input).unwrap();
         let request: IdentityObjectRequestV1 = serde_json::from_str(&request_string).unwrap();
         let id_cred_pub: String =
             base16_encode_string(&request.id_object_request.value.id_cred_pub);
@@ -168,7 +172,7 @@ mod tests {
         let global = read_global();
         let ip_info = read_ip_info();
 
-        let input = IdRecoveryRequestInput {
+        let input = IdentityRecoveryRequestInput {
             global_context: global,
             ip_info,
             timestamp: 0,
@@ -176,7 +180,7 @@ mod tests {
         };
 
         let request_string = create_identity_recovery_request_aux(input).unwrap();
-        let request: IdRecoveryRequestOut = serde_json::from_str(&request_string).unwrap();
+        let request: IdentityRecoveryRequestOut = serde_json::from_str(&request_string).unwrap();
         let id_cred_pub: String =
             base16_encode_string(&request.id_recovery_request.value.id_cred_pub);
 
