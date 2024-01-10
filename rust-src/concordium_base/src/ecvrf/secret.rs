@@ -128,7 +128,7 @@ impl From<&SecretKey> for ExpandedSecretKey {
         lower[31] |= 0b_0100_0000;
 
         ExpandedSecretKey {
-            key:   Scalar::from_bits(lower),
+            key:   Scalar::from_bytes_mod_order(lower),
             nonce: upper,
         }
     }
