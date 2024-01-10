@@ -126,18 +126,8 @@ impl From<&SecretKey> for ExpandedSecretKey {
         lower.copy_from_slice(&hash[00..32]);
         upper.copy_from_slice(&hash[32..64]);
 
-        // It seems like `from_bits` is the only way to construct an unreduced scalar
-        // that can potentially be grater than the field's order.
-
-        // TODO: we use a
-        // deprecated `from_bits` here, this also requires enabling the
-        // `legacy_compatibility` feature for the `ed25519-dalek` dependency. Maybe ther
-        // is a different way of implementing this.
-        #[allow(deprecated)]
-        let scalar = Scalar::from_bits(clamp_integer(lower));
-
         ExpandedSecretKey {
-            key:   scalar,
+            key:   Scalar::from_bytes_mod_order(clamp_integer(lower)),
             nonce: upper,
         }
     }

@@ -262,12 +262,7 @@ mod tests {
 
             // Test serialization of generated secret scalar
             let x = expanded_sk.key;
-            // TODO: we use deprecated `from_bits` here, this also requires enabling the
-            // `legacy_compatibility` feature for the `ed25519-dalek` dependency. Maybe ther
-            // is a different way of implementing this.
-            #[allow(deprecated)]
-            let scalar = Scalar::from_bits(x_bytes);
-            assert_eq!(x, scalar);
+            assert_eq!(x, Scalar::from_bytes_mod_order(x_bytes));
 
             // Test serialization of proof
             let proof = expanded_sk.prove(&pk, &alpha_bytes);

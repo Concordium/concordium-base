@@ -5,7 +5,6 @@ use core::fmt::Debug;
 use curve25519_dalek::{
     constants,
     edwards::{CompressedEdwardsY, EdwardsPoint},
-    scalar::{clamp_integer, Scalar},
 };
 use sha2::{Digest, Sha512};
 
@@ -61,25 +60,20 @@ impl From<&SecretKey> for PublicKey {
     /// Derive this public key from its corresponding `SecretKey`.
     /// Implements <https://tools.ietf.org/html/rfc8032#section-5.1.5>
     fn from(secret_key: &SecretKey) -> PublicKey {
-        let mut h: Sha512 = Sha512::new();
-        let mut hash: [u8; 64] = [0u8; 64];
-        let mut digest: [u8; 32] = [0u8; 32];
-
-        h.update(secret_key.as_bytes());
-        hash.copy_from_slice(h.finalize().as_slice());
-
-        digest.copy_from_slice(&hash[..32]);
-
-        PublicKey::mangle_scalar_bits_and_multiply_by_basepoint_to_produce_public_key(&mut digest)
+        let expanded = ExpandedSecretKey::from(secret_key);
+        (&expanded).into()
     }
 }
 
 impl From<&ExpandedSecretKey> for PublicKey {
     /// Derive this public key from its corresponding `ExpandedSecretKey`.
     fn from(expanded_secret_key: &ExpandedSecretKey) -> PublicKey {
-        let mut bits: [u8; 32] = expanded_secret_key.key.to_bytes();
+        let key = expanded_secret_key.key;
 
-        PublicKey::mangle_scalar_bits_and_multiply_by_basepoint_to_produce_public_key(&mut bits)
+        let point = &key * constants::ED25519_BASEPOINT_TABLE;
+        let compressed = point.compress();
+
+        PublicKey(compressed, point)
     }
 }
 
@@ -87,27 +81,6 @@ impl PublicKey {
     /// View this public key as a byte array.
     #[inline]
     pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
-
-    /// Internal utility function for mangling the bits of a (formerly
-    /// mathematically well-defined) "scalar" and multiplying it to produce a
-    /// public key.
-    fn mangle_scalar_bits_and_multiply_by_basepoint_to_produce_public_key(
-        bits: &mut [u8; 32],
-    ) -> PublicKey {
-        // It seems like `from_bits` is the only way to construct an unreduced scalar
-        // that can potentially be grater than the field's order.
-
-        // TODO: we use deprecated `from_bits` here, this also requires enabling the
-        // `legacy_compatibility` feature for the `ed25519-dalek` dependency. Maybe ther
-        // is a different way of implementing this.
-        #[allow(deprecated)]
-        let scalar = Scalar::from_bits(clamp_integer(*bits));
-
-        let point = &scalar * constants::ED25519_BASEPOINT_TABLE;
-        let compressed = point.compress();
-
-        PublicKey(compressed, point)
-    }
 
     /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.1.1>
     /// The failure should not happen in practice, expected number of iterations
@@ -120,7 +93,7 @@ impl PublicKey {
         h.update(self.as_bytes()); // PK_string
         h.update(message); // alpha_string
         for ctr in 0..=u8::max_value() {
-            // Each iteration fails, indpendent of other iterations, with probability about
+            // Each iteration fails, independent of other iterations, with probability about
             // a half. This happens if the digest does not represent a point on
             // the curve when decoded as in https://tools.ietf.org/html/rfc8032#section-5.1.3
             let mut attempt_h = h.clone();
