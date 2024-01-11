@@ -5,7 +5,7 @@ use concordium_base::{
     curve_arithmetic::Curve,
     elgamal::PublicKey,
     id::{
-        constants::{ArCurve, ArCurveG2, IpPairing},
+        constants::{ArCurve, BlsG2, IpPairing},
         types::*,
     },
     ps_sig,
@@ -17,7 +17,7 @@ use structopt::StructOpt;
 
 type Bls12 = IpPairing;
 type G1 = ArCurve;
-type G2 = ArCurveG2;
+type G2 = BlsG2;
 
 #[derive(StructOpt)]
 struct KeygenIp {

@@ -18,10 +18,10 @@ use serde::{
 use std::{fmt, io::Cursor, str::FromStr};
 use thiserror::Error;
 
-/// G1 group on the curve used by the anonymity revoker.
+/// Curve used by the anonymity revoker.
 pub type ArCurve = ArkGroup<G1Projective>;
-/// G2 group on the curve used by the anonymity revoker.
-pub type ArCurveG2 = ArkGroup<G2Projective>;
+/// G2 group of the BLS12-381 curve
+pub type BlsG2 = ArkGroup<G2Projective>;
 /// Pairing used by the identity provider.
 pub type IpPairing = Bls12<ark_bls12_381::Config>;
 /// Field used by the identity provider and anonymity revoker.

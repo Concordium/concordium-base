@@ -7,7 +7,7 @@
 - Add integration with the `arkworks` library interfaces for fields and elliptic curves (wrapper types and blanket trait implementations).
 - Add the `BLS12-381`implementation from the `arkworks` ecosystem.
 - The public types `id::constants::ArCurve`, `id::constants::IpPairing` are defined in terms of the `arkworks` BLS12-381 implementation.
-- Add a type alias `id::constants::ArCurveG2` for the `G2` group of `arkworks` BLS12-381.
+- Add a type alias `id::constants::BlsG2` for the `G2` group of `arkworks` BLS12-381.
 - Upgrade `ed25519-dalek` to `v2.0`.
 - Bump the `rand` version to `v0.8`
 - Add implementations of `Field`, `PrimeField` and `Curve` for the Ristretto representation of `curve25519`.

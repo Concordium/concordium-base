@@ -5,7 +5,7 @@ use concordium_base::{
     curve_arithmetic::Curve,
     elgamal::{PublicKey, SecretKey},
     id::{
-        constants::{ArCurve, ArCurveG2, BaseField, IpPairing},
+        constants::{ArCurve, BaseField, BlsG2, IpPairing},
         types::*,
     },
     ps_sig,
@@ -30,7 +30,7 @@ use structopt::StructOpt;
 
 type Bls12 = IpPairing;
 type G1 = ArCurve;
-type G2 = ArCurveG2;
+type G2 = BlsG2;
 type Fr = BaseField;
 
 const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
