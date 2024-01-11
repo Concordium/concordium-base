@@ -2,9 +2,7 @@
 //! `arkworks` field/curve traits.
 use core::fmt;
 use std::str::FromStr;
-
 use crate::common::{Deserial, Serial, Serialize};
-
 use super::{Curve, CurveDecodingError, Field, GenericMultiExp, PrimeField};
 use anyhow::anyhow;
 use ark_ec::hashing::HashToCurve;
@@ -104,7 +102,7 @@ impl<G: ark_ec::CurveGroup> Serial for ArkGroup<G> {
         self.0
             .into_affine()
             .serialize_compressed(out)
-            .expect("Serialzation expected to succeed");
+            .expect("Serialization expected to succeed");
     }
 }
 
