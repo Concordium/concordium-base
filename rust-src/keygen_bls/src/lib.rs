@@ -1,21 +1,21 @@
 //! Generate a private key in a deterministic way from a secret seed and key
 //! description.
-use ark_bls12_381::{Fr, G1Projective};
-use concordium_base::curve_arithmetic::{
-    arkworks_instances::{ArkField, ArkGroup},
-    Curve, Field, PrimeField,
+use concordium_base::{
+    curve_arithmetic::{Curve, Field, PrimeField},
+    id::constants::{ArCurve, BaseField},
 };
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
 
-type G1 = ArkGroup<G1Projective>;
+type G1 = ArCurve;
+type Fr = BaseField;
 
 /// This function is an implementation of the procedure described in <https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-2.3>
 /// It computes a random scalar in Fr given a seed (the argument `ikm`).
 ///
 /// This is a building block for deterministic key generation for identity
 /// provider, anonymity revoker keys and PRF keys.
-pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::InvalidLength> {
+pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::InvalidLength> {
     let mut ikm = ikm.to_vec();
     ikm.push(0);
     let l = 48; // = 48 for G1; r is
@@ -24,11 +24,11 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::Inv
     l_bytes.push(0);
     l_bytes.push(l);
     let salt = b"BLS-SIG-KEYGEN-SALT-";
-    let mut sk = <ArkField<Fr>>::zero();
+    let mut sk = <Fr>::zero();
     // shift with
     // 452312848583266388373324160190187140051835877600158453279131187530910662656 =
     // 2^248 = 2^(31*8)
-    let shift = <ArkField<Fr>>::from_repr(&[0, 0, 0, 72057594037927936]).unwrap();
+    let shift = Fr::from_repr(&[0, 0, 0, 72057594037927936]).unwrap();
     println!("Shift {:}", shift);
     let mut salt = Sha256::digest(&salt[..]);
     while sk.is_zero() {
@@ -66,10 +66,7 @@ pub fn keygen_bls(ikm: &[u8], key_info: &[u8]) -> Result<ArkField<Fr>, hkdf::Inv
 /// an integer modulo r. It therefore does not follow the standard (cf. <https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-2.3>),
 /// but is still secure.
 /// This function is needed for backwards compatibility.
-pub fn keygen_bls_deprecated(
-    ikm: &[u8],
-    key_info: &[u8],
-) -> Result<ArkField<Fr>, hkdf::InvalidLength> {
+pub fn keygen_bls_deprecated(ikm: &[u8], key_info: &[u8]) -> Result<Fr, hkdf::InvalidLength> {
     let mut ikm = ikm.to_vec();
     ikm.push(0);
     let l = 48; // = 48 for G1; r is
@@ -78,11 +75,11 @@ pub fn keygen_bls_deprecated(
     l_bytes.push(l);
     l_bytes.push(0);
     let salt = b"BLS-SIG-KEYGEN-SALT-";
-    let mut sk = <ArkField<Fr>>::zero();
+    let mut sk = <Fr>::zero();
     // shift with
     // 452312848583266388373324160190187140051835877600158453279131187530910662656 =
     // 2^248
-    let shift = <ArkField<Fr>>::from_repr(&[0, 0, 0, 72057594037927936]).unwrap();
+    let shift = <Fr>::from_repr(&[0, 0, 0, 72057594037927936]).unwrap();
     let mut salt = Sha256::digest(&salt[..]);
     while sk.is_zero() {
         let (_, h) = Hkdf::<Sha256>::extract(Some(&salt), &ikm);
@@ -192,7 +189,7 @@ mod tests {
         for i in 0..10 {
             if let Ok(seed) = hex::decode(inputs[i]) {
                 if let Ok(sk) = keygen_bls(&seed, b"") {
-                    let res: ArkField<Fr> = sk.into();
+                    let res: Fr = sk.into();
                     assert_eq!(res.into_repr(), expected_outputs[i])
                 } else {
                     panic!("Could not generate key from seed.")
