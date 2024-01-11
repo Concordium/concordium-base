@@ -15,7 +15,7 @@ use concordium_base::{
     hashes::{HashBytes, TransactionSignHash},
     id::{
         self, account_holder,
-        constants::{ArCurve, AttributeKind},
+        constants::{ArCurve, AttributeKind, IpPairing},
         id_proof_types::{ProofVersion, Statement, StatementWithContext},
         pedersen_commitment::Value as PedersenValue,
         ps_sig,
@@ -45,7 +45,7 @@ use std::{
     str::FromStr,
 };
 
-type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
+type Bls12 = IpPairing;
 
 /// Context for a transaction to send.
 #[derive(common::SerdeDeserialize)]

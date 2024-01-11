@@ -1,4 +1,3 @@
-use ark_bls12_381::G1Projective;
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
@@ -6,7 +5,6 @@ use concordium_base::{
         types::{Amount, CredentialIndex, KeyIndex, KeyPair, TransactionTime},
         *,
     },
-    curve_arithmetic::arkworks_instances::ArkGroup,
     dodis_yampolskiy_prf as prf,
     elgamal::{self, PublicKey, SecretKey},
     id::{
@@ -24,7 +22,7 @@ use concordium_base::{
 use dialoguer::{Input, MultiSelect, Select};
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use key_derivation::{words_to_seed, ConcordiumHdWallet, CredentialContext, Net};
+use key_derivation::{ConcordiumHdWallet, CredentialContext, Net};
 use rand::*;
 use serde_json::{json, to_value};
 use std::{
@@ -37,8 +35,8 @@ use std::{
 };
 use structopt::StructOpt;
 
-type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
-type G1 = ArkGroup<G1Projective>;
+type Bls12 = IpPairing;
+type G1 = ArCurve;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";

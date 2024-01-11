@@ -9,8 +9,8 @@ use crate::{
     curve_arithmetic::{arkworks_instances::ArkGroup, Curve, Pairing},
 };
 use anyhow::bail;
-use ark_bls12_381::{g1, G1Projective};
-use ark_ec::{bls12::Bls12, short_weierstrass::Projective};
+use ark_bls12_381::{G1Projective, G2Projective};
+use ark_ec::bls12::Bls12;
 use serde::{
     de::{self, Visitor},
     Deserializer, Serializer,
@@ -18,12 +18,14 @@ use serde::{
 use std::{fmt, io::Cursor, str::FromStr};
 use thiserror::Error;
 
-/// Curve used by the anonymity revoker.
-pub type ArCurve = ArkGroup<Projective<g1::Config>>;
+/// G1 group on the curve used by the anonymity revoker.
+pub type ArCurve = ArkGroup<G1Projective>;
+/// G2 group on the curve used by the anonymity revoker.
+pub type ArCurveG2 = ArkGroup<G2Projective>;
 /// Pairing used by the identity provider.
 pub type IpPairing = Bls12<ark_bls12_381::Config>;
 /// Field used by the identity provider and anonymity revoker.
-/// This is the base field of both the ArCurve and the IpPairing.
+/// This is the scalar field of both the ArCurve and the IpPairing.
 pub type BaseField = <IpPairing as Pairing>::ScalarField;
 // pub type BaseField = ArkField<Fr>;
 

@@ -32,8 +32,6 @@ serde_json = "1.0"
 chrono = "0.4.24" # the patch version is necessary since chrono adds new functionality in patch versions
 ed25519-dalek = "2.0"
 byteorder = "1.3"
-ark-bls12-381 = { version = "0.4"}
-ark-ec = { version = "0.4"}
 
 [dependencies.nodejs-sys]
 version = "0.12.0"

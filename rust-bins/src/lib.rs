@@ -20,7 +20,7 @@ use std::{
     str::FromStr,
 };
 
-type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
+type Bls12 = IpPairing;
 
 pub type ExampleAttribute = AttributeKind;
 

@@ -946,8 +946,6 @@ name = "idiss"
 version = "0.7.0"
 dependencies = [
  "anyhow",
- "ark-bls12-381",
- "ark-ec",
  "byteorder",
  "chrono",
  "concordium_base",

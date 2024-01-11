@@ -62,8 +62,10 @@ impl Deserial for Fr {
 impl Serial for Fr {
     fn serial<B: Buffer>(&self, out: &mut B) {
         // Note that it is crucial to use `into_bigint()` here.
-        // The internal representation is accessible direclty, but it's NOT the same
-        // (it's a Montgomery representation optimized for modular arithmetic)
+        // The internal representation is accessible direclty, but it's NOT the same.
+        // The representation depends on the selected backend.
+        // By default, it's a Montgomery representation optimized for modular
+        // arithmetic.
         let frpr = self.into_bigint();
         for a in frpr.0.iter().rev() {
             a.serial(out);

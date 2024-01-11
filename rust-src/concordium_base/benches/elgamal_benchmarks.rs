@@ -12,11 +12,12 @@ use concordium_base::{
         Curve,
     },
     elgamal::*,
+    id::constants::{ArCurve, BaseField},
 };
 use std::{str::FromStr, time::Duration};
 
-type G1 = ArkGroup<G1Projective>;
-type Fr = ArkField<ark_bls12_381::Fr>;
+type G1 = ArCurve;
+type Fr = BaseField;
 
 pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
     let mut csprng = thread_rng();

@@ -817,7 +817,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60f6d271ca33075c88028be6f04d502853d63a5ece419d269c15315d4fc1cf1d"
 dependencies = [
  "pkcs8",
- "serde",
  "signature",
 ]
 
@@ -1501,8 +1500,6 @@ version = "2.0.2"
 dependencies = [
  "aes",
  "anyhow",
- "ark-bls12-381",
- "ark-ec",
  "base64",
  "bitvec",
  "chrono",

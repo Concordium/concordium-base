@@ -1,14 +1,13 @@
-use ark_bls12_381::{G1Projective, G2Projective};
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
     common::*,
-    curve_arithmetic::{
-        arkworks_instances::{ArkField, ArkGroup},
-        Curve,
-    },
+    curve_arithmetic::Curve,
     elgamal::{PublicKey, SecretKey},
-    id::types::*,
+    id::{
+        constants::{ArCurve, ArCurveG2, BaseField, IpPairing},
+        types::*,
+    },
     ps_sig,
 };
 use crossterm::{
@@ -29,10 +28,10 @@ use std::{
 };
 use structopt::StructOpt;
 
-type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
-type G1 = ArkGroup<G1Projective>;
-type G2 = ArkGroup<G2Projective>;
-type Fr = ArkField<ark_bls12_381::Fr>;
+type Bls12 = IpPairing;
+type G1 = ArCurve;
+type G2 = ArCurveG2;
+type Fr = BaseField;
 
 const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
 
@@ -311,7 +310,7 @@ fn handle_generate_update_keys(kgup: KeygenGovernance) -> Result<(), String> {
             "verifyKey": base16_encode_string(&signing_key.verifying_key()),
             "scheme": "Ed25519",
         },
-        "signature": sig,
+        "signature": base16_encode_string(&sig),
         "type": level_str,
     });
     let secret_data = serde_json::json!({

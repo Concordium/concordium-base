@@ -1081,8 +1081,6 @@ name = "mobile_wallet"
 version = "0.25.1"
 dependencies = [
  "anyhow",
- "ark-bls12-381",
- "ark-ec",
  "base64",
  "byteorder",
  "chrono",

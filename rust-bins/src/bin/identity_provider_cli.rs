@@ -14,7 +14,7 @@ use dialoguer::Input;
 use std::{collections::btree_map::BTreeMap, path::PathBuf};
 use structopt::StructOpt;
 
-type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
+type Bls12 = IpPairing;
 
 #[derive(StructOpt)]
 #[structopt(

@@ -1,11 +1,13 @@
-use ark_bls12_381::{G1Projective, G2Projective};
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
     common::*,
-    curve_arithmetic::{arkworks_instances::ArkGroup, Curve},
+    curve_arithmetic::Curve,
     elgamal::PublicKey,
-    id::types::*,
+    id::{
+        constants::{ArCurve, ArCurveG2, IpPairing},
+        types::*,
+    },
     ps_sig,
 };
 use curve25519_dalek::edwards::CompressedEdwardsY;
@@ -13,9 +15,9 @@ use sha2::{Digest, Sha512};
 use std::{fs, path::PathBuf};
 use structopt::StructOpt;
 
-type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
-type G1 = ArkGroup<G1Projective>;
-type G2 = ArkGroup<G2Projective>;
+type Bls12 = IpPairing;
+type G1 = ArCurve;
+type G2 = ArCurveG2;
 
 #[derive(StructOpt)]
 struct KeygenIp {

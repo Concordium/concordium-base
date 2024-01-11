@@ -1,4 +1,3 @@
-use ark_bls12_381::G1Projective;
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
@@ -6,7 +5,7 @@ use concordium_base::{
         types::{KeyIndex, KeyPair, TransactionTime},
         *,
     },
-    curve_arithmetic::{arkworks_instances::ArkGroup, Curve, Pairing},
+    curve_arithmetic::{Curve, Pairing},
     dodis_yampolskiy_prf as prf,
     id::{
         account_holder::*,
@@ -22,8 +21,8 @@ use rand::*;
 use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::PathBuf};
 use structopt::StructOpt;
 
-type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
-type G1 = ArkGroup<G1Projective>;
+type Bls12 = IpPairing;
+type G1 = ArCurve;
 
 type ExampleAttribute = AttributeKind;
 
