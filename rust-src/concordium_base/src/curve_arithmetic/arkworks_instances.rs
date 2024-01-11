@@ -1,15 +1,16 @@
 //! Wrapper types and blanket implementations serving as adapters from
 //! `arkworks` field/curve traits.
-use core::fmt;
-use std::str::FromStr;
-use crate::common::{Deserial, Serial, Serialize};
 use super::{Curve, CurveDecodingError, Field, GenericMultiExp, PrimeField};
+use crate::common::{Deserial, Serial, Serialize};
 use anyhow::anyhow;
 use ark_ec::hashing::HashToCurve;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use core::fmt;
 
 /// A wrapper type for `arkworks` field types.
-#[derive(PartialOrd, Ord, PartialEq, Eq, Copy, Clone, fmt::Debug, derive_more::From)]
+#[derive(
+    PartialOrd, Ord, PartialEq, Eq, Copy, Clone, fmt::Debug, derive_more::From, derive_more::FromStr,
+)]
 pub struct ArkField<F>(pub(crate) F);
 
 /// Serialization is implemented by delegating the functionality to the wrapped
@@ -196,10 +197,4 @@ where
         let res = G::Hasher::hash(&hasher, m).expect("Expected successful hashing to curve");
         ArkGroup(res.into())
     }
-}
-
-impl<F: FromStr> FromStr for ArkField<F> {
-    type Err = F::Err;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> { F::from_str(s).map(|x| x.into()) }
 }

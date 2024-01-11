@@ -152,8 +152,6 @@ mod test {
         id::constants::{ArCurve, BaseField},
     };
     use rand::*;
-
-    use ark_bls12_381::G1Projective;
     use std::str::FromStr;
 
     type G1 = ArCurve;
