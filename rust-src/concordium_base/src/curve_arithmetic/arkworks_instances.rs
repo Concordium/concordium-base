@@ -175,8 +175,7 @@ where
     fn scalar_from_u64(n: u64) -> Self::Scalar { ArkField(G::ScalarField::from(n)) }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
-        // Traverse at most 4 8-byte chunks, for a total of 256 bits.
-        // The top-most two bits in the last chunk are set to 0.
+        // Traverse at most `ceil(CAPACITY / 8)` 8-byte chunks.
         let s = num::integer::div_ceil(Self::Scalar::CAPACITY, 8);
         let mut fr = Vec::with_capacity(s as usize);
         for chunk in bs.as_ref().chunks(8).take(s as usize) {
@@ -184,9 +183,15 @@ where
             v[..chunk.len()].copy_from_slice(chunk);
             fr.push(u64::from_le_bytes(v));
         }
-        // unset two topmost bits in the last read u64.
-        *fr.last_mut().expect("Non empty vector expected") &= !(1u64 << 63 | 1u64 << 62);
-        // fr[3] &= !(1u64 << 63 | 1u64 << 62);
+        let total_size_in_bits = bs.as_ref().len() * 8;
+        let num_bits_to_remove = total_size_in_bits as u32 - Self::Scalar::CAPACITY;
+        // create a mask for the last chunk with the topmost `num_bits_to_remove` zeros
+        // followed by `CAPACITY` of ones; it's implemented using (logical) right shift
+        // that adds zeros from the left. E.g. if `num_bits_to_remove = 2`, the
+        // mask will be `00111..11`
+        let mask = u64::MAX >> num_bits_to_remove;
+        // unset `num_bits_to_remove` topmost bits in the last u64.
+        *fr.last_mut().expect("Non empty vector expected") &= mask;
         <Self::Scalar>::from_repr(&fr)
             .expect("The scalar with top two bits erased should be valid.")
     }
