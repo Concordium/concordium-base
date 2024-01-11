@@ -258,10 +258,6 @@ impl ConcordiumHdWallet {
         ])?;
         let attribute_commitment_randomness_seed =
             derive_from_parsed_path(&path, &self.seed)?.private_key;
-        println!(
-            "attribute_commitment_randomness_seed: {:?}",
-            attribute_commitment_randomness_seed
-        );
         Ok(CommitmentRandomness::new(bls_key_bytes_from_seed(
             attribute_commitment_randomness_seed,
         )))
@@ -574,10 +570,6 @@ mod tests {
         let attribute_commitment_randomness = create_wallet(Net::Testnet, TEST_SEED_1)
             .get_attribute_commitment_randomness(5, 0, 4, AttributeTag(0))
             .unwrap();
-        println!(
-            "attribute_commitment_randomness: {:?}",
-            attribute_commitment_randomness
-        );
         assert_eq!(
             base16_encode_string(&attribute_commitment_randomness),
             "409fa90314ec8fb4a2ae812fd77fe58bfac81765cad3990478ff7a73ba6d88ae"
