@@ -9,7 +9,6 @@ pub mod secret_value;
 pub use secret_value::{Secret, Value};
 
 use crate::common::{Serial, Serialize};
-use byteorder::ReadBytesExt;
 use rand::*;
 use std::{borrow::Borrow, fmt, fmt::Debug};
 use thiserror::Error;
@@ -136,10 +135,6 @@ pub trait Curve:
     /// Exponentiation by a scalar, i.e., compute n * x for a group element x
     /// and integer n.
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
-    /// Deserialize a value from a byte source, but do not check that it is in
-    /// the group itself. This can be cheaper if the source of the value is
-    /// trusted, but it must not be used on untrusted sources.
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> anyhow::Result<Self>;
     /// Generate a random group element, uniformly distributed.
     fn generate<R: Rng>(rng: &mut R) -> Self;
     /// Generate a random scalar value, uniformly distributed.

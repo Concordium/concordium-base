@@ -2,7 +2,6 @@
 //! `arkworks` field/curve traits.
 use super::{Curve, CurveDecodingError, Field, GenericMultiExp, PrimeField};
 use crate::common::{Deserial, Serial, Serialize};
-use anyhow::anyhow;
 use ark_ec::hashing::HashToCurve;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use core::fmt;
@@ -163,14 +162,6 @@ where
     fn minus_point(&self, other: &Self) -> Self { ArkGroup(self.0 - other.0) }
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { ArkGroup(self.0 * scalar.0) }
-
-    fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(b: &mut R) -> anyhow::Result<Self> {
-        // TODO: this is not the most efficient implementation, since there might be
-        // some additional checks during deserialization. However, it seems
-        // there are no unchecked methods available through traits.
-        let res = G::Affine::deserialize_compressed(b).map_err(|e| anyhow!(e))?;
-        Ok(ArkGroup(res.into()))
-    }
 
     fn generate<R: rand::prelude::Rng>(rng: &mut R) -> Self { ArkGroup(G::rand(rng)) }
 

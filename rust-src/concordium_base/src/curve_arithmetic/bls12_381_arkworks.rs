@@ -262,24 +262,6 @@ mod tests {
         };
     }
 
-    /// A macro for testing that serializing a point and converting it back
-    /// using `bytes_to_curve_unchecked` gives the same point.
-    macro_rules! macro_test_group_byte_conversion_unchecked {
-        ($function_name:ident, $p:path) => {
-            #[test]
-            pub fn $function_name() {
-                let mut csprng = thread_rng();
-                for _ in 0..1000 {
-                    let curve = <$p>::generate(&mut csprng);
-                    let bytes = to_bytes(&curve);
-                    let curve_res = <$p>::bytes_to_curve_unchecked(&mut Cursor::new(&bytes));
-                    assert!(curve_res.is_ok());
-                    assert_eq!(curve, curve_res.unwrap());
-                }
-            }
-        };
-    }
-
     type G1 = ArkGroup<G1Projective>;
     type G2 = ArkGroup<G2Projective>;
 
@@ -289,7 +271,4 @@ mod tests {
 
     macro_test_group_byte_conversion!(curve_bytes_conv_g1, G1);
     macro_test_group_byte_conversion!(curve_bytes_conv_g2, G2);
-
-    macro_test_group_byte_conversion_unchecked!(u_curve_bytes_conv_g1, G1);
-    macro_test_group_byte_conversion_unchecked!(u_curve_bytes_conv_g2, G2);
 }

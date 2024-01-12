@@ -114,16 +114,6 @@ impl Curve for RistrettoPoint {
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { self * scalar.0 }
 
-    fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(
-        source: &mut R,
-    ) -> anyhow::Result<Self> {
-        let mut buf: [u8; 32] = [0; 32];
-        source.read_exact(&mut buf)?;
-        let res = CompressedRistretto::from_slice(&buf)?;
-        let point = res.decompress().ok_or(anyhow::anyhow!("Failed!"))?;
-        Ok(point)
-    }
-
     fn generate<R: rand::Rng>(rng: &mut R) -> Self {
         let mut uniform_bytes = [0u8; 64];
         rng.fill_bytes(&mut uniform_bytes);
@@ -251,19 +241,6 @@ pub(crate) mod tests {
             let scalar_res = RistrettoScalar::from_repr(&scalar_vec64);
             assert!(scalar_res.is_ok());
             assert_eq!(scalar, scalar_res.unwrap());
-        }
-    }
-
-    /// Turn curve points into representations and back again, and compare.
-    #[test]
-    fn test_point_byte_conversion_unchecked() {
-        let mut csprng = rand::thread_rng();
-        for _ in 0..1000 {
-            let point = RistrettoPoint::generate(&mut csprng);
-            let bytes = to_bytes(&point);
-            let point_res = RistrettoPoint::bytes_to_curve_unchecked(&mut Cursor::new(&bytes));
-            assert!(point_res.is_ok());
-            assert_eq!(point, point_res.unwrap());
         }
     }
 

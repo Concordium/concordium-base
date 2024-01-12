@@ -11,6 +11,8 @@
 - Upgrade `ed25519-dalek` to `v2.0`.
 - Bump the `rand` version to `v0.8`
 - Add implementations of `Field`, `PrimeField` and `Curve` for the Ristretto representation of `curve25519`.
+- Remove `Curve::bytes_to_curve_unchecked()`.
+- Rename `Cipher::from_bytes_unchecked()` to `Cipher::from_bytes()`; the method uses `deserial()` instead of `Curve::bytes_to_curve_unchecked()`.
 - Support `P7` protocol version.
 - The `Debug` implementation for `ContractEvent` displays the value in `hex`.
   The alternate formatter (using `#`) displays it as a list of bytes.
