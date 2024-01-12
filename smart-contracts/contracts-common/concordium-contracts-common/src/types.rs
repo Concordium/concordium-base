@@ -671,9 +671,7 @@ impl quickcheck::Arbitrary for Timestamp {
     }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(
-            quickcheck::Arbitrary::shrink(&self.milliseconds).map(Timestamp::from_timestamp_millis),
-        )
+        Box::new(quickcheck::Arbitrary::shrink(&self.millis).map(Timestamp::from_timestamp_millis))
     }
 }
 
@@ -2890,7 +2888,7 @@ mod test {
     fn test_given_millis_far_in_future_when_string_to_timestamp_then_map() {
         let millis = 100000001683508889u64;
         if let Ok(timestamp) = Timestamp::from_str(&millis.to_string()) {
-            assert_eq!(timestamp.milliseconds, millis);
+            assert_eq!(timestamp.millis, millis);
         } else {
             assert!(false)
         };
@@ -2901,7 +2899,7 @@ mod test {
     fn test_given_rfc3339_format_when_string_to_timestamp_then_map() {
         let datetime = "1970-01-01T00:00:00.042+00:00";
         if let Ok(timestamp) = Timestamp::from_str(datetime) {
-            assert_eq!(timestamp.milliseconds, 42);
+            assert_eq!(timestamp.millis, 42);
         } else {
             assert!(false)
         };
