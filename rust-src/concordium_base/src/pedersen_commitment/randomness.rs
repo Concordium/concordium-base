@@ -101,9 +101,6 @@ mod tests {
         };
     }
 
-    // NOTE: ArkWorks doesn't provide `CurveGroup` instances for the affine
-    // representation
-
     macro_test_randomness_to_byte_conversion!(
         randomness_to_byte_conversion_bls12_381_g1_projective,
         G1

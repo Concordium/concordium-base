@@ -120,17 +120,13 @@ mod tests {
         };
     }
 
-    // TODO: the code used to be diefined using the affine representation, but
-    // ArkWorks' BLS does not implement `CurveGroup` for the affine representation.
-    // Is it important that it's the affine representation? For now, the BLS
-    // projective representation will be used here.
     macro_test_value_to_byte_conversion!(
-        value_to_byte_conversion_bls12_381_g1_affine,
+        value_to_byte_conversion_bls12_381_g1_projective,
         ArkGroup<G1Projective>
     );
 
     macro_test_value_to_byte_conversion!(
-        value_to_byte_conversion_bls12_381_g2_affine,
+        value_to_byte_conversion_bls12_381_g2_projective,
         ArkGroup<G2Projective>
     );
 }
