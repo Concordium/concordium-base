@@ -653,7 +653,15 @@ pub struct CredentialSignatures {
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct Timestamp {
     /// Milliseconds since unix epoch.
-    pub(crate) milliseconds: u64,
+    pub millis: u64,
+}
+
+impl From<u64> for Timestamp {
+    fn from(millis: u64) -> Self {
+        Self {
+            millis,
+        }
+    }
 }
 
 #[cfg(feature = "concordium-quickcheck")]
@@ -670,23 +678,28 @@ impl quickcheck::Arbitrary for Timestamp {
 }
 
 impl Timestamp {
+    /// Construct a timestamp corresponding to the current date and time.
+    #[cfg(feature = "derive-serde")]
+    #[inline(always)]
+    pub fn now() -> Self { (chrono::Utc::now().timestamp_millis() as u64).into() }
+
     /// Construct timestamp from milliseconds since unix epoch.
     #[inline(always)]
-    pub const fn from_timestamp_millis(milliseconds: u64) -> Self {
+    pub const fn from_timestamp_millis(millis: u64) -> Self {
         Self {
-            milliseconds,
+            millis,
         }
     }
 
     /// Milliseconds since the UNIX epoch.
     #[inline(always)]
-    pub const fn timestamp_millis(&self) -> u64 { self.milliseconds }
+    pub const fn timestamp_millis(&self) -> u64 { self.millis }
 
     /// Add duration to the timestamp. Returns `None` if the resulting timestamp
     /// is not representable, i.e., too far in the future.
     #[inline(always)]
     pub fn checked_add(self, duration: Duration) -> Option<Self> {
-        self.milliseconds.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
+        self.millis.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
     }
 
     /// Subtract duration from the timestamp. Returns `None` instead of
@@ -694,7 +707,7 @@ impl Timestamp {
     /// epoch.
     #[inline(always)]
     pub fn checked_sub(self, duration: Duration) -> Option<Self> {
-        self.milliseconds.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
+        self.millis.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
     }
 
     /// Compute the duration between the self and another timestamp.
@@ -703,9 +716,9 @@ impl Timestamp {
     #[inline(always)]
     pub fn duration_between(self, other: Timestamp) -> Duration {
         let millis = if self >= other {
-            self.milliseconds - other.milliseconds
+            self.millis - other.millis
         } else {
-            other.milliseconds - self.milliseconds
+            other.millis - self.millis
         };
         Duration::from_millis(millis)
     }
@@ -714,7 +727,7 @@ impl Timestamp {
     /// is in the future compared to self.
     #[inline(always)]
     pub fn duration_since(self, before: Timestamp) -> Option<Duration> {
-        self.milliseconds.checked_sub(before.milliseconds).map(Duration::from_millis)
+        self.millis.checked_sub(before.millis).map(Duration::from_millis)
     }
 }
 
@@ -730,7 +743,7 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
     fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
         use chrono::TimeZone;
         if let Some(utc) = chrono::Utc
-            .timestamp_millis_opt(value.milliseconds.try_into().map_err(|_| TimestampOverflow)?)
+            .timestamp_millis_opt(value.millis.try_into().map_err(|_| TimestampOverflow)?)
             .single()
         {
             Ok(utc)
@@ -751,7 +764,7 @@ impl TryFrom<chrono::DateTime<chrono::Utc>> for Timestamp {
     fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
         let millis = value.timestamp_millis().try_into()?;
         Ok(Self {
-            milliseconds: millis,
+            millis,
         })
     }
 }
