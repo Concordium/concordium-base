@@ -1,5 +1,8 @@
 //! Wrapper types and blanket implementations serving as adapters from
-//! the `ff` crate `Field`.
+//! the `ff` crate `Field`. The Ristretto representation from the
+//! `curve25519-dalek` uses the `ff` traits for the fields involved. The crate
+//! is relatively widely used, so it could be useful for integrating with other
+//! elliptic curve implementations.
 use ff;
 use rand::RngCore;
 
