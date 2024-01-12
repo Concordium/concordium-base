@@ -271,12 +271,12 @@ pub(crate) mod tests {
     /// byte array to an array of limbs with least significant digits first.
     #[test]
     fn test_into() {
-        let s: RistrettoScalar = Scalar::from_canonical_bytes([
+        let res: Option<Scalar> = Scalar::from_canonical_bytes([
             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255,
             0, 0, 0, 0, 0, 0, 0, 0,
         ])
-        .unwrap()
         .into();
+        let s: RistrettoScalar = res.expect("Expected a valid scalar").into();
         assert_eq!(s.into_repr(), [1u64, 0u64, u64::MAX - 1, 0u64]);
     }
 

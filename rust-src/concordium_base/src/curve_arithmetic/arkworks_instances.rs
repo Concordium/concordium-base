@@ -121,9 +121,15 @@ impl<G: ark_ec::CurveGroup> Deserial for ArkGroup<G> {
 /// These parameters cannot be taken from the `arkworks` traits. Each `arkworks`
 /// curve should come with an implementation of this configuration trait.
 pub(crate) trait ArkCurveConfig<G: ark_ec::CurveGroup> {
+    /// Size in bytes of elements of the scalar field.
     const SCALAR_LENGTH: usize;
+    /// Size in bytes of group elements when serialized.
     const GROUP_ELEMENT_LENGTH: usize;
+    /// Domain separation string for hashing arbitrary data to a group element
+    /// on an elliptic curve.
     const DOMAIN_STRING: &'static str;
+    /// A hasher that implements hashing arbitrary data to a group element on an
+    /// elliptic curve.
     type Hasher: ark_ec::hashing::HashToCurve<G>;
 }
 
