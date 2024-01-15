@@ -4,6 +4,10 @@
 
 - Add a `branch_statistics` function to get insight into smart contract state
   tree structure.
+- Remove `utils::WasmVersion` to instead reexport a similar type from `concordium_contracts_common`.
+  This adds `Display`, `Default`, `TryFrom<u8>`, `serde::Serialize` and `serde::Deserialize` for `WasmVersion` and `From<WasmVersion>` for `u8`.
+  The associated type `FromStr::Err` changes from `anyhow::Error` to `concordium_contracts_common::WasmVersionParseError`.
+  The method `WasmVersin::read` is removed.
 
 ## concordium-smart-contract-engine 3.1.0 (2023-10-18)
 

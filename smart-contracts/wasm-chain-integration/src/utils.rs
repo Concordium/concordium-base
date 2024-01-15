@@ -3,6 +3,7 @@
 
 use crate::{v1::EmittedDebugStatement, ExecResult};
 use anyhow::{anyhow, bail, ensure, Context};
+pub use concordium_contracts_common::WasmVersion;
 use concordium_contracts_common::{
     self as concordium_std, from_bytes, hashes, schema, Cursor, Deserial,
 };
