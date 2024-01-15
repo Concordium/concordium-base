@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Add `SchemaType` implementation for `&str`.
+- Add missing functionality from `Timestamp` in `concordium-base` to `Timestamp` in this crate, i.e. make internal field `millis` public, implement `From<u64>` and add a `now` method.
 - The `Debug` implementations of `Parameter` and `OwnedParameter` now output the
   parameter as hex unless the alternate formatting (`#`) is specified.
 

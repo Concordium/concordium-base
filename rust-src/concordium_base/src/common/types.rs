@@ -10,7 +10,9 @@ use concordium_contracts_common::{
     self as concordium_std, ContractAddress, ContractName, OwnedContractName, OwnedParameter,
     OwnedReceiveName, Parameter, ReceiveName,
 };
-pub use concordium_contracts_common::{AccountAddress, Address, Amount, ACCOUNT_ADDRESS_SIZE};
+pub use concordium_contracts_common::{
+    AccountAddress, Address, Amount, Timestamp, ACCOUNT_ADDRESS_SIZE,
+};
 use derive_more::{Display, From, FromStr, Into};
 use ed25519_dalek::Signer;
 use std::{collections::BTreeMap, num::ParseIntError, str::FromStr};
@@ -454,34 +456,7 @@ impl FromStr for TransactionTime {
     }
 }
 
-/// Datatype used to indicate a timestamp in milliseconds.
-#[derive(
-    SerdeDeserialize, SerdeSerialize, PartialEq, Eq, Debug, Serialize, Clone, Copy, PartialOrd, Ord,
-)]
-#[serde(transparent)]
-pub struct Timestamp {
-    /// Milliseconds since the unix epoch.
-    pub millis: u64,
-}
-
-impl Timestamp {
-    pub fn now() -> Self { (chrono::Utc::now().timestamp_millis() as u64).into() }
-}
-
-impl From<u64> for Timestamp {
-    fn from(millis: u64) -> Self { Self { millis } }
-}
-
-impl FromStr for Timestamp {
-    type Err = ParseIntError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let millis = u64::from_str(s)?;
-        Ok(Self { millis })
-    }
-}
-
-/// A ed25519 keypair. This is available in the `ed25519_dalek` crate, but the
+/// A ed25519 keypair. This is available in the `ed25519::dalek` crate, but the
 /// JSON serialization there is not compatible with what we use, so we redefine
 /// it there.
 #[derive(

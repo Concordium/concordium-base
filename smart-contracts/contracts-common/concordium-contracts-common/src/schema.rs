@@ -409,6 +409,10 @@ impl SchemaType for String {
     fn get_type() -> Type { Type::String(SizeLength::U32) }
 }
 
+impl SchemaType for &str {
+    fn get_type() -> Type { String::get_type() }
+}
+
 impl SchemaType for OwnedContractName {
     fn get_type() -> Type { Type::ContractName(SizeLength::U16) }
 }
