@@ -17,39 +17,6 @@ use concordium_wasm::{
 use rand::{prelude::*, RngCore};
 use std::{collections::BTreeMap, default::Default};
 
-#[derive(Debug, Clone, Copy)]
-pub enum WasmVersion {
-    V0,
-    V1,
-}
-
-impl std::str::FromStr for WasmVersion {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "V0" | "v0" => Ok(WasmVersion::V0),
-            "V1" | "v1" => Ok(WasmVersion::V1),
-            _ => anyhow::bail!("Unsupported version: '{}'. Only 'V0' and 'V1' are supported.", s),
-        }
-    }
-}
-
-impl WasmVersion {
-    /// Get the version from the cursor. This is not a Serial implementation
-    /// since it uses big-endian.
-    pub fn read(source: &mut std::io::Cursor<&[u8]>) -> anyhow::Result<WasmVersion> {
-        let mut data = [0u8; 4];
-        use std::io::Read;
-        source.read_exact(&mut data).context("Not enough data to read WasmVersion.")?;
-        match u32::from_be_bytes(data) {
-            0 => Ok(WasmVersion::V0),
-            1 => Ok(WasmVersion::V1),
-            n => bail!("Unsupported Wasm version {}.", n),
-        }
-    }
-}
-
 /// A host which traps for any function call.
 pub struct TrapHost;
 
@@ -697,7 +664,7 @@ pub fn get_build_info_from_skeleton(
         }
     }
     let Some(cs) = build_context_section else {
-        return Err(CustomSectionLookupError::Missing)
+        return Err(CustomSectionLookupError::Missing);
     };
     let info: VersionedBuildInfo = from_bytes(cs.contents).context("Failed parsing build info")?;
     Ok(info)

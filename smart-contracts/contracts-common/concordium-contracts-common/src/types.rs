@@ -2491,11 +2491,90 @@ impl fmt::Display for ParseError {
 #[cfg(feature = "std")]
 impl std::error::Error for ParseError {}
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "derive-serde", serde(try_from = "u8", into = "u8"))]
+/// Version of the module. This determines the chain API that the module can
+/// access.
+pub enum WasmVersion {
+    /// The initial smart contracts version. This has a simple state API that
+    /// has very limited capacity. `V0` contracts also use message-passing as
+    /// the interaction method.
+    V0 = 0u8,
+    /// `V1` contracts were introduced with protocol version 4. In comparison to
+    /// `V0` contracts they use synchronous calls as the interaction method,
+    /// and they have access to a more fine-grained state API allowing for
+    /// unlimited (apart from NRG costs) state size.
+    V1,
+}
+
+impl fmt::Display for WasmVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WasmVersion::V0 => f.write_str("V0"),
+            WasmVersion::V1 => f.write_str("V1"),
+        }
+    }
+}
+
+/// V0 is the default version of smart contracts.
+impl Default for WasmVersion {
+    fn default() -> Self { Self::V0 }
+}
+
+impl convert::From<WasmVersion> for u8 {
+    fn from(x: WasmVersion) -> Self { x as u8 }
+}
+
 #[cfg(feature = "derive-serde")]
 mod serde_impl {
     use super::*;
     use serde::{de, de::Visitor, Deserializer, Serializer};
     use std::{fmt, num};
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("Unsupported version: {unexpected_string}. Only 'V0' and 'V1' are supported.")]
+    pub struct WasmVersionParseError {
+        pub unexpected_string: String,
+    }
+
+    impl str::FromStr for WasmVersion {
+        type Err = WasmVersionParseError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match s {
+                "V0" | "v0" => Ok(WasmVersion::V0),
+                "V1" | "v1" => Ok(WasmVersion::V1),
+                unexpected_string => Err(WasmVersionParseError {
+                    unexpected_string: unexpected_string.to_string(),
+                }),
+            }
+        }
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    #[error(
+        "Unsupported version: {unexpected_version}. Only versions 0 and 1 of smart contracts are \
+         supported."
+    )]
+    pub struct U8WasmVersionConvertError {
+        pub unexpected_version: u8,
+    }
+
+    impl TryFrom<u8> for WasmVersion {
+        type Error = U8WasmVersionConvertError;
+
+        fn try_from(value: u8) -> Result<Self, Self::Error> {
+            match value {
+                0 => Ok(Self::V0),
+                1 => Ok(Self::V1),
+                unexpected_version => Err(U8WasmVersionConvertError {
+                    unexpected_version,
+                }),
+            }
+        }
+    }
 
     /// An error that may occur when converting from a string to an exchange
     /// rate.
