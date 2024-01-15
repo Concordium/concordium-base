@@ -114,8 +114,10 @@ macro_rules! succeed_or_die {
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     let bytes_from_file = succeed_or_die!(fs::read(kgar.seed), e => "Could not read random input from provided file because {}");
-    let generator = G1::hash_to_group(&bytes_from_file).expect("Hashing to curve expected to succeed");
-    let key = G1::hash_to_group(&to_bytes(&generator)).expect("Hashing to curve expected to succeed");
+    let generator =
+        G1::hash_to_group(&bytes_from_file).expect("Hashing to curve expected to succeed");
+    let key =
+        G1::hash_to_group(&to_bytes(&generator)).expect("Hashing to curve expected to succeed");
     let ar_public_key = PublicKey { generator, key };
     let ar_identity = kgar.ar_identity;
     let name = kgar.name;
@@ -185,14 +187,18 @@ pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::PublicKey<Bls12> {
     let mut ys: Vec<G1> = Vec::with_capacity(n as usize);
     let mut y_tildas: Vec<G2> = Vec::with_capacity(n as usize);
     let mut g1_element = G1::hash_to_group(bytes).expect("Hashing to curve expected to succeed");
-    let mut g2_element = G2::hash_to_group(&to_bytes(&g1_element)).expect("Hashing to curve expected to succeed");
+    let mut g2_element =
+        G2::hash_to_group(&to_bytes(&g1_element)).expect("Hashing to curve expected to succeed");
     for _ in 0..n {
         ys.push(g1_element);
         y_tildas.push(g2_element);
-        g1_element = G1::hash_to_group(&to_bytes(&g2_element)).expect("Hashing to curve expected to succeed");
-        g2_element = G2::hash_to_group(&to_bytes(&g1_element)).expect("Hashing to curve expected to succeed");
+        g1_element = G1::hash_to_group(&to_bytes(&g2_element))
+            .expect("Hashing to curve expected to succeed");
+        g2_element = G2::hash_to_group(&to_bytes(&g1_element))
+            .expect("Hashing to curve expected to succeed");
     }
-    let x_tilda = G2::hash_to_group(&to_bytes(&g2_element)).expect("Hashing to curve expected to succeed");
+    let x_tilda =
+        G2::hash_to_group(&to_bytes(&g2_element)).expect("Hashing to curve expected to succeed");
     ps_sig::PublicKey {
         g: G1::one_point(),
         g_tilda: G2::one_point(),
