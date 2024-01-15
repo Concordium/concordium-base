@@ -152,22 +152,17 @@ impl fmt::Display for ArkField<Fr> {
     }
 }
 
+/// Tess for serialization/deserialization and conversion to/from bigint
+/// representation.
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
     use crate::{
         common::*,
         curve_arithmetic::{Curve, Field, PrimeField},
     };
-    use ark_ec::hashing::HashToCurve;
-    use ark_ff::field_hashers::HashToField;
     use num_bigint::BigUint;
-    use num_traits::One;
     use rand::thread_rng;
-
-    type Fq = ArkField<ark_bls12_381::Fq>;
 
     const SCALAR_BYTES_LE: [u8; 32] = [
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255, 0,
@@ -271,20 +266,37 @@ mod tests {
     type G1 = ArkGroup<G1Projective>;
     type G2 = ArkGroup<G2Projective>;
 
-    fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> G1 {
-        G1Projective::new_unchecked(x.0, y.0, z.0).into()
-    }
-
-    fn from_coordinates_unchecked_g2(x: Fq2, y: Fq2, z: Fq2) -> G2 {
-        G2Projective::new_unchecked(x, y, z).into()
-    }
-
     macro_test_scalar_byte_conversion!(sc_bytes_conv_g1, G1);
     macro_test_scalar_byte_conversion!(sc_bytes_conv_g2, G2);
     macro_test_scalar_byte_conversion!(sc_bytes_conv_bls12, Bls12);
 
     macro_test_group_byte_conversion!(curve_bytes_conv_g1, G1);
     macro_test_group_byte_conversion!(curve_bytes_conv_g2, G2);
+}
+
+/// Test for hashig arbitrary bytes to curve. The tests were ported from the
+/// custom implementation that was replaced with the `arkworks`
+/// `MapToCurveBasedHasher` implementation instantiated with the `G1` and `G2`
+/// groups on `BLS12-381`.
+#[cfg(test)]
+mod hash_to_curve_tests {
+    // Note that that the old custom implementation refers to https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10.
+    // However, `ark-ec` v.0.4.0 https://docs.rs/ark-ec/0.4.0/src/ark_ec/hashing/map_to_curve_hasher.rs.html#48 refers
+    // to the previous version of the draft.  Both drafts describe the same
+    // algorithms and use the same test vectors for the BLS curve. Test vectors
+    // of the v9 of the draft can be found in Appendix H.9.1 https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-09#section-h.9.1 and
+    //  H.10.1 https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-09#section-h.10.1
+
+    use super::*;
+    use crate::{common::*, curve_arithmetic::Field};
+    use ark_ec::hashing::HashToCurve;
+    use ark_ff::field_hashers::HashToField;
+    use num_traits::One;
+    use std::str::FromStr;
+
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
+    type Fq = ArkField<ark_bls12_381::Fq>;
 
     fn hash_to_curve(msg: &[u8], dst: &[u8]) -> G1 {
         let hasher = <G1Projective as ArkCurveConfig<_>>::Hasher::new(dst)
@@ -306,6 +318,14 @@ mod tests {
         let hasher = <DefaultFieldHasher<Sha256, 128> as HashToField<Fq2>>::new(dst);
         let fs: Vec<Fq2> = hasher.hash_to_field(msg, 2);
         (fs[0], fs[1])
+    }
+
+    fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> G1 {
+        G1Projective::new_unchecked(x.0, y.0, z.0).into()
+    }
+
+    fn from_coordinates_unchecked_g2(x: Fq2, y: Fq2, z: Fq2) -> G2 {
+        G2Projective::new_unchecked(x, y, z).into()
     }
 
     // This tests the function hash_to_curve function according to
