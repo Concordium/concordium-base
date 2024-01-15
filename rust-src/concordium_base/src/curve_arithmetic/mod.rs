@@ -156,7 +156,7 @@ pub trait Curve:
     /// them as a little-endian integer.
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
     /// Hash to a curve point from a seed. This is deterministic function.
-    fn hash_to_group(m: &[u8]) -> Self;
+    fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError>;
 }
 
 /// An abstraction over a multiexp algorithm.

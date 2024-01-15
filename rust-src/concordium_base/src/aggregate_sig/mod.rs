@@ -31,7 +31,7 @@ impl<P: Pairing> SecretKey<P> {
 
     /// Sign a message using the SecretKey
     pub fn sign(&self, m: &[u8]) -> Signature<P> {
-        let g1_hash = P::G1::hash_to_group(m);
+        let g1_hash = P::G1::hash_to_group(m).expect("Hashing to curve expected to succeed");
         let signature = g1_hash.mul_by_scalar(&self.0);
         Signature(signature)
     }
@@ -84,7 +84,7 @@ impl<P: Pairing> PublicKey<P> {
     /// For now, the generator used is the default generator of the underlying
     /// library however, this should be parametrized in the future
     pub fn verify(&self, m: &[u8], signature: Signature<P>) -> bool {
-        let g1_hash = P::G1::hash_to_group(m);
+        let g1_hash = P::G1::hash_to_group(m).expect("Hashing to curve expected to succeed");
         // compute pairings in parallel
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
@@ -160,7 +160,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
     let product = m_pk_pairs
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
-            let g1_hash = P::G1::hash_to_group(m);
+            let g1_hash = P::G1::hash_to_group(m).expect("Hashing to curve expected to succeed");
             let paired = P::pair(&g1_hash, &pk.0);
             let mut p = prod;
             p.mul_assign(&paired);
@@ -211,7 +211,7 @@ pub fn verify_aggregate_sig_hybrid<P: Pairing>(
                     .fold(P::G2::zero_point, |s, x| s.plus_point(&x.0))
                     .reduce(P::G2::zero_point, |s, x| s.plus_point(&x))
             };
-            let g1_hash = P::G1::hash_to_group(m);
+            let g1_hash = P::G1::hash_to_group(m).expect("Hashing to curve expected to succeed");
             let paired = P::pair(&g1_hash, &sum_pk_i);
             let mut p = prod;
             p.mul_assign(&paired);
@@ -255,7 +255,7 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     P::check_pairing_eq(
         &signature.0,
         &P::G2::one_point(),
-        &P::G1::hash_to_group(m),
+        &P::G1::hash_to_group(m).expect("Hashing to curve expected to succeed"),
         &sum,
     )
 }

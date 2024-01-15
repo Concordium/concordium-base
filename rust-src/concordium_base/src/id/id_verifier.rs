@@ -358,7 +358,8 @@ mod tests {
 
         let pub_data = cred_data.get_cred_key_info();
 
-        let reg_id: G1 = Curve::hash_to_group(b"some_bytes");
+        let reg_id: G1 =
+            Curve::hash_to_group(b"some_bytes").expect("Hashing to curve expected to succeed");
         let account_address = account_address_from_registration_id(&reg_id);
         let challenge = b"13549686546546546854651357687354";
 
@@ -533,7 +534,8 @@ mod tests {
 
     #[test]
     fn test_verify_id_attributes_proofs() {
-        let point: G1 = Curve::hash_to_group(b"some_bytes");
+        let point: G1 =
+            Curve::hash_to_group(b"some_bytes").expect("Hashing to curve expected to succeed");
         let cmm_prf = Commitment(point);
         let cmm_max_accounts = Commitment(point);
         let cmm_cred_counter = Commitment(point);

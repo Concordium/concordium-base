@@ -2,7 +2,7 @@
 //! `arkworks` field/curve traits.
 use super::{Curve, CurveDecodingError, Field, GenericMultiExp, PrimeField};
 use crate::common::{Deserial, Serial, Serialize};
-use ark_ec::hashing::HashToCurve;
+use ark_ec::hashing::{HashToCurve, HashToCurveError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use core::fmt;
 
@@ -115,6 +115,10 @@ impl<G: ark_ec::CurveGroup> Deserial for ArkGroup<G> {
     }
 }
 
+impl From<HashToCurveError> for CurveDecodingError {
+    fn from(_value: HashToCurveError) -> Self { CurveDecodingError::NotOnCurve }
+}
+
 /// Curve configuration.
 ///
 /// These parameters cannot be taken from the `arkworks` traits. Each `arkworks`
@@ -193,10 +197,9 @@ where
             .expect("The scalar with top two bits erased should be valid.")
     }
 
-    fn hash_to_group(m: &[u8]) -> Self {
-        let hasher = G::Hasher::new(G::DOMAIN_STRING.as_ref())
-            .expect("Expected valid domain separation string");
-        let res = G::Hasher::hash(&hasher, m).expect("Expected successful hashing to curve");
-        ArkGroup(res.into())
+    fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError> {
+        let hasher = G::Hasher::new(G::DOMAIN_STRING.as_ref())?;
+        let res = G::Hasher::hash(&hasher, m)?;
+        Ok(ArkGroup(res.into()))
     }
 }

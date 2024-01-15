@@ -1895,19 +1895,21 @@ impl<C: Curve> GlobalContext<C> {
     /// amount, and a fixed seed.
     pub fn generate_from_seed(genesis_string: String, n: usize, seed: &[u8]) -> Self {
         // initialize the first generator from pi digits.
-        let g = C::hash_to_group(seed);
+        let g = C::hash_to_group(seed).expect("Hashing to curve expected to succeed");
 
         // generate next generator by hashing the previous one
-        let h = C::hash_to_group(&to_bytes(&g));
+        let h = C::hash_to_group(&to_bytes(&g)).expect("Hashing to curve expected to succeed");
 
         let cmm_key = PedersenKey { g, h };
 
         let mut generators = Vec::with_capacity(n);
         let mut generator = h;
         for _ in 0..n {
-            generator = C::hash_to_group(&to_bytes(&generator));
+            generator = C::hash_to_group(&to_bytes(&generator))
+                .expect("Hashing to curve expected to succeed");
             let g = generator;
-            generator = C::hash_to_group(&to_bytes(&generator));
+            generator = C::hash_to_group(&to_bytes(&generator))
+                .expect("Hashing to curve expected to succeed");
             let h = generator;
             generators.push((g, h));
         }

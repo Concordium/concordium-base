@@ -1,4 +1,4 @@
-use super::{field_adapters::FFField, Curve, Field, MultiExp, PrimeField};
+use super::{field_adapters::FFField, Curve, CurveDecodingError, Field, MultiExp, PrimeField};
 use crate::common::{Buffer, Deserial, Serial};
 use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::{
@@ -8,8 +8,7 @@ use curve25519_dalek::{
     traits::{Identity, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
 use sha2::Sha512;
-
-use std::borrow::Borrow;
+use std::{borrow::Borrow, result::Result};
 
 impl Serial for Scalar {
     fn serial<B: Buffer>(&self, out: &mut B) {
@@ -140,7 +139,9 @@ impl Curve for RistrettoPoint {
             .expect("The scalar with top two bits erased should be valid.")
     }
 
-    fn hash_to_group(m: &[u8]) -> Self { RistrettoPoint::hash_from_bytes::<Sha512>(m) }
+    fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError> {
+        Result::Ok(RistrettoPoint::hash_from_bytes::<Sha512>(m))
+    }
 }
 
 /// An instance of multiexp algorithm from the Dalek library that uses
