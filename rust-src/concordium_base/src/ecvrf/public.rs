@@ -82,7 +82,7 @@ impl PublicKey {
     #[inline]
     pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
 
-    /// Implements <https://https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf_encode_to_curve_try_a>
+    /// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.4.1.1>
     /// The failure should not happen in practice, expected number of iterations
     /// is 2.
     // TODO: Check whether it still implements the algorithm after the RFC draft was
@@ -117,7 +117,7 @@ impl PublicKey {
 
     pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
 
-    /// Implements <https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-verifying>
+    /// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.3>
     #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: &Proof, message: &[u8]) -> bool {
         if let Some(h) = self.hash_to_curve(message) {

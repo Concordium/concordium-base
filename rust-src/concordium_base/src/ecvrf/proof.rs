@@ -29,7 +29,8 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
 /// a given public key.
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
-/// Implements step 8 of <https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-proving>
+/// Implements step 8 of 
+<https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.1>
 /// i.e. transforms a proof to a byte string
 impl Serial for Proof {
     #[inline]
@@ -48,7 +49,7 @@ impl Serial for Proof {
     }
 }
 
-/// Implements <https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-decode-proof>
+/// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.4.4>
 /// Construct a `Proof` from a slice of bytes. This function always
 /// results in a valid proof object.
 impl Deserial for Proof {
@@ -80,7 +81,7 @@ impl Debug for Proof {
     }
 }
 
-/// Implements <https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-proof-to-hash>
+/// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.2>
 impl Proof {
     pub fn to_hash(&self) -> [u8; 64] {
         let p = self.0.mul_by_cofactor();
