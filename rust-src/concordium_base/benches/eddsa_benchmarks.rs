@@ -31,7 +31,9 @@ pub fn bench_sign(c: &mut Criterion) {
     let signing_key = SigningKey::generate(&mut csprng);
     let pk = signing_key.verifying_key();
     let sig = signing_key.sign(a.as_slice());
-    c.bench_function("sign {}", move |b| b.iter(|| signing_key.sign(a.as_slice())));
+    c.bench_function("sign {}", move |b| {
+        b.iter(|| signing_key.sign(a.as_slice()))
+    });
     c.bench_function("verify{}", move |b| {
         b.iter(|| pk.verify(d.as_slice(), &sig))
     });
