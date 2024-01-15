@@ -1,7 +1,7 @@
 ## Unreleased changes
 
 - Improve performance of `multiexp*` family of functions.
-- Add traits `Field` and `PrimeField` with implementations for the underlying field of the `BLS12-381`` curve.
+- Add traits `Field` and `PrimeField` with implementations for the underlying field of the `BLS12-381` curve.
 - Add `MultiExp` trait that allows to have different `multiexp` algorithm implementations for different curves.
 - Add implementations of `Field`, `PrimeField` and `Curve` for the Ristretto representation of `curve25519`.
 - Support `P7` protocol version.
@@ -9,6 +9,8 @@
   The alternate formatter (using `#`) displays it as a list of bytes.
 - Add `FromStr` and `Display` instances to `dodis_yampolskiy_prf::SecretKey`.
 - Change `Debug` instance of `dodis_yampolskiy_prf::SecretKey` to hide the value.
+- Remove `Timestamp` to instead reexport the similar type from `concordium_contracts_common`.
+  This adds several new methods, but results in a breaking change in the `serde::Serialize` implementation, which is now using string containing RFC3393 representation instead the underlying milliseconds.
 
 ## 3.2.0 (2023-11-22)
 
