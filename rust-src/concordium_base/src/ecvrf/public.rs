@@ -85,8 +85,6 @@ impl PublicKey {
     /// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.4.1.1>
     /// The failure should not happen in practice, expected number of iterations
     /// is 2.
-    // TODO: Check whether it still implements the algorithm after the RFC draft was
-    // converted to a "stable" RFC version.
     pub fn hash_to_curve(&self, message: &[u8]) -> Option<EdwardsPoint> {
         let mut p_candidate_bytes = [0u8; 32];
         let mut h: Sha512 = Sha512::new();

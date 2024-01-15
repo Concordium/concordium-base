@@ -29,8 +29,7 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
 /// a given public key.
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
-/// Implements step 8 of 
-<https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.1>
+/// Implements step 8 of <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.1>
 /// i.e. transforms a proof to a byte string
 impl Serial for Proof {
     #[inline]
