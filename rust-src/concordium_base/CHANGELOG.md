@@ -9,9 +9,6 @@
   The alternate formatter (using `#`) displays it as a list of bytes.
 - Add `FromStr` and `Display` instances to `dodis_yampolskiy_prf::SecretKey`.
 - Change `Debug` instance of `dodis_yampolskiy_prf::SecretKey` to hide the value.
-
-### Breaking changes
-
 - Remove `Timestamp` to instead reexport the similar type from `concordium_contracts_common`.
   This adds several new methods, but results in a breaking change in the `serde::Serialize` implementation, which is now using string containing RFC3393 representation instead the underlying milliseconds.
 

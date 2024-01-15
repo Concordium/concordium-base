@@ -678,7 +678,6 @@ impl quickcheck::Arbitrary for Timestamp {
 impl Timestamp {
     /// Construct a timestamp corresponding to the current date and time.
     #[cfg(feature = "derive-serde")]
-    #[inline(always)]
     pub fn now() -> Self { (chrono::Utc::now().timestamp_millis() as u64).into() }
 
     /// Construct timestamp from milliseconds since unix epoch.
