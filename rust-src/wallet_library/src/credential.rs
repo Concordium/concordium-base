@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use concordium_base::{
     common::{
         base16_decode_string,
@@ -159,21 +159,23 @@ pub struct CredentialDeploymentPayload {
 /// Serializes the credential deployment payload. The result of this
 /// serialization should be sent as a raw payload to the node. The serialized
 /// bytes are returned hex encoded.
-pub fn serialize_credential_deployment_payload(payload: CredentialDeploymentPayload) -> String {
-    let cdi = get_credential_deployment_info(payload.signatures, payload.unsigned_cdi);
+pub fn serialize_credential_deployment_payload(
+    payload: CredentialDeploymentPayload,
+) -> Result<String> {
+    let cdi = get_credential_deployment_info(payload.signatures, payload.unsigned_cdi)?;
     let acc_cred = AccountCredential::Normal { cdi };
 
     let mut acc_cred_ser = Vec::<u8>::new();
     acc_cred.serial(&mut acc_cred_ser);
 
-    hex::encode(acc_cred_ser)
+    Ok(hex::encode(acc_cred_ser))
 }
 
 fn get_credential_deployment_info(
     signatures: Vec<String>,
     unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
-) -> CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind> {
-    let signature_map = build_signature_map(&signatures);
+) -> Result<CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>, anyhow::Error> {
+    let signature_map = build_signature_map(&signatures)?;
     let proof_acc_sk = AccountOwnershipProof {
         sigs: signature_map,
     };
@@ -183,21 +185,30 @@ fn get_credential_deployment_info(
         proof_acc_sk,
     };
 
-    CredentialDeploymentInfo {
+    Ok(CredentialDeploymentInfo {
         values: unsigned_cdi.values,
         proofs: cdp,
-    }
+    })
 }
 
-fn build_signature_map(signatures: &[String]) -> BTreeMap<KeyIndex, AccountOwnershipSignature> {
+fn build_signature_map(
+    signatures: &[String],
+) -> Result<BTreeMap<KeyIndex, AccountOwnershipSignature>, anyhow::Error> {
     signatures
         .iter()
         .enumerate()
         .map(|(index, key)| {
-            (
-                KeyIndex(index.try_into().unwrap()),
-                base16_decode_string(key).unwrap(),
-            )
+            let index_u8: u8 = match index.try_into() {
+                Ok(idx) => idx,
+                Err(err) => return Err(anyhow!(err)),
+            };
+
+            let decoded_key = match base16_decode_string(key) {
+                Ok(decoded) => decoded,
+                Err(e) => return Err(anyhow!(e)),
+            };
+
+            Ok((KeyIndex(index_u8), decoded_key))
         })
         .collect()
 }
@@ -323,7 +334,7 @@ mod tests {
             signatures,
         };
 
-        let serialized_payload = serialize_credential_deployment_payload(payload);
+        let serialized_payload = serialize_credential_deployment_payload(payload).unwrap();
 
         assert!(serialized_payload.contains("0101000029723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b101b317d3fea7de56f8c96f6e72820c5cd502cc0eef8454016ee548913255897c6b52156cc60df965d3efb3f160eff6ced40000000001000300000001"));
         assert!(serialized_payload.contains("828e17e41937bacb9e7a1bbc3a7e5178cd49abf2e5255479037671d0b2db03bb717bd67a8e873f593622e4f2acd3defba6389bc67b7559ee8d7fac54e22f11"));
