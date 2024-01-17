@@ -1,11 +1,13 @@
 use anyhow::{bail, Result};
-use concordium_base::id::{
-    account_holder::create_unsigned_credential,
-    constants,
-    constants::{ArCurve, AttributeKind},
-    dodis_yampolskiy_prf as prf,
-    pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue, Value},
-    types::*,
+use concordium_base::{
+    common::{types::TransactionTime, Buffer, Serial},
+    id::{
+        account_holder::create_unsigned_credential,
+        constants::{self, ArCurve, AttributeKind, IpPairing},
+        dodis_yampolskiy_prf as prf,
+        pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue, Value},
+        types::*,
+    },
 };
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
@@ -111,6 +113,34 @@ fn build_policy(
     })
 }
 
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialDeploymentDetails {
+    expiry:       TransactionTime,
+    unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
+}
+
+/// Defines the byte serialization of the credential deployment details. Note
+/// that this serialization is for a new credential being deployed, which the
+/// explicit 0 byte denotes.
+impl Serial for CredentialDeploymentDetails {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.unsigned_cdi.serial(out);
+        0u8.serial(out);
+        self.expiry.seconds.serial(out);
+    }
+}
+
+/// Serializes the credential deployment details. It is this serialization that
+/// should be signed when creating a new credential for deployment.
+pub fn serialize_credential_deployment_details(
+    credential_deployment_details: CredentialDeploymentDetails,
+) -> JsonString {
+    let mut serialized_details = Vec::<u8>::new();
+    credential_deployment_details.serial(&mut serialized_details);
+    hex::encode(serialized_details)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,8 +166,7 @@ mod tests {
         assert_eq!(values.threshold.0, 1);
     }
 
-    #[test]
-    pub fn create_unsigned_credential_test() {
+    fn create_unsigned_credential() -> UnsignedCredentialDeploymentInfoWithRandomness {
         let cred_number = 1;
         let revealed_attributes = Vec::new();
         let ip_info = read_ip_info();
@@ -195,7 +224,28 @@ mod tests {
         let result_str = create_unsigned_credential_v1_aux(input).unwrap();
         let result: UnsignedCredentialDeploymentInfoWithRandomness =
             serde_json::from_str(&result_str).unwrap();
+        result
+    }
 
-        assert_unsigned_credential(result.unsigned_cdi.values);
+    #[test]
+    pub fn create_unsigned_credential_test() {
+        let unsigned_credential = create_unsigned_credential();
+        assert_unsigned_credential(unsigned_credential.unsigned_cdi.values);
+    }
+
+    #[test]
+    pub fn serialize_credential_deployment_details_test() {
+        let unsigned_credential = create_unsigned_credential();
+        let expiry = TransactionTime::from_seconds(0x0685810406858104);
+
+        let details = CredentialDeploymentDetails {
+            expiry,
+            unsigned_cdi: unsigned_credential.unsigned_cdi,
+        };
+
+        let serialized_details = serialize_credential_deployment_details(details);
+
+        assert!(serialized_details.contains("01000029723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b101b317d3fea7de56f8c96f6e72820c5cd502cc0eef8454016ee548913255897c6b52156cc60df965d3efb3f160eff6ced40000000001000300000001"));
+        assert!(serialized_details.contains("0685810406858104"));
     }
 }
