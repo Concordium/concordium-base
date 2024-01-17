@@ -193,10 +193,12 @@ where
         let mask = u64::MAX >> num_bits_to_remove;
         // unset `num_bits_to_remove` topmost bits in the last u64.
         *fr.last_mut().expect("Non empty vector expected") &= mask;
-        <Self::Scalar>::from_repr(&fr).expect(&format!(
-            "The scalar with top {:} bits erased should be valid.",
-            num_bits_to_remove
-        ))
+        <Self::Scalar>::from_repr(&fr).unwrap_or_else(|_| {
+            panic!(
+                "The scalar with top {:} bits erased should be valid.",
+                num_bits_to_remove
+            )
+        })
     }
 
     fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError> {
