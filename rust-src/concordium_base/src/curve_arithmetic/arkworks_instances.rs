@@ -176,8 +176,8 @@ where
     fn scalar_from_u64(n: u64) -> Self::Scalar { ArkField(G::ScalarField::from(n)) }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
-        // Traverse at most `ceil(CAPACITY / 8)` 8-byte chunks.
-        let s = num::integer::div_ceil(Self::Scalar::CAPACITY, 8);
+        // Traverse at most `ceil(CAPACITY / 64)` 8-byte chunks.
+        let s = num::integer::div_ceil(Self::Scalar::CAPACITY, 64);
         let mut fr = vec![0u64; s as usize];
         for (chunk, place) in bs.as_ref().chunks(8).take(s as usize).zip(&mut fr) {
             let mut v = [0u8; 8];
@@ -195,8 +195,8 @@ where
         *fr.last_mut().expect("Non empty vector expected") &= mask;
         <Self::Scalar>::from_repr(&fr).unwrap_or_else(|_| {
             panic!(
-                "The scalar with top {:} bits erased should be valid.",
-                num_bits_to_remove
+                "The scalar {:?} with top {:} bits erased should be valid.",
+                fr, num_bits_to_remove
             )
         })
     }
