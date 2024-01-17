@@ -87,7 +87,9 @@ pub trait PrimeField: Field {
     const NUM_BITS: u32;
 
     /// How many bits of information can be reliably stored in the field
-    /// element.
+    /// element. It is expected that `num_limbs * 64 - CAPACITY < 64`, where
+    /// `num_limbs` is the size of vector returned by
+    /// `PrimeField::into_repr(self)`.
     const CAPACITY: u32;
 
     /// Get a big integer representation with least significant digit first.

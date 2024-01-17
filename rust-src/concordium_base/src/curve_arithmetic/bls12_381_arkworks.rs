@@ -169,7 +169,7 @@ mod tests {
         0, 0, 0, 0, 0, 0, 0,
     ];
 
-    /// Check that scalar_from_bytes_helper works on small values.
+    /// Check that scalar_from_bytes works on small values.
     #[test]
     fn scalar_from_bytes_small() {
         let mut rng = rand::thread_rng();

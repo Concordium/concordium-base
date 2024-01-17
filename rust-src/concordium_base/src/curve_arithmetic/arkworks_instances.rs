@@ -178,11 +178,11 @@ where
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
         // Traverse at most `ceil(CAPACITY / 8)` 8-byte chunks.
         let s = num::integer::div_ceil(Self::Scalar::CAPACITY, 8);
-        let mut fr = Vec::with_capacity(s as usize);
-        for chunk in bs.as_ref().chunks(8).take(s as usize) {
+        let mut fr = vec![0u64; s as usize];
+        for (chunk, place) in bs.as_ref().chunks(8).take(s as usize).zip(&mut fr) {
             let mut v = [0u8; 8];
             v[..chunk.len()].copy_from_slice(chunk);
-            fr.push(u64::from_le_bytes(v));
+            *place = u64::from_le_bytes(v);
         }
         let total_size_in_bits = bs.as_ref().len() * 8;
         let num_bits_to_remove = total_size_in_bits as u32 - Self::Scalar::CAPACITY;
@@ -193,8 +193,10 @@ where
         let mask = u64::MAX >> num_bits_to_remove;
         // unset `num_bits_to_remove` topmost bits in the last u64.
         *fr.last_mut().expect("Non empty vector expected") &= mask;
-        <Self::Scalar>::from_repr(&fr)
-            .expect("The scalar with top two bits erased should be valid.")
+        <Self::Scalar>::from_repr(&fr).expect(&format!(
+            "The scalar with top {:} bits erased should be valid.",
+            num_bits_to_remove
+        ))
     }
 
     fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError> {
