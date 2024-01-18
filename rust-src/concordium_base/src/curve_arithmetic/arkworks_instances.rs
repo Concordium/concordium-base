@@ -177,15 +177,15 @@ where
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
         // Traverse at most `ceil(CAPACITY / 64)` 8-byte chunks.
-        let s = num::integer::div_ceil(Self::Scalar::CAPACITY, 64);
-        let mut fr = vec![0u64; s as usize];
-        for (chunk, place) in bs.as_ref().chunks(8).take(s as usize).zip(&mut fr) {
+        let num_chunks = num::integer::div_ceil(Self::Scalar::CAPACITY, 64);
+        let mut fr = vec![0u64; num_chunks as usize];
+        for (chunk, place) in bs.as_ref().chunks(8).take(num_chunks as usize).zip(&mut fr) {
             let mut v = [0u8; 8];
             v[..chunk.len()].copy_from_slice(chunk);
             *place = u64::from_le_bytes(v);
         }
-        let total_size_in_bits = bs.as_ref().len() * 8;
-        let num_bits_to_remove = total_size_in_bits as u32 - Self::Scalar::CAPACITY;
+        let total_size_in_bits = num_chunks * 64;
+        let num_bits_to_remove = total_size_in_bits - Self::Scalar::CAPACITY;
         // create a mask for the last chunk with the topmost `num_bits_to_remove` zeros
         // followed by `CAPACITY` of ones; it's implemented using (logical) right shift
         // that adds zeros from the left. E.g. if `num_bits_to_remove = 2`, the

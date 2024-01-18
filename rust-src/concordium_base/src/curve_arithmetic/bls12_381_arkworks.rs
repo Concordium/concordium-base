@@ -162,12 +162,79 @@ mod tests {
         curve_arithmetic::{Curve, Field, PrimeField},
     };
     use num_bigint::BigUint;
-    use rand::thread_rng;
+    use rand::{thread_rng, Rng, RngCore};
+
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
 
     const SCALAR_BYTES_LE: [u8; 32] = [
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255, 0,
         0, 0, 0, 0, 0, 0, 0,
     ];
+
+    const SCALAR_BYTES_LE_SHORT: [u8; 30] = [
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255, 0,
+        0, 0, 0, 0, 255,
+    ];
+
+    const SCALAR_BYTES_LE_LONG: [u8; 33] = [
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255, 0,
+        0, 0, 0, 0, 0, 0, 0, 255,
+    ];
+
+    /// Test that if the size of the input array to `scalar_from_bytes()` is
+    /// less than 32, extra zeros are added at the end of the array to extend it
+    /// to 32 bytes.
+    #[test]
+    fn scalar_from_bytes_short() {
+        let s = <G1 as Curve>::scalar_from_bytes(&SCALAR_BYTES_LE_SHORT);
+        let limbs: Vec<u64> = s.into_repr();
+        // Convert limbs into an array of bytes
+        let mut buffer = Vec::with_capacity(32);
+        for u in limbs {
+            buffer.extend(u.to_le_bytes());
+        }
+        let bytes: [u8; 32] = buffer
+            .try_into()
+            .expect("Expected a bytes array of size 32");
+        let mut expected = [0u8; 32];
+        // fill the fist bytes with the input, remainig bytes will be zeroes.
+        expected[..30].copy_from_slice(&SCALAR_BYTES_LE_SHORT);
+        assert_eq!(expected, bytes)
+    }
+
+    /// Test that if the size of the input array to `scalar_from_bytes()` is
+    /// greater than 32, the extra bytes are ignored.
+    #[test]
+    fn scalar_from_bytes_long() {
+        let s = <G1 as Curve>::scalar_from_bytes(&SCALAR_BYTES_LE_LONG);
+        let fits_capacity_limbs: Vec<u64> = s.into_repr();
+        // Create four u64 limbs of the scalar representation from the first 32 bytes
+        let mut limbs_from_long = [0u64; 4];
+        let mut buffer = [0u8; 32];
+        buffer.copy_from_slice(&SCALAR_BYTES_LE_LONG[..32]);
+        for (i, chunk) in buffer.as_ref().chunks(8).take(4).enumerate() {
+            let mut v = [0u8; 8];
+            v[..chunk.len()].copy_from_slice(chunk);
+            limbs_from_long[i] = u64::from_le_bytes(v);
+        }
+        compare_up_to_last_two_bits(&limbs_from_long, &fits_capacity_limbs)
+    }
+
+    /// Compare the limbs masking the last limb of the first argument.
+    /// The second agument is assumed to be obtained from `scalar_from_bytes`,
+    /// so it is always capped by CAPACITY
+    fn compare_up_to_last_two_bits(limbs: &[u64], fits_capacity_limbs: &[u64]) {
+        let mask = !(1u64 << 63 | 1u64 << 62);
+        assert_eq!(limbs[0], fits_capacity_limbs[0], "First limb.");
+        assert_eq!(limbs[1], fits_capacity_limbs[1], "Second limb.");
+        assert_eq!(limbs[2], fits_capacity_limbs[2], "Third limb.");
+        assert_eq!(
+            limbs[3] & mask,
+            fits_capacity_limbs[3],
+            "Fourth limb with top bit masked."
+        );
+    }
 
     /// Check that scalar_from_bytes works on small values.
     #[test]
@@ -177,15 +244,44 @@ mod tests {
             let n = <ArkField<Fr>>::random(&mut rng);
             let mut bytes = to_bytes(&n);
             bytes.reverse();
-            let m = <ArkGroup<G1Projective> as Curve>::scalar_from_bytes(&bytes);
+            let m = <G1 as Curve>::scalar_from_bytes(&bytes);
             // make sure that n and m only differ in the topmost bit.
             let n = n.into_repr();
             let m = m.into_repr();
-            let mask = !(1u64 << 63 | 1u64 << 62);
-            assert_eq!(n[0], m[0], "First limb.");
-            assert_eq!(n[1], m[1], "Second limb.");
-            assert_eq!(n[2], m[2], "Third limb.");
-            assert_eq!(n[3] & mask, m[3] & mask, "Fourth limb with top bit masked.");
+            compare_up_to_last_two_bits(&n, &m);
+        }
+    }
+
+    // Test that everything that exeeds `CAPACITY` is ignored
+    /// by `Curve::scalar_from_bytes()`
+    #[test]
+    fn test_scalar_from_bytes_big() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            // First, we generate 31 random bytes.
+            let mut lower_bytes: [u8; 31] = [0u8; 31];
+            rng.fill_bytes(&mut lower_bytes);
+            let mut fits_capacity_bytes = [0u8; 32];
+            // Next, we create a byte array that is filled with random lower bytes, the last
+            // byte is in [0; 63], that is, of the form 0b00XXXXXX (big-endian).
+            fits_capacity_bytes[0..31].copy_from_slice(&lower_bytes);
+            let n = rng.gen_range(0..63);
+            fits_capacity_bytes[31] = n;
+            let fits_capacity = <G1 as Curve>::scalar_from_bytes(fits_capacity_bytes);
+            let i = rng.gen_range(1..4);
+            // Now, we create a byte array from lower bytes with the last byte being number
+            // that is guaranteed to exceed `G1::Scalar::CAPACITY`.
+            let mut bytes: [u8; 32] = [0u8; 32];
+            bytes[0..31].copy_from_slice(&lower_bytes);
+            // Add 0bXX000000 that leaves the first six bits untouched.
+            bytes[31] = n + (i << 6);
+            assert!(
+                bytes[31] > 63,
+                "The last byte expected to be grater than 63 to exceed CAPACITY"
+            );
+            let over_capacity = <G1 as Curve>::scalar_from_bytes(bytes);
+            // Check that two topmost bits are ignored.
+            assert_eq!(fits_capacity, over_capacity);
         }
     }
 
@@ -209,6 +305,7 @@ mod tests {
             let scalar_vec64 = scalar.into_repr();
             let scalar_res = <ArkField<Fr>>::from_repr(&scalar_vec64);
             assert!(scalar_res.is_ok());
+            assert_eq!(scalar_vec64.len(), 4);
             assert_eq!(scalar, scalar_res.unwrap());
         }
     }
@@ -262,9 +359,6 @@ mod tests {
             }
         };
     }
-
-    type G1 = ArkGroup<G1Projective>;
-    type G2 = ArkGroup<G2Projective>;
 
     macro_test_scalar_byte_conversion!(sc_bytes_conv_g1, G1);
     macro_test_scalar_byte_conversion!(sc_bytes_conv_g2, G2);
