@@ -4,7 +4,7 @@
 
 ### Added
 
-- Added method `serialize_credential_deployment_details` for serializing the credential deployment details that must be signed to deploy a new credential.
+- Added method `compute_credential_deployment_hash_to_sign` for computing the credential deployment sign digest that must be signed to deploy a new credential.
 - Added method `serialize_credential_deployment_payload` for serializing the credential deployment payload. 
 This payload is the one sent as a raw payload to the node when deploying a new credential.
 
