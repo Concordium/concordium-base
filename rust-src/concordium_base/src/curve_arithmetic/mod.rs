@@ -89,7 +89,7 @@ pub trait PrimeField: Field {
     /// How many bits of information can be reliably stored in the field
     /// element. It is expected that `num_limbs * 64 - CAPACITY < 64`, where
     /// `num_limbs` is the size of vector returned by
-    /// `PrimeField::into_repr(self)`.
+    /// [PrimeField::into_repr].
     const CAPACITY: u32;
 
     /// Get a big integer representation with least significant digit first.
@@ -154,8 +154,12 @@ pub trait Curve:
     /// Make a scalar from a 64-bit unsigned integer. This function assumes that
     /// the field is big enough to accommodate any 64-bit unsigned integer.
     fn scalar_from_u64(n: u64) -> Self::Scalar;
-    /// Make a scalar by taking the first Scalar::CAPACITY bits and interpreting
-    /// them as a little-endian integer.
+    /// Make a scalar by taking the first `Scalar::CAPACITY`` bits and
+    /// interpreting them as a little-endian integer. If the input length is
+    /// smaller than `num_limbs * 8` bytes then extra zeros are added in topmost
+    /// bytes. If the input lenght is greater, bytes after the first
+    /// `num_limbs * 8` are ignored. Where `num_limbs` is the size of vector
+    /// returned by [PrimeField::into_repr].
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
     /// Hash to a curve point from a seed. This is deterministic function.
     fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError>;
