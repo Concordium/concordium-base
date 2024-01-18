@@ -1,13 +1,23 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
-    common::*, curve_arithmetic::Curve, elgamal::PublicKey, id::types::*, ps_sig,
+    common::*,
+    curve_arithmetic::Curve,
+    elgamal::PublicKey,
+    id::{
+        constants::{ArCurve, BlsG2, IpPairing},
+        types::*,
+    },
+    ps_sig,
 };
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use pairing::bls12_381::{Bls12, G1, G2};
 use sha2::{Digest, Sha512};
 use std::{fs, path::PathBuf};
 use structopt::StructOpt;
+
+type Bls12 = IpPairing;
+type G1 = ArCurve;
+type G2 = BlsG2;
 
 #[derive(StructOpt)]
 struct KeygenIp {
@@ -104,8 +114,10 @@ macro_rules! succeed_or_die {
 
 fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     let bytes_from_file = succeed_or_die!(fs::read(kgar.seed), e => "Could not read random input from provided file because {}");
-    let generator = G1::hash_to_group(&bytes_from_file);
-    let key = G1::hash_to_group(&to_bytes(&generator));
+    let generator =
+        G1::hash_to_group(&bytes_from_file).expect("Hashing to curve expected to succeed");
+    let key =
+        G1::hash_to_group(&to_bytes(&generator)).expect("Hashing to curve expected to succeed");
     let ar_public_key = PublicKey { generator, key };
     let ar_identity = kgar.ar_identity;
     let name = kgar.name;
@@ -174,15 +186,19 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
 pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::PublicKey<Bls12> {
     let mut ys: Vec<G1> = Vec::with_capacity(n as usize);
     let mut y_tildas: Vec<G2> = Vec::with_capacity(n as usize);
-    let mut g1_element = G1::hash_to_group(bytes);
-    let mut g2_element = G2::hash_to_group(&to_bytes(&g1_element));
+    let mut g1_element = G1::hash_to_group(bytes).expect("Hashing to curve expected to succeed");
+    let mut g2_element =
+        G2::hash_to_group(&to_bytes(&g1_element)).expect("Hashing to curve expected to succeed");
     for _ in 0..n {
         ys.push(g1_element);
         y_tildas.push(g2_element);
-        g1_element = G1::hash_to_group(&to_bytes(&g2_element));
-        g2_element = G2::hash_to_group(&to_bytes(&g1_element));
+        g1_element = G1::hash_to_group(&to_bytes(&g2_element))
+            .expect("Hashing to curve expected to succeed");
+        g2_element = G2::hash_to_group(&to_bytes(&g1_element))
+            .expect("Hashing to curve expected to succeed");
     }
-    let x_tilda = G2::hash_to_group(&to_bytes(&g2_element));
+    let x_tilda =
+        G2::hash_to_group(&to_bytes(&g2_element)).expect("Hashing to curve expected to succeed");
     ps_sig::PublicKey {
         g: G1::one_point(),
         g_tilda: G2::one_point(),
@@ -196,7 +212,7 @@ pub fn generate_ps_pk(n: u32, bytes: &[u8]) -> ps_sig::PublicKey<Bls12> {
 /// The difference is that this one does not concatenate the input
 /// to Sha512 with the single octet values 0 and 1, and neither does it
 /// concatenate with a public key.
-pub fn hash_to_ed25519(msg: &[u8]) -> Option<ed25519_dalek::PublicKey> {
+pub fn hash_to_ed25519(msg: &[u8]) -> Option<ed25519_dalek::VerifyingKey> {
     let mut p_candidate_bytes = [0u8; 32];
     let mut h: Sha512 = Sha512::new();
     h.update(b"concordium_genesis_ed25519");
@@ -212,7 +228,7 @@ pub fn hash_to_ed25519(msg: &[u8]) -> Option<ed25519_dalek::PublicKey> {
             // not be 0 after multiplying by cofactor.
             if !ed_point.is_small_order() {
                 return Some(
-                    ed25519_dalek::PublicKey::from_bytes(
+                    ed25519_dalek::VerifyingKey::from_bytes(
                         &ed_point.mul_by_cofactor().compress().to_bytes(),
                     )
                     .unwrap(),

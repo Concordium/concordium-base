@@ -1,15 +1,14 @@
 //! Basic definitions of the curve and pairing abstractions, and implementations
 //! of these abstractions for the curves used on Concordium.
-mod bls12_381_g1hash;
-mod bls12_381_g2hash;
-mod bls12_381_instance;
+pub mod arkworks_instances;
+mod bls12_381_arkworks;
 mod ed25519_instance;
+mod field_adapters;
 
 pub mod secret_value;
 pub use secret_value::{Secret, Value};
 
 use crate::common::{Serial, Serialize};
-use byteorder::ReadBytesExt;
 use rand::*;
 use std::{borrow::Borrow, fmt, fmt::Debug};
 use thiserror::Error;
@@ -88,7 +87,9 @@ pub trait PrimeField: Field {
     const NUM_BITS: u32;
 
     /// How many bits of information can be reliably stored in the field
-    /// element.
+    /// element. It is expected that `num_limbs * 64 - CAPACITY < 64`, where
+    /// `num_limbs` is the size of vector returned by
+    /// [PrimeField::into_repr].
     const CAPACITY: u32;
 
     /// Get a big integer representation with least significant digit first.
@@ -136,10 +137,6 @@ pub trait Curve:
     /// Exponentiation by a scalar, i.e., compute n * x for a group element x
     /// and integer n.
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
-    /// Deserialize a value from a byte source, but do not check that it is in
-    /// the group itself. This can be cheaper if the source of the value is
-    /// trusted, but it must not be used on untrusted sources.
-    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> anyhow::Result<Self>;
     /// Generate a random group element, uniformly distributed.
     fn generate<R: Rng>(rng: &mut R) -> Self;
     /// Generate a random scalar value, uniformly distributed.
@@ -157,11 +154,15 @@ pub trait Curve:
     /// Make a scalar from a 64-bit unsigned integer. This function assumes that
     /// the field is big enough to accommodate any 64-bit unsigned integer.
     fn scalar_from_u64(n: u64) -> Self::Scalar;
-    /// Make a scalar by taking the first Scalar::CAPACITY bits and interpreting
-    /// them as a little-endian integer.
+    /// Make a scalar by taking the first `Scalar::CAPACITY`` bits and
+    /// interpreting them as a little-endian integer. If the input length is
+    /// smaller than `num_limbs * 8` bytes then extra zeros are added in topmost
+    /// bytes. If the input lenght is greater, bytes after the first
+    /// `num_limbs * 8` are ignored. Where `num_limbs` is the size of vector
+    /// returned by [PrimeField::into_repr].
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
     /// Hash to a curve point from a seed. This is deterministic function.
-    fn hash_to_group(m: &[u8]) -> Self;
+    fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError>;
 }
 
 /// An abstraction over a multiexp algorithm.
@@ -416,8 +417,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use pairing::bls12_381::G1;
+    use super::{arkworks_instances::ArkGroup, *};
+    use ark_bls12_381::G1Projective;
+
+    type SomeCurve = ArkGroup<G1Projective>;
 
     #[test]
     pub fn test_multiscalar() {
@@ -426,10 +429,10 @@ mod tests {
             let mut gs = Vec::with_capacity(l);
             let mut es = Vec::with_capacity(l);
             for _ in 0..l {
-                gs.push(G1::generate(&mut csprng));
-                es.push(G1::generate_scalar(&mut csprng));
+                gs.push(SomeCurve::generate(&mut csprng));
+                es.push(SomeCurve::generate_scalar(&mut csprng));
             }
-            let mut goal = G1::zero_point();
+            let mut goal = SomeCurve::zero_point();
             // Naive multiply + add method.
             for (g, e) in gs.iter().zip(es.iter()) {
                 goal = goal.plus_point(&g.mul_by_scalar(e))

@@ -1,8 +1,13 @@
 use crate::{
+    curve_arithmetic::arkworks_instances::ArkGroup,
     random_oracle::RandomOracle,
     sigma_protocols::{com_enc_eq, com_eq_sig, common::*, dlog},
 };
-use pairing::bls12_381::{Bls12, G1, G2};
+use ark_bls12_381::{G1Projective, G2Projective};
+
+type G1 = ArkGroup<G1Projective>;
+type G2 = ArkGroup<G2Projective>;
+type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
 
 #[test]
 pub fn test_and() {

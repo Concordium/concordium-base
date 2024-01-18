@@ -25,8 +25,11 @@ impl<C: Curve> Message<C> {
 
 #[cfg(test)]
 mod tests {
+    use ark_bls12_381::{G1Projective, G2Projective};
+
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1, G2};
 
     fn test_message_serialization_helper<C: Curve>() {
         let mut csprng = thread_rng();
@@ -39,7 +42,11 @@ mod tests {
     }
 
     #[test]
-    pub fn message_to_byte_conversion_g1() { test_message_serialization_helper::<G1>(); }
+    pub fn message_to_byte_conversion_g1() {
+        test_message_serialization_helper::<ArkGroup<G1Projective>>();
+    }
     #[test]
-    pub fn message_to_byte_conversion_g2() { test_message_serialization_helper::<G2>(); }
+    pub fn message_to_byte_conversion_g2() {
+        test_message_serialization_helper::<ArkGroup<G2Projective>>();
+    }
 }

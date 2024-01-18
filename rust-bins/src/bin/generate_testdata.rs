@@ -17,10 +17,12 @@ use concordium_base::{
     ps_sig,
 };
 use either::{Left, Right};
-use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::PathBuf};
 use structopt::StructOpt;
+
+type Bls12 = IpPairing;
+type G1 = ArCurve;
 
 type ExampleAttribute = AttributeKind;
 
@@ -478,6 +480,7 @@ fn main() {
     generate_initial(prf_key, 2, &ip_cdi_secret_key);
     generate_initial(prf_key_same, 3, &ip_cdi_secret_key); // Reuse of prf key
     let prf_key: prf::SecretKey<ArCurve> = prf::SecretKey::generate(&mut csprng);
-    let wrong_keys = ed25519_dalek::Keypair::generate(&mut csprng);
-    generate_initial(prf_key, 4, &wrong_keys.secret); // Wrong secret key
+    let mut wrong_keys = ed25519_dalek::SecretKey::default();
+    csprng.fill_bytes(&mut wrong_keys);
+    generate_initial(prf_key, 4, &wrong_keys); // Wrong secret key
 }

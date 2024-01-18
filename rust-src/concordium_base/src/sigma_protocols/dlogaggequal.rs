@@ -147,14 +147,19 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::curve_arithmetic::multiexp;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, G1};
+    use crate::{
+        curve_arithmetic::multiexp,
+        id::constants::{ArCurve, BaseField},
+    };
     use rand::*;
+    use std::str::FromStr;
+
+    type G1 = ArCurve;
+    type Fr = BaseField;
 
     pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
         // length of the challenge
-        let l = csprng.gen_range(0, 1000);
+        let l = csprng.gen_range(0..1000);
         let mut challenge_prefix = vec![0; l];
         for v in challenge_prefix.iter_mut() {
             *v = csprng.gen();

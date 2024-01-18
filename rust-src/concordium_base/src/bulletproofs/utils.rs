@@ -75,11 +75,12 @@ pub(crate) fn pad_vector_to_power_of_two<F: Field>(vec: &mut Vec<F>) {
 #[cfg(test)]
 mod tests {
 
+    use crate::curve_arithmetic::{arkworks_instances::ArkField, Field};
+
     use super::{pad_vector_to_power_of_two, z_vec};
-    use ff::Field;
     use rand::thread_rng;
 
-    type SomeField = pairing::bls12_381::Fq;
+    type SomeField = ArkField<ark_bls12_381::Fq>;
 
     #[test]
     fn test_vector_padding() {

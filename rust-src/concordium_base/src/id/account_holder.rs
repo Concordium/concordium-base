@@ -142,7 +142,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.response.r1.r2.responses.into_iter())
+        .zip(proof.response.r1.r2.responses)
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
@@ -216,7 +216,7 @@ pub fn generate_pio_v1<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.response.r2.responses.into_iter())
+        .zip(proof.response.r2.responses)
         .map(|((ar_id, f), w)| (*ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
 
@@ -1260,13 +1260,15 @@ mod tests {
 
     use crate::{
         common::types::{KeyIndex, KeyPair},
-        curve_arithmetic::Curve,
+        curve_arithmetic::{arkworks_instances::ArkGroup, Curve},
         id::{constants::*, identity_provider::*, secret_sharing::Threshold, test::*},
         pedersen_commitment::CommitmentKey as PedersenKey,
     };
+    use ark_bls12_381::g1;
+    use ark_ec::short_weierstrass::Projective;
     use either::Either::Left;
 
-    type ExampleCurve = pairing::bls12_381::G1;
+    type ExampleCurve = ArkGroup<Projective<g1::Config>>;
 
     const EXPIRY: TransactionTime = TransactionTime {
         seconds: 111111111111111111,
@@ -1353,7 +1355,8 @@ mod tests {
         let num_ars = 4;
         let threshold = 3;
         let ar_base = ExampleCurve::generate(&mut csprng);
-        let (ars_infos, _ar_keys) = test_create_ars(&ar_base, num_ars, &mut csprng);
+        let ars = test_create_ars(&ar_base, num_ars, &mut csprng);
+        let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = ars.0;
         let ck = PedersenKey::generate(&mut csprng);
         let value = Value::<ExampleCurve>::generate(&mut csprng);
 
@@ -1416,8 +1419,9 @@ mod tests {
             num_ars,
             &acc_data,
         );
-        let alist = test_create_attributes();
-        let ver_ok = verify_credentials(
+        let alist: AttributeList<<IpPairing as Pairing>::ScalarField, AttributeKind> =
+            test_create_attributes();
+        let ver_ok = verify_credentials::<IpPairing, AttributeKind, ArCurve>(
             &pio,
             context,
             &alist,

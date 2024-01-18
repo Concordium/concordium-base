@@ -877,6 +877,41 @@ pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T
     des.deserialize_str(Base16Visitor(Default::default()))
 }
 
+/// Encode a byte array as a hex string. This is more efficient than using
+/// the [`base16_encode`] implementation since it outputs the bytes in a chunk.
+pub(crate) fn base16_encode_array<S: Serializer, const N: usize>(
+    v: &[u8; N],
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    let b16_str = encode(v);
+    ser.serialize_str(&b16_str)
+}
+
+/// Dual to [`base16_encode_array`]. More efficient than [`base16_decode`] since
+/// it reads the entire byte array in one chunk.
+pub(crate) fn base16_decode_array<'de, D: Deserializer<'de>, const N: usize>(
+    des: D,
+) -> Result<[u8; N], D::Error> {
+    struct Base16Visitor<const N: usize>(std::marker::PhantomData<[u8; N]>);
+
+    impl<'de, const N: usize> Visitor<'de> for Base16Visitor<N> {
+        type Value = [u8; N];
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(formatter, "A base 16 string.")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            let bytes = decode(v).map_err(de::Error::custom)?;
+            bytes
+                .try_into()
+                .map_err(|_| de::Error::custom("Unexpected array length."))
+        }
+    }
+
+    des.deserialize_str(Base16Visitor(Default::default()))
+}
+
 /// Analogous to [base16_encode], but encodes into a string rather than a serde
 /// Serializer.
 pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(to_bytes(x)) }
@@ -963,7 +998,7 @@ fn test_set_serialization() {
 fn test_string_serialization() {
     use rand::Rng;
     for _ in 0..1000 {
-        let n: usize = rand::thread_rng().gen_range(0, 2 * MAX_PREALLOCATED_CAPACITY);
+        let n: usize = rand::thread_rng().gen_range(0..2 * MAX_PREALLOCATED_CAPACITY);
         let s: String = String::from_utf8(vec!['a' as u8; n]).unwrap();
         let deserialized = super::serialize_deserialize(&s).expect("Deserialization succeeds.");
         assert_eq!(s, deserialized);

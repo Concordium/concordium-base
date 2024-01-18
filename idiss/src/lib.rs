@@ -4,7 +4,7 @@ use concordium_base::{
     curve_arithmetic::*,
     id,
     id::{
-        constants::{ArCurve, AttributeKind},
+        constants::{ArCurve, AttributeKind, IpPairing},
         identity_provider::{
             create_initial_cdi, sign_identity_object, sign_identity_object_v1,
             validate_id_recovery_request, validate_request as ip_validate_request,
@@ -14,10 +14,12 @@ use concordium_base::{
     },
     ps_sig,
 };
-use pairing::bls12_381::{Bls12, G1};
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(feature = "nodejs")]
 use serde_json::ser::to_string;
+
+type Bls12 = IpPairing;
+type G1 = ArCurve;
 
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;

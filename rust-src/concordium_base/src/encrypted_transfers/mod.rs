@@ -279,14 +279,18 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
+
+    type SomeCurve = ArkGroup<G1Projective>;
 
     // Test that decryption is the inverse to encryption.
     #[test]
     fn test_encrypt_decrypt() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let context = GlobalContext::<SomeCurve>::generate(String::from("genesis_string"));
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -308,7 +312,7 @@ mod tests {
     #[test]
     fn test_scale() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let context = GlobalContext::<SomeCurve>::generate(String::from("genesis_string"));
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -334,7 +338,7 @@ mod tests {
     #[test]
     fn test_encryption_randomness_zero() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let context = GlobalContext::<SomeCurve>::generate(String::from("genesis_string"));
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let amount = Amount::from_micro_ccd(csprng.gen::<u64>());
         let dummy_encryption = encrypt_amount_with_fixed_randomness(&context, amount);
@@ -352,19 +356,20 @@ mod tests {
     #[test]
     fn test_make_and_verify_transfer_data() {
         let mut csprng = thread_rng();
-        let sk_sender: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
+        let sk_sender: SecretKey<SomeCurve> = SecretKey::generate_all(&mut csprng);
         let pk_sender = PublicKey::from(&sk_sender);
-        let sk_receiver: SecretKey<G1> = SecretKey::generate(&pk_sender.generator, &mut csprng);
+        let sk_receiver: SecretKey<SomeCurve> =
+            SecretKey::generate(&pk_sender.generator, &mut csprng);
         let pk_receiver = PublicKey::from(&sk_receiver);
         let s: u64 = csprng.gen(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
+        let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks =
             encrypt_amount(&context, &pk_sender, Amount::from_micro_ccd(s), &mut csprng);
 
@@ -400,17 +405,17 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_make_and_verify_sec_to_pub_transfer_data() {
         let mut csprng = thread_rng();
-        let sk_sender: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
+        let sk_sender: SecretKey<SomeCurve> = SecretKey::generate_all(&mut csprng);
         let pk_sender = PublicKey::from(&sk_sender);
         let s: u64 = csprng.gen(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
+        let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks =
             encrypt_amount(&context, &pk_sender, Amount::from_micro_ccd(s), &mut csprng);
 

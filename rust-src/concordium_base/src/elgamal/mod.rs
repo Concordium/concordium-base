@@ -207,8 +207,10 @@ pub fn decrypt_from_chunks_given_table<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1, G2};
+    use ark_bls12_381::{G1Projective, G2Projective};
     use rand::{rngs::ThreadRng, Rng};
 
     // This is a generic helper function that tests encryption/decryption in chunks.
@@ -231,10 +233,14 @@ mod tests {
     }
 
     #[test]
-    fn encrypt_decrypt_success_g1() { test_encrypt_decrypt_success_generic::<G1>() }
+    fn encrypt_decrypt_success_g1() {
+        test_encrypt_decrypt_success_generic::<ArkGroup<G1Projective>>()
+    }
 
     #[test]
-    fn encrypt_decrypt_success_g2() { test_encrypt_decrypt_success_generic::<G2>() }
+    fn encrypt_decrypt_success_g2() {
+        test_encrypt_decrypt_success_generic::<ArkGroup<G2Projective>>()
+    }
 
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
@@ -244,7 +250,7 @@ mod tests {
         let sk: SecretKey<C> = SecretKey::generate_all(&mut csprng);
         let pk = PublicKey::from(&sk);
         for _i in 1..10 {
-            let n = csprng.gen_range(0, 1000);
+            let n = csprng.gen_range(0..1000);
             let mut e = <C as Curve>::Scalar::zero();
             let one_scalar = Value::<C>::new(<C as Curve>::Scalar::one());
             for _ in 0..n {
@@ -259,12 +265,12 @@ mod tests {
 
     #[test]
     fn encrypt_decrypt_exponent_success_g1() {
-        test_encrypt_decrypt_exponent_success_generic::<G1>()
+        test_encrypt_decrypt_exponent_success_generic::<ArkGroup<G1Projective>>()
     }
 
     #[test]
     fn encrypt_decrypt_exponent_success_g2() {
-        test_encrypt_decrypt_exponent_success_generic::<G2>()
+        test_encrypt_decrypt_exponent_success_generic::<ArkGroup<G2Projective>>()
     }
 
     // This is a generic helper function that tests encryption/decryption in chunks.
@@ -278,7 +284,7 @@ mod tests {
 
         for _i in 1..10 {
             let scalar = Value::<C>::generate(&mut csprng);
-            let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
+            let chunk_size_index: usize = csprng.gen_range(0..possible_chunk_sizes.len());
             let chunk_size = possible_chunk_sizes[chunk_size_index];
             let chunks = value_to_chunks::<C>(&scalar, chunk_size);
             let retrieved_scalar = chunks_to_value::<C>(&chunks, chunk_size);
@@ -288,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn chunking_test_g1() { test_chunking_generic::<G1>() }
+    fn chunking_test_g1() { test_chunking_generic::<ArkGroup<G1Projective>>() }
 
     // This is a generic helper function that tests encryption/decryption in chunks.
     // It is parameterized by a curve, and the intention is that concrete tests are
@@ -302,7 +308,7 @@ mod tests {
 
         for _i in 1..2 {
             let scalar = Value::<C>::generate(&mut csprng);
-            let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
+            let chunk_size_index: usize = csprng.gen_range(0..possible_chunk_sizes.len());
             let chunk_size = possible_chunk_sizes[chunk_size_index];
             let m = 1 << (u8::from(chunk_size) - 1);
             let cipher_pairs =
@@ -317,5 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn chunked_encrypt_decrypt_test_g1() { test_chunked_encrypt_decrypt_generic::<G1>() }
+    fn chunked_encrypt_decrypt_test_g1() {
+        test_chunked_encrypt_decrypt_generic::<ArkGroup<G1Projective>>()
+    }
 }

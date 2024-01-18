@@ -1,10 +1,12 @@
 #[macro_use]
 extern crate criterion;
 
-use concordium_base::curve_arithmetic::*;
+use ark_bls12_381::G1Projective;
+use concordium_base::curve_arithmetic::{arkworks_instances::ArkGroup, Curve};
 use criterion::Criterion;
-use pairing::bls12_381::G1;
 use rand::*;
+
+type G1 = ArkGroup<G1Projective>;
 
 macro_rules! rand_m_of_length {
     ($length:expr, $rng:expr) => {{

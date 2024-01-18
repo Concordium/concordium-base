@@ -200,9 +200,13 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
     use crate::elgamal::{Message, SecretKey as ElgamalSecretKey};
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
+
+    type G1 = ArkGroup<G1Projective>;
 
     #[test]
     pub fn test_com_enc_eq_correctness() {

@@ -87,7 +87,7 @@ pub enum IdentifierType {
         parameter:  OwnedParameter,
     },
     /// Reference to a specific Ed25519 public key.
-    PublicKey { key: ed25519_dalek::PublicKey },
+    PublicKey { key: ed25519_dalek::VerifyingKey },
     /// Reference to a specific identity provider.
     Idp { idp_identity: IpIdentity },
 }
@@ -116,7 +116,7 @@ impl IdentifierType {
 
     /// If `self` is the [`PublicKey`](Self::PublicKey) variant then extract the
     /// public key, otherwise return [`None`].
-    pub fn extract_public_key(&self) -> Option<ed25519_dalek::PublicKey> {
+    pub fn extract_public_key(&self) -> Option<ed25519_dalek::VerifyingKey> {
         let IdentifierType::PublicKey {
             key,
         } = self else {

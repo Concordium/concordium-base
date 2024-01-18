@@ -458,11 +458,12 @@ pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use crate::curve_arithmetic::Curve;
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
     use rand::thread_rng;
-    type SomeCurve = G1;
+    type SomeCurve = ArkGroup<G1Projective>;
 
     #[test]
     fn testinner() {

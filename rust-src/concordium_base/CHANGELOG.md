@@ -1,9 +1,18 @@
 ## Unreleased changes
 
-- Improve performance of `multiexp*` family of functions.
-- Add traits `Field` and `PrimeField` with implementations for the underlying field of the `BLS12-381` curve.
 - Add `MultiExp` trait that allows to have different `multiexp` algorithm implementations for different curves.
+- Improve performance of the generic `multiexp` algorithm.
+- Add an instance of `MultiExp` that is specific to `curve25519`.
+- Add traits `Field` and `PrimeField` with implementations for the underlying field of the `BLS12-381` curve.
+- Add integration with the `arkworks` library interfaces for fields and elliptic curves (wrapper types and blanket trait implementations).
+- Add the `BLS12-381`implementation from the `arkworks` ecosystem.
+- The public types `id::constants::ArCurve`, `id::constants::IpPairing` are defined in terms of the `arkworks` BLS12-381 implementation.
+- Add a type alias `id::constants::BlsG2` for the `G2` group of `arkworks` BLS12-381.
+- Upgrade `ed25519-dalek` to `v2.0`.
+- Bump the `rand` version to `v0.8`
 - Add implementations of `Field`, `PrimeField` and `Curve` for the Ristretto representation of `curve25519`.
+- Remove `Curve::bytes_to_curve_unchecked()`.
+- Rename `Cipher::from_bytes_unchecked()` to `Cipher::from_bytes()`; the method uses `deserial()` instead of `Curve::bytes_to_curve_unchecked()`.
 - Support `P7` protocol version.
 - The `Debug` implementation for `ContractEvent` displays the value in `hex`.
   The alternate formatter (using `#`) displays it as a list of bytes.

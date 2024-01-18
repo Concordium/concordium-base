@@ -2,9 +2,10 @@
 
 use super::*;
 use crate::{common::*, ffi_helpers::*, random_oracle::RandomOracle, sigma_protocols::dlog};
-use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use std::{cmp::Ordering, slice};
+
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

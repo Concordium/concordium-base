@@ -217,12 +217,15 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
 #[allow(non_snake_case)]
 #[cfg(test)]
 mod tests {
+    use crate::id::constants::{ArCurve, BaseField};
+
     use super::*;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, G1};
-    // use pairing::bls12_381::G1;
+    use crate::curve_arithmetic::PrimeField;
     use rand::thread_rng;
-    // use std::convert::TryInto;
+    use std::str::FromStr;
+
+    type G1 = ArCurve;
+    type Fr = BaseField;
 
     #[test]
     pub fn test_com_lin_correctness() {

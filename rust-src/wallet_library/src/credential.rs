@@ -163,10 +163,12 @@ mod tests {
             attribute_randomness.insert(tag, randomness);
         }
 
-        let key = ed25519::PublicKey::from_bytes(
+        let key = ed25519::VerifyingKey::from_bytes(
             hex::decode("29723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b1")
                 .unwrap()
-                .as_slice(),
+                .as_slice()
+                .try_into()
+                .unwrap(),
         )
         .unwrap();
         let mut key_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();

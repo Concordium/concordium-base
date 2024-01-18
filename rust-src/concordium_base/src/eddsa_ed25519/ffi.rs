@@ -12,27 +12,29 @@ use crate::random_oracle::RandomOracle;
 #[no_mangle]
 extern "C" fn eddsa_priv_key() -> *mut SecretKey {
     let mut csprng = thread_rng();
-    let sk = SecretKey::generate(&mut csprng);
-    Box::into_raw(Box::new(sk))
+    let mut secret_key = SecretKey::default();
+    csprng.fill_bytes(&mut secret_key);
+    Box::into_raw(Box::new(secret_key))
 }
 
-// error encodeing
+// error encoding
 //-1 bad input
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-extern "C" fn eddsa_pub_key(sk_ptr: *mut SecretKey) -> *mut PublicKey {
-    let sk = from_ptr!(sk_ptr);
-    Box::into_raw(Box::new(PublicKey::from(sk)))
+extern "C" fn eddsa_pub_key(sk_ptr: *mut SecretKey) -> *mut VerifyingKey {
+    let secret_key = from_ptr!(sk_ptr);
+    let signing_key = SigningKey::from_bytes(secret_key);
+    Box::into_raw(Box::new(signing_key.verifying_key()))
 }
 
 macro_free_ffi!(Box eddsa_sign_free, SecretKey);
-macro_free_ffi!(Box eddsa_public_free, PublicKey);
+macro_free_ffi!(Box eddsa_public_free, VerifyingKey);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 extern "C" fn eddsa_sign_to_bytes(input_ptr: *mut SecretKey, output_len: *mut size_t) -> *const u8 {
     let input = from_ptr!(input_ptr);
-    let bytes = input.to_bytes().to_vec();
+    let bytes = input.to_vec();
     unsafe { *output_len = bytes.len() as size_t }
     let ret_ptr = bytes.as_ptr();
     ::std::mem::forget(bytes);
@@ -42,7 +44,7 @@ extern "C" fn eddsa_sign_to_bytes(input_ptr: *mut SecretKey, output_len: *mut si
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 extern "C" fn eddsa_public_to_bytes(
-    input_ptr: *mut PublicKey,
+    input_ptr: *mut VerifyingKey,
     output_len: *mut size_t,
 ) -> *const u8 {
     let input = from_ptr!(input_ptr);
@@ -55,13 +57,21 @@ extern "C" fn eddsa_public_to_bytes(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-extern "C" fn eddsa_public_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut PublicKey {
+extern "C" fn eddsa_public_from_bytes(
+    input_bytes: *mut u8,
+    input_len: size_t,
+) -> *mut VerifyingKey {
     let len = input_len;
     let bytes = slice_from_c_bytes!(input_bytes, len);
-    let e = PublicKey::from_bytes(bytes);
-    match e {
-        Ok(r) => Box::into_raw(Box::new(r)),
-        Err(_) => ::std::ptr::null_mut(),
+    let res: Result<[u8; 32], _> = bytes.try_into();
+    if let Ok(byte_array) = res {
+        let e = VerifyingKey::from_bytes(&byte_array);
+        match e {
+            Ok(r) => Box::into_raw(Box::new(r)),
+            Err(_) => ::std::ptr::null_mut(),
+        }
+    } else {
+        ::std::ptr::null_mut()
     }
 }
 
@@ -70,8 +80,8 @@ extern "C" fn eddsa_public_from_bytes(input_bytes: *mut u8, input_len: size_t) -
 extern "C" fn eddsa_sign_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut SecretKey {
     let len = input_len;
     let bytes = slice_from_c_bytes!(input_bytes, len);
-    let e = SecretKey::from_bytes(bytes);
-    match e {
+    let res: Result<[u8; 32], _> = bytes.try_into();
+    match res {
         Ok(r) => Box::into_raw(Box::new(r)),
         Err(_) => ::std::ptr::null_mut(),
     }
@@ -83,14 +93,12 @@ extern "C" fn eddsa_sign(
     message: *const u8,
     len: usize,
     sk_ptr: *mut SecretKey,
-    pk_ptr: *mut PublicKey,
     signature_bytes: &mut [u8; SIGNATURE_LENGTH],
 ) {
     let sk = from_ptr!(sk_ptr);
-    let pk = from_ptr!(pk_ptr);
     let data: &[u8] = slice_from_c_bytes!(message, len);
-    let expanded_sk = ExpandedSecretKey::from(sk);
-    let signature = expanded_sk.sign(data, pk);
+    let expanded_sk = SigningKey::from(sk);
+    let signature = expanded_sk.sign(data);
     signature_bytes.copy_from_slice(&signature.to_bytes());
 }
 // Error encoding
@@ -101,7 +109,7 @@ extern "C" fn eddsa_sign(
 extern "C" fn eddsa_verify(
     message: *const u8,
     len: usize,
-    pk_ptr: *mut PublicKey,
+    pk_ptr: *mut VerifyingKey,
     signature_bytes: &[u8; SIGNATURE_LENGTH],
 ) -> i32 {
     let sig = match Signature::try_from(&signature_bytes[..]) {
@@ -127,9 +135,14 @@ extern "C" fn eddsa_verify_dlog_ed25519(
     let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len);
     let public_key = {
         let pk_bytes = slice_from_c_bytes!(public_key_bytes, PUBLIC_KEY_LENGTH);
-        match PublicKey::from_bytes(pk_bytes) {
-            Err(_) => return -1,
-            Ok(pk) => pk,
+        let res: Result<[u8; 32], _> = pk_bytes.try_into();
+        if let Ok(pk_byte_array) = res {
+            match VerifyingKey::from_bytes(&pk_byte_array) {
+                Err(_) => return -1,
+                Ok(pk) => pk,
+            }
+        } else {
+            return -1;
         }
     };
     let proof = {
@@ -158,16 +171,23 @@ extern "C" fn eddsa_prove_dlog_ed25519(
     let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len);
     let public_key = {
         let pk_bytes = slice_from_c_bytes!(public_key_bytes, PUBLIC_KEY_LENGTH);
-        match PublicKey::from_bytes(pk_bytes) {
-            Err(_) => return -1,
-            Ok(pk) => pk,
+        let res: Result<[u8; PUBLIC_KEY_LENGTH], _> = pk_bytes.try_into();
+        if let Ok(pk_byte_array) = res {
+            match VerifyingKey::from_bytes(&pk_byte_array) {
+                Err(_) => return -1,
+                Ok(pk) => pk,
+            }
+        } else {
+            return -1;
         }
     };
     let secret_key = {
         let sk_bytes = slice_from_c_bytes!(secret_key_bytes, SECRET_KEY_LENGTH);
-        match SecretKey::from_bytes(sk_bytes) {
-            Err(_) => return -2,
-            Ok(sk) => sk,
+        let res: Result<[u8; 32], _> = sk_bytes.try_into();
+        if let Ok(sk_byte_array) = res {
+            sk_byte_array
+        } else {
+            return -2;
         }
     };
     let proof_bytes = mut_slice_from_c_bytes!(proof_ptr, PROOF_LENGTH);

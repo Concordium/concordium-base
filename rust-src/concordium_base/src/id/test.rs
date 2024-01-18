@@ -16,6 +16,7 @@ use crate::{
         types::*,
     },
 };
+use ed25519::SigningKey;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use rand::*;
@@ -60,7 +61,7 @@ pub fn test_create_ars<T: Rng>(
 }
 
 /// Create identity provider with #num_ars ARs to be used by tests
-pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
+pub fn test_create_ip_info<T: Rng + rand::CryptoRng>(
     csprng: &mut T,
     num_ars: u8,
     max_attrs: u8,
@@ -70,9 +71,10 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
     let ps_len = (5 + num_ars + max_attrs) as usize;
     let ip_secret_key = crate::ps_sig::SecretKey::<IpPairing>::generate(ps_len, csprng);
     let ip_verify_key = crate::ps_sig::PublicKey::from(&ip_secret_key);
-    let keypair = ed25519::Keypair::generate(csprng);
-    let ip_cdi_verify_key = keypair.public;
-    let ip_cdi_secret_key = keypair.secret;
+    let signing = SigningKey::generate(csprng);
+    let secret = signing.to_bytes();
+    let ip_cdi_verify_key = signing.verifying_key();
+    let ip_cdi_secret_key = secret;
 
     // Return IpData with public and private keys.
     IpData {

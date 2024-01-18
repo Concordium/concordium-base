@@ -1,9 +1,13 @@
+use ark_bls12_381::G1Projective;
 use concordium_base::{
-    curve_arithmetic::*, id::utils::commitment_to_share, pedersen_commitment::Commitment,
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
+    id::utils::commitment_to_share,
+    pedersen_commitment::Commitment,
 };
 use criterion::*;
-use pairing::bls12_381::G1;
 use rand::*;
+
+type G1 = ArkGroup<G1Projective>;
 
 fn bench_commitment_to_share(c: &mut Criterion) {
     let mut csprng = thread_rng();
