@@ -11,6 +11,7 @@ anyhow = "1.0"
 hex = "0.4"
 serde_json = "1.0"
 thiserror = "1.0"
+either = "1.6"
 
 [dependencies.key_derivation]
 path = "../key_derivation"

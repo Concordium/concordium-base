@@ -1,9 +1,8 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use concordium_base::{
     common::{
-        base16_decode_string,
+        base16_encode_string,
         types::{KeyIndex, TransactionTime},
-        Buffer, Serial,
     },
     id::{
         account_holder::create_unsigned_credential,
@@ -11,8 +10,10 @@ use concordium_base::{
         dodis_yampolskiy_prf as prf,
         pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue, Value},
         types::*,
+        utils::credential_hash_to_sign,
     },
 };
+use either::Either::Left;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -125,26 +126,17 @@ pub struct CredentialDeploymentDetails {
     unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
 }
 
-/// Defines the byte serialization of the credential deployment details. Note
-/// that this serialization is for a new credential being deployed, which the
-/// explicit 0 byte denotes.
-impl Serial for CredentialDeploymentDetails {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        self.unsigned_cdi.serial(out);
-        0u8.serial(out);
-        self.expiry.seconds.serial(out);
-    }
-}
-
-/// Serializes the credential deployment details. It is this serialization that
-/// should be signed when creating a new credential for deployment. The
-/// serialized bytes are returned hex encoded.
-pub fn serialize_credential_deployment_details(
+/// Computes the hash of a new credential deployment that should be signed
+/// by the account keys for deployment. The hash is returned hex encoded.
+pub fn compute_credential_deployment_hash_to_sign(
     credential_deployment_details: CredentialDeploymentDetails,
 ) -> String {
-    let mut serialized_details = Vec::<u8>::new();
-    credential_deployment_details.serial(&mut serialized_details);
-    hex::encode(serialized_details)
+    let credential_deployment_hash = credential_hash_to_sign(
+        &credential_deployment_details.unsigned_cdi.values,
+        &credential_deployment_details.unsigned_cdi.proofs,
+        &Left(credential_deployment_details.expiry),
+    );
+    hex::encode(credential_deployment_hash)
 }
 
 /// The required credential deployment context required to correctly serialize
@@ -153,7 +145,7 @@ pub fn serialize_credential_deployment_details(
 #[serde(rename_all = "camelCase")]
 pub struct CredentialDeploymentPayload {
     unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
-    signatures:   Vec<String>,
+    signatures:   BTreeMap<KeyIndex, AccountOwnershipSignature>,
 }
 
 /// Serializes the credential deployment payload. The result of this
@@ -164,21 +156,14 @@ pub fn serialize_credential_deployment_payload(
 ) -> Result<String> {
     let cdi = get_credential_deployment_info(payload.signatures, payload.unsigned_cdi)?;
     let acc_cred = AccountCredential::Normal { cdi };
-
-    let mut acc_cred_ser = Vec::<u8>::new();
-    acc_cred.serial(&mut acc_cred_ser);
-
-    Ok(hex::encode(acc_cred_ser))
+    Ok(base16_encode_string(&acc_cred))
 }
 
 fn get_credential_deployment_info(
-    signatures: Vec<String>,
+    signatures: BTreeMap<KeyIndex, AccountOwnershipSignature>,
     unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
 ) -> Result<CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>, anyhow::Error> {
-    let signature_map = build_signature_map(&signatures)?;
-    let proof_acc_sk = AccountOwnershipProof {
-        sigs: signature_map,
-    };
+    let proof_acc_sk = AccountOwnershipProof { sigs: signatures };
 
     let cdp = CredDeploymentProofs {
         id_proofs: unsigned_cdi.proofs,
@@ -189,28 +174,6 @@ fn get_credential_deployment_info(
         values: unsigned_cdi.values,
         proofs: cdp,
     })
-}
-
-fn build_signature_map(
-    signatures: &[String],
-) -> Result<BTreeMap<KeyIndex, AccountOwnershipSignature>, anyhow::Error> {
-    signatures
-        .iter()
-        .enumerate()
-        .map(|(index, key)| {
-            let index_u8: u8 = match index.try_into() {
-                Ok(idx) => idx,
-                Err(err) => return Err(anyhow!(err)),
-            };
-
-            let decoded_key = match base16_decode_string(key) {
-                Ok(decoded) => decoded,
-                Err(e) => return Err(anyhow!(e)),
-            };
-
-            Ok((KeyIndex(index_u8), decoded_key))
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -306,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    pub fn serialize_credential_deployment_details_test() {
+    pub fn compute_credential_deployment_hash_to_sign_test() {
         let unsigned_cdi = create_unsigned_credential().unsigned_cdi;
         let expiry = TransactionTime::from_seconds(0x0685810406858104);
 
@@ -315,19 +278,20 @@ mod tests {
             unsigned_cdi,
         };
 
-        let serialized_details = serialize_credential_deployment_details(details);
+        let credential_deployment_sign_digest = compute_credential_deployment_hash_to_sign(details);
 
-        assert!(serialized_details.contains("01000029723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b101b317d3fea7de56f8c96f6e72820c5cd502cc0eef8454016ee548913255897c6b52156cc60df965d3efb3f160eff6ced40000000001000300000001"));
-        assert!(serialized_details.contains("0685810406858104"));
+        assert_eq!(credential_deployment_sign_digest.len(), 64);
     }
 
     #[test]
     pub fn serialize_credential_deployment_payload_test() {
         let unsigned_cdi = create_unsigned_credential().unsigned_cdi;
 
-        let signature = "828e17e41937bacb9e7a1bbc3a7e5178cd49abf2e5255479037671d0b2db03bb717bd67a8e873f593622e4f2acd3defba6389bc67b7559ee8d7fac54e22f110251089f0ba6ccd02e0a625b6225b6eb256d8643c647e6389bfcf305a1eb0289e5";
-        let mut signatures = Vec::<String>::new();
-        signatures.push(signature.to_string());
+        let signature_hex = "6dd355667fae4eb43c6e0ab92e870edb2de0a88cae12dbd8591507f584fe4912babff497f1b8edf9567d2483d54ddc6459bea7855281b7a246a609e3001a4e08";
+        let signature = ed25519::Signature::from_str(signature_hex).unwrap();
+
+        let mut signatures: BTreeMap<KeyIndex, AccountOwnershipSignature> = BTreeMap::new();
+        signatures.insert(KeyIndex(0), AccountOwnershipSignature::from(signature));
 
         let payload = CredentialDeploymentPayload {
             unsigned_cdi,
@@ -337,6 +301,6 @@ mod tests {
         let serialized_payload = serialize_credential_deployment_payload(payload).unwrap();
 
         assert!(serialized_payload.contains("0101000029723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b101b317d3fea7de56f8c96f6e72820c5cd502cc0eef8454016ee548913255897c6b52156cc60df965d3efb3f160eff6ced40000000001000300000001"));
-        assert!(serialized_payload.contains("828e17e41937bacb9e7a1bbc3a7e5178cd49abf2e5255479037671d0b2db03bb717bd67a8e873f593622e4f2acd3defba6389bc67b7559ee8d7fac54e22f11"));
+        assert!(serialized_payload.contains(signature_hex));
     }
 }
