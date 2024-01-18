@@ -151,18 +151,16 @@ pub struct CredentialDeploymentPayload {
 /// Serializes the credential deployment payload. The result of this
 /// serialization should be sent as a raw payload to the node. The serialized
 /// bytes are returned hex encoded.
-pub fn serialize_credential_deployment_payload(
-    payload: CredentialDeploymentPayload,
-) -> Result<String> {
-    let cdi = get_credential_deployment_info(payload.signatures, payload.unsigned_cdi)?;
+pub fn serialize_credential_deployment_payload(payload: CredentialDeploymentPayload) -> String {
+    let cdi = get_credential_deployment_info(payload.signatures, payload.unsigned_cdi);
     let acc_cred = AccountCredential::Normal { cdi };
-    Ok(base16_encode_string(&acc_cred))
+    base16_encode_string(&acc_cred)
 }
 
 fn get_credential_deployment_info(
     signatures: BTreeMap<KeyIndex, AccountOwnershipSignature>,
     unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
-) -> Result<CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>, anyhow::Error> {
+) -> CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind> {
     let proof_acc_sk = AccountOwnershipProof { sigs: signatures };
 
     let cdp = CredDeploymentProofs {
@@ -170,10 +168,10 @@ fn get_credential_deployment_info(
         proof_acc_sk,
     };
 
-    Ok(CredentialDeploymentInfo {
+    CredentialDeploymentInfo {
         values: unsigned_cdi.values,
         proofs: cdp,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -298,7 +296,7 @@ mod tests {
             signatures,
         };
 
-        let serialized_payload = serialize_credential_deployment_payload(payload).unwrap();
+        let serialized_payload = serialize_credential_deployment_payload(payload);
 
         assert!(serialized_payload.contains("0101000029723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b101b317d3fea7de56f8c96f6e72820c5cd502cc0eef8454016ee548913255897c6b52156cc60df965d3efb3f160eff6ced40000000001000300000001"));
         assert!(serialized_payload.contains(signature_hex));
