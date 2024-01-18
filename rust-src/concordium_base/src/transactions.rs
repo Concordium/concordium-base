@@ -1409,6 +1409,19 @@ impl ExactSizeTransactionSigner for AccountKeys {
     }
 }
 
+impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
+    fn sign_transaction_hash(
+        &self,
+        hash_to_sign: &hashes::TransactionSignHash,
+    ) -> TransactionSignature {
+        (*self).sign_transaction_hash(hash_to_sign)
+    }
+}
+
+impl<'a, X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &'a X {
+    fn num_keys(&self) -> u32 { (*self).num_keys() }
+}
+
 impl TransactionSigner for BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>> {
     fn sign_transaction_hash(
         &self,
