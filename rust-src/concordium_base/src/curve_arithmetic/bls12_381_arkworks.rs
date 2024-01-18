@@ -285,7 +285,7 @@ mod tests {
         }
     }
 
-    /// Test that `into_repr()` correclty converts a scalar constructed from a
+    /// Test that `into_repr()` correctly converts a scalar constructed from a
     /// byte array to an array of limbs with least significant digits first.
     #[test]
     fn test_into() {
