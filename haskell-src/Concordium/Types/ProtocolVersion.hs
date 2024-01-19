@@ -273,12 +273,12 @@ $( singletons
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
         -- to the hashing scheme.
-        -- \* 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
-        -- All the contents of the transaction summaries are used for computing the hash.
-        -- \* 'TOV1' is used in P5 and P6. The hash is computed via a merkle tree and the
-        -- exact reject reasons for failed transactions are omitted from the hash.
-        -- \* 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
-        -- except the merkle trees are hashed to include the size.
+        --  * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+        --  All the contents of the transaction summaries are used for computing the hash.
+        --  * 'TOV1' is used in P5 and P6. The hash is computed via a merkle tree and the
+        --  exact reject reasons for failed transactions are omitted from the hash.
+        --  * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
+        --  except the merkle trees are hashed to include the size.
         data TransactionOutcomesVersion
             = TOV0
             | TOV1

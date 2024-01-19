@@ -6,11 +6,13 @@
 -- | Definitions for working with Merkle proofs.
 -- This module defines a raw format for a Merkle proof (namely 'MerkleProof') that can be used to
 -- represent very generic Merkle proof formats.
+--
 -- Beyond this, it provides a framework for parsing Merkle proofs into path-value mappings
 -- (represented as 'PartialTree') based on schemas (represented as 'MerkleSchema').
+-- The parsing framework is intended to support testing generated Merkle proofs.
+-- SDKs are expected to provide appropriate parsing of raw Merkle proofs into suitable data types.
 module Concordium.MerkleProofs where
 
-import Control.Applicative
 import Control.Monad
 import Control.Monad.Error.Class
 import Control.Monad.State
@@ -73,7 +75,7 @@ merkleBuilder (SubProof sp) = Builder.shortByteString (SHA256.hashToShortByteStr
 
 -- * Parsing Merkle proofs
 
--- | How a size is encoded in a Merkle proof.
+-- | How a size of some data or datastructure is encoded in a Merkle proof.
 -- (All sizes are unsigned, since a negative size is meaningless.)
 data SizeEncoding
     = -- | 16-bit big-endian
@@ -88,48 +90,48 @@ data SizeEncoding
 -- We do not fully parse data, but just tokenise it to fixed or variable length byte strings.
 data MerkleData
     = -- | A byte string of the given fixed length.
-      FixedLengthBytes Word64
+      FixedLengthBytes !Word64
     | -- | A variable length string of bytes prefixed by its length, encoded based on the size
       -- encoding.
-      VariableLengthBytes SizeEncoding
+      VariableLengthBytes !SizeEncoding
     deriving (Show)
 
 -- | Tag type used to label branches in the parse tree of a Merkle proof.
 type Tag = String
 
+-- | A schema that defines how a Merkle proof should be parsed into a 'PartialTree' by means
+-- of a formal grammar. The schema defines production rules for each non-terminal symbol. There
+-- should be a production rule for every 'NonTerminal' that occurs in a 'MerkleBody'.
+-- It is important in general that a schema should not allow ambiguity.
+type MerkleSchema = HM.HashMap NonTerminal MerkleBody
+
 -- | Identifier type used to identify non-terminals in a Merkle schema.
 type NonTerminal = Int
 
--- | The body of a rewrite rule from a 'MerkleSchema'.
+-- | The body of a production rule from a 'MerkleSchema'.
 data MerkleBody
     = -- | The provided 'ByteString' should appear literally.
-      LiteralBytes BS.ByteString
+      LiteralBytes !BS.ByteString
     | -- | Some particular data should appear. When parsed, it will be identified by the given tag.
-      Tagged Tag MerkleData
+      Tagged !Tag !MerkleData
     | -- | A sequence of tokens should appear.
-      Sequence [MerkleBody]
+      Sequence ![MerkleBody]
     | -- | Either the left or right branch should appear.
       --  In general, the branches should be defined such that there is no proof that can match both.
-      Choice MerkleBody MerkleBody
+      Choice !MerkleBody !MerkleBody
     | -- | A sub-proof should appear. When parsed, the sub-proof will be identified by the given tag.
-      Hashed Tag NonTerminal
+      Hashed !Tag !NonTerminal
     | -- | The given body should appear a number of times, preceded by the number of times it
       --  appears. The 'SizeEncoding' argument specifies how the number of repetitions is encoded.
       -- When parsed, the array will appear under the given tag, and beneath that,
       -- each element will be tagged "0", "1", etc. according to the index in the array.
-      RepeatedBE Tag SizeEncoding MerkleBody
+      RepeatedBE !Tag !SizeEncoding !MerkleBody
     | -- | An array of tokens should appear as a left-full Merkle binary tree.
       -- The size of the tree should appear at the root (the 'SizeEncoding' specifies how the size
       -- is represented). An empty LFMB-tree is represented by the hash of the 'BS.ByteString'.
       -- The contents of the array are tagged as in the case of 'RepeatedBE'.
-      LFMBTree Tag SizeEncoding BS.ByteString MerkleBody
+      LFMBTree !Tag !SizeEncoding !BS.ByteString !MerkleBody
     deriving (Show)
-
--- | A schema that defines how a Merkle proof should be parsed into a 'PartialTree'.
--- The schema defines production rules for each non-terminal symbol. There should be a production
--- rule for every 'NonTerminal' that occurs in a 'MerkleBody'.
--- It is important in general that a schema should not allow ambiguity.
-type MerkleSchema = HM.HashMap NonTerminal MerkleBody
 
 -- | The representation of a parsed Merkle proof as a tree, where leaves are data values (as raw
 -- bytes) and branches are labelled by 'Tag's.
@@ -138,26 +140,32 @@ type PartialTree = HM.HashMap Tag PartialBranch
 -- | A branch in a 'PartialTree'.
 data PartialBranch
     = -- | A leaf branch, containing a raw data value.
-      Leaf BS.ByteString
+      Leaf !BS.ByteString
     | -- | A sub-tree.
-      Node PartialTree
+      Node !PartialTree
     deriving (Eq, Show)
 
 -- ** Parser monad
 
--- | The context for the 'Parse' monad.
-data ParserContext r d c e a = ParserContext
+-- | The context for the 'Parse' monad. The type parameters are:
+--
+--   * @result@ - the ultimate result type of the continuation
+--   * @parseData@ - the type of the data being parsed
+--   * @context@ - the type of reader data
+--   * @error@ - the type of parser errors
+--   * @a@ - the return type
+data ParserContext result parseData context error a = ParserContext
     { -- | The remaining input data to parse.
-      parserInput :: d,
+      parserInput :: !parseData,
       -- | The reader context. Typically used to provide context for errors.
-      parserReaderContext :: c,
+      parserReaderContext :: !context,
       -- | Error continuation. This takes an error value and produces a value.
-      parserError :: e -> r,
+      parserError :: error -> result,
       -- | Success continuation. This takes a result value, the remaining input, and the reader
       -- context. (The continuation is parametrised by the reader context to support the
       -- implementation of 'local', which modifies the reader context for a sub-computation, but
       -- restores it for the continuation.)
-      parserCont :: a -> d -> c -> r
+      parserCont :: a -> parseData -> context -> result
     }
 
 -- | A generic monad for parsing. This is implemented using continuations. The type parameters are:
@@ -208,11 +216,6 @@ Parse a <<|> Parse b = Parse $ \pc ->
 Parse a <|>> Parse b = Parse $ \pc ->
     a pc{parserError = \_ -> b pc}
 
-instance (Monoid e) => Alternative (Parse r d c e) where
-    empty = Parse $ \pc -> parserError pc mempty
-    Parse a <|> Parse b = Parse $ \pc ->
-        a pc{parserError = \e1 -> b pc{parserError = \e2 -> parserError pc (e1 <> e2)}}
-
 instance MonadError e (Parse r d c e) where
     throwError e = Parse $ \pc -> parserError pc e
     catchError (Parse tryBlock) catchBlock = Parse $ \pc ->
@@ -237,13 +240,13 @@ data ParseError
     | -- | A sub-proof is present, but raw data is expected by the schema.
       UnexpectedSubProof
     | -- | A literal byte string was expected, but a different one was found.
-      Expected BS.ByteString BS.ByteString
+      Expected !BS.ByteString !BS.ByteString
     | -- | Attempted to parse a  'NonTerminal' that has no production rule in the schema.
-      UnknownSchemaId NonTerminal
+      UnknownSchemaId !NonTerminal
     | -- | There should be no more data, but there still is.
       ExpectedEndOfInput
     | -- | The error occurred while attempting to parse the given tag.
-      Context Tag ParseError
+      Context !Tag !ParseError
     deriving (Eq, Show)
 
 -- | Apply a context of tags to a 'ParseError'.
