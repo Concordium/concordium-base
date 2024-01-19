@@ -281,15 +281,16 @@ pub fn credential_hash_to_sign<
     values: &CredentialDeploymentValues<C, AttributeType>,
     proofs: &IdOwnershipProofs<P, C>,
     new_or_existing: &Either<TransactionTime, AccountAddress>,
-) -> Vec<u8> {
+) -> [u8; 32] {
+    use crate::common::Serial;
     let mut hasher = Sha256::new();
-    hasher.update(&to_bytes(&values));
-    hasher.update(&to_bytes(&proofs));
+    values.serial(&mut hasher);
+    proofs.serial(&mut hasher);
     // the serialization of Either has 0 tag for the left variant, and 1 for the
     // right
-    hasher.update(&to_bytes(&new_or_existing));
+    new_or_existing.serial(&mut hasher);
     let to_sign = &hasher.finalize();
-    to_sign.to_vec()
+    to_sign.into()
 }
 
 /// Given two ordered iterators call the corresponding functions in the
