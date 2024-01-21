@@ -2664,7 +2664,7 @@ mod serde_impl {
             // The buffer must be large enough to contain the 32 bytes for the address, 4
             // bytes for a checksum and 1 byte for the version.
             let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE + 4 + 1];
-            let len = bs58::decode(v).with_check(Some(1)).into(&mut buf)?;
+            let len = bs58::decode(v).with_check(Some(1)).onto(&mut buf)?;
             // Prepends 1 byte for the version
             if len != 1 + ACCOUNT_ADDRESS_SIZE {
                 return Err(AccountAddressParseError::InvalidByteLength(len));

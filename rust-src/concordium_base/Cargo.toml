@@ -42,7 +42,7 @@ zeroize = "1.1"
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
 num-bigint = "0.4"
 num-traits = "0.2"
-bs58 = { version = "0.4", features = ["check"] }
+bs58 = { version = "0.5", features = ["check"] }
 leb128 = "0.2"
 rayon = "1.7"
 subtle = "2.3"
