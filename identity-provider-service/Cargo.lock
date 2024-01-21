@@ -490,7 +490,6 @@ dependencies = [
  "ed25519-dalek",
  "either",
  "ff 0.13.0",
- "group 0.2.0",
  "hex",
  "itertools",
  "leb128",

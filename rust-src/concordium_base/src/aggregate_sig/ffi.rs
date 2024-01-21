@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::{common::*, ffi_helpers::*, random_oracle::RandomOracle, sigma_protocols::dlog};
-use rand::{rngs::StdRng, thread_rng, SeedableRng};
+use rand::{thread_rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::{cmp::Ordering, slice};
 
 type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
@@ -222,7 +223,7 @@ pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *mut SecretK
     for (i, byte) in s.to_le_bytes().iter().enumerate() {
         seed_[31 - i] = *byte;
     }
-    let mut rng: StdRng = SeedableRng::from_seed(seed_);
+    let mut rng: ChaCha20Rng = SeedableRng::from_seed(seed_);
     Box::into_raw(Box::new(SecretKey::generate(&mut rng)))
 }
 
@@ -264,7 +265,8 @@ pub extern "C" fn bls_check_proof(
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
 
     #[test]
     fn test_verify_aggregate_ffi() {
@@ -342,7 +344,7 @@ mod test {
     #[test]
     fn test_eq() {
         for _i in 0..10 {
-            let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+            let mut rng: ChaCha20Rng = SeedableRng::from_rng(thread_rng()).unwrap();
 
             let mut sk1 = SecretKey::<Bls12>::generate(&mut rng);
             let mut sk2 = SecretKey::<Bls12>::generate(&mut rng);

@@ -281,7 +281,7 @@ fn hash_message(m: &[u8]) -> Output<Sha512> { Sha512::digest(m) }
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::{rngs::StdRng, thread_rng, SeedableRng};
+    use rand::thread_rng;
     use std::convert::TryFrom;
 
     const SIGNERS: usize = 500;
@@ -293,7 +293,7 @@ mod test {
     // corresponding secret and public key
     fn get_sks_pks<P: Pairing>(
         amt: usize,
-        rng: &mut StdRng,
+        rng: &mut impl Rng,
     ) -> (Vec<SecretKey<P>>, Vec<PublicKey<P>>) {
         let sks: Vec<SecretKey<P>> = (0..amt).map(|_| SecretKey::<P>::generate(rng)).collect();
 
@@ -308,7 +308,7 @@ mod test {
 
     #[test]
     fn test_sign_and_verify() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
 
         for _ in 0..TEST_ITERATIONS {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
@@ -340,7 +340,7 @@ mod test {
 
     #[test]
     fn test_verify_aggregate_sig() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
 
         let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
 
@@ -383,7 +383,7 @@ mod test {
 
     #[test]
     fn test_verify_aggregate_sig_trusted_keys() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
         for _ in 0..TEST_ITERATIONS {
             let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
             let m: [u8; 32] = rng.gen::<[u8; 32]>();
@@ -418,7 +418,7 @@ mod test {
 
     #[test]
     fn test_verification_empty_signers() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
         for _ in 0..TEST_ITERATIONS {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let m: [u8; 32] = rng.gen::<[u8; 32]>();
@@ -431,7 +431,7 @@ mod test {
 
     #[test]
     fn test_has_duplicates() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
 
         for _ in 0..TEST_ITERATIONS {
             let signers: u64 = u64::try_from(SIGNERS)
@@ -454,7 +454,7 @@ mod test {
 
     #[test]
     fn test_to_from_bytes_identity() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
 
         for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
@@ -489,7 +489,7 @@ mod test {
 
     #[test]
     fn test_to_bytes_correct_length() {
-        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+        let mut rng = thread_rng();
 
         for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
