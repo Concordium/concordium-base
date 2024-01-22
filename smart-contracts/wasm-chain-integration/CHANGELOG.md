@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-smart-contract-engine 4.0.0 (2024-01-22)
+
 - Add a `branch_statistics` function to get insight into smart contract state
   tree structure.
 - Remove `utils::WasmVersion` to instead reexport a similar type from `concordium_contracts_common`.
