@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 4.0.0 (2024-01-22)
+
 - Add `MultiExp` trait that allows to have different `multiexp` algorithm implementations for different curves.
 - Improve performance of the generic `multiexp` algorithm.
 - Add an instance of `MultiExp` that is specific to `curve25519`.
