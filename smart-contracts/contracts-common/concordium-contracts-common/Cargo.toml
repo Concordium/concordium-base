@@ -41,7 +41,7 @@ version = "0.4"
 
 [dependencies.bs58]
 optional = true
-version = "0.4"
+version = "0.5"
 features = ["check"]
 
 [dependencies.num-bigint]
