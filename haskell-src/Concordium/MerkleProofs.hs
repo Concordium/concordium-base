@@ -245,6 +245,8 @@ data ParseError
       UnknownSchemaId !NonTerminal
     | -- | There should be no more data, but there still is.
       ExpectedEndOfInput
+    | -- | The size of a datastructure exceeds what can reasonably be parsed.
+      SizeOutOfBounds
     | -- | The error occurred while attempting to parse the given tag.
       Context !Tag !ParseError
     deriving (Eq, Show)
@@ -277,6 +279,9 @@ parseBytes len0 = Parse $ \ParserContext{..} ->
     inner parserError _ _ (SubProof _ : _) _ = parserError UnexpectedSubProof
 
 -- | Given a parser for a sub-proof, parse that sub-proof as part of a larger proof.
+--  We expect to either parse a 'SubProof' branch (accepted by the parser), which corresponds to
+--  the branch of the tree being present in the proof, or a hash corresponding to the root hash of
+--  that branch of the tree.
 --  The sub-proof parser should return (when successful) a builder for the byte string that should
 --  be hashed to give the root hash of the sub-proof.
 --  If a sub-proof is not next in the input, then the parser will take the next 32 bytes as a hash
@@ -317,10 +322,10 @@ parseSubProof inside = Parse $ \pc@ParserContext{..} ->
                                 else parserError (applyErrorContext ctx ExpectedEndOfInput)
                         }
 
+-- | Parse an encoded size.
 parseSize ::
-    (Num b) =>
     SizeEncoding ->
-    Parse r MerkleProof [Tag] ParseError (BS.ByteString, b)
+    Parse r MerkleProof [Tag] ParseError (BS.ByteString, Word64)
 parseSize sizeEncoding = do
     bytes <- parseBytes sizeBytes
     return (bytes, fromBE bytes)
@@ -329,6 +334,7 @@ parseSize sizeEncoding = do
         SizeU16BE -> 2
         SizeU32BE -> 4
         SizeU64BE -> 8
+    fromBE = BS.foldl' (\acc w -> acc * 256 + fromIntegral w) 0
 
 -- | Parse a Merkle proof given a schema and the expanded non-terminal to parse.
 parseMerkleBody ::
@@ -349,8 +355,10 @@ parseMerkleBody schema = inner
         bytes <- parseBytes (fromIntegral len)
         return (HM.insert tag (Leaf bytes) pt, Builder.byteString bytes)
     inner (Tagged tag (VariableLengthBytes lenEncoding)) pt = local (tag :) $ do
-        (lenBytes, len) <- parseSize lenEncoding
-        bytes <- parseBytes len
+        (lenBytes, len0) <- parseSize lenEncoding
+        -- If the size does not fit into an Int, then we cannot expect to continue parsing.
+        when (toInteger len0 > toInteger (maxBound :: Int)) $ throwParseError SizeOutOfBounds
+        bytes <- parseBytes (fromIntegral len0)
         return (HM.insert tag (Leaf bytes) pt, Builder.byteString lenBytes <> Builder.byteString bytes)
     inner (Sequence l) pt = do
         let f (pt', builder) mb = do
@@ -372,7 +380,7 @@ parseMerkleBody schema = inner
         let f (pt', builder) i = local (show i :) $ do
                 (pt'', builder'') <- inner sub mempty
                 return (HM.insert (show i) (Node pt'') pt', builder <> builder'')
-        (pt1, builder) <- foldM f (mempty, mempty) [0 .. (len :: Integer) - 1]
+        (pt1, builder) <- foldM f (mempty, mempty) [0 .. len - 1]
         return (HM.insert tag (Node pt1) pt, builder)
     inner (LFMBTree tag lenEncoding emptyBS sub) pt0 = local (tag :) $ do
         (_, len) <- parseSize lenEncoding
@@ -401,10 +409,6 @@ hashBuilder = SHA256.hashLazy . Builder.toLazyByteString
 -- | Construct a 'Builder.Builder' from a 'SHA256.Hash'.
 builderHash :: SHA256.Hash -> Builder.Builder
 builderHash = Builder.shortByteString . SHA256.hashToShortByteString
-
--- | Convert bytes into a number, parsing it big endian.
-fromBE :: (Num a) => BS.ByteString -> a
-fromBE = BS.foldl' (\acc w -> acc * 256 + fromIntegral w) 0
 
 -- | Compute the nearest power of 2 less than the input value.
 --
@@ -470,9 +474,16 @@ setFreshRec body = do
 blockSchema :: (NonTerminal, MerkleSchema)
 blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
   where
+    -- Raw byte representation of various types
+    -- 64-bit integer
     u64 = FixedLengthBytes 8
-    node l = Sequence [Hashed tag ident | (tag, ident) <- l]
+    -- SHA256 hash
     opaqueHash = FixedLengthBytes 32
+    -- VRF Proof
+    blockNonce = FixedLengthBytes 80
+    -- BLS (aggregate) signature
+    blsSignature = FixedLengthBytes 48
+    node l = Sequence [Hashed tag ident | (tag, ident) <- l]
     builder = do
         blockHash <- freshIdent
         blockHeaderHash <-
@@ -482,14 +493,14 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                   Hashed "parent" blockHash
                 ]
         timestampBakerHash <- setFresh . Sequence $ [Tagged "timestamp" u64, Tagged "bakerId" u64]
-        nonceHash <- setFresh $ Tagged "blockNonce" (FixedLengthBytes 80)
+        nonceHash <- setFresh $ Tagged "blockNonce" blockNonce
         bakerInfoHash <- setFresh . node $ [("timestampBaker", timestampBakerHash), ("nonce", nonceHash)]
         quorumCertificateHash <-
             setFresh . Sequence $
                 [ Hashed "block" blockHash,
                   Tagged "round" u64,
                   Tagged "epoch" u64,
-                  Tagged "aggregateSignature" (FixedLengthBytes 48),
+                  Tagged "aggregateSignature" blsSignature,
                   Tagged "signatories" (VariableLengthBytes SizeU32BE)
                 ]
         timeoutCertificateHash <-
@@ -514,7 +525,7 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                                 [ Tagged "round" u64,
                                   Tagged "finalizers" (VariableLengthBytes SizeU32BE)
                                 ],
-                          Tagged "aggregateSignature" (FixedLengthBytes 48)
+                          Tagged "aggregateSignature" blsSignature
                         ]
                     )
         epochFinalizationEntryHash <-
@@ -562,7 +573,7 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
         schemaAt blockHash ?= Sequence [Hashed "header" blockHeaderHash, Hashed "quasi" blockQuasiHash]
         return blockHash
 
--- | A class for types that can produce 'MerkleProof's.
+-- | A class for types @t@ that can produce 'MerkleProof's in a monadic context @m@.
 class MerkleProvable m t where
     -- | Build a 'MerkleProof', unwrapping sub-proofs where the predicate holds for the chain
     -- of tags.

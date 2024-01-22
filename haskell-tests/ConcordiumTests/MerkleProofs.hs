@@ -1,5 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Simple unit tests for Merkle proofs.
+--  These tests check that a given Merkle proof hashes and parses to known results.
+--  This is not intended as a comprehensive test of the Merkle proof functionality.
+--  Rather, the proof parsing infrastructure is intended to be used to test the correct
+--  production of Merkle proofs in the node.
 module ConcordiumTests.MerkleProofs where
 
 import qualified Data.HashMap.Strict as HM
@@ -13,6 +18,7 @@ testingBlockHash :: Hash.Hash
 testingBlockHash = read "9926f53cde0d3f25afb2dd9f3eb4050da1b01940c501a3c5d22719535061f95a"
 
 -- | A Merkle proof against the testing block.
+--  This proof should follow the block schema, and parse into 'testingBlockTree'.
 testingBlockProof :: MerkleProof
 testingBlockProof =
     [ SubProof
@@ -137,8 +143,12 @@ testingBlockTree =
 
 tests :: Spec
 tests = describe "Concordium.MerkleProofs" $ do
+    it "toRootHash on testing block" $ do
+        -- Test that the 'testingBlockProof' hashes to the 'testingBlockHash'.
+        toRootHash testingBlockProof
+            `shouldBe` testingBlockHash
     it "parseMerkleProof on testing block" $ do
         -- This simply tests that 'parseMerkleProof' with the 'blockSchema' gives a known outcome
         -- on the 'testingBlockProof'. This is subject to change if the schema changes.
         uncurry parseMerkleProof blockSchema testingBlockProof
-            `shouldBe` (Right (testingBlockTree, testingBlockHash))
+            `shouldBe` Right (testingBlockTree, testingBlockHash)
