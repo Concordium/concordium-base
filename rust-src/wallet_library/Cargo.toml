@@ -1,6 +1,6 @@
 [package]
 name = "wallet_library"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
 license-file = "../../LICENSE"
@@ -11,6 +11,7 @@ anyhow = "1.0"
 hex = "0.4"
 serde_json = "1.0"
 thiserror = "1.0"
+either = "1.6"
 
 [dependencies.key_derivation]
 path = "../key_derivation"

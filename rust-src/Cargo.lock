@@ -1966,11 +1966,12 @@ dependencies = [
 
 [[package]]
 name = "wallet_library"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "concordium_base",
  "ed25519-dalek",
+ "either",
  "hex",
  "key_derivation",
  "serde",
