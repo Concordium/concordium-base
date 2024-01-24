@@ -1020,7 +1020,7 @@ pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseRes
 
 // Versioned schema helpers
 #[cfg(feature = "derive-serde")]
-mod impls {
+pub mod impls {
     use crate::{from_bytes, schema::*};
     use base64::{engine::general_purpose, Engine};
 
