@@ -354,12 +354,15 @@ mod tests {
 
     use crate::{
         common::types::{KeyIndex, KeyPair},
+        curve_arithmetic::arkworks_instances::ArkGroup,
         id::{account_holder::*, constants::*, identity_provider::*, test::*},
     };
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
     use Either::{Left, Right};
+
+    type SomeCurve = ArkGroup<G1Projective>;
 
     const EXPIRY: TransactionTime = TransactionTime {
         seconds: 111111111111111111,
@@ -377,7 +380,7 @@ mod tests {
             ip_secret_key,
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let global_ctx = GlobalContext::<SomeCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let id_use_data = test_create_id_use_data(&mut csprng);
@@ -501,7 +504,7 @@ mod tests {
             ip_secret_key,
             .. // ip_cdi_secret_key is not used since we are testing the flow without initial account creation
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let global_ctx = GlobalContext::<SomeCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let id_use_data = test_create_id_use_data(&mut csprng);
@@ -601,7 +604,7 @@ mod tests {
             ip_secret_key,
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
+        let global_ctx = GlobalContext::<SomeCurve>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let id_use_data = test_create_id_use_data(&mut csprng);

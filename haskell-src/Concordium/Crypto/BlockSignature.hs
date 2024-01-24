@@ -51,7 +51,7 @@ signatureLength :: Int
 signatureLength = Ed25519.signatureSize
 
 sign :: KeyPair -> ByteString -> Signature
-sign KeyPair{..} = Signature . Ed25519.sign signKey verifyKey
+sign KeyPair{..} = Signature . Ed25519.sign signKey
 
 verify :: VerifyKey -> ByteString -> Signature -> Bool
 verify vfKey bs (Signature s) = Ed25519.verify vfKey bs s

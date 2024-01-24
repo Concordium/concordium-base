@@ -220,9 +220,13 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
     use rand::{thread_rng, Rng};
+
+    type G1 = ArkGroup<G1Projective>;
 
     #[test]
     pub fn test_vcom_eq_correctness() {
@@ -313,8 +317,8 @@ mod tests {
             i += 1;
         }
         let wrong_comm = Commitment::generate(csprng);
-        let index_wrong_comm: IndexType = csprng.gen_range(0, 6);
-        let index_wrong_gi: usize = csprng.gen_range(0, 10);
+        let index_wrong_comm: IndexType = csprng.gen_range(0..6);
+        let index_wrong_gi: usize = csprng.gen_range(0..10);
         let mut wrong_comms = comms.clone();
         wrong_comms.insert(index_wrong_comm, wrong_comm);
         let mut wrong_gis = gis.clone();

@@ -179,6 +179,8 @@ pub fn derive_from_parsed_path(parsed_path: &[u32], seed: &[u8]) -> Result<HdKey
 
 #[cfg(test)]
 mod tests {
+    use ed25519_dalek::SigningKey;
+
     use super::*;
 
     const TEST_VECTOR_1_SEED: &str = "000102030405060708090a0b0c0d0e0f";
@@ -187,8 +189,8 @@ mod tests {
     fn assert_keys(seed: &str, path: &str, chain_code: &str, private_key: &str, public_key: &str) {
         let seed = hex::decode(seed).unwrap();
         let keys = derive(path, &seed).unwrap();
-        let secret_key = ed25519_dalek::SecretKey::from_bytes(&keys.private_key).unwrap();
-        let public_key_derived = ed25519_dalek::PublicKey::from(&secret_key).to_bytes();
+        let signing_key = SigningKey::from_bytes(&keys.private_key);
+        let public_key_derived = signing_key.verifying_key().to_bytes();
         assert_eq!(
             keys.chain_code.to_vec(),
             hex::decode(chain_code).unwrap(),

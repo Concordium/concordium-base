@@ -1,4 +1,4 @@
-use super::{Curve, Field, MultiExp, PrimeField};
+use super::{field_adapters::FFField, Curve, CurveDecodingError, Field, MultiExp, PrimeField};
 use crate::common::{Buffer, Deserial, Serial};
 use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::{
@@ -7,81 +7,35 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
-use std::{
-    borrow::Borrow,
-    ops::{AddAssign, MulAssign, Neg, SubAssign},
-};
+use sha2::Sha512;
+use std::{borrow::Borrow, result::Result};
 
-/// A wrapper to make it possible to implement external traits
-/// and to avoid clashes with blacket implementations.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, derive_more::From)]
-pub struct RistrettoScalar(Scalar);
-
-impl Serial for RistrettoScalar {
+impl Serial for Scalar {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let res: &[u8; 32] = self.0.as_bytes();
+        let res: &[u8; 32] = self.as_bytes();
         out.write_all(res)
             .expect("Writing to a buffer should not fail.");
     }
 }
 
-impl Deserial for RistrettoScalar {
+impl Deserial for Scalar {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
         let mut buf: [u8; 32] = [0; 32];
         source.read_exact(&mut buf)?;
-        let res = Scalar::from_canonical_bytes(buf).ok_or(anyhow::anyhow!(
+        let res: Option<_> = Scalar::from_canonical_bytes(buf).into();
+        res.ok_or(anyhow::anyhow!(
             "Deserialization failed! Not a field value!"
-        ))?;
-        Ok(res.into())
+        ))
     }
 }
 
-impl Field for RistrettoScalar {
-    fn random<R: rand_core::RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
-        let mut scalar_bytes = [0u8; 64];
-        rng.fill_bytes(&mut scalar_bytes);
-        Scalar::from_bytes_mod_order_wide(&scalar_bytes).into()
-    }
-
-    fn zero() -> Self { Scalar::zero().into() }
-
-    fn one() -> Self { Scalar::one().into() }
-
-    fn is_zero(&self) -> bool { self.0 == Self::zero().0 }
-
-    fn square(&mut self) { self.0.mul_assign(self.0) }
-
-    fn double(&mut self) { self.0.add_assign(self.0) }
-
-    fn negate(&mut self) {
-        let v = self.0.neg();
-        self.0 = v;
-    }
-
-    fn add_assign(&mut self, other: &Self) { self.0.add_assign(other.0) }
-
-    fn sub_assign(&mut self, other: &Self) { self.0.sub_assign(other.0) }
-
-    fn mul_assign(&mut self, other: &Self) { self.0.mul_assign(other.0) }
-
-    fn inverse(&self) -> Option<Self> {
-        if self.is_zero() {
-            None
-        } else {
-            Some(self.0.invert().into())
-        }
-    }
-}
-
-impl PrimeField for RistrettoScalar {
-    // Taken from `curve25519-dalek` v.4.1.1 that implements `ff::PrimeField`
-    const CAPACITY: u32 = 252;
-    // Taken from `curve25519-dalek` v.4.1.1 that implements `ff::PrimeField``
-    const NUM_BITS: u32 = 253;
+impl PrimeField for FFField<Scalar> {
+    const CAPACITY: u32 = <Scalar as ff::PrimeField>::CAPACITY;
+    const NUM_BITS: u32 = <Scalar as ff::PrimeField>::NUM_BITS;
 
     fn into_repr(self) -> Vec<u64> {
+        let bytes = <Scalar as ff::PrimeField>::to_repr(&self.0);
         let mut vec: Vec<u64> = Vec::new();
-        let bytes: [u8; 32] = self.0.to_bytes();
         for chunk in bytes.chunks_exact(8) {
             // The chunk size is always 8 and there is no remainder after chunking, since
             // the representation is a 32-byte array. That is why it is safe to
@@ -104,10 +58,12 @@ impl PrimeField for RistrettoScalar {
             LittleEndian::write_u64(&mut s_bytes[offset..max], x);
             offset = max;
         }
-        let res = Scalar::from_canonical_bytes(s_bytes).ok_or(
-            super::CurveDecodingError::NotInField(format!("{:?}", s_bytes)),
-        )?;
-        Ok(res.into())
+        let res: Option<_> = Scalar::from_canonical_bytes(s_bytes).into();
+        let scalar: Scalar = res.ok_or(super::CurveDecodingError::NotInField(format!(
+            "{:?}",
+            s_bytes
+        )))?;
+        Ok(scalar.into())
     }
 }
 
@@ -124,16 +80,15 @@ impl Deserial for RistrettoPoint {
     fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> crate::common::ParseResult<Self> {
         let mut buf: [u8; 32] = [0; 32];
         source.read_exact(&mut buf)?;
-        let res = CompressedRistretto::from_slice(&buf)
-            .decompress()
-            .ok_or(anyhow::anyhow!("Failed!"))?;
-        Ok(res)
+        let res = CompressedRistretto::from_slice(&buf)?;
+        let point = res.decompress().ok_or(anyhow::anyhow!("Failed!"))?;
+        Ok(point)
     }
 }
 
 impl Curve for RistrettoPoint {
     type MultiExpType = RistrettoMultiExpNoPrecompute;
-    type Scalar = RistrettoScalar;
+    type Scalar = FFField<Scalar>;
 
     const GROUP_ELEMENT_LENGTH: usize = 32;
     const SCALAR_LENGTH: usize = 32;
@@ -158,17 +113,6 @@ impl Curve for RistrettoPoint {
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { self * scalar.0 }
 
-    fn bytes_to_curve_unchecked<R: byteorder::ReadBytesExt>(
-        source: &mut R,
-    ) -> anyhow::Result<Self> {
-        let mut buf: [u8; 32] = [0; 32];
-        source.read_exact(&mut buf)?;
-        let res = CompressedRistretto::from_slice(&buf)
-            .decompress()
-            .ok_or(anyhow::anyhow!("Failed!"))?;
-        Ok(res)
-    }
-
     fn generate<R: rand::Rng>(rng: &mut R) -> Self {
         let mut uniform_bytes = [0u8; 64];
         rng.fill_bytes(&mut uniform_bytes);
@@ -191,12 +135,12 @@ impl Curve for RistrettoPoint {
         }
         // unset four topmost bits in the last u64 limb.
         fr[3] &= !(1u64 << 63 | 1u64 << 62 | 1u64 << 61 | 1u64 << 60);
-        <RistrettoScalar as PrimeField>::from_repr(&fr)
+        <Self::Scalar as PrimeField>::from_repr(&fr)
             .expect("The scalar with top two bits erased should be valid.")
     }
 
-    fn hash_to_group(m: &[u8]) -> Self {
-        RistrettoPoint::hash_from_bytes::<ed25519_dalek::Sha512>(m)
+    fn hash_to_group(m: &[u8]) -> Result<Self, CurveDecodingError> {
+        Result::Ok(RistrettoPoint::hash_from_bytes::<Sha512>(m))
     }
 }
 
@@ -249,12 +193,16 @@ impl MultiExp for RistrettoMultiExpNoPrecompute {
 /// implementation, which features its own test suite.
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{RistrettoScalar, *};
-    use crate::common::*;
-    use curve25519_dalek::ristretto::RistrettoPoint;
-    use rand::Rng;
-    use rand_core::RngCore;
+    use super::*;
+    use crate::{
+        common::*,
+        curve_arithmetic::{field_adapters::FFField, Field},
+    };
+    use curve25519_dalek::{ristretto::RistrettoPoint, Scalar};
+    use rand::{Rng, RngCore};
     use std::io::Cursor;
+
+    type RistrettoScalar = FFField<Scalar>;
 
     /// Test serialization for scalars
     #[test]
@@ -297,29 +245,16 @@ pub(crate) mod tests {
         }
     }
 
-    /// Turn curve points into representations and back again, and compare.
-    #[test]
-    fn test_point_byte_conversion_unchecked() {
-        let mut csprng = rand::thread_rng();
-        for _ in 0..1000 {
-            let point = RistrettoPoint::generate(&mut csprng);
-            let bytes = to_bytes(&point);
-            let point_res = RistrettoPoint::bytes_to_curve_unchecked(&mut Cursor::new(&bytes));
-            assert!(point_res.is_ok());
-            assert_eq!(point, point_res.unwrap());
-        }
-    }
-
     /// Test that `into_repr()` correclty converts a scalar constructed from a
     /// byte array to an array of limbs with least significant digits first.
     #[test]
     fn test_into() {
-        let s: RistrettoScalar = Scalar::from_canonical_bytes([
+        let res: Option<Scalar> = Scalar::from_canonical_bytes([
             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 255, 255, 255, 255, 255, 255, 255,
             0, 0, 0, 0, 0, 0, 0, 0,
         ])
-        .expect("Expected a valid scalar")
         .into();
+        let s: RistrettoScalar = res.expect("Expected a valid scalar").into();
         assert_eq!(s.into_repr(), [1u64, 0u64, u64::MAX - 1, 0u64]);
     }
 
@@ -360,10 +295,10 @@ pub(crate) mod tests {
             // Next, we create a byte array that is filled with random lower bytes, the last
             // byte is in [0; 15], that is, of the form 0b0000XXXX (big-endian).
             fits_capacity_bytes[0..31].copy_from_slice(&lower_bytes);
-            let n = rng.gen_range(0, 16);
+            let n = rng.gen_range(0..16);
             fits_capacity_bytes[31] = n;
             let fits_capacity = <RistrettoPoint as Curve>::scalar_from_bytes(fits_capacity_bytes);
-            let i = rng.gen_range(1, 16);
+            let i = rng.gen_range(1..16);
             // Now, we create a byte array from lower bytes with the last byte being number
             // that is guaranteed to exceed `RistrettoScalar::CAPACITY`.
             let mut bytes: [u8; 32] = [0u8; 32];

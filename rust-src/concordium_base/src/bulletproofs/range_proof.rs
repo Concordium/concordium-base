@@ -797,15 +797,18 @@ pub fn verify_in_range<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::G1;
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.
     /// The second check will fail.
     /// This is tested by checking if the verifier returns
     /// Err(Err(VerificationError::Second))
-    type SomeCurve = G1;
+
+    type SomeCurve = ArkGroup<ark_bls12_381::G1Projective>;
+
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]

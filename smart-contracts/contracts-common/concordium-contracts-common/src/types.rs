@@ -653,7 +653,15 @@ pub struct CredentialSignatures {
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct Timestamp {
     /// Milliseconds since unix epoch.
-    pub(crate) milliseconds: u64,
+    pub millis: u64,
+}
+
+impl From<u64> for Timestamp {
+    fn from(millis: u64) -> Self {
+        Self {
+            millis,
+        }
+    }
 }
 
 #[cfg(feature = "concordium-quickcheck")]
@@ -663,30 +671,32 @@ impl quickcheck::Arbitrary for Timestamp {
     }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(
-            quickcheck::Arbitrary::shrink(&self.milliseconds).map(Timestamp::from_timestamp_millis),
-        )
+        Box::new(quickcheck::Arbitrary::shrink(&self.millis).map(Timestamp::from_timestamp_millis))
     }
 }
 
 impl Timestamp {
+    /// Construct a timestamp corresponding to the current date and time.
+    #[cfg(feature = "derive-serde")]
+    pub fn now() -> Self { (chrono::Utc::now().timestamp_millis() as u64).into() }
+
     /// Construct timestamp from milliseconds since unix epoch.
     #[inline(always)]
-    pub const fn from_timestamp_millis(milliseconds: u64) -> Self {
+    pub const fn from_timestamp_millis(millis: u64) -> Self {
         Self {
-            milliseconds,
+            millis,
         }
     }
 
     /// Milliseconds since the UNIX epoch.
     #[inline(always)]
-    pub const fn timestamp_millis(&self) -> u64 { self.milliseconds }
+    pub const fn timestamp_millis(&self) -> u64 { self.millis }
 
     /// Add duration to the timestamp. Returns `None` if the resulting timestamp
     /// is not representable, i.e., too far in the future.
     #[inline(always)]
     pub fn checked_add(self, duration: Duration) -> Option<Self> {
-        self.milliseconds.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
+        self.millis.checked_add(duration.milliseconds).map(Self::from_timestamp_millis)
     }
 
     /// Subtract duration from the timestamp. Returns `None` instead of
@@ -694,7 +704,7 @@ impl Timestamp {
     /// epoch.
     #[inline(always)]
     pub fn checked_sub(self, duration: Duration) -> Option<Self> {
-        self.milliseconds.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
+        self.millis.checked_sub(duration.milliseconds).map(Self::from_timestamp_millis)
     }
 
     /// Compute the duration between the self and another timestamp.
@@ -703,9 +713,9 @@ impl Timestamp {
     #[inline(always)]
     pub fn duration_between(self, other: Timestamp) -> Duration {
         let millis = if self >= other {
-            self.milliseconds - other.milliseconds
+            self.millis - other.millis
         } else {
-            other.milliseconds - self.milliseconds
+            other.millis - self.millis
         };
         Duration::from_millis(millis)
     }
@@ -714,7 +724,7 @@ impl Timestamp {
     /// is in the future compared to self.
     #[inline(always)]
     pub fn duration_since(self, before: Timestamp) -> Option<Duration> {
-        self.milliseconds.checked_sub(before.milliseconds).map(Duration::from_millis)
+        self.millis.checked_sub(before.millis).map(Duration::from_millis)
     }
 }
 
@@ -730,7 +740,7 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
     fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
         use chrono::TimeZone;
         if let Some(utc) = chrono::Utc
-            .timestamp_millis_opt(value.milliseconds.try_into().map_err(|_| TimestampOverflow)?)
+            .timestamp_millis_opt(value.millis.try_into().map_err(|_| TimestampOverflow)?)
             .single()
         {
             Ok(utc)
@@ -751,7 +761,7 @@ impl TryFrom<chrono::DateTime<chrono::Utc>> for Timestamp {
     fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
         let millis = value.timestamp_millis().try_into()?;
         Ok(Self {
-            milliseconds: millis,
+            millis,
         })
     }
 }
@@ -2481,11 +2491,90 @@ impl fmt::Display for ParseError {
 #[cfg(feature = "std")]
 impl std::error::Error for ParseError {}
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+#[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
+#[cfg_attr(feature = "derive-serde", serde(try_from = "u8", into = "u8"))]
+/// Version of the module. This determines the chain API that the module can
+/// access.
+pub enum WasmVersion {
+    /// The initial smart contracts version. This has a simple state API that
+    /// has very limited capacity. `V0` contracts also use message-passing as
+    /// the interaction method.
+    V0 = 0u8,
+    /// `V1` contracts were introduced with protocol version 4. In comparison to
+    /// `V0` contracts they use synchronous calls as the interaction method,
+    /// and they have access to a more fine-grained state API allowing for
+    /// unlimited (apart from NRG costs) state size.
+    V1,
+}
+
+impl fmt::Display for WasmVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WasmVersion::V0 => f.write_str("V0"),
+            WasmVersion::V1 => f.write_str("V1"),
+        }
+    }
+}
+
+/// V0 is the default version of smart contracts.
+impl Default for WasmVersion {
+    fn default() -> Self { Self::V0 }
+}
+
+impl convert::From<WasmVersion> for u8 {
+    fn from(x: WasmVersion) -> Self { x as u8 }
+}
+
 #[cfg(feature = "derive-serde")]
 mod serde_impl {
     use super::*;
     use serde::{de, de::Visitor, Deserializer, Serializer};
     use std::{fmt, num};
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("Unsupported version: {unexpected_string}. Only 'V0' and 'V1' are supported.")]
+    pub struct WasmVersionParseError {
+        pub unexpected_string: String,
+    }
+
+    impl str::FromStr for WasmVersion {
+        type Err = WasmVersionParseError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match s {
+                "V0" | "v0" => Ok(WasmVersion::V0),
+                "V1" | "v1" => Ok(WasmVersion::V1),
+                unexpected_string => Err(WasmVersionParseError {
+                    unexpected_string: unexpected_string.to_string(),
+                }),
+            }
+        }
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    #[error(
+        "Unsupported version: {unexpected_version}. Only versions 0 and 1 of smart contracts are \
+         supported."
+    )]
+    pub struct U8WasmVersionConvertError {
+        pub unexpected_version: u8,
+    }
+
+    impl TryFrom<u8> for WasmVersion {
+        type Error = U8WasmVersionConvertError;
+
+        fn try_from(value: u8) -> Result<Self, Self::Error> {
+            match value {
+                0 => Ok(Self::V0),
+                1 => Ok(Self::V1),
+                unexpected_version => Err(U8WasmVersionConvertError {
+                    unexpected_version,
+                }),
+            }
+        }
+    }
 
     /// An error that may occur when converting from a string to an exchange
     /// rate.
@@ -2575,7 +2664,7 @@ mod serde_impl {
             // The buffer must be large enough to contain the 32 bytes for the address, 4
             // bytes for a checksum and 1 byte for the version.
             let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE + 4 + 1];
-            let len = bs58::decode(v).with_check(Some(1)).into(&mut buf)?;
+            let len = bs58::decode(v).with_check(Some(1)).onto(&mut buf)?;
             // Prepends 1 byte for the version
             if len != 1 + ACCOUNT_ADDRESS_SIZE {
                 return Err(AccountAddressParseError::InvalidByteLength(len));
@@ -2877,7 +2966,7 @@ mod test {
     fn test_given_millis_far_in_future_when_string_to_timestamp_then_map() {
         let millis = 100000001683508889u64;
         if let Ok(timestamp) = Timestamp::from_str(&millis.to_string()) {
-            assert_eq!(timestamp.milliseconds, millis);
+            assert_eq!(timestamp.millis, millis);
         } else {
             assert!(false)
         };
@@ -2888,7 +2977,7 @@ mod test {
     fn test_given_rfc3339_format_when_string_to_timestamp_then_map() {
         let datetime = "1970-01-01T00:00:00.042+00:00";
         if let Ok(timestamp) = Timestamp::from_str(datetime) {
-            assert_eq!(timestamp.milliseconds, 42);
+            assert_eq!(timestamp.millis, 42);
         } else {
             assert!(false)
         };

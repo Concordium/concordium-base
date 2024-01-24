@@ -17,7 +17,6 @@ use crate::{
         dlog::{Dlog, DlogSecret},
     },
 };
-use ed25519_dalek as ed25519;
 use sha2::{Digest, Sha256};
 
 /// Function for producing a proof of a statement.
@@ -197,10 +196,7 @@ pub fn prove_ownership_of_account(
     let sigs = data
         .keys
         .iter()
-        .map(|(&idx, kp)| {
-            let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-            (idx, expanded_sk.sign(to_sign, &kp.public).into())
-        })
+        .map(|(&idx, kp)| (idx, kp.sign(to_sign).into()))
         .collect();
     AccountOwnershipProof { sigs }
 }

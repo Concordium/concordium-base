@@ -563,9 +563,12 @@ pub fn verify<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::G1;
-    type SomeCurve = G1;
+    use ark_bls12_381::G1Projective;
+
+    type SomeCurve = ArkGroup<G1Projective>;
 
     /// Converts the u64 set vector into a vector over the field
     fn get_set_vector<C: Curve>(the_set: &[u64]) -> Vec<C::Scalar> {
@@ -573,7 +576,13 @@ mod tests {
     }
 
     /// generates several values used in tests
-    fn generate_helper_values(n: usize) -> (Generators<G1>, CommitmentKey<G1>, Randomness<G1>) {
+    fn generate_helper_values(
+        n: usize,
+    ) -> (
+        Generators<SomeCurve>,
+        CommitmentKey<SomeCurve>,
+        Randomness<SomeCurve>,
+    ) {
         let rng = &mut thread_rng();
         let gens = Generators::generate(n, rng);
         let b = SomeCurve::generate(rng);
@@ -587,9 +596,9 @@ mod tests {
     /// Generates commitment to v given commitment key and randomness
     fn get_v_com(
         v: &<SomeCurve as Curve>::Scalar,
-        v_keys: &CommitmentKey<G1>,
-        v_rand: &Randomness<G1>,
-    ) -> Commitment<G1> {
+        v_keys: &CommitmentKey<SomeCurve>,
+        v_rand: &Randomness<SomeCurve>,
+    ) -> Commitment<SomeCurve> {
         let v_value = Value::<SomeCurve>::new(*v);
 
         v_keys.hide(&v_value, &v_rand)

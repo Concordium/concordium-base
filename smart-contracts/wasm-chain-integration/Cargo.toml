@@ -1,6 +1,6 @@
 [package]
 name = "concordium-smart-contract-engine"
-version = "3.1.0"
+version = "4.0.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
@@ -30,7 +30,7 @@ derive_more = "0.99"
 sha2 = "0.10"
 sha3 = "0.10"
 secp256k1 = "0.22.2"
-ed25519-zebra = "3"
+ed25519-zebra = "4"
 thiserror = "1"
 byteorder = "1.4"
 tinyvec = {version = "1.5", features = ["alloc"]}
@@ -42,10 +42,10 @@ rand = { version = "=0.8", features = ["small_rng"] }
 
 [dependencies.concordium-wasm]
 path = "../wasm-transform"
-version = "3"
+version = "4"
 
 [dependencies.concordium-contracts-common]
-version = "8.0"
+version = "9.0"
 path = "../contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 

@@ -131,9 +131,13 @@ pub fn verify_com_ineq<C: Curve>(
 
 #[cfg(test)]
 mod tests {
+    use crate::id::constants::{ArCurve, BaseField};
+
     use super::*;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, G1};
+    use std::str::FromStr;
+
+    type G1 = ArCurve;
+    type Fr = BaseField;
 
     #[test]
     fn test_com_ineq_correctness() {

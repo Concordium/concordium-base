@@ -106,12 +106,16 @@ impl<C: Curve> std::str::FromStr for SecretKey<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::G1;
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+    use ark_bls12_381::G1Projective;
+
+    type SomeCurve = ArkGroup<G1Projective>;
+
     #[test]
     pub fn key_to_byte_conversion() {
         let mut csprng = thread_rng();
         for _ in 1..100 {
-            let sk = SecretKey::<G1>::generate(&mut csprng);
+            let sk = SecretKey::<SomeCurve>::generate(&mut csprng);
             let res_sk2 = serialize_deserialize(&sk);
             assert!(res_sk2.is_ok());
             let sk2 = res_sk2.unwrap();

@@ -262,7 +262,7 @@ mod tests {
 
             // Test serialization of generated secret scalar
             let x = expanded_sk.key;
-            assert_eq!(x, Scalar::from_bits(x_bytes));
+            assert_eq!(x, Scalar::from_bytes_mod_order(x_bytes));
 
             // Test serialization of proof
             let proof = expanded_sk.prove(&pk, &alpha_bytes);

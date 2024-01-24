@@ -8,12 +8,13 @@ use super::{
 use crate::{
     bulletproofs::utils::Generators,
     common::{size_t, types::TransactionTime, *},
+    curve_arithmetic::arkworks_instances::ArkGroup,
     ffi_helpers::*,
     pedersen_commitment::CommitmentKey as PedersenKey,
 };
 use anyhow::Context;
+use ark_bls12_381::G1Projective;
 use either::Either::{Left, Right};
-use pairing::bls12_381::{Bls12, G1};
 use rand::thread_rng;
 use std::{
     collections::BTreeMap,
@@ -21,6 +22,9 @@ use std::{
     io::Cursor,
     str::from_utf8,
 };
+
+type Bls12 = ark_ec::bls12::Bls12<ark_bls12_381::Config>;
+type G1 = ArkGroup<G1Projective>;
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -555,7 +559,7 @@ fn ip_info_create_helper(
     // Identity provider CDI verify key.
     let ip_cdi_verify_key = {
         let ed_buf = &mut slice_from_c_bytes!(cdi_verify_key_ptr, cdi_verify_key_len);
-        from_bytes::<ed25519_dalek::PublicKey, &[u8]>(ed_buf)
+        from_bytes::<ed25519_dalek::VerifyingKey, &[u8]>(ed_buf)
             .context("Unable to create PublicKey instance from byte array at cdi_verify_key_ptr.")?
     };
 

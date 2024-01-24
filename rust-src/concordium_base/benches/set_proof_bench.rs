@@ -2,17 +2,19 @@
 #[macro_use]
 extern crate criterion;
 
+use ark_bls12_381::G1Projective;
 use concordium_base::{
     bulletproofs::{set_membership_proof, set_non_membership_proof, utils::Generators},
-    curve_arithmetic::*,
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::{CommitmentKey, Randomness},
     random_oracle::RandomOracle,
 };
 use criterion::{BenchmarkId, Criterion};
-use pairing::bls12_381::G1;
 use rand::*;
 use std::time::Duration;
+
+type G1 = ArkGroup<G1Projective>;
 
 #[allow(non_snake_case)]
 pub fn bench_set_proofs(c: &mut Criterion) {
@@ -34,7 +36,7 @@ pub fn bench_set_proofs(c: &mut Criterion) {
         }
 
         // Let w be an element in the set
-        let w_index = rng.gen_range(0, n);
+        let w_index = rng.gen_range(0..n);
         let w = the_set[w_index];
 
         // Commit to v

@@ -23,7 +23,6 @@ use dialoguer::{Input, MultiSelect, Select};
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
 use key_derivation::{ConcordiumHdWallet, CredentialContext, Net};
-use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use serde_json::{json, to_value};
 use std::{
@@ -35,6 +34,9 @@ use std::{
     path::{Path, PathBuf},
 };
 use structopt::StructOpt;
+
+type Bls12 = IpPairing;
+type G1 = ArCurve;
 
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "AR-";
@@ -1144,8 +1146,8 @@ fn handle_create_credential(cc: CreateCredential) {
             };
             let cred_data = {
                 let mut keys = std::collections::BTreeMap::new();
-                let public = ed25519::PublicKey::from(&secret);
-                keys.insert(KeyIndex(0), KeyPair { secret, public });
+                let signing_key = ed25519::SigningKey::from(&secret);
+                keys.insert(KeyIndex(0), signing_key.into());
 
                 CredentialData {
                     keys,
@@ -2221,9 +2223,10 @@ fn handle_generate_ips(gip: GenerateIps) {
         let id_secret_key = ps_sig::SecretKey::<Bls12>::generate(gip.key_capacity, &mut csprng);
         let id_public_key = ps_sig::PublicKey::from(&id_secret_key);
 
-        let keypair = ed25519::Keypair::generate(&mut csprng);
-        let ip_cdi_verify_key = keypair.public;
-        let ip_cdi_secret_key = keypair.secret;
+        let signing_key = ed25519::SigningKey::generate(&mut csprng);
+        let secret_key = signing_key.to_bytes();
+        let ip_cdi_verify_key = signing_key.verifying_key();
+        let ip_cdi_secret_key = secret_key;
 
         let ip_id = IpIdentity(id as u32);
         let ip_info = IpInfo {

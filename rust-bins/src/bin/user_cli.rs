@@ -788,8 +788,8 @@ fn handle_create_credential_v1(cc: CreateCredentialV1) -> anyhow::Result<()> {
         };
     let acc_data = {
         let mut keys = std::collections::BTreeMap::new();
-        let public = ed25519::PublicKey::from(&secret);
-        keys.insert(KeyIndex(0), KeyPair { secret, public });
+        let signing_key = ed25519::SigningKey::from_bytes(&secret);
+        keys.insert(KeyIndex(0), signing_key.into());
 
         CredentialData {
             keys,

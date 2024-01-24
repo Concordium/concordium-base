@@ -106,8 +106,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + DeserializeOwned> TryFrom<s
                     ty:         serde_json::from_value(ty)?,
                     network:    id.network,
                     contract:   address,
-                    credential: CredentialHolderId::new(ed25519_dalek::PublicKey::from_bytes(
-                        parameter.as_ref(),
+                    credential: CredentialHolderId::new(ed25519_dalek::VerifyingKey::from_bytes(
+                        &parameter.as_ref().try_into()?,
                     )?),
                     statement:  serde_json::from_value(statement)?,
                 })
@@ -494,7 +494,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     serde_json::from_value(get_field(&mut proof, "proofValue")?)?;
 
                 anyhow::ensure!(proof_value.len() == statement.len());
-                let proofs = statement.into_iter().zip(proof_value.into_iter()).collect();
+                let proofs = statement.into_iter().zip(proof_value).collect();
                 Ok(Self::Account {
                     created,
                     network: issuer.network,
@@ -540,7 +540,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::de::DeserializeOwned
                     serde_json::from_value(get_field(&mut proof, "proofValue")?)?;
 
                 anyhow::ensure!(proof_value.len() == statement.len());
-                let proofs = statement.into_iter().zip(proof_value.into_iter()).collect();
+                let proofs = statement.into_iter().zip(proof_value).collect();
 
                 Ok(Self::Web3Id {
                     created,
@@ -631,12 +631,12 @@ pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
 /// An ed25519 public key tagged with a phantom type parameter based on its
 /// role, e.g., an owner of a credential or a revocation key.
 pub struct Ed25519PublicKey<Role> {
-    pub public_key: ed25519_dalek::PublicKey,
+    pub public_key: ed25519_dalek::VerifyingKey,
     phantom:        PhantomData<Role>,
 }
 
-impl<Role> From<ed25519_dalek::PublicKey> for Ed25519PublicKey<Role> {
-    fn from(value: ed25519_dalek::PublicKey) -> Self { Self::new(value) }
+impl<Role> From<ed25519_dalek::VerifyingKey> for Ed25519PublicKey<Role> {
+    fn from(value: ed25519_dalek::VerifyingKey) -> Self { Self::new(value) }
 }
 
 impl<Role> serde::Serialize for Ed25519PublicKey<Role> {
@@ -682,13 +682,17 @@ impl<Role> TryFrom<&str> for Ed25519PublicKey<Role> {
     type Error = Ed25519PublicKeyFromStrError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let bytes = hex::decode(value)?;
-        Ok(Self::new(ed25519_dalek::PublicKey::from_bytes(&bytes)?))
+        let bytes: [u8; 32] = hex::decode(value)?.try_into().map_err(|_| {
+            Self::Error::InvalidBytes(ed25519_dalek::SignatureError::from_source(
+                "Incorrect public key length.",
+            ))
+        })?;
+        Ok(Self::new(ed25519_dalek::VerifyingKey::from_bytes(&bytes)?))
     }
 }
 
 impl<Role> Ed25519PublicKey<Role> {
-    pub fn new(public_key: ed25519_dalek::PublicKey) -> Self {
+    pub fn new(public_key: ed25519_dalek::VerifyingKey) -> Self {
         Self {
             public_key,
             phantom: PhantomData,
@@ -743,7 +747,7 @@ impl<Role> crate::contracts_common::Deserial for Ed25519PublicKey<Role> {
         source: &mut R,
     ) -> crate::contracts_common::ParseResult<Self> {
         let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
-        let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
+        let public_key = ed25519_dalek::VerifyingKey::from_bytes(&public_key_bytes)
             .map_err(|_| crate::contracts_common::ParseError {})?;
         Ok(Self {
             public_key,
@@ -763,7 +767,7 @@ impl<Role> crate::common::Deserial for Ed25519PublicKey<Role> {
     fn deserial<R: std::io::Read>(source: &mut R) -> crate::common::ParseResult<Self> {
         use anyhow::Context;
         let public_key_bytes = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]>::deserial(source)?;
-        let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes)
+        let public_key = ed25519_dalek::VerifyingKey::from_bytes(&public_key_bytes)
             .context("Invalid public key.")?;
         Ok(Self {
             public_key,
@@ -991,12 +995,12 @@ impl TryFrom<serde_json::Value> for LinkingProof {
 /// credential. The intention is that this is implemented by ed25519 keypairs
 /// or hardware wallets.
 pub trait Web3IdSigner {
-    fn id(&self) -> ed25519_dalek::PublicKey;
+    fn id(&self) -> ed25519_dalek::VerifyingKey;
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature;
 }
 
-impl Web3IdSigner for ed25519_dalek::Keypair {
-    fn id(&self) -> ed25519_dalek::PublicKey { self.public }
+impl Web3IdSigner for ed25519_dalek::SigningKey {
+    fn id(&self) -> ed25519_dalek::VerifyingKey { self.verifying_key() }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
         ed25519_dalek::Signer::sign(self, msg.as_ref())
@@ -1004,17 +1008,19 @@ impl Web3IdSigner for ed25519_dalek::Keypair {
 }
 
 impl Web3IdSigner for crate::common::types::KeyPair {
-    fn id(&self) -> ed25519_dalek::PublicKey { self.public }
+    fn id(&self) -> ed25519_dalek::VerifyingKey { self.public() }
 
-    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature { self.secret.sign(msg) }
+    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature { self.sign(msg.as_ref()) }
 }
 
 impl Web3IdSigner for ed25519_dalek::SecretKey {
-    fn id(&self) -> ed25519_dalek::PublicKey { self.into() }
+    fn id(&self) -> ed25519_dalek::VerifyingKey {
+        ed25519_dalek::SigningKey::from(self).verifying_key()
+    }
 
     fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
-        let expanded: ed25519_dalek::ExpandedSecretKey = self.into();
-        expanded.sign(msg.as_ref(), &self.into())
+        let expanded: ed25519_dalek::SigningKey = self.into();
+        ed25519_dalek::Signer::sign(&expanded, msg.as_ref())
     }
 }
 
@@ -1160,8 +1166,9 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
             anyhow::bail!("Only Web3 credentials are supported.")
         };
         anyhow::ensure!(entrypoint == "credentialEntry", "Incorrect entrypoint.");
-        let holder_id =
-            CredentialHolderId::new(ed25519_dalek::PublicKey::from_bytes(parameter.as_ref())?);
+        let holder_id = CredentialHolderId::new(ed25519_dalek::VerifyingKey::from_bytes(
+            parameter.as_ref().try_into()?,
+        )?);
 
         // Just validate the issuer field.
         {
@@ -1789,10 +1796,10 @@ mod tests {
     fn test_web3_only() -> anyhow::Result<()> {
         let mut rng = rand::thread_rng();
         let challenge = Challenge::new(rng.gen());
-        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
-        let signer_2 = ed25519_dalek::Keypair::generate(&mut rng);
-        let issuer_1 = ed25519_dalek::Keypair::generate(&mut rng);
-        let issuer_2 = ed25519_dalek::Keypair::generate(&mut rng);
+        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
+        let signer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
         let contract_1 = ContractAddress::new(1337, 42);
         let contract_2 = ContractAddress::new(1338, 0);
         let credential_statements = vec![
@@ -1806,7 +1813,7 @@ mod tests {
                 .collect(),
                 network:    Network::Testnet,
                 contract:   contract_1,
-                credential: CredentialHolderId::new(signer_1.public),
+                credential: CredentialHolderId::new(signer_1.verifying_key()),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1841,7 +1848,7 @@ mod tests {
                 .collect(),
                 network:    Network::Testnet,
                 contract:   contract_2,
-                credential: CredentialHolderId::new(signer_2.public),
+                credential: CredentialHolderId::new(signer_2.verifying_key()),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -1904,7 +1911,7 @@ mod tests {
             &params,
             &values_1,
             &randomness_1,
-            &CredentialHolderId::new(signer_1.public),
+            &CredentialHolderId::new(signer_1.verifying_key()),
             &issuer_1,
             contract_1,
         )
@@ -1944,7 +1951,7 @@ mod tests {
             &params,
             &values_2,
             &randomness_2,
-            &CredentialHolderId::new(signer_2.public),
+            &CredentialHolderId::new(signer_2.verifying_key()),
             &issuer_2,
             contract_2,
         )
@@ -1963,10 +1970,10 @@ mod tests {
 
         let public = vec![
             CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.public.into(),
+                issuer_pk: issuer_1.verifying_key().into(),
             },
             CredentialsInputs::Web3 {
-                issuer_pk: issuer_2.public.into(),
+                issuer_pk: issuer_2.verifying_key().into(),
             },
         ];
         anyhow::ensure!(
@@ -2001,8 +2008,8 @@ mod tests {
         let params = GlobalContext::generate("Test".into());
         let cred_id_exp = ArCurve::generate_scalar(&mut rng);
         let cred_id = CredentialRegistrationID::from_exponent(&params, cred_id_exp);
-        let signer_1 = ed25519_dalek::Keypair::generate(&mut rng);
-        let issuer_1 = ed25519_dalek::Keypair::generate(&mut rng);
+        let signer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer_1 = ed25519_dalek::SigningKey::generate(&mut rng);
         let contract_1 = ContractAddress::new(1337, 42);
         let credential_statements = vec![
             CredentialStatement::Web3Id {
@@ -2015,7 +2022,7 @@ mod tests {
                 .collect(),
                 network:    Network::Testnet,
                 contract:   contract_1,
-                credential: CredentialHolderId::new(signer_1.public),
+                credential: CredentialHolderId::new(signer_1.verifying_key()),
                 statement:  vec![
                     AtomicStatement::AttributeInRange {
                         statement: AttributeInRangeStatement {
@@ -2092,7 +2099,7 @@ mod tests {
             &params,
             &values_1,
             &randomness_1,
-            &CredentialHolderId::new(signer_1.public),
+            &CredentialHolderId::new(signer_1.verifying_key()),
             &issuer_1,
             contract_1,
         )
@@ -2147,7 +2154,7 @@ mod tests {
 
         let public = vec![
             CredentialsInputs::Web3 {
-                issuer_pk: issuer_1.public.into(),
+                issuer_pk: issuer_1.verifying_key().into(),
             },
             CredentialsInputs::Account {
                 commitments: commitments_2,
@@ -2181,8 +2188,8 @@ mod tests {
     /// Basic test that conversion of Web3IdCredential from/to JSON works.
     fn test_credential_json() {
         let mut rng = rand::thread_rng();
-        let signer = ed25519_dalek::Keypair::generate(&mut rng);
-        let issuer = ed25519_dalek::Keypair::generate(&mut rng);
+        let signer = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer = ed25519_dalek::SigningKey::generate(&mut rng);
         let mut randomness = BTreeMap::new();
         randomness.insert(
             0.to_string(),
@@ -2209,7 +2216,7 @@ mod tests {
         );
 
         let cred = Web3IdCredential::<ArCurve, Web3IdAttribute> {
-            holder_id: signer.public.into(),
+            holder_id: signer.verifying_key().into(),
             network: Network::Testnet,
             registry: ContractAddress::new(3, 17),
             credential_type: [
@@ -2220,7 +2227,7 @@ mod tests {
             .into_iter()
             .collect(),
             credential_schema: "http://link/to/schema".into(),
-            issuer_key: issuer.public.into(),
+            issuer_key: issuer.verifying_key().into(),
             valid_from: chrono::Utc.timestamp_millis_opt(17).unwrap(),
             valid_until: chrono::Utc.timestamp_millis_opt(12345).earliest(),
             values,

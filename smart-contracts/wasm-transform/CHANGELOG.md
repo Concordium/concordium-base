@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+## concordium-wasm 4.0.0 (2024-01-22)
+
+- Update contracts-common dependency to version 9.
+
 ## concordium-wasm 3.0.0 (2023-08-21)
 
 - `validate_module` is now parameterized by `ValidationConfig` which determines

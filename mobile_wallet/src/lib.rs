@@ -15,7 +15,7 @@ use concordium_base::{
     hashes::{HashBytes, TransactionSignHash},
     id::{
         self, account_holder,
-        constants::{ArCurve, AttributeKind},
+        constants::{ArCurve, AttributeKind, IpPairing},
         id_proof_types::{ProofVersion, Statement, StatementWithContext},
         pedersen_commitment::Value as PedersenValue,
         ps_sig,
@@ -34,7 +34,6 @@ use concordium_base::{
 use either::Either::{Left, Right};
 use key_derivation::{ConcordiumHdWallet, CredentialContext, Net};
 use libc::c_char;
-use pairing::bls12_381::Bls12;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
 use sha2::{Digest, Sha256};
@@ -45,6 +44,8 @@ use std::{
     ffi::{CStr, CString},
     str::FromStr,
 };
+
+type Bls12 = IpPairing;
 
 /// Context for a transaction to send.
 #[derive(common::SerdeDeserialize)]
@@ -659,7 +660,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let mut csprng = thread_rng();
     keys.insert(
         KeyIndex(0),
-        concordium_base::common::types::KeyPair::from(ed25519_dalek::Keypair::generate(
+        concordium_base::common::types::KeyPair::from(ed25519_dalek::SigningKey::generate(
             &mut csprng,
         )),
     );
@@ -919,8 +920,8 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
             identity_index,
             u32::from(acc_num),
         )?;
-        let public = ed25519_dalek::PublicKey::from(&secret);
-        keys.insert(KeyIndex(0), KeyPair { secret, public });
+        let signing_key = ed25519_dalek::SigningKey::from(&secret);
+        keys.insert(KeyIndex(0), signing_key.into());
 
         CredentialData {
             keys,

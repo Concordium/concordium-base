@@ -3,7 +3,10 @@
 use super::{constants::*, errors::*, public::*};
 use crate::common::*;
 use core::fmt::Debug;
-use curve25519_dalek::{constants, scalar::Scalar};
+use curve25519_dalek::{
+    constants,
+    scalar::{clamp_integer, Scalar},
+};
 use rand::{CryptoRng, Rng};
 use sha2::{digest::Digest, Sha512};
 use subtle::{Choice, ConstantTimeEq};
@@ -123,12 +126,8 @@ impl From<&SecretKey> for ExpandedSecretKey {
         lower.copy_from_slice(&hash[00..32]);
         upper.copy_from_slice(&hash[32..64]);
 
-        lower[0] &= 0b_1111_1000;
-        lower[31] &= 0b_0111_1111;
-        lower[31] |= 0b_0100_0000;
-
         ExpandedSecretKey {
-            key:   Scalar::from_bits(lower),
+            key:   Scalar::from_bytes_mod_order(clamp_integer(lower)),
             nonce: upper,
         }
     }
@@ -137,7 +136,7 @@ use super::proof::*;
 
 impl ExpandedSecretKey {
     /// VRF proof with expanded secret key
-    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1>
+    /// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.1>
     pub fn prove(&self, public_key: &PublicKey, alpha: &[u8]) -> Proof {
         let x = self.key;
         let h = public_key
@@ -160,7 +159,7 @@ impl ExpandedSecretKey {
         Proof(gamma, c, k_plus_cx)
     }
 
-    /// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.2.2>
+    /// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.4.2.2>
     fn nonce_generation(&self, h_string: &[u8]) -> Scalar {
         let digest = Sha512::new()
             .chain_update(self.nonce)

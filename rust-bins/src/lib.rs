@@ -7,7 +7,6 @@ use concordium_base::{
 };
 use dialoguer::Input;
 use hkdf::HkdfExtract;
-use pairing::bls12_381::Bls12;
 use rand::Rng;
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 use serde_json::{to_string_pretty, to_writer_pretty};
@@ -20,6 +19,8 @@ use std::{
     path::Path,
     str::FromStr,
 };
+
+type Bls12 = IpPairing;
 
 pub type ExampleAttribute = AttributeKind;
 
