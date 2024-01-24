@@ -659,9 +659,11 @@ pub fn receive_worker(attr: TokenStream, item: TokenStream) -> syn::Result<Token
                 if let Ok(state) = DeserialWithState::deserial_with_state(&state_api, &mut state_api.lookup_entry(&[]).unwrap_abort()) {
                     let mut state_builder = StateBuilder::open(state_api);
                     let mut host = ExternHost { state, state_builder };
-                    match #fn_name(&ctx, #host_ref, #(#fn_optional_args, )*) {
+                    let result = #fn_name(&ctx, #host_ref, #(#fn_optional_args, )*);
+                    match result {
                         Ok(rv) => {
-                            if rv.serial(&mut ExternReturnValue::open()).is_err() {
+                            let r = rv.serial(&mut ExternReturnValue::open());
+                            if r.is_err() {
                                 trap() // Could not serialize return value.
                             }
                             #save_state_if_mutable
