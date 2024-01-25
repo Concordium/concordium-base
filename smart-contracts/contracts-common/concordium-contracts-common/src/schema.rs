@@ -14,6 +14,8 @@ use core::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
+#[cfg(feature = "derive-serde")]
+pub use impls::VersionedSchemaError;
 /// Contract schema related types
 #[cfg(feature = "std")]
 use std::{
@@ -21,8 +23,6 @@ use std::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
-#[cfg(feature = "derive-serde")]
-pub use impls::VersionedSchemaError;
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing
