@@ -14,6 +14,8 @@ use core::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
+#[cfg(feature = "derive-serde")]
+pub use impls::VersionedSchemaError;
 /// Contract schema related types
 #[cfg(feature = "std")]
 use std::{
