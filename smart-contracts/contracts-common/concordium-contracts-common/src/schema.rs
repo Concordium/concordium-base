@@ -21,6 +21,8 @@ use std::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
+#[cfg(feature = "derive-serde")]
+pub use impls::VersionedSchemaError;
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
 /// Schemas are used to make structures human readable and to avoid dealing
@@ -1020,7 +1022,7 @@ pub fn deserial_length(source: &mut impl Read, size_len: SizeLength) -> ParseRes
 
 // Versioned schema helpers
 #[cfg(feature = "derive-serde")]
-pub mod impls {
+mod impls {
     use crate::{from_bytes, schema::*};
     use base64::{engine::general_purpose, Engine};
 
