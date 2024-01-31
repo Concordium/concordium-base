@@ -376,15 +376,15 @@ parseMerkleBody schema = inner
                     Just branch -> Node branch
             return (HM.insert tag val pt, Builder.byteString hashBS)
     inner (RepeatedBE tag lenEncoding sub) pt = local (tag :) $ do
-        (_, len) <- parseSize lenEncoding
+        (lenBytes, len) <- parseSize lenEncoding
         let f (pt', builder) i = local (show i :) $ do
                 (pt'', builder'') <- inner sub mempty
                 return (HM.insert (show i) (Node pt'') pt', builder <> builder'')
         let ixs = if len > 0 then [0 .. len - 1] else []
         (pt1, builder) <- foldM f (mempty, mempty) ixs
-        return (HM.insert tag (Node pt1) pt, builder)
+        return (HM.insert tag (Node pt1) pt, Builder.byteString lenBytes <> builder)
     inner (LFMBTree tag lenEncoding emptyBS sub) pt0 = local (tag :) $ do
-        (_, len) <- parseSize lenEncoding
+        (lenBytes, len) <- parseSize lenEncoding
         let doTree 0 _ pt = do
                 actual <- parseBytes (BS.length emptyBS)
                 unless (actual == emptyBS) $ throwParseError (Expected emptyBS actual)
@@ -401,7 +401,7 @@ parseMerkleBody schema = inner
                 (hsh, msubProof) <- parseSubProof ((_2 %~ builderHash) <$> doTree size base pt)
                 return (fromMaybe pt msubProof, hsh)
         (ptSub, hsh) <- doBranch len 0 mempty
-        return (HM.insert tag (Node ptSub) pt0, builderHash hsh)
+        return (HM.insert tag (Node ptSub) pt0, Builder.byteString lenBytes <> builderHash hsh)
 
 -- | Compute a hash from a 'Builder.Builder'.
 hashBuilder :: Builder.Builder -> SHA256.Hash

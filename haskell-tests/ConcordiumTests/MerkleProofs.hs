@@ -15,7 +15,7 @@ import Concordium.MerkleProofs
 
 -- | Block hash of testing block.
 testingBlockHash :: Hash.Hash
-testingBlockHash = read "c2b97dbfafa2de205dad08053ecbf35ba0ee8e918c79dbab0b2c27256fb02e38"
+testingBlockHash = read "988d5a216bb56f620f90c1ed7c8a987b4f682dadf37fa473d235d5150f26b8a3"
 
 -- | A Merkle proof against the testing block.
 --  This proof should follow the block schema, and parse into 'testingBlockTree'.
