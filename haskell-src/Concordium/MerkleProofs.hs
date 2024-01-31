@@ -365,7 +365,7 @@ parseMerkleBody schema = inner
                 (pt'', builder'') <- inner mb pt'
                 return (pt'', builder <> builder'')
         foldM f (pt, mempty) l
-    inner (Choice a b) pt = inner a pt <<|> inner b pt
+    inner (Choice a b) pt = inner a pt <|>> inner b pt
     inner (Hashed tag ident) pt = local (tag :) $ case HM.lookup ident schema of
         Nothing -> throwParseError (UnknownSchemaId ident)
         Just body -> do
@@ -380,7 +380,8 @@ parseMerkleBody schema = inner
         let f (pt', builder) i = local (show i :) $ do
                 (pt'', builder'') <- inner sub mempty
                 return (HM.insert (show i) (Node pt'') pt', builder <> builder'')
-        (pt1, builder) <- foldM f (mempty, mempty) [0 .. len - 1]
+        let ixs = if len > 0 then [0 .. len - 1] else []
+        (pt1, builder) <- foldM f (mempty, mempty) ixs
         return (HM.insert tag (Node pt1) pt, builder)
     inner (LFMBTree tag lenEncoding emptyBS sub) pt0 = local (tag :) $ do
         (_, len) <- parseSize lenEncoding
@@ -477,6 +478,8 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
     -- Raw byte representation of various types
     -- 64-bit integer
     u64 = FixedLengthBytes 8
+    -- 32-bit integer
+    u32 = FixedLengthBytes 4
     -- SHA256 hash
     opaqueHash = FixedLengthBytes 32
     -- VRF Proof
@@ -515,6 +518,7 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                         [ LiteralBytes (S.encode (1 :: Word8)),
                           Tagged "round" u64,
                           Tagged "minEpoch" u64,
+                          Tagged "aggregateSignature" blsSignature,
                           RepeatedBE "finalizerQCRoundsFirstEpoch" SizeU32BE $
                             Sequence
                                 [ Tagged "round" u64,
@@ -524,8 +528,7 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                             Sequence
                                 [ Tagged "round" u64,
                                   Tagged "finalizers" (VariableLengthBytes SizeU32BE)
-                                ],
-                          Tagged "aggregateSignature" blsSignature
+                                ]
                         ]
                     )
         epochFinalizationEntryHash <-
@@ -559,15 +562,36 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                   ("timeoutFinalization", timeoutFinalizationHash)
                 ]
         metaHash <- setFresh . node $ [("bakerInfo", bakerInfoHash), ("certificatesHash", certificatesHash)]
-        transactionsAndOutcomesHash <-
+        stateAndOutcomesHash <-
             setFresh . Sequence $
-                [ Tagged "transactions" opaqueHash,
+                [ Tagged "state" opaqueHash,
                   Tagged "outcomes" opaqueHash
+                ]
+        blockHeightInfoHash <-
+            setFresh . Sequence $
+                [ Tagged "absoluteBlockHeight" u64,
+                  Tagged "genesisIndex" u32,
+                  Tagged "relativeBlockHeight" u64
+                ]
+        finComHash <-
+            setFresh . Sequence $
+                [ Tagged "current" opaqueHash,
+                  Tagged "next" opaqueHash
+                ]
+        blockInfoHash <-
+            setFresh . Sequence $
+                [ Hashed "height" blockHeightInfoHash,
+                  Hashed "finalizationCommittee" finComHash
+                ]
+        resultHash <-
+            setFresh . Sequence $
+                [ Hashed "stateOutcomes" stateAndOutcomesHash,
+                  Hashed "info" blockInfoHash
                 ]
         dataHash <-
             setFresh . Sequence $
-                [ Hashed "transactionsAndOutcomes" transactionsAndOutcomesHash,
-                  Tagged "state" opaqueHash
+                [ Tagged "transactions" opaqueHash,
+                  Hashed "result" resultHash
                 ]
         blockQuasiHash <- setFresh . Sequence $ [Hashed "meta" metaHash, Hashed "data" dataHash]
         schemaAt blockHash ?= Sequence [Hashed "header" blockHeaderHash, Hashed "quasi" blockQuasiHash]

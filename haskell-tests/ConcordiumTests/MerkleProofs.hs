@@ -15,40 +15,31 @@ import Concordium.MerkleProofs
 
 -- | Block hash of testing block.
 testingBlockHash :: Hash.Hash
-testingBlockHash = read "9926f53cde0d3f25afb2dd9f3eb4050da1b01940c501a3c5d22719535061f95a"
+testingBlockHash = read "c2b97dbfafa2de205dad08053ecbf35ba0ee8e918c79dbab0b2c27256fb02e38"
 
 -- | A Merkle proof against the testing block.
 --  This proof should follow the block schema, and parse into 'testingBlockTree'.
 testingBlockProof :: MerkleProof
 testingBlockProof =
     [ SubProof
-        [ RawData "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NULR\148Hk\211\243\144\162\198\225z\128D\NAK\146?\FS\177H'&\180Yx#3yL\byD\242"
-        ],
+        [RawData "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\STX\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^"],
       SubProof
         [ SubProof
             [ SubProof
-                [ SubProof
-                    [ RawData "\NUL\NUL\SOH\140\213;\246a\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
-                    ],
-                  SubProof
-                    [ RawData "\ETB\138\244e\164\RS\b\t\242\247H\SYN\153J\234tB\SOH\148\170\183\235\FS\176sm\149\bCA\242\FS\195\197\147o\244U@P\228j<\ETBr\228\205\134\SON&\142-++\132\205\134\247e\172\&7&g\179\SI:ETc\247\SI\208w\147\137\139\208\219\r"
-                    ]
+                [ SubProof [RawData "\NUL\NUL\NUL\NUL\NUL\NUL\a\208\NUL\NUL\NUL\NUL\NUL\NUL\NUL\EOT"],
+                  SubProof [RawData "%\174\f\194\NUL\v\213\STX\234N\152\215\&0\n\155\171q\238\144zK\141\189\161^\215\184)B \FSj\187c\138\146=B\137\149kl\240\&8_\207\154_wK\137\230\STXe\182\204\NUL\193\200MwR\251?m\193k\152\228\134\rnI\154\236\253{3\137\SOH"]
                 ],
               SubProof
-                [ SubProof
-                    [ RawData "R\148Hk\211\243\144\162\198\225z\128D\NAK\146?\FS\177H'&\180Yx#3yL\byD\242\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\192\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
-                    ],
+                [ SubProof [RawData "\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\192\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"],
                   SubProof
-                    [ SubProof [RawData "\NUL"],
+                    [ SubProof [RawData "\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\128\149*`3\201\&4#\191\247\rv$\vL\149\178W\140\219\n\240\DC3\161\223\157\154\243z\158\226>\b\241\199\228\"\\>\155\248\\\237\FS\222%\SI\209\NUL\NUL\NUL\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH?\NUL\NUL\NUL\NUL"],
                       SubProof [RawData "\NUL"]
                     ]
                 ]
             ],
           SubProof
-            [ SubProof
-                [ RawData "\196#\249\233\RS\226\CAN\178\181\&04\133\221\135\163\t:e=\219\155\219\131\157\&0\170\EM$\222\GS\191\ENQ4^\248\197{3\154E[q\231\184\190\245g\157\197\162P`\141\ETX\251M-\225\234\208\200\\\CAN>"
-                ],
-              RawData "\149\238']~\245\167\a\130\DC2\251\ENQ\177S\255\240\243B\251\RS\203t\168\245B\162\152\233\161\160#\GS"
+            [ RawData "\196#\249\233\RS\226\CAN\178\181\&04\133\221\135\163\t:e=\219\155\219\131\157\&0\170\EM$\222\GS\191\ENQ",
+              RawData "V\161\148\235\199\132<\236\FS=\129\245\255'\156VPV\129\SYN\RS\241\129\179t\205\f\132|\200\tf"
             ]
         ]
     ]
@@ -61,8 +52,8 @@ testingBlockTree =
               Node
                 ( HM.fromList
                     [ ("epoch", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"),
-                      ("parent", Leaf "R\148Hk\211\243\144\162\198\225z\128D\NAK\146?\FS\177H'&\180Yx#3yL\byD\242"),
-                      ("round", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH")
+                      ("parent", Leaf "\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^"),
+                      ("round", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\STX")
                     ]
                 )
             ),
@@ -72,15 +63,8 @@ testingBlockTree =
                     [   ( "data",
                           Node
                             ( HM.fromList
-                                [   ( "transactionsAndOutcomes",
-                                      Node
-                                        ( HM.fromList
-                                            [ ("outcomes", Leaf "4^\248\197{3\154E[q\231\184\190\245g\157\197\162P`\141\ETX\251M-\225\234\208\200\\\CAN>"),
-                                              ("transactions", Leaf "\196#\249\233\RS\226\CAN\178\181\&04\133\221\135\163\t:e=\219\155\219\131\157\&0\170\EM$\222\GS\191\ENQ")
-                                            ]
-                                        )
-                                    ),
-                                  ("state", Leaf "\149\238']~\245\167\a\130\DC2\251\ENQ\177S\255\240\243B\251\RS\203t\168\245B\162\152\233\161\160#\GS")
+                                [ ("result", Leaf "V\161\148\235\199\132<\236\FS=\129\245\255'\156VPV\129\SYN\RS\241\129\179t\205\f\132|\200\tf"),
+                                  ("transactions", Leaf "\196#\249\233\RS\226\CAN\178\181\&04\133\221\135\163\t:e=\219\155\219\131\157\&0\170\EM$\222\GS\191\ENQ")
                                 ]
                             )
                         ),
@@ -94,7 +78,7 @@ testingBlockTree =
                                                   Node
                                                     ( HM.fromList
                                                         [ ("epochFinalizationEntry", Node (HM.fromList [("null", Leaf "")])),
-                                                          ("timeoutCertificate", Node (HM.fromList [("null", Leaf "")]))
+                                                          ("timeoutCertificate", Node (HM.fromList [("finalizerQCRoundsFirstEpoch", Node (HM.fromList [("0", Node (HM.fromList [("finalizers", Leaf "?"), ("round", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL")]))])), ("aggregateSignature", Leaf "\128\149*`3\201\&4#\191\247\rv$\vL\149\178W\140\219\n\240\DC3\161\223\157\154\243z\158\226>\b\241\199\228\"\\>\155\248\\\237\FS\222%\SI\209"), ("round", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH"), ("minEpoch", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"), ("finalizerQCRoundsSecondEpoch", Node (HM.fromList []))]))
                                                         ]
                                                     )
                                                 ),
@@ -102,7 +86,7 @@ testingBlockTree =
                                                   Node
                                                     ( HM.fromList
                                                         [ ("epoch", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"),
-                                                          ("block", Leaf "R\148Hk\211\243\144\162\198\225z\128D\NAK\146?\FS\177H'&\180Yx#3yL\byD\242"),
+                                                          ("block", Leaf "\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^"),
                                                           ("aggregateSignature", Leaf "\192\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"),
                                                           ("round", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"),
                                                           ("signatories", Leaf "")
@@ -118,15 +102,15 @@ testingBlockTree =
                                             [   ( "nonce",
                                                   Node
                                                     ( HM.fromList
-                                                        [ ("blockNonce", Leaf "\ETB\138\244e\164\RS\b\t\242\247H\SYN\153J\234tB\SOH\148\170\183\235\FS\176sm\149\bCA\242\FS\195\197\147o\244U@P\228j<\ETBr\228\205\134\SON&\142-++\132\205\134\247e\172\&7&g\179\SI:ETc\247\SI\208w\147\137\139\208\219\r")
+                                                        [ ("blockNonce", Leaf "%\174\f\194\NUL\v\213\STX\234N\152\215\&0\n\155\171q\238\144zK\141\189\161^\215\184)B \FSj\187c\138\146=B\137\149kl\240\&8_\207\154_wK\137\230\STXe\182\204\NUL\193\200MwR\251?m\193k\152\228\134\rnI\154\236\253{3\137\SOH")
                                                         ]
                                                     )
                                                 ),
                                                 ( "timestampBaker",
                                                   Node
                                                     ( HM.fromList
-                                                        [ ("bakerId", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"),
-                                                          ("timestamp", Leaf "\NUL\NUL\SOH\140\213;\246a")
+                                                        [ ("bakerId", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\EOT"),
+                                                          ("timestamp", Leaf "\NUL\NUL\NUL\NUL\NUL\NUL\a\208")
                                                         ]
                                                     )
                                                 )
