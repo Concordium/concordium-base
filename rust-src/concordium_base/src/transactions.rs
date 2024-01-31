@@ -1391,7 +1391,7 @@ impl TransactionSigner for AccountKeys {
         for (ci, cred_keys) in iter {
             let cred_sigs = cred_keys
                 .into_iter()
-                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref())))
+                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref()).into()))
                 .collect::<BTreeMap<_, _>>();
             signatures.insert(*ci, cred_sigs);
         }
@@ -1409,6 +1409,19 @@ impl ExactSizeTransactionSigner for AccountKeys {
     }
 }
 
+impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
+    fn sign_transaction_hash(
+        &self,
+        hash_to_sign: &hashes::TransactionSignHash,
+    ) -> TransactionSignature {
+        (*self).sign_transaction_hash(hash_to_sign)
+    }
+}
+
+impl<'a, X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &'a X {
+    fn num_keys(&self) -> u32 { (*self).num_keys() }
+}
+
 impl TransactionSigner for BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>> {
     fn sign_transaction_hash(
         &self,
@@ -1418,7 +1431,7 @@ impl TransactionSigner for BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>
         for (ci, cred_keys) in self {
             let cred_sigs = cred_keys
                 .iter()
-                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref())))
+                .map(|(ki, kp)| (*ki, kp.sign(hash_to_sign.as_ref()).into()))
                 .collect::<BTreeMap<_, _>>();
             signatures.insert(*ci, cred_sigs);
         }
@@ -1470,7 +1483,7 @@ pub struct AccountAccessStructure {
 pub type AccountStructure<'a> = &'a [(
     CredentialIndex,
     SignatureThreshold,
-    &'a [(KeyIndex, ed25519_dalek::PublicKey)],
+    &'a [(KeyIndex, ed25519_dalek::VerifyingKey)],
 )];
 
 impl AccountAccessStructure {
@@ -1504,7 +1517,7 @@ impl AccountAccessStructure {
 
     /// Generate a new [`AccountAccessStructure`] with a single credential and
     /// public key, at credential and key indices 0.
-    pub fn singleton(public_key: ed25519_dalek::PublicKey) -> Self {
+    pub fn singleton(public_key: ed25519_dalek::VerifyingKey) -> Self {
         Self::new(AccountThreshold::ONE, &[(
             0.into(),
             SignatureThreshold::ONE,
@@ -1525,7 +1538,12 @@ impl From<&AccountKeys> for AccountAccessStructure {
                         keys:      v
                             .keys
                             .iter()
-                            .map(|(ki, kp)| (*ki, VerifyKey::Ed25519VerifyKey(kp.public)))
+                            .map(|(ki, kp)| {
+                                (
+                                    *ki,
+                                    VerifyKey::Ed25519VerifyKey(kp.as_ref().verifying_key()),
+                                )
+                            })
                             .collect(),
                         threshold: v.threshold,
                     })
@@ -3179,11 +3197,11 @@ mod tests {
     fn test_transaction_signature_check() {
         let mut rng = rand::thread_rng();
         let mut keys = BTreeMap::<CredentialIndex, BTreeMap<KeyIndex, KeyPair>>::new();
-        let bound: usize = rng.gen_range(1, 20);
+        let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
             let c_idx = CredentialIndex::from(rng.gen::<u8>());
             if keys.get(&c_idx).is_none() {
-                let inner_bound: usize = rng.gen_range(1, 20);
+                let inner_bound: usize = rng.gen_range(1..20);
                 let mut cred_keys = BTreeMap::new();
                 for _ in 0..inner_bound {
                     let k_idx = KeyIndex::from(rng.gen::<u8>());
@@ -3195,12 +3213,12 @@ mod tests {
         let hash = TransactionSignHash::new(rng.gen());
         let sig = keys.sign_transaction_hash(&hash);
         let threshold =
-            AccountThreshold::try_from(rng.gen_range(1, (keys.len() + 1) as u8)).unwrap();
+            AccountThreshold::try_from(rng.gen_range(1..(keys.len() + 1) as u8)).unwrap();
         let pub_keys = keys
             .iter()
             .map(|(&ci, keys)| {
                 let threshold =
-                    SignatureThreshold::try_from(rng.gen_range(1, keys.len() + 1) as u8).unwrap();
+                    SignatureThreshold::try_from(rng.gen_range(1..keys.len() + 1) as u8).unwrap();
                 let keys = keys
                     .iter()
                     .map(|(&ki, kp)| (ki, VerifyKey::from(kp)))

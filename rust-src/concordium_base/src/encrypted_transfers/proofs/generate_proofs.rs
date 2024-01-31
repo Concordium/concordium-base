@@ -655,15 +655,18 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use pairing::bls12_381::G1;
-    // use rand::{rngs::ThreadRng, Rng};
+    use ark_bls12_381::G1Projective;
 
-    type SomeCurve = G1;
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
+    use super::*;
+
+    type SomeCurve = ArkGroup<G1Projective>;
+
     // Copied from common.rs in sigma_protocols since apparently it is not available
     pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
         // length of the challenge
-        let l = csprng.gen_range(0, 1000);
+        let l = csprng.gen_range(0..1000);
         let mut challenge_prefix = vec![0; l];
         for v in challenge_prefix.iter_mut() {
             *v = csprng.gen();
@@ -675,13 +678,14 @@ mod test {
     #[test]
     fn test_enc_trans() {
         let mut csprng = thread_rng();
-        let sk_sender: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
+        let sk_sender: SecretKey<SomeCurve> = SecretKey::generate_all(&mut csprng);
         let pk_sender = PublicKey::from(&sk_sender);
-        let sk_receiver: SecretKey<G1> = SecretKey::generate(&pk_sender.generator, &mut csprng);
+        let sk_receiver: SecretKey<SomeCurve> =
+            SecretKey::generate(&pk_sender.generator, &mut csprng);
         let pk_receiver = PublicKey::from(&sk_receiver);
         let s = csprng.gen::<u64>(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;
@@ -727,11 +731,11 @@ mod test {
     #[test]
     fn test_sec_to_pub() {
         let mut csprng = thread_rng();
-        let sk: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
+        let sk: SecretKey<SomeCurve> = SecretKey::generate_all(&mut csprng);
         let pk = PublicKey::from(&sk);
         let s = csprng.gen::<u64>(); // amount on account.
 
-        let a = csprng.gen_range(0, s); // amount to send
+        let a = csprng.gen_range(0..s); // amount to send
 
         let m = 2; // 2 chunks
         let n = 32;

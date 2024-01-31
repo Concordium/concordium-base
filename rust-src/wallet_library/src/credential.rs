@@ -1,61 +1,41 @@
 use anyhow::{bail, Result};
 use concordium_base::{
-    common::{base16_encode_string, types::KeyIndex},
-    contracts_common::NonZeroThresholdU8,
+    common::{
+        base16_encode_string,
+        types::{KeyIndex, TransactionTime},
+    },
     id::{
         account_holder::create_unsigned_credential,
-        constants,
-        constants::{ArCurve, AttributeKind},
+        constants::{self, ArCurve, AttributeKind, IpPairing},
         dodis_yampolskiy_prf as prf,
         pedersen_commitment::{Randomness as PedersenRandomness, Value as PedersenValue, Value},
         types::*,
+        utils::credential_hash_to_sign,
     },
 };
-use key_derivation::Net;
+use either::Either::Left;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use serde_json::json;
 use std::collections::BTreeMap;
 
-use crate::wallet::get_wallet;
-
 type JsonString = String;
-
-/// The shared unsigned credential input that is independent of
-/// whether or not the credential is going to be created by supplying
-/// a seed or the secret key material directly.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnsignedCredentialInput {
-    ip_info:             IpInfo<constants::IpPairing>,
-    global_context:      GlobalContext<constants::ArCurve>,
-    ars_infos:           BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
-    id_object:           IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
-    revealed_attributes: Vec<AttributeTag>,
-    cred_number:         u8,
-}
 
 /// Required input for generating an unsigned credential where the private keys
 /// are supplied directly.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UnsignedCredentialInputWithKeys {
-    common:                 UnsignedCredentialInput,
+pub struct UnsignedCredentialInput {
+    ip_info:                IpInfo<constants::IpPairing>,
+    global_context:         GlobalContext<constants::ArCurve>,
+    ars_infos:              BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
+    id_object: IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
+    revealed_attributes:    Vec<AttributeTag>,
+    cred_number:            u8,
     id_cred_sec:            PedersenValue<ArCurve>,
     prf_key:                prf::SecretKey<ArCurve>,
     blinding_randomness:    String,
     attribute_randomness:   BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>,
     credential_public_keys: CredentialPublicKeys,
-}
-
-/// Required input for generating an unsigned credential from where the
-/// private keys are derived from a seed and an identity index.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnsignedCredentialInputWithSeed {
-    common:         UnsignedCredentialInput,
-    seed_as_hex:    String,
-    net:            Net,
-    identity_index: u32,
 }
 
 /// Defines the JSON structure that matches the output of the function
@@ -68,69 +48,8 @@ struct UnsignedCredentialDeploymentInfoWithRandomness {
 }
 
 /// Creates unsigned credential deployment information and the corresponding
-/// randomness where the secrets are derived from the provided seed.
-/// Note that this hardcodes both the key threshold and the number of keys
-/// on the credential to 1.
-pub fn create_unsigned_credential_with_seed_v1_aux(
-    input: UnsignedCredentialInputWithSeed,
-) -> Result<JsonString> {
-    let wallet = get_wallet(input.seed_as_hex, input.net)?;
-
-    let identity_provider_index = input.common.ip_info.ip_identity.0;
-    let identity_index = input.identity_index;
-    let id_cred_sec =
-        PedersenValue::new(wallet.get_id_cred_sec(identity_provider_index, identity_index)?);
-    let prf_key = wallet.get_prf_key(identity_provider_index, identity_index)?;
-    let blinding_randomness =
-        wallet.get_blinding_randomness(identity_provider_index, identity_index)?;
-    let encoded_blinding_randomness = base16_encode_string(&blinding_randomness);
-
-    let identity_attributes_iter = input.common.id_object.get_attribute_list().alist.iter();
-    let revealed_attributes = &input.common.revealed_attributes;
-
-    let mut attribute_randomness = BTreeMap::new();
-    for (tag, _kind) in identity_attributes_iter {
-        if !revealed_attributes.contains(tag) {
-            let randomness: PedersenRandomness<ArCurve> = wallet
-                .get_attribute_commitment_randomness(
-                    identity_provider_index,
-                    identity_index,
-                    input.common.cred_number.into(),
-                    *tag,
-                )?;
-            attribute_randomness.insert(*tag, randomness);
-        }
-    }
-
-    let key = wallet.get_account_public_key(
-        identity_provider_index,
-        identity_index,
-        input.common.cred_number.into(),
-    )?;
-    let mut key_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();
-    key_map.insert(KeyIndex(0), VerifyKey::Ed25519VerifyKey(key));
-    let credential_public_keys: CredentialPublicKeys = CredentialPublicKeys {
-        threshold: NonZeroThresholdU8::ONE,
-        keys:      key_map,
-    };
-
-    let input_with_keys = UnsignedCredentialInputWithKeys {
-        common: input.common,
-        id_cred_sec,
-        prf_key,
-        blinding_randomness: encoded_blinding_randomness,
-        credential_public_keys,
-        attribute_randomness,
-    };
-
-    create_unsigned_credential_with_keys_v1_aux(input_with_keys)
-}
-
-/// Creates unsigned credential deployment information and the corresponding
 /// randomness where the secrets are provided directly as input.
-pub fn create_unsigned_credential_with_keys_v1_aux(
-    input: UnsignedCredentialInputWithKeys,
-) -> Result<JsonString> {
+pub fn create_unsigned_credential_v1_aux(input: UnsignedCredentialInput) -> Result<JsonString> {
     let chi = CredentialHolderInfo::<constants::ArCurve> {
         id_cred: IdCredentials {
             id_cred_sec: input.id_cred_sec,
@@ -153,17 +72,15 @@ pub fn create_unsigned_credential_with_keys_v1_aux(
             ),
     };
 
-    let common = input.common;
+    let context = IpContext::new(&input.ip_info, &input.ars_infos, &input.global_context);
 
-    let context = IpContext::new(&common.ip_info, &common.ars_infos, &common.global_context);
-
-    let policy = build_policy(&common.id_object.alist, common.revealed_attributes)?;
+    let policy = build_policy(&input.id_object.alist, input.revealed_attributes)?;
 
     let (cdi, rand) = create_unsigned_credential(
         context,
-        &common.id_object,
+        &input.id_object,
         &id_use_data,
-        common.cred_number,
+        input.cred_number,
         policy,
         input.credential_public_keys,
         None,
@@ -201,6 +118,62 @@ fn build_policy(
     })
 }
 
+/// The details for a new credential deployment.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialDeploymentDetails {
+    expiry:       TransactionTime,
+    unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
+}
+
+/// Computes the hash of a new credential deployment that should be signed
+/// by the account keys for deployment. The hash is returned hex encoded.
+pub fn compute_credential_deployment_hash_to_sign(
+    credential_deployment_details: CredentialDeploymentDetails,
+) -> String {
+    let credential_deployment_hash = credential_hash_to_sign(
+        &credential_deployment_details.unsigned_cdi.values,
+        &credential_deployment_details.unsigned_cdi.proofs,
+        &Left(credential_deployment_details.expiry),
+    );
+    hex::encode(credential_deployment_hash)
+}
+
+/// The required credential deployment context required to correctly serialize
+/// a new credential deployment so that it can be sent to the node.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialDeploymentPayload {
+    unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
+    signatures:   BTreeMap<KeyIndex, AccountOwnershipSignature>,
+}
+
+/// Serializes the credential deployment payload. The result of this
+/// serialization should be sent as a raw payload to the node. The serialized
+/// bytes are returned hex encoded.
+pub fn serialize_credential_deployment_payload(payload: CredentialDeploymentPayload) -> String {
+    let cdi = get_credential_deployment_info(payload.signatures, payload.unsigned_cdi);
+    let acc_cred = AccountCredential::Normal { cdi };
+    base16_encode_string(&acc_cred)
+}
+
+fn get_credential_deployment_info(
+    signatures: BTreeMap<KeyIndex, AccountOwnershipSignature>,
+    unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
+) -> CredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind> {
+    let proof_acc_sk = AccountOwnershipProof { sigs: signatures };
+
+    let cdp = CredDeploymentProofs {
+        id_proofs: unsigned_cdi.proofs,
+        proof_acc_sk,
+    };
+
+    CredentialDeploymentInfo {
+        values: unsigned_cdi.values,
+        proofs: cdp,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,24 +184,6 @@ mod tests {
     };
     use ed25519_dalek as ed25519;
     use std::str::FromStr;
-
-    const TEST_SEED_1: &str = "efa5e27326f8fa0902e647b52449bf335b7b605adc387015ec903f41d95080eb71361cbc7fb78721dcd4f3926a337340aa1406df83332c44c1cdcfe100603860";
-
-    fn create_test_input() -> UnsignedCredentialInput {
-        let ip_info = read_ip_info();
-        let global = read_global();
-        let ars_infos = read_ars_infos();
-        let identity_object = read_identity_object();
-
-        UnsignedCredentialInput {
-            ars_infos,
-            ip_info,
-            global_context: global,
-            id_object: identity_object,
-            cred_number: 1,
-            revealed_attributes: Vec::new(),
-        }
-    }
 
     fn assert_unsigned_credential(values: CredentialDeploymentValues<ArCurve, AttributeKind>) {
         let cred_id = values.cred_id;
@@ -244,8 +199,14 @@ mod tests {
         assert_eq!(values.threshold.0, 1);
     }
 
-    #[test]
-    pub fn create_unsigned_credential_with_keys_test() {
+    fn create_unsigned_credential() -> UnsignedCredentialDeploymentInfoWithRandomness {
+        let cred_number = 1;
+        let revealed_attributes = Vec::new();
+        let ip_info = read_ip_info();
+        let global_context = read_global();
+        let ars_infos = read_ars_infos();
+        let id_object = read_identity_object();
+
         let id_cred_sec: PedersenValue<ArCurve> = base16_decode_string(
             "7392eb0b4840c8a6f9314e99a8dd3e2c3663a1e615d8820851e3abd2965fab18",
         )
@@ -264,10 +225,12 @@ mod tests {
             attribute_randomness.insert(tag, randomness);
         }
 
-        let key = ed25519::PublicKey::from_bytes(
+        let key = ed25519::VerifyingKey::from_bytes(
             hex::decode("29723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b1")
                 .unwrap()
-                .as_slice(),
+                .as_slice()
+                .try_into()
+                .unwrap(),
         )
         .unwrap();
         let mut key_map: BTreeMap<KeyIndex, VerifyKey> = BTreeMap::new();
@@ -279,9 +242,13 @@ mod tests {
             keys:      key_map,
         };
 
-        let common = create_test_input();
-        let input = UnsignedCredentialInputWithKeys {
-            common,
+        let input = UnsignedCredentialInput {
+            ars_infos,
+            cred_number,
+            global_context,
+            id_object,
+            ip_info,
+            revealed_attributes,
             id_cred_sec,
             prf_key,
             blinding_randomness,
@@ -289,27 +256,51 @@ mod tests {
             credential_public_keys,
         };
 
-        let result_str = create_unsigned_credential_with_keys_v1_aux(input).unwrap();
+        let result_str = create_unsigned_credential_v1_aux(input).unwrap();
         let result: UnsignedCredentialDeploymentInfoWithRandomness =
             serde_json::from_str(&result_str).unwrap();
-
-        assert_unsigned_credential(result.unsigned_cdi.values);
+        result
     }
 
     #[test]
-    pub fn create_unsigned_credential_with_seed_test() {
-        let common = create_test_input();
-        let input = UnsignedCredentialInputWithSeed {
-            common,
-            identity_index: 0,
-            net: Net::Testnet,
-            seed_as_hex: TEST_SEED_1.to_string(),
+    pub fn create_unsigned_credential_test() {
+        let unsigned_credential = create_unsigned_credential();
+        assert_unsigned_credential(unsigned_credential.unsigned_cdi.values);
+    }
+
+    #[test]
+    pub fn compute_credential_deployment_hash_to_sign_test() {
+        let unsigned_cdi = create_unsigned_credential().unsigned_cdi;
+        let expiry = TransactionTime::from_seconds(0x0685810406858104);
+
+        let details = CredentialDeploymentDetails {
+            expiry,
+            unsigned_cdi,
         };
 
-        let result_str = create_unsigned_credential_with_seed_v1_aux(input).unwrap();
-        let result: UnsignedCredentialDeploymentInfoWithRandomness =
-            serde_json::from_str(&result_str).unwrap();
+        let credential_deployment_sign_digest = compute_credential_deployment_hash_to_sign(details);
 
-        assert_unsigned_credential(result.unsigned_cdi.values);
+        assert_eq!(credential_deployment_sign_digest.len(), 64);
+    }
+
+    #[test]
+    pub fn serialize_credential_deployment_payload_test() {
+        let unsigned_cdi = create_unsigned_credential().unsigned_cdi;
+
+        let signature_hex = "6dd355667fae4eb43c6e0ab92e870edb2de0a88cae12dbd8591507f584fe4912babff497f1b8edf9567d2483d54ddc6459bea7855281b7a246a609e3001a4e08";
+        let signature = ed25519::Signature::from_str(signature_hex).unwrap();
+
+        let mut signatures: BTreeMap<KeyIndex, AccountOwnershipSignature> = BTreeMap::new();
+        signatures.insert(KeyIndex(0), AccountOwnershipSignature::from(signature));
+
+        let payload = CredentialDeploymentPayload {
+            unsigned_cdi,
+            signatures,
+        };
+
+        let serialized_payload = serialize_credential_deployment_payload(payload);
+
+        assert!(serialized_payload.contains("0101000029723ec9a0b4ca16d5d548b676a1a0adbecdedc5446894151acb7699293d69b101b317d3fea7de56f8c96f6e72820c5cd502cc0eef8454016ee548913255897c6b52156cc60df965d3efb3f160eff6ced40000000001000300000001"));
+        assert!(serialized_payload.contains(signature_hex));
     }
 }

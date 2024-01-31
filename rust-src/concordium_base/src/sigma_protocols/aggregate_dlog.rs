@@ -119,9 +119,13 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::G1;
+    use ark_bls12_381::G1Projective;
     use rand::{thread_rng, Rng};
+
+    type G1 = ArkGroup<G1Projective>;
 
     #[test]
     pub fn test_aggregate_dlog_correctness() {
@@ -152,7 +156,7 @@ mod tests {
                     prove(&mut ro.split(), &agg, secret, csprng).expect("Input data is valid.");
 
                 // Construct invalid parameters
-                let index_wrong_coeff: usize = csprng.gen_range(0, i);
+                let index_wrong_coeff: usize = csprng.gen_range(0..i);
 
                 let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 let wrong_public = G1::generate(csprng);

@@ -1,6 +1,6 @@
 [package]
 name = "concordium_base"
-version = "3.2.0"
+version = "4.0.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
 rust-version = "1.65"
@@ -12,34 +12,36 @@ repository = "https://github.com/Concordium/concordium-base"
 homepage = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
-ff = "0.5"
+ff = "0.13"
+ark-ff = { version = "0.4"}
+ark-ec = { version = "0.4"}
+ark-serialize = { version = "0.4"}
+ark-std = { version = "0.4"}
+ark-bls12-381 = { version = "0.4"}
 sha2 = "0.10"
 sha3 = "0.10"
 anyhow = "1.0"
-rand_core = "=0.5"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 libc = "0.2"
 chrono = {version = "0.4.24", features = ["serde"]} # the patch version is necessary since chrono adds new functionality in patch versions
 serde_with = "3"
-ed25519-dalek = "=1.0"
+ed25519-dalek = {version = "2.0", features = ["rand_core"]}
 byteorder = "1.3"
 hex = "0.4"
 itertools = "0.10"
 either = "1.6"
-pairing = "0.15"
 derive_more = "0.99"
 thiserror = "1.0"
-rand = "0.7"
+rand = "0.8"
 num = "0.4"
-group = "0.2"
-curve25519-dalek = "3"
+curve25519-dalek = { version = "4.1", features = ["rand_core", "group"]}
 zeroize = "1.1"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
 rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
 num-bigint = "0.4"
 num-traits = "0.2"
-bs58 = { version = "0.4", features = ["check"] }
+bs58 = { version = "0.5", features = ["check"] }
 leb128 = "0.2"
 rayon = "1.7"
 subtle = "2.3"
@@ -52,12 +54,15 @@ pbkdf2 = { version  = "0.11", optional = true }
 hmac = { version  = "0.12", optional = true }
 nom = "7.1.3"
 
+# Dependencies needed by the ffi feature.
+rand_chacha = { version = "0.3", default-features = false, optional = true }
+
 [lib]
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
-version = "8.1"
+version = "9.0"
 path = "../../smart-contracts/contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
@@ -68,13 +73,13 @@ path = "../concordium_base_derive"
 
 [features]
 default = []
-ffi = []
+ffi = ["rand_chacha"]
 internal-test-helpers = []
 encryption = ["cbc", "aes", "base64", "pbkdf2", "hmac"]
 
 [dev-dependencies]
 criterion = "0.4"
-rand = {version = "0.7", features = ["small_rng"]}
+rand = {version = "0.8", features = ["small_rng"]}
 
 [[bench]]
 name = "hash_bench"

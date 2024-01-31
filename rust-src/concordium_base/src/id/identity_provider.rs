@@ -10,6 +10,7 @@ use crate::{
     random_oracle::RandomOracle,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
 };
+use ed25519_dalek::Signer as _;
 use rand::*;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -546,31 +547,24 @@ pub fn create_initial_cdi<
         cred_account: pub_info_for_ip.vk_acc,
     };
 
-    let sig = sign_initial_cred_values(&cred_values, expiry, ip_info, ip_cdi_secret_key);
+    let sig = sign_initial_cred_values(&cred_values, expiry, ip_cdi_secret_key);
     InitialCredentialDeploymentInfo {
         values: cred_values,
         sig,
     }
 }
 
-fn sign_initial_cred_values<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
->(
+fn sign_initial_cred_values<C: Curve, AttributeType: Attribute<C::Scalar>>(
     initial_cred_values: &InitialCredentialDeploymentValues<C, AttributeType>,
     expiry: TransactionTime,
-    ip_info: &IpInfo<P>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> IpCdiSignature {
     let mut hasher = Sha256::new();
     hasher.update(&to_bytes(&expiry));
     hasher.update(&to_bytes(&initial_cred_values));
     let to_sign = hasher.finalize();
-    let expanded_sk = ed25519_dalek::ExpandedSecretKey::from(ip_cdi_secret_key);
-    expanded_sk
-        .sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key)
-        .into()
+    let signing_key = ed25519_dalek::SigningKey::from(ip_cdi_secret_key);
+    signing_key.sign(to_sign.as_ref()).into()
 }
 
 pub fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
@@ -685,7 +679,6 @@ mod tests {
         id::{account_holder::generate_id_recovery_request, constants::ArCurve, test::*},
         pedersen_commitment::{CommitmentKey, Value as PedersenValue},
     };
-    use ff::Field;
     use std::collections::btree_map::BTreeMap;
 
     const EXPIRY: TransactionTime = TransactionTime {
@@ -709,7 +702,7 @@ mod tests {
         let ck = CommitmentKey::<ArCurve>::generate(&mut csprng);
 
         // Make degree-d polynomial
-        let d = csprng.gen_range(1, 10);
+        let d = csprng.gen_range(1..10);
         let mut coeffs = Vec::new();
         let mut rands = Vec::new();
         let mut values = Vec::new();

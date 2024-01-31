@@ -6,6 +6,7 @@ use crate::{
     },
     constants::*,
 };
+pub use concordium_contracts_common::WasmVersion;
 /// Re-export of common helper functionality for smart contract, such as types
 /// and serialization specific for smart contracts.
 pub use concordium_contracts_common::{
@@ -25,48 +26,6 @@ use std::convert::{TryFrom, TryInto};
 )]
 pub type Parameter = OwnedParameter;
 
-#[derive(
-    SerdeSerialize, SerdeDeserialize, Debug, Copy, Clone, Display, PartialEq, Eq, PartialOrd, Ord,
-)]
-#[serde(try_from = "u8", into = "u8")]
-#[repr(u8)]
-/// Version of the module. This determines the chain API that the module can
-/// access.
-pub enum WasmVersion {
-    #[display = "V0"]
-    /// The initial smart contracts version. This has a simple state API that
-    /// has very limited capacity. `V0` contracts also use message-passing as
-    /// the interaction method.
-    V0 = 0u8,
-    #[display = "V1"]
-    /// `V1` contracts were introduced with protocol version 4. In comparison to
-    /// `V0` contracts they use synchronous calls as the interaction method,
-    /// and they have access to a more fine-grained state API allowing for
-    /// unlimited (apart from NRG costs) state size.
-    V1,
-}
-
-/// V0 is the default version of smart contracts.
-impl Default for WasmVersion {
-    fn default() -> Self { Self::V0 }
-}
-
-impl From<WasmVersion> for u8 {
-    fn from(x: WasmVersion) -> Self { x as u8 }
-}
-
-impl TryFrom<u8> for WasmVersion {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Self::V0),
-            1 => Ok(Self::V1),
-            _ => anyhow::bail!("Only versions 0 and 1 of smart contracts are supported."),
-        }
-    }
-}
-
 impl Serial for WasmVersion {
     #[inline(always)]
     fn serial<B: Buffer>(&self, out: &mut B) { u32::from(u8::from(*self)).serial(out) }
@@ -76,7 +35,7 @@ impl Deserial for WasmVersion {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let x = u32::deserial(source)?;
         let tag = u8::try_from(x)?;
-        tag.try_into()
+        Ok(tag.try_into()?)
     }
 }
 

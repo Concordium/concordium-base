@@ -3,18 +3,20 @@
 #[macro_use]
 extern crate criterion;
 
+use ark_bls12_381::{Fr, G1Projective};
 use concordium_base::{
     bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators},
-    curve_arithmetic::*,
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
     id::id_proof_types::ProofVersion,
     pedersen_commitment::*,
     random_oracle::RandomOracle,
 };
 use criterion::Criterion;
 use curve25519_dalek::ristretto::RistrettoPoint;
-use pairing::bls12_381::G1;
 use rand::*;
 use std::time::Duration;
+
+type G1 = ArkGroup<G1Projective>;
 
 pub fn prove_verify_benchmarks<SomeCurve: Curve>(c: &mut Criterion) {
     let bench_group_name = "Range Proof for ".to_owned() + std::any::type_name::<SomeCurve>();

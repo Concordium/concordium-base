@@ -6,10 +6,11 @@ use crate::{
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial,
     },
-    curve_arithmetic::{Curve, Pairing},
+    curve_arithmetic::{arkworks_instances::ArkGroup, Curve, Pairing},
 };
 use anyhow::bail;
-use pairing::bls12_381::G1;
+use ark_bls12_381::{G1Projective, G2Projective};
+use ark_ec::bls12::Bls12;
 use serde::{
     de::{self, Visitor},
     Deserializer, Serializer,
@@ -18,12 +19,14 @@ use std::{fmt, io::Cursor, str::FromStr};
 use thiserror::Error;
 
 /// Curve used by the anonymity revoker.
-pub type ArCurve = pairing::bls12_381::G1;
+pub type ArCurve = ArkGroup<G1Projective>;
+/// G2 group of the BLS12-381 curve
+pub type BlsG2 = ArkGroup<G2Projective>;
 /// Pairing used by the identity provider.
-pub type IpPairing = pairing::bls12_381::Bls12;
+pub type IpPairing = Bls12<ark_bls12_381::Config>;
 /// Field used by the identity provider and anonymity revoker.
-/// This isthe base field of both the ArCurve and the IpPairing.
-pub type BaseField = <pairing::bls12_381::Bls12 as Pairing>::ScalarField;
+/// This is the scalar field of both the ArCurve and the IpPairing.
+pub type BaseField = <IpPairing as Pairing>::ScalarField;
 
 /// Index used to create the RegId of the initial credential.
 pub const INITIAL_CREDENTIAL_INDEX: u8 = 0;
@@ -110,13 +113,13 @@ impl From<u64> for AttributeKind {
     fn from(x: u64) -> Self { AttributeKind(x.to_string()) }
 }
 
-impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
-    fn to_field_element(&self) -> <G1 as Curve>::Scalar {
+impl Attribute<<ArkGroup<G1Projective> as Curve>::Scalar> for AttributeKind {
+    fn to_field_element(&self) -> <ArkGroup<G1Projective> as Curve>::Scalar {
         let mut buf = [0u8; 32];
         let len = self.0.as_bytes().len();
         buf[1 + (31 - len)..].copy_from_slice(self.0.as_bytes());
         buf[0] = len as u8; // this should be valid because len <= 31 so the first two bits will be unset
-        <<G1 as Curve>::Scalar as Deserial>::deserial(&mut Cursor::new(&buf))
+        <<ArkGroup<G1Projective> as Curve>::Scalar as Deserial>::deserial(&mut Cursor::new(&buf))
             .expect("31 bytes + length fits into a scalar.")
     }
 }

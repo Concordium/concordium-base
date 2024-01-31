@@ -263,7 +263,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
         let mask = SigRetrievalRandomness::generate_non_zero(csprng);
         let mut comm_to_signer: P::G1 = ps_pk.g.mul_by_scalar(&mask);
         let mut commitments = Vec::with_capacity(data_size);
-        for cY_j in ps_pk.ys.iter().take(csprng.gen_range(0, data_size)) {
+        for cY_j in ps_pk.ys.iter().take(csprng.gen_range(0..data_size)) {
             let v_j = Value::generate(csprng);
             let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
             comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
@@ -292,9 +292,17 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqSig<P
 
 #[cfg(test)]
 mod tests {
+
+    use ark_bls12_381::G1Projective;
+
     use super::*;
-    use crate::ps_sig::{SecretKey as PsSigSecretKey, Signature};
-    use pairing::bls12_381::{Bls12, G1};
+    use crate::{
+        curve_arithmetic::arkworks_instances::ArkGroup,
+        ps_sig::{SecretKey as PsSigSecretKey, Signature},
+    };
+
+    type G1 = ArkGroup<G1Projective>;
+    type Bls12 = ark_ec::models::bls12::Bls12<ark_bls12_381::Config>;
 
     #[test]
     #[allow(non_snake_case)]
@@ -343,7 +351,7 @@ mod tests {
 
                 {
                     if !wrong_ces.commitments.is_empty() {
-                        let idx = csprng.gen_range(0, wrong_ces.commitments.len());
+                        let idx = csprng.gen_range(0..wrong_ces.commitments.len());
                         let tmp = wrong_ces.commitments[idx];
                         wrong_ces.commitments[idx] = wrong_ces
                             .comm_key

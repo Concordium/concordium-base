@@ -4,7 +4,10 @@ use concordium_base::{
     common::*,
     curve_arithmetic::Curve,
     elgamal::{PublicKey, SecretKey},
-    id::types::*,
+    id::{
+        constants::{ArCurve, BaseField, BlsG2, IpPairing},
+        types::*,
+    },
     ps_sig,
 };
 use crossterm::{
@@ -12,9 +15,9 @@ use crossterm::{
     terminal::{Clear, ClearType},
 };
 use dialoguer::{Confirm, Input};
+use ed25519_dalek::SigningKey;
 use hmac::{Hmac, Mac};
 use keygen_bls::{keygen_bls, keygen_bls_deprecated};
-use pairing::bls12_381::{Bls12, Fr, G1, G2};
 use sha2::Sha512;
 use std::{
     collections::HashMap,
@@ -24,6 +27,11 @@ use std::{
     str::FromStr,
 };
 use structopt::StructOpt;
+
+type Bls12 = IpPairing;
+type G1 = ArCurve;
+type G2 = BlsG2;
+type Fr = BaseField;
 
 const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
 
@@ -289,7 +297,8 @@ pub fn read_words_from_file(
 fn handle_generate_update_keys(kgup: KeygenGovernance) -> Result<(), String> {
     let mut csprng = rand::thread_rng();
     let keypair = concordium_base::common::types::KeyPair::generate(&mut csprng);
-    let public_bytes = keypair.public.to_bytes();
+    let signing_key: &SigningKey = keypair.as_ref();
+    let public_bytes = signing_key.verifying_key().to_bytes();
     let sig = keypair.sign(&public_bytes);
     let level_str = match kgup.level {
         Level::Root => "root",
@@ -298,10 +307,10 @@ fn handle_generate_update_keys(kgup: KeygenGovernance) -> Result<(), String> {
     };
     let public_data = serde_json::json!({
         "key": {
-            "verifyKey": base16_encode_string(&keypair.public),
+            "verifyKey": base16_encode_string(&signing_key.verifying_key()),
             "scheme": "Ed25519",
         },
-        "signature": sig,
+        "signature": base16_encode_string(&sig),
         "type": level_str,
     });
     let secret_data = serde_json::json!({
@@ -529,8 +538,9 @@ fn handle_generate_ip_keys(kgip: KeygenIp) -> Result<(), String> {
         println!("Using deprecated BLS keygen.");
     }
     let ip_public_key = ps_sig::PublicKey::from(&ip_secret_key);
-    let ed_sk = succeed_or_die!(generate_ed_sk(&bytes_from_file), e => "Could not generate signature key for EdDSA because {}");
-    let ed_pk = ed25519_dalek::PublicKey::from(&ed_sk);
+    let ed_sk = generate_ed_sk(&bytes_from_file);
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&ed_sk);
+    let ed_pk = signing_key.verifying_key();
     let ip_cdi_verify_key = ed_pk;
     let ip_cdi_secret_key = ed_sk;
     let id = kgip.ip_identity;
@@ -665,12 +675,7 @@ pub fn keygen_ed(seed: &[u8]) -> [u8; 32] {
 
 /// It generates a ed25519_dalek secret key given a seed, using the `keygen_ed`
 /// above.
-pub fn generate_ed_sk(
-    seed: &[u8],
-) -> Result<ed25519_dalek::SecretKey, ed25519_dalek::SignatureError> {
-    let sk = ed25519_dalek::SecretKey::from_bytes(&keygen_ed(seed))?;
-    Ok(sk)
-}
+pub fn generate_ed_sk(seed: &[u8]) -> ed25519_dalek::SecretKey { keygen_ed(seed) }
 
 #[cfg(test)]
 mod tests {

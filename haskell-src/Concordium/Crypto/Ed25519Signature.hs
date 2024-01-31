@@ -25,7 +25,7 @@ import System.IO.Unsafe
 
 foreign import ccall unsafe "eddsa_priv_key" genPrivateKey :: IO (Ptr SignKey)
 foreign import ccall unsafe "eddsa_pub_key" derivePublicFFI :: Ptr SignKey -> IO (Ptr VerifyKey)
-foreign import ccall unsafe "eddsa_sign" signFFI :: Ptr Word8 -> Word32 -> Ptr SignKey -> Ptr VerifyKey -> Ptr Word8 -> IO ()
+foreign import ccall unsafe "eddsa_sign" signFFI :: Ptr Word8 -> Word32 -> Ptr SignKey -> Ptr Word8 -> IO ()
 foreign import ccall unsafe "eddsa_verify" verifyFFI :: Ptr Word8 -> Word32 -> Ptr VerifyKey -> Ptr Word8 -> CSize -> IO Int32
 foreign import ccall unsafe "&eddsa_public_free" freeVerifyKey :: FunPtr (Ptr VerifyKey -> IO ())
 foreign import ccall unsafe "eddsa_public_to_bytes" toBytesVerifyKey :: Ptr VerifyKey -> Ptr CSize -> IO (Ptr Word8)
@@ -122,15 +122,14 @@ newKeyPair = do
     let verifyKey = deriveVerifyKey signKey
     return (signKey, verifyKey)
 
-sign :: SignKey -> VerifyKey -> ByteString -> BSS.ShortByteString
-sign signKey verifyKey m = unsafePerformIO $
+sign :: SignKey -> ByteString -> BSS.ShortByteString
+sign signKey m = unsafePerformIO $
     withSignKey signKey $ \signKeyPtr ->
-        withVerifyKey verifyKey $ \verifyKeyPtr ->
-            BS.unsafeUseAsCStringLen m $ \(m', mlen) -> do
-                -- this use of unsafe is fine because the sign function
-                -- checks the length before dereferencing the data pointer
-                ((), s) <- withAllocatedShortByteString signatureSize $ signFFI (castPtr m') (fromIntegral mlen) signKeyPtr verifyKeyPtr
-                return s
+        BS.unsafeUseAsCStringLen m $ \(m', mlen) -> do
+            -- this use of unsafe is fine because the sign function
+            -- checks the length before dereferencing the data pointer
+            ((), s) <- withAllocatedShortByteString signatureSize $ signFFI (castPtr m') (fromIntegral mlen) signKeyPtr
+            return s
 
 verify :: VerifyKey -> ByteString -> BSS.ShortByteString -> Bool
 verify vf m sig = (BSS.length sig == signatureSize) && (suc > 0)

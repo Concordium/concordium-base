@@ -12,12 +12,14 @@ use crate::{
         set_non_membership_proof::SetNonMembershipProof,
     },
     common::*,
-    curve_arithmetic::Curve,
+    curve_arithmetic::{arkworks_instances::ArkGroup, Curve},
     sigma_protocols::dlog::Response as DlogResponse,
 };
-use pairing::bls12_381::G1;
+use ark_bls12_381::G1Projective;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use std::{collections::BTreeSet, convert::TryFrom, marker::PhantomData, str::FromStr};
+
+type G1 = ArkGroup<G1Projective>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy)]
 pub enum ProofVersion {

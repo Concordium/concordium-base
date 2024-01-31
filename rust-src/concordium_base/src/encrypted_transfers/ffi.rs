@@ -3,11 +3,12 @@
 //! scheduler, and the mobile wallet.
 
 use super::*;
-use crate::{common::*, elgamal, ffi_helpers::*};
-use rand::prelude::StdRng;
+use crate::{common::*, curve_arithmetic::arkworks_instances::ArkGroup, elgamal, ffi_helpers::*};
+use ark_bls12_381::G1Projective;
+use rand_chacha::ChaCha20Rng;
 use std::io::Cursor;
 
-type Group = pairing::bls12_381::G1;
+type Group = ArkGroup<G1Projective>;
 
 /// # Safety
 /// This function is safe if the pointers are all non-null, and produced
@@ -66,7 +67,7 @@ unsafe extern "C" fn group_element_from_seed(
     gc_ptr: *const GlobalContext<Group>,
     seed: u64,
 ) -> *mut GroupElement {
-    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
+    let mut rng: ChaCha20Rng = SeedableRng::seed_from_u64(seed);
     let gc = from_ptr!(gc_ptr);
     let pk = elgamal::PublicKey::from(&elgamal::SecretKey::generate(
         gc.elgamal_generator(),
@@ -418,7 +419,7 @@ unsafe extern "C" fn elgamal_sec_key_gen_seed(
     seed: u64,
 ) -> *mut elgamal::SecretKey<Group> {
     let gc = from_ptr!(gc_ptr);
-    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
+    let mut rng: ChaCha20Rng = SeedableRng::seed_from_u64(seed);
     Box::into_raw(Box::new(elgamal::SecretKey::generate(
         gc.elgamal_generator(),
         &mut rng,

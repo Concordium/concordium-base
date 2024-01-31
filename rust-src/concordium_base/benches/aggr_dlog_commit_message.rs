@@ -1,10 +1,12 @@
+use ark_bls12_381::G1Projective;
 use concordium_base::{
-    curve_arithmetic::*,
+    curve_arithmetic::{arkworks_instances::ArkGroup, *},
     sigma_protocols::{aggregate_dlog::*, common::*},
 };
 use criterion::*;
-use pairing::bls12_381::G1;
 use rand::*;
+
+type G1 = ArkGroup<G1Projective>;
 
 /// Benchmark the aggregate dlog sigma protocol
 fn bench_aggr_dlog_commit_message(c: &mut Criterion) {

@@ -1079,7 +1079,7 @@ pub struct IpInfo<P: Pairing> {
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub ip_cdi_verify_key: ed25519::PublicKey,
+    pub ip_cdi_verify_key: ed25519::VerifyingKey,
 }
 
 /// Collection of identity providers.
@@ -1370,9 +1370,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, Attri
     }
 }
 
-#[derive(Debug, PartialEq, Eq, concordium_std::Serialize)]
+#[derive(Debug, PartialEq, Eq, concordium_std::Serialize, serde::Serialize, serde::Deserialize)]
 /// Which signature scheme is being used. Currently only one is supported.
 pub enum SchemeId {
+    #[serde(rename = "Ed25519")]
     Ed25519,
 }
 
@@ -1380,7 +1381,7 @@ pub enum SchemeId {
 /// Public AKA verification key for a given scheme. Only ed25519 is currently
 /// supported.
 pub enum VerifyKey {
-    Ed25519VerifyKey(ed25519::PublicKey),
+    Ed25519VerifyKey(ed25519::VerifyingKey),
 }
 
 impl concordium_std::Serial for VerifyKey {
@@ -1400,7 +1401,7 @@ impl concordium_std::Deserial for VerifyKey {
         if tag == 0 {
             let bytes: [u8; ed25519::PUBLIC_KEY_LENGTH] =
                 concordium_std::Deserial::deserial(source)?;
-            let pk = ed25519::PublicKey::from_bytes(&bytes)
+            let pk = ed25519::VerifyingKey::from_bytes(&bytes)
                 .map_err(|_| concordium_std::ParseError {})?;
             Ok(Self::Ed25519VerifyKey(pk))
         } else {
@@ -1475,16 +1476,16 @@ impl<'de> SerdeDeserialize<'de> for VerifyKey {
     }
 }
 
-impl From<ed25519::PublicKey> for VerifyKey {
-    fn from(pk: ed25519::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
+impl From<ed25519::VerifyingKey> for VerifyKey {
+    fn from(pk: ed25519::VerifyingKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
 }
 
-impl From<&ed25519::Keypair> for VerifyKey {
-    fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+impl From<&ed25519::SigningKey> for VerifyKey {
+    fn from(kp: &ed25519::SigningKey) -> Self { VerifyKey::Ed25519VerifyKey(kp.verifying_key()) }
 }
 
 impl From<&KeyPair> for VerifyKey {
-    fn from(kp: &KeyPair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+    fn from(kp: &KeyPair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public()) }
 }
 
 /// Compare byte representation.
@@ -1894,19 +1895,21 @@ impl<C: Curve> GlobalContext<C> {
     /// amount, and a fixed seed.
     pub fn generate_from_seed(genesis_string: String, n: usize, seed: &[u8]) -> Self {
         // initialize the first generator from pi digits.
-        let g = C::hash_to_group(seed);
+        let g = C::hash_to_group(seed).expect("Hashing to curve expected to succeed");
 
         // generate next generator by hashing the previous one
-        let h = C::hash_to_group(&to_bytes(&g));
+        let h = C::hash_to_group(&to_bytes(&g)).expect("Hashing to curve expected to succeed");
 
         let cmm_key = PedersenKey { g, h };
 
         let mut generators = Vec::with_capacity(n);
         let mut generator = h;
         for _ in 0..n {
-            generator = C::hash_to_group(&to_bytes(&generator));
+            generator = C::hash_to_group(&to_bytes(&generator))
+                .expect("Hashing to curve expected to succeed");
             let g = generator;
-            generator = C::hash_to_group(&to_bytes(&generator));
+            generator = C::hash_to_group(&to_bytes(&generator))
+                .expect("Hashing to curve expected to succeed");
             let h = generator;
             generators.push((g, h));
         }
@@ -2064,7 +2067,7 @@ impl From<AccountKeys> for AccountPublicKeys {
                 inner_map.insert(
                     u8::from(key_index),
                     concordium_contracts_common::PublicKey::Ed25519(PublicKeyEd25519(
-                        *public_key.public.as_bytes(),
+                        *public_key.public().as_bytes(),
                     )),
                 );
             }
@@ -2130,7 +2133,7 @@ impl AccountKeys {
             let cred_sigs = cred_keys
                 .keys
                 .iter()
-                .map(|(ki, kp)| (*ki, kp.sign(msg)))
+                .map(|(ki, kp)| (*ki, kp.sign(msg).into()))
                 .collect::<BTreeMap<_, _>>();
             signatures.insert(*ci, cred_sigs);
         }
@@ -2151,9 +2154,7 @@ impl AccountKeys {
                     (
                         u8::from(*ki),
                         concordium_contracts_common::Signature::Ed25519(SignatureEd25519(
-                            // Unwrap is safe since the conversion is between signature types
-                            // represented by byte arrays of the same length [u8, u64].
-                            kp.sign(msg).sig.try_into().unwrap(),
+                            kp.sign(msg).to_bytes(),
                         )),
                     )
                 })
@@ -2222,7 +2223,7 @@ impl PublicCredentialData for CredentialData {
     fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
             .iter()
-            .map(|(&idx, kp)| (idx, VerifyKey::Ed25519VerifyKey(kp.public)))
+            .map(|(&idx, kp)| (idx, kp.into()))
             .collect()
     }
 }
@@ -2240,10 +2241,7 @@ impl CredentialDataWithSigning for CredentialData {
         );
         self.keys
             .iter()
-            .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(&to_sign, &kp.public).into())
-            })
+            .map(|(&idx, kp)| (idx, kp.sign(&to_sign).into()))
             .collect()
     }
 }
@@ -2263,7 +2261,7 @@ impl PublicInitialAccountData for InitialAccountData {
     fn get_public_keys(&self) -> BTreeMap<KeyIndex, VerifyKey> {
         self.keys
             .iter()
-            .map(|(&idx, kp)| (idx, VerifyKey::Ed25519VerifyKey(kp.public)))
+            .map(|(&idx, kp)| (idx, kp.into()))
             .collect()
     }
 }
@@ -2276,10 +2274,7 @@ impl InitialAccountDataWithSigning for InitialAccountData {
         let to_sign = Sha256::digest(to_bytes(pub_info_for_ip));
         self.keys
             .iter()
-            .map(|(&idx, kp)| {
-                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(&to_sign, &kp.public).into())
-            })
+            .map(|(&idx, kp)| (idx, kp.sign(&to_sign).into()))
             .collect()
     }
 }
@@ -2648,7 +2643,7 @@ mod tests {
         use rand::thread_rng;
 
         let mut csprng = thread_rng();
-        let keypair = ed25519::Keypair::generate(&mut csprng);
+        let keypair = ed25519::SigningKey::generate(&mut csprng);
         for _ in 0..1000 {
             let message: &[u8] = b"test";
             let signature: AccountOwnershipSignature = keypair.sign(message).into();
@@ -2677,17 +2672,13 @@ mod tests {
         // Get public key from map
         let credential_keys = &keypairs.keys[&CredentialIndex { index: 0 }];
         let key_pair = &credential_keys.keys[&KeyIndex(0)];
-        let public_key = key_pair.public;
+        let public_key = key_pair.public();
 
         // Check that signature is valid
         match signature {
             concordium_std::Signature::Ed25519(signature) => {
                 public_key
-                    .verify(
-                        message,
-                        &ed25519_dalek::Signature::from_bytes(&signature.0)
-                            .expect("Should be able to convert signature"),
-                    )
+                    .verify(message, &ed25519_dalek::Signature::from_bytes(&signature.0))
                     .expect("Should be a valid signature");
             }
             _ => assert!(false, "Could not get signature"),

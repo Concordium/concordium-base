@@ -79,8 +79,12 @@ impl<C: Curve> Randomness<C> {
 
 #[cfg(test)]
 mod tests {
+    use crate::curve_arithmetic::arkworks_instances::ArkGroup;
+
     use super::*;
-    use pairing::bls12_381::{G1Affine, G2Affine};
+    use ark_bls12_381::{G1Projective, G2Projective};
+    type G1 = ArkGroup<G1Projective>;
+    type G2 = ArkGroup<G2Projective>;
     macro_rules! macro_test_randomness_to_byte_conversion {
         ($function_name:ident, $curve_type:path) => {
             #[test]
@@ -98,12 +102,12 @@ mod tests {
     }
 
     macro_test_randomness_to_byte_conversion!(
-        randomness_to_byte_conversion_bls12_381_g1_affine,
-        G1Affine
+        randomness_to_byte_conversion_bls12_381_g1_projective,
+        G1
     );
 
     macro_test_randomness_to_byte_conversion!(
-        randomness_to_byte_conversion_bls12_381_g2_affine,
-        G2Affine
+        randomness_to_byte_conversion_bls12_381_g2_projective,
+        G2
     );
 }

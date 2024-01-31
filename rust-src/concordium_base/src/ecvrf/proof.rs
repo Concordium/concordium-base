@@ -29,24 +29,26 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
 /// a given public key.
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
-/// Implements step 8 of <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1>
+/// Implements step 8 of <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.1>
 /// i.e. transforms a proof to a byte string
 impl Serial for Proof {
     #[inline]
     fn serial<B: Buffer>(&self, x: &mut B) {
-        let c = &self.1.reduce().to_bytes();
+        // The scalar is already reduced https://docs.rs/curve25519-dalek/4.1.1/src/curve25519_dalek/scalar.rs.html#211,
+        // so we just convert it to bytes.
+        let c = &self.1.to_bytes();
         // assert c is within range
         assert_eq!(c[16..32], [0u8; 16]);
         x.write_all(&self.0.compress().to_bytes()[..])
             .expect("Writing to buffer should succeed.");
         x.write_all(&c[..16])
             .expect("Writing to buffer should succeed.");
-        x.write_all(&self.2.reduce().to_bytes()[..])
+        x.write_all(&self.2.to_bytes()[..])
             .expect("Writing to buffer should succeed.");
     }
 }
 
-/// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.4>
+/// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.4.4>
 /// Construct a `Proof` from a slice of bytes. This function always
 /// results in a valid proof object.
 impl Deserial for Proof {
@@ -61,9 +63,9 @@ impl Deserial for Proof {
         let compressed_point = CompressedEdwardsY(point_bytes);
         match compressed_point.decompress() {
             None => Err(ProofError(InternalError::PointDecompression).into()),
-            Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1) {
+            Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1).into() {
                 None => Err(ProofError(InternalError::ScalarFormat).into()),
-                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2) {
+                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2).into() {
                     None => Err(ProofError(InternalError::ScalarFormat).into()),
                     Some(s2) => Ok(Proof(p, s1, s2)),
                 },
@@ -78,7 +80,7 @@ impl Debug for Proof {
     }
 }
 
-/// Implements <https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.2>
+/// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.2>
 impl Proof {
     pub fn to_hash(&self) -> [u8; 64] {
         let p = self.0.mul_by_cofactor();

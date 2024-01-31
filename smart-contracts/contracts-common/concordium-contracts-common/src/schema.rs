@@ -14,6 +14,8 @@ use core::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
 };
+#[cfg(feature = "derive-serde")]
+pub use impls::VersionedSchemaError;
 /// Contract schema related types
 #[cfg(feature = "std")]
 use std::{
@@ -407,6 +409,10 @@ impl SchemaType for [u8] {
 
 impl SchemaType for String {
     fn get_type() -> Type { Type::String(SizeLength::U32) }
+}
+
+impl SchemaType for &str {
+    fn get_type() -> Type { String::get_type() }
 }
 
 impl SchemaType for OwnedContractName {
