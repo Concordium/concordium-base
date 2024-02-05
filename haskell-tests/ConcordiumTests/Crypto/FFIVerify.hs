@@ -8,6 +8,7 @@ import Concordium.ID.IdentityProvider
 import Concordium.ID.Parameters
 import Concordium.Types
 
+import Control.Monad
 import Control.Monad.Except
 import qualified Data.ByteString as BS
 import Data.Serialize

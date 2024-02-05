@@ -38,6 +38,7 @@ default-extensions:
 - MultiParamTypeClasses
 - RecordWildCards
 - TupleSections
+- TypeOperators
 
 flags:
   static:
@@ -81,7 +82,6 @@ dependencies:
 - unordered-containers >= 0.2
 - vector >= 0.12
 - proto-lens >= 0.7
-- proto-lens-protobuf-types >= 0.7
 - proto-lens-runtime >= 0.7
 
 library:
