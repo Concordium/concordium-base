@@ -1863,6 +1863,7 @@ dependencies = [
  "either",
  "hex",
  "key_derivation",
+ "rand",
  "serde",
  "serde_json",
  "thiserror",
