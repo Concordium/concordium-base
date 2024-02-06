@@ -494,7 +494,8 @@ pub fn init_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStr
                 let ctx = ExternContext::<ExternInitContext>::open(());
                 let mut state_api = ExternStateApi::open();
                 let mut state_builder = StateBuilder::open(state_api.clone());
-                match #fn_name(&ctx, &mut state_builder, #(#fn_optional_args, )*) {
+                let result = #fn_name(&ctx, &mut state_builder, #(#fn_optional_args, )*);
+                match result {
                     Ok(state) => {
                         // Store the state.
                         let mut root_entry = state_api.create_entry(&[]).unwrap_abort();
@@ -612,9 +613,11 @@ pub fn receive_worker(attr: TokenStream, item: TokenStream) -> syn::Result<Token
                 #setup_fn_optional_args
                 let ctx = ExternContext::<ExternReceiveContext>::open(());
                 let mut host = ExternLowLevelHost::default();
-                match #fn_name(&ctx, &mut host, #(#fn_optional_args, )*) {
+                let result = #fn_name(&ctx, &mut host, #(#fn_optional_args, )*);
+                match result {
                     Ok(rv) => {
-                        if rv.serial(&mut ExternReturnValue::open()).is_err() {
+                        let r = rv.serial(&mut ExternReturnValue::open());
+                        if r.is_err() {
                             trap() // Could not serialize the return value.
                         }
                         0
