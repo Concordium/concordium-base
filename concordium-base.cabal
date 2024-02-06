@@ -71,6 +71,7 @@ library
       Concordium.ID.Parameters
       Concordium.ID.Types
       Concordium.Logger
+      Concordium.MerkleProofs
       Concordium.Types
       Concordium.Types.Accounts
       Concordium.Types.Accounts.Releases
@@ -303,6 +304,7 @@ test-suite test
       ConcordiumTests.Crypto.VRF
       ConcordiumTests.Data.Base58Encoding
       ConcordiumTests.ID.Types
+      ConcordiumTests.MerkleProofs
       ConcordiumTests.Utils.Encryption
       ConcordiumTests.Utils.InterpolationSearch
       Generators
