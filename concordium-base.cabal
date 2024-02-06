@@ -1,6 +1,6 @@
 cabal-version: 2.0
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -122,6 +122,7 @@ library
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   ghc-options: -Wall -Wcompat -Werror=missing-fields -Werror=missing-methods -Wredundant-constraints -fno-ignore-asserts
   extra-libraries:
       concordium_base
@@ -149,7 +150,6 @@ library
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
@@ -186,6 +186,7 @@ executable generate-update-keys
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   ghc-options: -Wall -Wcompat -Werror=missing-fields -Werror=missing-methods -Wredundant-constraints -fno-ignore-asserts
   build-depends:
       QuickCheck >=2.12
@@ -214,7 +215,6 @@ executable generate-update-keys
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
@@ -246,6 +246,7 @@ executable genesis
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   ghc-options: -Wall -Wcompat -fno-ignore-asserts
   build-depends:
       QuickCheck >=2.12
@@ -274,7 +275,6 @@ executable genesis
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
@@ -332,6 +332,7 @@ test-suite test
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   ghc-options: -threaded -with-rtsopts=-N -Wall -Wno-deprecations
   build-depends:
       HUnit >=1.6
@@ -360,7 +361,6 @@ test-suite test
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random
     , scientific >=0.3.2
@@ -395,6 +395,7 @@ benchmark bls-perf
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -420,7 +421,6 @@ benchmark bls-perf
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
@@ -453,6 +453,7 @@ benchmark ed25519-perf
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -478,7 +479,6 @@ benchmark ed25519-perf
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
@@ -511,6 +511,7 @@ benchmark ed25519dlog-perf
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -536,7 +537,6 @@ benchmark ed25519dlog-perf
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
@@ -569,6 +569,7 @@ benchmark sha256-perf
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -594,7 +595,6 @@ benchmark sha256-perf
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2
@@ -627,6 +627,7 @@ benchmark verify-credential-perf
       MultiParamTypeClasses
       RecordWildCards
       TupleSections
+      TypeOperators
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
@@ -652,7 +653,6 @@ benchmark verify-credential-perf
     , prettyprinter >=1.2
     , primitive >=0.7
     , proto-lens >=0.7
-    , proto-lens-protobuf-types >=0.7
     , proto-lens-runtime >=0.7
     , random >=1.1
     , scientific >=0.3.2

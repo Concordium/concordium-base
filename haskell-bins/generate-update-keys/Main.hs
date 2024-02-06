@@ -1,5 +1,7 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- | A tool for generating update keys and authorizations for
@@ -181,11 +183,12 @@ generateKeys guk = do
             doGenerateKeys @'AuthorizationsVersion1 Authorizations{..}
   where
     CommonUpdateKeys{..} = gukCommon guk
-    doGenerateKeys :: (IsAuthorizationsVersion auv) => Authorizations auv -> IO ()
+    doGenerateKeys :: forall auv. (IsAuthorizationsVersion auv) => Authorizations auv -> IO ()
     doGenerateKeys level2KeysPre = do
         putStrLn "Generating keys..."
         asKeys <- Vec.fromList <$> sequence [makeKey k "level2-key" | k <- [0 .. cukKeyCount - 1]]
-        let level2Keys = level2KeysPre{asKeys = asKeys}
+        let level2Keys :: Authorizations auv
+            level2Keys = level2KeysPre{asKeys = asKeys}
         rootKeys <- makeHAS cukRootKeys "root-key" "Root key structure"
         level1Keys <- makeHAS cukLevel1Keys "level1-key" "Level 1 key structure"
         let keyCollection = UpdateKeysCollection{..}
@@ -204,6 +207,7 @@ generateKeys guk = do
         when (fromIntegral adThreshold > nKeys) $ die (desc ++ ": threshold (" ++ show adThreshold ++ ") cannot exceed number of keys (" ++ show nKeys ++ ")")
         when (maxKey >= cukKeyCount) $ die (desc ++ ": key index " ++ show maxKey ++ " is out of bounds. Maximal index is " ++ show (cukKeyCount - 1))
         return AccessStructure{accessThreshold = UpdateKeysThreshold adThreshold, ..}
+    makeHAS :: forall k. HigherAuthDetails -> String -> String -> IO (HigherLevelKeys k)
     makeHAS HigherAuthDetails{..} name desc = do
         when (hadThreshold > hadNumKeys) $ die (desc ++ ": threshold (" ++ show hadThreshold ++ ") cannot exceed number of keys (" ++ show hadNumKeys ++ ")")
         hlkKeys <- Vec.fromList <$> sequence [makeKey k name | k <- [0 .. hadNumKeys - 1]]
