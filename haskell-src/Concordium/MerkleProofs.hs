@@ -170,21 +170,23 @@ data ParserContext result parseData context error a = ParserContext
 
 -- | A generic monad for parsing. This is implemented using continuations. The type parameters are:
 --
---   * @r@ - the ultimate result type of the continuation
---   * @d@ - the type of the data being parsed
---   * @c@ - the type of reader data
---   * @e@ - the type of parser errors
+--   * @result@ - the ultimate result type of the continuation
+--   * @parseData@ - the type of the data being parsed
+--   * @context@ - the type of reader data
+--   * @error@ - the type of parser errors
 --   * @a@ - the return type
-newtype Parse r d c e a = Parse {unParse :: ParserContext r d c e a -> r}
+newtype Parse result parseData context error a = Parse
+    { unParse :: ParserContext result parseData context error a -> result
+    }
 
-instance Functor (Parse r d c e) where
+instance Functor (Parse result parseData context error) where
     fmap f (Parse z) = Parse (\ParserContext{..} -> z ParserContext{parserCont = parserCont . f, ..})
 
-instance Applicative (Parse r d c e) where
+instance Applicative (Parse result parseData context error) where
     pure res = Parse $ \ParserContext{..} -> parserCont res parserInput parserReaderContext
     m1 <*> m2 = m1 >>= (\x1 -> m2 >>= (pure . x1))
 
-instance Monad (Parse r d c e) where
+instance Monad (Parse result parseData context error) where
     Parse a >>= cont =
         Parse
             ( \ParserContext{..} ->
@@ -206,22 +208,22 @@ instance Monad (Parse r d c e) where
 
 -- | Try to parse with the first parser, falling back to the second on a failure.
 --  If both parsers fail, the error from the first parser is used.
-(<<|>) :: Parse r d c e a -> Parse r d c e a -> Parse r d c e a
+(<<|>) :: Parse result parseData context error a -> Parse result parseData context error a -> Parse result parseData context error a
 Parse a <<|> Parse b = Parse $ \pc ->
     a pc{parserError = \e -> b pc{parserError = \_ -> parserError pc e}}
 
 -- | Try to parse with the first parser, falling back to the second on a failure.
 --  If both parsers fail, the error from the second parser is used.
-(<|>>) :: Parse r d c e a -> Parse r d c e a -> Parse r d c e a
+(<|>>) :: Parse result parseData context error a -> Parse result parseData context error a -> Parse result parseData context error a
 Parse a <|>> Parse b = Parse $ \pc ->
     a pc{parserError = \_ -> b pc}
 
-instance MonadError e (Parse r d c e) where
+instance MonadError error (Parse result parseData context error) where
     throwError e = Parse $ \pc -> parserError pc e
     catchError (Parse tryBlock) catchBlock = Parse $ \pc ->
         tryBlock (pc{parserError = \e -> unParse (catchBlock e) pc})
 
-instance MonadReader c (Parse r d c e) where
+instance MonadReader context (Parse result parseData context error) where
     ask = Parse $ \ParserContext{..} ->
         parserCont parserReaderContext parserInput parserReaderContext
     local f (Parse a) = Parse $ \pc ->
