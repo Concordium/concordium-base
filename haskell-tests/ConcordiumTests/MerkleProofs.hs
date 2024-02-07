@@ -15,31 +15,34 @@ import Concordium.MerkleProofs
 
 -- | Block hash of testing block.
 testingBlockHash :: Hash.Hash
-testingBlockHash = read "988d5a216bb56f620f90c1ed7c8a987b4f682dadf37fa473d235d5150f26b8a3"
+testingBlockHash = read "e64ad0763bc2f54129b69f4633f23f2dff05ca553472c3410a30237b18c84b77"
 
 -- | A Merkle proof against the testing block.
 --  This proof should follow the block schema, and parse into 'testingBlockTree'.
 testingBlockProof :: MerkleProof
 testingBlockProof =
-    [ SubProof
-        [RawData "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\STX\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^"],
+    [ RawData "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\BEL",
       SubProof
         [ SubProof
+            [RawData "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\STX\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^"],
+          SubProof
             [ SubProof
-                [ SubProof [RawData "\NUL\NUL\NUL\NUL\NUL\NUL\a\208\NUL\NUL\NUL\NUL\NUL\NUL\NUL\EOT"],
-                  SubProof [RawData "%\174\f\194\NUL\v\213\STX\234N\152\215\&0\n\155\171q\238\144zK\141\189\161^\215\184)B \FSj\187c\138\146=B\137\149kl\240\&8_\207\154_wK\137\230\STXe\182\204\NUL\193\200MwR\251?m\193k\152\228\134\rnI\154\236\253{3\137\SOH"]
+                [ SubProof
+                    [ SubProof [RawData "\NUL\NUL\NUL\NUL\NUL\NUL\a\208\NUL\NUL\NUL\NUL\NUL\NUL\NUL\EOT"],
+                      SubProof [RawData "%\174\f\194\NUL\v\213\STX\234N\152\215\&0\n\155\171q\238\144zK\141\189\161^\215\184)B \FSj\187c\138\146=B\137\149kl\240\&8_\207\154_wK\137\230\STXe\182\204\NUL\193\200MwR\251?m\193k\152\228\134\rnI\154\236\253{3\137\SOH"]
+                    ],
+                  SubProof
+                    [ SubProof [RawData "\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\192\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"],
+                      SubProof
+                        [ SubProof [RawData "\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\128\149*`3\201\&4#\191\247\rv$\vL\149\178W\140\219\n\240\DC3\161\223\157\154\243z\158\226>\b\241\199\228\"\\>\155\248\\\237\FS\222%\SI\209\NUL\NUL\NUL\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH?\NUL\NUL\NUL\NUL"],
+                          SubProof [RawData "\NUL"]
+                        ]
+                    ]
                 ],
               SubProof
-                [ SubProof [RawData "\228\167\238\197\135\145D:\197{\224\211\200\199\ACK\FS\225\184+\RS\185\SUBn$\185\DELVg\130\&9\160^\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\192\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"],
-                  SubProof
-                    [ SubProof [RawData "\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\128\149*`3\201\&4#\191\247\rv$\vL\149\178W\140\219\n\240\DC3\161\223\157\154\243z\158\226>\b\241\199\228\"\\>\155\248\\\237\FS\222%\SI\209\NUL\NUL\NUL\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\SOH?\NUL\NUL\NUL\NUL"],
-                      SubProof [RawData "\NUL"]
-                    ]
+                [ RawData "\196#\249\233\RS\226\CAN\178\181\&04\133\221\135\163\t:e=\219\155\219\131\157\&0\170\EM$\222\GS\191\ENQ",
+                  RawData "V\161\148\235\199\132<\236\FS=\129\245\255'\156VPV\129\SYN\RS\241\129\179t\205\f\132|\200\tf"
                 ]
-            ],
-          SubProof
-            [ RawData "\196#\249\233\RS\226\CAN\178\181\&04\133\221\135\163\t:e=\219\155\219\131\157\&0\170\EM$\222\GS\191\ENQ",
-              RawData "V\161\148\235\199\132<\236\FS=\129\245\255'\156VPV\129\SYN\RS\241\129\179t\205\f\132|\200\tf"
             ]
         ]
     ]
@@ -47,7 +50,7 @@ testingBlockProof =
 -- | The expected result of parsing the 'testingBlockProof'.
 testingBlockTree :: PartialTree
 testingBlockTree =
-    HM.fromList
+    HM.singleton "root" . Node . HM.fromList $
         [   ( "header",
               Node
                 ( HM.fromList
