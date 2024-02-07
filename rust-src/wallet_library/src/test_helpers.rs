@@ -1,8 +1,9 @@
 use concordium_base::{
-    common::Versioned, id::{
+    common::Versioned,
+    id::{
         constants::{self, AttributeKind},
         types::{ArIdentity, ArInfo, GlobalContext, IdentityObjectV1, IpInfo},
-    }
+    },
 };
 use std::{
     collections::BTreeMap,

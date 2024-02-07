@@ -1,5 +1,9 @@
 use concordium_base::{
-    common::base16_decode, id::{constants, types::*}, web3id::{OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner}
+    common::base16_decode,
+    id::{constants, types::*},
+    web3id::{
+        OwnedCommitmentInputs, Presentation, ProofError, Request, Web3IdAttribute, Web3IdSigner,
+    },
 };
 use serde::Deserialize as SerdeDeserialize;
 
