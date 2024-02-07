@@ -25,6 +25,7 @@ import Data.Word
 import Lens.Micro.Platform
 
 import qualified Concordium.Crypto.SHA256 as SHA256
+import Concordium.Types.ProtocolVersion
 import Control.Monad.Reader
 import qualified Data.FixedByteString as FBS
 import Data.Foldable
@@ -596,7 +597,10 @@ blockSchema = runState builder emptySchemaBuilderState & _2 %~ _builderSchema
                   Hashed "result" resultHash
                 ]
         blockQuasiHash <- setFresh . Sequence $ [Hashed "meta" metaHash, Hashed "data" dataHash]
-        schemaAt blockHash ?= Sequence [Hashed "header" blockHeaderHash, Hashed "quasi" blockQuasiHash]
+        rootHash <-
+            setFresh . Sequence $
+                [Hashed "header" blockHeaderHash, Hashed "quasi" blockQuasiHash]
+        schemaAt blockHash ?= Sequence [LiteralBytes (S.encode P7), Hashed "root" rootHash]
         return blockHash
 
 -- | A class for types @t@ that can produce 'MerkleProof's in a monadic context @m@.
