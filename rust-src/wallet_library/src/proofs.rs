@@ -29,28 +29,28 @@ pub struct Web3IdProofInput {
         Vec<OwnedCommitmentInputs<constants::ArCurve, Web3IdAttribute, Web3IdSecretKey>>,
 }
 
-/// Creates a web3Id proof.
-pub fn create_web3_id_proof(
-    input: Web3IdProofInput,
-) -> Result<Presentation<constants::ArCurve, Web3IdAttribute>, ProofError> {
-    input.request.prove(
-        &input.global_context,
-        input.commitment_inputs.iter().map(Into::into),
-    )
+impl Web3IdProofInput {
+    /// Creates a web3Id proof.
+    pub fn create_proof(
+        self,
+    ) -> Result<Presentation<constants::ArCurve, Web3IdAttribute>, ProofError> {
+        self.request.prove(
+            &self.global_context,
+            self.commitment_inputs.iter().map(Into::into),
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use concordium_base::web3id::Presentation;
-
-    use crate::test_helpers::read_web3_id_request;
-
     use super::*;
+    use crate::test_helpers::read_web3_id_request;
+    use concordium_base::web3id::Presentation;
 
     #[test]
     pub fn create_web3_id_proof_test() -> anyhow::Result<()> {
         let request = read_web3_id_request();
-        let proof = create_web3_id_proof(request);
+        let proof = request.create_proof();
         let data = serde_json::to_string_pretty(&proof?)?;
         assert!(
             serde_json::from_str::<Presentation<constants::ArCurve, Web3IdAttribute>>(&data)

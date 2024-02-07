@@ -1,3 +1,4 @@
+use crate::proofs::Web3IdProofInput;
 use concordium_base::{
     common::Versioned,
     id::{
@@ -10,8 +11,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-
-use crate::proofs::Web3IdProofInput;
 
 fn base_path() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("resources") }
 
