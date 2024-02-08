@@ -1,3 +1,4 @@
+use crate::proofs::Web3IdProofInput;
 use concordium_base::{
     common::Versioned,
     id::{
@@ -49,4 +50,11 @@ pub fn read_identity_object(
         IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
     > = serde_json::from_str(&identity_object_contents).unwrap();
     identity_object_versioned.value
+}
+
+pub fn read_web3_id_request() -> Web3IdProofInput {
+    let base_path = base_path();
+    let request_contents = fs::read_to_string(base_path.join("web3_id_request.json"))
+        .expect("Should have been able to read the file");
+    serde_json::from_str(&request_contents).unwrap()
 }
