@@ -48,6 +48,14 @@ pub trait Host<I> {
         unimplemented!()
     }
 
+    fn track_call(&mut self) -> RunResult<()> {
+        unimplemented!()
+    }
+
+    fn track_return(&mut self) {
+        unimplemented!()
+    }
+
 }
 
 /// Result of execution. Runtime exceptions are returned as `Err(_)`.
@@ -690,6 +698,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     pc = target as usize;
                 }
                 InternalOpcode::Return => {
+                    host.track_return();
                     if let Some(top_frame) = function_frames.pop() {
                         if !return_type.is_empty() {
                             let top = stack.pop();
@@ -749,6 +758,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             });
                         }
                     } else {
+                        host.track_call()?;
                         let local_idx = idx as usize - self.imports.len();
                         let f = self
                             .code
@@ -806,6 +816,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 });
                             }
                         } else {
+                            host.track_call()?;
                             let f = self
                                 .code
                                 .get(*f_idx as usize - self.imports.len())
