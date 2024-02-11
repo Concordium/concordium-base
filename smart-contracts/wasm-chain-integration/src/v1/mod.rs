@@ -1443,6 +1443,11 @@ impl<
         self.energy.charge_memory_alloc(num_pages)
     }
 
+    #[inline(always)]
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,

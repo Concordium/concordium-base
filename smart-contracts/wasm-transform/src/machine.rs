@@ -5,8 +5,8 @@
 
 use crate::{
     artifact::{StackValue, *},
-    constants::{MAX_NUM_PAGES, PAGE_SIZE},
-    types::*,
+    constants::{MAX_NUM_PAGES, PAGE_SIZE, MAX_ALLOWED_STACK_HEIGHT},
+    types::*, metering_transformation::FN_IDX_ACCOUNT_ENERGY,
 };
 use anyhow::{anyhow, bail, ensure};
 use std::{convert::TryInto, io::Write};
@@ -43,6 +43,11 @@ pub trait Host<I> {
         memory: &mut Vec<u8>,
         stack: &mut RuntimeStack,
     ) -> RunResult<Option<Self::Interrupt>>;
+
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> {
+        unimplemented!()
+    }
+
 }
 
 /// Result of execution. Runtime exceptions are returned as `Err(_)`.
@@ -189,6 +194,12 @@ impl std::fmt::Display for RuntimeError {
 }
 
 impl RuntimeStack {
+    pub fn ensure_capacity(&mut self, additional: usize) {
+        if self.stack.len() < self.pos + additional {
+            self.stack.resize(self.pos + additional, StackValue::from(0u64));
+        }
+    }
+    
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     /// Return the current size of the stack, i.e., number of elements in it.
     pub fn size(&self) -> usize { self.pos }
@@ -198,29 +209,35 @@ impl RuntimeStack {
     /// least one element.**
     pub fn pop(&mut self) -> StackValue {
         self.pos -= 1;
-        self.stack[self.pos]
+        *unsafe { self.stack.get_unchecked(self.pos) }
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     /// Push an element onto the stack.
     pub fn push(&mut self, x: StackValue) {
-        if self.pos < self.stack.len() {
-            self.stack[self.pos] = x;
-        } else {
-            self.stack.push(x)
-        }
+        *unsafe{ self.stack.get_unchecked_mut(self.pos) } = x;
         self.pos += 1;
     }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     /// Get a mutable reference to the top of the stack **assuming the stack is
     /// not empty.**
-    pub fn peek_mut(&mut self) -> &mut StackValue { &mut self.stack[self.pos - 1] }
+    pub fn peek_mut(&mut self) -> &mut StackValue { unsafe { self.stack.get_unchecked_mut(self.pos - 1)} }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Get a mutable reference to the top of the stack **assuming the stack is
+    /// not empty.**
+    pub fn get_mut(&mut self, pos: usize) -> &mut StackValue { unsafe { self.stack.get_unchecked_mut(pos)} }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    /// Get a mutable reference to the top of the stack **assuming the stack is
+    /// not empty.**
+    pub fn get(&self, pos: usize) -> StackValue { *unsafe { self.stack.get_unchecked(pos)} }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     /// Return the top of the stack **assuming the stack is
     /// not empty.**
-    pub fn peek(&mut self) -> StackValue { self.stack[self.pos - 1] }
+    pub fn peek(&mut self) -> StackValue { *unsafe { self.stack.get_unchecked(self.pos - 1)} }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     /// Set the position of the stack. This is for internal use only. It is used
@@ -273,38 +290,30 @@ impl RuntimeStack {
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u16(bytes: &[u8], pc: &mut usize) -> u16 {
-    let mut dst = [0u8; 2];
-    let end = *pc + 2;
-    dst.copy_from_slice(&bytes[*pc..end]);
-    *pc = end;
-    u16::from_le_bytes(dst)
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const u16)};
+    *pc += 2;
+    r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
-    let mut dst = [0u8; 4];
-    let end = *pc + 4;
-    dst.copy_from_slice(&bytes[*pc..end]);
-    *pc = end;
-    u32::from_le_bytes(dst)
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const u32)};
+    *pc += 4;
+    r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_i32(bytes: &[u8], pc: &mut usize) -> i32 {
-    let mut dst = [0u8; 4];
-    let end = *pc + 4;
-    dst.copy_from_slice(&bytes[*pc..end]);
-    *pc = end;
-    i32::from_le_bytes(dst)
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const i32)};
+    *pc += 4;
+    r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u64(bytes: &[u8], pc: &mut usize) -> u64 {
-    let mut dst = [0u8; 8];
-    let end = *pc + 8;
-    dst.copy_from_slice(&bytes[*pc..end]);
-    *pc = end;
-    u64::from_le_bytes(dst)
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const u64)};
+    *pc += 8;
+    r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -372,8 +381,9 @@ fn get_memory_pos(
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()> {
-    ensure!(pos < memory.len(), "Illegal memory access.");
-    (&mut memory[pos..]).write_all(bytes)?;
+    let end = pos + bytes.len();
+    ensure!(end <= memory.len(), "Illegal memory access.");
+    (&mut memory[pos..end]).copy_from_slice(bytes);
     Ok(())
 }
 
@@ -480,8 +490,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         }
 
         let globals = self.global.inits.iter().copied().map(StackValue::from).collect::<Vec<_>>();
+        // TODO: MAX_ALLOWED is not necessary. We can record this information.
         let mut stack: RuntimeStack = RuntimeStack {
-            stack: Vec::with_capacity(1000),
+            stack: vec![StackValue::from(0u64); MAX_ALLOWED_STACK_HEIGHT + args.len() + outer_function.locals().len()],
             pos:   0,
         };
         for &arg in args.iter() {
@@ -588,7 +599,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         // method above, where the precondition is checked.
         let mut instructions = unsafe { self.code.get_unchecked(instructions_idx).code() };
         'outer: loop {
-            let instr = instructions[pc];
+            let instr = *unsafe { instructions.get_unchecked(pc) };
             pc += 1;
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
             // InternalOpcode::try_from(instr). About 25% faster on a fibonacci test.
@@ -703,6 +714,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         break 'outer;
                     }
                 }
+                InternalOpcode::CallImmediate => {
+                    let v = get_u32(instructions, &mut pc);
+                    host.tick_energy(v as u64)?;
+                }
                 InternalOpcode::Call => {
                     // if we want synchronous calls we need to either
                     // 1. Just use recursion in the host. This is problematic because of stack
@@ -748,6 +763,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         };
                         locals_base = current_frame.height;
                         function_frames.push(current_frame);
+                        stack.ensure_capacity(f.locals().len() + MAX_ALLOWED_STACK_HEIGHT);
                         for ty in f.locals() {
                             match ty {
                                 ValueType::I32 => stack.push(StackValue::from(0u32)),
@@ -812,6 +828,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             };
                             locals_base = current_frame.height;
                             function_frames.push(current_frame);
+                            stack.ensure_capacity(f.locals().len() + MAX_ALLOWED_STACK_HEIGHT);
                             for ty in f.locals() {
                                 match ty {
                                     ValueType::I32 => stack.push(StackValue {
@@ -843,18 +860,18 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 }
                 InternalOpcode::LocalGet => {
                     let idx = get_u16(instructions, &mut pc);
-                    let val = stack.stack[locals_base + idx as usize];
+                    let val = stack.get(locals_base + idx as usize);
                     stack.push(val)
                 }
                 InternalOpcode::LocalSet => {
                     let idx = get_u16(instructions, &mut pc);
                     let top = stack.pop();
-                    stack.stack[locals_base + idx as usize] = top
+                    *stack.get_mut(locals_base + idx as usize) = top
                 }
                 InternalOpcode::LocalTee => {
                     let idx = get_u16(instructions, &mut pc);
                     let top = stack.peek();
-                    stack.stack[locals_base + idx as usize] = top
+                    *stack.get_mut(locals_base + idx as usize) = top
                 }
                 InternalOpcode::GlobalGet => {
                     let idx = get_u16(instructions, &mut pc);

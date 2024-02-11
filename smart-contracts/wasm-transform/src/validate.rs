@@ -477,6 +477,9 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
         let next_opcode = opcode?;
         let old_stack_height = state.opds.stack.len();
         match next_opcode.borrow() {
+            OpCode::CallImmediate(_) => {
+                // bail!("Unsupported instruction.");
+            }
             OpCode::End => {
                 let (res, is_if) = state.pop_ctrl()?;
                 if is_if {

@@ -473,6 +473,7 @@ pub enum InternalOpcode {
     BrTableCarry,
     Return,
     Call,
+    CallImmediate,
     CallIndirect,
 
     // Parametric instructions
@@ -604,6 +605,8 @@ impl Instructions {
     fn push_i32(&mut self, x: i32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
     fn push_i64(&mut self, x: i64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+
+    fn push_u64(&mut self, x: u64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
     fn current_offset(&self) -> usize { self.bytes.len() }
 
@@ -842,6 +845,10 @@ impl Handler<&OpCode> for BackPatch {
             OpCode::Call(idx) => {
                 self.out.push(Call);
                 self.out.push_u32(*idx);
+            }
+            OpCode::CallImmediate(cost) => {
+                self.out.push(CallImmediate);
+                self.out.push_u32(*cost);
             }
             OpCode::CallIndirect(x) => {
                 self.out.push(CallIndirect);

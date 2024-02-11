@@ -210,6 +210,7 @@ pub(crate) mod cost {
                     },
                 )
             }
+            CallImmediate(_) => 0,
             Call(idx) => {
                 let (num_args, num_res) = module.get_func_type_len(*idx)?;
                 invoke_before(num_args, num_res)
@@ -361,8 +362,8 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         // actually the best also regarding conversion etc. Probably i64 is actually
         // fine. NB: The u64 energy value is written as is, and will be
         // reinterpreted as u64 again in the host function call.
-        self.new_seq.push(OpCode::I64Const(e as i64));
-        self.new_seq.push(OpCode::Call(FN_IDX_ACCOUNT_ENERGY));
+        // self.new_seq.push(OpCode::I64Const(e as i64));
+        self.new_seq.push(OpCode::CallImmediate(e as u32));
     }
 
     // TODO fn account_stack_size(&mut self, size: i64) { account_stack_size(&mut

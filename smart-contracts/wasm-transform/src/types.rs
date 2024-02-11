@@ -481,6 +481,7 @@ pub enum OpCode {
     },
     Return,
     Call(FuncIndex),
+    CallImmediate(u32),
     CallIndirect(TypeIndex),
 
     // Parametric instructions
