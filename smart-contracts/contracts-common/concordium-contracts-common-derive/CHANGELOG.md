@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+- Support returning types that reference host or state from `init` or `receive`
+  entrypoints. The generated code extends lifetimes of the `host` and `ctx`
+  sufficiently for it to compile.
+
 ## concordium-contracts-common-derive 4.0.1 (2023-10-18)
 
 - Replaced usage of traits in suggestion, such as `&impl HasHost<..>` with the concrete types: `&Host<..>`.
