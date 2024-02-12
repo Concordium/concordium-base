@@ -8,7 +8,6 @@
 --  to build a large intermediate datastructure.
 module Concordium.Utils.Serialization.Put where
 
-import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.ByteString.Builder

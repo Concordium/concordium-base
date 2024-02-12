@@ -12,6 +12,7 @@ hex = "0.4"
 serde_json = "1.0"
 thiserror = "1.0"
 either = "1.6"
+ed25519-dalek = "2.0"
 
 [dependencies.key_derivation]
 path = "../key_derivation"
@@ -26,4 +27,4 @@ name = "wallet_library"
 crate-type = ["rlib"]
 
 [dev-dependencies]
-ed25519-dalek = "2.0.0"
+rand = "0.8"

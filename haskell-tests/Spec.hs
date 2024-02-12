@@ -13,6 +13,7 @@ import qualified ConcordiumTests.Crypto.SHA256
 import qualified ConcordiumTests.Crypto.VRF
 import qualified ConcordiumTests.Data.Base58Encoding
 import qualified ConcordiumTests.ID.Types
+import qualified ConcordiumTests.MerkleProofs
 import qualified ConcordiumTests.Utils.Encryption
 import qualified Genesis.ParametersSpec
 import qualified Types.AccountEncryptedAmountSpec
@@ -39,6 +40,7 @@ main = hspec $ parallel $ do
     ConcordiumTests.Crypto.Ed25519DlogProofs.tests
     ConcordiumTests.Crypto.EncryptedTransfers.tests
     ConcordiumTests.Utils.Encryption.tests
+    ConcordiumTests.MerkleProofs.tests
     -- NB: The following tests are far from complete. They do not test what
     -- happens when data is corrupt in various ways (number of commmitted values
     -- is incorrect, or similar)
