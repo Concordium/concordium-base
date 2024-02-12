@@ -194,6 +194,7 @@ module Concordium.Types.ProtocolVersion (
     supportsGlobalsInInitSections,
     omitCustomSectionFromSize,
     supportsAccountSignatureChecks,
+    supportsContractInspectionQueries,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -625,4 +626,17 @@ supportsAccountSignatureChecks spv = case spv of
     SP4 -> False
     SP5 -> False
     SP6 -> True
+    SP7 -> True
+
+-- | Whether the protocol version supports querying a smart contract's module reference and name
+--  from smart contracts.
+--  (Supported in 'P7' and onwards.)
+supportsContractInspectionQueries :: SProtocolVersion pv -> Bool
+supportsContractInspectionQueries = \case
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> False
     SP7 -> True
