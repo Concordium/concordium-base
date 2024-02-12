@@ -494,6 +494,9 @@ pub fn init_worker(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStr
                 let ctx = ExternContext::<ExternInitContext>::open(());
                 let mut state_api = ExternStateApi::open();
                 let mut state_builder = StateBuilder::open(state_api.clone());
+                // It is critical here to assign the result to a temporary variable `result`
+                // so as to extend the lifetime appropriately so that init functions can return
+                // values that reference the host or ctx.
                 let result = #fn_name(&ctx, &mut state_builder, #(#fn_optional_args, )*);
                 match result {
                     Ok(state) => {
@@ -613,6 +616,9 @@ pub fn receive_worker(attr: TokenStream, item: TokenStream) -> syn::Result<Token
                 #setup_fn_optional_args
                 let ctx = ExternContext::<ExternReceiveContext>::open(());
                 let mut host = ExternLowLevelHost::default();
+                // It is critical here to assign the result to a temporary variable `result`
+                // so as to extend the lifetime appropriately so that receive functions can return
+                // values that reference the host or ctx.
                 let result = #fn_name(&ctx, &mut host, #(#fn_optional_args, )*);
                 match result {
                     Ok(rv) => {
@@ -662,6 +668,9 @@ pub fn receive_worker(attr: TokenStream, item: TokenStream) -> syn::Result<Token
                 if let Ok(state) = DeserialWithState::deserial_with_state(&state_api, &mut state_api.lookup_entry(&[]).unwrap_abort()) {
                     let mut state_builder = StateBuilder::open(state_api);
                     let mut host = ExternHost { state, state_builder };
+                    // It is critical here to assign the result to a temporary variable `result`
+                    // so as to extend the lifetime appropriately so that receive functions can return
+                    // values that reference the host or ctx.
                     let result = #fn_name(&ctx, #host_ref, #(#fn_optional_args, )*);
                     match result {
                         Ok(rv) => {
