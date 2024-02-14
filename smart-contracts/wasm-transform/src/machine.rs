@@ -332,17 +332,15 @@ fn read_u8(bytes: &[u8], pos: usize) -> RunResult<u8> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u16(bytes: &[u8], pos: usize) -> RunResult<u16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
-    let mut dst = [0u8; 2];
-    dst.copy_from_slice(&bytes[pos..pos + 2]);
-    Ok(u16::from_le_bytes(dst))
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const u16)};
+    Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u32(bytes: &[u8], pos: usize) -> RunResult<u32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
-    let mut dst = [0u8; 4];
-    dst.copy_from_slice(&bytes[pos..pos + 4]);
-    Ok(u32::from_le_bytes(dst))
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const u32)};
+    Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -353,38 +351,48 @@ fn read_i8(bytes: &[u8], pos: usize) -> RunResult<i8> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i16(bytes: &[u8], pos: usize) -> RunResult<i16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
-    let mut dst = [0u8; 2];
-    dst.copy_from_slice(&bytes[pos..pos + 2]);
-    Ok(i16::from_le_bytes(dst))
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const i16)};
+    Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i32(bytes: &[u8], pos: usize) -> RunResult<i32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
-    let mut dst = [0u8; 4];
-    dst.copy_from_slice(&bytes[pos..pos + 4]);
-    Ok(i32::from_le_bytes(dst))
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const i32)};
+    Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i64(bytes: &[u8], pos: usize) -> RunResult<i64> {
     ensure!(pos + 8 <= bytes.len(), "Memory access out of bounds.");
-    let mut dst = [0u8; 8];
-    dst.copy_from_slice(&bytes[pos..pos + 8]);
-    Ok(i64::from_le_bytes(dst))
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const i64)};
+    Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn get_memory_pos(
+fn get_memory_pos<'a>(
+    instructions: &[u8],
+    stack: &'a mut RuntimeStack,
+    pc: &mut usize,
+) -> (usize, &'a mut StackValue) {
+    let offset = get_u32(instructions, pc);
+    let top_mut = stack.peek_mut();
+    let top = unsafe { top_mut.short } as u32;
+    let pos = top as usize + offset as usize;
+    (pos, top_mut)
+}
+
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+fn get_memory_pos_pop(
     instructions: &[u8],
     stack: &mut RuntimeStack,
     pc: &mut usize,
-) -> RunResult<usize> {
+) -> usize {
     let offset = get_u32(instructions, pc);
     let top = stack.pop();
     let top = unsafe { top.short } as u32;
     let pos = top as usize + offset as usize;
-    Ok(pos)
+    pos
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -631,16 +639,20 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // current block.
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    stack.set_pos(stack.size() - diff as usize);
+                    if diff != 0 {
+                        stack.set_pos(stack.size() - diff as usize);
+                    }
                     pc = target as usize;
                 }
                 InternalOpcode::BrCarry => {
-                    let cur_size = stack.size();
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    let top = stack.pop();
-                    stack.set_pos(cur_size - diff as usize);
-                    stack.push(top);
+                    if diff != 0 {
+                        let cur_size = stack.size();
+                        let top = stack.pop();
+                        stack.set_pos(cur_size - diff as usize);
+                        stack.push(top);
+                    }
                     pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
@@ -661,9 +673,11 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     if unsafe { top.short } != 0 {
-                        let top = stack.pop();
-                        stack.set_pos(cur_size - diff as usize);
-                        stack.push(top);
+                        if diff != 0 {
+                            let top = stack.pop();
+                            stack.set_pos(cur_size - diff as usize);
+                            stack.push(top);
+                        }
                         pc = target as usize;
                     } // else do nothing
                 }
@@ -678,7 +692,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     } // else use default branch
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    stack.set_pos(cur_size - diff as usize);
+                    if diff != 0 {
+                        stack.set_pos(cur_size - diff as usize);
+                    }
                     pc = target as usize;
                 }
                 InternalOpcode::BrTableCarry => {
@@ -692,9 +708,11 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     } // else use default branch
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    let top = stack.pop();
-                    stack.set_pos(cur_size - diff as usize);
-                    stack.push(top);
+                    if diff != 0 {
+                        let top = stack.pop();
+                        stack.set_pos(cur_size - diff as usize);
+                        stack.push(top);
+                    }
                     pc = target as usize;
                 }
                 InternalOpcode::Return => {
@@ -773,13 +791,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         };
                         locals_base = current_frame.height;
                         function_frames.push(current_frame);
-                        stack.ensure_capacity(f.locals().len() + MAX_ALLOWED_STACK_HEIGHT);
-                        for ty in f.locals() {
-                            match ty {
-                                ValueType::I32 => stack.push(StackValue::from(0u32)),
-                                ValueType::I64 => stack.push(StackValue::from(0u64)),
-                            }
+                        let locals = f.locals();
+                        stack.ensure_capacity(locals.len() + MAX_ALLOWED_STACK_HEIGHT);
+                        for p in &mut stack.stack[stack.pos..stack.pos + locals.len()] {
+                            *p = StackValue::from(0u64);
                         }
+                        stack.pos += locals.len();
                         instructions = f.code();
                         instructions_idx = local_idx;
                         pc = 0;
@@ -839,17 +856,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             };
                             locals_base = current_frame.height;
                             function_frames.push(current_frame);
-                            stack.ensure_capacity(f.locals().len() + MAX_ALLOWED_STACK_HEIGHT);
-                            for ty in f.locals() {
-                                match ty {
-                                    ValueType::I32 => stack.push(StackValue {
-                                        short: 0,
-                                    }),
-                                    ValueType::I64 => stack.push(StackValue {
-                                        long: 0,
-                                    }),
-                                }
+                            let locals = f.locals();
+                            stack.ensure_capacity(locals.len() + MAX_ALLOWED_STACK_HEIGHT);
+                            for p in &mut stack.stack[stack.pos..stack.pos + locals.len()] {
+                                *p = StackValue::from(0u64);
                             }
+                            stack.pos += locals.len();
                             instructions = f.code();
                             instructions_idx = *f_idx as usize - self.imports.len();
                             pc = 0;
@@ -894,105 +906,105 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     globals[idx as usize] = top
                 }
                 InternalOpcode::I32Load => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_i32(&memory, pos)?;
-                    stack.push(StackValue::from(val))
+                    *top = StackValue::from(val);
                 }
                 InternalOpcode::I64Load => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_i64(&memory, pos)?;
-                    stack.push(StackValue::from(val))
+                    *top = StackValue::from(val)
                 }
                 InternalOpcode::I32Load8S => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_i8(&memory, pos)?;
-                    stack.push(StackValue::from(val as i32))
+                    *top = StackValue::from(val as i32);
                 }
                 InternalOpcode::I32Load8U => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_u8(&memory, pos)?;
-                    stack.push(StackValue::from(val as i32))
+                    *top = StackValue::from(val as i32);
                 }
                 InternalOpcode::I32Load16S => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_i16(&memory, pos)?;
-                    stack.push(StackValue::from(val as i32))
+                    *top = StackValue::from(val as i32);
                 }
                 InternalOpcode::I32Load16U => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_u16(&memory, pos)?;
-                    stack.push(StackValue::from(val as i32))
+                    *top = StackValue::from(val as i32);
                 }
                 InternalOpcode::I64Load8S => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_i8(&memory, pos)?;
-                    stack.push(StackValue::from(val as i64))
+                    *top = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load8U => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_u8(&memory, pos)?;
-                    stack.push(StackValue::from(val as i64))
+                    *top = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load16S => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_i16(&memory, pos)?;
-                    stack.push(StackValue::from(val as i64))
+                    *top = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load16U => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_u16(&memory, pos)?;
-                    stack.push(StackValue::from(val as i64))
+                    *top = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load32S => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_i32(&memory, pos)?;
-                    stack.push(StackValue::from(val as i64))
+                    *top = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load32U => {
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let (pos, top) = get_memory_pos(instructions, &mut stack, &mut pc);
                     let val = read_u32(&memory, pos)?;
-                    stack.push(StackValue::from(val as i64))
+                    *top = StackValue::from(val as i64);
                 }
                 InternalOpcode::I32Store => {
                     let val = stack.pop();
                     let val = unsafe { val.short };
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let pos = get_memory_pos_pop(instructions, &mut stack, &mut pc);
                     write_memory_at(&mut memory, pos, &val.to_le_bytes())?;
                 }
                 InternalOpcode::I64Store => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let pos = get_memory_pos_pop(instructions, &mut stack, &mut pc);
                     write_memory_at(&mut memory, pos, &val.to_le_bytes())?;
                 }
                 InternalOpcode::I32Store8 => {
                     let val = stack.pop();
                     let val = unsafe { val.short };
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let pos = get_memory_pos_pop(instructions, &mut stack, &mut pc);
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I32Store16 => {
                     let val = stack.pop();
                     let val = unsafe { val.short };
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let pos = get_memory_pos_pop(instructions, &mut stack, &mut pc);
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store8 => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let pos = get_memory_pos_pop(instructions, &mut stack, &mut pc);
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I64Store16 => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let pos = get_memory_pos_pop(instructions, &mut stack, &mut pc);
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store32 => {
                     let val = stack.pop();
                     let val = unsafe { val.long };
-                    let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
+                    let pos = get_memory_pos_pop(instructions, &mut stack, &mut pc);
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..4])?;
                 }
                 InternalOpcode::MemorySize => {
