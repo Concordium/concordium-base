@@ -129,10 +129,11 @@
  (func $init2 (export "init_contract2") (param i64) (result i32)
        (return (i32.const 0))) ;; Successful init
 
- ;; Check if the module reference of a contract matches the supplied value.
+ ;; Check if the contract name of a contract matches the supplied value.
  ;; The parameter should be the contract address followed by the expected
- ;; module reference.
- ;; The return value is 1 if it matches and 0 if it does not.
+ ;; contract name.
+ ;; The return value is 0 if it matches, -1 if it does not and -2 if the contract
+ ;; does not exist.
  (func $receive_check_name
         (export "contract2.check_name")
         (param $amount i64)
