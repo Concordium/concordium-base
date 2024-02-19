@@ -7,6 +7,8 @@ use concordium_base::{
 };
 use serde::Deserialize as SerdeDeserialize;
 
+use crate::statement::WalletCheck;
+
 /// Serializeable wrapper for a SecretKey.
 #[derive(SerdeDeserialize)]
 pub struct Web3IdSecretKey(#[serde(deserialize_with = "base16_decode")] ed25519_dalek::SecretKey);
@@ -41,8 +43,13 @@ impl Web3IdProofInput {
     }
 }
 
+impl WalletCheck for Web3IdProofInput {
+    fn satisfies_wallet_restrictions(&self) -> bool { self.request.satisfies_wallet_restrictions() }
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::test_helpers::read_web3_id_request;
     use concordium_base::web3id::Presentation;
