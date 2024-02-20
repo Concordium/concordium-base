@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- Made `HashBytes::new()` a const function
+
 ## concordium-contracts-common 9.0.0 (2024-01-22)
 
 - Add `SchemaType` implementation for `&str`.
