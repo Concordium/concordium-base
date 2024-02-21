@@ -66,7 +66,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
                 statement: _,
             } => todo!(),
         }
-        return true;
+        true
     }
 }
 
