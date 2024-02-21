@@ -12,6 +12,15 @@ const IDENTITY_SET_TAGS: &[AttributeTag] = &[
     AttributeTag(8),
 ]; // Country of residence, Nationality, IdDocType, IdDocIssuer
 
+fn is_iso8601(date: &str) -> bool {
+    println!("{}", date);
+    chrono::NaiveDate::parse_from_str(date, "%Y%m%d").is_ok()
+}
+
+fn is_iso3166_alpha_2(code: &str) -> bool { rust_iso3166::from_alpha2(code).is_some() }
+
+fn is_iso3166_2(code: &str) -> bool { rust_iso3166::iso3166_2::from_code(code).is_some() }
+
 pub trait WalletCheck {
     fn satisfies_wallet_restrictions(&self) -> bool;
 }
@@ -61,21 +70,39 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
     }
 }
 
+// Note that this is an implementation only for the account statement, the tag
+// is AttributeTag.
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
     for AtomicStatement<C, AttributeTag, AttributeType>
 {
     fn satisfies_wallet_restrictions(&self) -> bool {
+        let check_attribute_value = |value: &AttributeType| match self.attribute().0 {
+            // countryOfResidence | nationality
+            4 | 5 => is_iso3166_alpha_2(&value.to_string()),
+            // idDocIssuer
+            8 => is_iso3166_alpha_2(&value.to_string()) || is_iso3166_2(&value.to_string()),
+            // dob, idDocIssuedAt, idDocExpiresAt
+            3 | 9 | 10 => is_iso8601(&value.to_string()),
+            _ => true,
+        };
+
         match self {
             AtomicStatement::RevealAttribute { statement: _ } => true,
             AtomicStatement::AttributeInRange { statement } => {
-                statement.lower < statement.upper
+                check_attribute_value(&statement.lower)
+                    && check_attribute_value(&statement.upper)
+                    && statement.lower < statement.upper
                     && IDENTITY_RANGE_TAGS.contains(&statement.attribute_tag)
             }
             AtomicStatement::AttributeInSet { statement } => {
-                !statement.set.is_empty() && IDENTITY_SET_TAGS.contains(&statement.attribute_tag)
+                !statement.set.is_empty()
+                    && statement.set.iter().all(check_attribute_value)
+                    && IDENTITY_SET_TAGS.contains(&statement.attribute_tag)
             }
             AtomicStatement::AttributeNotInSet { statement } => {
-                !statement.set.is_empty() && IDENTITY_SET_TAGS.contains(&statement.attribute_tag)
+                !statement.set.is_empty()
+                    && statement.set.iter().all(check_attribute_value)
+                    && IDENTITY_SET_TAGS.contains(&statement.attribute_tag)
             }
         }
     }
@@ -83,14 +110,16 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
 
 #[cfg(test)]
 mod tests {
-    use std::{marker::PhantomData, str::FromStr};
+    use std::{collections::BTreeSet, marker::PhantomData, str::FromStr};
 
     use super::*;
     use concordium_base::{
         base::CredentialRegistrationID,
         id::{
             constants,
-            id_proof_types::{AttributeInRangeStatement, RevealAttributeStatement},
+            id_proof_types::{
+                AttributeInRangeStatement, AttributeInSetStatement, RevealAttributeStatement,
+            },
         },
         web3id::did::Network,
     };
@@ -100,14 +129,75 @@ mod tests {
         let statement = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(3),
-                lower:         constants::AttributeKind::from(11),
-                upper:         constants::AttributeKind::from(10),
+                lower:         constants::AttributeKind::from(20150101),
+                upper:         constants::AttributeKind::from(20140101),
                 _phantom:      PhantomData::<constants::ArCurve>,
             },
         };
         assert!(
             !statement.satisfies_wallet_restrictions(),
             "Statement with min > max should not satisfy"
+        );
+    }
+
+    #[test]
+    pub fn dob_must_be_valid_dates_test() {
+        let statement = AtomicStatement::AttributeInRange {
+            statement: AttributeInRangeStatement {
+                attribute_tag: AttributeTag(3),
+                lower:         constants::AttributeKind::from(20144040),
+                upper:         constants::AttributeKind::from(20154040),
+                _phantom:      PhantomData::<constants::ArCurve>,
+            },
+        };
+        assert!(
+            !statement.satisfies_wallet_restrictions(),
+            "Dob statement must have valid dates"
+        );
+    }
+
+    #[test]
+    pub fn nationality_must_be_country_code_test() {
+        let good_statement = AtomicStatement::AttributeInSet {
+            statement: AttributeInSetStatement {
+                attribute_tag: AttributeTag(5),
+                set:           BTreeSet::from([constants::AttributeKind("GB".into())]),
+                _phantom:      PhantomData::<constants::ArCurve>,
+            },
+        };
+        let bad_statement = AtomicStatement::AttributeInSet {
+            statement: AttributeInSetStatement {
+                attribute_tag: AttributeTag(5),
+                set:           BTreeSet::from([constants::AttributeKind("HI".into())]),
+                _phantom:      PhantomData::<constants::ArCurve>,
+            },
+        };
+
+        assert!(
+            !bad_statement.satisfies_wallet_restrictions(),
+            "Nationality statement must be country code"
+        );
+        assert!(
+            good_statement.satisfies_wallet_restrictions(),
+            "Nationality statement must be country code"
+        );
+    }
+
+    #[test]
+    pub fn id_doc_issuer_can_be_iso_3166_2_test() {
+        let statement = AtomicStatement::AttributeInSet {
+            statement: AttributeInSetStatement {
+                attribute_tag: AttributeTag(8),
+                set:           BTreeSet::from([
+                    constants::AttributeKind("DK-81".into()),
+                    constants::AttributeKind("GB-UKM".into()),
+                ]),
+                _phantom:      PhantomData::<constants::ArCurve>,
+            },
+        };
+        assert!(
+            statement.satisfies_wallet_restrictions(),
+            "idDocIssuer should be allowed ISO3166-2 values"
         );
     }
 
@@ -120,8 +210,8 @@ mod tests {
         > = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(3),
-                lower:         constants::AttributeKind::from(5),
-                upper:         constants::AttributeKind::from(10),
+                lower:         constants::AttributeKind::from(20140101),
+                upper:         constants::AttributeKind::from(20150101),
                 _phantom:      PhantomData::<constants::ArCurve>,
             },
         };
@@ -133,8 +223,8 @@ mod tests {
         > = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(2),
-                lower:         constants::AttributeKind::from(5),
-                upper:         constants::AttributeKind::from(10),
+                lower:         constants::AttributeKind::from(20140101),
+                upper:         constants::AttributeKind::from(20150101),
                 _phantom:      PhantomData::<constants::ArCurve>,
             },
         };
