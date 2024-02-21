@@ -2,7 +2,7 @@
 
 ## Unreleased changes
 
-- Made `HashBytes::new()` a const function
+- `HashBytes::new` is now a `const` function.
 
 ## concordium-contracts-common 9.0.0 (2024-01-22)
 
