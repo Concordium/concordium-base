@@ -1,3 +1,4 @@
+use crate::statement::{AcceptableRequest, RequestCheckError};
 use concordium_base::{
     common::base16_decode,
     id::{constants, types::*},
@@ -6,8 +7,6 @@ use concordium_base::{
     },
 };
 use serde::Deserialize as SerdeDeserialize;
-
-use crate::statement::WalletCheck;
 
 /// Serializeable wrapper for a SecretKey.
 #[derive(SerdeDeserialize)]
@@ -43,8 +42,10 @@ impl Web3IdProofInput {
     }
 }
 
-impl WalletCheck for Web3IdProofInput {
-    fn satisfies_wallet_restrictions(&self) -> bool { self.request.satisfies_wallet_restrictions() }
+impl AcceptableRequest for Web3IdProofInput {
+    fn acceptable_request(&self) -> Result<(), RequestCheckError> {
+        self.request.acceptable_request()
+    }
 }
 
 #[cfg(test)]

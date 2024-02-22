@@ -4,7 +4,7 @@
 
 ### Added
 
-- Added trait `WalletCheck` with method `satifies_wallet_restrictions`, and implemented it web3IdProofInput, request and statements.
+- Added trait `AcceptableRequest` with method `acceptable_request`, and implemented it for `web3IdProofInput`, request and statements.
 - Added method `create_web3_id_proof` for creating web3Id proofs.
 
 ## [0.2.0]

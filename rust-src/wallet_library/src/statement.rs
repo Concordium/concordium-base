@@ -1,42 +1,69 @@
+use std::collections::HashSet;
+
 use concordium_base::{
     curve_arithmetic::Curve,
     id::{id_proof_types::AtomicStatement, types::*},
     web3id::{CredentialStatement, Request},
 };
 
-const IDENTITY_RANGE_TAGS: &[AttributeTag] = &[AttributeTag(3), AttributeTag(9), AttributeTag(10)]; // dob, idDocIssuedAt, idDocExpiresAt
+/// List of identity attribute tags that we allow range statements for.
+/// The list should correspond to "dob", "idDocIssuedAt", "idDocExpiresAt".
+const IDENTITY_RANGE_TAGS: &[AttributeTag] = &[AttributeTag(3), AttributeTag(9), AttributeTag(10)];
+/// List of identity attribute tags that we allow set statements
+/// (membership/nonMembership) for. The list should correspond to "Country of
+/// residence", "Nationality", "IdDocType", "IdDocIssuer".
 const IDENTITY_SET_TAGS: &[AttributeTag] = &[
     AttributeTag(4),
     AttributeTag(5),
     AttributeTag(6),
     AttributeTag(8),
-]; // Country of residence, Nationality, IdDocType, IdDocIssuer
+];
 
-fn is_iso8601(date: &str) -> bool {
-    println!("{}", date);
-    chrono::NaiveDate::parse_from_str(date, "%Y%m%d").is_ok()
-}
+fn is_iso8601(date: &str) -> bool { chrono::NaiveDate::parse_from_str(date, "%Y%m%d").is_ok() }
 
 fn is_iso3166_alpha_2(code: &str) -> bool { rust_iso3166::from_alpha2(code).is_some() }
 
 fn is_iso3166_2(code: &str) -> bool { rust_iso3166::iso3166_2::from_code(code).is_some() }
 
-pub trait WalletCheck {
-    fn satisfies_wallet_restrictions(&self) -> bool;
+pub trait AcceptableRequest {
+    fn acceptable_request(&self) -> Result<(), RequestCheckError>;
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck for Request<C, AttributeType> {
-    fn satisfies_wallet_restrictions(&self) -> bool {
+#[derive(Debug, thiserror::Error, Clone)]
+pub enum RequestCheckError {
+    #[error("Credential statement must include atomic statements")]
+    EmptyCredentialStatement,
+    #[error("Credential statement may not reuse attribute tags across atomic statements")]
+    DuplicateTag,
+    #[error("Web3Id statement support have not been added yet")]
+    Web3IdStatementNotSupported,
+    #[error("`{0}`")]
+    InvalidValue(String),
+    #[error("Range statement min must be less than max")]
+    RangeMinMaxError,
+    #[error("The tag `{0}` is not allowed to be used for range statements")]
+    IllegalRangeTag(String),
+    #[error("Membership and NonMembership statement's may not have empty sets")]
+    EmptySet,
+    #[error("The tag `{0}` is not allowed to be used for set statements")]
+    IllegalSetTag(String),
+}
+
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest
+    for Request<C, AttributeType>
+{
+    fn acceptable_request(&self) -> Result<(), RequestCheckError> {
         self.credential_statements
             .iter()
-            .all(|s| s.satisfies_wallet_restrictions())
+            .map(|s| s.acceptable_request())
+            .collect()
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest
     for CredentialStatement<C, AttributeType>
 {
-    fn satisfies_wallet_restrictions(&self) -> bool {
+    fn acceptable_request(&self) -> Result<(), RequestCheckError> {
         match self {
             CredentialStatement::Account {
                 statement,
@@ -44,19 +71,20 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
                 cred_id: _,
             } => {
                 if statement.is_empty() {
-                    return false;
+                    return Err(RequestCheckError::EmptyCredentialStatement);
                 }
-                let mut used_tags = Vec::<AttributeTag>::new();
+                let mut used_tags = HashSet::<AttributeTag>::new();
                 for atomic_statement in statement {
                     if used_tags.contains(&atomic_statement.attribute()) {
-                        return false;
+                        return Err(RequestCheckError::DuplicateTag);
                     }
-                    used_tags.push(atomic_statement.attribute());
+                    used_tags.insert(atomic_statement.attribute());
 
-                    if !atomic_statement.satisfies_wallet_restrictions() {
-                        return false;
+                    if let Err(err) = atomic_statement.acceptable_request() {
+                        return Err(err);
                     }
                 }
+                Ok(())
             }
             CredentialStatement::Web3Id {
                 ty: _,
@@ -64,45 +92,96 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
                 contract: _,
                 credential: _,
                 statement: _,
-            } => todo!(),
+            } => Err(RequestCheckError::Web3IdStatementNotSupported),
         }
-        true
     }
 }
 
 // Note that this is an implementation only for the account statement, the tag
 // is AttributeTag.
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> WalletCheck
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest
     for AtomicStatement<C, AttributeTag, AttributeType>
 {
-    fn satisfies_wallet_restrictions(&self) -> bool {
-        let check_attribute_value = |value: &AttributeType| match self.attribute().0 {
-            // countryOfResidence | nationality
-            4 | 5 => is_iso3166_alpha_2(&value.to_string()),
-            // idDocIssuer
-            8 => is_iso3166_alpha_2(&value.to_string()) || is_iso3166_2(&value.to_string()),
-            // dob, idDocIssuedAt, idDocExpiresAt
-            3 | 9 | 10 => is_iso8601(&value.to_string()),
-            _ => true,
+    fn acceptable_request(&self) -> Result<(), RequestCheckError> {
+        let check_attribute_value = |value: &AttributeType| {
+            match self.attribute().0 {
+                // countryOfResidence | nationality
+                4 | 5 => {
+                    if !is_iso3166_alpha_2(&value.to_string()) {
+                        return Err(RequestCheckError::InvalidValue(
+                            "countryOfResidence and nationality attributes must be ISO 3166-1 \
+                             Alpha-2"
+                                .to_owned(),
+                        ));
+                    }
+                }
+                // idDocIssuer
+                8 => {
+                    if !is_iso3166_alpha_2(&value.to_string()) && !is_iso3166_2(&value.to_string())
+                    {
+                        return Err(RequestCheckError::InvalidValue(
+                            "idDocIssuer attributes must be ISO 3166-1 Alpha-2 or ISO 3166-2"
+                                .to_owned(),
+                        ));
+                    }
+                }
+                // dob, idDocIssuedAt, idDocExpiresAt
+                3 | 9 | 10 => {
+                    if !is_iso8601(&value.to_string()) {
+                        return Err(RequestCheckError::InvalidValue(
+                            "dob, idDocIssuedAt and idDocExpiresAt attributes must be ISO 8601"
+                                .to_owned(),
+                        ));
+                    }
+                }
+                _ => (),
+            }
+            Ok(())
         };
 
         match self {
-            AtomicStatement::RevealAttribute { statement: _ } => true,
+            AtomicStatement::RevealAttribute { statement: _ } => Ok(()),
             AtomicStatement::AttributeInRange { statement } => {
-                check_attribute_value(&statement.lower)
-                    && check_attribute_value(&statement.upper)
-                    && statement.lower < statement.upper
-                    && IDENTITY_RANGE_TAGS.contains(&statement.attribute_tag)
+                if let Err(e) = check_attribute_value(&statement.lower) {
+                    return Err(e);
+                }
+                if let Err(e) = check_attribute_value(&statement.upper) {
+                    return Err(e);
+                }
+                if statement.lower >= statement.upper {
+                    return Err(RequestCheckError::RangeMinMaxError);
+                }
+                if !IDENTITY_RANGE_TAGS.contains(&statement.attribute_tag) {
+                    return Err(RequestCheckError::IllegalRangeTag(format!(
+                        "{}",
+                        statement.attribute_tag
+                    )));
+                }
+                Ok(())
             }
             AtomicStatement::AttributeInSet { statement } => {
-                !statement.set.is_empty()
-                    && statement.set.iter().all(check_attribute_value)
-                    && IDENTITY_SET_TAGS.contains(&statement.attribute_tag)
+                if statement.set.is_empty() {
+                    return Err(RequestCheckError::EmptySet);
+                }
+                if !IDENTITY_SET_TAGS.contains(&statement.attribute_tag) {
+                    return Err(RequestCheckError::IllegalSetTag(format!(
+                        "{}",
+                        statement.attribute_tag
+                    )));
+                }
+                statement.set.iter().map(check_attribute_value).collect()
             }
             AtomicStatement::AttributeNotInSet { statement } => {
-                !statement.set.is_empty()
-                    && statement.set.iter().all(check_attribute_value)
-                    && IDENTITY_SET_TAGS.contains(&statement.attribute_tag)
+                if statement.set.is_empty() {
+                    return Err(RequestCheckError::EmptySet);
+                }
+                if !IDENTITY_SET_TAGS.contains(&statement.attribute_tag) {
+                    return Err(RequestCheckError::IllegalSetTag(format!(
+                        "{}",
+                        statement.attribute_tag
+                    )));
+                }
+                statement.set.iter().map(check_attribute_value).collect()
             }
         }
     }
@@ -134,10 +213,10 @@ mod tests {
                 _phantom:      PhantomData::<constants::ArCurve>,
             },
         };
-        assert!(
-            !statement.satisfies_wallet_restrictions(),
-            "Statement with min > max should not satisfy"
-        );
+        assert!(matches!(
+            statement.acceptable_request(),
+            Err(RequestCheckError::RangeMinMaxError)
+        ));
     }
 
     #[test]
@@ -150,10 +229,10 @@ mod tests {
                 _phantom:      PhantomData::<constants::ArCurve>,
             },
         };
-        assert!(
-            !statement.satisfies_wallet_restrictions(),
-            "Dob statement must have valid dates"
-        );
+        assert!(matches!(
+            statement.acceptable_request(),
+            Err(RequestCheckError::InvalidValue(_))
+        ));
     }
 
     #[test]
@@ -173,12 +252,12 @@ mod tests {
             },
         };
 
+        assert!(matches!(
+            bad_statement.acceptable_request(),
+            Err(RequestCheckError::InvalidValue(_))
+        ));
         assert!(
-            !bad_statement.satisfies_wallet_restrictions(),
-            "Nationality statement must be country code"
-        );
-        assert!(
-            good_statement.satisfies_wallet_restrictions(),
+            good_statement.acceptable_request().is_ok(),
             "Nationality statement must be country code"
         );
     }
@@ -196,7 +275,7 @@ mod tests {
             },
         };
         assert!(
-            statement.satisfies_wallet_restrictions(),
+            statement.acceptable_request().is_ok(),
             "idDocIssuer should be allowed ISO3166-2 values"
         );
     }
@@ -229,13 +308,13 @@ mod tests {
             },
         };
         assert!(
-            !name_statement.satisfies_wallet_restrictions(),
-            "Range statement should not be allowed on tag 1"
+            dob_statement.acceptable_request().is_ok(),
+            "Range statement should be allowed on tag 3 (dob)"
         );
-        assert!(
-            dob_statement.satisfies_wallet_restrictions(),
-            "Range statement should be allowed on tag 3"
-        );
+        assert!(matches!(
+            name_statement.acceptable_request(),
+            Err(RequestCheckError::IllegalRangeTag(_))
+        ));
     }
 
     #[test]
@@ -265,10 +344,10 @@ mod tests {
 
         let statement: CredentialStatement<constants::ArCurve, constants::AttributeKind> = CredentialStatement::Account { network: Network::Testnet, cred_id: CredentialRegistrationID::from_str("8a3a87f3f38a7a507d1e85dc02a92b8bcaa859f5cf56accb3c1bc7c40e1789b4933875a38dd4c0646ca3e940a02c42d8")?, statement: vec![statement1, statement2]};
 
-        assert!(
-            !statement.satisfies_wallet_restrictions(),
-            "Using the same attribute twice is not allowed"
-        );
+        assert!(matches!(
+            statement.acceptable_request(),
+            Err(RequestCheckError::DuplicateTag)
+        ));
         Ok(())
     }
 }

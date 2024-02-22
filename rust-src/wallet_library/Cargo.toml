@@ -13,8 +13,8 @@ serde_json = "1.0"
 thiserror = "1.0"
 either = "1.6"
 ed25519-dalek = "2.0"
-chrono = "0.4.24" # the patch version to match base
-rust_iso3166 = "0.1.11"
+chrono = "0.4"
+rust_iso3166 = "0.1"
 
 [dependencies.key_derivation]
 path = "../key_derivation"
