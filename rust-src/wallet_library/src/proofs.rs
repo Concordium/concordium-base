@@ -1,4 +1,4 @@
-use crate::statement::{AcceptableRequest, RequestCheckError};
+use crate::statement::{AcceptableRequest, RequestCheckError, WalletConfig};
 use concordium_base::{
     common::base16_decode,
     id::{constants, types::*},
@@ -42,9 +42,12 @@ impl Web3IdProofInput {
     }
 }
 
-impl AcceptableRequest for Web3IdProofInput {
-    fn acceptable_request(&self) -> Result<(), RequestCheckError> {
-        self.request.acceptable_request()
+impl AcceptableRequest<constants::ArCurve, Web3IdAttribute> for Web3IdProofInput {
+    fn acceptable_request(
+        &self,
+        config: &WalletConfig<constants::ArCurve, Web3IdAttribute>,
+    ) -> Result<(), RequestCheckError> {
+        self.request.acceptable_request(config)
     }
 }
 
