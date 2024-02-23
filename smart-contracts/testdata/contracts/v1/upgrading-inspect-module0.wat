@@ -1,3 +1,8 @@
+;; This module defines a contract (named `contract`) for testing the interaction between
+;; contract upgrade and querying the module reference of a contract.
+;; In particular, `contract.upgrade` upgrades the contract and checks that querying the module
+;; reference afterwards gives the expected (new) value.
+
 (module
     ;; Imports
     (import "concordium" "get_parameter_section" (func $host_get_parameter_section (param $index i32) (param $write_location i32) (param $length i32) (param $offset i32) (result i32)))
