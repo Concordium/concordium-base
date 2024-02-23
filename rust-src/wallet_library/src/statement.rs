@@ -58,6 +58,10 @@ pub struct WalletConfig<C: Curve, AttributeType: Attribute<C::Scalar>> {
 pub trait AttributeTagType: Serialize + Ord + Hash + Display {}
 impl<T: Serialize + Ord + Hash + Display> AttributeTagType for T {}
 
+type AttributeCheck<TagType, AttributeType> =
+    Box<dyn Fn(&TagType, &AttributeType) -> AcceptableRequestResult>;
+type AcceptableRequestResult = Result<(), RequestCheckError>;
+
 pub struct WalletConfigRules<
     C: Curve,
     TagType: AttributeTagType,
@@ -65,7 +69,7 @@ pub struct WalletConfigRules<
 > {
     pub range_tags:   HashSet<TagType>,
     pub set_tags:     HashSet<TagType>,
-    pub custom_rules: Box<dyn Fn(&TagType, &AttributeType) -> Result<(), RequestCheckError>>,
+    pub attribute_check: AttributeCheck<TagType, AttributeType>,
     _marker:          PhantomData<C>,
 }
 
@@ -123,7 +127,7 @@ pub fn get_default_wallet_config() -> WalletConfig<constants::ArCurve, Attribute
         identity_rules: Some(WalletConfigRules::<_, AttributeTag, _> {
             range_tags:   IDENTITY_RANGE_TAGS.into(),
             set_tags:     IDENTITY_SET_TAGS.into(),
-            custom_rules: Box::new(default_attribute_rules),
+            attribute_check: Box::new(default_attribute_rules),
             _marker:      PhantomData,
         }),
         web3_rules:     BTreeMap::new(),
@@ -150,8 +154,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, Attribu
     ) -> Result<(), RequestCheckError> {
         self.credential_statements
             .iter()
-            .map(|s| s.acceptable_request(config))
-            .collect()
+            .try_for_each(|s| s.acceptable_request(config))
     }
 }
 
@@ -179,11 +182,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, Attribu
                     }
                     used_tags.insert(attribute);
 
-                    if let Err(err) =
-                        atomic_statement.acceptable_atomic_statement(&config.identity_rules)
-                    {
-                        return Err(err);
-                    }
+                    atomic_statement.acceptable_atomic_statement(&config.identity_rules)?
                 }
                 Ok(())
             }
@@ -229,34 +228,30 @@ impl<C: Curve, TagType: AttributeTagType, AttributeType: Attribute<C::Scalar>>
         }
         // checks based on wallet config
         if let Some(rules) = config_rules {
-            let check = &rules.custom_rules;
+            let check = &rules.attribute_check;
             match self {
                 AtomicStatement::RevealAttribute { statement: _ } => (),
                 AtomicStatement::AttributeInRange { statement } => {
                     let tag = &statement.attribute_tag;
-                    if rules.range_tags.contains(tag) {
+                    if !rules.range_tags.contains(tag) {
                         return Err(RequestCheckError::IllegalRangeTag(format!("{}", tag)));
                     }
-                    if let Err(e) = check(tag, &statement.lower) {
-                        return Err(e);
-                    }
-                    if let Err(e) = check(tag, &statement.upper) {
-                        return Err(e);
-                    }
+                    check(tag, &statement.lower)?;
+                    check(tag, &statement.upper)?;
                 }
                 AtomicStatement::AttributeInSet { statement } => {
                     let tag = &statement.attribute_tag;
                     if !rules.set_tags.contains(tag) {
                         return Err(RequestCheckError::IllegalSetTag(format!("{}", tag)));
                     }
-                    return statement.set.iter().map(|a| check(tag, &a)).collect();
+                    return statement.set.iter().try_for_each(|a| check(tag, a));
                 }
                 AtomicStatement::AttributeNotInSet { statement } => {
                     let tag = &statement.attribute_tag;
                     if !rules.set_tags.contains(tag) {
                         return Err(RequestCheckError::IllegalSetTag(format!("{}", tag)));
                     }
-                    return statement.set.iter().map(|a| check(tag, &a)).collect();
+                    return statement.set.iter().try_for_each(|a| check(tag, a));
                 }
             }
         }
