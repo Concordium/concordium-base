@@ -50,27 +50,28 @@ pub enum RequestCheckError {
     IllegalSetTag(String),
 }
 
-pub struct WalletConfig<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub identity_rules: Option<WalletConfigRules<C, AttributeTag, AttributeType>>,
-    pub web3_rules:     BTreeMap<ContractAddress, WalletConfigRules<C, String, AttributeType>>,
+pub struct WalletConfig<'a, C: Curve, AttributeType: Attribute<C::Scalar>> {
+    pub identity_rules: Option<WalletConfigRules<'a, C, AttributeTag, AttributeType>>,
+    pub web3_rules:     BTreeMap<ContractAddress, WalletConfigRules<'a, C, String, AttributeType>>,
 }
 
 pub trait AttributeTagType: Serialize + Ord + Hash + Display {}
 impl<T: Serialize + Ord + Hash + Display> AttributeTagType for T {}
 
-type AttributeCheck<TagType, AttributeType> =
-    Box<dyn Fn(&TagType, &AttributeType) -> AcceptableRequestResult>;
+type AttributeCheck<'a, TagType, AttributeType> =
+    Box<dyn Fn(&TagType, &AttributeType) -> AcceptableRequestResult + 'a>;
 type AcceptableRequestResult = Result<(), RequestCheckError>;
 
 pub struct WalletConfigRules<
+    'a,
     C: Curve,
     TagType: AttributeTagType,
     AttributeType: Attribute<C::Scalar>,
 > {
-    pub range_tags:   HashSet<TagType>,
-    pub set_tags:     HashSet<TagType>,
-    pub attribute_check: AttributeCheck<TagType, AttributeType>,
-    _marker:          PhantomData<C>,
+    pub range_tags:      HashSet<TagType>,
+    pub set_tags:        HashSet<TagType>,
+    pub attribute_check: AttributeCheck<'a, TagType, AttributeType>,
+    pub _marker:         PhantomData<C>,
 }
 
 fn default_attribute_rules(
@@ -108,7 +109,7 @@ fn default_attribute_rules(
     Ok(())
 }
 
-pub fn get_default_wallet_config() -> WalletConfig<constants::ArCurve, AttributeKind> {
+pub fn get_default_wallet_config() -> WalletConfig<'static, constants::ArCurve, AttributeKind> {
     /// List of identity attribute tags that we allow range statements for.
     /// The list should correspond to "dob", "idDocIssuedAt", "idDocExpiresAt".
     const IDENTITY_RANGE_TAGS: [AttributeTag; 3] =
@@ -125,10 +126,10 @@ pub fn get_default_wallet_config() -> WalletConfig<constants::ArCurve, Attribute
 
     WalletConfig {
         identity_rules: Some(WalletConfigRules::<_, AttributeTag, _> {
-            range_tags:   IDENTITY_RANGE_TAGS.into(),
-            set_tags:     IDENTITY_SET_TAGS.into(),
+            range_tags:      IDENTITY_RANGE_TAGS.into(),
+            set_tags:        IDENTITY_SET_TAGS.into(),
             attribute_check: Box::new(default_attribute_rules),
-            _marker:      PhantomData,
+            _marker:         PhantomData,
         }),
         web3_rules:     BTreeMap::new(),
     }
