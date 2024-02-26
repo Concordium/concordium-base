@@ -9,26 +9,65 @@ use concordium_base::{
     base::ContractAddress,
     common::Serialize,
     curve_arithmetic::Curve,
-    id::{
-        constants::{self, AttributeKind},
-        id_proof_types::AtomicStatement,
-        types::*,
-    },
+    id::{id_proof_types::AtomicStatement, types::*},
     web3id::{CredentialStatement, Request},
 };
 
-fn is_iso8601(date: &str) -> bool { chrono::NaiveDate::parse_from_str(date, "%Y%m%d").is_ok() }
-
-fn is_iso3166_alpha_2(code: &str) -> bool { rust_iso3166::from_alpha2(code).is_some() }
-
-fn is_iso3166_2(code: &str) -> bool { rust_iso3166::iso3166_2::from_code(code).is_some() }
-
 pub trait AcceptableRequest<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Method to check whether the request is acceptable given the provided
+    /// config. i.e. that it satifies the rules in the config, and some
+    /// general rules.
     fn acceptable_request(
         &self,
         config: &WalletConfig<C, AttributeType>,
-    ) -> Result<(), RequestCheckError>;
+    ) -> AcceptableRequestResult;
 }
+
+pub trait AcceptableAtomicStatement<
+    C: Curve,
+    TagType: AttributeTagType,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// Method to check that the statement is acceptable given the provided
+    /// rules.
+    fn acceptable_atomic_statement(
+        &self,
+        rules: &Option<WalletConfigRules<C, TagType, AttributeType>>,
+    ) -> AcceptableRequestResult;
+}
+
+pub type AcceptableRequestResult = Result<(), RequestCheckError>;
+
+pub struct WalletConfig<'a, C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Rules that statements on identity credentials should satisfy
+    pub identity_rules: Option<WalletConfigRules<'a, C, AttributeTag, AttributeType>>,
+    /// Rules that statements on web3Id credentials should satisfy. If a
+    /// statement uses a contract index without an entry, it should only
+    /// consider for basic, global, rules.
+    pub web3_rules:     BTreeMap<ContractAddress, WalletConfigRules<'a, C, String, AttributeType>>,
+}
+
+pub struct WalletConfigRules<
+    'a,
+    C: Curve,
+    TagType: AttributeTagType,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    /// The set of tags, which are allowed to be used for range statements.
+    pub range_tags:      HashSet<TagType>,
+    /// The set of tags, which are allowed to be used for membership and
+    /// nonMembership statements.
+    pub set_tags:        HashSet<TagType>,
+    /// A function to check attributes using custom behaviour.
+    pub attribute_check: AttributeCheck<'a, TagType, AttributeType>,
+    pub _marker:         PhantomData<C>,
+}
+
+pub trait AttributeTagType: Serialize + Ord + Hash + Display {}
+impl<T: Serialize + Ord + Hash + Display> AttributeTagType for T {}
+
+type AttributeCheck<'a, TagType, AttributeType> =
+    Box<dyn Fn(&TagType, &AttributeType) -> AcceptableRequestResult + 'a>;
 
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum RequestCheckError {
@@ -50,109 +89,13 @@ pub enum RequestCheckError {
     IllegalSetTag(String),
 }
 
-pub struct WalletConfig<'a, C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub identity_rules: Option<WalletConfigRules<'a, C, AttributeTag, AttributeType>>,
-    pub web3_rules:     BTreeMap<ContractAddress, WalletConfigRules<'a, C, String, AttributeType>>,
-}
-
-pub trait AttributeTagType: Serialize + Ord + Hash + Display {}
-impl<T: Serialize + Ord + Hash + Display> AttributeTagType for T {}
-
-type AttributeCheck<'a, TagType, AttributeType> =
-    Box<dyn Fn(&TagType, &AttributeType) -> AcceptableRequestResult + 'a>;
-type AcceptableRequestResult = Result<(), RequestCheckError>;
-
-pub struct WalletConfigRules<
-    'a,
-    C: Curve,
-    TagType: AttributeTagType,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    pub range_tags:      HashSet<TagType>,
-    pub set_tags:        HashSet<TagType>,
-    pub attribute_check: AttributeCheck<'a, TagType, AttributeType>,
-    pub _marker:         PhantomData<C>,
-}
-
-fn default_attribute_rules(
-    tag: &AttributeTag,
-    value: &AttributeKind,
-) -> Result<(), RequestCheckError> {
-    match tag.0 {
-        // countryOfResidence | nationality
-        4 | 5 => {
-            if !is_iso3166_alpha_2(&value.to_string()) {
-                return Err(RequestCheckError::InvalidValue(
-                    "countryOfResidence and nationality attributes must be ISO 3166-1 Alpha-2"
-                        .to_owned(),
-                ));
-            }
-        }
-        // idDocIssuer
-        8 => {
-            if !is_iso3166_alpha_2(&value.to_string()) && !is_iso3166_2(&value.to_string()) {
-                return Err(RequestCheckError::InvalidValue(
-                    "idDocIssuer attributes must be ISO 3166-1 Alpha-2 or ISO 3166-2".to_owned(),
-                ));
-            }
-        }
-        // dob, idDocIssuedAt, idDocExpiresAt
-        3 | 9 | 10 => {
-            if !is_iso8601(&value.to_string()) {
-                return Err(RequestCheckError::InvalidValue(
-                    "dob, idDocIssuedAt and idDocExpiresAt attributes must be ISO 8601".to_owned(),
-                ));
-            }
-        }
-        _ => (),
-    }
-    Ok(())
-}
-
-pub fn get_default_wallet_config() -> WalletConfig<'static, constants::ArCurve, AttributeKind> {
-    /// List of identity attribute tags that we allow range statements for.
-    /// The list should correspond to "dob", "idDocIssuedAt", "idDocExpiresAt".
-    const IDENTITY_RANGE_TAGS: [AttributeTag; 3] =
-        [AttributeTag(3), AttributeTag(9), AttributeTag(10)];
-    /// List of identity attribute tags that we allow set statements
-    /// (membership/nonMembership) for. The list should correspond to "Country
-    /// of residence", "Nationality", "IdDocType", "IdDocIssuer".
-    const IDENTITY_SET_TAGS: [AttributeTag; 4] = [
-        AttributeTag(4),
-        AttributeTag(5),
-        AttributeTag(6),
-        AttributeTag(8),
-    ];
-
-    WalletConfig {
-        identity_rules: Some(WalletConfigRules::<_, AttributeTag, _> {
-            range_tags:      IDENTITY_RANGE_TAGS.into(),
-            set_tags:        IDENTITY_SET_TAGS.into(),
-            attribute_check: Box::new(default_attribute_rules),
-            _marker:         PhantomData,
-        }),
-        web3_rules:     BTreeMap::new(),
-    }
-}
-
-pub trait AcceptableAtomicStatement<
-    C: Curve,
-    TagType: AttributeTagType,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    fn acceptable_atomic_statement(
-        &self,
-        rules: &Option<WalletConfigRules<C, TagType, AttributeType>>,
-    ) -> Result<(), RequestCheckError>;
-}
-
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, AttributeType>
     for Request<C, AttributeType>
 {
     fn acceptable_request(
         &self,
         config: &WalletConfig<C, AttributeType>,
-    ) -> Result<(), RequestCheckError> {
+    ) -> AcceptableRequestResult {
         self.credential_statements
             .iter()
             .try_for_each(|s| s.acceptable_request(config))
@@ -165,7 +108,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, Attribu
     fn acceptable_request(
         &self,
         config: &WalletConfig<C, AttributeType>,
-    ) -> Result<(), RequestCheckError> {
+    ) -> AcceptableRequestResult {
         match self {
             CredentialStatement::Account {
                 statement,
@@ -207,7 +150,7 @@ impl<C: Curve, TagType: AttributeTagType, AttributeType: Attribute<C::Scalar>>
     fn acceptable_atomic_statement(
         &self,
         config_rules: &Option<WalletConfigRules<C, TagType, AttributeType>>,
-    ) -> Result<(), RequestCheckError> {
+    ) -> AcceptableRequestResult {
         // Simple checks
         match self {
             AtomicStatement::RevealAttribute { statement: _ } => return Ok(()),
@@ -265,6 +208,7 @@ mod tests {
     use std::{collections::BTreeSet, marker::PhantomData, str::FromStr};
 
     use super::*;
+    use crate::default_wallet_config::get_default_wallet_config;
     use concordium_base::{
         base::CredentialRegistrationID,
         id::{
