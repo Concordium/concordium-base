@@ -1,16 +1,15 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    fmt::Display,
-    hash::Hash,
-    marker::PhantomData,
-};
-
 use concordium_base::{
     base::ContractAddress,
     common::Serialize,
     curve_arithmetic::Curve,
     id::{id_proof_types::AtomicStatement, types::*},
     web3id::{CredentialStatement, Request},
+};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::Display,
+    hash::Hash,
+    marker::PhantomData,
 };
 
 pub trait AcceptableRequest<C: Curve, AttributeType: Attribute<C::Scalar>> {
