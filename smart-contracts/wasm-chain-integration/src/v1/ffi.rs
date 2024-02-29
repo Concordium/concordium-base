@@ -239,6 +239,8 @@ unsafe extern "C" fn call_receive_v1(
     support_queries_tag: u8, // non-zero to enable support of chain queries.
     support_account_signature_checks: u8, /* non-zero to enable support for querying account keys
                               * and checking signatures */
+    support_contract_inspection_queries: u8, /* non-zero to enable support for querying contract
+                                              * module reference and name */
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -284,12 +286,14 @@ unsafe extern "C" fn call_receive_v1(
 
                 let support_queries = support_queries_tag != 0;
                 let support_account_signature_checks = support_account_signature_checks != 0;
+                let support_contract_inspection_queries = support_contract_inspection_queries != 0;
 
                 let params = ReceiveParams {
                     max_parameter_size,
                     limit_logs_and_return_values,
                     support_queries,
                     support_account_signature_checks,
+                    support_contract_inspection_queries,
                 };
 
                 let res = invoke_receive(
@@ -635,12 +639,18 @@ extern "C" fn migrate_persistent_tree_v1(
 #[no_mangle]
 /// Deallocate the persistent state, freeing as much memory as possible.
 extern "C" fn free_persistent_state_v1(tree: *mut PersistentState) {
-    unsafe { Box::from_raw(tree) };
+    unsafe {
+        let _ = Box::from_raw(tree);
+    }
 }
 
 #[no_mangle]
 /// Deallocate the mutable state.
-extern "C" fn free_mutable_state_v1(tree: *mut MutableState) { unsafe { Box::from_raw(tree) }; }
+extern "C" fn free_mutable_state_v1(tree: *mut MutableState) {
+    unsafe {
+        let _ = Box::from_raw(tree);
+    }
+}
 
 #[no_mangle]
 /// Convert the mutable state to a persistent one. Return a pointer to the
