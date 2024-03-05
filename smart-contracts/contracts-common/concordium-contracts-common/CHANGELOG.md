@@ -3,6 +3,8 @@
 ## Unreleased changes
 
 - `HashBytes::new` is now a `const` function.
+- Derive `serde::Serialize` and `serde::Deserialize` for `AccountSignature`, `CredentialSignature`, `Signature`, and `SignatureEd25519` when feature `derive-serde` is enabled.
+- Implement `serde::Serialize` and `serde::Deserialize` for a fixed byte array of length 64 in the helper function `fixed_byte_array_64_hex` when feature `derive-serde` is enabled.
 
 ## concordium-contracts-common 9.0.0 (2024-01-22)
 
