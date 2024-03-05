@@ -3,6 +3,7 @@
 ## Unreleased changes
 
 - `HashBytes::new` is now a `const` function.
+- Added compile-time function `.get_alias_unchecked` for `AccountAddress` that neglects the bound check.
 
 ## concordium-contracts-common 9.0.0 (2024-01-22)
 
