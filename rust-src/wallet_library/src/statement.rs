@@ -12,6 +12,9 @@ use std::{
     marker::PhantomData,
 };
 
+/// This trait is used to check that a Request is acceptable according to a set
+/// of rules. It is used by wallets to restrict the incoming request to those
+/// they are able to handle, willing to expose to the user.
 pub trait AcceptableRequest<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Method to check whether the request is acceptable given the provided
     /// config. i.e. that it satifies the rules in the config, and some
@@ -31,7 +34,7 @@ pub trait AcceptableAtomicStatement<
     /// rules.
     fn acceptable_atomic_statement(
         &self,
-        rules: &Option<WalletConfigRules<C, TagType, AttributeType>>,
+        rules: Option<&WalletConfigRules<C, TagType, AttributeType>>,
     ) -> AcceptableRequestResult;
 }
 
@@ -74,8 +77,6 @@ pub enum RequestCheckError {
     EmptyCredentialStatement,
     #[error("Credential statement may not reuse attribute tags across atomic statements")]
     DuplicateTag,
-    #[error("Web3Id statement support have not been added yet")]
-    Web3IdStatementNotSupported,
     #[error("`{0}`")]
     InvalidValue(String),
     #[error("Range statement min must be less than max")]
@@ -120,22 +121,45 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, Attribu
                 let mut used_tags = HashSet::<AttributeTag>::new();
                 for atomic_statement in statement {
                     let attribute = atomic_statement.attribute();
+
                     if used_tags.contains(&attribute) {
                         return Err(RequestCheckError::DuplicateTag);
                     }
                     used_tags.insert(attribute);
 
-                    atomic_statement.acceptable_atomic_statement(&config.identity_rules)?
+                    atomic_statement.acceptable_atomic_statement(config.identity_rules.as_ref())?
                 }
                 Ok(())
             }
             CredentialStatement::Web3Id {
                 ty: _,
                 network: _,
-                contract: _,
+                contract,
                 credential: _,
-                statement: _,
-            } => Err(RequestCheckError::Web3IdStatementNotSupported),
+                statement,
+            } => {
+                if statement.is_empty() {
+                    return Err(RequestCheckError::EmptyCredentialStatement);
+                }
+                let mut used_tags = HashSet::<String>::new();
+                for atomic_statement in statement {
+                    let attribute = match atomic_statement {
+                        AtomicStatement::RevealAttribute { statement } => &statement.attribute_tag,
+                        AtomicStatement::AttributeInRange { statement } => &statement.attribute_tag,
+                        AtomicStatement::AttributeInSet { statement } => &statement.attribute_tag,
+                        AtomicStatement::AttributeNotInSet { statement } => {
+                            &statement.attribute_tag
+                        }
+                    };
+                    if used_tags.contains(attribute) {
+                        return Err(RequestCheckError::DuplicateTag);
+                    }
+                    used_tags.insert(attribute.clone());
+
+                    atomic_statement.acceptable_atomic_statement(config.web3_rules.get(contract))?
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -148,7 +172,7 @@ impl<C: Curve, TagType: AttributeTagType, AttributeType: Attribute<C::Scalar>>
 {
     fn acceptable_atomic_statement(
         &self,
-        config_rules: &Option<WalletConfigRules<C, TagType, AttributeType>>,
+        config_rules: Option<&WalletConfigRules<C, TagType, AttributeType>>,
     ) -> AcceptableRequestResult {
         // Simple checks
         match self {
@@ -177,7 +201,7 @@ impl<C: Curve, TagType: AttributeTagType, AttributeType: Attribute<C::Scalar>>
                 AtomicStatement::AttributeInRange { statement } => {
                     let tag = &statement.attribute_tag;
                     if !rules.range_tags.contains(tag) {
-                        return Err(RequestCheckError::IllegalRangeTag(format!("{}", tag)));
+                        return Err(RequestCheckError::IllegalRangeTag(tag.to_string()));
                     }
                     check(tag, &statement.lower)?;
                     check(tag, &statement.upper)?;
@@ -185,14 +209,14 @@ impl<C: Curve, TagType: AttributeTagType, AttributeType: Attribute<C::Scalar>>
                 AtomicStatement::AttributeInSet { statement } => {
                     let tag = &statement.attribute_tag;
                     if !rules.set_tags.contains(tag) {
-                        return Err(RequestCheckError::IllegalSetTag(format!("{}", tag)));
+                        return Err(RequestCheckError::IllegalSetTag(tag.to_string()));
                     }
                     return statement.set.iter().try_for_each(|a| check(tag, a));
                 }
                 AtomicStatement::AttributeNotInSet { statement } => {
                     let tag = &statement.attribute_tag;
                     if !rules.set_tags.contains(tag) {
-                        return Err(RequestCheckError::IllegalSetTag(format!("{}", tag)));
+                        return Err(RequestCheckError::IllegalSetTag(tag.to_string()));
                     }
                     return statement.set.iter().try_for_each(|a| check(tag, a));
                 }
@@ -230,7 +254,8 @@ mod tests {
             },
         };
         assert!(matches!(
-            statement.acceptable_atomic_statement(&get_default_wallet_config().identity_rules),
+            statement
+                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::RangeMinMaxError)
         ));
     }
@@ -246,7 +271,8 @@ mod tests {
             },
         };
         assert!(matches!(
-            statement.acceptable_atomic_statement(&get_default_wallet_config().identity_rules),
+            statement
+                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::InvalidValue(_))
         ));
     }
@@ -269,12 +295,13 @@ mod tests {
         };
 
         assert!(matches!(
-            bad_statement.acceptable_atomic_statement(&get_default_wallet_config().identity_rules),
+            bad_statement
+                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::InvalidValue(_))
         ));
         assert!(
             good_statement
-                .acceptable_atomic_statement(&get_default_wallet_config().identity_rules)
+                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref())
                 .is_ok(),
             "Nationality statement must be country code"
         );
@@ -294,7 +321,7 @@ mod tests {
         };
         assert!(
             statement
-                .acceptable_atomic_statement(&get_default_wallet_config().identity_rules)
+                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref())
                 .is_ok(),
             "idDocIssuer should be allowed ISO3166-2 values"
         );
@@ -329,12 +356,13 @@ mod tests {
         };
         assert!(
             dob_statement
-                .acceptable_atomic_statement(&get_default_wallet_config().identity_rules)
+                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref())
                 .is_ok(),
             "Range statement should be allowed on tag 3 (dob)"
         );
         assert!(matches!(
-            name_statement.acceptable_atomic_statement(&get_default_wallet_config().identity_rules),
+            name_statement
+                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::IllegalRangeTag(_))
         ));
     }
