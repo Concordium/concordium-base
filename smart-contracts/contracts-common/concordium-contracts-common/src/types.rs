@@ -622,7 +622,7 @@ pub struct AccountPublicKeys {
 
 pub(crate) type CredentialIndex = u8;
 
-#[derive(crate::Serialize, Debug, SchemaType)]
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 #[cfg_attr(feature = "derive-serde", derive(serde::Deserialize, serde::Serialize))]
 #[non_exhaustive]
 /// A cryptographic signature indexed by the signature scheme. Currently only a
@@ -631,7 +631,7 @@ pub enum Signature {
     Ed25519(SignatureEd25519),
 }
 
-#[derive(crate::Serialize, Debug, SchemaType)]
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 #[cfg_attr(feature = "derive-serde", derive(serde::Deserialize, serde::Serialize))]
 #[concordium(transparent)]
 /// Account signatures. This is an analogue of transaction signatures that are
@@ -644,7 +644,7 @@ pub struct AccountSignatures {
     pub sigs: BTreeMap<CredentialIndex, CredentialSignatures>,
 }
 
-#[derive(crate::Serialize, Debug, SchemaType)]
+#[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
 #[cfg_attr(feature = "derive-serde", derive(serde::Deserialize, serde::Serialize))]
 #[concordium(transparent)]
 pub struct CredentialSignatures {
@@ -2708,7 +2708,7 @@ mod serde_impl {
         use super::*;
 
         /// Serialize (via Serde)
-        pub fn serialize<S: serde::Serializer>(dt: &[u8], ser: S) -> Result<S::Ok, S::Error> {
+        pub fn serialize<S: serde::Serializer>(dt: &[u8; 64], ser: S) -> Result<S::Ok, S::Error> {
             ser.serialize_str(hex::encode(dt).as_str())
         }
 
@@ -3007,6 +3007,106 @@ mod serde_impl {
 mod test {
     use super::*;
     use std::str::FromStr;
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_json_serialization_and_deserialization_of_signature_ed25519() {
+        let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
+
+        let signature = SignatureEd25519::from_str(&hex_string.to_string()).unwrap();
+
+        // Serialize to JSON
+        let serialized = serde_json::to_value(&signature).unwrap();
+
+        // Deserialize from JSON
+        let deserialized: SignatureEd25519 = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(
+            signature, deserialized,
+            "Serializing and then deserializing should return the original value."
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_json_serialization_and_deserialization_of_signature() {
+        let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
+
+        let signature =
+            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+
+        // Serialize to JSON
+        let serialized = serde_json::to_value(&signature).unwrap();
+
+        // Deserialize from JSON
+        let deserialized: Signature = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(
+            signature, deserialized,
+            "Serializing and then deserializing should return the original value."
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_json_serialization_and_deserialization_of_credential_signature() {
+        let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
+
+        let signature =
+            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+
+        let mut sig_map = BTreeMap::new();
+        sig_map.insert(0u8, signature);
+
+        let credential_signature = CredentialSignatures {
+            sigs: sig_map,
+        };
+
+        // Serialize to JSON
+        let serialized = serde_json::to_value(&credential_signature).unwrap();
+
+        // Deserialize from JSON
+        let deserialized = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(
+            credential_signature, deserialized,
+            "Serializing and then deserializing should return the original value."
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
+    fn test_json_serialization_and_deserialization_of_account_signature() {
+        let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
+
+        let signature =
+            Signature::Ed25519(SignatureEd25519::from_str(&hex_string.to_string()).unwrap());
+
+        let mut sig_map = BTreeMap::new();
+        sig_map.insert(0u8, signature);
+
+        let credential_signature = CredentialSignatures {
+            sigs: sig_map,
+        };
+
+        let mut sig_map_outer = BTreeMap::new();
+        sig_map_outer.insert(0u8, credential_signature);
+
+        let account_signature = AccountSignatures {
+            sigs: sig_map_outer,
+        };
+
+        // Serialize to JSON
+        let serialized = serde_json::to_value(&account_signature).unwrap();
+
+        // Deserialize from JSON
+        let deserialized = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(
+            account_signature, deserialized,
+            "Serializing and then deserializing should return the original value."
+        );
+    }
 
     #[test]
     #[cfg(feature = "derive-serde")]
