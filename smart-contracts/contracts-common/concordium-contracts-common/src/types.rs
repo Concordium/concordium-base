@@ -3021,6 +3021,25 @@ mod test {
 
     #[test]
     #[cfg(feature = "derive-serde")]
+    fn test_json_serialization_and_deserialization_of_signature_ecdsa_secp256k1() {
+        let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
+
+        let signature = SignatureEcdsaSecp256k1::from_str(&hex_string.to_string()).unwrap();
+
+        // Serialize to JSON
+        let serialized = serde_json::to_value(&signature).unwrap();
+
+        // Deserialize from JSON
+        let deserialized: SignatureEcdsaSecp256k1 = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(
+            signature, deserialized,
+            "Serializing and then deserializing should return the original value."
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "derive-serde")]
     fn test_json_serialization_and_deserialization_of_signature() {
         let hex_string = "FC87CE9497CBD9DDDFB6CED31914D4FB93DD158EEFE7AF927AB31BB47178E61A33BEA52568475C161EC5B7A5E86B9F5F0274274192665D83197C4CE9A24C7C06";
 
