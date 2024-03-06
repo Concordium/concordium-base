@@ -516,12 +516,24 @@ impl FromStr for PublicKeyEcdsaSecp256k1 {
 
 /// Signature for a Ed25519 message. Must be 64 bytes long.
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
-#[cfg_attr(feature = "derive-serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(
+    feature = "derive-serde",
+    derive(SerdeSerialize, SerdeDeserialize),
+    serde(into = "String", try_from = "String")
+)]
 #[repr(transparent)]
-pub struct SignatureEd25519(
-    #[cfg_attr(feature = "derive-serde", serde(with = "serde_impl::fixed_byte_array_64_hex"))]
-    pub  [u8; 64],
-);
+pub struct SignatureEd25519(pub [u8; 64]);
+
+impl From<SignatureEd25519> for String {
+    fn from(sig: SignatureEd25519) -> String { sig.to_string() }
+}
+
+#[cfg(feature = "derive-serde")]
+impl TryFrom<String> for SignatureEd25519 {
+    type Error = ParseError;
+
+    fn try_from(s: String) -> Result<Self, ParseError> { Self::from_str(s.as_str()) }
+}
 
 impl fmt::Display for SignatureEd25519 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -552,8 +564,24 @@ impl FromStr for SignatureEd25519 {
 /// Signature for a ECDSA (over Secp256k1) message. Must be 64 bytes longs
 /// (serialized in compressed format).
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
+#[cfg_attr(
+    feature = "derive-serde",
+    derive(SerdeSerialize, SerdeDeserialize),
+    serde(into = "String", try_from = "String")
+)]
 #[repr(transparent)]
 pub struct SignatureEcdsaSecp256k1(pub [u8; 64]);
+
+impl From<SignatureEcdsaSecp256k1> for String {
+    fn from(sig: SignatureEcdsaSecp256k1) -> String { sig.to_string() }
+}
+
+#[cfg(feature = "derive-serde")]
+impl TryFrom<String> for SignatureEcdsaSecp256k1 {
+    type Error = ParseError;
+
+    fn try_from(s: String) -> Result<Self, ParseError> { Self::from_str(s.as_str()) }
+}
 
 impl fmt::Display for SignatureEcdsaSecp256k1 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -623,7 +651,11 @@ pub struct AccountPublicKeys {
 pub(crate) type CredentialIndex = u8;
 
 #[derive(crate::Serialize, Debug, SchemaType, PartialEq, Eq)]
-#[cfg_attr(feature = "derive-serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(
+    feature = "derive-serde",
+    derive(serde::Deserialize, serde::Serialize),
+    serde(tag = "SignatureSchema", content = "Signature")
+)]
 #[non_exhaustive]
 /// A cryptographic signature indexed by the signature scheme. Currently only a
 /// single scheme is supported, `ed25519`.
@@ -2700,46 +2732,6 @@ mod serde_impl {
     impl<'de> SerdeDeserialize<'de> for AccountAddress {
         fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
             des.deserialize_str(Base58Visitor)
-        }
-    }
-
-    /// Helper for [de]serializing a fixed length array of 64 as an hex string.
-    pub(super) mod fixed_byte_array_64_hex {
-        use super::*;
-
-        /// Serialize (via Serde)
-        pub fn serialize<S: serde::Serializer>(dt: &[u8; 64], ser: S) -> Result<S::Ok, S::Error> {
-            ser.serialize_str(hex::encode(dt).as_str())
-        }
-
-        /// Deserialize (via Serde)
-        pub fn deserialize<'de, D: serde::Deserializer<'de>>(des: D) -> Result<[u8; 64], D::Error> {
-            struct HexVisitor;
-            impl<'de> serde::de::Visitor<'de> for HexVisitor {
-                type Value = [u8; 64];
-
-                fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                    write!(formatter, "A hex string.")
-                }
-
-                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                where
-                    E: serde::de::Error, {
-                    let r = hex::decode(v).map_err(serde::de::Error::custom)?;
-
-                    if r.len() != 64 {
-                        return Err(serde::de::Error::invalid_length(
-                            r.len(),
-                            &"Length of 64 was expected.",
-                        ));
-                    }
-
-                    let mut array = [0u8; 64];
-                    array.copy_from_slice(&r);
-                    Ok(array)
-                }
-            }
-            des.deserialize_str(HexVisitor)
         }
     }
 
