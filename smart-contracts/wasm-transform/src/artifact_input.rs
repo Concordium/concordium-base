@@ -63,6 +63,8 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for CompiledFunctionBytes<'a> {
         let params: &'a [ValueType] = cursor.next(ctx)?;
         let num_locals: u32 = cursor.next(ctx)?;
         let locals: Vec<ArtifactLocal> = cursor.next(ctx)?;
+        let num_registers: u32 = cursor.next(ctx)?;
+        let constants: Vec<i64> = cursor.next(ctx)?;
         let code = cursor.next(ctx)?;
         Ok(CompiledFunctionBytes {
             type_idx,
@@ -70,6 +72,8 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for CompiledFunctionBytes<'a> {
             params,
             num_locals,
             locals,
+            num_registers,
+            constants,
             code,
         })
     }

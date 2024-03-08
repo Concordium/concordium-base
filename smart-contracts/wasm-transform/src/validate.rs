@@ -17,7 +17,7 @@ use crate::{
     },
     types::*,
 };
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail, ensure, Context};
 use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
 
 #[derive(Debug)]
@@ -139,11 +139,15 @@ impl ValidationState {
     /// Push a new type to the stack.
     fn push_opd(&mut self, m_type: MaybeKnown) {
         self.opds.stack.push(m_type);
-        if let Some(ur) = self.ctrls.stack.last().map(|frame| frame.unreachable) {
-            if !ur {
-                self.max_reachable_height =
-                    std::cmp::max(self.max_reachable_height, self.opds.stack.len());
-            }
+        if matches!(
+            self.ctrls.stack.last(),
+            Some(ControlFrame {
+                unreachable: false,
+                ..
+            })
+        ) {
+            self.max_reachable_height =
+                std::cmp::max(self.max_reachable_height, self.opds.stack.len());
         }
     }
 
@@ -417,7 +421,7 @@ fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
 /// The type parameter should be instantiated with an opcode. The reason it is a
 /// type parameter is to support both opcodes and references to opcodes as
 /// parameters. The latter is useful because opcodes are not copyable.
-pub trait Handler<O> {
+pub trait Handler<Ctx: HasValidationContext, O> {
     type Outcome: Sized;
 
     /// Handle the opcode. This function is called __after__ the `validate`
@@ -426,8 +430,10 @@ pub trait Handler<O> {
     /// height __before__ the opcode is processed.
     fn handle_opcode(
         &mut self,
+        ctx: &Ctx,
         state: &ValidationState,
         stack_heigh: usize,
+        unreachable_before: bool,
         opcode: O,
     ) -> anyhow::Result<()>;
 
@@ -436,14 +442,16 @@ pub trait Handler<O> {
     fn finish(self, state: &ValidationState) -> anyhow::Result<Self::Outcome>;
 }
 
-impl Handler<OpCode> for Vec<OpCode> {
+impl <Ctx: HasValidationContext>Handler<Ctx, OpCode> for Vec<OpCode> {
     type Outcome = (Self, usize);
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn handle_opcode(
         &mut self,
+        _ctx: &Ctx,
         _state: &ValidationState,
         _stack_height: usize,
+        unreachable_before: bool,
         opcode: OpCode,
     ) -> anyhow::Result<()> {
         self.push(opcode);
@@ -462,8 +470,8 @@ impl Handler<OpCode> for Vec<OpCode> {
 /// the iterator is fully consumed and properly terminated by an `End` opcode.
 /// The return value is the outcome determined by the handler, as well as
 /// the maximum reachable stack height in this function.
-pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
-    context: &impl HasValidationContext,
+pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>>(
+    context: &Ctx,
     opcodes: impl Iterator<Item = ParseResult<O>>,
     mut handler: H,
 ) -> ValidateResult<H::Outcome> {
@@ -476,6 +484,12 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
     for opcode in opcodes {
         let next_opcode = opcode?;
         let old_stack_height = state.opds.stack.len();
+        let unreachable_before = state
+            .ctrls
+            .stack
+            .last()
+            .context("Need to have at least one control frame")?
+            .unreachable;
         match next_opcode.borrow() {
             OpCode::CallImmediate(_) => {
                 // bail!("Unsupported instruction.");
@@ -843,7 +857,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.push_opd(Known(ValueType::I64));
             }
         }
-        handler.handle_opcode(&state, old_stack_height, next_opcode)?;
+        handler.handle_opcode(context, &state, old_stack_height, unreachable_before, next_opcode)?;
     }
     if state.done() {
         handler.finish(&state)

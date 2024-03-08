@@ -48,6 +48,13 @@ impl Host<ArtifactNamedImport> for TrapHost {
             name: f.clone(),
         })
     }
+
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> { Ok(()) }
+
+    fn track_call(&mut self) -> RunResult<()> { Ok(()) }
+
+    fn track_return(&mut self) {  }
+
 }
 
 #[derive(Default)]
@@ -82,6 +89,18 @@ impl Host<ArtifactNamedImport> for MeteringHost {
         }
         Ok(None)
     }
+
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> { Ok(()) }
+
+    fn track_call(&mut self) -> RunResult<()> {
+        self.call_depth += 1;
+        Ok(())
+    }
+
+    fn track_return(&mut self) {
+        self.call_depth.saturating_sub(1);
+    }
+
 }
 
 fn validate(source: &[u8]) -> anyhow::Result<Module> {

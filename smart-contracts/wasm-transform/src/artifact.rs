@@ -10,10 +10,11 @@ use crate::{
     types::*,
     validate::{validate, Handler, HasValidationContext, LocalsRange, ValidationState},
 };
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail, ensure, Context};
 use derive_more::{Display, From, Into};
 use std::{
-    collections::BTreeMap,
+    cmp::Reverse,
+    collections::{BTreeMap, BTreeSet, BinaryHeap},
     convert::{TryFrom, TryInto},
     io::Write,
     sync::Arc,
@@ -170,17 +171,22 @@ impl TryFrom<Local> for ArtifactLocal {
 #[derive(Debug, Clone)]
 /// A function which has been processed into a form suitable for execution.
 pub struct CompiledFunction {
-    type_idx:    TypeIndex,
-    return_type: BlockType,
+    type_idx:      TypeIndex,
+    return_type:   BlockType,
     /// Parameters of the function.
-    params:      Vec<ValueType>,
+    params:        Vec<ValueType>,
     /// Number of locals, cached, but should match what is in the
     /// locals vector below.
-    num_locals:  u32,
+    num_locals:    u32,
     /// Vector of types of locals. This __does not__ include function
     /// parameters.
-    locals:      Vec<ArtifactLocal>,
-    code:        Instructions,
+    locals:        Vec<ArtifactLocal>,
+    /// Maximum number of locations needed. This includes parameters,
+    /// locals, and any extra locations needed to preserve values.
+    num_registers: u32,
+    /// The constants in the function.
+    constants:     Vec<i64>,
+    code:          Instructions,
 }
 
 #[derive(Debug)]
@@ -188,27 +194,34 @@ pub struct CompiledFunction {
 /// that does not own the body and locals. This is used to make deserialization
 /// of artifacts cheaper.
 pub struct CompiledFunctionBytes<'a> {
-    pub(crate) type_idx:    TypeIndex,
-    pub(crate) return_type: BlockType,
-    pub(crate) params:      &'a [ValueType],
+    pub(crate) type_idx:      TypeIndex,
+    pub(crate) return_type:   BlockType,
+    pub(crate) params:        &'a [ValueType],
     /// Vector of types of locals. This __does not__ include
     /// parameters.
     /// FIXME: It would be ideal to have this as a zero-copy structure,
     /// but it likely does not matter, and it would be more error-prone.
-    pub(crate) num_locals:  u32,
-    pub(crate) locals:      Vec<ArtifactLocal>,
-    pub(crate) code:        &'a [u8],
+    pub(crate) num_locals:    u32,
+    pub(crate) locals:        Vec<ArtifactLocal>,
+    /// Maximum number of locations needed. This includes parameters,
+    /// locals, and any extra locations needed to preserve values.
+    pub(crate) num_registers: u32,
+    /// The constants in the function.
+    pub(crate) constants:     Vec<i64>, // TODO: Would be better if it was not allocated.
+    pub(crate) code:          &'a [u8],
 }
 
 impl<'a> From<CompiledFunctionBytes<'a>> for CompiledFunction {
     fn from(cfb: CompiledFunctionBytes<'a>) -> Self {
         Self {
-            type_idx:    cfb.type_idx,
-            return_type: cfb.return_type,
-            params:      cfb.params.to_vec(),
-            num_locals:  cfb.num_locals,
-            locals:      cfb.locals,
-            code:        cfb.code.to_vec().into(),
+            type_idx:      cfb.type_idx,
+            return_type:   cfb.return_type,
+            params:        cfb.params.to_vec(),
+            num_locals:    cfb.num_locals,
+            locals:        cfb.locals,
+            num_registers: cfb.num_registers,
+            constants:     cfb.constants,
+            code:          cfb.code.to_vec().into(),
         }
     }
 }
@@ -322,6 +335,10 @@ impl<'a> ExactSizeIterator for LocalsIterator<'a> {
 pub trait RunnableCode {
     /// The number of parameters of the function.
     fn num_params(&self) -> u32;
+    /// The number of registers the function needs in the worst case.
+    fn num_registers(&self) -> u32;
+    /// The number of registers the function needs in the worst case.
+    fn constants(&self) -> &[i64];
     /// The type of the function, as an index into the list of types of the
     /// module.
     fn type_idx(&self) -> TypeIndex;
@@ -341,6 +358,12 @@ pub trait RunnableCode {
 impl RunnableCode for CompiledFunction {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_params(&self) -> u32 { self.params.len() as u32 }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn num_registers(&self) -> u32 { self.num_registers }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn constants(&self) -> &[i64] { &self.constants }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
@@ -364,6 +387,12 @@ impl RunnableCode for CompiledFunction {
 impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_params(&self) -> u32 { self.params.len() as u32 }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn num_registers(&self) -> u32 { self.num_registers }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn constants(&self) -> &[i64] { &self.constants }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
@@ -466,9 +495,7 @@ pub enum InternalOpcode {
     Unreachable = 0u8,
     If,
     Br,
-    BrCarry,
     BrIf,
-    BrIfCarry,
     BrTable,
     BrTableCarry,
     Return,
@@ -477,13 +504,10 @@ pub enum InternalOpcode {
     CallIndirect,
 
     // Parametric instructions
-    Drop,
     Select,
 
     // Variable instructions
-    LocalGet,
     LocalSet,
-    LocalTee,
     GlobalGet,
     GlobalSet,
 
@@ -509,10 +533,6 @@ pub enum InternalOpcode {
     I64Store32,
     MemorySize,
     MemoryGrow,
-
-    // Numeric instructions
-    I32Const,
-    I64Const,
 
     I32Eqz,
     I32Eq,
@@ -584,6 +604,8 @@ pub enum InternalOpcode {
     I64Extend8S,
     I64Extend16S,
     I64Extend32S,
+
+    Copy,
 }
 
 /// Result of compilation. Either Ok(_) or an error indicating the reason.
@@ -611,6 +633,7 @@ impl Instructions {
     fn current_offset(&self) -> usize { self.bytes.len() }
 
     fn back_patch(&mut self, back_loc: usize, to_write: u32) -> CompileResult<()> {
+        // dbg!("PATCHING {back_loc}, INSERTING {to_write}");
         let mut place: &mut [u8] = &mut self.bytes[back_loc..];
         place.write_all(&to_write.to_le_bytes())?;
         Ok(())
@@ -622,32 +645,50 @@ enum JumpTarget {
     /// We know the position in the instruction sequence where the jump should
     /// resolve to. This is used in the case of loops.
     Known {
-        pos: usize,
+        pos:    usize,
+        result: Option<Provider>,
     },
     /// We do not yet know where in the instruction sequence we will jump to.
     /// We record the list of places at which we need to back-patch the location
     /// when we get to it.
     Unknown {
         backpatch_locations: Vec<usize>,
+        result:              Option<Provider>,
     },
 }
 
 impl JumpTarget {
-    pub fn new_unknown() -> Self {
+    pub fn result_slot(&self) -> Option<Provider> {
+        match self {
+            JumpTarget::Known {
+                result,
+                ..
+            } => *result,
+            JumpTarget::Unknown {
+                result,
+                ..
+            } => *result,
+        }
+    }
+
+    pub fn new_unknown(result: Option<Provider>) -> Self {
         JumpTarget::Unknown {
             backpatch_locations: Vec::new(),
+            result,
         }
     }
 
-    pub fn new_unknown_loc(pos: usize) -> Self {
+    pub fn new_unknown_loc(pos: usize, result: Option<Provider>) -> Self {
         JumpTarget::Unknown {
             backpatch_locations: vec![pos],
+            result,
         }
     }
 
-    pub fn new_known(pos: usize) -> Self {
+    pub fn new_known(pos: usize, result: Option<Provider>) -> Self {
         JumpTarget::Known {
             pos,
+            result,
         }
     }
 }
@@ -673,30 +714,106 @@ impl BackPatchStack {
         let lookup_idx = self.stack.len() - n as usize - 1;
         self.stack.get_mut(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
     }
-}
-/// An intermediate structure of the instruction sequence plus any pending
-/// backpatch locations we need to resolve.
-struct BackPatch {
-    out:       Instructions,
-    backpatch: BackPatchStack,
+
+    pub fn get(&self, n: LabelIndex) -> CompileResult<&JumpTarget> {
+        ensure!(
+            (n as usize) < self.stack.len(),
+            "Attempt to access label beyond the size of the stack."
+        );
+        let lookup_idx = self.stack.len() - n as usize - 1;
+        self.stack.get(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
+    }
 }
 
-impl BackPatch {
-    fn new() -> Self {
+struct DynamicLocations {
+    next_location:      i32,
+    reusable_locations: BTreeSet<i32>,
+}
+
+impl DynamicLocations {
+    pub fn new(next_location: i32) -> Self {
         Self {
-            out:       Default::default(),
-            backpatch: BackPatchStack {
-                stack: vec![JumpTarget::new_unknown()],
-            },
+            next_location,
+            reusable_locations: BTreeSet::new(),
         }
     }
 
-    pub fn push_jump(
+    pub fn reuse(&mut self, provider: Provider) {
+        if let Provider::Dynamic(idx) = provider {
+            self.reusable_locations.insert(idx);
+        }
+    }
+
+    pub fn get(&mut self) -> i32 {
+        if let Some(idx) = self.reusable_locations.pop_first() {
+            idx
+        } else {
+            let idx = self.next_location;
+            self.next_location += 1;
+            idx
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Provider {
+    Dynamic(i32),
+    Local(i32),
+    Constant(i32),
+}
+
+/// An intermediate structure of the instruction sequence plus any pending
+/// backpatch locations we need to resolve.
+struct BackPatch {
+    out:               Instructions,
+    backpatch:         BackPatchStack,
+    providers_stack:   Vec<Provider>,
+    /// The return type of the function.
+    return_type:       Option<ValueType>,
+    dynamic_locations: DynamicLocations,
+    constants:         BTreeMap<i64, i32>,
+}
+
+impl BackPatch {
+    /// Construct a new instance. The argument is the number of locals (this
+    /// includes parameters + declared locals). The number of locals is
+    /// assumed to be within bounds ensured by the validation.
+    fn new(num_locals: u32, return_type: Option<ValueType>) -> Self {
+        let dynamic_locations = DynamicLocations::new(num_locals as i32 + 1);
+        Self {
+            out: Default::default(),
+            backpatch: BackPatchStack {
+                // The return value of a function, if any, will always be at index 0.
+                stack: vec![JumpTarget::new_unknown(return_type.map(|_| Provider::Local(0)))],
+            },
+            providers_stack: Vec::new(),
+            constants: BTreeMap::new(),
+            dynamic_locations,
+            return_type,
+        }
+    }
+
+    fn push_loc(&mut self, loc: Provider) {
+        // TODO: Record preserve locations.
+        match loc {
+            Provider::Dynamic(idx) => {
+                self.out.push_i32(idx);
+            }
+            Provider::Constant(idx) => {
+                self.out.push_i32(idx);
+            }
+            Provider::Local(idx) => {
+                self.out.push_i32(idx);
+            }
+        }
+    }
+
+    fn push_jump(
         &mut self,
         label_idx: LabelIndex,
         state: &ValidationState,
         old_stack_height: usize, // stack height before the jump
-        instruction: Option<(InternalOpcode, InternalOpcode)>,
+        instruction: Option<InternalOpcode>,
     ) -> CompileResult<()> {
         let target_frame = state
             .ctrls
@@ -709,54 +826,179 @@ impl BackPatch {
             old_stack_height,
             target_height
         );
-        let diff = if let BlockType::EmptyType = target_frame.label_type {
-            if let Some((l, _)) = instruction {
-                self.out.push(l);
+        let target = self.backpatch.get(label_idx)?;
+        match target {
+            JumpTarget::Known {
+                pos: _,
+                result: _, // when jumping to a loop we don't carry any value over.
+            } => (),
+            JumpTarget::Unknown {
+                backpatch_locations: _,
+                result,
+            } => {
+                if matches!(target_frame.label_type, BlockType::ValueType(_)) {
+                    let &Some(result) = result else {
+                        anyhow::bail!("No target to place result.");
+                    };
+                    // If or Br instruction.
+                    // output instruction
+                    if instruction.is_some() {
+                        let provider = self
+                            .providers_stack
+                            .pop()
+                            .context("Expected a value at the top of the stack to carry over.")?;
+                        if provider != result {
+                            self.out.push(InternalOpcode::Copy);
+                            self.push_loc(provider);
+                            self.push_loc(result);
+                        }
+                        self.providers_stack.push(result);
+                    } else {
+                        // BrTable instruction.
+                        self.push_loc(result);
+                        // Since the part after the BrTable is unreachable.
+                        // the value of the providers stack does not matter.
+                    }
+                }
             }
-            (old_stack_height - target_height).try_into()?
-        } else {
-            if let Some((_, r)) = instruction {
-                self.out.push(r);
-            }
-            (old_stack_height - target_height).try_into()?
+        }
+        if let Some(i) = instruction {
+            self.out.push(i);
         };
-        // output the difference in stack heights.
-        self.out.push_u32(diff);
         let target = self.backpatch.get_mut(label_idx)?;
         match target {
             JumpTarget::Known {
                 pos,
+                ..
             } => {
                 self.out.push_u32(*pos as u32);
             }
             JumpTarget::Unknown {
                 backpatch_locations,
+                ..
             } => {
-                // output instruction
-                backpatch_locations.push(self.out.current_offset());
                 // output a dummy value
+                backpatch_locations.push(self.out.current_offset());
                 self.out.push_u32(0u32);
             }
         }
         Ok(())
     }
+
+    fn push_binary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
+        self.out.push(opcode);
+        let _ = self.push_consume()?;
+        let _ = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    fn push_ternary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
+        self.out.push(opcode);
+        let _ = self.push_consume()?;
+        let _ = self.push_consume()?;
+        let _ = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    fn push_mem_load(&mut self, opcode: InternalOpcode, memarg: &MemArg) -> CompileResult<()> {
+        self.out.push(opcode);
+        self.out.push_u32(memarg.offset);
+        let _operand = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    fn push_mem_store(&mut self, opcode: InternalOpcode, memarg: &MemArg) -> CompileResult<()> {
+        self.out.push(opcode);
+        self.out.push_u32(memarg.offset);
+        let _value = self.push_consume()?;
+        let _location = self.push_consume()?;
+        Ok(())
+    }
+
+    fn push_unary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
+        self.out.push(opcode);
+        let _operand = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    fn push_provide(&mut self) {
+        let result = self.dynamic_locations.get();
+        self.providers_stack.push(Provider::Dynamic(result));
+        self.out.push_i32(result);
+    }
+
+    /// Consume an operand and return the slot that was consumed.
+    fn push_consume(&mut self) -> CompileResult<Provider> {
+        let operand = self
+            .providers_stack
+            .pop()
+            .with_context(|| format!("Missing operand for push_consume"))?;
+        self.dynamic_locations.reuse(operand);
+        self.push_loc(operand);
+        Ok(operand)
+    }
 }
 
-impl Handler<&OpCode> for BackPatch {
-    type Outcome = Instructions;
+impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
+    type Outcome = (Instructions, i32, Vec<i64>);
 
     fn handle_opcode(
         &mut self,
+        ctx: &Ctx,
         state: &ValidationState,
         stack_height: usize,
+        unreachable_before: bool,
         opcode: &OpCode,
     ) -> CompileResult<()> {
         use InternalOpcode::*;
+        // dbg!("OPCODE {:?} {unreachable_before}", opcode);
+        if unreachable_before && !matches!(opcode, OpCode::End | OpCode::Else) {
+            return Ok(());
+        }
         match opcode {
             OpCode::End => {
+                // dbg!("LEN = {}", state.opds.stack.len());
+                // dbg!("LEN = {}", self.providers_stack.len());
+                let jump_target = self.backpatch.pop()?;
+                // Insert an additional Copy instruction if the top of the provider stack
+                // does not match what is expected.
+                if let Some(result) = jump_target.result_slot() {
+                    // if we are in an unreachable segment then
+                    // the stack might be empty at this point, and in general
+                    // there is no point in inserting a copy instruction
+                    // since it'll never be executed.
+                    if !unreachable_before {
+                        let provider = self
+                            .providers_stack
+                            .pop()
+                            .context("Expected a value at the top of the stack to end with.")?;
+                        if provider != result {
+                            self.out.push(InternalOpcode::Copy);
+                            self.push_loc(provider);
+                            self.push_loc(result);
+                        }
+                    } else {
+                        self.providers_stack.truncate(state.opds.stack.len());
+                        // There might not actually be anything at the top of the stack
+                        // in the unreachable segment. But there might, in which case
+                        // we must remove it to make sure that the `result` is at the top
+                        // after the block ends.
+                        if self.providers_stack.len() == state.opds.stack.len() {
+                            self.providers_stack.pop();
+                        }
+                    }
+                    self.providers_stack.push(result);
+                } else {
+                    self.providers_stack.truncate(state.opds.stack.len());
+                }
                 if let JumpTarget::Unknown {
                     backpatch_locations,
-                } = self.backpatch.pop()?
+                    result,
+                } = jump_target
                 {
                     // As u32 would be safe here since module sizes are much less than 4GB, but
                     // we are being extra careful.
@@ -764,33 +1006,60 @@ impl Handler<&OpCode> for BackPatch {
                     for pos in backpatch_locations {
                         self.out.back_patch(pos, current_pos)?;
                     }
-                }
-                // do not emit any code, since end is implicit in generated
-                // code.
+                } // else if it is a Known location there is no backpatching
+                  // needed. And no need to emit any code,
+                  // since end is implicit in generated code
+                  //
             }
-            OpCode::Block(_) => {
-                self.backpatch.push(JumpTarget::new_unknown());
+            OpCode::Block(ty) => {
+                let result = if matches!(ty, BlockType::ValueType(_)) {
+                    let r = self.dynamic_locations.get();
+                    Some(r)
+                } else {
+                    None
+                };
+                self.backpatch.push(JumpTarget::new_unknown(result.map(Provider::Dynamic)));
             }
-            OpCode::Loop(_) => {
-                self.backpatch.push(JumpTarget::new_known(self.out.current_offset()))
+            OpCode::Loop(ty) => {
+                let result = if matches!(ty, BlockType::ValueType(_)) {
+                    let r = self.dynamic_locations.get();
+                    Some(r)
+                } else {
+                    None
+                };
+                self.backpatch.push(JumpTarget::new_known(
+                    self.out.current_offset(),
+                    result.map(Provider::Dynamic),
+                ))
             }
             OpCode::If {
-                ..
+                ty,
             } => {
                 self.out.push(If);
-                self.backpatch.push(JumpTarget::new_unknown_loc(self.out.bytes.len()));
+                self.push_consume()?;
+                let result = if matches!(ty, BlockType::ValueType(_)) {
+                    let r = self.dynamic_locations.get();
+                    Some(r)
+                } else {
+                    None
+                };
+                self.backpatch.push(JumpTarget::new_unknown_loc(
+                    self.out.current_offset(),
+                    result.map(Provider::Dynamic),
+                ));
                 self.out.push_u32(0);
             }
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
                 // to the end of else.
-                self.push_jump(0, state, stack_height, Some((Br, BrCarry)))?;
+                self.push_jump(0, state, stack_height, Some(Br))?;
                 // Because the module is well-formed this can only happen after an if
                 // We do not backpatch the code now, apart from the initial jump to the else
                 // branch. The effect of this will be that any break out of the if statement
                 // will jump to the end of else, as intended.
                 if let JumpTarget::Unknown {
                     backpatch_locations,
+                    result,
                 } = self.backpatch.get_mut(0)?
                 {
                     // As u32 would be safe here since module sizes are much less than 4GB, but
@@ -802,29 +1071,66 @@ impl Handler<&OpCode> for BackPatch {
                     );
                     let first = backpatch_locations.remove(0);
                     self.out.back_patch(first, current_pos)?;
+
+                    // TODO: This is duplicated from the End
+                    if let &mut Some(result) = result {
+                        // if we are in an unreachable segment then
+                        // the stack might be empty at this point, and in general
+                        // there is no point in inserting a copy instruction
+                        // since it'll never be executed.
+                        if !unreachable_before {
+                            let provider = self
+                            .providers_stack
+                                .pop()
+                                .context("Expected a value at the top of the stack to end with.")?;
+                            if provider != result {
+                                self.out.push(InternalOpcode::Copy);
+                                self.push_loc(provider);
+                                self.push_loc(result);
+                            }
+                        } else {
+                            self.providers_stack.truncate(state.opds.stack.len());
+                            // There might not actually be anything at the top of the stack
+                            // in the unreachable segment. But there might, in which case
+                            // we must remove it to make sure that the `result` is at the top
+                            // after the block ends.
+                            self.providers_stack.pop();
+                        }
+                        self.providers_stack.push(result);
+                    } else {
+                        self.providers_stack.truncate(state.opds.stack.len());
+                    }
                 } else {
                     bail!("Invariant violation in else branch.")
                 }
             }
             OpCode::Br(label_idx) => {
-                self.push_jump(*label_idx, state, stack_height, Some((Br, BrCarry)))?;
+                self.push_jump(*label_idx, state, stack_height, Some(Br))?;
             }
             OpCode::BrIf(label_idx) => {
-                self.push_jump(*label_idx, state, stack_height, Some((BrIf, BrIfCarry)))?;
+                // TODO: We output first the target and then the conditional source. This is
+                // maybe not ideal since the conditional will sometimes not be
+                // taken in which case we don't need to read that.
+                let condition_source =
+                    self.providers_stack.pop().context("BrIf requires a provider.")?;
+                self.push_jump(*label_idx, state, stack_height, Some(BrIf))?;
+                self.push_loc(condition_source);
             }
             OpCode::BrTable {
                 labels,
                 default,
             } => {
-                let target_frame = state
-                    .ctrls
-                    .get(*default)
-                    .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
+                let target_frame =
+                    state.ctrls.get(*default).context("Could not get jump target frame.")?;
                 if let BlockType::EmptyType = target_frame.label_type {
                     self.out.push(BrTable);
+                    let _condition_source = self.push_consume()?;
                 } else {
                     self.out.push(BrTableCarry);
+                    let _condition_source = self.push_consume()?;
+                    let _copy_source = self.push_consume()?;
                 }
+
                 // the try_into is not needed because MAX_SWITCH_SIZE is small enough
                 // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
@@ -840,19 +1146,54 @@ impl Handler<&OpCode> for BackPatch {
                 // The interpreter will know that return means terminate execution of the
                 // function and from the result type of the function it will be
                 // clear whether anything needs to be returned.
+                if self.return_type.is_some() {
+                    let top = self.providers_stack.pop().context("Cannot return a value")?;
+                    if top != Provider::Local(0) {
+                        self.out.push(InternalOpcode::Copy);
+                        self.push_loc(top);
+                        self.push_loc(Provider::Local(0));
+                    }
+                }
                 self.out.push(Return)
             }
-            OpCode::Call(idx) => {
+            &OpCode::Call(idx) => {
                 self.out.push(Call);
-                self.out.push_u32(*idx);
+                self.out.push_u32(idx);
+                let f = ctx.get_func(idx)?;
+                // The interpreter knows the number of arguments already. No need to record.
+                // Note that arguments are from **last** to first.
+                for _ in &f.parameters {
+                    self.push_consume()?;
+                }
+                // Return value first, if it exists. The interpreter knows the return type
+                // already.
+                if f.result.is_some() {
+                    self.push_provide();
+                }
             }
             OpCode::CallImmediate(cost) => {
                 self.out.push(CallImmediate);
                 self.out.push_u32(*cost);
+                // TODO
             }
-            OpCode::CallIndirect(x) => {
+            &OpCode::CallIndirect(idx) => {
                 self.out.push(CallIndirect);
-                self.out.push_u32(*x);
+                self.out.push_u32(idx);
+                self.push_consume()?;
+                let f = ctx.get_type(idx)?;
+                // The interpreter knows the number of arguments already. No need to record.
+                // Note that arguments are from **last** to first.
+                for _ in &f.parameters {
+                    let provider = self
+                        .providers_stack
+                        .pop()
+                        .context("Insufficient number of arguments for function.")?;
+                    self.push_loc(provider);
+                }
+                // The interpreter knows the return type already.
+                if f.result.is_some() {
+                    self.push_provide();
+                }
             }
             OpCode::Nop => {
                 // do nothing, we don't need an opcode for that since we don't
@@ -862,319 +1203,348 @@ impl Handler<&OpCode> for BackPatch {
                 self.out.push(Unreachable);
             }
             OpCode::Drop => {
-                self.out.push(Drop);
+                let result =
+                    self.providers_stack.pop().context("Drop requires a non-empty stack.")?;
+                self.dynamic_locations.reuse(result);
             }
             OpCode::Select => {
-                self.out.push(Select);
+                self.push_ternary(Select)?;
             }
             OpCode::LocalGet(idx) => {
-                self.out.push(LocalGet);
-                // the as u16 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.out.push_u16(*idx as u16);
+                // the as i32 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
+                self.providers_stack.push(Provider::Local((*idx) as i32));
+                // No instruction
             }
-            OpCode::LocalSet(idx) => {
-                self.out.push(LocalSet);
-                // the as u16 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.out.push_u16(*idx as u16);
-            }
-            OpCode::LocalTee(idx) => {
-                self.out.push(LocalTee);
-                // the as u16 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.out.push_u16(*idx as u16);
+            OpCode::LocalSet(idx) | OpCode::LocalTee(idx) => {
+                // If the last instruction produced something just remove the indirection and
+                // write directly to the local
+                //
+                // If the value of this particular local is somewhere on the providers_stack we
+                // need to preserve that value.
+                // - make a new dynamic value beyond all possible values. (the "preserve" space)
+                // - copy from local to that value
+                // TODO: This should be more efficiently tracked via a Set.
+                let mut reserve = None;
+                for provide_slot in &mut self.providers_stack {
+                    if let Provider::Local(l) = *provide_slot {
+                        if Ok(*idx) == u32::try_from(l) {
+                            let reserve = match reserve {
+                                Some(r) => r,
+                                None => {
+                                    // TODO: Do we need a separate preserve stack?
+                                    let result = Provider::Dynamic(self.dynamic_locations.get());
+                                    reserve = Some(result);
+                                    result
+                                }
+                            };
+                            // When an operation actually reads this value it will read it from the
+                            // reserve slot.
+                            *provide_slot = reserve;
+                        }
+                    }
+                }
+                let idx = (*idx).try_into()?; // This should never overflow since we have a very low bound on locals. But we
+                                              // are just playing it safe.
+                if let Some(reserve) = reserve {
+                    self.out.push(Copy);
+                    self.out.push_i32(idx); // from
+                    self.push_loc(reserve); // to
+                }
+                self.out.push(LocalSet); // TODO: Do we need a LocalTee at all?
+                let operand = self.push_consume()?; // value first.
+                self.out.push_i32(idx); //target second
+                if matches!(opcode, OpCode::LocalTee(..)) {
+                    self.providers_stack.push(operand); // retain the provider
+                                                        // on the stack. TODO:
+                                                        // Should the provider
+                                                        // be the local instead?
+                }
+                // TODO: If LocalSet (LocalTee is a bit different) is
+                // immediately after a provider short circuit it.
             }
             OpCode::GlobalGet(idx) => {
                 self.out.push(GlobalGet);
                 // the as u16 is safe because idx < MAX_NUM_GLOBALS <= 2^16
                 self.out.push_u16(*idx as u16);
+                self.push_provide();
             }
             OpCode::GlobalSet(idx) => {
                 self.out.push(GlobalSet);
                 // the as u16 is safe because idx < MAX_NUM_GLOBALS <= 2^16
                 self.out.push_u16(*idx as u16);
+                self.push_consume()?;
             }
             OpCode::I32Load(memarg) => {
-                self.out.push(I32Load);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load, memarg)?;
             }
             OpCode::I64Load(memarg) => {
-                self.out.push(I64Load);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load, memarg)?;
             }
             OpCode::I32Load8S(memarg) => {
-                self.out.push(I32Load8S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load8S, memarg)?;
             }
             OpCode::I32Load8U(memarg) => {
-                self.out.push(I32Load8U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load8U, memarg)?;
             }
             OpCode::I32Load16S(memarg) => {
-                self.out.push(I32Load16S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load16S, memarg)?;
             }
             OpCode::I32Load16U(memarg) => {
-                self.out.push(I32Load16U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load16U, memarg)?;
             }
             OpCode::I64Load8S(memarg) => {
-                self.out.push(I64Load8S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load8S, memarg)?;
             }
             OpCode::I64Load8U(memarg) => {
-                self.out.push(I64Load8U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load8U, memarg)?;
             }
             OpCode::I64Load16S(memarg) => {
-                self.out.push(I64Load16S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load16S, memarg)?;
             }
             OpCode::I64Load16U(memarg) => {
-                self.out.push(I64Load16U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load16U, memarg)?;
             }
             OpCode::I64Load32S(memarg) => {
-                self.out.push(I64Load32S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load32S, memarg)?;
             }
             OpCode::I64Load32U(memarg) => {
-                self.out.push(I64Load32U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load32U, memarg)?;
             }
             OpCode::I32Store(memarg) => {
-                self.out.push(I32Store);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I32Store, memarg)?;
             }
             OpCode::I64Store(memarg) => {
-                self.out.push(I64Store);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store, memarg)?;
             }
             OpCode::I32Store8(memarg) => {
-                self.out.push(I32Store8);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I32Store8, memarg)?;
             }
             OpCode::I32Store16(memarg) => {
-                self.out.push(I32Store16);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I32Store16, memarg)?;
             }
             OpCode::I64Store8(memarg) => {
-                self.out.push(I64Store8);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store8, memarg)?;
             }
             OpCode::I64Store16(memarg) => {
-                self.out.push(I64Store16);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store16, memarg)?;
             }
             OpCode::I64Store32(memarg) => {
-                self.out.push(I64Store32);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store32, memarg)?;
             }
-            OpCode::MemorySize => self.out.push(MemorySize),
-            OpCode::MemoryGrow => self.out.push(MemoryGrow),
+            OpCode::MemorySize => {
+                self.out.push(MemorySize);
+                self.push_provide();
+            }
+            OpCode::MemoryGrow => self.push_unary(MemoryGrow)?,
             OpCode::I32Const(c) => {
-                self.out.push(I32Const);
-                self.out.push_i32(*c);
+                let next = -i32::try_from(self.constants.len())? - 1;
+                let idx = self.constants.entry((*c) as i64).or_insert(next);
+                // Do not emit any instructions.
+                self.providers_stack.push(Provider::Constant(*idx));
             }
             OpCode::I64Const(c) => {
-                self.out.push(I64Const);
-                self.out.push_i64(*c);
+                let next = -i32::try_from(self.constants.len())? - 1;
+                let idx = self.constants.entry(*c).or_insert(next);
+                // Do not emit any instructions.
+                self.providers_stack.push(Provider::Constant(*idx));
             }
             OpCode::I32Eqz => {
-                self.out.push(I32Eqz);
+                self.push_unary(I32Eqz)?;
             }
             OpCode::I32Eq => {
-                self.out.push(I32Eq);
+                self.push_binary(I32Eq)?;
             }
             OpCode::I32Ne => {
-                self.out.push(I32Ne);
+                self.push_binary(I32Ne)?;
             }
             OpCode::I32LtS => {
-                self.out.push(I32LtS);
+                self.push_binary(I32LtS)?;
             }
             OpCode::I32LtU => {
-                self.out.push(I32LtU);
+                self.push_binary(I32LtU)?;
             }
             OpCode::I32GtS => {
-                self.out.push(I32GtS);
+                self.push_binary(I32GtS)?;
             }
             OpCode::I32GtU => {
-                self.out.push(I32GtU);
+                self.push_binary(I32GtU)?;
             }
             OpCode::I32LeS => {
-                self.out.push(I32LeS);
+                self.push_binary(I32LeS)?;
             }
             OpCode::I32LeU => {
-                self.out.push(I32LeU);
+                self.push_binary(I32LeU)?;
             }
             OpCode::I32GeS => {
-                self.out.push(I32GeS);
+                self.push_binary(I32GeS)?;
             }
             OpCode::I32GeU => {
-                self.out.push(I32GeU);
+                self.push_binary(I32GeU)?;
             }
             OpCode::I64Eqz => {
-                self.out.push(I64Eqz);
+                self.push_unary(I64Eqz)?;
             }
             OpCode::I64Eq => {
-                self.out.push(I64Eq);
+                self.push_binary(I64Eq)?;
             }
             OpCode::I64Ne => {
-                self.out.push(I64Ne);
+                self.push_binary(I64Ne)?;
             }
             OpCode::I64LtS => {
-                self.out.push(I64LtS);
+                self.push_binary(I64LtS)?;
             }
             OpCode::I64LtU => {
-                self.out.push(I64LtU);
+                self.push_binary(I64LtU)?;
             }
             OpCode::I64GtS => {
-                self.out.push(I64GtS);
+                self.push_binary(I64GtS)?;
             }
             OpCode::I64GtU => {
-                self.out.push(I64GtU);
+                self.push_binary(I64GtU)?;
             }
             OpCode::I64LeS => {
-                self.out.push(I64LeS);
+                self.push_binary(I64LeS)?;
             }
             OpCode::I64LeU => {
-                self.out.push(I64LeU);
+                self.push_binary(I64LeU)?;
             }
             OpCode::I64GeS => {
-                self.out.push(I64GeS);
+                self.push_binary(I64GeS)?;
             }
             OpCode::I64GeU => {
-                self.out.push(I64GeU);
+                self.push_binary(I64GeU)?;
             }
             OpCode::I32Clz => {
-                self.out.push(I32Clz);
+                self.push_unary(I32Clz)?;
             }
             OpCode::I32Ctz => {
-                self.out.push(I32Ctz);
+                self.push_unary(I32Ctz)?;
             }
             OpCode::I32Popcnt => {
-                self.out.push(I32Popcnt);
+                self.push_unary(I32Popcnt)?;
             }
             OpCode::I32Add => {
-                self.out.push(I32Add);
+                self.push_binary(I32Add)?;
             }
             OpCode::I32Sub => {
-                self.out.push(I32Sub);
+                self.push_binary(I32Sub)?;
             }
             OpCode::I32Mul => {
-                self.out.push(I32Mul);
+                self.push_binary(I32Mul)?;
             }
             OpCode::I32DivS => {
-                self.out.push(I32DivS);
+                self.push_binary(I32DivS)?;
             }
             OpCode::I32DivU => {
-                self.out.push(I32DivU);
+                self.push_binary(I32DivU)?;
             }
             OpCode::I32RemS => {
-                self.out.push(I32RemS);
+                self.push_binary(I32RemS)?;
             }
             OpCode::I32RemU => {
-                self.out.push(I32RemU);
+                self.push_binary(I32RemU)?;
             }
             OpCode::I32And => {
-                self.out.push(I32And);
+                self.push_binary(I32And)?;
             }
             OpCode::I32Or => {
-                self.out.push(I32Or);
+                self.push_binary(I32Or)?;
             }
             OpCode::I32Xor => {
-                self.out.push(I32Xor);
+                self.push_binary(I32Xor)?;
             }
             OpCode::I32Shl => {
-                self.out.push(I32Shl);
+                self.push_binary(I32Shl)?;
             }
             OpCode::I32ShrS => {
-                self.out.push(I32ShrS);
+                self.push_binary(I32ShrS)?;
             }
             OpCode::I32ShrU => {
-                self.out.push(I32ShrU);
+                self.push_binary(I32ShrU)?;
             }
             OpCode::I32Rotl => {
-                self.out.push(I32Rotl);
+                self.push_binary(I32Rotl)?;
             }
             OpCode::I32Rotr => {
-                self.out.push(I32Rotr);
+                self.push_binary(I32Rotr)?;
             }
             OpCode::I64Clz => {
-                self.out.push(I64Clz);
+                self.push_unary(I64Clz)?;
             }
             OpCode::I64Ctz => {
-                self.out.push(I64Ctz);
+                self.push_unary(I64Ctz)?;
             }
             OpCode::I64Popcnt => {
-                self.out.push(I64Popcnt);
+                self.push_unary(I64Popcnt)?;
             }
             OpCode::I64Add => {
-                self.out.push(I64Add);
+                self.push_binary(I64Add)?;
             }
             OpCode::I64Sub => {
-                self.out.push(I64Sub);
+                self.push_binary(I64Sub)?;
             }
             OpCode::I64Mul => {
-                self.out.push(I64Mul);
+                self.push_binary(I64Mul)?;
             }
             OpCode::I64DivS => {
-                self.out.push(I64DivS);
+                self.push_binary(I64DivS)?;
             }
             OpCode::I64DivU => {
-                self.out.push(I64DivU);
+                self.push_binary(I64DivU)?;
             }
             OpCode::I64RemS => {
-                self.out.push(I64RemS);
+                self.push_binary(I64RemS)?;
             }
             OpCode::I64RemU => {
-                self.out.push(I64RemU);
+                self.push_binary(I64RemU)?;
             }
             OpCode::I64And => {
-                self.out.push(I64And);
+                self.push_binary(I64And)?;
             }
             OpCode::I64Or => {
-                self.out.push(I64Or);
+                self.push_binary(I64Or)?;
             }
             OpCode::I64Xor => {
-                self.out.push(I64Xor);
+                self.push_binary(I64Xor)?;
             }
             OpCode::I64Shl => {
-                self.out.push(I64Shl);
+                self.push_binary(I64Shl)?;
             }
             OpCode::I64ShrS => {
-                self.out.push(I64ShrS);
+                self.push_binary(I64ShrS)?;
             }
             OpCode::I64ShrU => {
-                self.out.push(I64ShrU);
+                self.push_binary(I64ShrU)?;
             }
             OpCode::I64Rotl => {
-                self.out.push(I64Rotl);
+                self.push_binary(I64Rotl)?;
             }
             OpCode::I64Rotr => {
-                self.out.push(I64Rotr);
+                self.push_binary(I64Rotr)?;
             }
             OpCode::I32WrapI64 => {
-                self.out.push(I32WrapI64);
+                self.push_unary(I32WrapI64)?;
             }
             OpCode::I64ExtendI32S => {
-                self.out.push(I64ExtendI32S);
+                self.push_unary(I64ExtendI32S)?;
             }
             OpCode::I64ExtendI32U => {
-                self.out.push(I64ExtendI32U);
+                self.push_unary(I64ExtendI32U)?;
             }
             OpCode::I32Extend8S => {
-                self.out.push(I32Extend8S);
+                self.push_unary(I32Extend8S)?;
             }
             OpCode::I32Extend16S => {
-                self.out.push(I32Extend16S);
+                self.push_unary(I32Extend16S)?;
             }
             OpCode::I64Extend8S => {
-                self.out.push(I64Extend8S);
+                self.push_unary(I64Extend8S)?;
             }
             OpCode::I64Extend16S => {
-                self.out.push(I64Extend16S);
+                self.push_unary(I64Extend16S)?;
             }
             OpCode::I64Extend32S => {
-                self.out.push(I64Extend32S);
+                self.push_unary(I64Extend32S)?;
             }
         }
         Ok(())
@@ -1182,7 +1552,14 @@ impl Handler<&OpCode> for BackPatch {
 
     fn finish(self, _state: &ValidationState) -> CompileResult<Self::Outcome> {
         ensure!(self.backpatch.stack.is_empty(), "There are still jumps to backpatch.");
-        Ok(self.out)
+        let mut constants = vec![0; self.constants.len()];
+        for (value, place) in self.constants {
+            *constants
+                .get_mut(usize::try_from(-(place + 1))?)
+                .context("Invariant violation. All locations are meant to be consecutive.")? =
+                value;
+        }
+        Ok((self.out, self.dynamic_locations.next_location, constants))
     }
 }
 
@@ -1289,10 +1666,15 @@ impl Module {
                 code,
             };
 
-            let mut exec_code =
-                validate(&context, code.expr.instrs.iter().map(Result::Ok), BackPatch::new())?;
+            let (mut exec_code, num_registers, constants) = validate(
+                &context,
+                code.expr.instrs.iter().map(Result::Ok),
+                BackPatch::new(start, code.ty.result),
+            )?;
             // We add a return instruction at the end so we have an easier time in the
             // interpreter since there is no implicit return.
+
+            // No need to insert an additional Copy here. The `End` block will insert it.
             exec_code.push(InternalOpcode::Return);
 
             let num_params: u32 = code.ty.parameters.len().try_into()?;
@@ -1303,6 +1685,8 @@ impl Module {
                 num_locals: start - num_params,
                 locals,
                 return_type: BlockType::from(code.ty.result),
+                num_registers: num_registers.try_into()?,
+                constants,
                 code: exec_code,
             };
             code_out.push(result)
