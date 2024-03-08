@@ -1,5 +1,7 @@
 # Changelog
 
+- Set `chrono` to version `0.4.35`.
+
 ## 0.5.6
 
 - Changed the submitCredential url. 

@@ -37,7 +37,7 @@ version = "1.0"
 
 [dependencies.chrono]
 optional = true
-version = "0.4.35"
+version = "0.4.35" # the patch version is necessary since chrono adds new functionality in patch versions
 
 [dependencies.bs58]
 optional = true
