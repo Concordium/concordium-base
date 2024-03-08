@@ -124,13 +124,13 @@ pub type IssuerKey = Ed25519PublicKey<IssuerKeyRole>;
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct CredentialEventData {
     /// A public key of the credential's holder.
-    holder_id:       CredentialHolderId,
+    pub holder_id:       CredentialHolderId,
     /// A reference to the credential JSON schema.
-    schema_ref:      SchemaRef,
+    pub schema_ref:      SchemaRef,
     /// Type of the credential.
-    credential_type: CredentialType,
+    pub credential_type: CredentialType,
     /// The metadata URL of the newly registered credential.
-    metadata_url:    MetadataUrl,
+    pub metadata_url:    MetadataUrl,
 }
 
 /// A type for specifying who is revoking a credential, when registering a
@@ -149,13 +149,13 @@ pub enum Revoker {
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RevokeCredentialEvent {
     /// A public key of the credential's holder.
-    holder_id: CredentialHolderId,
+    pub holder_id: CredentialHolderId,
     /// Who revokes the credential.
-    revoker:   Revoker,
+    pub revoker:   Revoker,
     /// An optional text clarifying the revocation reasons.
     /// The issuer can use this field to comment on the revocation, so the
     /// holder can observe it in the wallet.
-    reason:    Option<Reason>,
+    pub reason:    Option<Reason>,
 }
 
 #[derive(Debug, contracts_common::Serialize, Clone)]
@@ -169,14 +169,14 @@ pub struct IssuerMetadataEvent {
 /// The schema reference has been updated for the credential type.
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct CredentialSchemaRefEvent {
-    r#type:     CredentialType,
-    schema_ref: SchemaRef,
+    pub r#type:     CredentialType,
+    pub schema_ref: SchemaRef,
 }
 
 #[derive(Debug, Clone, contracts_common::Serialize)]
 pub struct CredentialMetadataEvent {
-    credential_id: CredentialHolderId,
-    metadata_url:  MetadataUrl,
+    pub credential_id: CredentialHolderId,
+    pub metadata_url:  MetadataUrl,
 }
 
 #[derive(contracts_common::Serialize, Debug, Clone)]
@@ -191,9 +191,9 @@ pub enum RevocationKeyAction {
 #[derive(contracts_common::Serialize, Debug, Clone)]
 pub struct RevocationKeyEvent {
     /// The public key that is registered/removed
-    key:    RevocationKey,
+    pub key:    RevocationKey,
     /// A register/remove action.
-    action: RevocationKeyAction,
+    pub action: RevocationKeyAction,
 }
 
 /// An event specified by CIS4 standard.

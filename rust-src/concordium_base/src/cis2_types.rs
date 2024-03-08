@@ -963,8 +963,8 @@ pub enum Event {
         fmt = "Transferred {} of token with ID {} from {} to {}",
         amount,
         token_id,
-        "display_address(from)",
-        "display_address(to)"
+        "from",
+        "to"
     )]
     Transfer {
         token_id: TokenId,
@@ -977,7 +977,7 @@ pub enum Event {
         fmt = "Minted {} of token with ID {} for {}",
         amount,
         token_id,
-        "display_address(owner)"
+        "owner"
     )]
     Mint {
         token_id: TokenId,
@@ -989,7 +989,7 @@ pub enum Event {
         fmt = "Burned {} of token with ID {} for {}",
         amount,
         token_id,
-        "display_address(owner)"
+        "owner"
     )]
     Burn {
         token_id: TokenId,
@@ -997,12 +997,7 @@ pub enum Event {
         owner:    Address,
     },
     /// Add/Remove an address as operator for some other address.
-    #[display(
-        fmt = "{} {} as operator for {}",
-        update,
-        "display_address(operator)",
-        "display_address(owner)"
-    )]
+    #[display(fmt = "{} {} as operator for {}", update, "operator", "owner")]
     UpdateOperator {
         update:   OperatorUpdate,
         owner:    Address,
@@ -1064,15 +1059,6 @@ impl Deserial for Event {
             }),
             _ => Ok(Event::Unknown),
         }
-    }
-}
-
-/// Display the Address using either the display for account address or contract
-/// address.
-fn display_address(a: &Address) -> String {
-    match a {
-        Address::Account(addr) => format!("{}", addr),
-        Address::Contract(addr) => format!("{}", addr),
     }
 }
 
