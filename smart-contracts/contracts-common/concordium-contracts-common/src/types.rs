@@ -2379,7 +2379,7 @@ mod policy_json {
                         .ok_or_else(|| {
                             serde::de::Error::custom("Could not convert YearMonth to a date.")
                         })?;
-                let timestamp: u64 = dt.timestamp_millis().try_into().map_err(|_| {
+                let timestamp: u64 = dt.and_utc().timestamp_millis().try_into().map_err(|_| {
                     serde::de::Error::custom("Times before 1970 are not supported.")
                 })?;
                 Ok(timestamp)
