@@ -1165,7 +1165,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 for _ in &f.parameters {
                     self.push_consume()?;
                 }
-                // Return value first, if it exists. The interpreter knows the return type
+                // Return value, if it exists. The interpreter knows the return type
                 // already.
                 if f.result.is_some() {
                     self.push_provide();
