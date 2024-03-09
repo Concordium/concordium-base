@@ -14,6 +14,15 @@ use std::{convert::TryInto, io::Write};
 #[cfg(not(target_endian = "little"))]
 compile_error!("The intepreter only supports little endian platforms.");
 
+macro_rules! no_eprintln {
+    () => {
+
+    };
+    ($($arg:tt)*) => {{
+
+    }};
+}
+
 /// An empty type used when no interrupt is possible by a host function call.
 #[derive(Debug, Copy, Clone)]
 pub enum NoInterrupt {}
@@ -101,7 +110,9 @@ impl RunConfig {
     pub fn push_value<F>(&mut self, f: F)
     where
         StackValue: From<F>, {
-        self.locals_vec[self.locals_base + self.return_value_loc] = f.into();
+        let v: StackValue = f.into();
+        no_eprintln!("STORING {} to {}", unsafe {v.short}, self.locals_base + self.return_value_loc);
+        self.locals_vec[self.locals_base + self.return_value_loc] = v;
     }
 }
 
@@ -260,7 +271,7 @@ fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_local(constants: &[i64], bytes: &[u8], locals: &[StackValue], pc: &mut usize) -> StackValue {
     let v = get_i32(bytes, pc);
-    // dbg!("GET_LOCAL_LOCATION {v}");
+    no_eprintln!("GET_LOCAL_LOCATION {v}");
     // Targets should never be constants, so we should always have a non-negative
     // value.
     let r = if v >= 0 {
@@ -273,7 +284,7 @@ fn get_local(constants: &[i64], bytes: &[u8], locals: &[StackValue], pc: &mut us
     } else {
         constants[(-(v + 1)) as usize].into()
     };
-    // dbg!("GET LOCAL {}", unsafe { r.short });
+    no_eprintln!("GET LOCAL {}", unsafe { r.short });
     r
 }
 
@@ -284,7 +295,7 @@ fn get_local_mut<'a>(
     pc: &mut usize,
 ) -> &'a mut StackValue {
     let v = get_i32(bytes, pc);
-    // dbg!("GET_LOCAL_LOCATION_MUT {v}");
+    no_eprintln!("GET_LOCAL_LOCATION_MUT {v}");
     // Targets should never be constants, so we should always have a non-negative
     // value.
     assert!(v >= 0);
@@ -422,7 +433,7 @@ fn binary_i32(
     let left = get_local(constants, instructions, locals, pc);
     let target = get_local_mut(instructions, locals, pc);
     target.short = f(unsafe { left.short }, unsafe { right.short });
-    // dbg!("SETTING {}", unsafe { target.short });
+    no_eprintln!("SETTING {}", unsafe { target.short });
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -640,7 +651,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         let mut constants = code.constants();
         let mut instructions = code.code();
         'outer: loop {
-            // dbg!("PC = {pc}");
+            no_eprintln!("PC = {pc}");
             let instr = *unsafe { instructions.get_unchecked(pc) };
             pc += 1;
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
@@ -648,19 +659,19 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             // The ensure here guarantees that the transmute is safe, provided that
             // InternalOpcode stays as it is.
             // ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
-            // dbg!(
-//                "INSTRUCTION {:#?} ({})",
-//                unsafe { std::mem::transmute::<_, InternalOpcode>(instr) },
-  //              unsafe { std::mem::transmute::<_, InternalOpcode>(instr) } as u8
-    //        );
+            no_eprintln!(
+                "INSTRUCTION {:#?} ({})",
+                unsafe { std::mem::transmute::<_, InternalOpcode>(instr) },
+                unsafe { std::mem::transmute::<_, InternalOpcode>(instr) } as u8
+            );
             match unsafe { std::mem::transmute(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
                     let condition = get_local(constants, instructions, &locals, &mut pc);
                     let else_target = get_u32(instructions, &mut pc);
-                    // dbg!("PCIf {pc}");
-                    // dbg!("ELSE_TARGET {else_target}");
-                    // dbg!("CONDITION {}", unsafe { condition.short });
+                    no_eprintln!("PCIf {pc}");
+                    no_eprintln!("ELSE_TARGET {else_target}");
+                    no_eprintln!("CONDITION {}", unsafe { condition.short });
                     if unsafe { condition.short } == 0 {
                         // jump to the else branch.
                         pc = else_target as usize;
@@ -670,7 +681,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // we could optimize this for the common case of jumping to end/beginning of a
                     // current block.
                     let target = get_u32(instructions, &mut pc);
-                    // dbg!("BR_TARGET {target}");
+                    no_eprintln!("BR_TARGET {target}");
                     pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
@@ -678,8 +689,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // current block.
                     let target = get_u32(instructions, &mut pc);
                     let condition = get_local(constants, instructions, &locals, &mut pc);
-                    // dbg!("BR_IF_CONDITION {}", unsafe { condition.short });
-                    // dbg!("BR_IF_TARGET {target}");
+                    no_eprintln!("BR_IF_CONDITION {}", unsafe { condition.short });
+                    no_eprintln!("BR_IF_TARGET {target}");
                     if unsafe { condition.short } != 0 {
                         pc = target as usize;
                     } // else do nothing
@@ -720,18 +731,18 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         // Make sure the return value is at the right place
                         // for the callee to continue.
                         if let Some((place, t)) = return_type {
-                            // dbg!("SETTING {} {}", top_frame.locals_base + place, place);
+                            no_eprintln!("SETTING {} {}", top_frame.locals_base + place, place);
                             match t {
                                 ValueType::I32 => {
-                                    // dbg!("TO VALUE {}", unsafe { locals[0].short });
+                                    no_eprintln!("TO VALUE {}", unsafe { locals[0].short });
                                 }
                                 ValueType::I64 => {
-                                    // dbg!("TO VALUE {}", unsafe { locals[0].long });
+                                    no_eprintln!("TO VALUE {}", unsafe { locals[0].long });
                                 }
                             }
                             locals_vec[top_frame.locals_base + place] = locals[0];
                         } else {
-                            // dbg!("NO RETURN TYPE");
+                            no_eprintln!("NO RETURN TYPE");
                         }
                         pc = top_frame.pc;
                         instructions_idx = top_frame.instructions_idx;
@@ -748,9 +759,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         return_type = top_frame.return_type;
                         // truncate all the locals that are above what we need at present.
                         locals_vec.truncate(locals_base);
-                        // dbg!("LOCALS_BASE: {}", locals_base);
+                        no_eprintln!("LOCALS_BASE: {}", locals_base);
                         locals_base = top_frame.locals_base;
-                        // dbg!("LOCALS_BASE: {}", locals_base);
+                        no_eprintln!("LOCALS_BASE: {}", locals_base);
                         locals = &mut locals_vec[locals_base..];
                     } else {
                         break 'outer;
@@ -773,9 +784,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // If the host function returns Ok(None) then the meaning of it is that
                     // execution should resume as normal.
                     let idx = get_u32(instructions, &mut pc);
-                    // dbg!("IDX = {idx}");
+                    no_eprintln!("IDX = {idx}");
                     if let Some(f) = self.imports.get(idx as usize) {
-                        // dbg!("HOST CALL");
+                        no_eprintln!("HOST CALL");
                         // TODO: Make this more efficient.
                         let mut stack = vec![StackValue::from(0u64); f.ty().parameters.len()];
 
@@ -811,13 +822,14 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         } else {
                             if f.ty().result.is_some() {
                                 locals[return_value_loc] = stack.pop();
+                                no_eprintln!("GOT RETURN VALUE {}", unsafe { locals[return_value_loc].short });
                             };
                         }
                         assert!(stack.stack.is_empty());
                     } else {
                         host.track_call()?;
                         let local_idx = idx as usize - self.imports.len();
-                        // dbg!("LOCAL IDX = {local_idx}");
+                        no_eprintln!("LOCAL IDX = {local_idx}");
                         let f = self
                             .code
                             .get(local_idx)
@@ -829,14 +841,14 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         locals_vec.resize(new_size, StackValue::from(0u64));
                         let (prefix, new_locals) = locals_vec.split_at_mut(current_size);
                         let current_locals = &mut prefix[locals_base..];
-                        // dbg!("LOCALS_BASE: {}", locals_base);
+                        no_eprintln!("LOCALS_BASE: {}", locals_base);
 
-                        // dbg!("{locals_base}");
+                        no_eprintln!("{locals_base}");
 
-                        // dbg!("CURRENT_LOCALS: {}", current_locals.len());
-                        // dbg!("NEW_LOCALS: {}", new_locals.len());
-                        // dbg!("{}", f.num_registers());
-                        // dbg!("NUM_PARAMS {}", f.num_params());
+                        no_eprintln!("CURRENT_LOCALS: {}", current_locals.len());
+                        no_eprintln!("NEW_LOCALS: {}", new_locals.len());
+                        no_eprintln!("NUM_REGISTERS {}", f.num_registers());
+                        no_eprintln!("NUM_PARAMS {}", f.num_params());
 
                         // Note the rev.
                         for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev() {
@@ -848,7 +860,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 Some((get_i32(instructions, &mut pc) as usize, v))
                             }
                         };
-                        // dbg!("{new_return_type:?}");
+                        no_eprintln!("PARAMS {:?}", f.params());
+                        no_eprintln!("RETURN TYPE {:?}", f.return_type());
+                        no_eprintln!("NEW_RETURN_TYPE {new_return_type:?}");
 
                         let current_frame = FunctionState {
                             pc,
@@ -858,11 +872,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         };
                         function_frames.push(current_frame);
                         locals_base = current_size;
-                        // dbg!("LOCALS_BASE: {}", locals_base);
+                        no_eprintln!("LOCALS_BASE: {}", locals_base);
 
                         locals = new_locals;
                         return_type = new_return_type;
                         instructions = f.code();
+                        no_eprintln!("NEW CODE {instructions:?}");
                         constants = f.constants();
                         instructions_idx = local_idx;
                         pc = 0;
@@ -943,7 +958,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             locals_vec.resize(new_size, StackValue::from(0u64));
                             let (prefix, new_locals) = locals_vec.split_at_mut(current_size);
                             let current_locals = &mut prefix[locals_base..];
-                            // dbg!("LOCALS_BASE: {}", locals_base);
+                            no_eprintln!("LOCALS_BASE: {}", locals_base);
                             // Note the rev.
                             for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev()
                             {
@@ -964,7 +979,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             };
                             function_frames.push(current_frame);
                             locals_base = current_size;
-                            // dbg!("LOCALS_BASE: {}", locals_base);
+                            no_eprintln!("LOCALS_BASE: {}", locals_base);
 
                             locals = new_locals;
 
