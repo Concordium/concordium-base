@@ -1251,13 +1251,14 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                     self.push_loc(reserve); // to
                 }
                 self.out.push(LocalSet); // TODO: Do we need a LocalTee at all?
-                let operand = self.push_consume()?; // value first.
-                self.out.push_i32(idx); //target second
-                if matches!(opcode, OpCode::LocalTee(..)) {
-                    self.providers_stack.push(operand); // retain the provider
-                                                        // on the stack. TODO:
-                                                        // Should the provider
-                                                        // be the local instead?
+                if matches!(opcode, OpCode::LocalSet(..)) {
+                    let _operand = self.push_consume()?; // value first.
+                    self.out.push_i32(idx); //target second
+                } else {
+                    // else we have to retain the provider on the stack.
+                    let operand = self.providers_stack.last().context("Expect a value on the stack")?;
+                    self.push_loc(*operand);
+                    self.out.push_i32(idx); //target second
                 }
                 // TODO: If LocalSet (LocalTee is a bit different) is
                 // immediately after a provider short circuit it.

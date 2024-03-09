@@ -1,3 +1,9 @@
+// TODO:
+// - don't use the stack for host functions anymore.
+// - clean up prints
+// - Read all data from instructions at once (e.g., three locals).
+// - Short circuit SetLocal in the artifact.
+
 //! An implementation of the abstract machine that can run artifacts.
 //! This module defines types related to code execution. The functions to run
 //! code are defined as methods on the [`Artifact`] type, e.g.,
@@ -15,11 +21,8 @@ use std::{convert::TryInto, io::Write};
 compile_error!("The intepreter only supports little endian platforms.");
 
 macro_rules! no_eprintln {
-    () => {
-
-    };
     ($($arg:tt)*) => {{
-
+        // eprintln!($($arg)*)
     }};
 }
 
@@ -275,14 +278,12 @@ fn get_local(constants: &[i64], bytes: &[u8], locals: &[StackValue], pc: &mut us
     // Targets should never be constants, so we should always have a non-negative
     // value.
     let r = if v >= 0 {
-        // TODO:
         *unsafe {
             locals
-                .get(v as usize)
-                .expect(format!("Local not within range {} {v}", locals.len()).as_str())
+                .get_unchecked(v as usize)
         }
     } else {
-        constants[(-(v + 1)) as usize].into()
+        StackValue::from(*unsafe { constants.get_unchecked((-(v + 1)) as usize) })
     };
     no_eprintln!("GET LOCAL {}", unsafe { r.short });
     r
@@ -295,11 +296,11 @@ fn get_local_mut<'a>(
     pc: &mut usize,
 ) -> &'a mut StackValue {
     let v = get_i32(bytes, pc);
-    no_eprintln!("GET_LOCAL_LOCATION_MUT {v}");
+    // no_eprintln!("GET_LOCAL_LOCATION_MUT {v}");
     // Targets should never be constants, so we should always have a non-negative
     // value.
     assert!(v >= 0);
-    unsafe { locals.get_mut(v as usize).unwrap() }
+    unsafe { locals.get_unchecked_mut(v as usize) }
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -641,6 +642,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             return_value_loc: _,
         } = config;
 
+        let mut stack = RuntimeStack{
+            stack: vec![StackValue::from(0u64); 10] // TODO: This should be max host function arguments.
+        };
+
         let mut locals = &mut locals_vec[locals_base..];
         // the use of get_unchecked here is safe if the caller constructs the Runconfig
         // in a protocol compliant way.
@@ -772,7 +777,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     host.tick_energy(v as u64)?;
                 }
                 InternalOpcode::Call => {
-                    // TODO. Copy locals.
                     // if we want synchronous calls we need to either
                     // 1. Just use recursion in the host. This is problematic because of stack
                     // overflow.
@@ -788,9 +792,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     if let Some(f) = self.imports.get(idx as usize) {
                         no_eprintln!("HOST CALL");
                         // TODO: Make this more efficient.
-                        let mut stack = vec![StackValue::from(0u64); f.ty().parameters.len()];
-
-                        for p in (&mut stack).into_iter().rev() {
+                        unsafe { stack.stack.set_len(f.ty().parameters.len()) };
+                        for p in (&mut stack.stack).into_iter().rev() {
                             *p = get_local(constants, instructions, &locals, &mut pc)
                         }
                         let return_value_loc = if f.ty().result.is_some() {
@@ -799,11 +802,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         } else {
                             0
                         };
-                        let stack = &mut RuntimeStack {
-                            stack,
-                        };
                         // we are calling an imported function, handle the call directly.
-                        if let Some(reason) = host.call(f, &mut memory, stack)? {
+                        if let Some(reason) = host.call(f, &mut memory, &mut stack)? {
                             return Ok(ExecutionOutcome::Interrupted {
                                 reason,
                                 config: RunConfig {
@@ -896,10 +896,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             let ty_actual = f.ty();
                             // call imported function.
                             ensure!(ty_actual == ty, "Actual type different from expected.");
-                            // TODO: Make this more efficient.
-                            let mut stack = vec![StackValue::from(0u64); f.ty().parameters.len()];
 
-                            for p in (&mut stack).into_iter().rev() {
+                            // TODO: Make this more efficient.
+                            unsafe { stack.stack.set_len(f.ty().parameters.len()) };
+                            for p in (&mut stack.stack).into_iter().rev() {
                                 *p = get_local(constants, instructions, &locals, &mut pc)
                             }
                             let return_value_loc = if f.ty().result.is_some() {
@@ -909,11 +909,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 0
                             };
 
-                            let stack = &mut RuntimeStack {
-                                stack,
-                            };
                             // we are calling an imported function, handle the call directly.
-                            if let Some(reason) = host.call(f, &mut memory, stack)? {
+                            if let Some(reason) = host.call(f, &mut memory, &mut stack)? {
                                 return Ok(ExecutionOutcome::Interrupted {
                                     reason,
                                     config: RunConfig {
@@ -1113,7 +1110,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     *target = StackValue::from(l as i32);
                 }
                 InternalOpcode::MemoryGrow => {
-                    let val = get_local(constants, instructions, &locals, &mut pc);
+                    let val = get_local(constants, instructions, locals, &mut pc);
                     let target = get_local_mut(instructions, locals, &mut pc);
                     let n = unsafe { val.short } as u32;
                     let sz = memory.len() / PAGE_SIZE as usize;
