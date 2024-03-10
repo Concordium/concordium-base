@@ -3,6 +3,8 @@
 // - clean up prints
 // - Read all data from instructions at once (e.g., three locals).
 // - Short circuit SetLocal in the artifact.
+// - GlobalGet can be short circuited if we store all constants in the module
+//   in one place together with globals.
 
 //! An implementation of the abstract machine that can run artifacts.
 //! This module defines types related to code execution. The functions to run
@@ -669,6 +671,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 unsafe { std::mem::transmute::<_, InternalOpcode>(instr) },
                 unsafe { std::mem::transmute::<_, InternalOpcode>(instr) } as u8
             );
+            // println!("{:?}", unsafe { std::mem::transmute::<_, InternalOpcode>(instr) });
             match unsafe { std::mem::transmute(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {

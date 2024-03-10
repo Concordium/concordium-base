@@ -626,14 +626,9 @@ impl Instructions {
 
     fn push_i32(&mut self, x: i32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
-    fn push_i64(&mut self, x: i64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
-
-    fn push_u64(&mut self, x: u64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
-
     fn current_offset(&self) -> usize { self.bytes.len() }
 
     fn back_patch(&mut self, back_loc: usize, to_write: u32) -> CompileResult<()> {
-        // dbg!("PATCHING {back_loc}, INSERTING {to_write}");
         let mut place: &mut [u8] = &mut self.bytes[back_loc..];
         place.write_all(&to_write.to_le_bytes())?;
         Ok(())
@@ -772,6 +767,11 @@ struct BackPatch {
     return_type:       Option<ValueType>,
     dynamic_locations: DynamicLocations,
     constants:         BTreeMap<i64, i32>,
+    /// If the last instruction produced something
+    /// in the dynamic area record the location here
+    /// so we can short-circuit the LocalSet that immediately
+    /// follows such an instruction.
+    last_provide_loc:  Option<usize>,
 }
 
 impl BackPatch {
@@ -790,6 +790,7 @@ impl BackPatch {
             constants: BTreeMap::new(),
             dynamic_locations,
             return_type,
+            last_provide_loc: None,
         }
     }
 
@@ -928,6 +929,7 @@ impl BackPatch {
     fn push_provide(&mut self) {
         let result = self.dynamic_locations.get();
         self.providers_stack.push(Provider::Dynamic(result));
+        self.last_provide_loc = Some(self.out.current_offset());
         self.out.push_i32(result);
     }
 
@@ -955,7 +957,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         opcode: &OpCode,
     ) -> CompileResult<()> {
         use InternalOpcode::*;
-        // dbg!("OPCODE {:?} {unreachable_before}", opcode);
+        let last_provide = self.last_provide_loc.take();
         if unreachable_before && !matches!(opcode, OpCode::End | OpCode::Else) {
             return Ok(());
         }
@@ -1080,7 +1082,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         // since it'll never be executed.
                         if !unreachable_before {
                             let provider = self
-                            .providers_stack
+                                .providers_stack
                                 .pop()
                                 .context("Expected a value at the top of the stack to end with.")?;
                             if provider != result {
@@ -1250,18 +1252,39 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                     self.out.push_i32(idx); // from
                     self.push_loc(reserve); // to
                 }
-                self.out.push(LocalSet); // TODO: Do we need a LocalTee at all?
                 if matches!(opcode, OpCode::LocalSet(..)) {
-                    let _operand = self.push_consume()?; // value first.
-                    self.out.push_i32(idx); //target second
+                    match last_provide {
+                        // if we had to copy to a reserve location then it is not
+                        // possible to short circuit the instruction.
+                        // We need to insert an additional copy instruction.
+                        Some(back_loc) if reserve.is_none() => {
+                            // instead of inserting LocalSet, just tell the previous
+                            // instruction to copy the value directly into the local.
+                            self.out.back_patch(back_loc, idx as u32)?;
+
+                            // And clear the provider from the stack
+                            let operand = self
+                                .providers_stack
+                                .pop()
+                                .with_context(|| format!("Missing operand for push_consume"))?;
+                            self.dynamic_locations.reuse(operand);
+                        }
+                        _ => {
+                            self.out.push(LocalSet);
+                            let _operand = self.push_consume()?; // value first.
+                            self.out.push_i32(idx); //target second
+                        }
+                    }
                 } else {
+                    // TODO: If LocalSet (LocalTee is a bit different) is
+                    // immediately after a provider short circuit it if possible.
+                    self.out.push(LocalSet);
                     // else we have to retain the provider on the stack.
-                    let operand = self.providers_stack.last().context("Expect a value on the stack")?;
+                    let operand =
+                        self.providers_stack.last().context("Expect a value on the stack")?;
                     self.push_loc(*operand);
                     self.out.push_i32(idx); //target second
                 }
-                // TODO: If LocalSet (LocalTee is a bit different) is
-                // immediately after a provider short circuit it.
             }
             OpCode::GlobalGet(idx) => {
                 self.out.push(GlobalGet);
@@ -1675,7 +1698,8 @@ impl Module {
             // We add a return instruction at the end so we have an easier time in the
             // interpreter since there is no implicit return.
 
-            // No need to insert an additional Copy here. The `End` block will insert it.
+            // No need to insert an additional Copy here. The `End` block will insert it if
+            // needed.
             exec_code.push(InternalOpcode::Return);
 
             let num_params: u32 = code.ty.parameters.len().try_into()?;
