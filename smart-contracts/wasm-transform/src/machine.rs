@@ -3,8 +3,8 @@
 // - clean up prints
 // - Read all data from instructions at once (e.g., three locals).
 // - Short circuit SetLocal in the artifact.
-// - GlobalGet can be short circuited if we store all constants in the module
-//   in one place together with globals.
+// - GlobalGet can be short circuited if we store all constants in the module in
+//   one place together with globals.
 
 //! An implementation of the abstract machine that can run artifacts.
 //! This module defines types related to code execution. The functions to run
@@ -13,20 +13,14 @@
 
 use crate::{
     artifact::{StackValue, *},
-    constants::{MAX_ALLOWED_STACK_HEIGHT, MAX_NUM_PAGES, PAGE_SIZE},
+    constants::{MAX_NUM_PAGES, PAGE_SIZE},
     types::*,
 };
-use anyhow::{anyhow, bail, ensure, Context};
+use anyhow::{anyhow, bail, ensure};
 use std::{convert::TryInto, io::Write};
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("The intepreter only supports little endian platforms.");
-
-macro_rules! no_eprintln {
-    ($($arg:tt)*) => {{
-        // eprintln!($($arg)*)
-    }};
-}
 
 /// An empty type used when no interrupt is possible by a host function call.
 #[derive(Debug, Copy, Clone)]
@@ -116,7 +110,6 @@ impl RunConfig {
     where
         StackValue: From<F>, {
         let v: StackValue = f.into();
-        no_eprintln!("STORING {} to {}", unsafe {v.short}, self.locals_base + self.return_value_loc);
         self.locals_vec[self.locals_base + self.return_value_loc] = v;
     }
 }
@@ -247,7 +240,9 @@ impl RuntimeStack {
     /// This function is safe provided
     /// - the stack is not empty
     /// - top of the stack contains a 32-bit value.
-    pub unsafe fn peek_u32(&mut self) -> u32 { self.stack.last().expect("Non-empty stack").short as u32 }
+    pub unsafe fn peek_u32(&mut self) -> u32 {
+        self.stack.last().expect("Non-empty stack").short as u32
+    }
 
     /// **Remove** and return the top of the stack, **assuming the stack is not
     /// empty.**
@@ -276,18 +271,11 @@ fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_local(constants: &[i64], bytes: &[u8], locals: &[StackValue], pc: &mut usize) -> StackValue {
     let v = get_i32(bytes, pc);
-    no_eprintln!("GET_LOCAL_LOCATION {v}");
-    // Targets should never be constants, so we should always have a non-negative
-    // value.
     let r = if v >= 0 {
-        *unsafe {
-            locals
-                .get_unchecked(v as usize)
-        }
+        *unsafe { locals.get_unchecked(v as usize) }
     } else {
         StackValue::from(*unsafe { constants.get_unchecked((-(v + 1)) as usize) })
     };
-    no_eprintln!("GET LOCAL {}", unsafe { r.short });
     r
 }
 
@@ -298,7 +286,6 @@ fn get_local_mut<'a>(
     pc: &mut usize,
 ) -> &'a mut StackValue {
     let v = get_i32(bytes, pc);
-    // no_eprintln!("GET_LOCAL_LOCATION_MUT {v}");
     // Targets should never be constants, so we should always have a non-negative
     // value.
     assert!(v >= 0);
@@ -436,7 +423,6 @@ fn binary_i32(
     let left = get_local(constants, instructions, locals, pc);
     let target = get_local_mut(instructions, locals, pc);
     target.short = f(unsafe { left.short }, unsafe { right.short });
-    no_eprintln!("SETTING {}", unsafe { target.short });
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -644,8 +630,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             return_value_loc: _,
         } = config;
 
-        let mut stack = RuntimeStack{
-            stack: vec![StackValue::from(0u64); 10] // TODO: This should be max host function arguments.
+        let mut stack = RuntimeStack {
+            stack: vec![StackValue::from(0u64); 10], /* TODO: This should be max host function
+                                                      * arguments. */
         };
 
         let mut locals = &mut locals_vec[locals_base..];
@@ -658,7 +645,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         let mut constants = code.constants();
         let mut instructions = code.code();
         'outer: loop {
-            no_eprintln!("PC = {pc}");
             let instr = *unsafe { instructions.get_unchecked(pc) };
             pc += 1;
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
@@ -666,20 +652,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             // The ensure here guarantees that the transmute is safe, provided that
             // InternalOpcode stays as it is.
             // ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
-            no_eprintln!(
-                "INSTRUCTION {:#?} ({})",
-                unsafe { std::mem::transmute::<_, InternalOpcode>(instr) },
-                unsafe { std::mem::transmute::<_, InternalOpcode>(instr) } as u8
-            );
-//             println!("{:?}", unsafe { std::mem::transmute::<_, InternalOpcode>(instr) });
+            //             println!("{:?}", unsafe { std::mem::transmute::<_,
+            // InternalOpcode>(instr) });
             match unsafe { std::mem::transmute(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
                     let condition = get_local(constants, instructions, &locals, &mut pc);
                     let else_target = get_u32(instructions, &mut pc);
-                    no_eprintln!("PCIf {pc}");
-                    no_eprintln!("ELSE_TARGET {else_target}");
-                    no_eprintln!("CONDITION {}", unsafe { condition.short });
                     if unsafe { condition.short } == 0 {
                         // jump to the else branch.
                         pc = else_target as usize;
@@ -689,7 +668,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // we could optimize this for the common case of jumping to end/beginning of a
                     // current block.
                     let target = get_u32(instructions, &mut pc);
-                    no_eprintln!("BR_TARGET {target}");
                     pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
@@ -697,8 +675,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // current block.
                     let target = get_u32(instructions, &mut pc);
                     let condition = get_local(constants, instructions, &locals, &mut pc);
-                    no_eprintln!("BR_IF_CONDITION {}", unsafe { condition.short });
-                    no_eprintln!("BR_IF_TARGET {target}");
                     if unsafe { condition.short } != 0 {
                         pc = target as usize;
                     } // else do nothing
@@ -738,19 +714,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     if let Some(top_frame) = function_frames.pop() {
                         // Make sure the return value is at the right place
                         // for the callee to continue.
-                        if let Some((place, t)) = return_type {
-                            no_eprintln!("SETTING {} {}", top_frame.locals_base + place, place);
-                            match t {
-                                ValueType::I32 => {
-                                    no_eprintln!("TO VALUE {}", unsafe { locals[0].short });
-                                }
-                                ValueType::I64 => {
-                                    no_eprintln!("TO VALUE {}", unsafe { locals[0].long });
-                                }
-                            }
+                        if let Some((place, _)) = return_type {
                             locals_vec[top_frame.locals_base + place] = locals[0];
-                        } else {
-                            no_eprintln!("NO RETURN TYPE");
                         }
                         pc = top_frame.pc;
                         instructions_idx = top_frame.instructions_idx;
@@ -766,10 +731,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         constants = code.constants();
                         return_type = top_frame.return_type;
                         // truncate all the locals that are above what we need at present.
-                        locals_vec.truncate(locals_base);
-                        no_eprintln!("LOCALS_BASE: {}", locals_base);
+                        unsafe { locals_vec.set_len(locals_base) };
                         locals_base = top_frame.locals_base;
-                        no_eprintln!("LOCALS_BASE: {}", locals_base);
                         locals = &mut locals_vec[locals_base..];
                     } else {
                         break 'outer;
@@ -791,9 +754,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // If the host function returns Ok(None) then the meaning of it is that
                     // execution should resume as normal.
                     let idx = get_u32(instructions, &mut pc);
-                    no_eprintln!("IDX = {idx}");
                     if let Some(f) = self.imports.get(idx as usize) {
-                        no_eprintln!("HOST CALL");
                         // TODO: Make this more efficient.
                         unsafe { stack.stack.set_len(f.ty().parameters.len()) };
                         for p in (&mut stack.stack).into_iter().rev() {
@@ -825,14 +786,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         } else {
                             if f.ty().result.is_some() {
                                 locals[return_value_loc] = stack.pop();
-                                no_eprintln!("GOT RETURN VALUE {}", unsafe { locals[return_value_loc].short });
                             };
                         }
                         assert!(stack.stack.is_empty());
                     } else {
                         host.track_call()?;
                         let local_idx = idx as usize - self.imports.len();
-                        no_eprintln!("LOCAL IDX = {local_idx}");
                         let f = self
                             .code
                             .get(local_idx)
@@ -844,14 +803,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         locals_vec.resize(new_size, StackValue::from(0u64));
                         let (prefix, new_locals) = locals_vec.split_at_mut(current_size);
                         let current_locals = &mut prefix[locals_base..];
-                        no_eprintln!("LOCALS_BASE: {}", locals_base);
-
-                        no_eprintln!("{locals_base}");
-
-                        no_eprintln!("CURRENT_LOCALS: {}", current_locals.len());
-                        no_eprintln!("NEW_LOCALS: {}", new_locals.len());
-                        no_eprintln!("NUM_REGISTERS {}", f.num_registers());
-                        no_eprintln!("NUM_PARAMS {}", f.num_params());
 
                         // Note the rev.
                         for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev() {
@@ -863,9 +814,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 Some((get_i32(instructions, &mut pc) as usize, v))
                             }
                         };
-                        no_eprintln!("PARAMS {:?}", f.params());
-                        no_eprintln!("RETURN TYPE {:?}", f.return_type());
-                        no_eprintln!("NEW_RETURN_TYPE {new_return_type:?}");
 
                         let current_frame = FunctionState {
                             pc,
@@ -875,12 +823,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         };
                         function_frames.push(current_frame);
                         locals_base = current_size;
-                        no_eprintln!("LOCALS_BASE: {}", locals_base);
 
                         locals = new_locals;
                         return_type = new_return_type;
                         instructions = f.code();
-                        no_eprintln!("NEW CODE {instructions:?}");
                         constants = f.constants();
                         instructions_idx = local_idx;
                         pc = 0;
@@ -950,7 +896,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 "Actual type different from expected."
                             );
 
-
                             // FIXME: Remove duplication.
                             // drop(locals);
                             let current_size = locals_vec.len();
@@ -958,7 +903,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             locals_vec.resize(new_size, StackValue::from(0u64));
                             let (prefix, new_locals) = locals_vec.split_at_mut(current_size);
                             let current_locals = &mut prefix[locals_base..];
-                            no_eprintln!("LOCALS_BASE: {}", locals_base);
                             // Note the rev.
                             for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev()
                             {
@@ -979,7 +923,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             };
                             function_frames.push(current_frame);
                             locals_base = current_size;
-                            no_eprintln!("LOCALS_BASE: {}", locals_base);
 
                             locals = new_locals;
 
