@@ -255,22 +255,29 @@ impl RuntimeStack {
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn get_u16(bytes: &[u8], pc: &mut usize) -> u16 {
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const u16) };
-    *pc += 2;
+fn get_u16(pc: &mut *const u8) -> u16 {
+    let r = unsafe { *pc.cast::<u16>() };
+    *pc = unsafe { pc.add(2) };
     r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const u32) };
-    *pc += 4;
+fn get_u32(pc: &mut *const u8) -> u32 {
+    let r = unsafe { *pc.cast::<u32>() };
+    *pc = unsafe { pc.add(4) };
     r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn get_local(constants: &[i64], bytes: &[u8], locals: &[StackValue], pc: &mut usize) -> StackValue {
-    let v = get_i32(bytes, pc);
+fn get_i32(pc: &mut *const u8) -> i32 {
+    let r = unsafe { *pc.cast::<i32>() };
+    *pc = unsafe { pc.add(4) };
+    r
+}
+
+#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+fn get_local(constants: &[i64], locals: &[StackValue], pc: &mut *const u8) -> StackValue {
+    let v = get_i32(pc);
     let r = if v >= 0 {
         *unsafe { locals.get_unchecked(v as usize) }
     } else {
@@ -280,30 +287,12 @@ fn get_local(constants: &[i64], bytes: &[u8], locals: &[StackValue], pc: &mut us
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn get_local_mut<'a>(
-    bytes: &[u8],
-    locals: &'a mut [StackValue],
-    pc: &mut usize,
-) -> &'a mut StackValue {
-    let v = get_i32(bytes, pc);
+fn get_local_mut<'a>(locals: &'a mut [StackValue], pc: &mut *const u8) -> &'a mut StackValue {
+    let v = get_i32(pc);
     // Targets should never be constants, so we should always have a non-negative
     // value.
     assert!(v >= 0);
     unsafe { locals.get_unchecked_mut(v as usize) }
-}
-
-#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn get_i32(bytes: &[u8], pc: &mut usize) -> i32 {
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const i32) };
-    *pc += 4;
-    r
-}
-
-#[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn get_u64(bytes: &[u8], pc: &mut usize) -> u64 {
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(*pc) as *const u64) };
-    *pc += 8;
-    r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -314,14 +303,14 @@ fn read_u8(bytes: &[u8], pos: usize) -> RunResult<u8> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u16(bytes: &[u8], pos: usize) -> RunResult<u16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const u16) };
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<u16>()) };
     Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u32(bytes: &[u8], pos: usize) -> RunResult<u32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const u32) };
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<u32>()) };
     Ok(r)
 }
 
@@ -333,47 +322,45 @@ fn read_i8(bytes: &[u8], pos: usize) -> RunResult<i8> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i16(bytes: &[u8], pos: usize) -> RunResult<i16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const i16) };
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<i16>()) };
     Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i32(bytes: &[u8], pos: usize) -> RunResult<i32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const i32) };
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<i32>()) };
     Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i64(bytes: &[u8], pos: usize) -> RunResult<i64> {
     ensure!(pos + 8 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos) as *const i64) };
+    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<i64>()) };
     Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn memory_load<'a>(
     constants: &[i64],
-    instructions: &[u8],
     locals: &'a mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
 ) -> (&'a mut StackValue, usize) {
-    let offset = get_u32(instructions, pc);
-    let base = get_local(constants, instructions, locals, pc);
-    let result = get_local_mut(instructions, locals, pc);
+    let offset = get_u32(pc);
+    let base = get_local(constants, locals, pc);
+    let result = get_local_mut(locals, pc);
     (result, unsafe { base.short } as u32 as usize + offset as usize)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn memory_store<'a>(
     constants: &[i64],
-    instructions: &[u8],
     locals: &'a [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
 ) -> (StackValue, usize) {
-    let offset = get_u32(instructions, pc);
-    let value = get_local(constants, instructions, locals, pc);
-    let base = get_local(constants, instructions, locals, pc);
+    let offset = get_u32(pc);
+    let value = get_local(constants, locals, pc);
+    let base = get_local(constants, locals, pc);
     (value, unsafe { base.short } as u32 as usize + offset as usize)
 }
 
@@ -388,54 +375,50 @@ fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()>
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn unary_i32(
     constants: &[i64],
-    instructions: &[u8],
     locals: &mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
     f: impl Fn(i32) -> i32,
 ) {
-    let source = get_local(constants, instructions, locals, pc);
-    let target = get_local_mut(instructions, locals, pc);
+    let source = get_local(constants, locals, pc);
+    let target = get_local_mut(locals, pc);
     target.short = f(unsafe { source.short });
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn unary_i64(
     constants: &[i64],
-    instructions: &[u8],
     locals: &mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
     f: impl Fn(i64) -> i64,
 ) {
-    let source = get_local(constants, instructions, locals, pc);
-    let target = get_local_mut(instructions, locals, pc);
+    let source = get_local(constants, locals, pc);
+    let target = get_local_mut(locals, pc);
     target.long = f(unsafe { source.long });
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i32(
     constants: &[i64],
-    instructions: &[u8],
     locals: &mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
     f: impl Fn(i32, i32) -> i32,
 ) {
-    let right = get_local(constants, instructions, locals, pc);
-    let left = get_local(constants, instructions, locals, pc);
-    let target = get_local_mut(instructions, locals, pc);
+    let right = get_local(constants, locals, pc);
+    let left = get_local(constants, locals, pc);
+    let target = get_local_mut(locals, pc);
     target.short = f(unsafe { left.short }, unsafe { right.short });
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i32_partial(
     constants: &[i64],
-    instructions: &[u8],
     locals: &mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
     f: impl Fn(i32, i32) -> Option<i32>,
 ) -> RunResult<()> {
-    let right = get_local(constants, instructions, locals, pc);
-    let left = get_local(constants, instructions, locals, pc);
-    let target = get_local_mut(instructions, locals, pc);
+    let right = get_local(constants, locals, pc);
+    let left = get_local(constants, locals, pc);
+    let target = get_local_mut(locals, pc);
     target.short = f(unsafe { left.short }, unsafe { right.short })
         .ok_or_else(|| anyhow!("Runtime exception in i32 binary."))?;
     Ok(())
@@ -444,28 +427,26 @@ fn binary_i32_partial(
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i64(
     constants: &[i64],
-    instructions: &[u8],
     locals: &mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
     f: impl Fn(i64, i64) -> i64,
 ) {
-    let right = get_local(constants, instructions, locals, pc);
-    let left = get_local(constants, instructions, locals, pc);
-    let target = get_local_mut(instructions, locals, pc);
+    let right = get_local(constants, locals, pc);
+    let left = get_local(constants, locals, pc);
+    let target = get_local_mut(locals, pc);
     target.long = f(unsafe { left.long }, unsafe { right.long });
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i64_partial(
     constants: &[i64],
-    instructions: &[u8],
     locals: &mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
     f: impl Fn(i64, i64) -> Option<i64>,
 ) -> RunResult<()> {
-    let right = get_local(constants, instructions, locals, pc);
-    let left = get_local(constants, instructions, locals, pc);
-    let target = get_local_mut(instructions, locals, pc);
+    let right = get_local(constants, locals, pc);
+    let left = get_local(constants, locals, pc);
+    let target = get_local_mut(locals, pc);
     target.long = f(unsafe { left.long }, unsafe { right.long })
         .ok_or_else(|| anyhow!("Runtime exception in i64 binary"))?;
     Ok(())
@@ -474,14 +455,13 @@ fn binary_i64_partial(
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn binary_i64_test(
     constants: &[i64],
-    instructions: &[u8],
     locals: &mut [StackValue],
-    pc: &mut usize,
+    pc: &mut *const u8,
     f: impl Fn(i64, i64) -> i32,
 ) {
-    let right = get_local(constants, instructions, locals, pc);
-    let left = get_local(constants, instructions, locals, pc);
-    let target = get_local_mut(instructions, locals, pc);
+    let right = get_local(constants, locals, pc);
+    let left = get_local(constants, locals, pc);
+    let target = get_local_mut(locals, pc);
     target.short = f(unsafe { left.long }, unsafe { right.long });
 }
 
@@ -618,7 +598,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         // struct instead of deconstructing it here. Why that is I don't know, but it
         // likely has to do with memory layout.
         let RunConfig {
-            mut pc,
+            pc,
             mut instructions_idx,
             mut function_frames,
             mut return_type,
@@ -644,9 +624,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         let code = unsafe { self.code.get_unchecked(instructions_idx) };
         let mut constants = code.constants();
         let mut instructions = code.code();
+        let mut pc = unsafe { instructions.as_ptr().add(pc) };
         'outer: loop {
-            let instr = *unsafe { instructions.get_unchecked(pc) };
-            pc += 1;
+            let instr = unsafe { *pc };
+            pc = unsafe { pc.add(1) };
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
             // InternalOpcode::try_from(instr). About 25% faster on a fibonacci test.
             // The ensure here guarantees that the transmute is safe, provided that
@@ -657,56 +638,59 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             match unsafe { std::mem::transmute(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
-                    let condition = get_local(constants, instructions, &locals, &mut pc);
-                    let else_target = get_u32(instructions, &mut pc);
+                    let condition = get_local(constants, &locals, &mut pc);
+                    let else_target = get_u32(&mut pc);
                     if unsafe { condition.short } == 0 {
                         // jump to the else branch.
-                        pc = else_target as usize;
+                        pc = unsafe { instructions.as_ptr().add(else_target as usize) };
                     } // else do nothing and start executing the if branch
                 }
                 InternalOpcode::Br => {
                     // we could optimize this for the common case of jumping to end/beginning of a
                     // current block.
-                    let target = get_u32(instructions, &mut pc);
-                    pc = target as usize;
+                    let target = get_u32(&mut pc);
+                    pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::BrIf => {
                     // we could optimize this for the common case of jumping to end/beginning of a
                     // current block.
-                    let target = get_u32(instructions, &mut pc);
-                    let condition = get_local(constants, instructions, &locals, &mut pc);
+                    let target = get_u32(&mut pc);
+                    let condition = get_local(constants, &locals, &mut pc);
                     if unsafe { condition.short } != 0 {
-                        pc = target as usize;
+                        pc = unsafe { instructions.as_ptr().add(target as usize) };
                     } // else do nothing
                 }
                 InternalOpcode::BrTable => {
-                    let condition = get_local(constants, instructions, &locals, &mut pc);
-                    let num_labels = get_u16(instructions, &mut pc);
+                    let condition = get_local(constants, &locals, &mut pc);
+                    let num_labels = get_u16(&mut pc);
                     let top: u32 = unsafe { condition.short } as u32;
                     if top < u32::from(num_labels) {
-                        pc += (top as usize + 1) * 4; // the +1 is for the
-                                                      // default branch.
+                        pc = unsafe {
+                            pc.add((top as usize + 1) * 4)
+                        } ;// the +1 is for the
+                          // default branch.
                     } // else use default branch
-                    let target = get_u32(instructions, &mut pc);
-                    pc = target as usize;
+                    let target = get_u32(&mut pc);
+                    pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::BrTableCarry => {
-                    let condition = get_local(constants, instructions, &locals, &mut pc);
-                    let copy_source = get_local(constants, instructions, &locals, &mut pc);
-                    let num_labels = get_u16(instructions, &mut pc);
+                    let condition = get_local(constants, &locals, &mut pc);
+                    let copy_source = get_local(constants, &locals, &mut pc);
+                    let num_labels = get_u16(&mut pc);
                     let top: u32 = unsafe { condition.short } as u32;
                     if top < u32::from(num_labels) {
-                        pc += (top as usize + 1) * 8; // the +1 is for the
-                                                      // default branch.
+                        pc = unsafe {
+                            pc.add((top as usize + 1) * 8)
+                        }; // the +1 is for the default branch.
                     } // else use default branch
-                    let copy_target = get_local_mut(instructions, locals, &mut pc);
+                    let copy_target = get_local_mut( locals, &mut pc);
                     *copy_target = copy_source;
-                    let target = get_u32(instructions, &mut pc);
-                    pc = target as usize;
+                    let target = get_u32( &mut pc);
+                    pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::Copy => {
-                    let copy_source = get_local(constants, instructions, &locals, &mut pc);
-                    let copy_target = get_local_mut(instructions, locals, &mut pc);
+                    let copy_source = get_local(constants, &locals, &mut pc);
+                    let copy_target = get_local_mut(locals, &mut pc);
                     *copy_target = copy_source;
                 }
                 InternalOpcode::Return => {
@@ -717,7 +701,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         if let Some((place, _)) = return_type {
                             locals_vec[top_frame.locals_base + place] = locals[0];
                         }
-                        pc = top_frame.pc;
                         instructions_idx = top_frame.instructions_idx;
                         // the use of get_unchecked here is entirely safe. The only way for the
                         // index to get on the stack is if we have been
@@ -728,6 +711,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         // problems as well and is not possible in safe Rust anyhow.
                         let code = unsafe { self.code.get_unchecked(instructions_idx) };
                         instructions = code.code();
+                        pc = unsafe { instructions.as_ptr().add(top_frame.pc) };
                         constants = code.constants();
                         return_type = top_frame.return_type;
                         // truncate all the locals that are above what we need at present.
@@ -739,7 +723,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     }
                 }
                 InternalOpcode::CallImmediate => {
-                    let v = get_u32(instructions, &mut pc);
+                    let v = get_u32(&mut pc);
                     host.tick_energy(v as u64)?;
                 }
                 InternalOpcode::Call => {
@@ -753,15 +737,16 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // function/module. The host will then handle resumption.
                     // If the host function returns Ok(None) then the meaning of it is that
                     // execution should resume as normal.
-                    let idx = get_u32(instructions, &mut pc);
+                    let idx = get_u32(&mut pc);
                     if let Some(f) = self.imports.get(idx as usize) {
-                        // TODO: Make this more efficient.
+                        // TODO: Make this more efficient and safer. Make sure length is sufficient
+                        // for all host calls.
                         unsafe { stack.stack.set_len(f.ty().parameters.len()) };
                         for p in (&mut stack.stack).into_iter().rev() {
-                            *p = get_local(constants, instructions, &locals, &mut pc)
+                            *p = get_local(constants, &locals, &mut pc)
                         }
                         let return_value_loc = if f.ty().result.is_some() {
-                            let target = get_i32(instructions, &mut pc);
+                            let target = get_i32(&mut pc);
                             target as usize
                         } else {
                             0
@@ -771,7 +756,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             return Ok(ExecutionOutcome::Interrupted {
                                 reason,
                                 config: RunConfig {
-                                    pc,
+                                    pc: unsafe { pc.offset_from(instructions.as_ptr()) as usize }, /* TODO: Maybe use try_into? */
                                     instructions_idx,
                                     function_frames,
                                     return_type,
@@ -806,17 +791,15 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
 
                         // Note the rev.
                         for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev() {
-                            *p = get_local(constants, instructions, current_locals, &mut pc)
+                            *p = get_local(constants, current_locals, &mut pc)
                         }
                         let new_return_type = match f.return_type() {
                             BlockType::EmptyType => None,
-                            BlockType::ValueType(v) => {
-                                Some((get_i32(instructions, &mut pc) as usize, v))
-                            }
+                            BlockType::ValueType(v) => Some((get_i32(&mut pc) as usize, v)),
                         };
 
                         let current_frame = FunctionState {
-                            pc,
+                            pc: unsafe{ pc.offset_from(instructions.as_ptr()) as usize }, /* TODO: Maybe use try_into?, */
                             instructions_idx,
                             locals_base,
                             return_type,
@@ -829,16 +812,16 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         instructions = f.code();
                         constants = f.constants();
                         instructions_idx = local_idx;
-                        pc = 0;
+                        pc = instructions.as_ptr();
                     }
                 }
                 InternalOpcode::CallIndirect => {
-                    let ty_idx = get_u32(instructions, &mut pc);
+                    let ty_idx = get_u32(&mut pc);
                     let ty = self
                         .ty
                         .get(ty_idx as usize)
                         .ok_or_else(|| anyhow!("Non-existent type."))?;
-                    let idx = get_local(constants, instructions, locals, &mut pc);
+                    let idx = get_local(constants, locals, &mut pc);
                     let idx = unsafe { idx.short } as u32;
                     if let Some(Some(f_idx)) = self.table.functions.get(idx as usize) {
                         if let Some(f) = self.imports.get(*f_idx as usize) {
@@ -849,10 +832,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             // TODO: Make this more efficient.
                             unsafe { stack.stack.set_len(f.ty().parameters.len()) };
                             for p in (&mut stack.stack).into_iter().rev() {
-                                *p = get_local(constants, instructions, &locals, &mut pc)
+                                *p = get_local(constants, &locals, &mut pc)
                             }
                             let return_value_loc = if f.ty().result.is_some() {
-                                let target = get_i32(instructions, &mut pc);
+                                let target = get_i32(&mut pc);
                                 target as usize
                             } else {
                                 0
@@ -863,7 +846,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 return Ok(ExecutionOutcome::Interrupted {
                                     reason,
                                     config: RunConfig {
-                                        pc,
+                                        pc: unsafe { pc.offset_from(instructions.as_ptr()) as usize}, /* TODO: Maybe use try_into?, */
                                         instructions_idx,
                                         function_frames,
                                         return_type,
@@ -906,17 +889,15 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             // Note the rev.
                             for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev()
                             {
-                                *p = get_local(constants, instructions, current_locals, &mut pc)
+                                *p = get_local(constants, current_locals, &mut pc)
                             }
                             let new_return_type = match f.return_type() {
                                 BlockType::EmptyType => None,
-                                BlockType::ValueType(v) => {
-                                    Some((get_i32(instructions, &mut pc) as usize, v))
-                                }
+                                BlockType::ValueType(v) => Some((get_i32(&mut pc) as usize, v)),
                             };
 
                             let current_frame = FunctionState {
-                                pc,
+                                pc: unsafe { pc.offset_from(instructions.as_ptr()) as usize}, /* TODO: Maybe use try_into?, */
                                 instructions_idx,
                                 locals_base,
                                 return_type,
@@ -930,17 +911,17 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             instructions = f.code();
                             constants = f.constants();
                             instructions_idx = local_idx;
-                            pc = 0;
+                            pc = instructions.as_ptr();
                         }
                     } else {
                         bail!("Calling undefined function {}.", idx) // trap
                     }
                 }
                 InternalOpcode::Select => {
-                    let top = get_local(constants, instructions, &locals, &mut pc);
-                    let t2 = get_local(constants, instructions, &locals, &mut pc);
-                    let t1 = get_local(constants, instructions, &locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let top = get_local(constants, &locals, &mut pc);
+                    let t2 = get_local(constants, &locals, &mut pc);
+                    let t1 = get_local(constants, &locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     if unsafe { top.short } == 0 {
                         *target = t2;
                     } else {
@@ -948,116 +929,116 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     }
                 }
                 InternalOpcode::LocalSet => {
-                    let source = get_local(constants, instructions, &locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let source = get_local(constants, &locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     *target = source;
                 }
                 InternalOpcode::GlobalGet => {
-                    let idx = get_u16(instructions, &mut pc);
-                    let copy_target = get_local_mut(instructions, locals, &mut pc);
+                    let idx = get_u16(&mut pc);
+                    let copy_target = get_local_mut(locals, &mut pc);
                     *copy_target = globals[idx as usize];
                 }
                 InternalOpcode::GlobalSet => {
-                    let idx = get_u16(instructions, &mut pc);
-                    let copy_target = get_local(constants, instructions, &locals, &mut pc);
+                    let idx = get_u16(&mut pc);
+                    let copy_target = get_local(constants, &locals, &mut pc);
                     globals[idx as usize] = copy_target;
                 }
                 InternalOpcode::I32Load => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_i32(&memory, pos)?;
                     *result = StackValue::from(val);
                 }
                 InternalOpcode::I64Load => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_i64(&memory, pos)?;
                     *result = StackValue::from(val);
                 }
                 InternalOpcode::I32Load8S => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_i8(&memory, pos)?;
                     *result = StackValue::from(val as i32);
                 }
                 InternalOpcode::I32Load8U => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_u8(&memory, pos)?;
                     *result = StackValue::from(val as i32);
                 }
                 InternalOpcode::I32Load16S => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_i16(&memory, pos)?;
                     *result = StackValue::from(val as i32);
                 }
                 InternalOpcode::I32Load16U => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_u16(&memory, pos)?;
                     *result = StackValue::from(val as i32);
                 }
                 InternalOpcode::I64Load8S => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_i8(&memory, pos)?;
                     *result = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load8U => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_u8(&memory, pos)?;
                     *result = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load16S => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_i16(&memory, pos)?;
                     *result = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load16U => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_u16(&memory, pos)?;
                     *result = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load32S => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_i32(&memory, pos)?;
                     *result = StackValue::from(val as i64);
                 }
                 InternalOpcode::I64Load32U => {
-                    let (result, pos) = memory_load(constants, instructions, locals, &mut pc);
+                    let (result, pos) = memory_load(constants, locals, &mut pc);
                     let val = read_u32(&memory, pos)?;
                     *result = StackValue::from(val as i64);
                 }
                 InternalOpcode::I32Store => {
-                    let (val, pos) = memory_store(constants, instructions, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, &locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.short }.to_le_bytes())?;
                 }
                 InternalOpcode::I64Store => {
-                    let (val, pos) = memory_store(constants, instructions, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, &locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes())?;
                 }
                 InternalOpcode::I32Store8 => {
-                    let (val, pos) = memory_store(constants, instructions, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, &locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.short }.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I32Store16 => {
-                    let (val, pos) = memory_store(constants, instructions, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, &locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.short }.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store8 => {
-                    let (val, pos) = memory_store(constants, instructions, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, &locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I64Store16 => {
-                    let (val, pos) = memory_store(constants, instructions, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, &locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store32 => {
-                    let (val, pos) = memory_store(constants, instructions, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, &locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes()[..4])?;
                 }
                 InternalOpcode::MemorySize => {
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     let l = memory.len() / PAGE_SIZE as usize;
                     *target = StackValue::from(l as i32);
                 }
                 InternalOpcode::MemoryGrow => {
-                    let val = get_local(constants, instructions, locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let val = get_local(constants, locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     let n = unsafe { val.short } as u32;
                     let sz = memory.len() / PAGE_SIZE as usize;
                     if sz + n as usize > max_memory {
@@ -1070,8 +1051,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     }
                 }
                 InternalOpcode::I32Eqz => {
-                    let source = get_local(constants, instructions, &locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let source = get_local(constants, &locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     let val = unsafe { source.short };
                     target.short = if val == 0 {
                         1i32
@@ -1080,58 +1061,46 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     };
                 }
                 InternalOpcode::I32Eq => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
-                        (left == right) as i32
-                    });
+                    binary_i32(constants, locals, &mut pc, |left, right| (left == right) as i32);
                 }
                 InternalOpcode::I32Ne => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
-                        (left != right) as i32
-                    });
+                    binary_i32(constants, locals, &mut pc, |left, right| (left != right) as i32);
                 }
                 InternalOpcode::I32LtS => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
-                        (left < right) as i32
-                    });
+                    binary_i32(constants, locals, &mut pc, |left, right| (left < right) as i32);
                 }
                 InternalOpcode::I32LtU => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i32(constants, locals, &mut pc, |left, right| {
                         ((left as u32) < (right as u32)) as i32
                     });
                 }
                 InternalOpcode::I32GtS => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
-                        (left > right) as i32
-                    });
+                    binary_i32(constants, locals, &mut pc, |left, right| (left > right) as i32);
                 }
                 InternalOpcode::I32GtU => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i32(constants, locals, &mut pc, |left, right| {
                         ((left as u32) > (right as u32)) as i32
                     });
                 }
                 InternalOpcode::I32LeS => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
-                        (left <= right) as i32
-                    });
+                    binary_i32(constants, locals, &mut pc, |left, right| (left <= right) as i32);
                 }
                 InternalOpcode::I32LeU => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i32(constants, locals, &mut pc, |left, right| {
                         ((left as u32) <= (right as u32)) as i32
                     });
                 }
                 InternalOpcode::I32GeS => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
-                        (left >= right) as i32
-                    });
+                    binary_i32(constants, locals, &mut pc, |left, right| (left >= right) as i32);
                 }
                 InternalOpcode::I32GeU => {
-                    binary_i32(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i32(constants, locals, &mut pc, |left, right| {
                         ((left as u32) >= (right as u32)) as i32
                     });
                 }
                 InternalOpcode::I64Eqz => {
-                    let source = get_local(constants, instructions, &locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let source = get_local(constants, &locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     let val = unsafe { source.long };
                     target.short = if val == 0 {
                         1i32
@@ -1140,239 +1109,211 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     };
                 }
                 InternalOpcode::I64Eq => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         (left == right) as i32
                     });
                 }
                 InternalOpcode::I64Ne => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         (left != right) as i32
                     });
                 }
                 InternalOpcode::I64LtS => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         (left < right) as i32
                     });
                 }
                 InternalOpcode::I64LtU => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         ((left as u64) < (right as u64)) as i32
                     });
                 }
                 InternalOpcode::I64GtS => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         (left > right) as i32
                     });
                 }
                 InternalOpcode::I64GtU => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         ((left as u64) > (right as u64)) as i32
                     });
                 }
                 InternalOpcode::I64LeS => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         (left <= right) as i32
                     });
                 }
                 InternalOpcode::I64LeU => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         ((left as u64) <= (right as u64)) as i32
                     });
                 }
                 InternalOpcode::I64GeS => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         (left >= right) as i32
                     });
                 }
                 InternalOpcode::I64GeU => {
-                    binary_i64_test(constants, instructions, locals, &mut pc, |left, right| {
+                    binary_i64_test(constants, locals, &mut pc, |left, right| {
                         ((left as u64) >= (right as u64)) as i32
                     });
                 }
                 InternalOpcode::I32Clz => {
-                    unary_i32(constants, instructions, locals, &mut pc, |x| {
-                        x.leading_zeros() as i32
-                    });
+                    unary_i32(constants, locals, &mut pc, |x| x.leading_zeros() as i32);
                 }
                 InternalOpcode::I32Ctz => {
-                    unary_i32(constants, instructions, locals, &mut pc, |x| {
-                        x.trailing_zeros() as i32
-                    });
+                    unary_i32(constants, locals, &mut pc, |x| x.trailing_zeros() as i32);
                 }
                 InternalOpcode::I32Popcnt => {
-                    unary_i32(constants, instructions, locals, &mut pc, |x| x.count_ones() as i32);
+                    unary_i32(constants, locals, &mut pc, |x| x.count_ones() as i32);
                 }
                 InternalOpcode::I32Add => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| x.wrapping_add(y));
+                    binary_i32(constants, locals, &mut pc, |x, y| x.wrapping_add(y));
                 }
                 InternalOpcode::I32Sub => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| x.wrapping_sub(y));
+                    binary_i32(constants, locals, &mut pc, |x, y| x.wrapping_sub(y));
                 }
                 InternalOpcode::I32Mul => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| x.wrapping_mul(y));
+                    binary_i32(constants, locals, &mut pc, |x, y| x.wrapping_mul(y));
                 }
                 InternalOpcode::I32DivS => {
-                    binary_i32_partial(constants, instructions, locals, &mut pc, |x, y| {
-                        x.checked_div(y)
-                    })?;
+                    binary_i32_partial(constants, locals, &mut pc, |x, y| x.checked_div(y))?;
                 }
                 InternalOpcode::I32DivU => {
-                    binary_i32_partial(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i32_partial(constants, locals, &mut pc, |x, y| {
                         (x as u32).checked_div(y as u32).map(|x| x as i32)
                     })?;
                 }
                 InternalOpcode::I32RemS => {
-                    binary_i32_partial(constants, instructions, locals, &mut pc, |x, y| {
-                        x.checked_rem(y)
-                    })?;
+                    binary_i32_partial(constants, locals, &mut pc, |x, y| x.checked_rem(y))?;
                 }
                 InternalOpcode::I32RemU => {
-                    binary_i32_partial(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i32_partial(constants, locals, &mut pc, |x, y| {
                         (x as u32).checked_rem(y as u32).map(|x| x as i32)
                     })?;
                 }
                 InternalOpcode::I32And => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| x & y);
+                    binary_i32(constants, locals, &mut pc, |x, y| x & y);
                 }
                 InternalOpcode::I32Or => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| x | y);
+                    binary_i32(constants, locals, &mut pc, |x, y| x | y);
                 }
                 InternalOpcode::I32Xor => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| x ^ y);
+                    binary_i32(constants, locals, &mut pc, |x, y| x ^ y);
                 }
                 InternalOpcode::I32Shl => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| {
-                        x << (y as u32 % 32)
-                    });
+                    binary_i32(constants, locals, &mut pc, |x, y| x << (y as u32 % 32));
                 }
                 InternalOpcode::I32ShrS => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| {
-                        x >> (y as u32 % 32)
-                    });
+                    binary_i32(constants, locals, &mut pc, |x, y| x >> (y as u32 % 32));
                 }
                 InternalOpcode::I32ShrU => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i32(constants, locals, &mut pc, |x, y| {
                         ((x as u32) >> (y as u32 % 32)) as i32
                     });
                 }
                 InternalOpcode::I32Rotl => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| {
-                        x.rotate_left(y as u32 % 32)
-                    });
+                    binary_i32(constants, locals, &mut pc, |x, y| x.rotate_left(y as u32 % 32));
                 }
                 InternalOpcode::I32Rotr => {
-                    binary_i32(constants, instructions, locals, &mut pc, |x, y| {
-                        x.rotate_right(y as u32 % 32)
-                    });
+                    binary_i32(constants, locals, &mut pc, |x, y| x.rotate_right(y as u32 % 32));
                 }
                 InternalOpcode::I64Clz => {
-                    unary_i64(constants, instructions, locals, &mut pc, |x| {
-                        x.leading_zeros() as i64
-                    });
+                    unary_i64(constants, locals, &mut pc, |x| x.leading_zeros() as i64);
                 }
                 InternalOpcode::I64Ctz => {
-                    unary_i64(constants, instructions, locals, &mut pc, |x| {
-                        x.trailing_zeros() as i64
-                    });
+                    unary_i64(constants, locals, &mut pc, |x| x.trailing_zeros() as i64);
                 }
                 InternalOpcode::I64Popcnt => {
-                    unary_i64(constants, instructions, locals, &mut pc, |x| x.count_ones() as i64);
+                    unary_i64(constants, locals, &mut pc, |x| x.count_ones() as i64);
                 }
                 InternalOpcode::I64Add => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| x.wrapping_add(y));
+                    binary_i64(constants, locals, &mut pc, |x, y| x.wrapping_add(y));
                 }
                 InternalOpcode::I64Sub => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| x.wrapping_sub(y));
+                    binary_i64(constants, locals, &mut pc, |x, y| x.wrapping_sub(y));
                 }
                 InternalOpcode::I64Mul => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| x.wrapping_mul(y));
+                    binary_i64(constants, locals, &mut pc, |x, y| x.wrapping_mul(y));
                 }
                 InternalOpcode::I64DivS => {
-                    binary_i64_partial(constants, instructions, locals, &mut pc, |x, y| {
-                        x.checked_div(y)
-                    })?;
+                    binary_i64_partial(constants, locals, &mut pc, |x, y| x.checked_div(y))?;
                 }
                 InternalOpcode::I64DivU => {
-                    binary_i64_partial(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i64_partial(constants, locals, &mut pc, |x, y| {
                         (x as u64).checked_div(y as u64).map(|x| x as i64)
                     })?;
                 }
                 InternalOpcode::I64RemS => {
-                    binary_i64_partial(constants, instructions, locals, &mut pc, |x, y| {
-                        x.checked_rem(y)
-                    })?;
+                    binary_i64_partial(constants, locals, &mut pc, |x, y| x.checked_rem(y))?;
                 }
                 InternalOpcode::I64RemU => {
-                    binary_i64_partial(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i64_partial(constants, locals, &mut pc, |x, y| {
                         (x as u64).checked_rem(y as u64).map(|x| x as i64)
                     })?;
                 }
                 InternalOpcode::I64And => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| x & y);
+                    binary_i64(constants, locals, &mut pc, |x, y| x & y);
                 }
                 InternalOpcode::I64Or => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| x | y);
+                    binary_i64(constants, locals, &mut pc, |x, y| x | y);
                 }
                 InternalOpcode::I64Xor => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| x ^ y);
+                    binary_i64(constants, locals, &mut pc, |x, y| x ^ y);
                 }
                 InternalOpcode::I64Shl => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| {
-                        x << (y as u64 % 64)
-                    });
+                    binary_i64(constants, locals, &mut pc, |x, y| x << (y as u64 % 64));
                 }
                 InternalOpcode::I64ShrS => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| {
-                        x >> (y as u64 % 64)
-                    });
+                    binary_i64(constants, locals, &mut pc, |x, y| x >> (y as u64 % 64));
                 }
                 InternalOpcode::I64ShrU => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i64(constants, locals, &mut pc, |x, y| {
                         ((x as u64) >> (y as u64 % 64)) as i64
                     });
                 }
                 InternalOpcode::I64Rotl => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i64(constants, locals, &mut pc, |x, y| {
                         x.rotate_left((y as u64 % 64) as u32)
                     });
                 }
                 InternalOpcode::I64Rotr => {
-                    binary_i64(constants, instructions, locals, &mut pc, |x, y| {
+                    binary_i64(constants, locals, &mut pc, |x, y| {
                         x.rotate_right((y as u64 % 64) as u32)
                     });
                 }
                 InternalOpcode::I32WrapI64 => {
-                    let source = get_local(constants, instructions, &locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let source = get_local(constants, &locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     target.short = unsafe { source.long } as i32;
                 }
                 InternalOpcode::I64ExtendI32S => {
-                    let source = get_local(constants, instructions, &locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let source = get_local(constants, &locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     target.long = unsafe { source.short } as i64;
                 }
                 InternalOpcode::I64ExtendI32U => {
-                    let source = get_local(constants, instructions, &locals, &mut pc);
-                    let target = get_local_mut(instructions, locals, &mut pc);
+                    let source = get_local(constants, &locals, &mut pc);
+                    let target = get_local_mut(locals, &mut pc);
                     // The two as' are important since the semantics of the cast in rust is that
                     // it will sign extend if the source is signed. So first we make it unsigned,
                     // and then extend, making it so that it is extended with 0's.
                     target.long = unsafe { source.short } as u32 as i64;
                 }
                 InternalOpcode::I32Extend8S => {
-                    unary_i32(constants, instructions, locals, &mut pc, |x| x as i8 as i32)
+                    unary_i32(constants, locals, &mut pc, |x| x as i8 as i32)
                 }
                 InternalOpcode::I32Extend16S => {
-                    unary_i32(constants, instructions, locals, &mut pc, |x| x as i16 as i32)
+                    unary_i32(constants, locals, &mut pc, |x| x as i16 as i32)
                 }
                 InternalOpcode::I64Extend8S => {
-                    unary_i64(constants, instructions, locals, &mut pc, |x| x as i8 as i64)
+                    unary_i64(constants, locals, &mut pc, |x| x as i8 as i64)
                 }
                 InternalOpcode::I64Extend16S => {
-                    unary_i64(constants, instructions, locals, &mut pc, |x| x as i16 as i64)
+                    unary_i64(constants, locals, &mut pc, |x| x as i16 as i64)
                 }
                 InternalOpcode::I64Extend32S => {
-                    unary_i64(constants, instructions, locals, &mut pc, |x| x as i32 as i64)
+                    unary_i64(constants, locals, &mut pc, |x| x as i32 as i64)
                 }
             }
         }
