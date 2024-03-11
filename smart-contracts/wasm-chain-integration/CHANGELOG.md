@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+- `TestHost` can now be constructed with an instance state (using `TestHost::with_state`), making the test host support host functions related to the smart contract key-value state.
+- The function `utils::run_module_tests` now provides an empty in-memory instance state for each test case, allowing module tests to use host functions related to the smart contract key-value state.
 - Support for querying the module reference and contract name of an instance via
   `invoke` (for protocol version 7). These are enabled by a new
   `support_contract_inspection_queries` parameter in `ReceiveParams` and
@@ -31,7 +33,7 @@
 - `ReceiveParams` is extended with `support_account_signature_checks` flag, that
   enables or disables two new operations that can be `invoke`d. Querying account
   public keys and checking account signatures.
-- `InvokeFailure` is extended with two new variants 
+- `InvokeFailure` is extended with two new variants
   `SignatureDataMalformed` and `SignatureCheckFailed` that can be triggered as a
   result of checking a signature.
 

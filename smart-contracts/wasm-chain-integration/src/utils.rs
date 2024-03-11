@@ -1,7 +1,10 @@
 //! Various utilities for testing and extraction of schemas and build
 //! information.
 
-use crate::{v1::EmittedDebugStatement, ExecResult};
+use crate::{
+    v1::{host, trie, EmittedDebugStatement, InstanceState},
+    ExecResult,
+};
 use anyhow::{anyhow, bail, ensure, Context};
 pub use concordium_contracts_common::WasmVersion;
 use concordium_contracts_common::{
@@ -39,27 +42,31 @@ impl<I> machine::Host<I> for TrapHost {
 /// A host which traps for any function call apart from `report_error` which it
 /// prints to standard out and `get_random` that calls a random number
 /// generator.
-pub struct TestHost<R> {
+pub struct TestHost<'a, R, BackingStore> {
     /// A RNG for randomised testing.
     rng:              Option<R>,
     /// A flag set to `true` if the RNG was used.
     rng_used:         bool,
     /// Debug statements in the order they were emitted.
     pub debug_events: Vec<EmittedDebugStatement>,
+    /// In-memory instance state used for state-related host calls.
+    state:            Option<InstanceState<'a, BackingStore>>,
 }
 
-impl TestHost<SmallRng> {
-    /// Create a new `TestHost` instance without a RNG instance.
+impl<'a> TestHost<'a, SmallRng, trie::Loader<Vec<u8>>> {
+    /// Create a new `TestHost` instance without a RNG instance and instance
+    /// state.
     pub const fn uninitialized() -> Self {
         TestHost {
             rng:          None,
             rng_used:     false,
             debug_events: Vec::new(),
+            state:        None,
         }
     }
 }
 
-impl<R: RngCore> TestHost<R> {
+impl<'a, R: RngCore> TestHost<'a, R, trie::Loader<Vec<u8>>> {
     /// Create a new `TestHost` instance with the given RNG and set the flag to
     /// unused.
     pub fn new(rng: R) -> Self {
@@ -67,11 +74,28 @@ impl<R: RngCore> TestHost<R> {
             rng:          Some(rng),
             rng_used:     false,
             debug_events: Vec::new(),
+            state:        None,
         }
     }
 }
 
-impl<R: RngCore> validate::ValidateImportExport for TestHost<R> {
+impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
+    /// Create a new `TestHost` instance with the given RNG and set the flag to
+    /// unused. This also take an instance state to use for host calls related
+    /// to the state.
+    pub fn with_state(rng: R, initial_state: InstanceState<'a, BackingStore>) -> Self {
+        TestHost {
+            rng:          Some(rng),
+            rng_used:     false,
+            debug_events: Vec::new(),
+            state:        Some(initial_state),
+        }
+    }
+}
+
+impl<'a, R: RngCore, BackingStore> validate::ValidateImportExport
+    for TestHost<'a, R, BackingStore>
+{
     /// Simply ensure that there are no duplicates.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn validate_import_function(
@@ -149,7 +173,9 @@ pub(crate) fn extract_debug(
     Ok((filename, line, column, msg))
 }
 
-impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
+impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<ArtifactNamedImport>
+    for TestHost<'a, R, BackingStore>
+{
     type Interrupt = NoInterrupt;
 
     fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> {
@@ -163,6 +189,7 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
+        let mut energy = crate::InterpreterEnergy::new(u64::MAX);
         if f.matches("concordium", "report_error") {
             let (filename, line, column, msg) = extract_debug(memory, stack)?;
             bail!(ReportError::Reported {
@@ -179,7 +206,6 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
             match self.rng.as_mut() {
                 Some(r) => {
                     r.try_fill_bytes(&mut memory[dest..dest + size])?;
-                    Ok(None)
                 }
                 None => {
                     bail!("Expected an initialized RNG.");
@@ -194,10 +220,49 @@ impl<R: RngCore> machine::Host<ArtifactNamedImport> for TestHost<R> {
                 msg,
                 remaining_energy: 0.into(), // debug host does not have energy.
             });
-            Ok(None)
+        } else if f.matches("concordium", "state_lookup_entry") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_lookup_entry(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_create_entry") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_create_entry(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_delete_entry") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_delete_entry(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_delete_prefix") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_delete_prefix(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_iterate_prefix") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_iterator(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_iterator_next") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_iterator_next(stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_iterator_delete") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_iterator_delete(stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_iterator_key_size") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_iterator_key_size(stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_iterator_key_read") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_iterator_key_read(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_entry_read") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_entry_read(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_entry_write") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_entry_write(memory, stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_entry_size") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_entry_size(stack, &mut energy, state)?;
+        } else if f.matches("concordium", "state_entry_resize") {
+            let state = self.state.as_mut().context("No state initialized in test host")?;
+            host::state_entry_resize(stack, &mut energy, state)?;
         } else {
             bail!("Unsupported host function call.")
         }
+        Ok(None)
     }
 }
 
@@ -228,7 +293,13 @@ pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestRe
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
             // create a `TestHost` instance for each test with the usage flag set to `false`
-            let mut test_host = TestHost::new(SmallRng::seed_from_u64(seed));
+            let mut initial_state = trie::MutableState::initial_state();
+            let mut loader = trie::Loader::new(Vec::new());
+            let mut test_host = {
+                let inner = initial_state.get_inner(&mut loader);
+                let state = InstanceState::new(loader, inner);
+                TestHost::with_state(SmallRng::seed_from_u64(seed), state)
+            };
             let res = artifact.run(&mut test_host, name, &[]);
             match res {
                 Ok(_) => {
