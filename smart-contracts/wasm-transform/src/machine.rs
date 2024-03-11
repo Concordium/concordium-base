@@ -671,7 +671,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 unsafe { std::mem::transmute::<_, InternalOpcode>(instr) },
                 unsafe { std::mem::transmute::<_, InternalOpcode>(instr) } as u8
             );
-            // println!("{:?}", unsafe { std::mem::transmute::<_, InternalOpcode>(instr) });
+//             println!("{:?}", unsafe { std::mem::transmute::<_, InternalOpcode>(instr) });
             match unsafe { std::mem::transmute(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {

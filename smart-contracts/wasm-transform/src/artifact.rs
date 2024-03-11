@@ -1276,14 +1276,31 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         }
                     }
                 } else {
-                    // TODO: If LocalSet (LocalTee is a bit different) is
-                    // immediately after a provider short circuit it if possible.
-                    self.out.push(LocalSet);
-                    // else we have to retain the provider on the stack.
-                    let operand =
-                        self.providers_stack.last().context("Expect a value on the stack")?;
-                    self.push_loc(*operand);
-                    self.out.push_i32(idx); //target second
+                    match last_provide {
+                        // if we had to copy to a reserve location then it is not
+                        // possible to short circuit the instruction.
+                        // We need to insert an additional copy instruction.
+                        Some(back_loc) if reserve.is_none() => {
+                            // instead of inserting LocalSet, just tell the previous
+                            // instruction to copy the value directly into the local.
+                            self.out.back_patch(back_loc, idx as u32)?;
+
+                            // And clear the provider from the stack
+                            let operand = self
+                                .providers_stack
+                                .pop()
+                                .with_context(|| format!("Missing operand for push_consume"))?;
+                            self.dynamic_locations.reuse(operand);
+                            self.providers_stack.push(Provider::Local(idx));
+                        }
+                        _ => {
+                            self.out.push(LocalSet);
+                            let operand =
+                                self.providers_stack.last().context("Expect a value on the stack")?;
+                            self.push_loc(*operand);
+                            self.out.push_i32(idx); //target second
+                        }
+                    }
                 }
             }
             OpCode::GlobalGet(idx) => {
