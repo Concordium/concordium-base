@@ -654,7 +654,7 @@ pub(crate) type CredentialIndex = u8;
 #[cfg_attr(
     feature = "derive-serde",
     derive(serde::Deserialize, serde::Serialize),
-    serde(tag = "SignatureSchema", content = "Signature")
+    serde(tag = "signatureScheme", content = "signature")
 )]
 #[non_exhaustive]
 /// A cryptographic signature indexed by the signature scheme. Currently only a

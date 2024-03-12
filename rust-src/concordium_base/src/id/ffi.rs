@@ -545,8 +545,7 @@ fn ip_info_create_helper(
     desc_len: size_t,
 ) -> Result<*mut IpInfo<Bls12>, anyhow::Error> {
     // Identity.
-    let ip_identity =
-        IpIdentity::try_from(identity).context("Unable to create IpIdentity instance from u32.")?;
+    let ip_identity = IpIdentity::from(identity);
 
     // Identity provider verify key.
     let ip_verify_key = {
