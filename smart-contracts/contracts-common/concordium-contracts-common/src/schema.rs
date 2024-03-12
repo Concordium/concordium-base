@@ -774,7 +774,7 @@ impl Deserial for FunctionV2 {
         if matches!(idx, 1 | 2 | 5 | 6) {
             let _ = r.return_value.insert(source.get()?);
         }
-        if matches!(idx, 3 | 4 | 5 | 6) {
+        if matches!(idx, 3..=6) {
             let _ = r.error.insert(source.get()?);
         }
         Ok(r)

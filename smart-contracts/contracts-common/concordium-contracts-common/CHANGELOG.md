@@ -2,8 +2,10 @@
 
 ## Unreleased changes
 
-- `HashBytes::new` is now a `const` function.
 - Added compile-time function `.get_alias_unchecked` for `AccountAddress` that neglects the bound check.
+- Implement `serde::Serialize` and `serde::Deserialize` for `AccountSignature`, `CredentialSignature`, `Signature`, `SignatureEcdsaSecp256k1` and `SignatureEd25519` when feature `derive-serde` is enabled.
+- Set minimum supported Rust version to 1.73.
+- Change `HashBytes::new` is now a `const` function.
 
 ## concordium-contracts-common 9.0.0 (2024-01-22)
 

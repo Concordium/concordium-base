@@ -361,7 +361,7 @@ impl Statement<G1, AttributeKind> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
@@ -389,7 +389,7 @@ impl Statement<G1, AttributeKind> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
@@ -418,7 +418,7 @@ impl Statement<G1, AttributeKind> {
             attribute_tag: AttributeTag::from_str("dob").ok()?, // date of birth tag
             lower,
             upper,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
@@ -436,7 +436,7 @@ impl Statement<G1, AttributeKind> {
             attribute_tag: AttributeTag::from_str("idDocExpiresAt").ok()?, // doc expiry
             lower,
             upper,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
@@ -473,7 +473,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
             attribute_tag: tag,
             lower,
             upper,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInRange { statement });
@@ -487,7 +487,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         let statement = AttributeInSetStatement {
             attribute_tag: tag,
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInSet { statement });
@@ -501,7 +501,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         let statement = AttributeNotInSetStatement {
             attribute_tag: tag,
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeNotInSet { statement });
@@ -517,7 +517,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
             attribute_tag: AttributeTag::from_str("countryOfResidence").ok()?, /* country of
                                                                                 * residence */
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInSet { statement });
@@ -533,7 +533,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
             attribute_tag: AttributeTag::from_str("countryOfResidence").ok()?, /* country of
                                                                                 * residence */
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeNotInSet { statement });
@@ -548,7 +548,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         let statement = AttributeInSetStatement {
             attribute_tag: AttributeTag::from_str("idDocIssuer").ok()?,
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInSet { statement });
@@ -563,7 +563,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         let statement = AttributeNotInSetStatement {
             attribute_tag: AttributeTag::from_str("idDocIssuer").ok()?,
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeNotInSet { statement });
@@ -578,7 +578,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         let statement = AttributeInSetStatement {
             attribute_tag: AttributeTag::from_str("nationality").ok()?,
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeInSet { statement });
@@ -593,7 +593,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
         let statement = AttributeNotInSetStatement {
             attribute_tag: AttributeTag::from_str("nationality").ok()?,
             set,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         };
         self.statements
             .push(AtomicStatement::AttributeNotInSet { statement });

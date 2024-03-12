@@ -435,7 +435,7 @@ impl<T> BakerKeysPayload<T> {
             .prove(csprng, &mut RandomOracle::domain(&challenge));
 
         BakerKeysPayload {
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
             election_verify_key: baker_keys.election_verify.clone(),
             signature_verify_key: baker_keys.signature_verify.clone(),
             aggregation_verify_key: baker_keys.aggregation_verify.clone(),
@@ -1719,7 +1719,7 @@ impl<V> Deserial for BakerKeysPayload<V> {
         let proof_election = source.get()?;
         let proof_aggregation = source.get()?;
         Ok(Self {
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
             election_verify_key,
             signature_verify_key,
             aggregation_verify_key,

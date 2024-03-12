@@ -1,9 +1,9 @@
 [package]
 name = "concordium_base"
-version = "4.0.0"
+version = "4.1.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.73"
 license-file = "../../LICENSE"
 include = ["src/", "data/", "benches/"]
 readme = "./README.md"
@@ -24,7 +24,7 @@ anyhow = "1.0"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 libc = "0.2"
-chrono = {version = "0.4.24", features = ["serde"]} # the patch version is necessary since chrono adds new functionality in patch versions
+chrono = {version = "0.4.35", features = ["serde"]} # the patch version is necessary since chrono adds new functionality in patch versions
 serde_with = "3"
 ed25519-dalek = {version = "2.0", features = ["rand_core"]}
 byteorder = "1.3"
