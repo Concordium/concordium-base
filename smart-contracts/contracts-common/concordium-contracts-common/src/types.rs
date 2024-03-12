@@ -1039,11 +1039,9 @@ impl AccountAddress {
 
     /// Get the `n-th` alias of an address. There are 2^24 possible aliases.
     /// If the counter is `>= 2^24` then this function will return [`None`].
-    pub fn get_alias(&self, counter: u32) -> Option<Self> {
+    pub const fn get_alias(&self, counter: u32) -> Option<Self> {
         if counter < (1 << 24) {
-            let mut data = self.0;
-            data[29..].copy_from_slice(&counter.to_be_bytes()[1..]);
-            Some(Self(data))
+            Some(self.get_alias_unchecked(counter))
         } else {
             None
         }
@@ -1055,7 +1053,7 @@ impl AccountAddress {
     /// 2^24 and 0 will give the same alias.
     pub const fn get_alias_unchecked(&self, counter: u32) -> Self {
         let mut data = self.0;
-        let counter_bytes = counter.to_be_bytes();
+        let counter_bytes = counter.to_le_bytes();
 
         data[29] = counter_bytes[1];
         data[30] = counter_bytes[2];
