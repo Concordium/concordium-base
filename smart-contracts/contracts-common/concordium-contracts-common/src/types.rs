@@ -1055,9 +1055,9 @@ impl AccountAddress {
         let mut data = self.0;
         let counter_bytes = counter.to_le_bytes();
 
-        data[29] = counter_bytes[1];
-        data[30] = counter_bytes[2];
-        data[31] = counter_bytes[3];
+        data[29] = counter_bytes[2];
+        data[30] = counter_bytes[1];
+        data[31] = counter_bytes[0];
 
         Self(data)
     }
