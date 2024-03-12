@@ -851,6 +851,19 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
         }
         Ok(None)
     }
+
+    #[inline(always)]
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    #[inline(always)]
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        host::track_call(&mut self.activation_frames)
+    }
+
+    #[inline(always)]
+    fn track_return(&mut self) { host::track_return(&mut self.activation_frames) }
 }
 
 impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImports>
@@ -952,6 +965,19 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
         }
         Ok(None)
     }
+
+    #[inline(always)]
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    #[inline(always)]
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        host::track_call(&mut self.activation_frames)
+    }
+
+    #[inline(always)]
+    fn track_return(&mut self) { host::track_return(&mut self.activation_frames) }
 }
 
 /// Collection of information relevant to invoke an init-function.

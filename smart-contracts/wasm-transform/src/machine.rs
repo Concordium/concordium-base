@@ -55,11 +55,11 @@ pub trait Host<I> {
         stack: &mut RuntimeStack,
     ) -> RunResult<Option<Self::Interrupt>>;
 
-    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> { unimplemented!() }
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()>;
 
-    fn track_call(&mut self) -> RunResult<()> { unimplemented!() }
+    fn track_call(&mut self) -> RunResult<()>;
 
-    fn track_return(&mut self) { unimplemented!() }
+    fn track_return(&mut self);
 }
 
 /// Result of execution. Runtime exceptions are returned as `Err(_)`.

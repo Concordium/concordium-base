@@ -48,6 +48,12 @@ impl<I> Host<I> for TestHost {
     ) -> crate::machine::RunResult<Option<Self::Interrupt>> {
         unimplemented!("No imports are allowed, so this can never be called in tests.")
     }
+
+    fn tick_energy(&mut self, _energy: u64) -> crate::machine::RunResult<()> { unimplemented!() }
+
+    fn track_call(&mut self) -> crate::machine::RunResult<()> { unimplemented!() }
+
+    fn track_return(&mut self) { unimplemented!() }
 }
 
 #[test]
