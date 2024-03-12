@@ -60,8 +60,6 @@ module Concordium.Types.Accounts (
     accountBakerInfo,
     -- | The pending change (if any) to the baker's status.
     bakerPendingChange,
-    serializeAccountBaker,
-    deserializeAccountBaker,
     AccountDelegation (..),
     delegationIdentity,
     delegationStakedAmount,
@@ -324,28 +322,6 @@ instance HasBakerInfo (AccountBaker av) where
 
 instance (AVSupportsDelegation av) => HasBakerPoolInfo (AccountBaker av) where
     bakerPoolInfo = accountBakerInfo . bakerPoolInfo
-
--- | Serialize an 'AccountBaker'
-serializeAccountBaker :: (IsAccountVersion av) => Putter (AccountBaker av)
-serializeAccountBaker AccountBaker{..} = do
-    put _stakedAmount
-    put _stakeEarnings
-    put _accountBakerInfo
-    put _bakerPendingChange
-
--- | Deserialize an 'AccountBaker'.
-deserializeAccountBaker :: (IsAccountVersion av) => Get (AccountBaker av)
-deserializeAccountBaker = do
-    _stakedAmount <- get
-    _stakeEarnings <- get
-    _accountBakerInfo <- get
-    _bakerPendingChange <- get
-    -- If there is a pending reduction, check that it is actually a reduction.
-    case _bakerPendingChange of
-        ReduceStake amt _
-            | amt > _stakedAmount -> fail "Pending stake reduction is not a reduction in stake"
-        _ -> return ()
-    return AccountBaker{..}
 
 data AccountDelegation (av :: AccountVersion) where
     AccountDelegationV1 ::
