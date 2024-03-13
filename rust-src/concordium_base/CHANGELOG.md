@@ -1,7 +1,6 @@
 ## Unreleased changes
 
 - Set minimum supported Rust version to 1.73.
-- Set `chrono` to version `0.4.35`.
 - Make fields of CIS4 events public.
 
 ## 4.0.0 (2024-01-22)

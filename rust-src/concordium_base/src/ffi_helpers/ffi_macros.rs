@@ -11,6 +11,7 @@ macro_rules! macro_derive_binary {
         extern "C" fn $function_name(one_ptr: *$mod $type, two_ptr: *$mod $type) -> u8 {
             let one = from_ptr!(one_ptr);
             let two = from_ptr!(two_ptr);
+            #[allow(clippy::redundant_closure_call)]
             u8::from($f(one, two))
         }
     };
@@ -95,6 +96,7 @@ macro_rules! macro_derive_from_bytes {
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = from_bytes::<$type,_>(&mut Cursor::new(&bytes));
             match e {
+                #[allow(clippy::redundant_closure_call)]
                 Ok(r) => $fr(r),
                 Err(_) => $val,
             }
@@ -128,6 +130,7 @@ macro_rules! macro_derive_from_bytes_no_cursor {
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = $from(&bytes);
             match e {
+                #[allow(clippy::redundant_closure_call)]
                 Ok(r) => $fr(r),
                 Err(_) => $val,
             }

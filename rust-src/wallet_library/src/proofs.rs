@@ -1,3 +1,4 @@
+use crate::statement::{AcceptableRequest, RequestCheckError, WalletConfig};
 use concordium_base::{
     common::base16_decode,
     id::{constants, types::*},
@@ -41,8 +42,18 @@ impl Web3IdProofInput {
     }
 }
 
+impl AcceptableRequest<constants::ArCurve, Web3IdAttribute> for Web3IdProofInput {
+    fn acceptable_request(
+        &self,
+        config: &WalletConfig<constants::ArCurve, Web3IdAttribute>,
+    ) -> Result<(), RequestCheckError> {
+        self.request.acceptable_request(config)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::test_helpers::read_web3_id_request;
     use concordium_base::web3id::Presentation;

@@ -153,48 +153,6 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
     finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
 migrateChainParameters StateMigrationParametersP6ToP7{} cps = cps
 
--- | Apply a state migration to an 'AccountStake' structure.
---
---  [P3 to P4]: bakers have the default baker pool information applied to them, where the pool status
---    and commission rates are given by the migration parameters; pending changes are converted from
---    epoch times to absolute times.
-migrateAccountStake ::
-    forall oldpv pv.
-    StateMigrationParameters oldpv pv ->
-    AccountStake (AccountVersionFor oldpv) ->
-    AccountStake (AccountVersionFor pv)
-migrateAccountStake StateMigrationParametersTrivial = id
-migrateAccountStake StateMigrationParametersP1P2 = id
-migrateAccountStake StateMigrationParametersP2P3 = id
-migrateAccountStake (StateMigrationParametersP3ToP4 migration) =
-    \case
-        AccountStakeNone -> AccountStakeNone
-        AccountStakeBaker AccountBaker{_accountBakerInfo = BakerInfoExV0 bi, ..} ->
-            AccountStakeBaker
-                AccountBaker
-                    { _accountBakerInfo = BakerInfoExV1 bi (P4.defaultBakerPoolInfo migration),
-                      _bakerPendingChange = migratePendingChangeEffective migration <$> _bakerPendingChange,
-                      ..
-                    }
-migrateAccountStake StateMigrationParametersP4ToP5 =
-    \case
-        AccountStakeNone -> AccountStakeNone
-        AccountStakeBaker AccountBaker{_accountBakerInfo = BakerInfoExV1{..}, ..} ->
-            AccountStakeBaker
-                AccountBaker
-                    { _accountBakerInfo = BakerInfoExV1{..},
-                      _bakerPendingChange = coercePendingChangeEffectiveV1 <$> _bakerPendingChange,
-                      ..
-                    }
-        AccountStakeDelegate AccountDelegationV1{..} ->
-            AccountStakeDelegate
-                AccountDelegationV1
-                    { _delegationPendingChange = coercePendingChangeEffectiveV1 <$> _delegationPendingChange,
-                      ..
-                    }
-migrateAccountStake StateMigrationParametersP5ToP6{} = id
-migrateAccountStake StateMigrationParametersP6ToP7{} = id
-
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
 migratePendingChangeEffective :: P4.StateMigrationData -> PendingChangeEffective 'AccountV0 -> PendingChangeEffective 'AccountV1
