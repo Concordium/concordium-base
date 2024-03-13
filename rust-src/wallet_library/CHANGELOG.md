@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added trait `AcceptableRequest` with method `acceptable_request`, and implemented it for `web3IdProofInput`, request and statements.
 - Added method `create_web3_id_proof` for creating web3Id proofs.
 
 ## [0.2.0]

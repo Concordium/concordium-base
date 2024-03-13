@@ -2096,7 +2096,7 @@ pub fn impl_deletable(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         }
         syn::Data::Enum(ref data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
-            for (_, variant) in data.variants.iter().enumerate() {
+            for variant in data.variants.iter() {
                 let (field_names, pattern) = match variant.fields {
                     syn::Fields::Named(_) => {
                         let field_names: Vec<_> = variant
