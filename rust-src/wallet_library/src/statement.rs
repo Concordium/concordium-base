@@ -164,8 +164,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> AcceptableRequest<C, Attribu
     }
 }
 
-// Note that this is an implementation only for the account statement, the tag
-// is AttributeTag.
 impl<C: Curve, TagType: AttributeTagType, AttributeType: Attribute<C::Scalar>>
     AcceptableAtomicStatement<C, TagType, AttributeType>
     for AtomicStatement<C, TagType, AttributeType>
@@ -231,7 +229,7 @@ mod tests {
     use std::{collections::BTreeSet, marker::PhantomData, str::FromStr};
 
     use super::*;
-    use crate::default_wallet_config::get_default_wallet_config;
+    use crate::default_wallet_config::default_wallet_config;
     use concordium_base::{
         base::CredentialRegistrationID,
         id::{
@@ -254,8 +252,7 @@ mod tests {
             },
         };
         assert!(matches!(
-            statement
-                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
+            statement.acceptable_atomic_statement(default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::RangeMinMaxError)
         ));
     }
@@ -271,8 +268,7 @@ mod tests {
             },
         };
         assert!(matches!(
-            statement
-                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
+            statement.acceptable_atomic_statement(default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::InvalidValue(_))
         ));
     }
@@ -296,12 +292,12 @@ mod tests {
 
         assert!(matches!(
             bad_statement
-                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
+                .acceptable_atomic_statement(default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::InvalidValue(_))
         ));
         assert!(
             good_statement
-                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref())
+                .acceptable_atomic_statement(default_wallet_config().identity_rules.as_ref())
                 .is_ok(),
             "Nationality statement must be country code"
         );
@@ -321,7 +317,7 @@ mod tests {
         };
         assert!(
             statement
-                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref())
+                .acceptable_atomic_statement(default_wallet_config().identity_rules.as_ref())
                 .is_ok(),
             "idDocIssuer should be allowed ISO3166-2 values"
         );
@@ -356,13 +352,13 @@ mod tests {
         };
         assert!(
             dob_statement
-                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref())
+                .acceptable_atomic_statement(default_wallet_config().identity_rules.as_ref())
                 .is_ok(),
             "Range statement should be allowed on tag 3 (dob)"
         );
         assert!(matches!(
             name_statement
-                .acceptable_atomic_statement(get_default_wallet_config().identity_rules.as_ref()),
+                .acceptable_atomic_statement(default_wallet_config().identity_rules.as_ref()),
             Err(RequestCheckError::IllegalRangeTag(_))
         ));
     }
@@ -392,10 +388,14 @@ mod tests {
             },
         };
 
-        let statement: CredentialStatement<constants::ArCurve, constants::AttributeKind> = CredentialStatement::Account { network: Network::Testnet, cred_id: CredentialRegistrationID::from_str("8a3a87f3f38a7a507d1e85dc02a92b8bcaa859f5cf56accb3c1bc7c40e1789b4933875a38dd4c0646ca3e940a02c42d8")?, statement: vec![statement1, statement2]};
+        let statement: CredentialStatement<constants::ArCurve, constants::AttributeKind> = CredentialStatement::Account {
+            network: Network::Testnet,
+            cred_id: CredentialRegistrationID::from_str("8a3a87f3f38a7a507d1e85dc02a92b8bcaa859f5cf56accb3c1bc7c40e1789b4933875a38dd4c0646ca3e940a02c42d8")?,
+            statement: vec![statement1, statement2]
+        };
 
         assert!(matches!(
-            statement.acceptable_request(&get_default_wallet_config()),
+            statement.acceptable_request(&default_wallet_config()),
             Err(RequestCheckError::DuplicateTag)
         ));
         Ok(())

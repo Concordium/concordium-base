@@ -69,9 +69,10 @@ pub const ALLOWED_IDENTITY_SET_TAGS: [AttributeTag; 4] = [
 ];
 
 /// Returns the `WalletConfig` that is used by our wallet implementations for
-/// identity proofs. Note that it does not contain any rules for web3
-/// statements.
-pub fn get_default_wallet_config() -> WalletConfig<'static, constants::ArCurve, AttributeKind> {
+/// identity proofs. Note that it does not contain any rules for web3Id
+/// statements, so when checking web3Id statements, it will only check basic
+/// rules.
+pub fn default_wallet_config() -> WalletConfig<'static, constants::ArCurve, AttributeKind> {
     WalletConfig {
         identity_rules: Some(WalletConfigRules::<_, AttributeTag, _> {
             range_tags:      ALLOWED_IDENTITY_RANGE_TAGS.into(),
