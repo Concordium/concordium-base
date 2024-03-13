@@ -179,4 +179,4 @@ migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
     RemoveStake eff -> RemoveStake (migratePendingChangeEffective migration eff)
 migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1
 migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
-migrateStakePendingChange StateMigrationParametersP6ToP7{} = id
+migrateStakePendingChange StateMigrationParametersP6ToP7{} = const NoChange

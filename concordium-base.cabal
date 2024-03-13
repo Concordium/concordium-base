@@ -313,6 +313,7 @@ test-suite test
       Types.AddressesSpec
       Types.AmountFraction
       Types.AmountSpec
+      Types.Cooldown
       Types.ParametersSpec
       Types.PayloadSerializationSpec
       Types.TransactionSerializationSpec

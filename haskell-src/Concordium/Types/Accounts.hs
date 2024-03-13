@@ -68,6 +68,10 @@ module Concordium.Types.Accounts (
     delegationStakeEarnings,
     delegationTarget,
     delegationPendingChange,
+    CooldownTime (..),
+    CooldownTimeCode (..),
+    encodeCooldownTime,
+    decodeCooldownTime,
     AccountStake (..),
     AccountStakeHash (..),
     getAccountStakeHash,
@@ -83,9 +87,14 @@ module Concordium.Types.Accounts (
 
 import Data.Aeson
 import Data.Aeson.Types (Parser)
+import qualified Data.Bits as Bits
+import Data.Bool.Singletons
 import qualified Data.Map as Map
+import Data.Maybe
 import Data.Serialize
+import Data.Singletons
 import Data.Time
+import Data.Word
 import Lens.Micro.Platform (Lens', lens, makeClassy, makeLenses, (^.))
 
 import Concordium.Common.Version
@@ -253,12 +262,16 @@ instance (AVSupportsDelegation av) => HasBakerPoolInfo (BakerInfoEx av) where
 --  this time.)
 --
 --  For 'AccountV0', this is specified as an 'Epoch', which is an absolute number of epochs since
---  the latest genesis.  For 'AccountV1' (onwards), this is an absolute timestamp. This latter choice
---  is preferable, as it does not need to be changed on a protocol update to account for the
---  resetting of the Epoch counter.
+--  the latest genesis.  For 'AccountV1' and 'AccountV2', this is an absolute timestamp. This latter
+--  choice is preferable, as it does not need to be changed on a protocol update to account for the
+--  resetting of the Epoch counter.  For 'AccountV3' (onwards) the type has no values, as pending
+--  changes are replaced by inactive stake.
 data PendingChangeEffective (av :: AccountVersion) where
     PendingChangeEffectiveV0 :: !Epoch -> PendingChangeEffective 'AccountV0
-    PendingChangeEffectiveV1 :: (AVSupportsDelegation av) => !Timestamp -> PendingChangeEffective av
+    PendingChangeEffectiveV1 ::
+        (AVSupportsDelegation av, SupportsFlexibleCooldown av ~ 'False) =>
+        !Timestamp ->
+        PendingChangeEffective av
 
 deriving instance Eq (PendingChangeEffective av)
 deriving instance Ord (PendingChangeEffective av)
@@ -269,7 +282,9 @@ instance (IsAccountVersion av) => Serialize (PendingChangeEffective av) where
     put (PendingChangeEffectiveV1 timestamp) = put timestamp
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> PendingChangeEffectiveV0 <$> get
-        SAVDelegationSupported -> PendingChangeEffectiveV1 <$> get
+        SAVDelegationSupported -> case sSupportsFlexibleCooldown (sing @av) of
+            SFalse -> PendingChangeEffectiveV1 <$> get
+            STrue -> fail "PendingChangeEffective is not compatible with flexible cooldown"
 
 -- | Get the 'Timestamp' from a 'PendingChangeEffective' if the account version supports delegation.
 pendingChangeEffectiveTimestamp :: (AVSupportsDelegation av) => PendingChangeEffective av -> Timestamp
@@ -277,7 +292,10 @@ pendingChangeEffectiveTimestamp :: (AVSupportsDelegation av) => PendingChangeEff
 pendingChangeEffectiveTimestamp (PendingChangeEffectiveV1 ts) = ts
 
 -- | Convert a 'PendingChangeEffective' between account versions that support delegation.
-coercePendingChangeEffectiveV1 :: (AVSupportsDelegation av1, AVSupportsDelegation av2) => PendingChangeEffective av1 -> PendingChangeEffective av2
+coercePendingChangeEffectiveV1 ::
+    (AVSupportsDelegation av1, AVSupportsDelegation av2, SupportsFlexibleCooldown av2 ~ 'False) =>
+    PendingChangeEffective av1 ->
+    PendingChangeEffective av2
 coercePendingChangeEffectiveV1 (PendingChangeEffectiveV1 ts) = PendingChangeEffectiveV1 ts
 
 -- | Pending changes to the baker or delegation associated with an account.
@@ -401,6 +419,147 @@ instance forall av. (IsAccountVersion av, AVSupportsDelegation av) => Serialize 
         _delegationPendingChange <- get
         return AccountDelegationV1{..}
 
+-- | Records
+data CooldownTime
+    = -- | In active cooldown. Timestamp must be less than 2^63
+      CooldownTimestamp !Timestamp
+    | -- | Will enter cooldown at next epoch, with the specified cooldown expiry timestamp.
+      --  Timestamp must be less than 2^62 - 1
+      PreCooldownTS !Timestamp
+    | -- | Will enter cooldown at next epoch, with the cooldown determined by the cooldown duration.
+      PreCooldown
+    | -- | Will enter cooldown at payday after next epoch, with the specified cooldown expiry
+      --  timestamp. Timestamp must be less than 2^62 - 1
+      PrePreCooldownTS !Timestamp
+    | -- | Will enter cooldown at payday after next epoch, with the cooldown determined by the
+      -- cooldown duration.
+      PrePreCooldown
+    deriving (Eq, Ord, Show)
+
+-- | This type encodes a `CooldownTime` as a 64-bit integer. The encoding is designed to preserve
+--  the ordering. Note that not all timestamps are representable, but it should be over a hundred
+--  million years before that becomes relevant.  The table below shows the coding:
+--
+--   +-----------------------+-----------------------------------------+
+--   | @theCooldownTimeCode@ | `CooldownTime`                          |
+--   +=======================+=========================================+
+--   | @0x0000000000000000@  | @CooldownTimestamp 0x0000000000000000@  |
+--   +-----------------------+-----------------------------------------+
+--   | ...                   | ...                                     |
+--   +-----------------------+-----------------------------------------+
+--   | @0x7fffffffffffffff@  | @CooldownTimestamp 0x7fffffffffffffff@  |
+--   +-----------------------+-----------------------------------------+
+--   | @0x8000000000000000@  | @PreCooldownTS 0x0000000000000000@      |
+--   +-----------------------+-----------------------------------------+
+--   | ...                   | ...                                     |
+--   +-----------------------+-----------------------------------------+
+--   | @0xbffffffffffffffe@  | @PreCooldownTS 0x3ffffffffffffffe@      |
+--   +-----------------------+-----------------------------------------+
+--   | @0xbfffffffffffffff@  | @PreCooldown@                           |
+--   +-----------------------+-----------------------------------------+
+--   | @0xc000000000000000@  | @PrePreCooldownTS 0x0000000000000000@   |
+--   +-----------------------+-----------------------------------------+
+--   | ...                   | ...                                     |
+--   +-----------------------+-----------------------------------------+
+--   | @0xfffffffffffffffe@  | @PrePreCooldownTS 0x3ffffffffffffffe@   |
+--   +-----------------------+-----------------------------------------+
+--   | @0xffffffffffffffff@  | @PrePreCooldown@                        |
+--   +-----------------------+-----------------------------------------+
+newtype CooldownTimeCode = CooldownTimeCode {theCooldownTimeCode :: Word64}
+    deriving (Eq, Ord, Show)
+
+maxCooldownTimestampCode :: CooldownTimeCode
+maxCooldownTimestampCode = CooldownTimeCode 0x7fffffffffffffff
+
+encodeCooldownTime :: CooldownTime -> CooldownTimeCode
+encodeCooldownTime (CooldownTimestamp ts)
+    | ts < 0x8000000000000000 = CooldownTimeCode $ tsMillis ts
+encodeCooldownTime (PreCooldownTS ts)
+    | ts < 0x3fffffffffffffff = CooldownTimeCode $ tsMillis ts Bits..|. 0x8000000000000000
+encodeCooldownTime PreCooldown = CooldownTimeCode 0xbfffffffffffffff
+encodeCooldownTime (PrePreCooldownTS ts)
+    | ts < 0x3fffffffffffffff = CooldownTimeCode $ tsMillis ts Bits..|. 0xc000000000000000
+encodeCooldownTime PrePreCooldown = CooldownTimeCode 0xffffffffffffffff
+encodeCooldownTime _ = error "CooldownTime is not representable"
+
+decodeCooldownTime :: CooldownTimeCode -> CooldownTime
+decodeCooldownTime (CooldownTimeCode code) =
+    if Bits.testBit code 63
+        then
+            if Bits.testBit code 62
+                then
+                    if code == 0xffffffffffffffff
+                        then PrePreCooldown
+                        else PrePreCooldownTS . Timestamp $! code Bits..&. 0x3fffffffffffffff
+                else
+                    if code == 0xbfffffffffffffff
+                        then PreCooldown
+                        else PreCooldownTS . Timestamp $! code Bits..&. 0x3fffffffffffffff
+        else CooldownTimestamp (Timestamp code)
+
+instance Serialize CooldownTime where
+    put = putWord64be . theCooldownTimeCode . encodeCooldownTime
+    get = decodeCooldownTime . CooldownTimeCode <$> getWord64be
+
+data CooldownQueue (av :: AccountVersion) where
+    EmptyCooldownQueue :: CooldownQueue av
+    CooldownQueue ::
+        (SupportsFlexibleCooldown av ~ 'True) =>
+        -- | Entries in the map must be non-zero amounts, and the map must be non-empty.
+        Map.Map CooldownTimeCode Amount ->
+        CooldownQueue av
+
+-- | Process all cooldowns that expire at or before the given timestamp.
+--  If there are no such cooldowns, then 'Nothing' is returned.
+--  Otherwise, the total amount exiting cooldown and the remaining queue are returned.
+processCooldowns :: Timestamp -> CooldownQueue av -> Maybe (Amount, CooldownQueue av)
+processCooldowns _ EmptyCooldownQueue = Nothing
+processCooldowns ts (CooldownQueue queue)
+    | freeAmount == 0 = Nothing
+    | otherwise = Just (freeAmount, remainder)
+  where
+    freeAmount = sum free + sum bonus
+    (free, bonus, keep) = Map.splitLookup (encodeCooldownTime (CooldownTimestamp ts)) queue
+    remainder
+        | null keep = EmptyCooldownQueue
+        | otherwise = CooldownQueue keep
+
+processPreCooldown :: Timestamp -> CooldownQueue av -> Maybe (CooldownQueue av)
+processPreCooldown _ EmptyCooldownQueue = Nothing
+processPreCooldown ts (CooldownQueue queue)
+    | null precooldowns = Nothing
+    | otherwise = Just . CooldownQueue $ Map.unionsWith (+) [cooldowns, newCooldowns, preprecooldowns]
+  where
+    (cooldowns, rest) = Map.spanAntitone (<= maxCooldownTimestampCode) queue
+    (precooldowns, preprecooldowns) = Map.spanAntitone (<= encodeCooldownTime PreCooldown) rest
+    newCooldowns = Map.mapKeysWith (+) f precooldowns
+    f c@(CooldownTimeCode code)
+        | c == encodeCooldownTime PreCooldown = CooldownTimeCode $ tsMillis ts
+        | otherwise = CooldownTimeCode (Bits.clearBit code 63)
+
+isCooldownQueueEmpty :: CooldownQueue av -> Bool
+isCooldownQueueEmpty EmptyCooldownQueue = True
+isCooldownQueueEmpty _ = False
+
+nextCooldownTime :: CooldownQueue av -> Maybe Timestamp
+nextCooldownTime EmptyCooldownQueue = Nothing
+nextCooldownTime (CooldownQueue queue) = case decodeCooldownTime minEntry of
+    CooldownTimestamp ts -> Just ts
+    _ -> Nothing
+  where
+    -- This is safe because 'CooldownQueue' requires @queue@ to be non-empty.
+    (minEntry, _) = Map.findMin queue
+
+hasPreCooldown :: CooldownQueue av -> Bool
+hasPreCooldown EmptyCooldownQueue = False
+hasPreCooldown (CooldownQueue queue) = case Map.lookupGT maxCooldownTimestampCode queue of
+    Just (x, _) -> x <= encodeCooldownTime PreCooldown
+    Nothing -> False
+
+hasPrePreCooldown :: CooldownQueue av -> Bool
+hasPrePreCooldown EmptyCooldownQueue = False
+hasPrePreCooldown (CooldownQueue queue) = isJust $ Map.lookupGT (encodeCooldownTime PreCooldown) queue
+
 -- | Whether an account stakes as a baker, delegates to a baker, or neither.
 data AccountStake (av :: AccountVersion) where
     AccountStakeNone :: AccountStake av
@@ -462,6 +621,11 @@ accountStakeNoneHashV2 :: AccountStakeHash 'AccountV2
 {-# NOINLINE accountStakeNoneHashV2 #-}
 accountStakeNoneHashV2 = AccountStakeHash $ Hash.hash "A2NoStake"
 
+-- | Hash of 'AccountStakeNone' in 'AccountV3'.
+accountStakeNoneHashV3 :: AccountStakeHash 'AccountV3
+{-# NOINLINE accountStakeNoneHashV3 #-}
+accountStakeNoneHashV3 = AccountStakeHash $ Hash.hash "A3NoStake"
+
 -- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
@@ -488,12 +652,37 @@ instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) wher
                             put _delegationPendingChange
                         )
 
+-- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+--  This is since the stake is accounted for separately in the @AccountHash@.
+instance HashableTo (AccountStakeHash 'AccountV3) (AccountStake 'AccountV3) where
+    getHash AccountStakeNone = accountStakeNoneHashV3
+    getHash (AccountStakeBaker AccountBaker{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A3Baker"
+                    <> runPutLazy
+                        ( do
+                            put _stakeEarnings
+                            put _accountBakerInfo
+                        )
+    getHash (AccountStakeDelegate AccountDelegationV1{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A3Delegation"
+                    <> runPutLazy
+                        ( do
+                            put _delegationIdentity
+                            put _delegationStakeEarnings
+                            put _delegationTarget
+                        )
+
 -- | Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
 getAccountStakeHash :: forall av. (IsAccountVersion av) => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
     SAccountV0 -> getHash
     SAccountV1 -> getHash
     SAccountV2 -> getHash
+    SAccountV3 -> getHash
 
 -- | A representation type (used for queries) for the staking status of an account.
 --  This representation is agnostic to the protocol version and represents pending change times

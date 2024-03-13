@@ -106,6 +106,8 @@ module Concordium.Types.ProtocolVersion (
     --    * 'AccountV1' is used in 'P4'. Adds stake delegation.
     --
     --    * 'AccountV2' is used in 'P5' and 'P6'. Modifies the hash calculation.
+    --
+    --    * 'AccountV3' is used in 'P7'. Modifies the stake cooldown behaviour.
     AccountVersion (..),
     -- | Singleton type corresponding to 'AccountVersion'.
     SAccountVersion (..),
@@ -161,6 +163,18 @@ module Concordium.Types.ProtocolVersion (
     PVSupportsDelegation,
     delegationSupport,
     protocolSupportsDelegation,
+
+    -- * Flexible cooldown support
+
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake.
+    supportsFlexibleCooldown,
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake (at the type level).
+    SupportsFlexibleCooldown,
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake (on singletons).
+    sSupportsFlexibleCooldown,
 
     -- * Block hash version
 
@@ -258,8 +272,10 @@ $( singletons
               AccountV0
             | -- \|Account version used in P4. Adds stake delegation.
               AccountV1
-            | -- \|Account version used in P5. Modifies hashing.
+            | -- \|Account version used in P5, and P6. Modifies hashing.
               AccountV2
+            | -- \|Account version used from P7. Modifies stake cooldown.
+              AccountV3
 
         -- \|'AccountVersion' associated with a 'ProtocolVersion'.
         accountVersionFor :: ProtocolVersion -> AccountVersion
@@ -269,7 +285,7 @@ $( singletons
         accountVersionFor P4 = AccountV1
         accountVersionFor P5 = AccountV2
         accountVersionFor P6 = AccountV2
-        accountVersionFor P7 = AccountV2
+        accountVersionFor P7 = AccountV3
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
@@ -317,6 +333,13 @@ $( singletons
         supportsDelegation AccountV0 = DelegationNotSupported AccountV0
         supportsDelegation AccountV1 = DelegationSupported AccountV1
         supportsDelegation AccountV2 = DelegationSupported AccountV2
+        supportsDelegation AccountV3 = DelegationSupported AccountV3
+
+        supportsFlexibleCooldown :: AccountVersion -> Bool
+        supportsFlexibleCooldown AccountV0 = False
+        supportsFlexibleCooldown AccountV1 = False
+        supportsFlexibleCooldown AccountV2 = False
+        supportsFlexibleCooldown AccountV3 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -513,6 +536,7 @@ delegationSupport = case accountVersion @av of
     SAccountV0 -> SAVDelegationNotSupported
     SAccountV1 -> SAVDelegationSupported
     SAccountV2 -> SAVDelegationSupported
+    SAccountV3 -> SAVDelegationSupported
 
 -- | Whether the protocol supports delegation functionality.
 protocolSupportsDelegation :: SProtocolVersion pv -> Bool
