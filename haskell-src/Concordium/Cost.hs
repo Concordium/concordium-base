@@ -285,3 +285,13 @@ contractInstanceCheckAccountSignatureCost ::
     Int ->
     Energy
 contractInstanceCheckAccountSignatureCost size numSigs = fromIntegral numSigs * fromIntegral (100 + size `div` 10)
+
+-- | The cost of querying the contract module reference from a smart contract instance.
+contractInstanceQueryContractModuleReferenceCost :: Energy
+contractInstanceQueryContractModuleReferenceCost = 200
+
+-- | The cost of querying the contract module name from a smart contract instance.
+--  While the length of a smart contract name is variable, it is at most 100 characters, so there
+--  is no real benefit to varying the cost based on the length.
+contractInstanceQueryContractNameCost :: Energy
+contractInstanceQueryContractNameCost = 200

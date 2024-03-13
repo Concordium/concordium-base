@@ -2,7 +2,6 @@ use anyhow::bail;
 use byteorder::ReadBytesExt;
 
 use concordium_contracts_common::{constants::SHA256, hashes::HashBytes, NonZeroThresholdU8};
-use std::convert::TryFrom;
 
 use super::serialize::*;
 
@@ -55,7 +54,7 @@ impl Deserial for Signature {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
         let mut buf = [0u8; SIGNATURE_LENGTH];
         source.read_exact(&mut buf)?;
-        Ok(Signature::try_from(buf)?)
+        Ok(Signature::from(buf))
     }
 }
 

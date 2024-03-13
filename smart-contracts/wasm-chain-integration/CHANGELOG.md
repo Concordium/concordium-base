@@ -2,6 +2,12 @@
 
 ## Unreleased changes
 
+- Support for querying the module reference and contract name of an instance via
+  `invoke` (for protocol version 7). These are enabled by a new
+  `support_contract_inspection_queries` parameter in `ReceiveParams` and
+  `call_receive_v1`. When enabled, `invoke` can generate the new interrupt
+  types `QueryContractModuleReference` and `QueryContractName`.
+
 ## concordium-smart-contract-engine 4.0.0 (2024-01-22)
 
 - Add a `branch_statistics` function to get insight into smart contract state

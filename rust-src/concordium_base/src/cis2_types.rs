@@ -280,7 +280,7 @@ impl Deserial for TokenAmount {
 #[serde(try_from = "String", into = "String")]
 pub struct TokenId(Vec<u8>);
 
-/// Error for constructing a new [`TokenId`](TokenId).
+/// Error for constructing a new [`TokenId`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Token ID too large. Maximum allowed size is 255 bytes. {0} bytes were provided.")]
 pub struct NewTokenIdError(usize);
@@ -421,7 +421,7 @@ pub struct AdditionalData {
     data: Vec<u8>,
 }
 
-/// Error for constructing a new [`AdditionalData`](AdditionalData).
+/// Error for constructing a new [`AdditionalData`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid byte length, must be withing a length of u16::MAX.")]
 pub struct NewAdditionalDataError;
@@ -451,13 +451,13 @@ impl Serial for AdditionalData {
     }
 }
 
-/// Error for constructing a [`AdditionalData`](AdditionalData) from a string.
+/// Error for constructing a [`AdditionalData`] from a string.
 #[derive(Debug, Error)]
 pub enum FromStrAdditionalDataError {
     /// Invalid hex string was provided.
     #[error("Failed to parse hex encoding: {0}")]
     InvalidHex(#[from] hex::FromHexError),
-    /// Unable to construct  [`AdditionalData`](AdditionalData).
+    /// Unable to construct  [`AdditionalData`].
     #[error("Failed constructing data: {0}")]
     InvalidData(#[from] NewAdditionalDataError),
 }
@@ -524,7 +524,7 @@ impl Serial for Transfer {
     }
 }
 
-/// Error for constructing a new [`TransferParams`](TransferParams).
+/// Error for constructing a new [`TransferParams`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of transfers, must be withing a length of u16::MAX.")]
 pub struct NewTransferParamsError;
@@ -615,7 +615,7 @@ impl Serial for UpdateOperator {
 #[derive(Debug, AsRef, Clone, Into)]
 pub struct UpdateOperatorParams(Vec<UpdateOperator>);
 
-/// Error for constructing a new [`UpdateOperatorParams`](UpdateOperatorParams).
+/// Error for constructing a new [`UpdateOperatorParams`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of operator updates, must be withing a length of u16::MAX.")]
 pub struct NewUpdateOperatorParamsError;
@@ -669,7 +669,7 @@ impl Serial for BalanceOfQuery {
 #[derive(Debug, Clone, AsRef, Into)]
 pub struct BalanceOfQueryParams(Vec<BalanceOfQuery>);
 
-/// Error for constructing a new [`BalanceOfQueryParams`](BalanceOfQueryParams).
+/// Error for constructing a new [`BalanceOfQueryParams`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of queries, must be withing a length of u16::MAX.")]
 pub struct NewBalanceOfQueryParamsError;
@@ -707,7 +707,7 @@ impl Serial for BalanceOfQueryParams {
 pub struct BalanceOfQueryResponse(Vec<TokenAmount>);
 
 /// Error for constructing a new
-/// [`BalanceOfQueryResponse`](BalanceOfQueryResponse).
+/// [`BalanceOfQueryResponse`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of results, must be withing a length of u16::MAX.")]
 pub struct NewBalanceOfQueryResponseError;
@@ -765,7 +765,7 @@ impl Serial for OperatorOfQuery {
 pub struct OperatorOfQueryParams(Vec<OperatorOfQuery>);
 
 /// Error for constructing a new
-/// [`OperatorOfQueryParams`](OperatorOfQueryParams).
+/// [`OperatorOfQueryParams`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of queries, must be withing a length of u16::MAX.")]
 pub struct NewOperatorOfQueryParamsError;
@@ -804,7 +804,7 @@ impl Serial for OperatorOfQueryParams {
 pub struct OperatorOfQueryResponse(Vec<bool>);
 
 /// Error for constructing a new
-/// [`OperatorOfQueryResponse`](OperatorOfQueryResponse).
+/// [`OperatorOfQueryResponse`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of results, must be withing a length of u16::MAX.")]
 pub struct NewOperatorOfQueryResponseError;
@@ -846,7 +846,7 @@ pub type TokenMetadataQuery = TokenId;
 pub struct TokenMetadataQueryParams(Vec<TokenMetadataQuery>);
 
 /// Error for constructing a new
-/// [`TokenMetadataQueryParams`](TokenMetadataQueryParams).
+/// [`TokenMetadataQueryParams`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of queries, must be withing a length of u16::MAX.")]
 pub struct NewTokenMetadataQueryParamsError;
@@ -884,7 +884,7 @@ impl Serial for TokenMetadataQueryParams {
 pub struct TokenMetadataQueryResponse(Vec<MetadataUrl>);
 
 /// Error for constructing a new
-/// [`TokenMetadataQueryResponse`](TokenMetadataQueryResponse).
+/// [`TokenMetadataQueryResponse`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of results, must be withing a length of u16::MAX.")]
 pub struct NewTokenMetadataQueryResponseError;
@@ -929,7 +929,7 @@ pub struct MetadataUrl {
 }
 
 /// Error for constructing a new
-/// [`MetadataUrl`](MetadataUrl).
+/// [`MetadataUrl`].
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Invalid number of results, must be withing a length of u16::MAX.")]
 pub struct NewMetadataUrlError;
@@ -963,8 +963,8 @@ pub enum Event {
         fmt = "Transferred {} of token with ID {} from {} to {}",
         amount,
         token_id,
-        "display_address(from)",
-        "display_address(to)"
+        "from",
+        "to"
     )]
     Transfer {
         token_id: TokenId,
@@ -977,7 +977,7 @@ pub enum Event {
         fmt = "Minted {} of token with ID {} for {}",
         amount,
         token_id,
-        "display_address(owner)"
+        "owner"
     )]
     Mint {
         token_id: TokenId,
@@ -989,7 +989,7 @@ pub enum Event {
         fmt = "Burned {} of token with ID {} for {}",
         amount,
         token_id,
-        "display_address(owner)"
+        "owner"
     )]
     Burn {
         token_id: TokenId,
@@ -997,12 +997,7 @@ pub enum Event {
         owner:    Address,
     },
     /// Add/Remove an address as operator for some other address.
-    #[display(
-        fmt = "{} {} as operator for {}",
-        update,
-        "display_address(operator)",
-        "display_address(owner)"
-    )]
+    #[display(fmt = "{} {} as operator for {}", update, "operator", "owner")]
     UpdateOperator {
         update:   OperatorUpdate,
         owner:    Address,
@@ -1064,15 +1059,6 @@ impl Deserial for Event {
             }),
             _ => Ok(Event::Unknown),
         }
-    }
-}
-
-/// Display the Address using either the display for account address or contract
-/// address.
-fn display_address(a: &Address) -> String {
-    match a {
-        Address::Account(addr) => format!("{}", addr),
-        Address::Contract(addr) => format!("{}", addr),
     }
 }
 

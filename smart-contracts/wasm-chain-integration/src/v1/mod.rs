@@ -118,6 +118,14 @@ pub enum Interrupt {
     QueryAccountKeys {
         address: AccountAddress,
     },
+    /// Query the module reference of a contract.
+    QueryContractModuleReference {
+        address: ContractAddress,
+    },
+    /// Query the constructor name of a contract.
+    QueryContractName {
+        address: ContractAddress,
+    },
 }
 
 impl Interrupt {
@@ -152,6 +160,12 @@ impl Interrupt {
                 ..
             } => false,
             Interrupt::QueryAccountKeys {
+                ..
+            } => false,
+            Interrupt::QueryContractModuleReference {
+                ..
+            } => false,
+            Interrupt::QueryContractName {
                 ..
             } => false,
         }
@@ -228,6 +242,22 @@ impl Interrupt {
             } => {
                 out.push(7u8);
                 out.write_all(address.as_ref())?;
+                Ok(())
+            }
+            Interrupt::QueryContractModuleReference {
+                address,
+            } => {
+                out.push(8u8);
+                out.write_all(&address.index.to_be_bytes())?;
+                out.write_all(&address.subindex.to_be_bytes())?;
+                Ok(())
+            }
+            Interrupt::QueryContractName {
+                address,
+            } => {
+                out.push(9u8);
+                out.write_all(&address.index.to_be_bytes())?;
+                out.write_all(&address.subindex.to_be_bytes())?;
                 Ok(())
             }
         }
@@ -337,7 +367,7 @@ pub struct DebugTracker {
 }
 
 /// The [`Display`](std::fmt::Display) implementation renders all public fields
-/// of the type in **multiple lines**. The host cgalls and emitted events are
+/// of the type in **multiple lines**. The host calls and emitted events are
 /// interleaved so that they appear in the order that they occurred.
 impl std::fmt::Display for DebugTracker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -554,6 +584,8 @@ mod host {
     const QUERY_EXCHANGE_RATE_TAG: u32 = 4;
     const CHECK_ACCOUNT_SIGNATURE_TAG: u32 = 5;
     const QUERY_ACCOUNT_KEYS_TAG: u32 = 6;
+    const QUERY_CONTRACT_MODULE_REFERENCE_TAG: u32 = 7;
+    const QUERY_CONTRACT_NAME_TAG: u32 = 8;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -647,12 +679,10 @@ mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `invoke` host function.
     pub(crate) fn invoke(
-        support_queries: bool,
-        support_account_signature_checks: bool,
+        params: ReceiveParams,
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
-        max_parameter_size: usize,
     ) -> machine::RunResult<Option<Interrupt>> {
         energy.tick_energy(constants::INVOKE_BASE_COST)?;
         let length_u32 = unsafe { stack.pop_u32() }; // length of the instruction payload in memory
@@ -687,13 +717,13 @@ mod host {
             CALL_TAG => {
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
                 let mut cursor = Cursor::new(&memory[start..start + length]);
-                match parse_call_args(energy, &mut cursor, max_parameter_size) {
+                match parse_call_args(energy, &mut cursor, params.max_parameter_size) {
                     Ok(Ok(i)) => Ok(Some(i)),
                     Ok(Err(OutOfEnergy)) => bail!(OutOfEnergy),
                     Err(e) => bail!("Illegal call, cannot parse arguments: {:?}", e),
                 }
             }
-            QUERY_ACCOUNT_BALANCE_TAG if support_queries => {
+            QUERY_ACCOUNT_BALANCE_TAG if params.support_queries => {
                 ensure!(
                     length == ACCOUNT_ADDRESS_SIZE,
                     "Account balance queries must have exactly 32 bytes of payload, but was {}",
@@ -709,7 +739,7 @@ mod host {
                 }
                 .into())
             }
-            QUERY_CONTRACT_BALANCE_TAG if support_queries => {
+            QUERY_CONTRACT_BALANCE_TAG if params.support_queries => {
                 ensure!(
                     length == 8 + 8,
                     "Contract balance queries must have exactly 16 bytes of payload, but was {}",
@@ -731,7 +761,7 @@ mod host {
                 }
                 .into())
             }
-            QUERY_EXCHANGE_RATE_TAG if support_queries => {
+            QUERY_EXCHANGE_RATE_TAG if params.support_queries => {
                 ensure!(
                     length == 0,
                     "Exchange rate query must have no payload, but was {}",
@@ -739,7 +769,7 @@ mod host {
                 );
                 Ok(Interrupt::QueryExchangeRates.into())
             }
-            CHECK_ACCOUNT_SIGNATURE_TAG if support_account_signature_checks => {
+            CHECK_ACCOUNT_SIGNATURE_TAG if params.support_account_signature_checks => {
                 ensure!(
                     length >= ACCOUNT_ADDRESS_SIZE,
                     "Account signature check queries must have at least the 32 bytes for an \
@@ -761,7 +791,7 @@ mod host {
                 }
                 .into())
             }
-            QUERY_ACCOUNT_KEYS_TAG if support_account_signature_checks => {
+            QUERY_ACCOUNT_KEYS_TAG if params.support_account_signature_checks => {
                 ensure!(
                     length == ACCOUNT_ADDRESS_SIZE,
                     "Account keys queries must have exactly 32 bytes of payload, but was {}",
@@ -773,6 +803,51 @@ mod host {
                 addr_bytes.copy_from_slice(&memory[start..start + ACCOUNT_ADDRESS_SIZE]);
                 let address = AccountAddress(addr_bytes);
                 Ok(Interrupt::QueryAccountKeys {
+                    address,
+                }
+                .into())
+            }
+            QUERY_CONTRACT_MODULE_REFERENCE_TAG if params.support_contract_inspection_queries => {
+                ensure!(
+                    length == 8 + 8,
+                    "Contract module reference queries must have exactly 16 bytes of payload, but \
+                     was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut buf = [0u8; 8];
+                buf.copy_from_slice(&memory[start..start + 8]);
+                let index = u64::from_le_bytes(buf);
+                buf.copy_from_slice(&memory[start + 8..start + 16]);
+                let subindex = u64::from_le_bytes(buf);
+                let address = ContractAddress {
+                    index,
+                    subindex,
+                };
+                Ok(Interrupt::QueryContractModuleReference {
+                    address,
+                }
+                .into())
+            }
+            QUERY_CONTRACT_NAME_TAG if params.support_contract_inspection_queries => {
+                ensure!(
+                    length == 8 + 8,
+                    "Contract name queries must have exactly 16 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                let mut buf = [0u8; 8];
+                buf.copy_from_slice(&memory[start..start + 8]);
+                let index = u64::from_le_bytes(buf);
+                buf.copy_from_slice(&memory[start + 8..start + 16]);
+                let subindex = u64::from_le_bytes(buf);
+                let address = ContractAddress {
+                    index,
+                    subindex,
+                };
+                Ok(Interrupt::QueryContractName {
                     address,
                 }
                 .into())
@@ -1547,14 +1622,8 @@ impl<
             }?,
             ImportFunc::ReceiveOnly(rof) => match rof {
                 ReceiveOnlyFunc::Invoke => {
-                    let invoke = host::invoke(
-                        self.stateless.params.support_queries,
-                        self.stateless.params.support_account_signature_checks,
-                        memory,
-                        stack,
-                        &mut self.energy,
-                        self.stateless.params.max_parameter_size,
-                    );
+                    let invoke =
+                        host::invoke(self.stateless.params, memory, stack, &mut self.energy);
                     let energy_after: InterpreterEnergy = self.energy;
                     self.trace.trace_host_call(f.tag, energy_before.saturating_sub(&energy_after));
                     return invoke;
@@ -2078,46 +2147,64 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct ReceiveParams {
     /// Maximum size of a parameter that an `invoke` operation can have.
-    pub max_parameter_size:               usize,
+    pub max_parameter_size:                  usize,
     /// Whether the amount of logs a contract may produce, and the size of the
     /// logs, is limited.
-    pub limit_logs_and_return_values:     bool,
+    pub limit_logs_and_return_values:        bool,
     /// Whether queries should be supported or not. Queries were introduced in
     /// protocol 5.
-    pub support_queries:                  bool,
+    pub support_queries:                     bool,
     /// Whether querying account public keys and checking account signatures is
     /// supported.
-    pub support_account_signature_checks: bool,
+    pub support_account_signature_checks:    bool,
+    /// Whether queries for inspecting a smart contract's module reference and
+    /// contract name should be supported or not. These queries were introduced
+    /// in protocol 7.
+    pub support_contract_inspection_queries: bool,
 }
 
 impl ReceiveParams {
     /// Parameters that are in effect in protocol version 4.
     pub fn new_p4() -> Self {
         Self {
-            max_parameter_size:               1024,
-            limit_logs_and_return_values:     true,
-            support_queries:                  false,
-            support_account_signature_checks: false,
+            max_parameter_size:                  1024,
+            limit_logs_and_return_values:        true,
+            support_queries:                     false,
+            support_account_signature_checks:    false,
+            support_contract_inspection_queries: false,
         }
     }
 
-    /// Parameters that are in effect in protocol version 5 and up.
+    /// Parameters that are in effect in protocol version 5.
     pub fn new_p5() -> Self {
         Self {
-            max_parameter_size:               u16::MAX.into(),
-            limit_logs_and_return_values:     false,
-            support_queries:                  true,
-            support_account_signature_checks: false,
+            max_parameter_size:                  u16::MAX.into(),
+            limit_logs_and_return_values:        false,
+            support_queries:                     true,
+            support_account_signature_checks:    false,
+            support_contract_inspection_queries: false,
         }
     }
 
-    /// Parameters that are in effect in protocol version 6 and up.
+    /// Parameters that are in effect in protocol version 6.
     pub fn new_p6() -> Self {
         Self {
-            max_parameter_size:               u16::MAX.into(),
-            limit_logs_and_return_values:     false,
-            support_queries:                  true,
-            support_account_signature_checks: true,
+            max_parameter_size:                  u16::MAX.into(),
+            limit_logs_and_return_values:        false,
+            support_queries:                     true,
+            support_account_signature_checks:    true,
+            support_contract_inspection_queries: false,
+        }
+    }
+
+    /// Parameters that are in effect in protocol version 7 and up.
+    pub fn new_p7() -> Self {
+        Self {
+            max_parameter_size:                  u16::MAX.into(),
+            limit_logs_and_return_values:        false,
+            support_queries:                     true,
+            support_account_signature_checks:    true,
+            support_contract_inspection_queries: true,
         }
     }
 }

@@ -2,6 +2,7 @@
 
 ## Unreleased changes
 
+- Set minimum supported Rust version to 1.73.
 - Support returning types that reference host or state from `init` or `receive`
   entrypoints. The generated code extends lifetimes of the `host` and `ctx`
   sufficiently for it to compile.
