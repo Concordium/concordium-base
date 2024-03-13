@@ -60,8 +60,6 @@ module Concordium.Types.Accounts (
     accountBakerInfo,
     -- | The pending change (if any) to the baker's status.
     bakerPendingChange,
-    serializeAccountBaker,
-    deserializeAccountBaker,
     AccountDelegation (..),
     delegationIdentity,
     delegationStakedAmount,
@@ -69,8 +67,6 @@ module Concordium.Types.Accounts (
     delegationTarget,
     delegationPendingChange,
     AccountStake (..),
-    serializeAccountStake,
-    deserializeAccountStake,
     AccountStakeHash (..),
     getAccountStakeHash,
     AccountInfo (..),
@@ -327,28 +323,6 @@ instance HasBakerInfo (AccountBaker av) where
 instance (AVSupportsDelegation av) => HasBakerPoolInfo (AccountBaker av) where
     bakerPoolInfo = accountBakerInfo . bakerPoolInfo
 
--- | Serialize an 'AccountBaker'
-serializeAccountBaker :: (IsAccountVersion av) => Putter (AccountBaker av)
-serializeAccountBaker AccountBaker{..} = do
-    put _stakedAmount
-    put _stakeEarnings
-    put _accountBakerInfo
-    put _bakerPendingChange
-
--- | Deserialize an 'AccountBaker'.
-deserializeAccountBaker :: (IsAccountVersion av) => Get (AccountBaker av)
-deserializeAccountBaker = do
-    _stakedAmount <- get
-    _stakeEarnings <- get
-    _accountBakerInfo <- get
-    _bakerPendingChange <- get
-    -- If there is a pending reduction, check that it is actually a reduction.
-    case _bakerPendingChange of
-        ReduceStake amt _
-            | amt > _stakedAmount -> fail "Pending stake reduction is not a reduction in stake"
-        _ -> return ()
-    return AccountBaker{..}
-
 data AccountDelegation (av :: AccountVersion) where
     AccountDelegationV1 ::
         (AVSupportsDelegation av) =>
@@ -409,43 +383,6 @@ data AccountStake (av :: AccountVersion) where
     AccountStakeBaker :: !(AccountBaker av) -> AccountStake av
     AccountStakeDelegate :: !(AccountDelegation av) -> AccountStake av
     deriving (Eq, Show)
-
--- | Serialize an 'AccountStake', depending on the account version.
---  Note that it should be recorded earlier in the serialization whether the stake is
---  'AccountStakeNone', since in that case nothing is written.  This function is thus intended
---  to be used in the context of a broader account serialization function.
---
---  For 'AccountV0', the baker is simply serialized. (Delegation is not possible.)
---
---  For 'AccountV1', a byte is written that records whether the stake is as a baker (0) or
---  delegated (1).  Following this, the baker or delegation is simply serialized.
-serializeAccountStake :: forall av. (IsAccountVersion av) => Putter (AccountStake av)
-serializeAccountStake AccountStakeNone = return ()
-serializeAccountStake (AccountStakeBaker bkr) = case delegationSupport @av of
-    SAVDelegationNotSupported -> serializeAccountBaker bkr
-    SAVDelegationSupported -> do
-        putWord8 0
-        serializeAccountBaker bkr
-serializeAccountStake (AccountStakeDelegate dlg@AccountDelegationV1{}) = do
-    -- Only applies for AccountV1
-    putWord8 1
-    put dlg
-
--- | Deserialize an 'AccountStake', depending on the account version.
---  This cannot deserialize the 'AccountStakeNone' case, so should be used in a context where it is
---  already determined that that is not the case.
---
---  For 'AccountV0', the baker is simply deserialized. (Delegation is not possible.)
---
---  For 'AccountV1', the first byte indicates whether a baker (0) or a delegation (1) is read.
-deserializeAccountStake :: forall av. (IsAccountVersion av) => Get (AccountStake av)
-deserializeAccountStake = case delegationSupport @av of
-    SAVDelegationNotSupported -> AccountStakeBaker <$> deserializeAccountBaker
-    SAVDelegationSupported ->
-        getWord8 >>= \case
-            0 -> AccountStakeBaker <$> deserializeAccountBaker
-            1 -> AccountStakeDelegate <$> get
-            _ -> fail "Invalid stake type"
 
 newtype AccountStakeHash (av :: AccountVersion) = AccountStakeHash {theAccountStakeHash :: Hash.Hash}
     deriving (Eq, Ord, Show, Serialize, ToJSON, FromJSON) via Hash.Hash
