@@ -1063,7 +1063,7 @@ pub mod quickcheck {
             #(#attrs)*
             fn #name() {
                 #item_fn
-               ::concordium_std::test_infrastructure::concordium_qc(#num_tests, #name as (fn (#inputs) #codomain))
+               concordium_std::test_infrastructure::concordium_qc(#num_tests, #name as (fn (#inputs) #codomain))
             }
         };
         Ok(res)
