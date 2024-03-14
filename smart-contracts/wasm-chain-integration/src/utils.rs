@@ -189,6 +189,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         memory: &mut Vec<u8>,
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
+        // We don't track the energy usage in this host, so to reuse code which does, we
+        // provide a really large amount of energy to preventing the case of
+        // running out of energy.
         let mut energy = crate::InterpreterEnergy::new(u64::MAX);
         if f.matches("concordium", "report_error") {
             let (filename, line, column, msg) = extract_debug(memory, stack)?;
