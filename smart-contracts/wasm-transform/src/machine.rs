@@ -360,9 +360,9 @@ fn memory_load<'a>(
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-fn memory_store<'a>(
+fn memory_store(
     constants: &[i64],
-    locals: &'a [StackValue],
+    locals: &[StackValue],
     pc: &mut *const u8,
 ) -> (StackValue, usize) {
     let offset = get_u32(pc);
@@ -375,7 +375,7 @@ fn memory_store<'a>(
 fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()> {
     let end = pos + bytes.len();
     ensure!(end <= memory.len(), "Illegal memory access.");
-    (&mut memory[pos..end]).copy_from_slice(bytes);
+    memory[pos..end].copy_from_slice(bytes);
     Ok(())
 }
 
@@ -646,7 +646,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             match unsafe { std::mem::transmute(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
-                    let condition = get_local(constants, &locals, &mut pc);
+                    let condition = get_local(constants, locals, &mut pc);
                     let else_target = get_u32(&mut pc);
                     if unsafe { condition.short } == 0 {
                         // jump to the else branch.
@@ -663,13 +663,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // we could optimize this for the common case of jumping to end/beginning of a
                     // current block.
                     let target = get_u32(&mut pc);
-                    let condition = get_local(constants, &locals, &mut pc);
+                    let condition = get_local(constants, locals, &mut pc);
                     if unsafe { condition.short } != 0 {
                         pc = unsafe { instructions.as_ptr().add(target as usize) };
                     } // else do nothing
                 }
                 InternalOpcode::BrTable => {
-                    let condition = get_local(constants, &locals, &mut pc);
+                    let condition = get_local(constants, locals, &mut pc);
                     let num_labels = get_u16(&mut pc);
                     let top: u32 = unsafe { condition.short } as u32;
                     if top < u32::from(num_labels) {
@@ -680,8 +680,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::BrTableCarry => {
-                    let condition = get_local(constants, &locals, &mut pc);
-                    let copy_source = get_local(constants, &locals, &mut pc);
+                    let condition = get_local(constants, locals, &mut pc);
+                    let copy_source = get_local(constants, locals, &mut pc);
                     let num_labels = get_u16(&mut pc);
                     let top: u32 = unsafe { condition.short } as u32;
                     if top < u32::from(num_labels) {
@@ -693,7 +693,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::Copy => {
-                    let copy_source = get_local(constants, &locals, &mut pc);
+                    let copy_source = get_local(constants, locals, &mut pc);
                     let copy_target = get_local_mut(locals, &mut pc);
                     *copy_target = copy_source;
                 }
@@ -746,8 +746,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         // TODO: Make this more efficient and safer. Make sure length is sufficient
                         // for all host calls.
                         unsafe { stack.stack.set_len(f.ty().parameters.len()) };
-                        for p in (&mut stack.stack).into_iter().rev() {
-                            *p = get_local(constants, &locals, &mut pc)
+                        for p in stack.stack.iter_mut().rev() {
+                            *p = get_local(constants, locals, &mut pc)
                         }
                         let return_value_loc = if f.ty().result.is_some() {
                             let target = get_i32(&mut pc);
@@ -772,10 +772,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                     return_value_loc,
                                 },
                             });
-                        } else {
-                            if f.ty().result.is_some() {
-                                locals[return_value_loc] = stack.pop();
-                            };
+                        } else if f.ty().result.is_some() {
+                            locals[return_value_loc] = stack.pop();
                         }
                         assert!(stack.stack.is_empty());
                     } else {
@@ -794,7 +792,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         let current_locals = &mut prefix[locals_base..];
 
                         // Note the rev.
-                        for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev() {
+                        for p in new_locals[..f.num_params() as usize].iter_mut().rev() {
                             *p = get_local(constants, current_locals, &mut pc)
                         }
                         let new_return_type = match f.return_type() {
@@ -835,8 +833,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
 
                             // TODO: Make this more efficient.
                             unsafe { stack.stack.set_len(f.ty().parameters.len()) };
-                            for p in (&mut stack.stack).into_iter().rev() {
-                                *p = get_local(constants, &locals, &mut pc)
+                            for p in stack.stack.iter_mut().rev() {
+                                *p = get_local(constants, locals, &mut pc)
                             }
                             let return_value_loc = if f.ty().result.is_some() {
                                 let target = get_i32(&mut pc);
@@ -864,10 +862,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                         return_value_loc,
                                     },
                                 });
-                            } else {
-                                if f.ty().result.is_some() {
-                                    locals[return_value_loc] = stack.pop();
-                                };
+                            } else if f.ty().result.is_some() {
+                                locals[return_value_loc] = stack.pop();
                             }
                         } else {
                             host.track_call()?;
@@ -893,8 +889,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             let (prefix, new_locals) = locals_vec.split_at_mut(current_size);
                             let current_locals = &mut prefix[locals_base..];
                             // Note the rev.
-                            for p in (&mut new_locals[..f.num_params() as usize]).into_iter().rev()
-                            {
+                            for p in new_locals[..f.num_params() as usize].iter_mut().rev() {
                                 *p = get_local(constants, current_locals, &mut pc)
                             }
                             let new_return_type = match f.return_type() {
@@ -924,9 +919,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     }
                 }
                 InternalOpcode::Select => {
-                    let top = get_local(constants, &locals, &mut pc);
-                    let t2 = get_local(constants, &locals, &mut pc);
-                    let t1 = get_local(constants, &locals, &mut pc);
+                    let top = get_local(constants, locals, &mut pc);
+                    let t2 = get_local(constants, locals, &mut pc);
+                    let t1 = get_local(constants, locals, &mut pc);
                     let target = get_local_mut(locals, &mut pc);
                     if unsafe { top.short } == 0 {
                         *target = t2;
@@ -935,7 +930,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     }
                 }
                 InternalOpcode::LocalSet => {
-                    let source = get_local(constants, &locals, &mut pc);
+                    let source = get_local(constants, locals, &mut pc);
                     let target = get_local_mut(locals, &mut pc);
                     *target = source;
                 }
@@ -946,7 +941,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 }
                 InternalOpcode::GlobalSet => {
                     let idx = get_u16(&mut pc);
-                    let copy_target = get_local(constants, &locals, &mut pc);
+                    let copy_target = get_local(constants, locals, &mut pc);
                     globals[idx as usize] = copy_target;
                 }
                 InternalOpcode::I32Load => {
@@ -1010,31 +1005,31 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     *result = StackValue::from(val as i64);
                 }
                 InternalOpcode::I32Store => {
-                    let (val, pos) = memory_store(constants, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.short }.to_le_bytes())?;
                 }
                 InternalOpcode::I64Store => {
-                    let (val, pos) = memory_store(constants, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes())?;
                 }
                 InternalOpcode::I32Store8 => {
-                    let (val, pos) = memory_store(constants, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.short }.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I32Store16 => {
-                    let (val, pos) = memory_store(constants, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.short }.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store8 => {
-                    let (val, pos) = memory_store(constants, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I64Store16 => {
-                    let (val, pos) = memory_store(constants, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store32 => {
-                    let (val, pos) = memory_store(constants, &locals, &mut pc);
+                    let (val, pos) = memory_store(constants, locals, &mut pc);
                     write_memory_at(&mut memory, pos, &unsafe { val.long }.to_le_bytes()[..4])?;
                 }
                 InternalOpcode::MemorySize => {
@@ -1057,7 +1052,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     }
                 }
                 InternalOpcode::I32Eqz => {
-                    let source = get_local(constants, &locals, &mut pc);
+                    let source = get_local(constants, locals, &mut pc);
                     let target = get_local_mut(locals, &mut pc);
                     let val = unsafe { source.short };
                     target.short = if val == 0 {
@@ -1105,7 +1100,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     });
                 }
                 InternalOpcode::I64Eqz => {
-                    let source = get_local(constants, &locals, &mut pc);
+                    let source = get_local(constants, locals, &mut pc);
                     let target = get_local_mut(locals, &mut pc);
                     let val = unsafe { source.long };
                     target.short = if val == 0 {
@@ -1289,17 +1284,17 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     });
                 }
                 InternalOpcode::I32WrapI64 => {
-                    let source = get_local(constants, &locals, &mut pc);
+                    let source = get_local(constants, locals, &mut pc);
                     let target = get_local_mut(locals, &mut pc);
                     target.short = unsafe { source.long } as i32;
                 }
                 InternalOpcode::I64ExtendI32S => {
-                    let source = get_local(constants, &locals, &mut pc);
+                    let source = get_local(constants, locals, &mut pc);
                     let target = get_local_mut(locals, &mut pc);
                     target.long = unsafe { source.short } as i64;
                 }
                 InternalOpcode::I64ExtendI32U => {
-                    let source = get_local(constants, &locals, &mut pc);
+                    let source = get_local(constants, locals, &mut pc);
                     let target = get_local_mut(locals, &mut pc);
                     // The two as' are important since the semantics of the cast in rust is that
                     // it will sign extend if the source is signed. So first we make it unsigned,

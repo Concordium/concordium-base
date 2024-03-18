@@ -938,7 +938,7 @@ impl BackPatch {
         let operand = self
             .providers_stack
             .pop()
-            .with_context(|| format!("Missing operand for push_consume"))?;
+            .with_context(|| "Missing operand for push_consume".to_string())?;
         self.dynamic_locations.reuse(operand);
         self.push_loc(operand);
         Ok(operand)
@@ -1267,7 +1267,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                             let operand = self
                                 .providers_stack
                                 .pop()
-                                .with_context(|| format!("Missing operand for push_consume"))?;
+                                .with_context(|| "Missing operand for push_consume".to_string())?;
                             self.dynamic_locations.reuse(operand);
                         }
                         _ => {
@@ -1290,7 +1290,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                             let operand = self
                                 .providers_stack
                                 .pop()
-                                .with_context(|| format!("Missing operand for push_consume"))?;
+                                .with_context(|| "Missing operand for push_consume".to_string())?;
                             self.dynamic_locations.reuse(operand);
                             self.providers_stack.push(Provider::Local(idx));
                         }

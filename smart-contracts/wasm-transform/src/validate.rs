@@ -443,16 +443,10 @@ pub trait Handler<Ctx: HasValidationContext, O> {
 }
 
 /// A [`Handler`] that is used during validation of a pure Wasm module.
+/// The [`Default`] instance creates an empty handler.
+#[derive(Default)]
 pub struct PureWasmModuleHandler {
     pub(crate) instr: Vec<OpCode>,
-}
-
-impl PureWasmModuleHandler {
-    pub fn new() -> Self {
-        Self {
-            instr: Vec::new(),
-        }
-    }
 }
 
 impl<Ctx: HasValidationContext> Handler<Ctx, OpCode> for PureWasmModuleHandler {
@@ -1043,7 +1037,7 @@ pub fn validate_module(
                 let (opcodes, max_height) = validate(
                     &ctx,
                     &mut OpCodeIterator::new(config.allow_sign_extension_instr, c.expr_bytes),
-                    PureWasmModuleHandler::new(),
+                    PureWasmModuleHandler::default(),
                 )?;
                 ensure!(
                     num_locals as usize + max_height <= MAX_ALLOWED_STACK_HEIGHT,
