@@ -12,7 +12,7 @@ module Concordium.Types.Execution where
 
 import Prelude hiding (fail)
 
-import Control.Monad.Reader
+import Control.Monad
 
 import Concordium.Utils.Serialization
 import Data.Aeson ((.:), (.=))

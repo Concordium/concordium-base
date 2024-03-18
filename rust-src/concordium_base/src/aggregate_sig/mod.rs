@@ -52,7 +52,7 @@ impl<P: Pairing> SecretKey<P> {
 }
 
 impl<P: Pairing> Clone for SecretKey<P> {
-    fn clone(&self) -> Self { SecretKey(self.0) }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<P: Pairing> Copy for SecretKey<P> {}
@@ -101,7 +101,7 @@ impl<P: Pairing> PublicKey<P> {
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
-    fn clone(&self) -> Self { PublicKey(self.0) }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<P: Pairing> Copy for PublicKey<P> {}
@@ -125,7 +125,7 @@ impl<P: Pairing> Signature<P> {
 }
 
 impl<P: Pairing> Clone for Signature<P> {
-    fn clone(&self) -> Self { Signature(self.0) }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<P: Pairing> Copy for Signature<P> {}

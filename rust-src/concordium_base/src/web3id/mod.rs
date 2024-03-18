@@ -726,12 +726,7 @@ impl<Role> PartialEq for Ed25519PublicKey<Role> {
 }
 
 impl<Role> Clone for Ed25519PublicKey<Role> {
-    fn clone(&self) -> Self {
-        Self {
-            public_key: self.public_key,
-            phantom:    PhantomData,
-        }
-    }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<Role> Copy for Ed25519PublicKey<Role> {}

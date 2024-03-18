@@ -127,8 +127,11 @@ module Concordium.Types.ProtocolVersion (
     --    * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
     --      All the contents of the transaction summaries are used for computing the hash.
     --
-    --    * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+    --    * 'TOV1' is used in P5 and onwards. The hash is computed via a merkle tree and the
     --      exact reject reasons for failed transactions are omitted from the hash.
+    --
+    --    * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
+    --      except the merkle trees are hashed to include the size.
     TransactionOutcomesVersion (..),
     -- | Singleton type corresponding to 'TransactionOutcomesVersion'.
     STransactionOutcomesVersion (..),
@@ -191,6 +194,7 @@ module Concordium.Types.ProtocolVersion (
     supportsGlobalsInInitSections,
     omitCustomSectionFromSize,
     supportsAccountSignatureChecks,
+    supportsContractInspectionQueries,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -270,13 +274,16 @@ $( singletons
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
         -- to the hashing scheme.
-        -- \* 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
-        -- All the contents of the transaction summaries are used for computing the hash.
-        -- \* 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
-        -- exact reject reasons for failed transactions are omitted from the hash.
+        --  * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+        --  All the contents of the transaction summaries are used for computing the hash.
+        --  * 'TOV1' is used in P5 and P6. The hash is computed via a merkle tree and the
+        --  exact reject reasons for failed transactions are omitted from the hash.
+        --  * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
+        --  except the merkle trees are hashed to include the size.
         data TransactionOutcomesVersion
             = TOV0
             | TOV1
+            | TOV2
 
         -- \|Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
         transactionOutcomesVersionFor :: ProtocolVersion -> TransactionOutcomesVersion
@@ -286,7 +293,7 @@ $( singletons
         transactionOutcomesVersionFor P4 = TOV0
         transactionOutcomesVersionFor P5 = TOV1
         transactionOutcomesVersionFor P6 = TOV1
-        transactionOutcomesVersionFor P7 = TOV1
+        transactionOutcomesVersionFor P7 = TOV2
 
         -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
         -- at an account version. This is intended to give more descriptive type errors in cases where the
@@ -619,4 +626,17 @@ supportsAccountSignatureChecks spv = case spv of
     SP4 -> False
     SP5 -> False
     SP6 -> True
+    SP7 -> True
+
+-- | Whether the protocol version supports querying a smart contract's module reference and name
+--  from smart contracts.
+--  (Supported in 'P7' and onwards.)
+supportsContractInspectionQueries :: SProtocolVersion pv -> Bool
+supportsContractInspectionQueries = \case
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> False
     SP7 -> True

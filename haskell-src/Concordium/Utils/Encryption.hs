@@ -11,7 +11,6 @@ import Control.Monad.Except
 
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as AE
-import qualified Data.Aeson.Internal as AE
 import qualified Data.Aeson.KeyMap as AEMap
 import qualified Data.Aeson.Parser as AE
 import qualified Data.Aeson.Types as AE

@@ -80,6 +80,7 @@ module Concordium.Wasm (
     isValidInitName,
     extractInitName,
     initContractName,
+    initNameBytes,
     ReceiveName (..),
     isValidReceiveName,
     contractAndFunctionName,
@@ -372,6 +373,10 @@ instance Serialize InitName where
             Right t
                 | isValidInitName t -> return (InitName t)
                 | otherwise -> fail "Not a valid init name."
+
+-- | Convert an 'InitName' to a raw UTF-8 encoded byte string.
+initNameBytes :: InitName -> ByteString
+initNameBytes = Text.encodeUtf8 . initName
 
 -- | Serialize an amount in little endian for use by passing data to smart
 --  contracts.
