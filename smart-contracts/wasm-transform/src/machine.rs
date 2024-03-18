@@ -55,10 +55,19 @@ pub trait Host<I> {
         stack: &mut RuntimeStack,
     ) -> RunResult<Option<Self::Interrupt>>;
 
+    /// Consume a given amount of NRG.
     fn tick_energy(&mut self, _energy: u64) -> RunResult<()>;
 
+    /// Track a function call. This is called upon entry to a function. The
+    /// corresonding [`track_return`](Host::track_return) is called upon
+    /// return from a function. These two together can be used to track function
+    /// call stack depth. [`track_call`](Host::track_call) can return an `Err`
+    /// to indicate that a call stack depth was exceeded. This will lead to
+    /// immediate termination of execution.
     fn track_call(&mut self) -> RunResult<()>;
 
+    /// Called when a function returns. See documentation of
+    /// [`track_call`](Host::track_call) for details.
     fn track_return(&mut self);
 }
 
@@ -512,7 +521,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
 
         let globals = self.global.inits.iter().copied().map(StackValue::from).collect::<Vec<_>>();
         let mut locals: Vec<StackValue> =
-            vec![StackValue::from(0u64); outer_function.num_registers() as usize];
+            vec![unsafe { std::mem::zeroed() }; outer_function.num_registers() as usize];
         for (&arg, place) in args.iter().zip(&mut locals) {
             *place = match arg {
                 Value::I32(v) => StackValue::from(v),
@@ -611,8 +620,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         } = config;
 
         let mut stack = RuntimeStack {
-            stack: vec![StackValue::from(0u64); 10], /* TODO: This should be max host function
-                                                      * arguments. */
+            stack: vec![unsafe { std::mem::zeroed() }; 10], /* TODO: This should be max host
+                                                             * function
+                                                             * arguments. */
         };
 
         let mut locals = &mut locals_vec[locals_base..];
@@ -665,10 +675,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     let num_labels = get_u16(&mut pc);
                     let top: u32 = unsafe { condition.short } as u32;
                     if top < u32::from(num_labels) {
-                        pc = unsafe {
-                            pc.add((top as usize + 1) * 4)
-                        } ;// the +1 is for the
-                          // default branch.
+                        pc = unsafe { pc.add((top as usize + 1) * 4) }; // the +1 is for the
+                                                                        // default branch.
                     } // else use default branch
                     let target = get_u32(&mut pc);
                     pc = unsafe { instructions.as_ptr().add(target as usize) };
@@ -679,13 +687,11 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     let num_labels = get_u16(&mut pc);
                     let top: u32 = unsafe { condition.short } as u32;
                     if top < u32::from(num_labels) {
-                        pc = unsafe {
-                            pc.add((top as usize + 1) * 8)
-                        }; // the +1 is for the default branch.
+                        pc = unsafe { pc.add((top as usize + 1) * 8) }; // the +1 is for the default branch.
                     } // else use default branch
-                    let copy_target = get_local_mut( locals, &mut pc);
+                    let copy_target = get_local_mut(locals, &mut pc);
                     *copy_target = copy_source;
-                    let target = get_u32( &mut pc);
+                    let target = get_u32(&mut pc);
                     pc = unsafe { instructions.as_ptr().add(target as usize) };
                 }
                 InternalOpcode::Copy => {
@@ -785,7 +791,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         // drop(locals);
                         let current_size = locals_vec.len();
                         let new_size = current_size + f.num_registers() as usize;
-                        locals_vec.resize(new_size, StackValue::from(0u64));
+                        locals_vec.resize(new_size, unsafe { std::mem::zeroed() });
                         let (prefix, new_locals) = locals_vec.split_at_mut(current_size);
                         let current_locals = &mut prefix[locals_base..];
 
@@ -799,7 +805,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         };
 
                         let current_frame = FunctionState {
-                            pc: unsafe{ pc.offset_from(instructions.as_ptr()) as usize }, /* TODO: Maybe use try_into?, */
+                            pc: unsafe { pc.offset_from(instructions.as_ptr()) as usize }, /* TODO: Maybe use try_into?, */
                             instructions_idx,
                             locals_base,
                             return_type,
@@ -846,7 +852,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                                 return Ok(ExecutionOutcome::Interrupted {
                                     reason,
                                     config: RunConfig {
-                                        pc: unsafe { pc.offset_from(instructions.as_ptr()) as usize}, /* TODO: Maybe use try_into?, */
+                                        pc: unsafe {
+                                            pc.offset_from(instructions.as_ptr()) as usize
+                                        }, /* TODO: Maybe use try_into?, */
                                         instructions_idx,
                                         function_frames,
                                         return_type,
@@ -883,7 +891,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             // drop(locals);
                             let current_size = locals_vec.len();
                             let new_size = current_size + f.num_registers() as usize;
-                            locals_vec.resize(new_size, StackValue::from(0u64));
+                            locals_vec.resize(new_size, unsafe { std::mem::zeroed() });
                             let (prefix, new_locals) = locals_vec.split_at_mut(current_size);
                             let current_locals = &mut prefix[locals_base..];
                             // Note the rev.
@@ -897,7 +905,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             };
 
                             let current_frame = FunctionState {
-                                pc: unsafe { pc.offset_from(instructions.as_ptr()) as usize}, /* TODO: Maybe use try_into?, */
+                                pc: unsafe { pc.offset_from(instructions.as_ptr()) as usize }, /* TODO: Maybe use try_into?, */
                                 instructions_idx,
                                 locals_base,
                                 return_type,

@@ -28,6 +28,7 @@ use std::{
 /// expect on the stack. Using a union saves on the discriminant compared to
 /// using an enum, leading to 50% less space used on the stack, as well as
 /// removes the need to handle impossible cases.
+#[repr(C)]
 pub union StackValue {
     pub short: i32,
     pub long:  i64,
