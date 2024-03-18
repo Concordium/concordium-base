@@ -74,14 +74,8 @@ impl Host<ArtifactNamedImport> for MeteringHost {
         _memory: &mut Vec<u8>,
         _stack: &mut RuntimeStack,
     ) -> RunResult<Option<NoInterrupt>> {
-        if f.matches("concordium_metering", "track_call") {
-            self.call_depth += 1;
-            ensure!(self.call_depth <= 10000, "Call depth exceeded.");
-        } else if f.matches("concordium_metering", "trac_return") {
-            self.call_depth -= 1;
-        } else if f.matches("concordium_metering", "account_energy") {
-            self.energy_left -= 1;
-        } else if f.matches("concordium_metering", "account_memory") {
+        if f.matches("concordium_metering", "account_memory") {
+            // do nothing
         } else {
             bail!(HostCallError {
                 name: f.clone(),

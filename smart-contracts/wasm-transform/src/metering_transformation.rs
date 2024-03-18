@@ -714,16 +714,6 @@ impl Module {
         // insert a new type for the new imports
         let mut new_types = Vec::with_capacity(self.ty.types.len() + NUM_ADDED_FUNCTIONS as usize);
         new_types.extend_from_slice(&self.ty.types);
-        // account energy
-        new_types.push(Rc::new(FunctionType {
-            parameters: vec![ValueType::I64],
-            result:     None,
-        }));
-        // account call/return
-        new_types.push(Rc::new(FunctionType {
-            parameters: Vec::new(),
-            result:     None,
-        }));
         // account memory alloc
         new_types.push(Rc::new(FunctionType {
             parameters: vec![ValueType::I32],
@@ -739,43 +729,10 @@ impl Module {
                 name: "concordium_metering".to_owned(),
             },
             item_name:   Name {
-                name: "account_energy".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
-                name: "track_call".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally + 1,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
-                name: "track_return".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally + 1,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
                 name: "account_memory".to_owned(),
             },
             description: ImportDescription::Func {
-                type_idx: num_types_originally + 2,
+                type_idx: num_types_originally,
             },
         });
         new_imports.append(&mut self.import.imports);

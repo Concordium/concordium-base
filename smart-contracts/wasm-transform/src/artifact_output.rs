@@ -59,6 +59,8 @@ impl<C: RunnableCode> Output for C {
         self.params().output(out)?;
         self.num_locals().output(out)?;
         self.locals().locals.output(out)?;
+        self.num_registers().output(out)?;
+        self.constants().output(out)?;
         self.code().output(out)
     }
 }

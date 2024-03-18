@@ -999,7 +999,8 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 }
                 if let JumpTarget::Unknown {
                     backpatch_locations,
-                    result: _, // not needed for backpatching. But it was used above to potentially insert a Copy.
+                    result: _, /* not needed for backpatching. But it was used above to
+                                * potentially insert a Copy. */
                 } = jump_target
                 {
                     // As u32 would be safe here since module sizes are much less than 4GB, but

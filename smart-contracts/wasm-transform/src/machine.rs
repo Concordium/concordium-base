@@ -1,8 +1,6 @@
 // TODO:
 // - don't use the stack for host functions anymore.
-// - clean up prints
 // - Read all data from instructions at once (e.g., three locals).
-// - Short circuit SetLocal in the artifact.
 // - GlobalGet can be short circuited if we store all constants in the module in
 //   one place together with globals.
 
@@ -287,12 +285,11 @@ fn get_i32(pc: &mut *const u8) -> i32 {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_local(constants: &[i64], locals: &[StackValue], pc: &mut *const u8) -> StackValue {
     let v = get_i32(pc);
-    let r = if v >= 0 {
+    if v >= 0 {
         *unsafe { locals.get_unchecked(v as usize) }
     } else {
         StackValue::from(*unsafe { constants.get_unchecked((-(v + 1)) as usize) })
-    };
-    r
+    }
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -331,7 +328,7 @@ fn read_i8(bytes: &[u8], pos: usize) -> RunResult<i8> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i16(bytes: &[u8], pos: usize) -> RunResult<i16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { bytes.as_ptr().cast::<i16>().read_unaligned() };
+    let r = unsafe { bytes.as_ptr().add(pos).cast::<i16>().read_unaligned() };
     Ok(r)
 }
 
@@ -358,7 +355,8 @@ fn memory_load<'a>(
     let offset = get_u32(pc);
     let base = get_local(constants, locals, pc);
     let result = get_local_mut(locals, pc);
-    (result, unsafe { base.short } as u32 as usize + offset as usize)
+    let pos = unsafe { base.short } as u32 as usize + offset as usize;
+    (result, pos)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]

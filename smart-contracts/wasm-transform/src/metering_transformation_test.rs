@@ -278,11 +278,7 @@ fn test_call() {
         vec![I32Const(10), I32Const(20), Call(0), I32Const(40), I32Sub, End],
         flatten![
             energy!(ENTRY + 2 * CONST + invoke_before(2, 1)),
-            [
-                I32Const(10),
-                I32Const(20),
-                Call(NUM_ADDED_FUNCTIONS),
-            ],
+            [I32Const(10), I32Const(20), Call(NUM_ADDED_FUNCTIONS),],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],
             [End]
@@ -310,12 +306,7 @@ fn test_call_indirect() {
         vec![I32Const(10), I32Const(20), I32Const(0), CallIndirect(1), I32Const(40), I32Sub, End],
         flatten![
             energy!(ENTRY + 3 * CONST + call_indirect(2, 1)),
-            [
-                I32Const(10),
-                I32Const(20),
-                I32Const(0),
-                CallIndirect(1),
-            ],
+            [I32Const(10), I32Const(20), I32Const(0), CallIndirect(1),],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],
             [End]
