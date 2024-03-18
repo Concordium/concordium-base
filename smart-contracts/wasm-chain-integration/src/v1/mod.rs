@@ -1291,16 +1291,13 @@ impl<
         self.energy.tick_energy(energy)
     }
 
-
     #[inline(always)]
     fn track_call(&mut self) -> machine::RunResult<()> {
         v0::host::track_call(&mut self.activation_frames)
     }
 
     #[inline(always)]
-    fn track_return(&mut self) {
-        v0::host::track_return(&mut self.activation_frames)
-    }
+    fn track_return(&mut self) { v0::host::track_return(&mut self.activation_frames) }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
@@ -1464,16 +1461,13 @@ impl<
         self.energy.tick_energy(energy)
     }
 
-
     #[inline(always)]
     fn track_call(&mut self) -> machine::RunResult<()> {
         v0::host::track_call(&mut self.stateless.activation_frames)
     }
 
     #[inline(always)]
-    fn track_return(&mut self) {
-        v0::host::track_return(&mut self.stateless.activation_frames)
-    }
+    fn track_return(&mut self) { v0::host::track_return(&mut self.stateless.activation_frames) }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(

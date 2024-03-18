@@ -130,9 +130,7 @@ impl Host<MeteringImport> for MeteringHost {
         }
     }
 
-    fn track_return(&mut self) {
-        self.activation_frames += 1;
-    }
+    fn track_return(&mut self) { self.activation_frames += 1; }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(

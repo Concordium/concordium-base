@@ -560,15 +560,11 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 // We need to change which function we call since we've inserted NUM_ADDED_FUNCTIONS
                 // functions at the beginning of the module, for cost accounting.
                 Call(idx) => {
-                    // self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
                     self.add_instr_account_energy(&Call(idx + NUM_ADDED_FUNCTIONS));
-                    // self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
                 }
                 // The call indirect function does not have to be reindexed since the table is.
                 CallIndirect(_) => {
-                    // self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
                     self.add_instr_account_energy(instr);
-                    // self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
                 }
                 _ => {
                     // In all other cases, just add the instruction to the pending instructions.
