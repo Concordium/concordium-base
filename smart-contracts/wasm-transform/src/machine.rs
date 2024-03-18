@@ -728,7 +728,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         break 'outer;
                     }
                 }
-                InternalOpcode::CallImmediate => {
+                InternalOpcode::TickEnergy => {
                     let v = get_u32(&mut pc);
                     host.tick_energy(v as u64)?;
                 }

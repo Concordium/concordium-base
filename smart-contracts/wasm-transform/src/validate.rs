@@ -491,7 +491,7 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
             .context("Need to have at least one control frame")?
             .unreachable;
         match next_opcode.borrow() {
-            OpCode::CallImmediate(_) => {
+            OpCode::TickEnergy(_) => {
                 // bail!("Unsupported instruction.");
             }
             OpCode::End => {

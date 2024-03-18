@@ -210,7 +210,7 @@ pub(crate) mod cost {
                     },
                 )
             }
-            CallImmediate(_) => 0,
+            TickEnergy(_) => 0,
             Call(idx) => {
                 let (num_args, num_res) = module.get_func_type_len(*idx)?;
                 invoke_before(num_args, num_res)
@@ -363,7 +363,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         // fine. NB: The u64 energy value is written as is, and will be
         // reinterpreted as u64 again in the host function call.
         // self.new_seq.push(OpCode::I64Const(e as i64));
-        self.new_seq.push(OpCode::CallImmediate(e as u32));
+        self.new_seq.push(OpCode::TickEnergy(e as u32));
     }
 
     // TODO fn account_stack_size(&mut self, size: i64) { account_stack_size(&mut

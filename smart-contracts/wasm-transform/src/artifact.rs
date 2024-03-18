@@ -13,8 +13,7 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Context};
 use derive_more::{Display, From, Into};
 use std::{
-    cmp::Reverse,
-    collections::{BTreeMap, BTreeSet, BinaryHeap},
+    collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     io::Write,
     sync::Arc,
@@ -501,7 +500,7 @@ pub enum InternalOpcode {
     BrTableCarry,
     Return,
     Call,
-    CallImmediate,
+    TickEnergy,
     CallIndirect,
 
     // Parametric instructions
@@ -1174,8 +1173,8 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                     self.push_provide();
                 }
             }
-            OpCode::CallImmediate(cost) => {
-                self.out.push(CallImmediate);
+            OpCode::TickEnergy(cost) => {
+                self.out.push(TickEnergy);
                 self.out.push_u32(*cost);
                 // TODO
             }
@@ -1296,8 +1295,10 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         }
                         _ => {
                             self.out.push(LocalSet);
-                            let operand =
-                                self.providers_stack.last().context("Expect a value on the stack")?;
+                            let operand = self
+                                .providers_stack
+                                .last()
+                                .context("Expect a value on the stack")?;
                             self.push_loc(*operand);
                             self.out.push_i32(idx); //target second
                         }
