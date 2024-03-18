@@ -102,7 +102,7 @@ impl From<SlotDuration> for chrono::Duration {
         // where slot duration would exceed
         // i64::MAX. But that will not
         // happen.
-        Self::milliseconds(s.millis as i64)
+        Self::try_milliseconds(s.millis as i64).expect("Slot duration less than i64::MAX")
     }
 }
 
@@ -121,7 +121,7 @@ impl From<DurationSeconds> for chrono::Duration {
         // where duration would exceed
         // i64::MAX. But that will not
         // happen.
-        Self::seconds(s.seconds as i64)
+        Self::try_seconds(s.seconds as i64).expect("Duration that fits chrono::Duration.")
     }
 }
 
