@@ -5,26 +5,15 @@ use crate::types::*;
 use anyhow::{anyhow, bail};
 use std::{convert::TryInto, rc::Rc};
 
-/// TODO set these indices to the imports of the respective accounting host
-/// functions. They should be given by the specification.
-/// The type of this function should be i64 -> ()
-pub(crate) const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
-/// Dynamically track calls to enable us to limit the number of active
-/// frames.
-/// The type of this function should be unit to unit.
-pub(crate) const FN_IDX_TRACK_CALL: FuncIndex = 1;
-/// Track returns so that we can keep the count correctly.
-/// The type of this function should be () -> ().
-pub(crate) const FN_IDX_TRACK_RETURN: FuncIndex = 2;
 /// Charge for memory allocation. The type of this
 /// function should be i32 -> i32.
-pub(crate) const FN_IDX_MEMORY_ALLOC: FuncIndex = 3;
+pub(crate) const FN_IDX_MEMORY_ALLOC: FuncIndex = 0;
 
 /// The number of added functions. All functions that are in the source module
 /// will have the indices shifted by this amount.
 /// The table as well must be updated by increasing all the function indices by
 /// this constant.
-pub(crate) const NUM_ADDED_FUNCTIONS: FuncIndex = 4;
+pub(crate) const NUM_ADDED_FUNCTIONS: FuncIndex = 1;
 
 /// Result of a transformation. The transformation should generally not fail on
 /// a well-formed module, i.e., one that has been validated. But we might want

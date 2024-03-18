@@ -442,7 +442,20 @@ pub trait Handler<Ctx: HasValidationContext, O> {
     fn finish(self, state: &ValidationState) -> anyhow::Result<Self::Outcome>;
 }
 
-impl <Ctx: HasValidationContext>Handler<Ctx, OpCode> for Vec<OpCode> {
+/// A [`Handler`] that is used during validation of a pure Wasm module.
+pub struct PureWasmModuleHandler {
+    pub(crate) instr: Vec<OpCode>,
+}
+
+impl PureWasmModuleHandler {
+    pub fn new() -> Self {
+        Self {
+            instr: Vec::new(),
+        }
+    }
+}
+
+impl<Ctx: HasValidationContext> Handler<Ctx, OpCode> for PureWasmModuleHandler {
     type Outcome = (Self, usize);
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -451,10 +464,11 @@ impl <Ctx: HasValidationContext>Handler<Ctx, OpCode> for Vec<OpCode> {
         _ctx: &Ctx,
         _state: &ValidationState,
         _stack_height: usize,
-        unreachable_before: bool,
+        _unreachable_before: bool,
         opcode: OpCode,
     ) -> anyhow::Result<()> {
-        self.push(opcode);
+        anyhow::ensure!(!matches!(opcode, OpCode::TickEnergy(_)));
+        self.instr.push(opcode);
         Ok(())
     }
 
@@ -857,7 +871,13 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
                 state.push_opd(Known(ValueType::I64));
             }
         }
-        handler.handle_opcode(context, &state, old_stack_height, unreachable_before, next_opcode)?;
+        handler.handle_opcode(
+            context,
+            &state,
+            old_stack_height,
+            unreachable_before,
+            next_opcode,
+        )?;
     }
     if state.done() {
         handler.finish(&state)
@@ -1023,7 +1043,7 @@ pub fn validate_module(
                 let (opcodes, max_height) = validate(
                     &ctx,
                     &mut OpCodeIterator::new(config.allow_sign_extension_instr, c.expr_bytes),
-                    Vec::new(),
+                    PureWasmModuleHandler::new(),
                 )?;
                 ensure!(
                     num_locals as usize + max_height <= MAX_ALLOWED_STACK_HEIGHT,
@@ -1036,7 +1056,7 @@ pub fn validate_module(
                     num_locals,
                     locals: c.locals,
                     expr: Expression {
-                        instrs: opcodes,
+                        instrs: opcodes.instr,
                     },
                 };
                 parsed_code.push(code)

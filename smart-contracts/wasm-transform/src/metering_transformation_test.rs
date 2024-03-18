@@ -39,7 +39,7 @@ macro_rules! flatten {
 
 macro_rules! energy {
     ($e:expr) => {
-        [I64Const($e as i64), Call(FN_IDX_ACCOUNT_ENERGY)]
+        [TickEnergy($e as u32)]
     };
 }
 
@@ -281,9 +281,7 @@ fn test_call() {
             [
                 I32Const(10),
                 I32Const(20),
-                Call(FN_IDX_TRACK_CALL),
                 Call(NUM_ADDED_FUNCTIONS),
-                Call(FN_IDX_TRACK_RETURN)
             ],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],
@@ -316,9 +314,7 @@ fn test_call_indirect() {
                 I32Const(10),
                 I32Const(20),
                 I32Const(0),
-                Call(FN_IDX_TRACK_CALL),
                 CallIndirect(1),
-                Call(FN_IDX_TRACK_RETURN)
             ],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],

@@ -265,21 +265,21 @@ impl RuntimeStack {
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u16(pc: &mut *const u8) -> u16 {
-    let r = unsafe { *pc.cast::<u16>() };
+    let r = unsafe { pc.cast::<u16>().read_unaligned() };
     *pc = unsafe { pc.add(2) };
     r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_u32(pc: &mut *const u8) -> u32 {
-    let r = unsafe { *pc.cast::<u32>() };
+    let r = unsafe { pc.cast::<u32>().read_unaligned() };
     *pc = unsafe { pc.add(4) };
     r
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn get_i32(pc: &mut *const u8) -> i32 {
-    let r = unsafe { *pc.cast::<i32>() };
+    let r = unsafe { pc.cast::<i32>().read_unaligned() };
     *pc = unsafe { pc.add(4) };
     r
 }
@@ -312,14 +312,14 @@ fn read_u8(bytes: &[u8], pos: usize) -> RunResult<u8> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u16(bytes: &[u8], pos: usize) -> RunResult<u16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<u16>()) };
+    let r = unsafe { bytes.as_ptr().add(pos).cast::<u16>().read_unaligned() };
     Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_u32(bytes: &[u8], pos: usize) -> RunResult<u32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<u32>()) };
+    let r = unsafe { bytes.as_ptr().add(pos).cast::<u32>().read_unaligned() };
     Ok(r)
 }
 
@@ -331,21 +331,21 @@ fn read_i8(bytes: &[u8], pos: usize) -> RunResult<i8> {
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i16(bytes: &[u8], pos: usize) -> RunResult<i16> {
     ensure!(pos + 2 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<i16>()) };
+    let r = unsafe { bytes.as_ptr().cast::<i16>().read_unaligned() };
     Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i32(bytes: &[u8], pos: usize) -> RunResult<i32> {
     ensure!(pos + 4 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<i32>()) };
+    let r = unsafe { bytes.as_ptr().add(pos).cast::<i32>().read_unaligned() };
     Ok(r)
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
 fn read_i64(bytes: &[u8], pos: usize) -> RunResult<i64> {
     ensure!(pos + 8 <= bytes.len(), "Memory access out of bounds.");
-    let r = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<i64>()) };
+    let r = unsafe { bytes.as_ptr().add(pos).cast::<i64>().read_unaligned() };
     Ok(r)
 }
 
