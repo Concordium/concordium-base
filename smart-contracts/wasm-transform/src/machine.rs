@@ -286,9 +286,13 @@ fn get_i32(pc: &mut *const u8) -> i32 {
 fn get_local(constants: &[i64], locals: &[StackValue], pc: &mut *const u8) -> StackValue {
     let v = get_i32(pc);
     if v >= 0 {
-        *unsafe { locals.get_unchecked(v as usize) }
+        let v = v as usize;
+        // assert!(v < locals.len());
+        *unsafe { locals.get_unchecked(v) }
     } else {
-        StackValue::from(*unsafe { constants.get_unchecked((-(v + 1)) as usize) })
+        let v = (-(v + 1)) as usize;
+        // assert!((v as usize) < constants.len());
+        StackValue::from(*unsafe { constants.get_unchecked(v) })
     }
 }
 
@@ -297,7 +301,7 @@ fn get_local_mut<'a>(locals: &'a mut [StackValue], pc: &mut *const u8) -> &'a mu
     let v = get_i32(pc);
     // Targets should never be constants, so we should always have a non-negative
     // value.
-    assert!(v >= 0);
+    // assert!(v >= 0);
     unsafe { locals.get_unchecked_mut(v as usize) }
 }
 
@@ -617,6 +621,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             return_value_loc: _,
         } = config;
 
+        // Stack used for host function calls, to pass parameters.
         let mut stack = RuntimeStack {
             stack: vec![unsafe { std::mem::zeroed() }; 10], /* TODO: This should be max host
                                                              * function
@@ -743,9 +748,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     // execution should resume as normal.
                     let idx = get_u32(&mut pc);
                     if let Some(f) = self.imports.get(idx as usize) {
-                        // TODO: Make this more efficient and safer. Make sure length is sufficient
-                        // for all host calls.
-                        unsafe { stack.stack.set_len(f.ty().parameters.len()) };
+                        let params_len = f.ty().parameters.len();
+                        if stack.stack.capacity() < params_len {
+                            stack.stack.resize(params_len, unsafe { std::mem::zeroed() });
+                        } else {
+                            unsafe { stack.stack.set_len(params_len) };
+                        }
                         for p in stack.stack.iter_mut().rev() {
                             *p = get_local(constants, locals, &mut pc)
                         }
@@ -831,8 +839,12 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             // call imported function.
                             ensure!(ty_actual == ty, "Actual type different from expected.");
 
-                            // TODO: Make this more efficient.
-                            unsafe { stack.stack.set_len(f.ty().parameters.len()) };
+                            let params_len = f.ty().parameters.len();
+                            if stack.stack.capacity() < params_len {
+                                stack.stack.resize(params_len, unsafe { std::mem::zeroed() });
+                            } else {
+                                unsafe { stack.stack.set_len(params_len) };
+                            }
                             for p in stack.stack.iter_mut().rev() {
                                 *p = get_local(constants, locals, &mut pc)
                             }

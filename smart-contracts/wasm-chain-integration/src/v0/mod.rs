@@ -803,9 +803,6 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => host::track_return(&mut self.activation_frames),
             ImportFunc::ChargeMemoryAlloc => host::charge_memory_alloc(stack, &mut self.energy)?,
             ImportFunc::Common(cf) => match cf {
                 CommonFunc::GetParameterSize => {
@@ -884,9 +881,6 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => host::track_return(&mut self.activation_frames),
             ImportFunc::ChargeMemoryAlloc => host::charge_memory_alloc(stack, &mut self.energy)?,
             ImportFunc::Common(cf) => match cf {
                 CommonFunc::GetParameterSize => {

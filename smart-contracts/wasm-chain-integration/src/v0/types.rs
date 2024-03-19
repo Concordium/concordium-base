@@ -435,12 +435,6 @@ pub(crate) enum ReceiveOnlyFunc {
 #[derive(Copy, Clone, Debug)]
 /// Enumeration of allowed imports.
 pub(crate) enum ImportFunc {
-    /// Chage for execution cost.
-    ChargeEnergy,
-    /// Track calling a function, increasing the activation frame count.
-    TrackCall,
-    /// Track returning from a function, decreasing the activation frame count.
-    TrackReturn,
     /// Charge for allocating the given amount of pages.
     ChargeMemoryAlloc,
     /// Functions that are common to both init and receive methods.
@@ -457,9 +451,6 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
         cursor: &mut std::io::Cursor<&'a [u8]>,
     ) -> concordium_wasm::parse::ParseResult<Self> {
         match Byte::parse(ctx, cursor)? {
-            0 => Ok(ImportFunc::ChargeEnergy),
-            1 => Ok(ImportFunc::TrackCall),
-            2 => Ok(ImportFunc::TrackReturn),
             3 => Ok(ImportFunc::ChargeMemoryAlloc),
             4 => Ok(ImportFunc::Common(CommonFunc::GetParameterSize)),
             5 => Ok(ImportFunc::Common(CommonFunc::GetParameterSection)),
@@ -489,9 +480,6 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
 impl Output for ImportFunc {
     fn output(&self, out: &mut impl std::io::Write) -> concordium_wasm::output::OutResult<()> {
         let tag: u8 = match self {
-            ImportFunc::ChargeEnergy => 0,
-            ImportFunc::TrackCall => 1,
-            ImportFunc::TrackReturn => 2,
             ImportFunc::ChargeMemoryAlloc => 3,
             ImportFunc::Common(c) => match c {
                 CommonFunc::GetParameterSize => 4,
@@ -635,9 +623,6 @@ impl TryFromImport for ProcessedImports {
         let m = &import.mod_name;
         let tag = if m.name == "concordium_metering" {
             match import.item_name.name.as_ref() {
-                "account_energy" => ImportFunc::ChargeEnergy,
-                "track_call" => ImportFunc::TrackCall,
-                "track_return" => ImportFunc::TrackReturn,
                 "account_memory" => ImportFunc::ChargeMemoryAlloc,
                 name => bail!("Unsupported import {}.", name),
             }

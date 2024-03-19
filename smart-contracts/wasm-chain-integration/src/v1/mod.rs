@@ -441,9 +441,6 @@ impl crate::DebugInfo for DebugTracker {
     fn trace_host_call(&mut self, f: self::ImportFunc, energy_used: InterpreterEnergy) {
         let next_idx = self.next_index;
         match f {
-            ImportFunc::ChargeEnergy => self.operation.add(energy_used),
-            ImportFunc::TrackCall => (),
-            ImportFunc::TrackReturn => (),
             ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(energy_used),
             ImportFunc::Common(c) => {
                 self.next_index += 1;
@@ -1383,9 +1380,6 @@ impl<
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         let energy_before = self.energy;
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => v0::host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => v0::host::track_return(&mut self.activation_frames),
             ImportFunc::ChargeMemoryAlloc => {
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
@@ -1553,11 +1547,6 @@ impl<
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         let energy_before = self.energy;
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => v0::host::track_call(&mut self.stateless.activation_frames)?,
-            ImportFunc::TrackReturn => {
-                v0::host::track_return(&mut self.stateless.activation_frames)
-            }
             ImportFunc::ChargeMemoryAlloc => {
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
