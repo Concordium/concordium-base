@@ -53,14 +53,12 @@ impl Host<ArtifactNamedImport> for TrapHost {
 
     fn track_call(&mut self) -> RunResult<()> { Ok(()) }
 
-    fn track_return(&mut self) {  }
-
+    fn track_return(&mut self) {}
 }
 
 #[derive(Default)]
 struct MeteringHost {
-    call_depth:  i64,
-    energy_left: u64,
+    call_depth: i64,
 }
 
 impl Host<ArtifactNamedImport> for MeteringHost {
@@ -88,13 +86,11 @@ impl Host<ArtifactNamedImport> for MeteringHost {
 
     fn track_call(&mut self) -> RunResult<()> {
         self.call_depth += 1;
+        ensure!(self.call_depth <= 10_000, "Call depth exceeded.");
         Ok(())
     }
 
-    fn track_return(&mut self) {
-        self.call_depth.saturating_sub(1);
-    }
-
+    fn track_return(&mut self) { self.call_depth -= 1; }
 }
 
 fn validate(source: &[u8]) -> anyhow::Result<Module> {
@@ -203,8 +199,7 @@ fn invoke_update_metering(
 ) -> anyhow::Result<Option<Value>> {
     let run = artifact.run(
         &mut MeteringHost {
-            call_depth:  0,
-            energy_left: 10000,
+            call_depth: 0,
         },
         name,
         args,
