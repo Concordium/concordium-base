@@ -1,5 +1,4 @@
 // TODO:
-// - don't use the stack for host functions anymore.
 // - Read all data from instructions at once (e.g., three locals).
 // - GlobalGet can be short circuited if we store all constants in the module in
 //   one place together with globals.
