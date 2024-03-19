@@ -50,52 +50,29 @@ pub struct TestHost<'a, R, BackingStore> {
     /// Debug statements in the order they were emitted.
     pub debug_events: Vec<EmittedDebugStatement>,
     /// In-memory instance state used for state-related host calls.
-    state:            Option<InstanceState<'a, BackingStore>>,
-}
-
-impl<'a> TestHost<'a, SmallRng, trie::Loader<Vec<u8>>> {
-    /// Create a new `TestHost` instance without a RNG instance and instance
-    /// state.
-    pub const fn uninitialized() -> Self {
-        TestHost {
-            rng:          None,
-            rng_used:     false,
-            debug_events: Vec::new(),
-            state:        None,
-        }
-    }
-}
-
-impl<'a, R: RngCore> TestHost<'a, R, trie::Loader<Vec<u8>>> {
-    /// Create a new `TestHost` instance with the given RNG and set the flag to
-    /// unused.
-    pub fn new(rng: R) -> Self {
-        TestHost {
-            rng:          Some(rng),
-            rng_used:     false,
-            debug_events: Vec::new(),
-            state:        None,
-        }
-    }
+    state:            InstanceState<'a, BackingStore>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
-    /// Create a new `TestHost` instance with the given RNG and set the flag to
-    /// unused. This also take an instance state to use for host calls related
-    /// to the state.
-    pub fn with_state(rng: R, initial_state: InstanceState<'a, BackingStore>) -> Self {
+    /// Create a new `TestHost` instance with the given RNG, set the flag to
+    /// unused, no debug events and use the provided instance state for
+    /// state-related host function calls.
+    pub fn new(rng: R, state: InstanceState<'a, BackingStore>) -> Self {
         TestHost {
-            rng:          Some(rng),
-            rng_used:     false,
+            rng: Some(rng),
+            rng_used: false,
             debug_events: Vec::new(),
-            state:        Some(initial_state),
+            state,
         }
     }
 }
 
-impl<'a, R: RngCore, BackingStore> validate::ValidateImportExport
-    for TestHost<'a, R, BackingStore>
-{
+/// Type providing `ValidateImportExport` implementation which only ensure no
+/// duplicate imports. Any module name and item name and type is
+/// considered valid for both import and export.
+pub struct NoDuplicateImport;
+
+impl validate::ValidateImportExport for NoDuplicateImport {
     /// Simply ensure that there are no duplicates.
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn validate_import_function(
@@ -224,44 +201,31 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 remaining_energy: 0.into(), // debug host does not have energy.
             });
         } else if f.matches("concordium", "state_lookup_entry") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_lookup_entry(memory, stack, &mut energy, state)?;
+            host::state_lookup_entry(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_create_entry") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_create_entry(memory, stack, &mut energy, state)?;
+            host::state_create_entry(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_delete_entry") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_delete_entry(memory, stack, &mut energy, state)?;
+            host::state_delete_entry(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_delete_prefix") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_delete_prefix(memory, stack, &mut energy, state)?;
+            host::state_delete_prefix(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_iterate_prefix") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_iterator(memory, stack, &mut energy, state)?;
+            host::state_iterator(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_iterator_next") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_iterator_next(stack, &mut energy, state)?;
+            host::state_iterator_next(stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_iterator_delete") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_iterator_delete(stack, &mut energy, state)?;
+            host::state_iterator_delete(stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_iterator_key_size") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_iterator_key_size(stack, &mut energy, state)?;
+            host::state_iterator_key_size(stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_iterator_key_read") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_iterator_key_read(memory, stack, &mut energy, state)?;
+            host::state_iterator_key_read(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_entry_read") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_entry_read(memory, stack, &mut energy, state)?;
+            host::state_entry_read(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_entry_write") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_entry_write(memory, stack, &mut energy, state)?;
+            host::state_entry_write(memory, stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_entry_size") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_entry_size(stack, &mut energy, state)?;
+            host::state_entry_size(stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_entry_resize") {
-            let state = self.state.as_mut().context("No state initialized in test host")?;
-            host::state_entry_resize(stack, &mut energy, state)?;
+            host::state_entry_resize(stack, &mut energy, &mut self.state)?;
         } else {
             bail!("Unsupported host function call.")
         }
@@ -288,10 +252,12 @@ pub struct TestResult {
 ///
 /// The return value is a list of test results.
 pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestResult>> {
-    let host = TestHost::new(SmallRng::seed_from_u64(seed));
-    let artifact =
-        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
-            .artifact;
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(
+        ValidationConfig::V1,
+        &NoDuplicateImport,
+        module_bytes,
+    )?
+    .artifact;
     let mut out = Vec::with_capacity(artifact.export.len());
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
@@ -301,7 +267,7 @@ pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestRe
             let mut test_host = {
                 let inner = initial_state.get_inner(&mut loader);
                 let state = InstanceState::new(loader, inner);
-                TestHost::with_state(SmallRng::seed_from_u64(seed), state)
+                TestHost::new(SmallRng::seed_from_u64(seed), state)
             };
             let res = artifact.run(&mut test_host, name, &[]);
             match res {
@@ -346,10 +312,12 @@ pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestRe
 pub fn generate_contract_schema_v0(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact =
-        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V0, &host, module_bytes)?
-            .artifact;
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(
+        ValidationConfig::V0,
+        &NoDuplicateImport,
+        module_bytes,
+    )?
+    .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -402,10 +370,12 @@ pub fn generate_contract_schema_v0(
 pub fn generate_contract_schema_v1(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact =
-        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
-            .artifact;
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(
+        ValidationConfig::V1,
+        &NoDuplicateImport,
+        module_bytes,
+    )?
+    .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -448,10 +418,12 @@ pub fn generate_contract_schema_v1(
 pub fn generate_contract_schema_v2(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact =
-        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
-            .artifact;
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(
+        ValidationConfig::V1,
+        &NoDuplicateImport,
+        module_bytes,
+    )?
+    .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 
@@ -494,10 +466,12 @@ pub fn generate_contract_schema_v2(
 pub fn generate_contract_schema_v3(
     module_bytes: &[u8],
 ) -> ExecResult<schema::VersionedModuleSchema> {
-    let host = TestHost::uninitialized(); // The RNG is not relevant for schema generation
-    let artifact =
-        utils::instantiate::<ArtifactNamedImport, _>(ValidationConfig::V1, &host, module_bytes)?
-            .artifact;
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(
+        ValidationConfig::V1,
+        &NoDuplicateImport,
+        module_bytes,
+    )?
+    .artifact;
 
     let mut contract_schemas = BTreeMap::new();
 

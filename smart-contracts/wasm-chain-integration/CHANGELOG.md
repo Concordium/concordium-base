@@ -2,7 +2,8 @@
 
 ## Unreleased changes
 
-- `TestHost` can now be constructed with an instance state (using `TestHost::with_state`), making the test host support host functions related to the smart contract key-value state.
+- `TestHost` no longer implements the `ValidateImportExport` trait, instead use `NoDuplicateImport` struct.
+- `TestHost::new` now takes an instance state, allowing for support of host functions related to the smart contract key-value state.
 - The function `utils::run_module_tests` now provides an empty in-memory instance state for each test case, allowing module tests to use host functions related to the smart contract key-value state.
 - Support for querying the module reference and contract name of an instance via
   `invoke` (for protocol version 7). These are enabled by a new
