@@ -200,7 +200,7 @@ jobs:
         export RUSTFLAGS="-D warnings"
         cargo check --locked --manifest-path rust-src/Cargo.toml --workspace
         cargo check --locked --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
-        cargo check --locked --manifest-path idiss/Cargo.toml --workspace
+        cargo check --locked --manifest-path idiss/Cargo.toml --workspace --features csharp
         cargo check --locked --manifest-path mobile_wallet/Cargo.toml --workspace
         cargo check --locked --manifest-path mobile_wallet/Cargo.toml --target aarch64-linux-android
         cargo check --locked --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
