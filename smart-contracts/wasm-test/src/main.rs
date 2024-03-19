@@ -295,6 +295,7 @@ fn main() -> anyhow::Result<()> {
                                                     format!("Error: {}", e)
                                                 ),
                                             }
+                                            print_ok();
                                         }
                                         Err(e) => {
                                             modules
@@ -346,9 +347,13 @@ fn main() -> anyhow::Result<()> {
                                             } else {
                                                 bail!("Module {:?} not valid due to {}.", m.id, e)
                                             }
+                                            print_omitted_msg(
+                                                m.span,
+                                                "Module omitted",
+                                                format!("{e:#}").as_str(),
+                                            );
                                         }
                                     }
-                                    print_ok();
                                 }
                                 wast::WastDirective::QuoteModule {
                                     ..
