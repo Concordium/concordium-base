@@ -4,7 +4,7 @@ import Test.Hspec
 import Test.QuickCheck
 
 import Concordium.Types
-import Concordium.Types.Accounts
+import Concordium.Types.Accounts.Cooldown
 
 genCooldownTime :: Gen CooldownTime
 genCooldownTime =
