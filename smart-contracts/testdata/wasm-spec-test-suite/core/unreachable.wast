@@ -7,8 +7,6 @@
 
   (func (export "type-i32") (result i32) (unreachable))
   (func (export "type-i64") (result i32) (unreachable))
-  (func (export "type-f32") (result f64) (unreachable))
-  (func (export "type-f64") (result f64) (unreachable))
 
   (func (export "as-func-first") (result i32)
     (unreachable) (i32.const -1)
@@ -154,28 +152,11 @@
     )
   )
 
-  (func (export "as-local.set-value") (local f32)
-    (local.set 0 (unreachable))
-  )
-  (func (export "as-local.tee-value") (result f32) (local f32)
-    (local.tee 0 (unreachable))
-  )
-  (global $a (mut f32) (f32.const 0))
-  (func (export "as-global.set-value") (result f32)
-    (global.set $a (unreachable))
-  )
-
   (memory 1)
-  (func (export "as-load-address") (result f32)
-    (f32.load (unreachable))
-  )
   (func (export "as-loadN-address") (result i64)
     (i64.load8_s (unreachable))
   )
 
-  (func (export "as-store-address")
-    (f64.store (unreachable) (f64.const 7))
-  )
   (func (export "as-store-value")
     (i64.store (i32.const 2) (unreachable))
   )
@@ -185,10 +166,6 @@
   )
   (func (export "as-storeN-value")
     (i64.store16 (i32.const 2) (unreachable))
-  )
-
-  (func (export "as-unary-operand") (result f32)
-    (f32.neg (unreachable))
   )
 
   (func (export "as-binary-left") (result i32)
@@ -202,13 +179,6 @@
     (i32.eqz (unreachable))
   )
 
-  (func (export "as-compare-left") (result i32)
-    (f64.le (unreachable) (f64.const 10))
-  )
-  (func (export "as-compare-right") (result i32)
-    (f32.ne (f32.const 10) (unreachable))
-  )
-
   (func (export "as-convert-operand") (result i32)
     (i32.wrap_i64 (unreachable))
   )
@@ -220,8 +190,6 @@
 
 (assert_trap (invoke "type-i32") "unreachable")
 (assert_trap (invoke "type-i64") "unreachable")
-(assert_trap (invoke "type-f32") "unreachable")
-(assert_trap (invoke "type-f64") "unreachable")
 
 (assert_trap (invoke "as-func-first") "unreachable")
 (assert_trap (invoke "as-func-mid") "unreachable")

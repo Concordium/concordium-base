@@ -17,7 +17,7 @@ use crate::{
     },
     types::*,
 };
-use anyhow::{anyhow, bail, ensure, Context};
+use anyhow::{anyhow, bail, ensure};
 use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
 
 #[derive(Debug)]
@@ -112,9 +112,26 @@ pub struct ValidationState {
     pub(crate) ctrls:                ControlStack,
     /// Maximum reachable stack height.
     pub(crate) max_reachable_height: usize,
+    /// The smallest index of a control frame that has entered unreachable
+    /// section, if any.
+    pub(crate) unreachable_section:  Option<usize>,
 }
 
 impl ValidationState {
+    /// Return whether the frame we are in currently is completely unreachable.
+    /// A frame is unreachable if it is introduced after an unreachable
+    /// instruction in the parent frame.
+    pub fn reachability(&self) -> Reachability {
+        let Some(idx) = self.unreachable_section else {
+            return Reachability::Reachable
+        };
+        if idx + 1 < self.ctrls.stack.len() {
+            Reachability::UnreachableFrame
+        } else {
+            Reachability::UnreachableInstruction
+        }
+    }
+
     /// Check whether we are done, meaning that the control stack is
     /// exhausted.
     pub fn done(&self) -> bool { self.ctrls.stack.is_empty() }
@@ -245,6 +262,13 @@ impl ValidationState {
                 ensure!(self.opds.stack.len() == height, "Operand stack not exhausted.");
                 // Finally pop after we've made sure the stack is properly cleared.
                 self.ctrls.stack.pop();
+                // If the just-popped control frame was the lowest one that was unreachable
+                // then we have entered reachable code section again.
+                if let Some(idx) = self.unreachable_section {
+                    if idx == self.ctrls.stack.len() {
+                        self.unreachable_section = None;
+                    } // otherwise remain in unreachable code.
+                }
                 Ok((end_type, opcode))
             }
         }
@@ -256,6 +280,13 @@ impl ValidationState {
             Some(frame) => {
                 self.opds.stack.truncate(frame.height);
                 frame.unreachable = true;
+                let last_idx = self.ctrls.stack.len() - 1;
+                if let Some(idx) = self.unreachable_section {
+                    self.unreachable_section = Some(std::cmp::min(idx, last_idx));
+                // -1 is safe since we know the stack is inhabited
+                } else {
+                    self.unreachable_section = Some(last_idx);
+                }
                 Ok(())
             }
         }
@@ -417,6 +448,18 @@ fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
     Ok(())
 }
 
+/// The state of validation with respect to reachability of the instructions
+/// that were processed.
+#[derive(Debug, Clone, Copy)]
+pub enum Reachability {
+    /// A state that is reachable.
+    Reachable,
+    /// An unreachable instruction inside a reachable frame.
+    UnreachableInstruction,
+    /// A frame that is not reachable.
+    UnreachableFrame,
+}
+
 /// Trait to handle the results of validation.
 /// The type parameter should be instantiated with an opcode. The reason it is a
 /// type parameter is to support both opcodes and references to opcodes as
@@ -433,7 +476,7 @@ pub trait Handler<Ctx: HasValidationContext, O> {
         ctx: &Ctx,
         state: &ValidationState,
         stack_heigh: usize,
-        unreachable_before: bool,
+        unreachable_before: Reachability,
         opcode: O,
     ) -> anyhow::Result<()>;
 
@@ -458,7 +501,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, OpCode> for PureWasmModuleHandler {
         _ctx: &Ctx,
         _state: &ValidationState,
         _stack_height: usize,
-        _unreachable_before: bool,
+        _unreachable_before: Reachability,
         opcode: OpCode,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(!matches!(opcode, OpCode::TickEnergy(_)));
@@ -487,17 +530,13 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
         opds:                 OperandStack::default(),
         ctrls:                ControlStack::default(),
         max_reachable_height: 0,
+        unreachable_section:  None,
     };
     state.push_ctrl(false, context.return_type(), context.return_type());
     for opcode in opcodes {
         let next_opcode = opcode?;
         let old_stack_height = state.opds.stack.len();
-        let unreachable_before = state
-            .ctrls
-            .stack
-            .last()
-            .context("Need to have at least one control frame")?
-            .unreachable;
+        let unreachable_before = state.reachability();
         match next_opcode.borrow() {
             OpCode::TickEnergy(_) => {
                 // bail!("Unsupported instruction.");

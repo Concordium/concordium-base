@@ -8,7 +8,9 @@
 use crate::{
     constants::MAX_NUM_PAGES,
     types::*,
-    validate::{validate, Handler, HasValidationContext, LocalsRange, ValidationState},
+    validate::{
+        validate, Handler, HasValidationContext, LocalsRange, Reachability, ValidationState,
+    },
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use derive_more::{Display, From, Into};
@@ -636,6 +638,7 @@ impl Instructions {
 }
 
 /// Target of a jump that we need to keep track of temporarily.
+#[derive(Debug)]
 enum JumpTarget {
     /// We know the position in the instruction sequence where the jump should
     /// resolve to. This is used in the case of loops.
@@ -698,7 +701,7 @@ impl BackPatchStack {
     pub fn push(&mut self, target: JumpTarget) { self.stack.push(target) }
 
     pub fn pop(&mut self) -> CompileResult<JumpTarget> {
-        self.stack.pop().ok_or_else(|| anyhow!("Attempt to pop from an empty stack."))
+        self.stack.pop().ok_or_else(|| anyhow!("Attempt to pop from an empty backpatch stack."))
     }
 
     pub fn get_mut(&mut self, n: LabelIndex) -> CompileResult<&mut JumpTarget> {
@@ -811,6 +814,7 @@ impl BackPatch {
 
     fn push_jump(
         &mut self,
+        unreachable_before: bool,
         label_idx: LabelIndex,
         state: &ValidationState,
         old_stack_height: usize, // stack height before the jump
@@ -828,37 +832,40 @@ impl BackPatch {
             target_height
         );
         let target = self.backpatch.get(label_idx)?;
-        match target {
-            JumpTarget::Known {
-                pos: _,
-                result: _, // when jumping to a loop we don't carry any value over.
-            } => (),
-            JumpTarget::Unknown {
-                backpatch_locations: _,
-                result,
-            } => {
-                if matches!(target_frame.label_type, BlockType::ValueType(_)) {
-                    let &Some(result) = result else {
+        // If we are in the unreachable section then the instruction
+        // is never going to be reached, so there is no point in inserting
+        // the Copy instruction.
+        if !unreachable_before {
+            match target {
+                JumpTarget::Known {
+                    pos: _,
+                    result: _, // when jumping to a loop we don't carry any value over.
+                } => (),
+                JumpTarget::Unknown {
+                    backpatch_locations: _,
+                    result,
+                } => {
+                    if matches!(target_frame.label_type, BlockType::ValueType(_)) {
+                        let &Some(result) = result else {
                         anyhow::bail!("No target to place result.");
                     };
-                    // If or Br instruction.
-                    // output instruction
-                    if instruction.is_some() {
-                        let provider = self
-                            .providers_stack
-                            .pop()
-                            .context("Expected a value at the top of the stack to carry over.")?;
-                        if provider != result {
-                            self.out.push(InternalOpcode::Copy);
-                            self.push_loc(provider);
+                        // If or Br instruction.
+                        if instruction.is_some() {
+                            let provider = self.providers_stack.pop().context(
+                                "Expected a value at the top of the stack to carry over.",
+                            )?;
+                            if provider != result {
+                                self.out.push(InternalOpcode::Copy);
+                                self.push_loc(provider);
+                                self.push_loc(result);
+                            }
+                            self.providers_stack.push(result);
+                        } else {
+                            // BrTable instruction.
                             self.push_loc(result);
+                            // Since the part after the BrTable is unreachable.
+                            // the value of the providers stack does not matter.
                         }
-                        self.providers_stack.push(result);
-                    } else {
-                        // BrTable instruction.
-                        self.push_loc(result);
-                        // Since the part after the BrTable is unreachable.
-                        // the value of the providers stack does not matter.
                     }
                 }
             }
@@ -953,18 +960,23 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         ctx: &Ctx,
         state: &ValidationState,
         stack_height: usize,
-        unreachable_before: bool,
+        unreachable_before: Reachability,
         opcode: &OpCode,
     ) -> CompileResult<()> {
         use InternalOpcode::*;
         let last_provide = self.last_provide_loc.take();
-        if unreachable_before && !matches!(opcode, OpCode::End | OpCode::Else) {
-            return Ok(());
-        }
+        let unreachable_before = match unreachable_before {
+            Reachability::UnreachableFrame => return Ok(()),
+            Reachability::UnreachableInstruction
+                if !matches!(opcode, OpCode::Else | OpCode::End) =>
+            {
+                return Ok(())
+            }
+            Reachability::UnreachableInstruction => true,
+            Reachability::Reachable => false,
+        };
         match opcode {
             OpCode::End => {
-                // dbg!("LEN = {}", state.opds.stack.len());
-                // dbg!("LEN = {}", self.providers_stack.len());
                 let jump_target = self.backpatch.pop()?;
                 // Insert an additional Copy instruction if the top of the provider stack
                 // does not match what is expected.
@@ -1055,7 +1067,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
                 // to the end of else.
-                self.push_jump(0, state, stack_height, Some(Br))?;
+                self.push_jump(unreachable_before, 0, state, stack_height, Some(Br))?;
                 // Because the module is well-formed this can only happen after an if
                 // We do not backpatch the code now, apart from the initial jump to the else
                 // branch. The effect of this will be that any break out of the if statement
@@ -1108,15 +1120,15 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 }
             }
             OpCode::Br(label_idx) => {
-                self.push_jump(*label_idx, state, stack_height, Some(Br))?;
+                self.push_jump(unreachable_before, *label_idx, state, stack_height, Some(Br))?;
             }
             OpCode::BrIf(label_idx) => {
-                // TODO: We output first the target and then the conditional source. This is
+                // We output first the target and then the conditional source. This is
                 // maybe not ideal since the conditional will sometimes not be
-                // taken in which case we don't need to read that.
+                // taken in which case we don't need to read that, but it's simpler.
                 let condition_source =
                     self.providers_stack.pop().context("BrIf requires a provider.")?;
-                self.push_jump(*label_idx, state, stack_height, Some(BrIf))?;
+                self.push_jump(unreachable_before, *label_idx, state, stack_height, Some(BrIf))?;
                 self.push_loc(condition_source);
             }
             OpCode::BrTable {
@@ -1138,11 +1150,11 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
-                self.push_jump(*default, state, stack_height, None)?;
+                self.push_jump(unreachable_before, *default, state, stack_height, None)?;
                 // The label types are the same for the default as well all the other
                 // labels.
                 for label_idx in labels {
-                    self.push_jump(*label_idx, state, stack_height, None)?;
+                    self.push_jump(unreachable_before, *label_idx, state, stack_height, None)?;
                 }
             }
             OpCode::Return => {
@@ -1709,7 +1721,6 @@ impl Module {
                 locals: &ranges,
                 code,
             };
-
             let (mut exec_code, num_registers, constants) = validate(
                 &context,
                 code.expr.instrs.iter().map(Result::Ok),
