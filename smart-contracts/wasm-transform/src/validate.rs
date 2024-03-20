@@ -476,7 +476,7 @@ pub trait Handler<Ctx: HasValidationContext, O> {
         ctx: &Ctx,
         state: &ValidationState,
         stack_heigh: usize,
-        unreachable_before: Reachability,
+        reachability: Reachability,
         opcode: O,
     ) -> anyhow::Result<()>;
 
@@ -501,7 +501,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, OpCode> for PureWasmModuleHandler {
         _ctx: &Ctx,
         _state: &ValidationState,
         _stack_height: usize,
-        _unreachable_before: Reachability,
+        _reachability: Reachability,
         opcode: OpCode,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(!matches!(opcode, OpCode::TickEnergy(_)));

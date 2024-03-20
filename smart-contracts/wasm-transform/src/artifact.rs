@@ -814,7 +814,7 @@ impl BackPatch {
 
     fn push_jump(
         &mut self,
-        unreachable_before: bool,
+        instruction_reachable: bool,
         label_idx: LabelIndex,
         state: &ValidationState,
         old_stack_height: usize, // stack height before the jump
@@ -835,7 +835,7 @@ impl BackPatch {
         // If we are in the unreachable section then the instruction
         // is never going to be reached, so there is no point in inserting
         // the Copy instruction.
-        if !unreachable_before {
+        if instruction_reachable {
             match target {
                 JumpTarget::Known {
                     pos: _,
@@ -960,20 +960,24 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         ctx: &Ctx,
         state: &ValidationState,
         stack_height: usize,
-        unreachable_before: Reachability,
+        reachability: Reachability,
         opcode: &OpCode,
     ) -> CompileResult<()> {
         use InternalOpcode::*;
+        // The last location where the provider wrote the result.
+        // This is used to short-circuit SetLocal
         let last_provide = self.last_provide_loc.take();
-        let unreachable_before = match unreachable_before {
+        let instruction_reachable = match reachability {
             Reachability::UnreachableFrame => return Ok(()),
             Reachability::UnreachableInstruction
+            // Else and End instructions can be reached even in
+            // unreachable segments because they can be a target of a jump.
                 if !matches!(opcode, OpCode::Else | OpCode::End) =>
             {
                 return Ok(())
             }
-            Reachability::UnreachableInstruction => true,
-            Reachability::Reachable => false,
+            Reachability::UnreachableInstruction => false,
+            Reachability::Reachable => true,
         };
         match opcode {
             OpCode::End => {
@@ -985,7 +989,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                     // the stack might be empty at this point, and in general
                     // there is no point in inserting a copy instruction
                     // since it'll never be executed.
-                    if !unreachable_before {
+                    if instruction_reachable {
                         let provider = self
                             .providers_stack
                             .pop()
@@ -1067,7 +1071,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
                 // to the end of else.
-                self.push_jump(unreachable_before, 0, state, stack_height, Some(Br))?;
+                self.push_jump(instruction_reachable, 0, state, stack_height, Some(Br))?;
                 // Because the module is well-formed this can only happen after an if
                 // We do not backpatch the code now, apart from the initial jump to the else
                 // branch. The effect of this will be that any break out of the if statement
@@ -1093,7 +1097,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         // the stack might be empty at this point, and in general
                         // there is no point in inserting a copy instruction
                         // since it'll never be executed.
-                        if !unreachable_before {
+                        if instruction_reachable {
                             let provider = self
                                 .providers_stack
                                 .pop()
@@ -1120,7 +1124,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 }
             }
             OpCode::Br(label_idx) => {
-                self.push_jump(unreachable_before, *label_idx, state, stack_height, Some(Br))?;
+                self.push_jump(instruction_reachable, *label_idx, state, stack_height, Some(Br))?;
             }
             OpCode::BrIf(label_idx) => {
                 // We output first the target and then the conditional source. This is
@@ -1128,7 +1132,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // taken in which case we don't need to read that, but it's simpler.
                 let condition_source =
                     self.providers_stack.pop().context("BrIf requires a provider.")?;
-                self.push_jump(unreachable_before, *label_idx, state, stack_height, Some(BrIf))?;
+                self.push_jump(instruction_reachable, *label_idx, state, stack_height, Some(BrIf))?;
                 self.push_loc(condition_source);
             }
             OpCode::BrTable {
@@ -1150,11 +1154,11 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
-                self.push_jump(unreachable_before, *default, state, stack_height, None)?;
+                self.push_jump(instruction_reachable, *default, state, stack_height, None)?;
                 // The label types are the same for the default as well all the other
                 // labels.
                 for label_idx in labels {
-                    self.push_jump(unreachable_before, *label_idx, state, stack_height, None)?;
+                    self.push_jump(instruction_reachable, *label_idx, state, stack_height, None)?;
                 }
             }
             OpCode::Return => {
