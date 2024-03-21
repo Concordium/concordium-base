@@ -2,6 +2,9 @@
 
 - Set minimum supported Rust version to 1.73.
 - Make fields of CIS4 events public.
+- Remove the `From<SlotDuration>` and `From<DurationSeconds>` implementations
+  for `chrono::Duration` and replace them with fallible `TryFrom`
+  implementations that fail when durations overflow.
 
 ## 4.0.0 (2024-01-22)
 

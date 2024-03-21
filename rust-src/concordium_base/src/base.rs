@@ -96,13 +96,20 @@ pub struct SlotDuration {
     pub millis: u64,
 }
 
-impl From<SlotDuration> for chrono::Duration {
-    fn from(s: SlotDuration) -> Self {
-        // this is technically iffy in cases
-        // where slot duration would exceed
-        // i64::MAX. But that will not
-        // happen.
-        Self::try_milliseconds(s.millis as i64).expect("Slot duration less than i64::MAX")
+/// The slot duration is not representable as a [`Duration`](chrono::Duration).
+/// It is too large.
+#[derive(Debug, thiserror::Error)]
+#[error("Slot duration is not representable as chrono::Duration.")]
+pub struct SlotDurationConversionError;
+
+impl TryFrom<SlotDuration> for chrono::Duration {
+    type Error = SlotDurationConversionError;
+
+    fn try_from(s: SlotDuration) -> Result<Self, Self::Error> {
+        let Ok(millis) = s.millis.try_into() else {
+            return Err(SlotDurationConversionError);
+        };
+        Self::try_milliseconds(millis).ok_or(SlotDurationConversionError)
     }
 }
 
@@ -115,13 +122,20 @@ pub struct DurationSeconds {
     pub seconds: u64,
 }
 
-impl From<DurationSeconds> for chrono::Duration {
-    fn from(s: DurationSeconds) -> Self {
-        // this is technically iffy in cases
-        // where duration would exceed
-        // i64::MAX. But that will not
-        // happen.
-        Self::try_seconds(s.seconds as i64).expect("Duration that fits chrono::Duration.")
+/// The duration in seconds is not representable as a
+/// [`Duration`](chrono::Duration). It is too large.
+#[derive(Debug, thiserror::Error)]
+#[error("Duration in seconds is not representable as chrono::Duration.")]
+pub struct DurationSecondsConversionError;
+
+impl TryFrom<DurationSeconds> for chrono::Duration {
+    type Error = SlotDurationConversionError;
+
+    fn try_from(s: DurationSeconds) -> Result<Self, Self::Error> {
+        let Ok(millis) = s.seconds.try_into() else {
+            return Err(SlotDurationConversionError);
+        };
+        Self::try_seconds(millis).ok_or(SlotDurationConversionError)
     }
 }
 
