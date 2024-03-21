@@ -1100,7 +1100,7 @@ pub struct ContractAddress {
 
 impl ContractAddress {
     /// Construct a new contract address from index and subindex.
-    pub fn new(index: ContractIndex, subindex: ContractSubIndex) -> Self {
+    pub const fn new(index: ContractIndex, subindex: ContractSubIndex) -> Self {
         Self {
             index,
             subindex,
