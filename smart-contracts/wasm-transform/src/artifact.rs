@@ -754,51 +754,132 @@ impl DynamicLocations {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// A provider of a value for an instruction.
 enum Provider {
+    /// The provider is a dynamic location, not one of the locals.
     Dynamic(i32),
+    /// A provider is a local declared in the Wasm code.
     Local(i32),
+    /// The provider is a constant embedded in the code.
     Constant(i32),
+}
+
+/// A stack of providers that is used to statically resolve locations where
+/// instructions will receive arguments.
+struct ProvidersStack {
+    /// The stack of providers. This is meant to correspond to the validation
+    /// stack but instead of types it has locations of where the value for
+    /// the instruction will be found at runtime.
+    stack:             Vec<Provider>,
+    /// An auxiliary structure used to keep track of available dynamic
+    /// locations. These locations are recycled when they no longer appear
+    /// on the stack.
+    dynamic_locations: DynamicLocations,
+    /// A mapping of constant values to their locations. The map is used to
+    /// deduplicate constants embedded in the code.
+    ///
+    /// Note that we coerce i32 constants to i64 constants and only keep track
+    /// of i64 values.
+    constants:         BTreeMap<i64, i32>,
+}
+
+impl ProvidersStack {
+    /// Construct a new [`ProvidersStack`] given the total number of locals
+    /// (parameters and declared locals).
+    pub fn new(num_locals: u32, return_type: Option<ValueType>) -> Self {
+        let next_location = if num_locals == 0 && return_type.is_some() {
+            1
+        } else {
+            num_locals
+        };
+        let dynamic_locations = DynamicLocations::new(next_location as i32);
+        Self {
+            stack: Vec::new(),
+            dynamic_locations,
+            constants: BTreeMap::new(),
+        }
+    }
+
+    /// Consume a provider from the top of the stack and recycle its location
+    /// in case it was a dynamic location.
+    pub fn consume(&mut self) -> CompileResult<Provider> {
+        let operand = self.stack.pop().context("Missing operand for consume")?;
+        self.dynamic_locations.reuse(operand);
+        Ok(operand)
+    }
+
+    /// Generate a fresh dynamic location and return its index.
+    pub fn provide(&mut self) -> i32 {
+        let result = self.dynamic_locations.get();
+        self.stack.push(Provider::Dynamic(result));
+        result
+    }
+
+    /// Push an existing provider to the providers stack.
+    pub fn provide_existing(&mut self, provider: Provider) { self.stack.push(provider); }
+
+    /// Retrieve, but not remove, the top provider on the stack.
+    pub fn top(&self) -> CompileResult<Provider> {
+        let operand = self.stack.last().context("Missing operand for top")?;
+        Ok(*operand)
+    }
+
+    /// Return the number of values on the provider stack.
+    pub fn len(&self) -> usize { self.stack.len() }
+
+    /// Push a constant onto the provider stack.
+    pub fn push_constant(&mut self, c: i64) -> CompileResult<()> {
+        let next = -i32::try_from(self.constants.len())? - 1;
+        let idx = self.constants.entry(c).or_insert(next);
+        self.stack.push(Provider::Constant(*idx));
+        Ok(())
+    }
+
+    /// Truncate the provider stack to be **at most** `new_len` elements.
+    /// All the extra values are available for reuse.
+    pub fn truncate(&mut self, new_len: usize) -> CompileResult<()> {
+        let drop_len = self.stack.len().saturating_sub(new_len);
+        for _ in 0..drop_len {
+            self.consume()?;
+        }
+        Ok(())
+    }
 }
 
 /// An intermediate structure of the instruction sequence plus any pending
 /// backpatch locations we need to resolve.
 struct BackPatch {
-    out:               Instructions,
-    backpatch:         BackPatchStack,
-    providers_stack:   Vec<Provider>,
+    out:              Instructions,
+    backpatch:        BackPatchStack,
+    providers_stack:  ProvidersStack,
     /// The return type of the function.
-    return_type:       Option<ValueType>,
-    dynamic_locations: DynamicLocations,
-    constants:         BTreeMap<i64, i32>,
+    return_type:      Option<ValueType>,
     /// If the last instruction produced something
     /// in the dynamic area record the location here
     /// so we can short-circuit the LocalSet that immediately
     /// follows such an instruction.
-    last_provide_loc:  Option<usize>,
+    last_provide_loc: Option<usize>,
 }
 
 impl BackPatch {
-    /// Construct a new instance. The argument is the number of locals (this
-    /// includes parameters + declared locals). The number of locals is
-    /// assumed to be within bounds ensured by the validation.
+    /// Construct a new instance. The `num_locals` argument is the number of
+    /// locals (this includes parameters + declared locals). The number of
+    /// locals is assumed to be within bounds ensured by the validation.
     fn new(num_locals: u32, return_type: Option<ValueType>) -> Self {
-        let dynamic_locations = DynamicLocations::new(num_locals as i32 + 1);
         Self {
             out: Default::default(),
             backpatch: BackPatchStack {
                 // The return value of a function, if any, will always be at index 0.
                 stack: vec![JumpTarget::new_unknown(return_type.map(|_| Provider::Local(0)))],
             },
-            providers_stack: Vec::new(),
-            constants: BTreeMap::new(),
-            dynamic_locations,
+            providers_stack: ProvidersStack::new(num_locals, return_type),
             return_type,
             last_provide_loc: None,
         }
     }
 
+    /// Write a provider into the output bufer.
     fn push_loc(&mut self, loc: Provider) {
-        // TODO: Record preserve locations.
         match loc {
             Provider::Dynamic(idx) => {
                 self.out.push_i32(idx);
@@ -851,15 +932,13 @@ impl BackPatch {
                     };
                         // If or Br instruction.
                         if instruction.is_some() {
-                            let provider = self.providers_stack.pop().context(
-                                "Expected a value at the top of the stack to carry over.",
-                            )?;
+                            let provider = self.providers_stack.consume()?;
                             if provider != result {
                                 self.out.push(InternalOpcode::Copy);
                                 self.push_loc(provider);
                                 self.push_loc(result);
                             }
-                            self.providers_stack.push(result);
+                            self.providers_stack.provide_existing(result);
                         } else {
                             // BrTable instruction.
                             self.push_loc(result);
@@ -934,19 +1013,14 @@ impl BackPatch {
     }
 
     fn push_provide(&mut self) {
-        let result = self.dynamic_locations.get();
-        self.providers_stack.push(Provider::Dynamic(result));
+        let result = self.providers_stack.provide();
         self.last_provide_loc = Some(self.out.current_offset());
         self.out.push_i32(result);
     }
 
     /// Consume an operand and return the slot that was consumed.
     fn push_consume(&mut self) -> CompileResult<Provider> {
-        let operand = self
-            .providers_stack
-            .pop()
-            .with_context(|| "Missing operand for push_consume".to_string())?;
-        self.dynamic_locations.reuse(operand);
+        let operand = self.providers_stack.consume()?;
         self.push_loc(operand);
         Ok(operand)
     }
@@ -990,28 +1064,25 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                     // there is no point in inserting a copy instruction
                     // since it'll never be executed.
                     if instruction_reachable {
-                        let provider = self
-                            .providers_stack
-                            .pop()
-                            .context("Expected a value at the top of the stack to end with.")?;
+                        let provider = self.providers_stack.consume()?;
                         if provider != result {
                             self.out.push(InternalOpcode::Copy);
                             self.push_loc(provider);
                             self.push_loc(result);
                         }
                     } else {
-                        self.providers_stack.truncate(state.opds.stack.len());
+                        self.providers_stack.truncate(state.opds.stack.len())?;
                         // There might not actually be anything at the top of the stack
                         // in the unreachable segment. But there might, in which case
                         // we must remove it to make sure that the `result` is at the top
                         // after the block ends.
                         if self.providers_stack.len() == state.opds.stack.len() {
-                            self.providers_stack.pop();
+                            self.providers_stack.consume()?;
                         }
                     }
-                    self.providers_stack.push(result);
+                    self.providers_stack.provide_existing(result);
                 } else {
-                    self.providers_stack.truncate(state.opds.stack.len());
+                    self.providers_stack.truncate(state.opds.stack.len())?;
                 }
                 if let JumpTarget::Unknown {
                     backpatch_locations,
@@ -1032,7 +1103,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             }
             OpCode::Block(ty) => {
                 let result = if matches!(ty, BlockType::ValueType(_)) {
-                    let r = self.dynamic_locations.get();
+                    let r = self.providers_stack.dynamic_locations.get();
                     Some(r)
                 } else {
                     None
@@ -1041,7 +1112,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             }
             OpCode::Loop(ty) => {
                 let result = if matches!(ty, BlockType::ValueType(_)) {
-                    let r = self.dynamic_locations.get();
+                    let r = self.providers_stack.dynamic_locations.get();
                     Some(r)
                 } else {
                     None
@@ -1057,7 +1128,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 self.out.push(If);
                 self.push_consume()?;
                 let result = if matches!(ty, BlockType::ValueType(_)) {
-                    let r = self.dynamic_locations.get();
+                    let r = self.providers_stack.dynamic_locations.get();
                     Some(r)
                 } else {
                     None
@@ -1098,26 +1169,23 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         // there is no point in inserting a copy instruction
                         // since it'll never be executed.
                         if instruction_reachable {
-                            let provider = self
-                                .providers_stack
-                                .pop()
-                                .context("Expected a value at the top of the stack to end with.")?;
+                            let provider = self.providers_stack.consume()?;
                             if provider != result {
                                 self.out.push(InternalOpcode::Copy);
                                 self.push_loc(provider);
                                 self.push_loc(result);
                             }
                         } else {
-                            self.providers_stack.truncate(state.opds.stack.len());
+                            self.providers_stack.truncate(state.opds.stack.len())?;
                             // There might not actually be anything at the top of the stack
                             // in the unreachable segment. But there might, in which case
                             // we must remove it to make sure that the `result` is at the top
                             // after the block ends.
-                            self.providers_stack.pop();
+                            let _ = self.providers_stack.consume();
                         }
-                        self.providers_stack.push(result);
+                        self.providers_stack.provide_existing(result);
                     } else {
-                        self.providers_stack.truncate(state.opds.stack.len());
+                        self.providers_stack.truncate(state.opds.stack.len())?;
                     }
                 } else {
                     bail!("Invariant violation in else branch.")
@@ -1130,8 +1198,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // We output first the target and then the conditional source. This is
                 // maybe not ideal since the conditional will sometimes not be
                 // taken in which case we don't need to read that, but it's simpler.
-                let condition_source =
-                    self.providers_stack.pop().context("BrIf requires a provider.")?;
+                let condition_source = self.providers_stack.consume()?;
                 self.push_jump(instruction_reachable, *label_idx, state, stack_height, Some(BrIf))?;
                 self.push_loc(condition_source);
             }
@@ -1166,7 +1233,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // function and from the result type of the function it will be
                 // clear whether anything needs to be returned.
                 if self.return_type.is_some() {
-                    let top = self.providers_stack.pop().context("Cannot return a value")?;
+                    let top = self.providers_stack.consume()?;
                     if top != Provider::Local(0) {
                         self.out.push(InternalOpcode::Copy);
                         self.push_loc(top);
@@ -1193,7 +1260,6 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             OpCode::TickEnergy(cost) => {
                 self.out.push(TickEnergy);
                 self.out.push_u32(*cost);
-                // TODO
             }
             &OpCode::CallIndirect(idx) => {
                 self.out.push(CallIndirect);
@@ -1203,10 +1269,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // The interpreter knows the number of arguments already. No need to record.
                 // Note that arguments are from **last** to first.
                 for _ in &f.parameters {
-                    let provider = self
-                        .providers_stack
-                        .pop()
-                        .context("Insufficient number of arguments for function.")?;
+                    let provider = self.providers_stack.consume()?;
                     self.push_loc(provider);
                 }
                 // The interpreter knows the return type already.
@@ -1222,16 +1285,14 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 self.out.push(Unreachable);
             }
             OpCode::Drop => {
-                let result =
-                    self.providers_stack.pop().context("Drop requires a non-empty stack.")?;
-                self.dynamic_locations.reuse(result);
+                self.providers_stack.consume()?;
             }
             OpCode::Select => {
                 self.push_ternary(Select)?;
             }
             OpCode::LocalGet(idx) => {
                 // the as i32 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.providers_stack.push(Provider::Local((*idx) as i32));
+                self.providers_stack.provide_existing(Provider::Local((*idx) as i32));
                 // No instruction
             }
             OpCode::LocalSet(idx) | OpCode::LocalTee(idx) => {
@@ -1244,14 +1305,15 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // - copy from local to that value
                 // TODO: This should be more efficiently tracked via a Set.
                 let mut reserve = None;
-                for provide_slot in &mut self.providers_stack {
+                for provide_slot in self.providers_stack.stack.iter_mut() {
                     if let Provider::Local(l) = *provide_slot {
                         if Ok(*idx) == u32::try_from(l) {
                             let reserve = match reserve {
                                 Some(r) => r,
                                 None => {
-                                    // TODO: Do we need a separate preserve stack?
-                                    let result = Provider::Dynamic(self.dynamic_locations.get());
+                                    let result = Provider::Dynamic(
+                                        self.providers_stack.dynamic_locations.get(),
+                                    );
                                     reserve = Some(result);
                                     result
                                 }
@@ -1280,11 +1342,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                             self.out.back_patch(back_loc, idx as u32)?;
 
                             // And clear the provider from the stack
-                            let operand = self
-                                .providers_stack
-                                .pop()
-                                .with_context(|| "Missing operand for push_consume".to_string())?;
-                            self.dynamic_locations.reuse(operand);
+                            self.providers_stack.consume()?;
                         }
                         _ => {
                             self.out.push(LocalSet);
@@ -1303,20 +1361,13 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                             self.out.back_patch(back_loc, idx as u32)?;
 
                             // And clear the provider from the stack
-                            let operand = self
-                                .providers_stack
-                                .pop()
-                                .with_context(|| "Missing operand for push_consume".to_string())?;
-                            self.dynamic_locations.reuse(operand);
-                            self.providers_stack.push(Provider::Local(idx));
+                            self.providers_stack.consume()?;
+                            self.providers_stack.provide_existing(Provider::Local(idx));
                         }
                         _ => {
                             self.out.push(LocalSet);
-                            let operand = self
-                                .providers_stack
-                                .last()
-                                .context("Expect a value on the stack")?;
-                            self.push_loc(*operand);
+                            let operand = self.providers_stack.top()?;
+                            self.push_loc(operand);
                             self.out.push_i32(idx); //target second
                         }
                     }
@@ -1396,17 +1447,11 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 self.push_provide();
             }
             OpCode::MemoryGrow => self.push_unary(MemoryGrow)?,
-            OpCode::I32Const(c) => {
-                let next = -i32::try_from(self.constants.len())? - 1;
-                let idx = self.constants.entry((*c) as i64).or_insert(next);
-                // Do not emit any instructions.
-                self.providers_stack.push(Provider::Constant(*idx));
+            &OpCode::I32Const(c) => {
+                self.providers_stack.push_constant(c as i64)?;
             }
-            OpCode::I64Const(c) => {
-                let next = -i32::try_from(self.constants.len())? - 1;
-                let idx = self.constants.entry(*c).or_insert(next);
-                // Do not emit any instructions.
-                self.providers_stack.push(Provider::Constant(*idx));
+            &OpCode::I64Const(c) => {
+                self.providers_stack.push_constant(c)?;
             }
             OpCode::I32Eqz => {
                 self.push_unary(I32Eqz)?;
@@ -1612,14 +1657,14 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
 
     fn finish(self, _state: &ValidationState) -> CompileResult<Self::Outcome> {
         ensure!(self.backpatch.stack.is_empty(), "There are still jumps to backpatch.");
-        let mut constants = vec![0; self.constants.len()];
-        for (value, place) in self.constants {
+        let mut constants = vec![0; self.providers_stack.constants.len()];
+        for (value, place) in self.providers_stack.constants {
             *constants
                 .get_mut(usize::try_from(-(place + 1))?)
                 .context("Invariant violation. All locations are meant to be consecutive.")? =
                 value;
         }
-        Ok((self.out, self.dynamic_locations.next_location, constants))
+        Ok((self.out, self.providers_stack.dynamic_locations.next_location, constants))
     }
 }
 
