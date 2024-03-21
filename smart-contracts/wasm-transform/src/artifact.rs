@@ -643,8 +643,7 @@ enum JumpTarget {
     /// We know the position in the instruction sequence where the jump should
     /// resolve to. This is used in the case of loops.
     Known {
-        pos:    usize,
-        result: Option<Provider>,
+        pos: usize,
     },
     /// We do not yet know where in the instruction sequence we will jump to.
     /// We record the list of places at which we need to back-patch the location
@@ -656,19 +655,6 @@ enum JumpTarget {
 }
 
 impl JumpTarget {
-    pub fn result_slot(&self) -> Option<Provider> {
-        match self {
-            JumpTarget::Known {
-                result,
-                ..
-            } => *result,
-            JumpTarget::Unknown {
-                result,
-                ..
-            } => *result,
-        }
-    }
-
     pub fn new_unknown(result: Option<Provider>) -> Self {
         JumpTarget::Unknown {
             backpatch_locations: Vec::new(),
@@ -676,6 +662,8 @@ impl JumpTarget {
         }
     }
 
+    /// Similar to [`new_unknown`] except we already know one location at which
+    /// we will need to backpatch.
     pub fn new_unknown_loc(pos: usize, result: Option<Provider>) -> Self {
         JumpTarget::Unknown {
             backpatch_locations: vec![pos],
@@ -683,10 +671,12 @@ impl JumpTarget {
         }
     }
 
-    pub fn new_known(pos: usize, result: Option<Provider>) -> Self {
+    /// Construct a new unknown location `JumpTarget`. The `result` indicates
+    /// the location where the value is expected at the end of the block.
+    /// This is used for the `Block` instruction.
+    pub fn new_known(pos: usize) -> Self {
         JumpTarget::Known {
             pos,
-            result,
         }
     }
 }
@@ -723,8 +713,12 @@ impl BackPatchStack {
     }
 }
 
+/// A generator of dynamic locations needed in addition to the locals during
+/// execution.
 struct DynamicLocations {
+    /// The next location to give out if there are no reusable locations.
     next_location:      i32,
+    /// A set of locations that are available for use again.
     reusable_locations: BTreeSet<i32>,
 }
 
@@ -736,12 +730,15 @@ impl DynamicLocations {
         }
     }
 
+    /// Inform that a given location, if it is a dynamic location, may be used
+    /// again.
     pub fn reuse(&mut self, provider: Provider) {
         if let Provider::Dynamic(idx) = provider {
             self.reusable_locations.insert(idx);
         }
     }
 
+    /// Get the next available location.
     pub fn get(&mut self) -> i32 {
         if let Some(idx) = self.reusable_locations.pop_first() {
             idx
@@ -870,7 +867,7 @@ impl BackPatch {
             out: Default::default(),
             backpatch: BackPatchStack {
                 // The return value of a function, if any, will always be at index 0.
-                stack: vec![JumpTarget::new_unknown(return_type.map(|_| Provider::Local(0)))],
+                stack: vec![JumpTarget::new_unknown(return_type.map(|_| RETURN_VALUE_LOCATION))],
             },
             providers_stack: ProvidersStack::new(num_locals, return_type),
             return_type,
@@ -913,38 +910,36 @@ impl BackPatch {
             target_height
         );
         let target = self.backpatch.get(label_idx)?;
+        // Before a jump we must make sure that whenever execution ends up at the
+        // target label we will always have the value
+        //
         // If we are in the unreachable section then the instruction
         // is never going to be reached, so there is no point in inserting
         // the Copy instruction.
         if instruction_reachable {
-            match target {
-                JumpTarget::Known {
-                    pos: _,
-                    result: _, // when jumping to a loop we don't carry any value over.
-                } => (),
-                JumpTarget::Unknown {
-                    backpatch_locations: _,
-                    result,
-                } => {
-                    if matches!(target_frame.label_type, BlockType::ValueType(_)) {
-                        let &Some(result) = result else {
-                        anyhow::bail!("No target to place result.");
-                    };
-                        // If or Br instruction.
-                        if instruction.is_some() {
-                            let provider = self.providers_stack.consume()?;
-                            if provider != result {
-                                self.out.push(InternalOpcode::Copy);
-                                self.push_loc(provider);
-                                self.push_loc(result);
-                            }
-                            self.providers_stack.provide_existing(result);
-                        } else {
-                            // BrTable instruction.
+            if let JumpTarget::Unknown {
+                backpatch_locations: _,
+                result,
+            } = target
+            {
+                if matches!(target_frame.label_type, BlockType::ValueType(_)) {
+                    let &Some(result) = result else {
+                            anyhow::bail!("No target to place result.");
+                        };
+                    // If or Br instruction.
+                    if instruction.is_some() {
+                        let provider = self.providers_stack.consume()?;
+                        if provider != result {
+                            self.out.push(InternalOpcode::Copy);
+                            self.push_loc(provider);
                             self.push_loc(result);
-                            // Since the part after the BrTable is unreachable.
-                            // the value of the providers stack does not matter.
                         }
+                        self.providers_stack.provide_existing(result);
+                    } else {
+                        // BrTable instruction.
+                        self.push_loc(result);
+                        // Since the part after the BrTable is unreachable.
+                        // the value of the providers stack does not matter.
                     }
                 }
             }
@@ -964,7 +959,8 @@ impl BackPatch {
                 backpatch_locations,
                 ..
             } => {
-                // output a dummy value
+                // output a dummy value that will be backpatched after we pass the End of the
+                // block
                 backpatch_locations.push(self.out.current_offset());
                 self.out.push_u32(0u32);
             }
@@ -972,6 +968,7 @@ impl BackPatch {
         Ok(())
     }
 
+    // Push a binary operation, consuming two values and providing the result.
     fn push_binary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
         self.out.push(opcode);
         let _ = self.push_consume()?;
@@ -980,6 +977,7 @@ impl BackPatch {
         Ok(())
     }
 
+    // Push a ternary operation, consuming three values and providing the result.
     fn push_ternary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
         self.out.push(opcode);
         let _ = self.push_consume()?;
@@ -1012,6 +1010,12 @@ impl BackPatch {
         Ok(())
     }
 
+    /// Write a newly generated location to the output buffer.
+    /// This also records the location into `last_provide_loc` so that if
+    /// this instruction is followed by a `SetLocal` (or `TeeLocal`) instruction
+    /// the `SetLocal` is short-circuited in the sense that we tell the
+    /// preceding instruction to directly write the value into the local (as
+    /// long as this is safe, see the handling of `SetLocal` instruction).
     fn push_provide(&mut self) {
         let result = self.providers_stack.provide();
         self.last_provide_loc = Some(self.out.current_offset());
@@ -1025,6 +1029,10 @@ impl BackPatch {
         Ok(operand)
     }
 }
+
+/// We make a choice that we always have the return value of the function
+/// available at index 0.
+const RETURN_VALUE_LOCATION: Provider = Provider::Local(0);
 
 impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
     type Outcome = (Instructions, i32, Vec<i64>);
@@ -1041,6 +1049,10 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         // The last location where the provider wrote the result.
         // This is used to short-circuit SetLocal
         let last_provide = self.last_provide_loc.take();
+        // Short circuit the handling of the instruction is definitely not reachable.
+        // Otherwise return if the instruction is directly reachable, or only reachable
+        // through a jump (which is only the case if it is an end of a block, so either
+        // End or Else instruction).
         let instruction_reachable = match reachability {
             Reachability::UnreachableFrame => return Ok(()),
             Reachability::UnreachableInstruction
@@ -1056,52 +1068,78 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         match opcode {
             OpCode::End => {
                 let jump_target = self.backpatch.pop()?;
-                // Insert an additional Copy instruction if the top of the provider stack
-                // does not match what is expected.
-                if let Some(result) = jump_target.result_slot() {
-                    // if we are in an unreachable segment then
-                    // the stack might be empty at this point, and in general
-                    // there is no point in inserting a copy instruction
-                    // since it'll never be executed.
-                    if instruction_reachable {
-                        let provider = self.providers_stack.consume()?;
-                        if provider != result {
-                            self.out.push(InternalOpcode::Copy);
-                            self.push_loc(provider);
-                            self.push_loc(result);
-                        }
-                    } else {
-                        self.providers_stack.truncate(state.opds.stack.len())?;
-                        // There might not actually be anything at the top of the stack
-                        // in the unreachable segment. But there might, in which case
-                        // we must remove it to make sure that the `result` is at the top
-                        // after the block ends.
-                        if self.providers_stack.len() == state.opds.stack.len() {
-                            self.providers_stack.consume()?;
+                match jump_target {
+                    JumpTarget::Known {
+                        ..
+                    } => {
+                        // this is end end of a loop. Meaning the only way we
+                        // get to this location is by executing
+                        // instructions in a sequence. This end cannot be jumped
+                        // to.
+                        //
+                        // But if this is not reachable then we need to correct the
+                        // stack to be of correct size by potentially pushing a dummy value to it.
+                        //
+                        // Note that if the End of a loop block is not reachable this also means
+                        // we're in an infinite loop.
+                        if !instruction_reachable {
+                            if self.providers_stack.len() < state.opds.stack.len() {
+                                self.providers_stack.provide();
+                            }
                         }
                     }
-                    self.providers_stack.provide_existing(result);
-                } else {
-                    self.providers_stack.truncate(state.opds.stack.len())?;
+                    JumpTarget::Unknown {
+                        backpatch_locations,
+                        result,
+                    } => {
+                        // Insert an additional Copy instruction if the top of the provider stack
+                        // does not match what is expected.
+                        if let Some(result) = result {
+                            // if we are in an unreachable segment then
+                            // the stack might be empty at this point, and in general
+                            // there is no point in inserting a copy instruction
+                            // since it'll never be executed.
+                            if instruction_reachable {
+                                let provider = self.providers_stack.consume()?;
+                                if provider != result {
+                                    self.out.push(InternalOpcode::Copy);
+                                    self.push_loc(provider);
+                                    self.push_loc(result);
+                                }
+                            } else {
+                                self.providers_stack.truncate(state.opds.stack.len())?;
+                                // There might not actually be anything at the top of the stack
+                                // in the unreachable segment. But there might, in which case
+                                // we must remove it to make sure that the `result` is at the top
+                                // after the block ends.
+                                // Note that the providers stack can never be shorter than
+                                // `state.opds.stack.len()` at this point due to well-formedness of
+                                // blocks.
+                                if self.providers_stack.len() == state.opds.stack.len() {
+                                    self.providers_stack.consume()?;
+                                }
+                            }
+                            self.providers_stack.provide_existing(result);
+                        } else {
+                            self.providers_stack.truncate(state.opds.stack.len())?;
+                        }
+                        // As u32 would be safe here since module sizes are much less than 4GB, but
+                        // we are being extra careful.
+                        let current_pos: u32 = self.out.bytes.len().try_into()?;
+                        for pos in backpatch_locations {
+                            self.out.back_patch(pos, current_pos)?;
+                        }
+                    }
                 }
-                if let JumpTarget::Unknown {
-                    backpatch_locations,
-                    result: _, /* not needed for backpatching. But it was used above to
-                                * potentially insert a Copy. */
-                } = jump_target
-                {
-                    // As u32 would be safe here since module sizes are much less than 4GB, but
-                    // we are being extra careful.
-                    let current_pos: u32 = self.out.bytes.len().try_into()?;
-                    for pos in backpatch_locations {
-                        self.out.back_patch(pos, current_pos)?;
-                    }
-                } // else if it is a Known location there is no backpatching
-                  // needed. And no need to emit any code,
-                  // since end is implicit in generated code
-                  //
             }
             OpCode::Block(ty) => {
+                // If the block has a return value (in our version of Wasm that means a single
+                // value only) then we need to reserve a location where this
+                // value will be available after the block ends. The block end
+                // can be reached in multiple ways, e.g. through jumps from multiple locations,
+                // and it is crucial that all of those will yield end up writing the value that
+                // is relevant at the same location. This is the location we
+                // reserve here.
                 let result = if matches!(ty, BlockType::ValueType(_)) {
                     let r = self.providers_stack.dynamic_locations.get();
                     Some(r)
@@ -1110,23 +1148,19 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 };
                 self.backpatch.push(JumpTarget::new_unknown(result.map(Provider::Dynamic)));
             }
-            OpCode::Loop(ty) => {
-                let result = if matches!(ty, BlockType::ValueType(_)) {
-                    let r = self.providers_stack.dynamic_locations.get();
-                    Some(r)
-                } else {
-                    None
-                };
-                self.backpatch.push(JumpTarget::new_known(
-                    self.out.current_offset(),
-                    result.map(Provider::Dynamic),
-                ))
+            OpCode::Loop(_ty) => {
+                // In contrast to a `Block` or `If`, the only way an end of a block is reached
+                // is through direct execution. Jumps cannot target it. Thus we
+                // don't need to insert any copies or reserve any locations.
+                self.backpatch.push(JumpTarget::new_known(self.out.current_offset()))
             }
             OpCode::If {
                 ty,
             } => {
                 self.out.push(If);
                 self.push_consume()?;
+                // Like for `Block`, we need to reserve a location that will have the resulting
+                // value no matter how we end up at it.
                 let result = if matches!(ty, BlockType::ValueType(_)) {
                     let r = self.providers_stack.dynamic_locations.get();
                     Some(r)
@@ -1234,10 +1268,10 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // clear whether anything needs to be returned.
                 if self.return_type.is_some() {
                     let top = self.providers_stack.consume()?;
-                    if top != Provider::Local(0) {
+                    if top != RETURN_VALUE_LOCATION {
                         self.out.push(InternalOpcode::Copy);
                         self.push_loc(top);
-                        self.push_loc(Provider::Local(0));
+                        self.push_loc(RETURN_VALUE_LOCATION);
                     }
                 }
                 self.out.push(Return)
@@ -1303,8 +1337,16 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // need to preserve that value.
                 // - make a new dynamic value beyond all possible values. (the "preserve" space)
                 // - copy from local to that value
-                // TODO: This should be more efficiently tracked via a Set.
                 let mut reserve = None;
+                // TODO: Measure worst case here. A function that has 1024 locals that we get
+                // and the just execute as many LocalTee as possible.
+                // In principle this loop here is "non-linear" behaviour
+                // since we need to iterate the entire length of the stack for each instruction.
+                // The worst case of this is LocalTee since that keeps the stack the same
+                // height. But note that stack height is limited by
+                // `MAX_ALLOWED_STACK_HEIGHT`, so this is not really quadratic
+                // behaviour, it is still linear in the number of instructions
+                // except the constant is rather large.
                 for provide_slot in self.providers_stack.stack.iter_mut() {
                     if let Provider::Local(l) = *provide_slot {
                         if Ok(*idx) == u32::try_from(l) {
@@ -1374,6 +1416,9 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 }
             }
             OpCode::GlobalGet(idx) => {
+                // TODO: In principle globals could also be "providers" or locations to write.
+                // We could have them in front of constants, in the negative space.
+                // Need to see if it's worth it.
                 self.out.push(GlobalGet);
                 // the as u16 is safe because idx < MAX_NUM_GLOBALS <= 2^16
                 self.out.push_u16(*idx as u16);
