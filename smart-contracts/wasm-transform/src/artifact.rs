@@ -641,7 +641,8 @@ impl Instructions {
 #[derive(Debug)]
 enum JumpTarget {
     /// We know the position in the instruction sequence where the jump should
-    /// resolve to. This is used in the case of loops.
+    /// resolve to. This is used in the case of loops since jumps to a loop
+    /// block jump to the beginning of the block.
     Known {
         pos: usize,
     },
@@ -1123,6 +1124,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         } else {
                             self.providers_stack.truncate(state.opds.stack.len())?;
                         }
+
                         // As u32 would be safe here since module sizes are much less than 4GB, but
                         // we are being extra careful.
                         let current_pos: u32 = self.out.bytes.len().try_into()?;
@@ -1183,7 +1185,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // will jump to the end of else, as intended.
                 if let JumpTarget::Unknown {
                     backpatch_locations,
-                    result,
+                    result: _,
                 } = self.backpatch.get_mut(0)?
                 {
                     // As u32 would be safe here since module sizes are much less than 4GB, but
@@ -1195,32 +1197,6 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                     );
                     let first = backpatch_locations.remove(0);
                     self.out.back_patch(first, current_pos)?;
-
-                    // TODO: This is duplicated from the End
-                    if let &mut Some(result) = result {
-                        // if we are in an unreachable segment then
-                        // the stack might be empty at this point, and in general
-                        // there is no point in inserting a copy instruction
-                        // since it'll never be executed.
-                        if instruction_reachable {
-                            let provider = self.providers_stack.consume()?;
-                            if provider != result {
-                                self.out.push(InternalOpcode::Copy);
-                                self.push_loc(provider);
-                                self.push_loc(result);
-                            }
-                        } else {
-                            self.providers_stack.truncate(state.opds.stack.len())?;
-                            // There might not actually be anything at the top of the stack
-                            // in the unreachable segment. But there might, in which case
-                            // we must remove it to make sure that the `result` is at the top
-                            // after the block ends.
-                            let _ = self.providers_stack.consume();
-                        }
-                        self.providers_stack.provide_existing(result);
-                    } else {
-                        self.providers_stack.truncate(state.opds.stack.len())?;
-                    }
                 } else {
                     bail!("Invariant violation in else branch.")
                 }
