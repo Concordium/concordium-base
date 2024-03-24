@@ -940,11 +940,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                         *target = t1;
                     }
                 }
-                InternalOpcode::LocalSet => {
-                    let source = get_local(constants, locals, &mut pc);
-                    let target = get_local_mut(locals, &mut pc);
-                    *target = source;
-                }
                 InternalOpcode::GlobalGet => {
                     let idx = get_u16(&mut pc);
                     let copy_target = get_local_mut(locals, &mut pc);

@@ -509,7 +509,6 @@ pub enum InternalOpcode {
     Select,
 
     // Variable instructions
-    LocalSet,
     GlobalGet,
     GlobalSet,
 
@@ -1363,7 +1362,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                             self.providers_stack.consume()?;
                         }
                         _ => {
-                            self.out.push(LocalSet);
+                            self.out.push(Copy);
                             let _operand = self.push_consume()?; // value first.
                             self.out.push_i32(idx); //target second
                         }
@@ -1371,8 +1370,9 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 } else {
                     match last_provide {
                         // if we had to copy to a reserve location then it is not
-                        // possible to short circuit the instruction.
-                        // We need to insert an additional copy instruction.
+                        // possible to short circuit the instruction since there is an extra Copy
+                        // instruction. We need to insert an additional copy
+                        // instruction.
                         Some(back_loc) if reserve.is_none() => {
                             // instead of inserting LocalSet, just tell the previous
                             // instruction to copy the value directly into the local.
@@ -1383,7 +1383,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                             self.providers_stack.provide_existing(Provider::Local(idx));
                         }
                         _ => {
-                            self.out.push(LocalSet);
+                            self.out.push(Copy);
                             let operand = self.providers_stack.top()?;
                             self.push_loc(operand);
                             self.out.push_i32(idx); //target second
