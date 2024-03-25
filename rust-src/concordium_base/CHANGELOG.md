@@ -5,6 +5,10 @@
 - Remove the `From<SlotDuration>` and `From<DurationSeconds>` implementations
   for `chrono::Duration` and replace them with fallible `TryFrom`
   implementations that fail when durations overflow.
+- `ContractAddress::new`
+- `ContractName`, `ReceiveName`, `EntrypointName`, and `Parameter`
+  `new_unchecked` constructors are made `const` so they can be used when
+  defining constants. Similarly `Parameter::empty` is `const` now.
 
 ## 4.0.0 (2024-01-22)
 

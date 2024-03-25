@@ -1255,11 +1255,11 @@ impl<'a> ContractName<'a> {
     /// the behaviour of any methods on this type is unspecified, and may
     /// include panics.
     #[inline(always)]
-    pub fn new_unchecked(name: &'a str) -> Self { ContractName(name) }
+    pub const fn new_unchecked(name: &'a str) -> Self { ContractName(name) }
 
     /// Get contract name used on chain: "init_<contract_name>".
     #[inline(always)]
-    pub fn get_chain_name(self) -> &'a str { self.0 }
+    pub const fn get_chain_name(self) -> &'a str { self.0 }
 
     /// Convert a [`ContractName`] to its owned counterpart. This is an
     /// expensive operation that requires memory allocation.
@@ -1332,7 +1332,7 @@ impl OwnedContractName {
     /// Create a new OwnedContractName without checking the format. Expected
     /// format: "init_<contract_name>".
     #[inline(always)]
-    pub fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
+    pub const fn new_unchecked(name: String) -> Self { OwnedContractName(name) }
 
     /// Convert to [`ContractName`] by reference.
     #[inline(always)]
@@ -1406,10 +1406,10 @@ impl<'a> ReceiveName<'a> {
     /// Create a new ReceiveName without checking the format. Expected format:
     /// "<contract_name>.<func_name>".
     #[inline(always)]
-    pub fn new_unchecked(name: &'a str) -> Self { ReceiveName(name) }
+    pub const fn new_unchecked(name: &'a str) -> Self { ReceiveName(name) }
 
     /// Get receive name used on chain: "<contract_name>.<func_name>".
-    pub fn get_chain_name(self) -> &'a str { self.0 }
+    pub const fn get_chain_name(self) -> &'a str { self.0 }
 
     /// Convert a [`ReceiveName`] to its owned counterpart. This is an expensive
     /// operation that requires memory allocation.
@@ -1517,7 +1517,7 @@ impl OwnedReceiveName {
     /// Create a new OwnedReceiveName without checking the format. Expected
     /// format: "<contract_name>.<func_name>".
     #[inline(always)]
-    pub fn new_unchecked(name: String) -> Self { OwnedReceiveName(name) }
+    pub const fn new_unchecked(name: String) -> Self { OwnedReceiveName(name) }
 
     /// Convert to [`ReceiveName`]. See [`ReceiveName`] for additional methods
     /// available on the type.
@@ -1619,7 +1619,7 @@ impl OwnedEntrypointName {
     /// unsafe.** It is provided for convenience since sometimes it is
     /// statically clear that the format is satisfied.
     #[inline(always)]
-    pub fn new_unchecked(name: String) -> Self { Self(name) }
+    pub const fn new_unchecked(name: String) -> Self { Self(name) }
 
     /// Convert to an [`EntrypointName`] by reference.
     #[inline(always)]
@@ -1684,11 +1684,11 @@ impl<'a> Parameter<'a> {
     /// fits the size limit. The caller is assumed to ensure this via
     /// external means.
     #[inline]
-    pub fn new_unchecked(bytes: &'a [u8]) -> Self { Self(bytes) }
+    pub const fn new_unchecked(bytes: &'a [u8]) -> Self { Self(bytes) }
 
     /// Construct an empty parameter.
     #[inline]
-    pub fn empty() -> Self { Self(&[]) }
+    pub const fn empty() -> Self { Self(&[]) }
 }
 
 /// Parameter to the init function or entrypoint. Owned version.
@@ -1784,11 +1784,11 @@ impl OwnedParameter {
     /// fits the size limit. The caller is assumed to ensure this via
     /// external means.
     #[inline]
-    pub fn new_unchecked(bytes: Vec<u8>) -> Self { Self(bytes) }
+    pub const fn new_unchecked(bytes: Vec<u8>) -> Self { Self(bytes) }
 
     /// Construct an empty parameter.
     #[inline]
-    pub fn empty() -> Self { Self(Vec::new()) }
+    pub const fn empty() -> Self { Self(Vec::new()) }
 }
 
 /// Check whether the given string is a valid contract entrypoint name.
@@ -1870,7 +1870,7 @@ impl ExchangeRate {
     /// Construct an unchecked exchange rate from a numerator and denominator.
     /// The numerator and denominator must both be non-zero, and they have to be
     /// in reduced form.
-    pub fn new_unchecked(numerator: u64, denominator: u64) -> Self {
+    pub const fn new_unchecked(numerator: u64, denominator: u64) -> Self {
         Self {
             numerator,
             denominator,
@@ -1878,10 +1878,10 @@ impl ExchangeRate {
     }
 
     /// Get the numerator. This is never 0.
-    pub fn numerator(&self) -> u64 { self.numerator }
+    pub const fn numerator(&self) -> u64 { self.numerator }
 
     /// Get the denominator. This is never 0.
-    pub fn denominator(&self) -> u64 { self.denominator }
+    pub const fn denominator(&self) -> u64 { self.denominator }
 }
 
 /// The euro/NRG and microCCD/euro exchange rates.
@@ -1962,7 +1962,7 @@ pub struct Chain<T, U> {
 
 impl<T, U> Chain<T, U> {
     /// Construct a reader by chaining to readers together.
-    pub fn new(first: T, second: U) -> Self {
+    pub const fn new(first: T, second: U) -> Self {
         Self {
             first,
             second,
