@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-smart-contract-engine 5.0.0 (2024-03-25)
+
 - `TestHost` no longer implements the `ValidateImportExport` trait, instead use `NoDuplicateImport` struct.
 - `TestHost::new` now takes an instance state, allowing for support of host functions related to the smart contract key-value state.
 - The function `utils::run_module_tests` now provides an empty in-memory instance state for each test case, allowing module tests to use host functions related to the smart contract key-value state.

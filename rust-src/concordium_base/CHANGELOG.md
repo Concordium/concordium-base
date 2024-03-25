@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 5.0.0 (2024-03-25)
+
 - Set minimum supported Rust version to 1.73.
 - Make fields of CIS4 events public.
 - Remove the `From<SlotDuration>` and `From<DurationSeconds>` implementations
