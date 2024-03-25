@@ -32,11 +32,11 @@ version = "1.0.0"
 
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "4"
+version = "*"
 
 [build-dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "4"
+version = "*"
 
 # Use the same optimization level for building build.rs as for the library
 # itself in release mode. This is necessary because some of the dependencies
