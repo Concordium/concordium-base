@@ -553,7 +553,7 @@ impl std::fmt::Display for EmittedDebugStatement {
     }
 }
 
-mod host {
+pub(crate) mod host {
     //! v1 host function implementations. Functions in this inner module are
     //! mostly just wrappers. They parse relevant arguments from the
     //! machine, e.g., read values from the stack or memory, and push values to

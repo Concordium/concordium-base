@@ -1,6 +1,6 @@
 [package]
 name = "concordium_base"
-version = "4.1.0"
+version = "5.0.0"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
 rust-version = "1.73"
@@ -62,7 +62,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
-version = "9.0"
+version = "9.1"
 path = "../../smart-contracts/contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 

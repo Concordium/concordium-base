@@ -1695,7 +1695,11 @@ impl serde::Serialize for Web3IdAttribute {
             Web3IdAttribute::Numeric(n) => n.serialize(serializer),
             Web3IdAttribute::Timestamp(ts) => {
                 let epoch = chrono::DateTime::<chrono::Utc>::MIN_UTC;
-                let Some(dt) = epoch.checked_add_signed(chrono::Duration::milliseconds(ts.timestamp_millis().try_into().map_err(S::Error::custom)?)) else {
+                let millis: i64 = ts.timestamp_millis().try_into().map_err(S::Error::custom)?;
+                let Some(time_delta) = chrono::Duration::try_milliseconds(millis) else {
+                    return Err(S::Error::custom("Timestamp out of range."));
+                };
+                let Some(dt) = epoch.checked_add_signed(time_delta) else {
                     return Err(S::Error::custom("Timestamp out of range."));
                 };
                 let mut map = serializer.serialize_map(Some(2))?;
@@ -1751,7 +1755,8 @@ impl std::fmt::Display for Web3IdAttribute {
                     .timestamp_millis()
                     .try_into()
                     .ok()
-                    .and_then(|ms| epoch.checked_add_signed(chrono::Duration::milliseconds(ms)))
+                    .and_then(chrono::Duration::try_milliseconds)
+                    .and_then(|ms| epoch.checked_add_signed(ms))
                 {
                     dt.fmt(f)
                 } else {
