@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate criterion;
 
-use ark_bls12_381::{Fr, G1Projective};
+use ark_bls12_381::G1Projective;
 use concordium_base::{
     bulletproofs::{inner_product_proof::*, range_proof::*, utils::Generators},
     curve_arithmetic::{arkworks_instances::ArkGroup, *},

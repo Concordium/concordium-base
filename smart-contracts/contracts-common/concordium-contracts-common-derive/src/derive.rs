@@ -1290,6 +1290,7 @@ pub fn impl_deserial(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 quote! {
                     let #tag_bytes_ident = <#tag_byte_type_tokens as #root::Deserial>::deserial(#source_ident)?;
                     let tag = #repr_ident::from_le_bytes(#tag_bytes_ident);
+                    #[allow(clippy::manual_range_patterns)]
                     match tag {
                         #matches_tokens
                         _ => Err(Default::default())
@@ -1793,6 +1794,7 @@ pub fn impl_deserial_with_state(ast: &syn::DeriveInput) -> syn::Result<TokenStre
                 quote! {
                     let #tag_bytes_ident = <#tag_byte_type_tokens as concordium_std::Deserial>::deserial(#source_ident)?;
                     let tag = #repr_ident::from_le_bytes(#tag_bytes_ident);
+                    #[allow(clippy::manual_range_patterns)]
                     match tag {
                         #matches_tokens
                         _ => Err(Default::default())

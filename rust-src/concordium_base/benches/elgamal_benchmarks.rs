@@ -1,4 +1,3 @@
-use ark_bls12_381::G1Projective;
 use rand::*;
 
 #[macro_use]
@@ -7,10 +6,7 @@ extern crate criterion;
 use criterion::Criterion;
 
 use concordium_base::{
-    curve_arithmetic::{
-        arkworks_instances::{ArkField, ArkGroup},
-        Curve,
-    },
+    curve_arithmetic::Curve,
     elgamal::*,
     id::constants::{ArCurve, BaseField},
 };
