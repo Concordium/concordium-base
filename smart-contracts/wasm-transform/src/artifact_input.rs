@@ -3,7 +3,7 @@
 use crate::{
     artifact::{
         Artifact, ArtifactData, ArtifactLocal, ArtifactMemory, ArtifactNamedImport,
-        CompiledFunctionBytes, InstantiatedGlobals, InstantiatedTable,
+        ArtifactVersion, CompiledFunctionBytes, InstantiatedGlobals, InstantiatedTable,
     },
     parse::*,
     types::{BlockType, FuncIndex, FunctionType, GlobalInit, Name, TypeIndex, ValueType},
@@ -113,6 +113,16 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ArtifactData {
     }
 }
 
+impl<'a, Ctx> Parseable<'a, Ctx> for ArtifactVersion {
+    fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let v: u16 = cursor.next(ctx)?;
+        match v {
+            1 => Ok(Self::V1),
+            n => anyhow::bail!("Unsupported artifact version: {n}."),
+        }
+    }
+}
+
 /// NB: This implementation is only meant to be used on trusted sources.
 /// It optimistically allocates memory, which could lead to problems if the
 /// input is untrusted.
@@ -120,7 +130,15 @@ impl<'a, Ctx: Copy, I: Parseable<'a, Ctx>> Parseable<'a, Ctx>
     for Artifact<I, CompiledFunctionBytes<'a>>
 {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let imports: Vec<I> = Vec::parse(ctx, cursor).context("Failed to parse imports.")?;
+        let version = cursor.next(ctx)?;
+        let imports: Vec<I> = {
+            let imports_len: u16 = cursor.next(ctx)?;
+            let mut imports = Vec::with_capacity(imports_len.into());
+            for _ in 0..imports_len {
+                imports.push(cursor.next(ctx)?)
+            }
+            imports
+        };
         let ty: Vec<FunctionType> = Vec::parse(ctx, cursor).context("Failed to parse types.")?;
         let table = InstantiatedTable::parse(ctx, cursor).context("Failed to parse table.")?;
         let memory = cursor.next(ctx).context("Failed to parse memory.")?;
@@ -136,6 +154,7 @@ impl<'a, Ctx: Copy, I: Parseable<'a, Ctx>> Parseable<'a, Ctx>
         }
         let code = Vec::parse(ctx, cursor).context("Failed to parse code.")?;
         Ok(Artifact {
+            version,
             imports,
             ty,
             table,

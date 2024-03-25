@@ -415,6 +415,18 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     fn code(&self) -> &[u8] { self.code }
 }
 
+/// Version of the artifact. We only support one version at present in this
+/// library, but older versions of the library supported a different version, so
+/// this versioning allows us to detect those older versions and apply migration
+/// as needed.
+#[derive(Debug, Clone, Copy)]
+pub enum ArtifactVersion {
+    /// A more efficient instruction set representation that precompiles the
+    /// stack machine into a "register based" one where there is no more
+    /// stack during execution.
+    V1,
+}
+
 /// A processed Wasm module. This no longer has custom sections since they are
 /// not needed for further processing.
 /// The type parameter `ImportFunc` is instantiated with the representation of
@@ -430,6 +442,7 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
 /// the code up from the database.
 #[derive(Debug, Clone)]
 pub struct Artifact<ImportFunc, CompiledCode> {
+    pub version: ArtifactVersion,
     /// Imports by (module name, item name).
     pub imports: Vec<ImportFunc>,
     /// Types of the module. These are needed for dynamic dispatch, i.e.,
@@ -461,6 +474,7 @@ pub type OwnedArtifact<ImportFunc> = Artifact<ImportFunc, CompiledFunction>;
 impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<ImportFunc> {
     fn from(a: BorrowedArtifact<'a, ImportFunc>) -> Self {
         let Artifact {
+            version,
             imports,
             ty,
             table,
@@ -470,6 +484,7 @@ impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<Im
             code,
         } = a;
         Self {
+            version,
             imports,
             ty,
             table,
@@ -1884,6 +1899,7 @@ impl Module {
             .map(|i| I::try_from_import(&ty, i))
             .collect::<CompileResult<_>>()?;
         Ok(Artifact {
+            version: ArtifactVersion::V1,
             imports,
             ty,
             table,
