@@ -1097,7 +1097,9 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         //
                         // Note that if the End of a loop block is not reachable this also means
                         // we're in an infinite loop.
-                        if !instruction_reachable && self.providers_stack.len() < state.opds.stack.len() {
+                        if !instruction_reachable
+                            && self.providers_stack.len() < state.opds.stack.len()
+                        {
                             self.providers_stack.provide();
                         }
                     }
