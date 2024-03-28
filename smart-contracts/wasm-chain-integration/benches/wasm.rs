@@ -117,6 +117,21 @@ impl Host<MeteringImport> for MeteringHost {
         self.energy.charge_memory_alloc(num_pages)
     }
 
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        if let Some(fr) = self.activation_frames.checked_sub(1) {
+            self.activation_frames = fr;
+            Ok(())
+        } else {
+            bail!("Too many nested functions.")
+        }
+    }
+
+    fn track_return(&mut self) { self.activation_frames += 1; }
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,

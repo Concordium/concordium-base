@@ -37,6 +37,12 @@ impl<I> machine::Host<I> for TrapHost {
     ) -> machine::RunResult<Option<NoInterrupt>> {
         bail!("TrapHost traps on all host calls.")
     }
+
+    fn tick_energy(&mut self, _energy: u64) -> machine::RunResult<()> { Ok(()) }
+
+    fn track_call(&mut self) -> machine::RunResult<()> { Ok(()) }
+
+    fn track_return(&mut self) {}
 }
 
 /// A host which traps for any function call apart from `report_error` which it
@@ -231,6 +237,12 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         }
         Ok(None)
     }
+
+    fn tick_energy(&mut self, _energy: u64) -> machine::RunResult<()> { Ok(()) }
+
+    fn track_call(&mut self) -> machine::RunResult<()> { Ok(()) }
+
+    fn track_return(&mut self) {}
 }
 
 /// The type of results returned after running a test.

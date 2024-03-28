@@ -12,6 +12,7 @@ use crate::{
     },
     InterpreterEnergy,
 };
+use anyhow::Context;
 use concordium_contracts_common::{
     Address, Amount, ChainMetadata, ContractAddress, OwnedEntrypointName, Timestamp,
 };
@@ -62,8 +63,8 @@ fn test_crypto_prims() -> anyhow::Result<()> {
             },
             &skeleton,
         )
-        .unwrap();
-        module.inject_metering().expect("Metering injection should succeed.");
+        .context("Unable to validate module")?;
+        module.inject_metering().context("Metering injection should succeed.")?;
         module
     };
 
@@ -72,7 +73,8 @@ fn test_crypto_prims() -> anyhow::Result<()> {
     // make sure serialization works for artifacts so do a needless serialization +
     // deserialization
     artifact.output(&mut out)?;
-    let artifact: Artifact<ProcessedImports, CompiledFunctionBytes> = utils::parse_artifact(&out)?;
+    let artifact: Artifact<ProcessedImports, CompiledFunctionBytes> =
+        utils::parse_artifact(&out).context("Failed to parse back artifact.")?;
 
     let owner = concordium_contracts_common::AccountAddress([0u8; 32]);
 

@@ -2,7 +2,7 @@
 name = "concordium-wasm"
 version = "4.0.0"
 authors = ["Concordium <developers@concordium.com>"]
-edition = "2018"
+edition = "2021"
 license-file = "../../LICENSE"
 readme = "./README.md"
 description = "Concordium's Wasm execution engine"

@@ -5,26 +5,15 @@ use crate::types::*;
 use anyhow::{anyhow, bail};
 use std::{convert::TryInto, rc::Rc};
 
-/// TODO set these indices to the imports of the respective accounting host
-/// functions. They should be given by the specification.
-/// The type of this function should be i64 -> ()
-pub(crate) const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
-/// Dynamically track calls to enable us to limit the number of active
-/// frames.
-/// The type of this function should be unit to unit.
-pub(crate) const FN_IDX_TRACK_CALL: FuncIndex = 1;
-/// Track returns so that we can keep the count correctly.
-/// The type of this function should be () -> ().
-pub(crate) const FN_IDX_TRACK_RETURN: FuncIndex = 2;
 /// Charge for memory allocation. The type of this
 /// function should be i32 -> i32.
-pub(crate) const FN_IDX_MEMORY_ALLOC: FuncIndex = 3;
+pub(crate) const FN_IDX_MEMORY_ALLOC: FuncIndex = 0;
 
 /// The number of added functions. All functions that are in the source module
 /// will have the indices shifted by this amount.
 /// The table as well must be updated by increasing all the function indices by
 /// this constant.
-pub(crate) const NUM_ADDED_FUNCTIONS: FuncIndex = 4;
+pub(crate) const NUM_ADDED_FUNCTIONS: FuncIndex = 1;
 
 /// Result of a transformation. The transformation should generally not fail on
 /// a well-formed module, i.e., one that has been validated. But we might want
@@ -210,6 +199,7 @@ pub(crate) mod cost {
                     },
                 )
             }
+            TickEnergy(_) => 0,
             Call(idx) => {
                 let (num_args, num_res) = module.get_func_type_len(*idx)?;
                 invoke_before(num_args, num_res)
@@ -361,8 +351,8 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         // actually the best also regarding conversion etc. Probably i64 is actually
         // fine. NB: The u64 energy value is written as is, and will be
         // reinterpreted as u64 again in the host function call.
-        self.new_seq.push(OpCode::I64Const(e as i64));
-        self.new_seq.push(OpCode::Call(FN_IDX_ACCOUNT_ENERGY));
+        // self.new_seq.push(OpCode::I64Const(e as i64));
+        self.new_seq.push(OpCode::TickEnergy(e as u32));
     }
 
     // TODO fn account_stack_size(&mut self, size: i64) { account_stack_size(&mut
@@ -570,15 +560,11 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 // We need to change which function we call since we've inserted NUM_ADDED_FUNCTIONS
                 // functions at the beginning of the module, for cost accounting.
                 Call(idx) => {
-                    self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
                     self.add_instr_account_energy(&Call(idx + NUM_ADDED_FUNCTIONS));
-                    self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
                 }
                 // The call indirect function does not have to be reindexed since the table is.
                 CallIndirect(_) => {
-                    self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
                     self.add_instr_account_energy(instr);
-                    self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
                 }
                 _ => {
                     // In all other cases, just add the instruction to the pending instructions.
@@ -728,16 +714,6 @@ impl Module {
         // insert a new type for the new imports
         let mut new_types = Vec::with_capacity(self.ty.types.len() + NUM_ADDED_FUNCTIONS as usize);
         new_types.extend_from_slice(&self.ty.types);
-        // account energy
-        new_types.push(Rc::new(FunctionType {
-            parameters: vec![ValueType::I64],
-            result:     None,
-        }));
-        // account call/return
-        new_types.push(Rc::new(FunctionType {
-            parameters: Vec::new(),
-            result:     None,
-        }));
         // account memory alloc
         new_types.push(Rc::new(FunctionType {
             parameters: vec![ValueType::I32],
@@ -753,43 +729,10 @@ impl Module {
                 name: "concordium_metering".to_owned(),
             },
             item_name:   Name {
-                name: "account_energy".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
-                name: "track_call".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally + 1,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
-                name: "track_return".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally + 1,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
                 name: "account_memory".to_owned(),
             },
             description: ImportDescription::Func {
-                type_idx: num_types_originally + 2,
+                type_idx: num_types_originally,
             },
         });
         new_imports.append(&mut self.import.imports);

@@ -803,9 +803,6 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => host::track_return(&mut self.activation_frames),
             ImportFunc::ChargeMemoryAlloc => host::charge_memory_alloc(stack, &mut self.energy)?,
             ImportFunc::Common(cf) => match cf {
                 CommonFunc::GetParameterSize => {
@@ -851,6 +848,19 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
         }
         Ok(None)
     }
+
+    #[inline(always)]
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    #[inline(always)]
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        host::track_call(&mut self.activation_frames)
+    }
+
+    #[inline(always)]
+    fn track_return(&mut self) { host::track_return(&mut self.activation_frames) }
 }
 
 impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImports>
@@ -871,9 +881,6 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => host::track_return(&mut self.activation_frames),
             ImportFunc::ChargeMemoryAlloc => host::charge_memory_alloc(stack, &mut self.energy)?,
             ImportFunc::Common(cf) => match cf {
                 CommonFunc::GetParameterSize => {
@@ -952,6 +959,19 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
         }
         Ok(None)
     }
+
+    #[inline(always)]
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    #[inline(always)]
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        host::track_call(&mut self.activation_frames)
+    }
+
+    #[inline(always)]
+    fn track_return(&mut self) { host::track_return(&mut self.activation_frames) }
 }
 
 /// Collection of information relevant to invoke an init-function.

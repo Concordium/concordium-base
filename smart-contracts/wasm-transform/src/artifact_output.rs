@@ -59,6 +59,8 @@ impl<C: RunnableCode> Output for C {
         self.params().output(out)?;
         self.num_locals().output(out)?;
         self.locals().locals.output(out)?;
+        self.num_registers().output(out)?;
+        self.constants().output(out)?;
         self.code().output(out)
     }
 }
@@ -67,9 +69,22 @@ impl Output for InstantiatedGlobals {
     fn output(&self, out: &mut impl Write) -> OutResult<()> { self.inits.output(out) }
 }
 
+impl Output for ArtifactVersion {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        match self {
+            ArtifactVersion::V1 => 1u16.output(out),
+        }
+    }
+}
+
 impl<ImportFunc: Output, CompiledCode: RunnableCode> Output for Artifact<ImportFunc, CompiledCode> {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
-        self.imports.output(out)?;
+        self.version.output(out)?;
+        let imports_len = u16::try_from(self.imports.len())?;
+        imports_len.output(out)?;
+        for i in &self.imports {
+            i.output(out)?;
+        }
         self.ty.output(out)?;
         self.table.functions.output(out)?;
         self.memory.output(out)?;

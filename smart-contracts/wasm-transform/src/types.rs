@@ -592,4 +592,13 @@ pub enum OpCode {
     I64Extend8S,
     I64Extend16S,
     I64Extend32S,
+
+    // Extra instructions that are not part of the Wasm spec.
+    // They are part of the OpCode data type regardless to simplify
+    // program transformations, chiefly the metering transformation.
+    // Ideally we'd have a type parameter to OpCode, or a different data type,
+    // but that creates more overhead than what is worth with the existing codebase.
+    // So we add it here to the type, and make sure to not produce it when parsing
+    // and disallow it during initial module validation.
+    TickEnergy(u32),
 }
