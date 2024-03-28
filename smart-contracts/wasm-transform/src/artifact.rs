@@ -816,7 +816,12 @@ impl ProvidersStack {
     /// in case it was a dynamic location.
     pub fn consume(&mut self) -> CompileResult<Provider> {
         let operand = self.stack.pop().context("Missing operand for consume")?;
-        self.dynamic_locations.reuse(operand);
+        // TODO: This is kind of expensive to run for each consume and we could do
+        // better by having a map of used locations to their place on the stack.
+        let other = self.stack.iter().all(|x| *x != operand);
+        if other {
+            self.dynamic_locations.reuse(operand);
+        }
         Ok(operand)
     }
 
@@ -828,7 +833,15 @@ impl ProvidersStack {
     }
 
     /// Push an existing provider to the providers stack.
-    pub fn provide_existing(&mut self, provider: Provider) { self.stack.push(provider); }
+    pub fn provide_existing(&mut self, provider: Provider) {
+        self.stack.push(provider);
+        // Make sure that if the provider is on the stack it's not
+        // free for use. We rely on the property that locations
+        // returned from `dynamic_locations.get` are fresh.
+        if let Provider::Dynamic(idx) = provider {
+            self.dynamic_locations.reusable_locations.remove(&idx);
+        }
+    }
 
     /// Retrieve, but not remove, the top provider on the stack.
     pub fn top(&self) -> CompileResult<Provider> {
@@ -939,8 +952,8 @@ impl BackPatch {
             {
                 if matches!(target_frame.label_type, BlockType::ValueType(_)) {
                     let &Some(result) = result else {
-                            anyhow::bail!("No target to place result.");
-                        };
+                        anyhow::bail!("No target to place result.");
+                    };
                     // If or Br instruction.
                     if instruction.is_some() {
                         let provider = self.providers_stack.consume()?;
