@@ -291,7 +291,8 @@ fn get_local(constants: &[i64], locals: &[StackValue], pc: &mut *const u8) -> St
     } else {
         let v = (-(v + 1)) as usize;
         // assert!((v as usize) < constants.len());
-        StackValue::from(*unsafe { constants.get_unchecked(v) })
+        let v = unsafe { constants.get_unchecked(v) };
+        StackValue::from(*v)
     }
 }
 
@@ -645,8 +646,6 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             // The ensure here guarantees that the transmute is safe, provided that
             // InternalOpcode stays as it is.
             // ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
-            //             println!("{:?}", unsafe { std::mem::transmute::<_,
-            // InternalOpcode>(instr) });
             match unsafe { std::mem::transmute(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {

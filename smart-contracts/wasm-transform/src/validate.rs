@@ -469,13 +469,11 @@ pub trait Handler<Ctx: HasValidationContext, O> {
 
     /// Handle the opcode. This function is called __after__ the `validate`
     /// function itself processes the opcode. Hence the validation state is
-    /// already updated. However the function does get access to the stack
-    /// height __before__ the opcode is processed.
+    /// already updated.
     fn handle_opcode(
         &mut self,
         ctx: &Ctx,
         state: &ValidationState,
-        stack_heigh: usize,
         reachability: Reachability,
         opcode: O,
     ) -> anyhow::Result<()>;
@@ -500,7 +498,6 @@ impl<Ctx: HasValidationContext> Handler<Ctx, OpCode> for PureWasmModuleHandler {
         &mut self,
         _ctx: &Ctx,
         _state: &ValidationState,
-        _stack_height: usize,
         _reachability: Reachability,
         opcode: OpCode,
     ) -> anyhow::Result<()> {
@@ -535,7 +532,6 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
     state.push_ctrl(false, context.return_type(), context.return_type());
     for opcode in opcodes {
         let next_opcode = opcode?;
-        let old_stack_height = state.opds.stack.len();
         let unreachable_before = state.reachability();
         match next_opcode.borrow() {
             OpCode::TickEnergy(_) => {
@@ -904,13 +900,7 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
                 state.push_opd(Known(ValueType::I64));
             }
         }
-        handler.handle_opcode(
-            context,
-            &state,
-            old_stack_height,
-            unreachable_before,
-            next_opcode,
-        )?;
+        handler.handle_opcode(context, &state, unreachable_before, next_opcode)?;
     }
     if state.done() {
         handler.finish(&state)

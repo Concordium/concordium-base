@@ -843,12 +843,6 @@ impl ProvidersStack {
         }
     }
 
-    /// Retrieve, but not remove, the top provider on the stack.
-    pub fn top(&self) -> CompileResult<Provider> {
-        let operand = self.stack.last().context("Missing operand for top")?;
-        Ok(*operand)
-    }
-
     /// Return the number of values on the provider stack.
     pub fn len(&self) -> usize { self.stack.len() }
 
@@ -918,63 +912,11 @@ impl BackPatch {
         }
     }
 
-    fn push_jump(
-        &mut self,
-        instruction_reachable: bool,
-        label_idx: LabelIndex,
-        state: &ValidationState,
-        old_stack_height: usize, // stack height before the jump
-        instruction: Option<InternalOpcode>,
-    ) -> CompileResult<()> {
-        let target_frame = state
-            .ctrls
-            .get(label_idx)
-            .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
-        let target_height = target_frame.height;
-        ensure!(
-            old_stack_height >= target_height,
-            "Current height must be at least as much as the target, {} >= {}",
-            old_stack_height,
-            target_height
-        );
-        let target = self.backpatch.get(label_idx)?;
-        // Before a jump we must make sure that whenever execution ends up at the
-        // target label we will always have the value
-        //
-        // If we are in the unreachable section then the instruction
-        // is never going to be reached, so there is no point in inserting
-        // the Copy instruction.
-        if instruction_reachable {
-            if let JumpTarget::Unknown {
-                backpatch_locations: _,
-                result,
-            } = target
-            {
-                if matches!(target_frame.label_type, BlockType::ValueType(_)) {
-                    let &Some(result) = result else {
-                        anyhow::bail!("No target to place result.");
-                    };
-                    // If or Br instruction.
-                    if instruction.is_some() {
-                        let provider = self.providers_stack.consume()?;
-                        if provider != result {
-                            self.out.push(InternalOpcode::Copy);
-                            self.push_loc(provider);
-                            self.push_loc(result);
-                        }
-                        self.providers_stack.provide_existing(result);
-                    } else {
-                        // BrTable instruction.
-                        self.push_loc(result);
-                        // Since the part after the BrTable is unreachable.
-                        // the value of the providers stack does not matter.
-                    }
-                }
-            }
-        }
-        if let Some(i) = instruction {
-            self.out.push(i);
-        };
+    /// Record a jump to the given label. If the location is already known (if
+    /// the target is a loop) then just record it immediately. Otherwise
+    /// insert a dummy value and record the location to "backpatch" when we
+    /// discover where the jump should end up in the instruction sequence.
+    fn insert_jump_location(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
         let target = self.backpatch.get_mut(label_idx)?;
         match target {
             JumpTarget::Known {
@@ -993,6 +935,86 @@ impl BackPatch {
                 self.out.push_u32(0u32);
             }
         }
+        Ok(())
+    }
+
+    /// Push a jump that is executed as a result of a `BrIf` instruction.
+    fn push_br_if_jump(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
+        let target = self.backpatch.get(label_idx)?;
+        // Before a jump we must make sure that whenever execution ends up at the
+        // target label we will always have the value
+        if let JumpTarget::Unknown {
+            result: Some(result),
+            ..
+        } = target
+        {
+            let result = *result;
+            let provider = self.providers_stack.consume()?;
+            if provider != result {
+                self.out.push(InternalOpcode::Copy);
+                self.push_loc(provider);
+                self.push_loc(result);
+            }
+            // After BrIf we need to potentially keep executing,
+            // so keep the provider on the stack. But because we inserted a copy
+            // the correct value is `result` on the top of the stack.
+            self.providers_stack.provide_existing(result);
+        }
+        self.out.push(InternalOpcode::BrIf);
+        self.insert_jump_location(label_idx)?;
+        Ok(())
+    }
+
+    /// Push a jump that is the result of a `Br` instruction.
+    fn push_br_jump(
+        &mut self,
+        instruction_reachable: bool,
+        label_idx: LabelIndex,
+    ) -> CompileResult<()> {
+        let target = self.backpatch.get(label_idx)?;
+        // Before a jump we must make sure that whenever execution ends up at the
+        // target label we will always have the value
+        //
+        // If we are in the unreachable section then the instruction
+        // is never going to be reached, so there is no point in inserting
+        // the Copy instruction.
+        if instruction_reachable {
+            if let JumpTarget::Unknown {
+                backpatch_locations: _,
+                result: Some(result),
+            } = target
+            {
+                let result = *result;
+                let provider = self.providers_stack.consume()?;
+                if provider != result {
+                    self.out.push(InternalOpcode::Copy);
+                    self.push_loc(provider);
+                    self.push_loc(result);
+                }
+            }
+        }
+        self.out.push(InternalOpcode::Br);
+        self.insert_jump_location(label_idx)?;
+        Ok(())
+    }
+
+    fn push_br_table_jump(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
+        let target = self.backpatch.get(label_idx)?;
+        // Before a jump we must make sure that whenever execution ends up at the
+        // target label we will always have the value
+        //
+        // If we are in the unreachable section then the instruction
+        // is never going to be reached, so there is no point in inserting
+        // the Copy instruction.
+        if let JumpTarget::Unknown {
+            backpatch_locations: _,
+            result: Some(result),
+        } = target
+        {
+            let result = *result;
+            self.push_loc(result);
+        }
+        self.insert_jump_location(label_idx)?;
         Ok(())
     }
 
@@ -1069,7 +1091,6 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         &mut self,
         ctx: &Ctx,
         state: &ValidationState,
-        stack_height: usize,
         reachability: Reachability,
         opcode: &OpCode,
     ) -> CompileResult<()> {
@@ -1135,7 +1156,6 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                                     self.push_loc(result);
                                 }
                             } else {
-                                self.providers_stack.truncate(state.opds.stack.len())?;
                                 // There might not actually be anything at the top of the stack
                                 // in the unreachable segment. But there might, in which case
                                 // we must remove it to make sure that the `result` is at the top
@@ -1148,8 +1168,6 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                                 }
                             }
                             self.providers_stack.provide_existing(result);
-                        } else {
-                            self.providers_stack.truncate(state.opds.stack.len())?;
                         }
 
                         // As u32 would be safe here since module sizes are much less than 4GB, but
@@ -1192,20 +1210,17 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // value no matter how we end up at it.
                 let result = if matches!(ty, BlockType::ValueType(_)) {
                     let r = self.providers_stack.dynamic_locations.get();
-                    Some(r)
+                    Some(Provider::Dynamic(r))
                 } else {
                     None
                 };
-                self.backpatch.push(JumpTarget::new_unknown_loc(
-                    self.out.current_offset(),
-                    result.map(Provider::Dynamic),
-                ));
+                self.backpatch.push(JumpTarget::new_unknown_loc(self.out.current_offset(), result));
                 self.out.push_u32(0);
             }
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
                 // to the end of else.
-                self.push_jump(instruction_reachable, 0, state, stack_height, Some(Br))?;
+                self.push_br_jump(instruction_reachable, 0)?;
                 // Because the module is well-formed this can only happen after an if
                 // We do not backpatch the code now, apart from the initial jump to the else
                 // branch. The effect of this will be that any break out of the if statement
@@ -1229,14 +1244,16 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 }
             }
             OpCode::Br(label_idx) => {
-                self.push_jump(instruction_reachable, *label_idx, state, stack_height, Some(Br))?;
+                self.push_br_jump(instruction_reachable, *label_idx)?;
+                // Everything after Br, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
             OpCode::BrIf(label_idx) => {
                 // We output first the target and then the conditional source. This is
                 // maybe not ideal since the conditional will sometimes not be
                 // taken in which case we don't need to read that, but it's simpler.
                 let condition_source = self.providers_stack.consume()?;
-                self.push_jump(instruction_reachable, *label_idx, state, stack_height, Some(BrIf))?;
+                self.push_br_if_jump(*label_idx)?;
                 self.push_loc(condition_source);
             }
             OpCode::BrTable {
@@ -1258,12 +1275,14 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
-                self.push_jump(instruction_reachable, *default, state, stack_height, None)?;
+                self.push_br_table_jump(*default)?;
                 // The label types are the same for the default as well all the other
                 // labels.
                 for label_idx in labels {
-                    self.push_jump(instruction_reachable, *label_idx, state, stack_height, None)?;
+                    self.push_br_table_jump(*label_idx)?;
                 }
+                // Everything after BrTable, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
             OpCode::Return => {
                 // The interpreter will know that return means terminate execution of the
@@ -1277,7 +1296,9 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         self.push_loc(RETURN_VALUE_LOCATION);
                     }
                 }
-                self.out.push(Return)
+                self.out.push(Return);
+                // Everything after Return, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
             &OpCode::Call(idx) => {
                 self.out.push(Call);
@@ -1320,6 +1341,8 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             }
             OpCode::Unreachable => {
                 self.out.push(Unreachable);
+                // Everything after Unreachable, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
             OpCode::Drop => {
                 self.providers_stack.consume()?;
@@ -1411,10 +1434,11 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                             self.providers_stack.provide_existing(Provider::Local(idx));
                         }
                         _ => {
+                            // And clear the provider from the stack
                             self.out.push(Copy);
-                            let operand = self.providers_stack.top()?;
-                            self.push_loc(operand);
+                            let _source = self.push_consume()?;
                             self.out.push_i32(idx); //target second
+                            self.providers_stack.provide_existing(Provider::Local(idx));
                         }
                     }
                 }
@@ -1701,6 +1725,9 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 self.push_unary(I64Extend32S)?;
             }
         }
+        // This opcode handler maintains the invariant that the providers stack is the
+        // same size as the operand stack.
+        assert_eq!(self.providers_stack.stack.len(), state.opds.stack.len(), "{opcode:?}");
         Ok(())
     }
 
