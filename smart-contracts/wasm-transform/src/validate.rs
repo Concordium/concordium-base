@@ -118,9 +118,9 @@ pub struct ValidationState {
 }
 
 impl ValidationState {
-    /// Return whether the frame we are in currently is completely unreachable.
-    /// A frame is unreachable if it is introduced after an unreachable
-    /// instruction in the parent frame.
+    /// Return whether the frame we are in currently is completely unreachable,
+    /// the frame is reachable but the instruction inside it is not, or the
+    /// instruction is reachable.
     pub fn reachability(&self) -> Reachability {
         let Some(idx) = self.unreachable_section else {
             return Reachability::Reachable
@@ -535,7 +535,8 @@ pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>
         let unreachable_before = state.reachability();
         match next_opcode.borrow() {
             OpCode::TickEnergy(_) => {
-                // bail!("Unsupported instruction.");
+                // Do nothing, this does not affect the stack, it acts as a
+                // function of type () => ().
             }
             OpCode::End => {
                 let (res, is_if) = state.pop_ctrl()?;
