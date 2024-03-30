@@ -16,6 +16,7 @@ mod artifact_output;
 pub mod constants;
 pub mod machine;
 mod metering_transformation;
+pub use metering_transformation::{CostConfiguration, CostConfigurationV0};
 pub mod output;
 pub mod parse;
 pub mod types;

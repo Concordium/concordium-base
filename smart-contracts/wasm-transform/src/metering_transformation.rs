@@ -35,8 +35,50 @@ fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> TransformationResult<u
 }
 
 /// Definition of energy costs of instructions.
-pub(crate) mod cost {
-    pub type Energy = u64;
+pub trait CostConfiguration {
+    /// Get the cost of the given instruction in the context of the stack of
+    /// labels, and the module.
+    fn get_cost(
+        &self,
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy>;
+
+    /// Cost incurred by the number of locals when invoking a function (to be
+    /// charged after invocation). The number of locals is only the number of
+    /// declared locals, not including function parameters.
+    fn invoke_after(&self, num_locals: u32) -> Energy;
+
+    /// Cost of an unconditional jump with the given label arity.
+    /// The label arity for us is either 0 or 1, since we do not support
+    /// multiple return values.
+    fn branch(&self, label_arity: usize) -> Energy;
+}
+
+pub(crate) type Energy = u64;
+
+/// Cost configuration for the initial version of the execution engine used
+/// in node versions 1-6. This is more expensive compared to
+/// CostConfigurationV1.
+pub struct CostConfigurationV0;
+
+impl CostConfiguration for CostConfigurationV0 {
+    fn get_cost(
+        &self,
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy> {
+        cost_v0::get_cost(instr, labels, module)
+    }
+
+    fn invoke_after(&self, num_locals: u32) -> Energy { cost_v0::invoke_after(num_locals) }
+
+    fn branch(&self, label_arity: usize) -> Energy { cost_v0::branch(label_arity) }
+}
+
+pub(crate) mod cost_v0 {
     use super::*;
 
     /// Part of a cost of a function call related to allocating
@@ -122,11 +164,6 @@ pub(crate) mod cost {
     /// Jumps are simply setting the instruction pointer.
     pub const IF_STATEMENT: Energy = TEST + JUMP;
 
-    /// Cost of an unconditional jump with the given label arity.
-    /// The label arity for us is either 0 or 1, since we do not support
-    /// multiple return values.
-    pub const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
-
     /// BR_IF is almost the same as an IF statement, so we price it the same.
     pub const BR_IF: Energy = IF_STATEMENT;
 
@@ -144,15 +181,6 @@ pub(crate) mod cost {
          + copy_stack(num_res) + JUMP
     }
 
-    /// Cost incurred by the number of locals when invoking a function (to be
-    /// charged after invocation). The number of locals is only the number of
-    /// declared locals, not including function parameters.
-    pub const fn invoke_after(num_locals: u32) -> Energy {
-        // Enter frame and allocate the given number of locals.
-        // Each local takes 8 bytes.
-        4 * (num_locals as Energy)
-    }
-
     /// Cost of call_indirect with the given number of arguments and results.
     /// This is expensive since it involves a dynamic type check.
     pub const fn call_indirect(num_args: usize, num_res: usize) -> Energy {
@@ -163,12 +191,10 @@ pub(crate) mod cost {
     /// i.e., parameters + results that need to be checked.
     pub const fn type_check(len: usize) -> Energy { len as Energy }
 
-    /// Get the cost of the given instruction in the context of the stack of
-    /// labels, and the module.
-    pub(crate) fn get_cost<C: HasTransformationContext>(
+    pub(crate) fn get_cost(
         instr: &OpCode,
         labels: &[BlockType],
-        module: &C,
+        module: &impl HasTransformationContext,
     ) -> TransformationResult<Energy> {
         use crate::types::OpCode::*;
         let res = match instr {
@@ -320,12 +346,26 @@ pub(crate) mod cost {
         };
         Ok(res)
     }
+
+    /// Cost incurred by the number of locals when invoking a function (to
+    /// be charged after invocation). The number of locals is only
+    /// the number of declared locals, not including function
+    /// parameters.
+    pub(crate) const fn invoke_after(num_locals: u32) -> Energy {
+        // Enter frame and allocate the given number of locals.
+        // Each local takes 8 bytes.
+        4 * (num_locals as Energy)
+    }
+
+    /// Cost of an unconditional jump with the given label arity.
+    /// The label arity for us is either 0 or 1, since we do not support
+    /// multiple return values.
+    pub(crate) const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
 }
 
-use cost::Energy;
-
 ///Metadata needed for transformation.
-struct InstrSeqTransformer<'a, C> {
+struct InstrSeqTransformer<'a, CostConfig, C> {
+    config:               &'a CostConfig,
     /// Reference to the original module to get the right context.
     module:               &'a C,
     /// Current label stack (in the form of the labels' arities).
@@ -341,7 +381,9 @@ struct InstrSeqTransformer<'a, C> {
     pending_instructions: InstrSeq,
 }
 
-impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
+impl<'b, CostConfig: CostConfiguration, C: HasTransformationContext>
+    InstrSeqTransformer<'b, CostConfig, C>
+{
     fn lookup_label(&mut self, idx: LabelIndex) -> TransformationResult<usize> {
         lookup_label(&self.labels, idx)
     }
@@ -400,7 +442,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         for instr in input_instructions {
             // First add the energy to be charged for this instruction to the accumulated
             // energy.
-            self.add_energy(cost::get_cost(instr, &self.labels, self.module)?);
+            self.add_energy(self.config.get_cost(instr, &self.labels, self.module)?);
 
             // Then determine whether the current unconditional instruction sequence stops
             // (in which case the amount to charge for the collected instructions is now
@@ -523,7 +565,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::EmptyType,
                             });
-                            self.account_energy(cost::branch(label_arity))?;
+                            self.account_energy(self.config.branch(label_arity))?;
                             // In the replacement instruction, the label moves out by one index and
                             // therefore the index has to be incremented.
                             self.add_to_new(&Br(idx + 1));
@@ -539,7 +581,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::ValueType(ValueType::I32),
                             });
-                            self.account_energy(cost::branch(label_arity))?;
+                            self.account_energy(self.config.branch(label_arity))?;
                             self.add_to_new(&I32Const(1));
                             self.add_to_new(&Else);
                             self.add_to_new(&I32Const(0));
@@ -581,7 +623,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
 /// A helper trait so that we can use the transformation on different datatypes.
 /// In particular we use it in tests which have their own notion of context to
 /// make it possible to specify modules in a compact way.
-pub(crate) trait HasTransformationContext {
+pub trait HasTransformationContext {
     /// Get the number of arguments and return values of a function type at the
     /// given index.
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)>;
@@ -617,7 +659,8 @@ impl HasTransformationContext for Module {
 
 /// Inject cost accounting into the function, according to cost
 /// specification.
-pub(crate) fn inject_accounting<C: HasTransformationContext>(
+pub(crate) fn inject_accounting<CostConfig: CostConfiguration, C: HasTransformationContext>(
+    config: &CostConfig,
     function: &Code,
     module: &C,
 ) -> TransformationResult<Code> {
@@ -626,7 +669,7 @@ pub(crate) fn inject_accounting<C: HasTransformationContext>(
     // stack size.
     let num_params: u32 = function.ty.parameters.len().try_into()?;
     let energy =
-        cost::invoke_after(function.num_locals.checked_sub(num_params).ok_or_else(|| {
+        config.invoke_after(function.num_locals.checked_sub(num_params).ok_or_else(|| {
             anyhow!(
                 "Precondition violation. Number of locals is less than the number of parameters."
             )
@@ -634,6 +677,7 @@ pub(crate) fn inject_accounting<C: HasTransformationContext>(
 
     let labels = vec![BlockType::from(function.ty.result)];
     let mut transformer = InstrSeqTransformer {
+        config,
         module,
         labels,
         new_seq: InstrSeq::new(),
@@ -692,7 +736,7 @@ impl<'a> HasTransformationContext for ModuleContext<'a> {
 
 impl Module {
     /// Add metering instructions to the module.
-    pub fn inject_metering(&mut self) -> TransformationResult<()> {
+    pub fn inject_metering(&mut self, config: impl CostConfiguration) -> TransformationResult<()> {
         // Update the elements to account for the inserted imports.
         for elem in self.element.elements.iter_mut() {
             for init in elem.inits.iter_mut() {
@@ -705,7 +749,7 @@ impl Module {
             imported: &self.import.imports,
         };
         for code in self.code.impls.iter_mut() {
-            let injected_code = inject_accounting(code, &ctx)?;
+            let injected_code = inject_accounting(&config, code, &ctx)?;
             *code = injected_code;
         }
 

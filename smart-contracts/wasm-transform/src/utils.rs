@@ -3,6 +3,7 @@
 
 use crate::{
     artifact::{Artifact, ArtifactVersion, CompiledFunction, CompiledFunctionBytes, TryFromImport},
+    metering_transformation::CostConfiguration,
     parse::{parse_skeleton, GetParseable, Parseable, Skeleton},
     validate::{validate_module, ValidateImportExport, ValidationConfig},
 };
@@ -40,13 +41,14 @@ pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
 /// artifact.
 pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
     config: ValidationConfig,
+    cost_config: impl CostConfiguration,
     imp: &VI,
     bytes: &[u8],
 ) -> anyhow::Result<InstantiatedModule<I>> {
     let skeleton = parse_skeleton(bytes)?;
     let custom_sections_size = skeleton.custom_sections_size();
     let mut module = validate_module(config, imp, &skeleton)?;
-    module.inject_metering()?;
+    module.inject_metering(cost_config)?;
     let artifact = module.compile()?;
     Ok(InstantiatedModule {
         custom_sections_size,
