@@ -46,6 +46,7 @@ use concordium_wasm::{
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
     validate::ValidationConfig,
+    CostConfiguration,
 };
 use machine::Value;
 use sha3::Digest;
@@ -2034,10 +2035,12 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: 
     init_name: &str,
     loader: BackingStore,
     validation_config: ValidationConfig,
+    cost_config: impl CostConfiguration,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult<A>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
+        cost_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
             enable_debug:    A::ENABLE_DEBUG,
@@ -2484,6 +2487,7 @@ pub fn invoke_receive_with_metering_from_source<
     A: DebugInfo,
 >(
     validation_config: ValidationConfig,
+    cost_config: impl CostConfiguration,
     ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
@@ -2492,6 +2496,7 @@ pub fn invoke_receive_with_metering_from_source<
 ) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
+        cost_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
             enable_debug:    A::ENABLE_DEBUG,

@@ -22,6 +22,7 @@ use concordium_wasm::{
     output::Output,
     parse, utils,
     validate::{self, ValidationConfig},
+    CostConfigurationV0,
 };
 use sha2::Digest;
 
@@ -64,7 +65,9 @@ fn test_crypto_prims() -> anyhow::Result<()> {
             &skeleton,
         )
         .context("Unable to validate module")?;
-        module.inject_metering().context("Metering injection should succeed.")?;
+        module
+            .inject_metering(CostConfigurationV0)
+            .context("Metering injection should succeed.")?;
         module
     };
 

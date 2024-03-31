@@ -23,6 +23,7 @@ use concordium_smart_contract_engine::{
 use concordium_wasm::{
     machine, parse,
     validate::{self, ValidationConfig},
+    CostConfigurationV1,
 };
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use sha2::Digest;
@@ -76,7 +77,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             &skeleton,
         )
         .unwrap();
-        module.inject_metering().expect("Metering injection should succeed.");
+        module.inject_metering(CostConfigurationV1).expect("Metering injection should succeed.");
         module
     };
 
