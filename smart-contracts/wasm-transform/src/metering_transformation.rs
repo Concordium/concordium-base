@@ -446,8 +446,8 @@ pub(crate) mod cost_v1 {
     /// Looking up globals is cheap compared to linear memory.
     /// They are essentially the same as locals, except they are in a different
     /// array.
-    pub const GET_GLOBAL: Energy = 1 + read_source(1);
-    pub const SET_GLOBAL: Energy = 1 + write_result(1);
+    pub const GET_GLOBAL: Energy = 1;
+    pub const SET_GLOBAL: Energy = 1;
 
     /// # Memory instructions.
     /// Load either an i32 or i64 from linear memory.
@@ -475,7 +475,7 @@ pub(crate) mod cost_v1 {
 
     /// Cost of a branch with table (switch statement). This involves bounds
     /// checking on the array of labels, and then a normal branch.
-    pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + JUMP }
+    pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + 3 + JUMP }
 
     /// Cost for invoking a function __before__ the entering the function.
     /// This excludes the cost incurred by the number of locals the function
