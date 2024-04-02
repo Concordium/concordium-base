@@ -55,7 +55,9 @@ linuxBuild False env verbosity = do
 windowsBuild :: WithEnvAndVerbosity
 windowsBuild env verbosity = do
     let copyLib lib = do
-            rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
+            -- We delete the static library if present to ensure that we only link with the
+            -- dynamic library.
+            rawSystemExit verbosity "rm" ["-f", "./lib/" ++ lib ++ ".a"]
             rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
             notice verbosity $ "Copied " ++ lib ++ "."
     rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env
@@ -101,10 +103,27 @@ makeRust _ flags _ lbi = do
     rawSystemExit verbosity "mkdir" ["-p", "./lib"]
     build env verbosity
 
+-- | On Windows, copy the DLL files to the binary install directory. This is to ensure that they
+-- are accessible when running the binaries, tests and benchmarks.
+copyDlls :: Args -> CopyFlags -> PackageDescription -> LocalBuildInfo -> IO ()
+copyDlls _ flags pkgDescr lbi = case buildOS of
+    Windows -> do
+        let installDirs = absoluteComponentInstallDirs pkgDescr lbi (localUnitId lbi) copydest
+        let copyLib lib = do
+                rawSystemExit verbosity "cp" ["-u", "./lib/" ++ lib ++ ".dll", bindir installDirs]
+                notice verbosity $ "Copy " ++ lib ++ " to " ++ bindir installDirs
+        mapM_ copyLib concordiumLibs
+    _ -> return ()
+  where
+    distPref = fromFlag (copyDistPref flags)
+    verbosity = fromFlag (copyVerbosity flags)
+    copydest = fromFlag (copyDest flags)
+
 main =
     defaultMainWithHooks $
         generatingProtos
             "./concordium-grpc-api"
             simpleUserHooks
-                { postConf = makeRust
+                { postConf = makeRust,
+                  postCopy = copyDlls
                 }
