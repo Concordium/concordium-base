@@ -1,10 +1,15 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Concordium.Types.Accounts.CooldownQueue where
 
 import qualified Data.Bits as Bits
+import Data.Bool.Singletons
 import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Serialize
@@ -111,6 +116,20 @@ data CooldownQueue (av :: AccountVersion) where
         -- | Entries in the map must be non-zero amounts, and the map must be non-empty.
         Map.Map CooldownTimeCode Amount ->
         CooldownQueue av
+
+deriving instance Show (CooldownQueue av)
+deriving instance Eq (CooldownQueue av)
+
+instance forall av. (IsAccountVersion av) => Serialize (CooldownQueue av) where
+    put = case sSupportsFlexibleCooldown (accountVersion @av) of
+        SFalse -> const (return ())
+        STrue -> \case
+            EmptyCooldownQueue -> undefined
+            CooldownQueue queue -> undefined
+    get = undefined
+
+emptyCooldownQueue :: CooldownQueue av
+emptyCooldownQueue = EmptyCooldownQueue
 
 -- | Process all cooldowns that expire at or before the given timestamp.
 --  If there are no such cooldowns, then 'Nothing' is returned.

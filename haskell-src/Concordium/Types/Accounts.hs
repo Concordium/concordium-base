@@ -47,6 +47,7 @@ module Concordium.Types.Accounts (
     BakerInfoEx (..),
     bieBakerInfo,
     bieBakerPoolInfo,
+    coerceBakerInfoEx,
     PendingChangeEffective (..),
     pendingChangeEffectiveTimestamp,
     coercePendingChangeEffectiveV1,
@@ -110,6 +111,7 @@ type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructur
     AccountStructureVersionFor 'AccountV0 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV1 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
+    AccountStructureVersionFor 'AccountV3 = 'AccountStructureV1
 
 -- | The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
@@ -225,6 +227,11 @@ bieBakerInfo =
 bieBakerPoolInfo :: (AVSupportsDelegation av) => Lens' (BakerInfoEx av) BakerPoolInfo
 bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
+
+coerceBakerInfoEx ::
+    BakerInfoEx 'AccountV2 ->
+    BakerInfoEx 'AccountV3
+coerceBakerInfoEx BakerInfoExV1{..} = BakerInfoExV1{..}
 
 -- | Note that the serialization of 'BakerInfoEx' matches exactly
 --  the serialization of 'BakerInfo' for 'AccountV0'. This is needed to preserve
