@@ -70,6 +70,10 @@ module Concordium.Wasm (
     V0,
     V1,
 
+    -- *** Validation versions
+    CostSemanticsVersion (..),
+    pvCostSemanticsVersion,
+
     -- *** Methods
 
     --
@@ -172,6 +176,21 @@ import Concordium.Types.HashableTo
 import Concordium.Utils.Serialization
 
 --------------------------------------------------------------------------------
+
+-- | Version of the cost semantics to assign to modules. This cost assignment is
+-- indepenent of the module version below. It is defined by a protocol version.
+-- The new, reduced cost assignment @CSV1@ is introduced in protocol 7.
+data CostSemanticsVersion = CSV0 | CSV1
+
+pvCostSemanticsVersion :: SProtocolVersion pv -> CostSemanticsVersion
+pvCostSemanticsVersion = \case
+    SP1 -> CSV0
+    SP2 -> CSV0
+    SP3 -> CSV0
+    SP4 -> CSV0
+    SP5 -> CSV0
+    SP6 -> CSV0
+    SP7 -> CSV1
 
 -- | Supported versions of Wasm modules. This version defines available host
 --  functions, their semantics, and limitations of contracts.
