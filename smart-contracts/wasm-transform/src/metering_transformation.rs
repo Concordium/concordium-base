@@ -389,7 +389,7 @@ pub(crate) mod cost_v1 {
 
     /// Part of a cost of a function call related to allocating
     /// a new function frame and storing values of locals, etc.
-    pub const FUNC_FRAME_BASE: Energy = 5;
+    pub const FUNC_FRAME_BASE: Energy = 2;
 
     /// Cost of a jump (either Br, Loop, or analogous).
     pub const JUMP: Energy = 2;
@@ -495,7 +495,7 @@ pub(crate) mod cost_v1 {
 
     /// Cost of a dynamic type check. The argument is the number of types
     /// i.e., parameters + results that need to be checked.
-    pub const fn type_check(len: usize) -> Energy { len as Energy }
+    pub const fn type_check(len: usize) -> Energy { (len / 10) as Energy }
 
     pub(crate) fn get_cost(
         instr: &OpCode,
@@ -645,11 +645,7 @@ pub(crate) mod cost_v1 {
     /// be charged after invocation). The number of locals is only
     /// the number of declared locals, not including function
     /// parameters.
-    pub(crate) const fn invoke_after(num_locals: u32) -> Energy {
-        // Enter frame and allocate the given number of locals.
-        // Each local takes 8 bytes.
-        4 * (num_locals as Energy)
-    }
+    pub(crate) const fn invoke_after(num_locals: u32) -> Energy { (num_locals / 16) as Energy }
 }
 
 ///Metadata needed for transformation.
