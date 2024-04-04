@@ -475,7 +475,7 @@ pub(crate) mod cost_v1 {
 
     /// Cost of a branch with table (switch statement). This involves bounds
     /// checking on the array of labels, and then a normal branch.
-    pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + 3 + JUMP }
+    pub const fn br_table(_label_arity: usize) -> Energy { BOUNDS + 3 + JUMP }
 
     /// Cost for invoking a function __before__ the entering the function.
     /// This excludes the cost incurred by the number of locals the function

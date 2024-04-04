@@ -4,6 +4,7 @@ use concordium_wasm::{
     output::Output,
     utils::{parse_artifact, InstantiatedModule},
     validate::ValidationConfig,
+    CostConfigurationV0, CostConfigurationV1,
 };
 use libc::size_t;
 
@@ -164,6 +165,8 @@ unsafe extern "C" fn call_receive_v0(
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`
+/// - `metering_version` the version of cost assignment to use when building the
+///   artifact.
 /// - `output_len` a pointer where the total length of the output will be
 ///   written.
 /// - `output_artifact_len` a pointer where the length of the serialized
@@ -186,17 +189,29 @@ unsafe extern "C" fn call_receive_v0(
 unsafe extern "C" fn validate_and_process_v0(
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
+    metering_version: u8,
     output_len: *mut size_t, // this is the total length of the output byte array
     output_artifact_len: *mut size_t, // the length of the artifact byte array
     output_artifact_bytes: *mut *const u8, /* location where the pointer to the artifact will
                               * be written. */
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
-    match utils::instantiate_with_metering::<ProcessedImports, _>(
-        ValidationConfig::V0,
-        &ConcordiumAllowedImports,
-        wasm_bytes,
-    ) {
+    let metered = match metering_version {
+        0 => utils::instantiate_with_metering::<ProcessedImports, _>(
+            ValidationConfig::V0,
+            CostConfigurationV0,
+            &ConcordiumAllowedImports,
+            wasm_bytes,
+        ),
+        1 => utils::instantiate_with_metering::<ProcessedImports, _>(
+            ValidationConfig::V0,
+            CostConfigurationV1,
+            &ConcordiumAllowedImports,
+            wasm_bytes,
+        ),
+        n => panic!("Precondition violation. Unsupported cost configuration {n}."),
+    };
+    match metered {
         Ok(InstantiatedModule {
             custom_sections_size: _,
             artifact,

@@ -25,6 +25,7 @@ use concordium_wasm::{
     output::Output,
     utils::{parse_artifact, InstantiatedModule},
     validate::ValidationConfig,
+    CostConfigurationV0, CostConfigurationV1,
 };
 
 use crate::v0::ffi::slice_from_c_bytes;
@@ -363,6 +364,8 @@ unsafe extern "C" fn call_receive_v1(
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`
+/// - `metering_version` the version of cost assignment to use when building the
+///   artifact.
 /// - `output_len` a pointer where the total length of the output will be
 ///   written.
 /// - `output_artifact_len` a pointer where the length of the serialized
@@ -391,6 +394,7 @@ unsafe extern "C" fn validate_and_process_v1(
     allow_sign_extension_instr: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
+    metering_version: u8,
     // this is the total length of the output byte array
     output_len: *mut size_t,
     // the length of the artifact byte array
@@ -400,17 +404,31 @@ unsafe extern "C" fn validate_and_process_v1(
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
-    match utils::instantiate_with_metering::<ProcessedImports, _>(
-        ValidationConfig {
-            allow_globals_in_init:      allow_globals_in_init != 0,
-            allow_sign_extension_instr: allow_sign_extension_instr != 0,
-        },
-        &ConcordiumAllowedImports {
-            support_upgrade: support_upgrade == 1,
-            enable_debug:    false, // we don't allow debugging when running as part of the chain.
-        },
-        wasm_bytes,
-    ) {
+    let validation_config = ValidationConfig {
+        allow_globals_in_init:      allow_globals_in_init != 0,
+        allow_sign_extension_instr: allow_sign_extension_instr != 0,
+    };
+    let allowed_imports = &ConcordiumAllowedImports {
+        support_upgrade: support_upgrade == 1,
+        enable_debug:    false, // we don't allow debugging when running as part of the chain.
+    };
+
+    let metered = match metering_version {
+        0 => utils::instantiate_with_metering::<ProcessedImports, _>(
+            validation_config,
+            CostConfigurationV0,
+            allowed_imports,
+            wasm_bytes,
+        ),
+        1 => utils::instantiate_with_metering::<ProcessedImports, _>(
+            validation_config,
+            CostConfigurationV1,
+            allowed_imports,
+            wasm_bytes,
+        ),
+        n => panic!("Precondition violation. Unsupported cost configuration {n}"),
+    };
+    match metered {
         Ok(InstantiatedModule {
             artifact,
             custom_sections_size,
