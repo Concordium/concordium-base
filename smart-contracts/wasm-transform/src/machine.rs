@@ -105,6 +105,12 @@ pub struct RunConfig {
     /// allowed to allocate. This is fixed at startup and cannot be changed
     /// during execution.
     max_memory:       usize,
+    /// In case of an interrupt, upon resume there might be a return value
+    /// produced by the interrupt. This is the location in which the return
+    /// value is written. In case there is no return value for that
+    /// particular function this is set to a dummy location 0 and not used upon
+    /// resume. The type of the host function that is being called determines
+    /// which case we're in so we do not record the information here.
     return_value_loc: usize,
 }
 
@@ -623,9 +629,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
 
         // Stack used for host function calls, to pass parameters.
         let mut stack = RuntimeStack {
-            stack: vec![unsafe { std::mem::zeroed() }; 10], /* TODO: This should be max host
-                                                             * function
-                                                             * arguments. */
+            // We preallocate the stack so that all host functions
+            // that we have will not need further allocations.
+            stack: vec![unsafe { std::mem::zeroed() }; 10],
         };
 
         let mut locals = &mut locals_vec[locals_base..];
