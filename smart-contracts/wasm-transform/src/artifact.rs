@@ -208,8 +208,10 @@ pub struct CompiledFunctionBytes<'a> {
     /// Maximum number of locations needed. This includes parameters,
     /// locals, and any extra locations needed to preserve values.
     pub(crate) num_registers: u32,
-    /// The constants in the function.
-    pub(crate) constants:     Vec<i64>, // TODO: Would be better if it was not allocated.
+    /// The constants in the function. In principle we could make this zero-copy
+    /// (with some complexity due to alignment) but the added complexity is
+    /// not worth it.
+    pub(crate) constants:     Vec<i64>,
     pub(crate) code:          &'a [u8],
 }
 
@@ -338,8 +340,9 @@ pub trait RunnableCode {
     /// The number of parameters of the function.
     fn num_params(&self) -> u32;
     /// The number of registers the function needs in the worst case.
+    /// This includes locals and parameters.
     fn num_registers(&self) -> u32;
-    /// The number of registers the function needs in the worst case.
+    /// The number of distinct constants that appear in the function body.
     fn constants(&self) -> &[i64];
     /// The type of the function, as an index into the list of types of the
     /// module.
@@ -664,12 +667,22 @@ enum JumpTarget {
     /// We record the list of places at which we need to back-patch the location
     /// when we get to it.
     Unknown {
+        /// List of locations where we need to insert target location of the
+        /// jump after this is determined.
         backpatch_locations: Vec<usize>,
+        /// If the return type of the block is a value type (not `EmptyType`)
+        /// then this is the location where the value must be available
+        /// after every exit (either via jump or via terminating the block by
+        /// reaching the end of execution) of the block.
         result:              Option<Provider>,
     },
 }
 
 impl JumpTarget {
+    /// Insert a new jump target with unknown location (this is the case when
+    /// entering a block or if (but not loop)). The `result` indicates where
+    /// the result of the block should be available after every exit of the
+    /// block. It is `None` if the block's return type is `EmptyType`.
     pub fn new_unknown(result: Option<Provider>) -> Self {
         JumpTarget::Unknown {
             backpatch_locations: Vec::new(),
@@ -686,9 +699,7 @@ impl JumpTarget {
         }
     }
 
-    /// Construct a new unknown location `JumpTarget`. The `result` indicates
-    /// the location where the value is expected at the end of the block.
-    /// This is used for the `Block` instruction.
+    /// Construct a new known location `JumpTarget`.
     pub fn new_known(pos: usize) -> Self {
         JumpTarget::Known {
             pos,
@@ -734,6 +745,13 @@ struct DynamicLocations {
     /// The next location to give out if there are no reusable locations.
     next_location:      i32,
     /// A set of locations that are available for use again.
+    /// The two operations that are needed are getting a location out,
+    /// and returning it for reuse. We choose a set here so that we can also
+    /// always return the smallest location. Which location is reused first
+    /// is not relevant for correctness. It might affect performance a bit due
+    /// to memory locality, so reusing smaller locations should be better (since
+    /// locals are also small locations), but that's going to be very case
+    /// specific.
     reusable_locations: BTreeSet<i32>,
 }
 
@@ -767,6 +785,11 @@ impl DynamicLocations {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 /// A provider of a value for an instruction.
+/// This is a disjoint union of locations
+/// - locals which go from indices 0..num_locals (including parameters)
+/// - dynamic locations which go from indices `num_locals..num_registers`
+/// - constants which go from indices (-1).. (however many constants there are
+///   in a function)
 enum Provider {
     /// The provider is a dynamic location, not one of the locals.
     Dynamic(i32),
@@ -869,7 +892,12 @@ impl ProvidersStack {
 /// backpatch locations we need to resolve.
 struct BackPatch {
     out:              Instructions,
+    /// The
     backpatch:        BackPatchStack,
+    /// The provider stack. This mimicks the operand stack but it additionally
+    /// records the register locations where the values are available for
+    /// instructions so that those registers can be added as immediate
+    /// arguments to instructions.
     providers_stack:  ProvidersStack,
     /// The return type of the function.
     return_type:      Option<ValueType>,
@@ -1000,12 +1028,6 @@ impl BackPatch {
 
     fn push_br_table_jump(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
         let target = self.backpatch.get(label_idx)?;
-        // Before a jump we must make sure that whenever execution ends up at the
-        // target label we will always have the value
-        //
-        // If we are in the unreachable section then the instruction
-        // is never going to be reached, so there is no point in inserting
-        // the Copy instruction.
         if let JumpTarget::Unknown {
             backpatch_locations: _,
             result: Some(result),
@@ -1121,8 +1143,8 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                     JumpTarget::Known {
                         ..
                     } => {
-                        // this is end end of a loop. Meaning the only way we
-                        // get to this location is by executing
+                        // this is the end of a loop. Meaning the only way we
+                        // can get to this location is by executing
                         // instructions in a sequence. This end cannot be jumped
                         // to.
                         //
@@ -1189,11 +1211,11 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // reserve here.
                 let result = if matches!(ty, BlockType::ValueType(_)) {
                     let r = self.providers_stack.dynamic_locations.get();
-                    Some(r)
+                    Some(Provider::Dynamic(r))
                 } else {
                     None
                 };
-                self.backpatch.push(JumpTarget::new_unknown(result.map(Provider::Dynamic)));
+                self.backpatch.push(JumpTarget::new_unknown(result));
             }
             OpCode::Loop(_ty) => {
                 // In contrast to a `Block` or `If`, the only way an end of a block is reached
@@ -1312,6 +1334,10 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // Return value, if it exists. The interpreter knows the return type
                 // already.
                 if f.result.is_some() {
+                    // To clarify any confusion, the return value will be available, by convention,
+                    // in the RETURN_VALUE_LOCATION register of the callee. We
+                    // then need to copy that into the appropriate location in
+                    // the caller's register.
                     self.push_provide();
                 }
             }
@@ -1444,9 +1470,13 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 }
             }
             OpCode::GlobalGet(idx) => {
-                // TODO: In principle globals could also be "providers" or locations to write.
+                // In principle globals could also be "providers" or locations to write.
                 // We could have them in front of constants, in the negative space.
-                // Need to see if it's worth it.
+                // This is a bit complex for the same reason that SetLocal is complex.
+                // We need to sometimes insert Copy instructions to preserve values that
+                // are on the operand stack. We have prototypes this as well but it did
+                // not lead to performance improvements on examples, so that case is not handled
+                // here.
                 self.out.push(GlobalGet);
                 // the as u16 is safe because idx < MAX_NUM_GLOBALS <= 2^16
                 self.out.push_u16(*idx as u16);
