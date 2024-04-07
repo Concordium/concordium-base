@@ -39,10 +39,10 @@ pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
 
 /// Parse a Wasm module, validate, inject metering, and compile to a runnable
 /// artifact.
-pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
+pub fn instantiate_with_metering<I: TryFromImport>(
     config: ValidationConfig,
     cost_config: impl CostConfiguration,
-    imp: &VI,
+    imp: &impl ValidateImportExport,
     bytes: &[u8],
 ) -> anyhow::Result<InstantiatedModule<I>> {
     let skeleton = parse_skeleton(bytes)?;

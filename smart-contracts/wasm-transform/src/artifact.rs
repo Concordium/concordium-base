@@ -839,8 +839,13 @@ impl ProvidersStack {
     /// in case it was a dynamic location.
     pub fn consume(&mut self) -> CompileResult<Provider> {
         let operand = self.stack.pop().context("Missing operand for consume")?;
-        // TODO: This is kind of expensive to run for each consume and we could do
+        // This is kind of expensive to run for each consume and we could do
         // better by having a map of used locations to their place on the stack.
+        //
+        // However the benchmark using validation-time-consume.wat module indicates
+        // that performance is not an issue. We can optimize this in the future without
+        // breaking changes if we want to improve validation performance a couple of
+        // percent.
         let other = self.stack.iter().all(|x| *x != operand);
         if other {
             self.dynamic_locations.reuse(operand);
@@ -1390,8 +1395,6 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // - make a new dynamic value beyond all possible values. (the "preserve" space)
                 // - copy from local to that value
                 let mut reserve = None;
-                // TODO: Measure worst case here. A function that has 1024 locals that we get
-                // and the just execute as many LocalTee as possible.
                 // In principle this loop here is "non-linear" behaviour
                 // since we need to iterate the entire length of the stack for each instruction.
                 // The worst case of this is LocalTee since that keeps the stack the same
@@ -1399,6 +1402,14 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // `MAX_ALLOWED_STACK_HEIGHT`, so this is not really quadratic
                 // behaviour, it is still linear in the number of instructions
                 // except the constant is rather large.
+                //
+                // There is a benchmark with the module validation-time-preserve.wat that
+                // measure validation of a module that is more than 1MB with a stack height
+                // 1000. with mostly LocalTee instructions. It takes in the range of 13ms to
+                // validate and compile. Which is well within acceptable range. So for the
+                // time being we do not add extra complexity to make the behaviour here more
+                // efficient. But that is an optimization that can be done without making
+                // any breaking changes.
                 for provide_slot in self.providers_stack.stack.iter_mut() {
                     if let Provider::Local(l) = *provide_slot {
                         if Ok(*idx) == u32::try_from(l) {

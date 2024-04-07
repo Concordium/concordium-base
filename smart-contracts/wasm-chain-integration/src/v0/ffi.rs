@@ -197,13 +197,13 @@ unsafe extern "C" fn validate_and_process_v0(
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
     let metered = match metering_version {
-        0 => utils::instantiate_with_metering::<ProcessedImports, _>(
+        0 => utils::instantiate_with_metering::<ProcessedImports>(
             ValidationConfig::V0,
             CostConfigurationV0,
             &ConcordiumAllowedImports,
             wasm_bytes,
         ),
-        1 => utils::instantiate_with_metering::<ProcessedImports, _>(
+        1 => utils::instantiate_with_metering::<ProcessedImports>(
             ValidationConfig::V0,
             CostConfigurationV1,
             &ConcordiumAllowedImports,

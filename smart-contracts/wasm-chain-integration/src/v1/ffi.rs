@@ -414,13 +414,13 @@ unsafe extern "C" fn validate_and_process_v1(
     };
 
     let metered = match metering_version {
-        0 => utils::instantiate_with_metering::<ProcessedImports, _>(
+        0 => utils::instantiate_with_metering::<ProcessedImports>(
             validation_config,
             CostConfigurationV0,
             allowed_imports,
             wasm_bytes,
         ),
-        1 => utils::instantiate_with_metering::<ProcessedImports, _>(
+        1 => utils::instantiate_with_metering::<ProcessedImports>(
             validation_config,
             CostConfigurationV1,
             allowed_imports,

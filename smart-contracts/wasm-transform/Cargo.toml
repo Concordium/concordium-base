@@ -25,5 +25,12 @@ version = "9"
 path = "../contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
+[dev-dependencies]
+criterion = "0.5"
+
 [lib]
 crate-type = ["rlib"]
+
+[[bench]]
+name = "validation-time"
+harness = false
