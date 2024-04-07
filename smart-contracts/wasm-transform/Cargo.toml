@@ -26,7 +26,7 @@ path = "../contracts-common/concordium-contracts-common"
 features = ["derive-serde"]
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.4"
 
 [lib]
 crate-type = ["rlib"]
