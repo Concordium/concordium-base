@@ -1101,6 +1101,7 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+#[allow(clippy::too_many_arguments)]
 pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     source_bytes: &[u8],
     amount: u64,
