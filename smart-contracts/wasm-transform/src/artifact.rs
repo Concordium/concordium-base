@@ -419,9 +419,13 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
 }
 
 /// Version of the artifact. We only support one version at present in this
-/// library, but older versions of the library supported a different version, so
-/// this versioning allows us to detect those older versions and apply migration
-/// as needed.
+/// library, version 1, but older versions of the library supported a different
+/// version, so this versioning allows us to detect those older versions and
+/// apply migration as needed.
+///
+/// The artifact is always serialized such that it starts with a 4-byte version
+/// prefix, which enables us to detect older versions while only supporting the
+/// new version in the library.
 #[derive(Debug, Clone, Copy)]
 pub enum ArtifactVersion {
     /// A more efficient instruction set representation that precompiles the
