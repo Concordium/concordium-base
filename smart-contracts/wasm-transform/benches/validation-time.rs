@@ -38,6 +38,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             black_box(utils::instantiate_with_metering::<ArtifactNamedImport>(
                 ValidationConfig::V1,
+                CostConfigurationV1,
                 &NoImports,
                 VALIDATION_TIME_PRESERVE,
             ))
@@ -47,6 +48,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             black_box(utils::instantiate_with_metering::<ArtifactNamedImport>(
                 ValidationConfig::V1,
+                CostConfigurationV1,
                 &NoImports,
                 VALIDATION_TIME_CONSUME,
             ))
