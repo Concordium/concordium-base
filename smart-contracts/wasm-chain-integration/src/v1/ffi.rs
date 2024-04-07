@@ -400,7 +400,7 @@ unsafe extern "C" fn validate_and_process_v1(
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
-    match utils::instantiate_with_metering::<ProcessedImports, _>(
+    match utils::instantiate_with_metering::<ProcessedImports>(
         ValidationConfig {
             allow_globals_in_init:      allow_globals_in_init != 0,
             allow_sign_extension_instr: allow_sign_extension_instr != 0,
