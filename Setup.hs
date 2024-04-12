@@ -57,7 +57,7 @@ windowsBuild env verbosity = do
     let copyLib lib = do
             -- We delete the static library if present to ensure that we only link with the
             -- dynamic library.
-            rawSystemExit verbosity "rm" ["-f", "./lib/" ++ lib ++ ".a"]
+            rawSystemExit verbosity "rm" ["-f", "./lib/lib" ++ lib ++ ".a"]
             rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
             notice verbosity $ "Copied " ++ lib ++ "."
     rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env

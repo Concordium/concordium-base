@@ -16,6 +16,7 @@ import Data.Serialize
 import Data.Word
 
 import Concordium.Types
+import Concordium.Utils.Serialization
 
 -- | Records when a cooldown will expire.
 data CooldownTime
@@ -64,7 +65,7 @@ data CooldownTime
 --   | @0xffffffffffffffff@  | @PrePreCooldown@                        |
 --   +-----------------------+-----------------------------------------+
 newtype CooldownTimeCode = CooldownTimeCode {theCooldownTimeCode :: Word64}
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Serialize)
 
 -- | The highest 'CooldownTimeCode' that corresponds to a 'CooldownTimestamp'.
 --  All lower codes will also correspond to 'CooldownTimestamp's.
@@ -124,9 +125,14 @@ instance forall av. (IsAccountVersion av) => Serialize (CooldownQueue av) where
     put = case sSupportsFlexibleCooldown (accountVersion @av) of
         SFalse -> const (return ())
         STrue -> \case
-            EmptyCooldownQueue -> undefined
-            CooldownQueue queue -> undefined
-    get = undefined
+            EmptyCooldownQueue -> putWord64be 0
+            CooldownQueue queue -> do
+                putSafeMapOf put put queue
+    get = case sSupportsFlexibleCooldown (accountVersion @av) of
+        SFalse -> return EmptyCooldownQueue
+        STrue -> do
+            queue <- getSafeMapOf get get
+            return $! if Map.null queue then EmptyCooldownQueue else CooldownQueue queue
 
 emptyCooldownQueue :: CooldownQueue av
 emptyCooldownQueue = EmptyCooldownQueue
