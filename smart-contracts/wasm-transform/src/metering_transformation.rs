@@ -149,10 +149,10 @@ pub(crate) mod cost_v0 {
     pub const LOAD_WORD: Energy = 4;
 
     /// Checking memory size is pretty cheap, it is just a vec.len() call.
-    pub const MEMSIZE: Energy = write_stack(1);
+    pub const MEMSIZE: Energy = write_stack(1) + 3;
     /// Constant part for the memory grow instruction. The variable part is
     /// charged for by the host function.
-    pub const MEMGROW: Energy = read_stack(1) + write_stack(1) + 6;
+    pub const MEMGROW: Energy = read_stack(1) + write_stack(1) + 8;
 
     /// Control instructions
     ///
