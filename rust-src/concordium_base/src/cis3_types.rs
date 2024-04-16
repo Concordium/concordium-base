@@ -39,8 +39,8 @@ pub struct NewSupportsPermitQueryParamsError;
 
 /// The parameter type for the `supportsPermit` contract function, part of the
 /// CIS3 specification.
-#[derive(Debug, AsRef, Clone, Into)]
-pub struct SupportsPermitQueryParams(Vec<OwnedEntrypointName>);
+#[derive(Debug, AsRef, Clone, Into, concordium_std::Serialize)]
+pub struct SupportsPermitQueryParams(#[concordium(size_length = 2)] Vec<OwnedEntrypointName>);
 
 impl SupportsPermitQueryParams {
     /// Create a new `SupportsPermitQueryParams`.
