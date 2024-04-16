@@ -1,13 +1,13 @@
 use crate::smart_contracts::ContractEvent;
 use concordium_contracts_common::{
-    serial_vector_no_length, AccountAddress, AccountSignatures, ContractAddress, Cursor, Deserial,
-    OwnedEntrypointName, OwnedParameter, ParseError, Read, Serial, Timestamp, Write,
+    self as concordium_std, AccountAddress, AccountSignatures, ContractAddress, Cursor, Deserial,
+    OwnedEntrypointName, OwnedParameter, ParseError, Read, Timestamp,
 };
 use derive_more::{AsRef, Display, Into};
 use thiserror::Error;
 
 /// A permit message, part of the CIS3 specification.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, concordium_std::Serialize)]
 pub struct PermitMessage {
     /// The address of the intended contract.
     pub contract_address: ContractAddress,
@@ -21,19 +21,8 @@ pub struct PermitMessage {
     pub payload:          OwnedParameter,
 }
 
-/// Serialization of the permit message according to the CIS3 specification.
-impl Serial for PermitMessage {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.contract_address.serial(out)?;
-        self.nonce.serial(out)?;
-        self.timestamp.serial(out)?;
-        self.entry_point.serial(out)?;
-        self.payload.serial(out)
-    }
-}
-
 /// The parameters for a `permit` invokation, part of the CIS3 specification.
-#[derive(Debug)]
+#[derive(Debug, concordium_std::Serialize)]
 pub struct PermitParams {
     /// The signature of the sponsoree.
     pub signature: AccountSignatures,
@@ -41,15 +30,6 @@ pub struct PermitParams {
     pub signer:    AccountAddress,
     /// The message to be signed.
     pub message:   PermitMessage,
-}
-
-/// Serialization of the permit parameters according to the CIS3 specification.
-impl Serial for PermitParams {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.signature.serial(out)?;
-        self.signer.serial(out)?;
-        self.message.serial(out)
-    }
 }
 
 /// Error for constructing a new [`SupportsPermitQueryParams`].
@@ -68,7 +48,7 @@ impl SupportsPermitQueryParams {
     pub fn new(
         entry_points: Vec<OwnedEntrypointName>,
     ) -> Result<Self, NewSupportsPermitQueryParamsError> {
-        if entry_points.len() > u16::MAX as usize {
+        if entry_points.len() > u16::MAX.into() {
             return Err(NewSupportsPermitQueryParamsError);
         }
         Ok(Self(entry_points))
@@ -82,29 +62,8 @@ impl SupportsPermitQueryParams {
 /// The response type for the `supportsPermit` contract function.
 /// The response is a vector of booleans, where each boolean indicates whether
 /// the corresponding entry point in the query supports the `permit` function.
-#[derive(Debug, PartialEq, Eq, AsRef, Clone, Into)]
-pub struct SupportsPermitRepsonse(pub Vec<bool>);
-
-impl Deserial for SupportsPermitRepsonse {
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, ParseError> {
-        let len = source.read_u16()?;
-        let mut res = Vec::with_capacity(len.into());
-        for _ in 0..len {
-            res.push(bool::deserial(source)?);
-        }
-        Ok(Self(res))
-    }
-}
-
-/// Serialization of the `supportsPermit` query parameters according to the CIS3
-/// specification.
-impl Serial for SupportsPermitQueryParams {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        let len = u16::try_from(self.0.len()).map_err(|_| W::Err::default())?;
-        len.serial(out)?;
-        serial_vector_no_length(&self.0, out)
-    }
-}
+#[derive(Debug, PartialEq, Eq, AsRef, Clone, Into, concordium_std::Serialize)]
+pub struct SupportsPermitRepsonse(#[concordium(size_length = 2)] pub Vec<bool>);
 
 /// Smart contract logged event, part of the CIS3 specification.
 #[derive(Debug, Display, Clone)]
