@@ -1,5 +1,8 @@
 ## Unreleased changes
 
+- Add a new module `cis3_types` that defines the interface types for CIS3
+  compatible contracts.
+
 ## 5.0.0 (2024-03-25)
 
 - Set minimum supported Rust version to 1.73.

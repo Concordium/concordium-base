@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 pub mod base;
 pub mod cis2_types;
+pub mod cis3_types;
 pub mod cis4_types;
 pub mod constants;
 pub mod hashes;
