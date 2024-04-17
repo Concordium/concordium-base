@@ -37,6 +37,7 @@ mod types;
 
 use crate::{constants, v0, DebugInfo, ExecResult, InterpreterEnergy, OutOfEnergy};
 use anyhow::{bail, ensure};
+use concordium_base::{base::CredentialRegistrationID, id::types::IpIdentity};
 use concordium_contracts_common::{
     AccountAddress, Address, Amount, ChainMetadata, ContractAddress, EntrypointName,
     ModuleReference, OwnedEntrypointName, ReceiveName,
@@ -127,6 +128,11 @@ pub enum Interrupt {
     QueryContractName {
         address: ContractAddress,
     },
+    /// Query account keys.
+    VerifyPresentation {
+        presentation: Vec<u8>,
+        addresses:    Option<Vec<(IpIdentity, CredentialRegistrationID)>>,
+    },
 }
 
 impl Interrupt {
@@ -167,6 +173,9 @@ impl Interrupt {
                 ..
             } => false,
             Interrupt::QueryContractName {
+                ..
+            } => false,
+            Interrupt::VerifyPresentation {
                 ..
             } => false,
         }
@@ -259,6 +268,17 @@ impl Interrupt {
                 out.push(9u8);
                 out.write_all(&address.index.to_be_bytes())?;
                 out.write_all(&address.subindex.to_be_bytes())?;
+                Ok(())
+            }
+            Interrupt::VerifyPresentation {
+                presentation,
+                addresses,
+            } => {
+                out.push(10u8);
+                out.write_all(&(presentation.len() as u64).to_be_bytes())?;
+                out.write_all(presentation.as_ref())?;
+                use concordium_base::common::Serial;
+                addresses.serial(out);
                 Ok(())
             }
         }
@@ -571,6 +591,10 @@ pub(crate) mod host {
     use std::convert::TryFrom;
 
     use super::*;
+    use concordium_base::{
+        id::constants::{ArCurve, AttributeKind},
+        web3id::Presentation,
+    };
     use concordium_contracts_common::{
         Cursor, EntrypointName, Get, ParseError, ParseResult, ACCOUNT_ADDRESS_SIZE,
     };
@@ -584,6 +608,7 @@ pub(crate) mod host {
     const QUERY_ACCOUNT_KEYS_TAG: u32 = 6;
     const QUERY_CONTRACT_MODULE_REFERENCE_TAG: u32 = 7;
     const QUERY_CONTRACT_NAME_TAG: u32 = 8;
+    const VERIFY_PRESENTATION_TAG: u32 = 9;
 
     /// Parse the call arguments. This is using the serialization as defined in
     /// the smart contracts code since the arguments will be written by a
@@ -849,6 +874,55 @@ pub(crate) mod host {
                     address,
                 }
                 .into())
+            }
+            VERIFY_PRESENTATION_TAG => {
+                ensure!(
+                    length == ACCOUNT_ADDRESS_SIZE,
+                    "Account keys queries must have exactly 32 bytes of payload, but was {}",
+                    length
+                );
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(start + length <= memory.len(), "Illegal memory access.");
+                if energy.tick_energy(constants::copy_to_host_cost(length_u32)).is_err() {
+                    bail!(OutOfEnergy);
+                }
+                let mut presentation = vec![0u8; length];
+                presentation.copy_from_slice(&memory[start..start + length]);
+                if let Ok(p) =
+                    serde_json::from_slice::<Presentation<ArCurve, AttributeKind>>(&presentation)
+                {
+                    let mut addresses = Vec::new();
+                    for meta in p.metadata() {
+                        match meta.cred_metadata {
+                            concordium_base::web3id::CredentialMetadata::Account {
+                                issuer,
+                                cred_id,
+                            } => {
+                                addresses.push((issuer, cred_id));
+                            }
+                            concordium_base::web3id::CredentialMetadata::Web3Id {
+                                ..
+                            } => {
+                                return Ok(Interrupt::VerifyPresentation {
+                                    presentation,
+                                    addresses: None,
+                                }
+                                .into())
+                            }
+                        }
+                    }
+                    Ok(Interrupt::VerifyPresentation {
+                        presentation,
+                        addresses: Some(addresses),
+                    }
+                    .into())
+                } else {
+                    Ok(Interrupt::VerifyPresentation {
+                        presentation,
+                        addresses: None,
+                    }
+                    .into())
+                }
             }
             c => bail!("Illegal instruction code {}.", c),
         }
