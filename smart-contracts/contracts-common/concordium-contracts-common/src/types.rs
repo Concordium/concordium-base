@@ -3008,6 +3008,28 @@ mod serde_impl {
     }
 }
 
+pub struct RV {
+    pub challenge:  [u8; 32],
+    pub statements: Vec<CredentialStatement>,
+}
+
+pub struct CredentialStatement {
+    pub address: AccountAddress,
+    pub atomics: Vec<AtomicStatement>,
+}
+
+pub enum AtomicStatement {
+    InRange {
+        tag:   u8,
+        lower: String,
+        upper: String,
+    },
+    InSet {
+        tag: u8,
+        set: Vec<String>,
+    },
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

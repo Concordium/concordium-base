@@ -757,7 +757,7 @@ impl BakerCredentials {
 /// key and a sequential counter. [`CredentialRegistrationID`]'s generated from
 /// the same PRF key, but different counter values cannot easily be linked
 /// together.
-pub struct CredentialRegistrationID(crate::id::constants::ArCurve);
+pub struct CredentialRegistrationID(pub crate::id::constants::ArCurve);
 
 impl FromStr for CredentialRegistrationID {
     type Err = anyhow::Error;

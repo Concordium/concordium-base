@@ -16,13 +16,16 @@ use crate::{
     id::{
         constants::{ArCurve, AttributeKind},
         id_proof_types::{AtomicProof, AtomicStatement, ProofVersion},
-        types::{Attribute, AttributeTag, GlobalContext, IpIdentity},
+        types::{
+            account_address_from_registration_id, Attribute, AttributeTag, GlobalContext,
+            IpIdentity,
+        },
     },
     pedersen_commitment,
     random_oracle::RandomOracle,
 };
 use concordium_contracts_common::{
-    hashes::HashBytes, ContractAddress, OwnedEntrypointName, OwnedParameter, Timestamp,
+    hashes::HashBytes, ContractAddress, OwnedEntrypointName, OwnedParameter, Timestamp, RV,
 };
 use did::*;
 use ed25519_dalek::Verifier;
@@ -624,6 +627,50 @@ pub type Challenge = HashBytes<Web3IdChallengeMarker>;
 pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub challenge:             Challenge,
     pub credential_statements: Vec<CredentialStatement<C, AttributeType>>,
+}
+
+fn convert_request(request: Request<ArCurve, AttributeKind>) -> Option<RV> {
+    let challenge = request.challenge.bytes;
+    let mut credential_statements = vec![];
+    for cred_statement in request.credential_statements {
+        let (address, atomics) = match cred_statement {
+            CredentialStatement::Account {
+                cred_id, statement, ..
+            } => {
+                let mut atomics = vec![];
+                for account_statements in statement {
+                    match account_statements {
+                        AtomicStatement::RevealAttribute { .. } => return None,
+                        AtomicStatement::AttributeInRange { statement } => {
+                            let atomic = concordium_contracts_common::AtomicStatement::InRange {
+                                tag:   statement.attribute_tag.0,
+                                lower: statement.lower.0,
+                                upper: statement.upper.0,
+                            };
+                            atomics.push(atomic);
+                        }
+                        AtomicStatement::AttributeInSet { statement } => {
+                            let atomic = concordium_contracts_common::AtomicStatement::InSet {
+                                tag: statement.attribute_tag.0,
+                                set: statement.set.iter().map(|x| x.0.clone()).collect(),
+                            };
+                            atomics.push(atomic);
+                        }
+                        AtomicStatement::AttributeNotInSet { .. } => return None,
+                    }
+                }
+                (account_address_from_registration_id(&cred_id.0), atomics)
+            }
+            _ => return None,
+        };
+        let credential_statement =
+            concordium_contracts_common::CredentialStatement { address, atomics };
+        credential_statements.push(credential_statement);
+    }
+    Some(RV {
+        challenge,
+        statements: credential_statements,
+    })
 }
 
 #[repr(transparent)]
