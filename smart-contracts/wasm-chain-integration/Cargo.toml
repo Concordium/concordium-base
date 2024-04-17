@@ -12,7 +12,7 @@ repository = "https://github.com/Concordium/concordium-base/"
 # If this feature is enabled  the ffi exports are going to be produced
 # for use from Haskell.
 enable-ffi = []
-default=[]
+default=["enable-ffi"]
 fuzz-coverage = ["concordium-wasm/fuzz-coverage"]
 fuzz = ["arbitrary", "concordium-contracts-common/fuzz"]
 # Expose helpers for displaying the state of a V1 contract.

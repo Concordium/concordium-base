@@ -629,7 +629,7 @@ pub struct Request<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub credential_statements: Vec<CredentialStatement<C, AttributeType>>,
 }
 
-fn convert_request(request: Request<ArCurve, AttributeKind>) -> Option<RV> {
+pub fn convert_request(request: Request<ArCurve, AttributeKind>) -> Option<RV> {
     let challenge = request.challenge.bytes;
     let mut credential_statements = vec![];
     for cred_statement in request.credential_statements {

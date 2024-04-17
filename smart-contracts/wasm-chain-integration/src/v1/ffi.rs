@@ -19,6 +19,14 @@ use super::trie::{
     SizeCollector, StoreCallback,
 };
 use crate::v1::*;
+use concordium_base::{
+    id::{
+        constants::{ArCurve, AttributeKind},
+        types::{AttributeTag, GlobalContext},
+    },
+    pedersen_commitment,
+    web3id::{convert_request, CredentialsInputs, Presentation},
+};
 use concordium_contracts_common::OwnedReceiveName;
 use concordium_wasm::{
     artifact::{BorrowedArtifact, CompiledFunction},
@@ -835,4 +843,55 @@ unsafe extern "C" fn is_legacy_artifact(
     } else {
         0u8
     }
+}
+
+#[no_mangle]
+unsafe extern "C" fn verify_presentation(
+    gc_ptr: *const GlobalContext<ArCurve>,
+    creds_ptr: *const u8,
+    creds_ptr_len: size_t,
+    presentation_ptr: *const u8,
+    presentation_len: size_t,
+    output_len: *mut size_t,
+) -> *mut u8 {
+    let creds_bytes = slice_from_c_bytes!(creds_ptr, creds_ptr_len);
+    let presentation_bytes = slice_from_c_bytes!(presentation_ptr, presentation_len);
+    let gc = unsafe { &*gc_ptr };
+    let mut out = vec![0u8; 1];
+    let Ok(presentation) = serde_json::from_slice::<Presentation<_, AttributeKind>>(presentation_bytes) else {
+        *output_len = 1;
+        let ptr = out.as_mut_ptr();
+        std::mem::forget(out);
+        return ptr
+    };
+    let Ok(comms) = concordium_base::common::from_bytes::<Vec<(AccountAddress, BTreeMap<AttributeTag, pedersen_commitment::Commitment<ArCurve>>)>, _>(&mut std::io::Cursor::new(creds_bytes)) else {
+        *output_len = 1;
+        let ptr = out.as_mut_ptr();
+        std::mem::forget(out);
+        return ptr
+    };
+    let (addresses, comms) = comms.into_iter().unzip::<_, _, Vec<_>, Vec<_>>();
+    let comms = comms
+        .into_iter()
+        .map(|commitments| CredentialsInputs::Account {
+            commitments,
+        })
+        .collect::<Vec<_>>();
+    let Ok(result) = presentation.verify(gc, comms.iter()) else {
+        *output_len = 1;
+        let ptr = out.as_mut_ptr();
+        std::mem::forget(out);
+        return ptr
+    };
+    let converted = convert_request(result);
+
+    let mut out = Vec::new();
+    concordium_base::smart_contracts::concordium_contracts_common::Serial::serial(
+        &converted, &mut out,
+    )
+    .unwrap();
+    *output_len = out.len() as size_t;
+    let ptr = out.as_mut_ptr();
+    std::mem::forget(out);
+    return ptr;
 }

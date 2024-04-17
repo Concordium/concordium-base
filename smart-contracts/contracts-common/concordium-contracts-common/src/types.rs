@@ -3008,16 +3008,19 @@ mod serde_impl {
     }
 }
 
+#[derive(concordium_std::Serialize)]
 pub struct RV {
     pub challenge:  [u8; 32],
     pub statements: Vec<CredentialStatement>,
 }
 
+#[derive(concordium_std::Serialize)]
 pub struct CredentialStatement {
     pub address: AccountAddress,
     pub atomics: Vec<AtomicStatement>,
 }
 
+#[derive(concordium_std::Serialize)]
 pub enum AtomicStatement {
     InRange {
         tag:   u8,
