@@ -859,12 +859,14 @@ unsafe extern "C" fn verify_presentation(
     let gc = unsafe { &*gc_ptr };
     let mut out = vec![0u8; 1];
     let Ok(presentation) = serde_json::from_slice::<Presentation<_, AttributeKind>>(presentation_bytes) else {
+        println!("FAILED TO PARSE PRESENTATION");
         *output_len = 1;
         let ptr = out.as_mut_ptr();
         std::mem::forget(out);
         return ptr
     };
     let Ok(comms) = concordium_base::common::from_bytes::<Vec<(AccountAddress, BTreeMap<AttributeTag, pedersen_commitment::Commitment<ArCurve>>)>, _>(&mut std::io::Cursor::new(creds_bytes)) else {
+        println!("FAILED TO PARSE FFI INPUT");
         *output_len = 1;
         let ptr = out.as_mut_ptr();
         std::mem::forget(out);
@@ -877,11 +879,15 @@ unsafe extern "C" fn verify_presentation(
             commitments,
         })
         .collect::<Vec<_>>();
-    let Ok(result) = presentation.verify(gc, comms.iter()) else {
-        *output_len = 1;
-        let ptr = out.as_mut_ptr();
-        std::mem::forget(out);
-        return ptr
+    let result = match presentation.verify(gc, comms.iter()) {
+        Ok(result) => result,
+        Err(e) => {
+            println!("VERIFICATION {e:#}");
+            *output_len = 1;
+            let ptr = out.as_mut_ptr();
+            std::mem::forget(out);
+            return ptr;
+        }
     };
     let converted = convert_request(result);
 

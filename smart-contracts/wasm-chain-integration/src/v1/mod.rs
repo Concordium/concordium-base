@@ -876,11 +876,7 @@ pub(crate) mod host {
                 .into())
             }
             VERIFY_PRESENTATION_TAG => {
-                ensure!(
-                    length == ACCOUNT_ADDRESS_SIZE,
-                    "Account keys queries must have exactly 32 bytes of payload, but was {}",
-                    length
-                );
+                println!("VERIFYING PRESENTATION {start}, {length}");
                 // Overflow is not possible in the next line on 64-bit machines.
                 ensure!(start + length <= memory.len(), "Illegal memory access.");
                 if energy.tick_energy(constants::copy_to_host_cost(length_u32)).is_err() {
@@ -888,40 +884,43 @@ pub(crate) mod host {
                 }
                 let mut presentation = vec![0u8; length];
                 presentation.copy_from_slice(&memory[start..start + length]);
-                if let Ok(p) =
-                    serde_json::from_slice::<Presentation<ArCurve, AttributeKind>>(&presentation)
+                match serde_json::from_slice::<Presentation<ArCurve, AttributeKind>>(&presentation)
                 {
-                    let mut addresses = Vec::new();
-                    for meta in p.metadata() {
-                        match meta.cred_metadata {
-                            concordium_base::web3id::CredentialMetadata::Account {
-                                issuer,
-                                cred_id,
-                            } => {
-                                addresses.push((issuer, cred_id));
-                            }
-                            concordium_base::web3id::CredentialMetadata::Web3Id {
-                                ..
-                            } => {
-                                return Ok(Interrupt::VerifyPresentation {
-                                    presentation,
-                                    addresses: None,
+                    Ok(p) => {
+                        let mut addresses = Vec::new();
+                        for meta in p.metadata() {
+                            match meta.cred_metadata {
+                                concordium_base::web3id::CredentialMetadata::Account {
+                                    issuer,
+                                    cred_id,
+                                } => {
+                                    addresses.push((issuer, cred_id));
                                 }
-                                .into())
+                                concordium_base::web3id::CredentialMetadata::Web3Id {
+                                    ..
+                                } => {
+                                    return Ok(Interrupt::VerifyPresentation {
+                                        presentation,
+                                        addresses: None,
+                                    }
+                                    .into())
+                                }
                             }
                         }
+                        Ok(Interrupt::VerifyPresentation {
+                            presentation,
+                            addresses: Some(addresses),
+                        }
+                        .into())
                     }
-                    Ok(Interrupt::VerifyPresentation {
-                        presentation,
-                        addresses: Some(addresses),
+                    Err(e) => {
+                        println!("ERROR = {e}");
+                        Ok(Interrupt::VerifyPresentation {
+                            presentation,
+                            addresses: None,
+                        }
+                        .into())
                     }
-                    .into())
-                } else {
-                    Ok(Interrupt::VerifyPresentation {
-                        presentation,
-                        addresses: None,
-                    }
-                    .into())
                 }
             }
             c => bail!("Illegal instruction code {}.", c),
