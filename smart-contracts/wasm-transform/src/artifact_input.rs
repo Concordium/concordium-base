@@ -115,9 +115,9 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ArtifactData {
 
 impl<'a, Ctx> Parseable<'a, Ctx> for ArtifactVersion {
     fn parse(ctx: Ctx, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let v: u16 = cursor.next(ctx)?;
+        let v: u8 = cursor.next(ctx)?;
         match v {
-            1 => Ok(Self::V1),
+            255 => Ok(Self::V1),
             n => anyhow::bail!("Unsupported artifact version: {n}."),
         }
     }

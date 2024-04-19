@@ -1287,6 +1287,18 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 labels,
                 default,
             } => {
+                // We split the BrTable into two instructions, `BrTable` and `BrTableCarry`.
+                // The former applies where the target of the jump does not expect any value at
+                // the top of the stack, whereas the latter one applies when a single value is
+                // expected.
+                //
+                // Validation (see validate.rs case for BrTable) ensures that all targets of the
+                // jump have the same label type, so we determine the label type
+                // by only checking the label type of the default jump target.
+                //
+                // In the case of BrTableCarry we need to insert additional Copy instructions to
+                // make sure that when execution resumes after the jump the value is available
+                // in the correct register.
                 let target_frame =
                     state.ctrls.get(*default).context("Could not get jump target frame.")?;
                 if let BlockType::EmptyType = target_frame.label_type {
