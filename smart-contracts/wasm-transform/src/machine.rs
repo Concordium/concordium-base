@@ -753,13 +753,17 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     let idx = get_u32(&mut pc);
                     if let Some(f) = self.imports.get(idx as usize) {
                         let params_len = f.ty().parameters.len();
-                        if stack.stack.capacity() < params_len {
-                            stack.stack.resize(params_len, unsafe { std::mem::zeroed() });
-                        } else {
-                            unsafe { stack.stack.set_len(params_len) };
+                        stack.stack.clear();
+                        stack.stack.reserve(params_len);
+                        // NB: Locations of locals are stored in reverse order, i.e.,
+                        // location of the last argument to the function is stored first.
+                        // That is the reason for the reverse iteration below.
+                        for offset in (0..params_len).rev() {
+                            let val = get_local(constants, locals, &mut pc);
+                            unsafe { stack.stack.as_mut_ptr().add(offset).write(val) }
                         }
-                        for p in stack.stack.iter_mut().rev() {
-                            *p = get_local(constants, locals, &mut pc)
+                        unsafe {
+                            stack.stack.set_len(params_len);
                         }
                         let return_value_loc = if f.ty().result.is_some() {
                             let target = get_i32(&mut pc);
@@ -844,13 +848,14 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                             ensure!(ty_actual == ty, "Actual type different from expected.");
 
                             let params_len = f.ty().parameters.len();
-                            if stack.stack.capacity() < params_len {
-                                stack.stack.resize(params_len, unsafe { std::mem::zeroed() });
-                            } else {
-                                unsafe { stack.stack.set_len(params_len) };
+                            stack.stack.clear();
+                            stack.stack.reserve(params_len);
+                            for offset in (0..params_len).rev() {
+                                let val = get_local(constants, locals, &mut pc);
+                                unsafe { stack.stack.as_mut_ptr().add(offset).write(val) }
                             }
-                            for p in stack.stack.iter_mut().rev() {
-                                *p = get_local(constants, locals, &mut pc)
+                            unsafe {
+                                stack.stack.set_len(params_len);
                             }
                             let return_value_loc = if f.ty().result.is_some() {
                                 let target = get_i32(&mut pc);
