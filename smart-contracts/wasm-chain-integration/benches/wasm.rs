@@ -194,7 +194,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -208,7 +211,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -242,7 +245,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -255,7 +261,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -292,7 +298,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -305,7 +314,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -420,7 +429,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_LOOP)).unwrap();
         let mut module =
             validate::validate_module(ValidationConfig::V1, &NoDuplicateImport, &skeleton).unwrap();
-        module.inject_metering().unwrap();
+        module.inject_metering(CostConfigurationV1).unwrap();
         let artifact = module.compile::<MeteringImport>().unwrap();
 
         // Execute the function `name` with arguments `args` until running out of
@@ -566,7 +575,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 &skeleton,
             )
             .unwrap();
-            module.inject_metering().expect("Metering injection should succeed.");
+            module
+                .inject_metering(CostConfigurationV1)
+                .expect("Metering injection should succeed.");
             module
         };
 

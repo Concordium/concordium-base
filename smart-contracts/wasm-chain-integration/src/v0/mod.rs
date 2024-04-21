@@ -33,6 +33,7 @@ use concordium_wasm::{
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
     validate::ValidationConfig,
+    CostConfiguration,
 };
 use machine::Value;
 use std::{collections::LinkedList, convert::TryInto, io::Write};
@@ -1100,6 +1101,7 @@ pub fn invoke_init_from_source<Ctx: HasInitContext>(
 /// Same as `invoke_init_from_source`, except that the module has cost
 /// accounting instructions inserted before the init function is called.
 #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
+#[allow(clippy::too_many_arguments)]
 pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     source_bytes: &[u8],
     amount: u64,
@@ -1107,10 +1109,12 @@ pub fn invoke_init_with_metering_from_source<Ctx: HasInitContext>(
     init_name: &str,
     parameter: Parameter,
     limit_logs_and_return_values: bool,
+    cost_config: impl CostConfiguration,
     energy: InterpreterEnergy,
 ) -> ExecResult<InitResult> {
     let artifact = utils::instantiate_with_metering(
         ValidationConfig::V0,
+        cost_config,
         &ConcordiumAllowedImports,
         source_bytes,
     )?
@@ -1275,9 +1279,11 @@ pub fn invoke_receive_with_metering_from_source<Ctx: HasReceiveContext>(
     current_state: &[u8],
     max_parameter_size: usize,
     limit_logs_and_return_values: bool,
+    cost_config: impl CostConfiguration,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate_with_metering(
         ValidationConfig::V0,
+        cost_config,
         &ConcordiumAllowedImports,
         source_bytes,
     )?

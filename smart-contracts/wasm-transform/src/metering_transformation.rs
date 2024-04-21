@@ -35,8 +35,50 @@ fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> TransformationResult<u
 }
 
 /// Definition of energy costs of instructions.
-pub(crate) mod cost {
-    pub type Energy = u64;
+pub trait CostConfiguration {
+    /// Get the cost of the given instruction in the context of the stack of
+    /// labels, and the module.
+    fn get_cost(
+        &self,
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy>;
+
+    /// Cost incurred by the number of locals when invoking a function (to be
+    /// charged after invocation). The number of locals is only the number of
+    /// declared locals, not including function parameters.
+    fn invoke_after(&self, num_locals: u32) -> Energy;
+
+    /// Cost of an unconditional jump with the given label arity.
+    /// The label arity for us is either 0 or 1, since we do not support
+    /// multiple return values.
+    fn branch(&self, label_arity: usize) -> Energy;
+}
+
+pub(crate) type Energy = u64;
+
+/// Cost configuration for the initial version of the execution engine used
+/// in node versions 1-6. This is more expensive compared to
+/// CostConfigurationV1.
+pub struct CostConfigurationV0;
+
+impl CostConfiguration for CostConfigurationV0 {
+    fn get_cost(
+        &self,
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy> {
+        cost_v0::get_cost(instr, labels, module)
+    }
+
+    fn invoke_after(&self, num_locals: u32) -> Energy { cost_v0::invoke_after(num_locals) }
+
+    fn branch(&self, label_arity: usize) -> Energy { cost_v0::branch(label_arity) }
+}
+
+pub(crate) mod cost_v0 {
     use super::*;
 
     /// Part of a cost of a function call related to allocating
@@ -122,11 +164,6 @@ pub(crate) mod cost {
     /// Jumps are simply setting the instruction pointer.
     pub const IF_STATEMENT: Energy = TEST + JUMP;
 
-    /// Cost of an unconditional jump with the given label arity.
-    /// The label arity for us is either 0 or 1, since we do not support
-    /// multiple return values.
-    pub const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
-
     /// BR_IF is almost the same as an IF statement, so we price it the same.
     pub const BR_IF: Energy = IF_STATEMENT;
 
@@ -144,15 +181,6 @@ pub(crate) mod cost {
          + copy_stack(num_res) + JUMP
     }
 
-    /// Cost incurred by the number of locals when invoking a function (to be
-    /// charged after invocation). The number of locals is only the number of
-    /// declared locals, not including function parameters.
-    pub const fn invoke_after(num_locals: u32) -> Energy {
-        // Enter frame and allocate the given number of locals.
-        // Each local takes 8 bytes.
-        4 * (num_locals as Energy)
-    }
-
     /// Cost of call_indirect with the given number of arguments and results.
     /// This is expensive since it involves a dynamic type check.
     pub const fn call_indirect(num_args: usize, num_res: usize) -> Energy {
@@ -163,12 +191,10 @@ pub(crate) mod cost {
     /// i.e., parameters + results that need to be checked.
     pub const fn type_check(len: usize) -> Energy { len as Energy }
 
-    /// Get the cost of the given instruction in the context of the stack of
-    /// labels, and the module.
-    pub(crate) fn get_cost<C: HasTransformationContext>(
+    pub(crate) fn get_cost(
         instr: &OpCode,
         labels: &[BlockType],
-        module: &C,
+        module: &impl HasTransformationContext,
     ) -> TransformationResult<Energy> {
         use crate::types::OpCode::*;
         let res = match instr {
@@ -320,12 +346,311 @@ pub(crate) mod cost {
         };
         Ok(res)
     }
+
+    /// Cost incurred by the number of locals when invoking a function (to
+    /// be charged after invocation). The number of locals is only
+    /// the number of declared locals, not including function
+    /// parameters.
+    pub(crate) const fn invoke_after(num_locals: u32) -> Energy {
+        // Enter frame and allocate the given number of locals.
+        // Each local takes 8 bytes.
+        4 * (num_locals as Energy)
+    }
+
+    /// Cost of an unconditional jump with the given label arity.
+    /// The label arity for us is either 0 or 1, since we do not support
+    /// multiple return values.
+    pub(crate) const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
 }
 
-use cost::Energy;
+/// Cost configuration for the initial version of the execution engine used
+/// in node versions 1-6. This is more expensive compared to
+/// CostConfigurationV1.
+pub struct CostConfigurationV1;
+
+impl CostConfiguration for CostConfigurationV1 {
+    fn get_cost(
+        &self,
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy> {
+        cost_v1::get_cost(instr, labels, module)
+    }
+
+    fn invoke_after(&self, num_locals: u32) -> Energy { cost_v1::invoke_after(num_locals) }
+
+    fn branch(&self, _label_arity: usize) -> Energy { cost_v1::JUMP }
+}
+
+/// Helpers related to cost assignment for [`CostConfigurationV1`].
+pub(crate) mod cost_v1 {
+    use super::*;
+
+    /// Part of a cost of a function call related to allocating
+    /// a new function frame and storing values of locals, etc.
+    pub const FUNC_FRAME_BASE: Energy = 2;
+
+    /// Cost of a jump (either Br, Loop, or analogous).
+    pub const JUMP: Energy = 2;
+
+    /// Read a value from either a local, dynamic, or constant space.
+    pub const fn read_source(n: u32) -> Energy { n as Energy }
+
+    /// Write n elements to some location.
+    pub const fn write_result(n: u32) -> Energy { n as Energy }
+
+    /// Copy n elements from one place in the stack to another.
+    /// Used by jumps and function returns.
+    pub const fn copy_stack(n: usize) -> Energy { n as Energy }
+
+    /// Cost of a boolean test.
+    pub const TEST: Energy = 2;
+    /// Cost of a bounds check in, for example, BrTable, and memory loads
+    /// and stores.
+    pub const BOUNDS: Energy = 2;
+
+    /// # Numeric instructions
+    /// Base cost of a unary instruction.
+    pub const UNOP: Energy = 1;
+    /// Base cost of a binary instruction.
+    pub const BINOP: Energy = 1;
+    /// Cost of a `const` instruction.
+    pub const CONST: Energy = 0; // they are erased.
+
+    /// Cost of a simple unary instruction. Which at present contains
+    /// all unary numeric instructions.
+    pub const SIMPLE_UNOP: Energy = UNOP;
+
+    /// Cost of a simple binary instruction. This includes all bit
+    /// operations, and addition and subtraction.
+    pub const SIMPLE_BINOP: Energy = BINOP;
+    /// See for example <https://streamhpc.com/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/>
+    /// The cost of `MUL`, `DIV` and `REM` is in general more, so we account for
+    /// that. However the ratio compared to add is not that much more since our
+    /// current implementation is an interpreter, and consequently there are
+    /// overheads in argument handling that dominate the costs.
+    pub const MUL: Energy = BINOP + 1;
+    pub const DIV: Energy = BINOP + 1;
+    pub const REM: Energy = BINOP + 1;
+
+    /// Parametric instructions
+    pub const DROP: Energy = 0;
+    pub const SELECT: Energy = TEST;
+
+    /// Local variable instructions disappear. There are occassional Copy
+    /// instructions needed but those are rare so we don't account for them.
+    pub const GET_LOCAL: Energy = 0;
+    pub const SET_LOCAL: Energy = 0;
+    pub const TEE_LOCAL: Energy = 0;
+    /// Looking up globals is cheap compared to linear memory.
+    /// They are essentially the same as locals, except they are in a different
+    /// array.
+    pub const GET_GLOBAL: Energy = 1;
+    pub const SET_GLOBAL: Energy = 1;
+
+    /// # Memory instructions.
+    /// Load either an i32 or i64 from linear memory.
+    /// In practice the cost does not depend on the number of bytes.
+    pub const LOAD_WORD: Energy = 1;
+
+    /// Checking memory size is pretty cheap, it is just a vec.len() call.
+    pub const MEMSIZE: Energy = 1;
+    /// Constant part for the memory grow instruction. The variable part is
+    /// charged for by the host function.
+    pub const MEMGROW: Energy = read_source(1) + write_result(1) + 8;
+
+    /// Control instructions
+    ///
+    /// A Nop really does not cost anything, but it does take up space, so we
+    /// give it the least possible cost
+    pub const NOP: Energy = 1;
+
+    /// The if statement boils down to a test and a jump afterwards.
+    /// Jumps are simply setting the instruction pointer.
+    pub const IF_STATEMENT: Energy = TEST + JUMP;
+
+    /// BR_IF is almost the same as an IF statement, so we price it the same.
+    pub const BR_IF: Energy = IF_STATEMENT;
+
+    /// Cost of a branch with table (switch statement). This involves bounds
+    /// checking on the array of labels, and then a normal branch.
+    pub const fn br_table(_label_arity: usize) -> Energy { BOUNDS + 3 + JUMP }
+
+    /// Cost for invoking a function __before__ the entering the function.
+    /// This excludes the cost incurred by the number of locals the function
+    /// defines (for the latter, see `invoke_after`).
+    pub const fn invoke_before(num_args: usize, num_res: usize) -> Energy {
+        // Enter frame
+        FUNC_FRAME_BASE + copy_stack(num_args) + JUMP
+         // Leave frame
+         + copy_stack(num_res) + JUMP
+    }
+
+    /// Cost of call_indirect with the given number of arguments and results.
+    /// This is expensive since it involves a dynamic type check.
+    pub const fn call_indirect(num_args: usize, num_res: usize) -> Energy {
+        BOUNDS + type_check(num_args + num_res) + invoke_before(num_args, num_res)
+    }
+
+    /// Cost of a dynamic type check. The argument is the number of types
+    /// i.e., parameters + results that need to be checked.
+    pub const fn type_check(len: usize) -> Energy { (len / 10) as Energy }
+
+    pub(crate) fn get_cost(
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &impl HasTransformationContext,
+    ) -> TransformationResult<Energy> {
+        use crate::types::OpCode::*;
+        let res = match instr {
+            // Control instructions
+            Nop => NOP,
+            Unreachable => 0,
+            Block(_) => 0,
+            Loop(_) => 0,
+            If {
+                ..
+            } => IF_STATEMENT,
+            Br(_idx) => JUMP,
+            BrIf(_) => BR_IF,
+            BrTable {
+                default,
+                ..
+            } => br_table(lookup_label(labels, *default)?),
+            Return => JUMP,
+            TickEnergy(_) => 0,
+            Call(idx) => {
+                let (num_args, num_res) = module.get_func_type_len(*idx)?;
+                invoke_before(num_args, num_res)
+            }
+            CallIndirect(ty_idx) => {
+                let (num_args, num_res) = module.get_type_len(*ty_idx)?;
+                call_indirect(num_args, num_res)
+            }
+            End => 0,
+            Else => 0,
+
+            // Parametric instructions
+            Drop => DROP,
+            Select => SELECT,
+
+            //Variable instructions
+            LocalGet(_) => GET_LOCAL,
+            LocalSet(_) => SET_LOCAL,
+            LocalTee(_) => TEE_LOCAL,
+            GlobalGet(_) => GET_GLOBAL,
+            GlobalSet(_) => SET_GLOBAL,
+
+            // Memory instructions
+            I32Load(_) => LOAD_WORD,
+            I64Load(_) => LOAD_WORD,
+            I32Load8S(_) => LOAD_WORD,
+            I32Load8U(_) => LOAD_WORD,
+            I32Load16S(_) => LOAD_WORD,
+            I32Load16U(_) => LOAD_WORD,
+            I64Load8S(_) => LOAD_WORD,
+            I64Load8U(_) => LOAD_WORD,
+            I64Load16S(_) => LOAD_WORD,
+            I64Load16U(_) => LOAD_WORD,
+            I64Load32S(_) => LOAD_WORD,
+            I64Load32U(_) => LOAD_WORD,
+            I32Store(_) => BOUNDS,
+            I64Store(_) => BOUNDS,
+            I32Store8(_) => BOUNDS,
+            I32Store16(_) => BOUNDS,
+            I64Store8(_) => BOUNDS,
+            I64Store16(_) => BOUNDS,
+            I64Store32(_) => BOUNDS,
+            MemorySize => MEMSIZE,
+            MemoryGrow => MEMGROW,
+
+            // Numeric instructions
+            I32Const(_) => CONST,
+            I64Const(_) => CONST,
+
+            I32Eqz => SIMPLE_UNOP,
+            I32Eq => SIMPLE_BINOP,
+            I32Ne => SIMPLE_BINOP,
+            I32LtS => SIMPLE_BINOP,
+            I32LtU => SIMPLE_BINOP,
+            I32GtS => SIMPLE_BINOP,
+            I32GtU => SIMPLE_BINOP,
+            I32LeS => SIMPLE_BINOP,
+            I32LeU => SIMPLE_BINOP,
+            I32GeS => SIMPLE_BINOP,
+            I32GeU => SIMPLE_BINOP,
+            I64Eqz => SIMPLE_UNOP,
+            I64Eq => SIMPLE_BINOP,
+            I64Ne => SIMPLE_BINOP,
+            I64LtS => SIMPLE_BINOP,
+            I64LtU => SIMPLE_BINOP,
+            I64GtS => SIMPLE_BINOP,
+            I64GtU => SIMPLE_BINOP,
+            I64LeS => SIMPLE_BINOP,
+            I64LeU => SIMPLE_BINOP,
+            I64GeS => SIMPLE_BINOP,
+            I64GeU => SIMPLE_BINOP,
+
+            I32Clz => SIMPLE_UNOP,
+            I32Ctz => SIMPLE_UNOP,
+            I32Popcnt => SIMPLE_UNOP,
+            I32Add => SIMPLE_BINOP,
+            I32Sub => SIMPLE_BINOP,
+            I32Mul => MUL,
+            I32DivS => DIV,
+            I32DivU => DIV,
+            I32RemS => REM,
+            I32RemU => REM,
+            I32And => SIMPLE_BINOP,
+            I32Or => SIMPLE_BINOP,
+            I32Xor => SIMPLE_BINOP,
+            I32Shl => SIMPLE_BINOP,
+            I32ShrS => SIMPLE_BINOP,
+            I32ShrU => SIMPLE_BINOP,
+            I32Rotl => SIMPLE_BINOP,
+            I32Rotr => SIMPLE_BINOP,
+            I64Clz => SIMPLE_UNOP,
+            I64Ctz => SIMPLE_UNOP,
+            I64Popcnt => SIMPLE_UNOP,
+            I64Add => SIMPLE_BINOP,
+            I64Sub => SIMPLE_BINOP,
+            I64Mul => MUL,
+            I64DivS => DIV,
+            I64DivU => DIV,
+            I64RemS => REM,
+            I64RemU => REM,
+            I64And => SIMPLE_BINOP,
+            I64Or => SIMPLE_BINOP,
+            I64Xor => SIMPLE_BINOP,
+            I64Shl => SIMPLE_BINOP,
+            I64ShrS => SIMPLE_BINOP,
+            I64ShrU => SIMPLE_BINOP,
+            I64Rotl => SIMPLE_BINOP,
+            I64Rotr => SIMPLE_BINOP,
+
+            I32WrapI64 => SIMPLE_UNOP,
+            I64ExtendI32S => SIMPLE_UNOP,
+            I64ExtendI32U => SIMPLE_UNOP,
+            I32Extend8S => SIMPLE_UNOP,
+            I32Extend16S => SIMPLE_UNOP,
+            I64Extend8S => SIMPLE_UNOP,
+            I64Extend16S => SIMPLE_UNOP,
+            I64Extend32S => SIMPLE_UNOP,
+        };
+        Ok(res)
+    }
+
+    /// Cost incurred by the number of locals when invoking a function (to
+    /// be charged after invocation). The number of locals is only
+    /// the number of declared locals, not including function
+    /// parameters.
+    pub(crate) const fn invoke_after(num_locals: u32) -> Energy { (num_locals / 16) as Energy }
+}
 
 ///Metadata needed for transformation.
-struct InstrSeqTransformer<'a, C> {
+struct InstrSeqTransformer<'a, CostConfig, C> {
+    config:               &'a CostConfig,
     /// Reference to the original module to get the right context.
     module:               &'a C,
     /// Current label stack (in the form of the labels' arities).
@@ -341,7 +666,9 @@ struct InstrSeqTransformer<'a, C> {
     pending_instructions: InstrSeq,
 }
 
-impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
+impl<'b, CostConfig: CostConfiguration, C: HasTransformationContext>
+    InstrSeqTransformer<'b, CostConfig, C>
+{
     fn lookup_label(&mut self, idx: LabelIndex) -> TransformationResult<usize> {
         lookup_label(&self.labels, idx)
     }
@@ -400,7 +727,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         for instr in input_instructions {
             // First add the energy to be charged for this instruction to the accumulated
             // energy.
-            self.add_energy(cost::get_cost(instr, &self.labels, self.module)?);
+            self.add_energy(self.config.get_cost(instr, &self.labels, self.module)?);
 
             // Then determine whether the current unconditional instruction sequence stops
             // (in which case the amount to charge for the collected instructions is now
@@ -523,7 +850,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::EmptyType,
                             });
-                            self.account_energy(cost::branch(label_arity))?;
+                            self.account_energy(self.config.branch(label_arity))?;
                             // In the replacement instruction, the label moves out by one index and
                             // therefore the index has to be incremented.
                             self.add_to_new(&Br(idx + 1));
@@ -539,7 +866,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::ValueType(ValueType::I32),
                             });
-                            self.account_energy(cost::branch(label_arity))?;
+                            self.account_energy(self.config.branch(label_arity))?;
                             self.add_to_new(&I32Const(1));
                             self.add_to_new(&Else);
                             self.add_to_new(&I32Const(0));
@@ -581,7 +908,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
 /// A helper trait so that we can use the transformation on different datatypes.
 /// In particular we use it in tests which have their own notion of context to
 /// make it possible to specify modules in a compact way.
-pub(crate) trait HasTransformationContext {
+pub trait HasTransformationContext {
     /// Get the number of arguments and return values of a function type at the
     /// given index.
     fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)>;
@@ -617,7 +944,8 @@ impl HasTransformationContext for Module {
 
 /// Inject cost accounting into the function, according to cost
 /// specification.
-pub(crate) fn inject_accounting<C: HasTransformationContext>(
+pub(crate) fn inject_accounting<CostConfig: CostConfiguration, C: HasTransformationContext>(
+    config: &CostConfig,
     function: &Code,
     module: &C,
 ) -> TransformationResult<Code> {
@@ -626,7 +954,7 @@ pub(crate) fn inject_accounting<C: HasTransformationContext>(
     // stack size.
     let num_params: u32 = function.ty.parameters.len().try_into()?;
     let energy =
-        cost::invoke_after(function.num_locals.checked_sub(num_params).ok_or_else(|| {
+        config.invoke_after(function.num_locals.checked_sub(num_params).ok_or_else(|| {
             anyhow!(
                 "Precondition violation. Number of locals is less than the number of parameters."
             )
@@ -634,6 +962,7 @@ pub(crate) fn inject_accounting<C: HasTransformationContext>(
 
     let labels = vec![BlockType::from(function.ty.result)];
     let mut transformer = InstrSeqTransformer {
+        config,
         module,
         labels,
         new_seq: InstrSeq::new(),
@@ -692,7 +1021,7 @@ impl<'a> HasTransformationContext for ModuleContext<'a> {
 
 impl Module {
     /// Add metering instructions to the module.
-    pub fn inject_metering(&mut self) -> TransformationResult<()> {
+    pub fn inject_metering(&mut self, config: impl CostConfiguration) -> TransformationResult<()> {
         // Update the elements to account for the inserted imports.
         for elem in self.element.elements.iter_mut() {
             for init in elem.inits.iter_mut() {
@@ -705,7 +1034,7 @@ impl Module {
             imported: &self.import.imports,
         };
         for code in self.code.impls.iter_mut() {
-            let injected_code = inject_accounting(code, &ctx)?;
+            let injected_code = inject_accounting(&config, code, &ctx)?;
             *code = injected_code;
         }
 

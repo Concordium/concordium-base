@@ -73,6 +73,7 @@ module Concordium.Wasm (
     -- *** Validation versions
     CostSemanticsVersion (..),
     pvCostSemanticsVersion,
+    costSemanticsVersionToWord8,
 
     -- *** Methods
 
@@ -191,6 +192,13 @@ pvCostSemanticsVersion = \case
     SP5 -> CSV0
     SP6 -> CSV0
     SP7 -> CSV1
+
+-- |Convert the version to a Word8. This is used when transferring information
+-- via FFI.
+costSemanticsVersionToWord8 :: CostSemanticsVersion -> Word8
+costSemanticsVersionToWord8 = \case
+    CSV0 -> 0
+    CSV1 -> 1
 
 -- | Supported versions of Wasm modules. This version defines available host
 --  functions, their semantics, and limitations of contracts.

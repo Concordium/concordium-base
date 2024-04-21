@@ -12,7 +12,7 @@ use crate::types::*;
 use std::rc::Rc;
 
 use crate::{
-    metering_transformation::{cost::*, *},
+    metering_transformation::{cost_v0::*, *},
     types::{
         BlockType::{EmptyType, ValueType as BlockValue},
         OpCode::*,
@@ -144,7 +144,7 @@ fn test_body_ctx(
         ty:         Rc::new(ty),
         num_locals: 2,
     };
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, body_expect);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, body_expect);
 }
 
 // Tests with different locals
@@ -160,7 +160,7 @@ fn test_locals_1() {
     };
     let expected = flatten![[End]];
 
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, expected);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn test_locals_2() {
         num_locals: 2,
     };
     let expected = flatten![energy!(invoke_after(2)), [End]];
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, expected);
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn test_locals_3() {
         // NOTE: this is a random value and does not correspond to the body
     };
     let expected = flatten![energy!(invoke_after(2)), [End]];
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, expected);
 }
 
 // Tests for function bodies.

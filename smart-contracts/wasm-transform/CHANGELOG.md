@@ -8,6 +8,7 @@
   about reachability of the instruction that is being handled.
 - The `Host` trait is expanded to special-case instructions for resource
   accounting.
+- Introduce a new version of cost assignment that is to be used in protocol 7.
 
 ## concordium-wasm 4.0.0 (2024-01-22)
 
