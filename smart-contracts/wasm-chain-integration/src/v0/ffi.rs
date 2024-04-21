@@ -192,7 +192,7 @@ unsafe extern "C" fn validate_and_process_v0(
                               * be written. */
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
-    match utils::instantiate_with_metering::<ProcessedImports, _>(
+    match utils::instantiate_with_metering::<ProcessedImports>(
         ValidationConfig::V0,
         &ConcordiumAllowedImports,
         wasm_bytes,

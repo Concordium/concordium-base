@@ -5,26 +5,15 @@ use crate::types::*;
 use anyhow::{anyhow, bail};
 use std::{convert::TryInto, rc::Rc};
 
-/// TODO set these indices to the imports of the respective accounting host
-/// functions. They should be given by the specification.
-/// The type of this function should be i64 -> ()
-pub(crate) const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
-/// Dynamically track calls to enable us to limit the number of active
-/// frames.
-/// The type of this function should be unit to unit.
-pub(crate) const FN_IDX_TRACK_CALL: FuncIndex = 1;
-/// Track returns so that we can keep the count correctly.
-/// The type of this function should be () -> ().
-pub(crate) const FN_IDX_TRACK_RETURN: FuncIndex = 2;
 /// Charge for memory allocation. The type of this
 /// function should be i32 -> i32.
-pub(crate) const FN_IDX_MEMORY_ALLOC: FuncIndex = 3;
+pub(crate) const FN_IDX_MEMORY_ALLOC: FuncIndex = 0;
 
 /// The number of added functions. All functions that are in the source module
 /// will have the indices shifted by this amount.
 /// The table as well must be updated by increasing all the function indices by
 /// this constant.
-pub(crate) const NUM_ADDED_FUNCTIONS: FuncIndex = 4;
+pub(crate) const NUM_ADDED_FUNCTIONS: FuncIndex = 1;
 
 /// Result of a transformation. The transformation should generally not fail on
 /// a well-formed module, i.e., one that has been validated. But we might want
@@ -210,6 +199,7 @@ pub(crate) mod cost {
                     },
                 )
             }
+            TickEnergy(_) => 0,
             Call(idx) => {
                 let (num_args, num_res) = module.get_func_type_len(*idx)?;
                 invoke_before(num_args, num_res)
@@ -356,40 +346,39 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         lookup_label(&self.labels, idx)
     }
 
-    fn account_energy(&mut self, e: Energy) {
-        // TODO the current specification says we use an I64Const. Decide what is
-        // actually the best also regarding conversion etc. Probably i64 is actually
-        // fine. NB: The u64 energy value is written as is, and will be
-        // reinterpreted as u64 again in the host function call.
-        self.new_seq.push(OpCode::I64Const(e as i64));
-        self.new_seq.push(OpCode::Call(FN_IDX_ACCOUNT_ENERGY));
+    fn account_energy(&mut self, e: Energy) -> TransformationResult<()> {
+        // It is safe to cast e to u32 since
+        // this `account_energy` is for straight-line segments, meaning max here is
+        // bounded quite heavily by module sizes.
+        // But instead here we do try_into for added safety.
+        self.new_seq.push(OpCode::TickEnergy(e.try_into()?));
+        Ok(())
     }
-
-    // TODO fn account_stack_size(&mut self, size: i64) { account_stack_size(&mut
-    // self.new_seq, size) }
 
     fn add_energy(&mut self, e: Energy) { self.energy += e; }
 
     /// Account for all of the pending energy and drain the pending OpCodes to
     /// the new output sequence.
-    fn account_energy_push_pending(&mut self) {
+    fn account_energy_push_pending(&mut self) -> TransformationResult<()> {
         // If there is nothing to account for, do not insert accounting instructions.
         // This case can occur for example with nested loop instructions, or nested
         // blocks followed by a loop.
         if self.energy > 0 {
-            self.account_energy(self.energy);
+            self.account_energy(self.energy)?;
             self.energy = 0;
         }
         // Move the pending instructions for which we just accounted to new_seq.
         // NB: This leaves pending_instructions empty, and correctness relies on it.
         self.new_seq.append(&mut self.pending_instructions);
+        Ok(())
     }
 
     /// Account for all the pending energy, and push the given OpCode to the
     /// output list.
-    fn add_instr_account_energy(&mut self, instr: &OpCode) {
-        self.account_energy_push_pending();
+    fn add_instr_account_energy(&mut self, instr: &OpCode) -> TransformationResult<()> {
+        self.account_energy_push_pending()?;
         self.add_to_new(instr);
+        Ok(())
     }
 
     /// Add the OpCode to the pending sequence.
@@ -429,7 +418,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 Loop(_) => {
                     // account for all the pending instructions up to this point since a loop can be
                     // entered multiple times.
-                    self.account_energy_push_pending();
+                    self.account_energy_push_pending()?;
                     // A loop's label type is its argument type.
                     self.labels.push(BlockType::EmptyType);
                     self.add_to_new(instr);
@@ -439,7 +428,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 } => {
                     // Since there are two branches we need to charge for all the instructions
                     // before we enter either of them, and start afresh.
-                    self.account_energy_push_pending();
+                    self.account_energy_push_pending()?;
                     // An if-block's label type is its end type.
                     self.labels.push(*ty);
                     self.add_to_new(instr);
@@ -447,7 +436,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 Return => {
                     // First charge for all pending instructions and execute all pending
                     // instructions.
-                    self.account_energy_push_pending();
+                    self.account_energy_push_pending()?;
                     // Finally account for stack size by reducing it by the same value it was
                     // increased when entering the function, then return.
                     // TODO self.account_stack_size(-self.max_stack_size);
@@ -455,12 +444,12 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                     self.add_to_new(instr);
                 }
                 End => {
-                    self.account_energy_push_pending();
+                    self.account_energy_push_pending()?;
                     self.labels.pop();
                     self.add_to_new(instr);
                 }
                 Else => {
-                    self.account_energy_push_pending();
+                    self.account_energy_push_pending()?;
                     if let Some(ty) = self.labels.pop() {
                         self.labels.push(ty)
                     } else {
@@ -477,12 +466,12 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                     self.add_to_pending(&Call(FN_IDX_MEMORY_ALLOC));
                     self.add_to_pending(instr);
                 }
-                Unreachable => self.add_instr_account_energy(instr),
+                Unreachable => self.add_instr_account_energy(instr)?,
                 Br(_) => {
-                    self.add_instr_account_energy(instr);
+                    self.add_instr_account_energy(instr)?;
                 }
                 BrIf(idx) => {
-                    self.account_energy_push_pending();
+                    self.account_energy_push_pending()?;
                     let label_arity = self.lookup_label(*idx)?;
                     // If the target of the `br_if` instruction is the end of a block that returns
                     // nothing, we can replace the `br_if` instruction with an
@@ -534,7 +523,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::EmptyType,
                             });
-                            self.account_energy(cost::branch(label_arity));
+                            self.account_energy(cost::branch(label_arity))?;
                             // In the replacement instruction, the label moves out by one index and
                             // therefore the index has to be incremented.
                             self.add_to_new(&Br(idx + 1));
@@ -550,7 +539,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                             self.add_to_new(&If {
                                 ty: BlockType::ValueType(ValueType::I32),
                             });
-                            self.account_energy(cost::branch(label_arity));
+                            self.account_energy(cost::branch(label_arity))?;
                             self.add_to_new(&I32Const(1));
                             self.add_to_new(&Else);
                             self.add_to_new(&I32Const(0));
@@ -566,19 +555,15 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 }
                 BrTable {
                     ..
-                } => self.add_instr_account_energy(instr),
+                } => self.add_instr_account_energy(instr)?,
                 // We need to change which function we call since we've inserted NUM_ADDED_FUNCTIONS
                 // functions at the beginning of the module, for cost accounting.
                 Call(idx) => {
-                    self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
-                    self.add_instr_account_energy(&Call(idx + NUM_ADDED_FUNCTIONS));
-                    self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
+                    self.add_instr_account_energy(&Call(idx + NUM_ADDED_FUNCTIONS))?;
                 }
                 // The call indirect function does not have to be reindexed since the table is.
                 CallIndirect(_) => {
-                    self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
-                    self.add_instr_account_energy(instr);
-                    self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
+                    self.add_instr_account_energy(instr)?;
                 }
                 _ => {
                     // In all other cases, just add the instruction to the pending instructions.
@@ -587,7 +572,7 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
             }
         }
         if !self.pending_instructions.is_empty() {
-            self.account_energy_push_pending();
+            self.account_energy_push_pending()?;
         }
         Ok(())
     }
@@ -728,16 +713,6 @@ impl Module {
         // insert a new type for the new imports
         let mut new_types = Vec::with_capacity(self.ty.types.len() + NUM_ADDED_FUNCTIONS as usize);
         new_types.extend_from_slice(&self.ty.types);
-        // account energy
-        new_types.push(Rc::new(FunctionType {
-            parameters: vec![ValueType::I64],
-            result:     None,
-        }));
-        // account call/return
-        new_types.push(Rc::new(FunctionType {
-            parameters: Vec::new(),
-            result:     None,
-        }));
         // account memory alloc
         new_types.push(Rc::new(FunctionType {
             parameters: vec![ValueType::I32],
@@ -753,43 +728,10 @@ impl Module {
                 name: "concordium_metering".to_owned(),
             },
             item_name:   Name {
-                name: "account_energy".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
-                name: "track_call".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally + 1,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
-                name: "track_return".to_owned(),
-            },
-            description: ImportDescription::Func {
-                type_idx: num_types_originally + 1,
-            },
-        });
-        new_imports.push(Import {
-            mod_name:    Name {
-                name: "concordium_metering".to_owned(),
-            },
-            item_name:   Name {
                 name: "account_memory".to_owned(),
             },
             description: ImportDescription::Func {
-                type_idx: num_types_originally + 2,
+                type_idx: num_types_originally,
             },
         });
         new_imports.append(&mut self.import.imports);

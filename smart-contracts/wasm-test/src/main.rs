@@ -48,12 +48,17 @@ impl Host<ArtifactNamedImport> for TrapHost {
             name: f.clone(),
         })
     }
+
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> { Ok(()) }
+
+    fn track_call(&mut self) -> RunResult<()> { Ok(()) }
+
+    fn track_return(&mut self) {}
 }
 
 #[derive(Default)]
 struct MeteringHost {
-    call_depth:  i64,
-    energy_left: u64,
+    call_depth: i64,
 }
 
 impl Host<ArtifactNamedImport> for MeteringHost {
@@ -67,14 +72,8 @@ impl Host<ArtifactNamedImport> for MeteringHost {
         _memory: &mut Vec<u8>,
         _stack: &mut RuntimeStack,
     ) -> RunResult<Option<NoInterrupt>> {
-        if f.matches("concordium_metering", "track_call") {
-            self.call_depth += 1;
-            ensure!(self.call_depth <= 10000, "Call depth exceeded.");
-        } else if f.matches("concordium_metering", "trac_return") {
-            self.call_depth -= 1;
-        } else if f.matches("concordium_metering", "account_energy") {
-            self.energy_left -= 1;
-        } else if f.matches("concordium_metering", "account_memory") {
+        if f.matches("concordium_metering", "account_memory") {
+            // do nothing
         } else {
             bail!(HostCallError {
                 name: f.clone(),
@@ -82,6 +81,16 @@ impl Host<ArtifactNamedImport> for MeteringHost {
         }
         Ok(None)
     }
+
+    fn tick_energy(&mut self, _energy: u64) -> RunResult<()> { Ok(()) }
+
+    fn track_call(&mut self) -> RunResult<()> {
+        self.call_depth += 1;
+        ensure!(self.call_depth <= 10_000, "Call depth exceeded.");
+        Ok(())
+    }
+
+    fn track_return(&mut self) { self.call_depth -= 1; }
 }
 
 fn validate(source: &[u8]) -> anyhow::Result<Module> {
@@ -190,8 +199,7 @@ fn invoke_update_metering(
 ) -> anyhow::Result<Option<Value>> {
     let run = artifact.run(
         &mut MeteringHost {
-            call_depth:  0,
-            energy_left: 10000,
+            call_depth: 0,
         },
         name,
         args,
@@ -287,6 +295,7 @@ fn main() -> anyhow::Result<()> {
                                                     format!("Error: {}", e)
                                                 ),
                                             }
+                                            print_ok();
                                         }
                                         Err(e) => {
                                             modules
@@ -338,9 +347,13 @@ fn main() -> anyhow::Result<()> {
                                             } else {
                                                 bail!("Module {:?} not valid due to {}.", m.id, e)
                                             }
+                                            print_omitted_msg(
+                                                m.span,
+                                                "Module omitted",
+                                                format!("{e:#}").as_str(),
+                                            );
                                         }
                                     }
-                                    print_ok();
                                 }
                                 wast::WastDirective::QuoteModule {
                                     ..

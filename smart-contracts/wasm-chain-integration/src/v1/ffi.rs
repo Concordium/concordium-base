@@ -400,7 +400,7 @@ unsafe extern "C" fn validate_and_process_v1(
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
-    match utils::instantiate_with_metering::<ProcessedImports, _>(
+    match utils::instantiate_with_metering::<ProcessedImports>(
         ValidationConfig {
             allow_globals_in_init:      allow_globals_in_init != 0,
             allow_sign_extension_instr: allow_sign_extension_instr != 0,
@@ -801,5 +801,20 @@ extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut P
         Box::into_raw(r)
     } else {
         std::ptr::null_mut()
+    }
+}
+
+#[no_mangle]
+/// Check if the provided byte array belongs to the legacy artifact
+unsafe extern "C" fn is_legacy_artifact(
+    artifact_ptr: *const u8,    // pointer to the artifact
+    artifact_bytes_len: size_t, // length of the artifact
+) -> u8 {
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
+
+    if utils::check_artifact_version(artifact_bytes).is_err() {
+        1u8
+    } else {
+        0u8
     }
 }
