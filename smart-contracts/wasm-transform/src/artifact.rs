@@ -792,7 +792,7 @@ impl DynamicLocations {
 /// This is a disjoint union of locations
 /// - locals which go from indices 0..num_locals (including parameters)
 /// - dynamic locations which go from indices `num_locals..num_registers`
-/// - constants which go from indices (-1).. (however many constants there are
+/// - constants which go from indices (-1).. (-however many constants there are
 ///   in a function)
 enum Provider {
     /// The provider is a dynamic location, not one of the locals.
@@ -826,6 +826,9 @@ impl ProvidersStack {
     /// Construct a new [`ProvidersStack`] given the total number of locals
     /// (parameters and declared locals).
     pub fn new(num_locals: u32, return_type: Option<ValueType>) -> Self {
+        // We'll always write the return value of the function, if there is one, to
+        // location 0. So we make sure we have this location even if the function
+        // is without parameters and return values.
         let next_location = if num_locals == 0 && return_type.is_some() {
             1
         } else {
@@ -850,8 +853,8 @@ impl ProvidersStack {
         // that performance is not an issue. We can optimize this in the future without
         // breaking changes if we want to improve validation performance a couple of
         // percent.
-        let other = self.stack.iter().all(|x| *x != operand);
-        if other {
+        let is_unused = self.stack.iter().all(|x| *x != operand);
+        if is_unused {
             self.dynamic_locations.reuse(operand);
         }
         Ok(operand)
@@ -901,9 +904,11 @@ impl ProvidersStack {
 /// backpatch locations we need to resolve.
 struct BackPatch {
     out:              Instructions,
-    /// The
+    /// The list of locations we need to backpatch, that is, insert jump
+    /// locations at once we know where those jumps end, which is typically at
+    /// the `End` of a block.
     backpatch:        BackPatchStack,
-    /// The provider stack. This mimicks the operand stack but it additionally
+    /// The provider stack. This mimics the operand stack but it additionally
     /// records the register locations where the values are available for
     /// instructions so that those registers can be added as immediate
     /// arguments to instructions.
@@ -934,7 +939,7 @@ impl BackPatch {
         }
     }
 
-    /// Write a provider into the output bufer.
+    /// Write a provider into the output buffer.
     fn push_loc(&mut self, loc: Provider) {
         match loc {
             Provider::Dynamic(idx) => {
@@ -1035,6 +1040,8 @@ impl BackPatch {
         Ok(())
     }
 
+    /// Push a jump to the location specified by the `label_idx`.
+    /// Used when compiling BrTable.
     fn push_br_table_jump(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
         let target = self.backpatch.get(label_idx)?;
         if let JumpTarget::Unknown {
@@ -1042,6 +1049,10 @@ impl BackPatch {
             result: Some(result),
         } = target
         {
+            // When compiling a jump to a target which expects a value we
+            // insert here the expected location of the value.
+            // This is used by the BrTableCarry instruction handler to do a Copy
+            // before jumping.
             let result = *result;
             self.push_loc(result);
         }
@@ -1129,7 +1140,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         // The last location where the provider wrote the result.
         // This is used to short-circuit SetLocal
         let last_provide = self.last_provide_loc.take();
-        // Short circuit the handling of the instruction is definitely not reachable.
+        // Short circuit the handling if the instruction is definitely not reachable.
         // Otherwise return if the instruction is directly reachable, or only reachable
         // through a jump (which is only the case if it is an end of a block, so either
         // End or Else instruction).
@@ -1158,10 +1169,13 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                         // to.
                         //
                         // But if this is not reachable then we need to correct the
-                        // stack to be of correct size by potentially pushing a dummy value to it.
+                        // stack to be of correct size by potentially pushing a dummy value to it
+                        // since after entering an unreachable segment there is no guarantee
+                        // that there is a value on the provider stack which would break the
+                        // assumption that the provider stak is the same length as the operand
+                        // stack.
                         //
-                        // Note that if the End of a loop block is not reachable this also means
-                        // we're in an infinite loop.
+                        // Note that the operand stack is already updated at this point.
                         if !instruction_reachable
                             && self.providers_stack.len() < state.opds.stack.len()
                         {
@@ -1501,7 +1515,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // We could have them in front of constants, in the negative space.
                 // This is a bit complex for the same reason that SetLocal is complex.
                 // We need to sometimes insert Copy instructions to preserve values that
-                // are on the operand stack. We have prototypes this as well but it did
+                // are on the operand stack. We have prototyped this as well but it did
                 // not lead to performance improvements on examples, so that case is not handled
                 // here.
                 self.out.push(GlobalGet);

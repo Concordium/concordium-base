@@ -160,7 +160,9 @@ struct FunctionState {
     /// the entire execution and after entering a function all the locals
     /// are pushed on first (this includes function parameters).
     locals_base:      usize,
-    /// Return type of the function.
+    /// Location where the return value must be written in the locals array
+    /// **after** a return is called, together with the return type of the
+    /// function. If `None` the function has no return value.
     return_type:      Option<(usize, ValueType)>,
 }
 
@@ -357,6 +359,12 @@ fn read_i64(bytes: &[u8], pos: usize) -> RunResult<i64> {
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+/// Retrieve data for processing a memory load instruction.
+/// The return value is a pair of a (mutable) pointer to the register where the
+/// result should be written, and the offset in memory where the value should be
+/// read from.
+///
+/// The instruction pointer is advanced.
 fn memory_load<'a>(
     constants: &[i64],
     locals: &'a mut [StackValue],
@@ -370,6 +378,9 @@ fn memory_load<'a>(
 }
 
 #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+/// Retrieve data for processing a memory store instruction.
+/// The return value is a pair of a value to be stored and the place in memory
+/// where the value should be writte to.
 fn memory_store(
     constants: &[i64],
     locals: &[StackValue],
