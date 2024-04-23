@@ -114,7 +114,9 @@ data CooldownQueue (av :: AccountVersion) where
     -- | A non-empty cooldown queue.
     CooldownQueue ::
         (SupportsFlexibleCooldown av ~ 'True) =>
-        -- | Entries in the map must be non-zero amounts, and the map must be non-empty.
+        -- | Non-empty map of 'CooldownTimeCode' to either the amount to release at the expiry time
+        --  (in the case of 'CooldownTimestamp') or the target balance of the account (in all other
+        --  cases).
         Map.Map CooldownTimeCode Amount ->
         CooldownQueue av
 
@@ -157,15 +159,21 @@ processCooldowns ts (CooldownQueue queue)
 -- changed, i.e. there are no pre-cooldowns.
 -- Note, this will predominantly be used when there is at most one pre-cooldown, and it has no
 -- timestamp set. Thus, this is not particularly optimized for other cases.
-processPreCooldown :: Timestamp -> CooldownQueue av -> Maybe (CooldownQueue av)
-processPreCooldown _ EmptyCooldownQueue = Nothing
-processPreCooldown ts (CooldownQueue queue)
+processPreCooldown :: Timestamp -> Amount -> CooldownQueue av -> Maybe (Amount, CooldownQueue av)
+processPreCooldown _ _ EmptyCooldownQueue = Nothing
+processPreCooldown ts stake (CooldownQueue queue)
     | null precooldowns = Nothing
-    | otherwise = Just . CooldownQueue $ Map.unionsWith (+) [cooldowns, newCooldowns, preprecooldowns]
+    | tsMillis ts > theCooldownTimeCode maxCooldownTimestampCode = error "Timestamp out of bounds"
+    | otherwise = Just (newStake, newQueue)
   where
+    newQueue = CooldownQueue $ Map.unionsWith (+) [newCooldowns, preprecooldowns]
     (cooldowns, rest) = Map.spanAntitone (<= maxCooldownTimestampCode) queue
     (precooldowns, preprecooldowns) = Map.spanAntitone (<= encodeCooldownTime PreCooldown) rest
-    newCooldowns = Map.mapKeysWith (+) f precooldowns
+    (newStake, newCooldowns) = Map.foldlWithKey' ff (stake, cooldowns) precooldowns
+    ff (staked, accCooldowns) tc amt
+        | staked == 0 = (staked, accCooldowns)
+        | staked < amt = (staked, accCooldowns)
+        | otherwise = (amt, Map.alter (Just . (+ (staked - amt)) . fromMaybe 0) (f tc) accCooldowns)
     f c@(CooldownTimeCode code)
         | c == encodeCooldownTime PreCooldown = CooldownTimeCode $ tsMillis ts
         | otherwise = CooldownTimeCode (Bits.clearBit code 63)
