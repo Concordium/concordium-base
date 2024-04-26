@@ -47,7 +47,7 @@ module Concordium.Types.Accounts (
     BakerInfoEx (..),
     bieBakerInfo,
     bieBakerPoolInfo,
-    coerceBakerInfoEx,
+    coerceBakerInfoExV1,
     PendingChangeEffective (..),
     pendingChangeEffectiveTimestamp,
     coercePendingChangeEffectiveV1,
@@ -228,10 +228,12 @@ bieBakerPoolInfo :: (AVSupportsDelegation av) => Lens' (BakerInfoEx av) BakerPoo
 bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
-coerceBakerInfoEx ::
-    BakerInfoEx 'AccountV2 ->
-    BakerInfoEx 'AccountV3
-coerceBakerInfoEx BakerInfoExV1{..} = BakerInfoExV1{..}
+-- | Coerce a 'BakerInfoEx' between two account versions that support delegation.
+coerceBakerInfoExV1 ::
+    (AVSupportsDelegation av1, AVSupportsDelegation av2) =>
+    BakerInfoEx av1 ->
+    BakerInfoEx av2
+coerceBakerInfoExV1 BakerInfoExV1{..} = BakerInfoExV1{..}
 
 -- | Note that the serialization of 'BakerInfoEx' matches exactly
 --  the serialization of 'BakerInfo' for 'AccountV0'. This is needed to preserve

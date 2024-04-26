@@ -74,7 +74,6 @@ library
       Concordium.MerkleProofs
       Concordium.Types
       Concordium.Types.Accounts
-      Concordium.Types.Accounts.CooldownQueue
       Concordium.Types.Accounts.Releases
       Concordium.Types.AnonymityRevokers
       Concordium.Types.Block
