@@ -148,10 +148,6 @@ module Concordium.Types.ProtocolVersion (
 
     -- * Delegation support
 
-    -- | Whether or not delegation is supported at a particular account version.
-    DelegationSupport (..),
-    -- Singleton type corresponding to 'DelegationSupport'.
-    SDelegationSupport (..),
     -- | Determine whether delegation is supported for a particular account version.
     supportsDelegation,
     -- | Determine whether delegation is supported for a particular account version (at the type level).
@@ -231,6 +227,7 @@ import Data.Singletons.Base.TH
 import Data.Word
 
 import Concordium.Utils.Serialization.Put (PutT)
+import GHC.TypeError
 
 -- See the splice documentation in 'Parameters.hs' for an explanation of what is generated.
 $( singletons
@@ -311,29 +308,11 @@ $( singletons
         transactionOutcomesVersionFor P6 = TOV1
         transactionOutcomesVersionFor P7 = TOV2
 
-        -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
-        -- at an account version. This is intended to give more descriptive type errors in cases where the
-        -- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
-        -- @AVSupportsDelegation 'AccountV0@ will give a type error:
-        --
-        -- @
-        --   Couldn't match type: 'DelegationNotSupported 'AccountV0
-        --   with: 'DelegationSupported 'AccountV0
-        -- @
-        --
-        -- This is more meaningful than @Couldn't match type: 'False with: 'True@.
-        -- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
-        data DelegationSupport
-            = -- \|Delegation is supported at the account version
-              DelegationSupported AccountVersion
-            | -- \|Delegation is not supported at the account version
-              DelegationNotSupported AccountVersion
-
-        supportsDelegation :: AccountVersion -> DelegationSupport
-        supportsDelegation AccountV0 = DelegationNotSupported AccountV0
-        supportsDelegation AccountV1 = DelegationSupported AccountV1
-        supportsDelegation AccountV2 = DelegationSupported AccountV2
-        supportsDelegation AccountV3 = DelegationSupported AccountV3
+        supportsDelegation :: AccountVersion -> Bool
+        supportsDelegation AccountV0 = False
+        supportsDelegation AccountV1 = True
+        supportsDelegation AccountV2 = True
+        supportsDelegation AccountV3 = True
 
         supportsFlexibleCooldown :: AccountVersion -> Bool
         supportsFlexibleCooldown AccountV0 = False
@@ -515,9 +494,10 @@ blockHashVersion :: (IsBlockHashVersion bhv) => SBlockHashVersion bhv
 blockHashVersion = sing
 
 -- | Constraint that an account version supports delegation.
---
---  TODO: As of ghc 9.4, @Assert@ should be used to give better type errors.
-type AVSupportsDelegation (av :: AccountVersion) = SupportsDelegation av ~ 'DelegationSupported av
+type AVSupportsDelegation (av :: AccountVersion) =
+    Assert
+        (SupportsDelegation av)
+        (TypeError (Text "Account version " :<>: ShowType av :<>: Text " must support delegation"))
 
 -- | Constraint that a protocol version supports delegation.
 type PVSupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
@@ -542,8 +522,8 @@ delegationSupport = case accountVersion @av of
 protocolSupportsDelegation :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsDelegation #-}
 protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor spv) of
-    SDelegationSupported{} -> True
-    _ -> False
+    STrue -> True
+    SFalse -> False
 
 -- | Whether the protocol version supports memo functionality.
 --  (Memos are supported in 'P2' onwards.)
