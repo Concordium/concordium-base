@@ -358,21 +358,6 @@ data BareBlockItem
         }
     deriving (Eq, Show)
 
--- | Concordium-client can output partially signed transactions into a JSON-file to support multi-sig.
--- 'CredentialDeployment' and 'ChainUpdate' are not created by regular user accounts
--- hence the `ToJSON` is not implemented for these types of transactions.
-instance ToJSON BareBlockItem where
-    toJSON (NormalTransaction transaction) =
-        toJSON transaction
-    toJSON (CredentialDeployment _transaction) =
-        error "ToJSON for CredentialDeployment in BareBlockItem is not implemented"
-    toJSON (ChainUpdate _transaction) =
-        error "ToJSON for ChainUpdate in BareBlockItem is not implemented"
-
-instance FromJSON BareBlockItem where
-    parseJSON = AE.withObject "BareBlockItem" $ \obj -> do
-        NormalTransaction <$> parseJSON (AE.Object obj)
-
 instance HashableTo TransactionHash BareBlockItem where
     getHash = transactionHashFromBareBlockItem
 
