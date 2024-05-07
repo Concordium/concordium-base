@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+- Derive `serde::Serialize` and `serde::Serialize` for `PublicKeyEd25519` using
+  `FromStr` and `Display` implementations, when feature `derive-serde` is
+  enabled.
+
 ## concordium-contracts-common 9.1.0 (2024-03-25)
 
 - Add `get_alias_unchecked` for `AccountAddress` that neglects the bounds check
