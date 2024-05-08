@@ -386,6 +386,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 proofs,
             } => {
                 let json = serde_json::json!({
+                    "tag": "account",
                     "type": ["VerifiableCredential", "ConcordiumVerifiableCredential"],
                     "issuer": format!("did:ccd:{network}:idp:{issuer}"),
                     "credentialSubject": {
@@ -410,6 +411,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar> + serde::Serialize> serde::Se
                 holder,
             } => {
                 let json = serde_json::json!({
+                    "tag": "web3Id",
                     "type": ty,
                     "issuer": format!("did:ccd:{network}:sci:{}:{}/issuer", contract.index, contract.subindex),
                     "credentialSubject": {
