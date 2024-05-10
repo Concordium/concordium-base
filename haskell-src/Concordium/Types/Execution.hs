@@ -46,6 +46,7 @@ import Concordium.Types.Execution.TH
 import Concordium.Types.Updates
 import Concordium.Utils
 import qualified Concordium.Wasm as Wasm
+import Data.Char (isLower)
 
 -- | We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -158,6 +159,12 @@ instance S.Serialize BakerKeysWithProofs where
 bakerKeysWithProofsSize :: Int
 bakerKeysWithProofsSize =
     VRF.publicKeySize + dlogProofSize + Sig.publicKeySize + dlogProofSize + Bls.publicKeySize + Bls.proofSize
+
+instance AE.FromJSON BakerKeysWithProofs where
+    parseJSON = error "Not yet implemented"
+
+instance AE.ToJSON BakerKeysWithProofs where
+    toJSON = error "Not yet implemented"
 
 -- | The transaction payload. Defines the supported kinds of transactions.
 --
@@ -403,6 +410,20 @@ instance S.Serialize TransactionType where
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
+
+-- Implement `FromJSON` and `ToJSON` instances for `Payload`.
+$( deriveJSON
+    defaultOptions
+        { AE.constructorTagModifier = firstLower,
+          AE.fieldLabelModifier = firstLower . dropWhile isLower,
+          AE.sumEncoding =
+            AE.TaggedObject
+                { AE.tagFieldName = "transactionType",
+                  AE.contentsFieldName = ""
+                }
+        }
+    ''Payload
+ )
 
 -- | Payload serialization according to
 --

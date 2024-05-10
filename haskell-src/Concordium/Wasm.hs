@@ -4,6 +4,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- |
@@ -310,6 +311,12 @@ data WasmModule
     = WasmModuleV0 (WasmModuleV V0)
     | WasmModuleV1 (WasmModuleV V1)
     deriving (Eq, Show)
+
+instance AE.FromJSON WasmModule where
+    parseJSON = error "Not yet implemented"
+
+instance AE.ToJSON WasmModule where
+    toJSON = error "Not yet implemented"
 
 getModuleRef :: forall v. (IsWasmVersion v) => WasmModuleV v -> ModuleRef
 getModuleRef wm = case getWasmVersion @v of

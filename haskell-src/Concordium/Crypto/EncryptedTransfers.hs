@@ -297,6 +297,9 @@ instance FromJSON EncryptedAmountTransferData where
         eatdProof <- v .: "proof"
         return EncryptedAmountTransferData{..}
 
+instance ToJSON EncryptedAmountTransferData where
+    toJSON = error "Will not be implemented since feature will be deprecated soon"
+
 withEncryptedAmountTransferData ::
     EncryptedAmountTransferData ->
     (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a) ->
@@ -490,6 +493,9 @@ instance FromJSON SecToPubAmountTransferData where
         stpatdIndex <- v .: "index"
         stpatdProof <- v .: "proof"
         return SecToPubAmountTransferData{..}
+
+instance ToJSON SecToPubAmountTransferData where
+    toJSON = error "Will not be implemented since feature will be deprecated soon"
 
 withSecToPubAmountTransferData ::
     SecToPubAmountTransferData ->

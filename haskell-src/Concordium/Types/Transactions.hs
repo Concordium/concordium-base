@@ -350,8 +350,6 @@ signedTransactionVersion = 1
 data SignedTransaction = SignedTransaction
     { -- | Signature
       stVersion :: !Int,
-      -- | Header
-      stTransactionType :: !TransactionType,
       -- | Hash used for signing
       stEnergy :: !Energy,
       -- | Hash used for signing
@@ -368,50 +366,25 @@ data SignedTransaction = SignedTransaction
     deriving (Eq, Show)
 
 instance ToJSON SignedTransaction where
-    toJSON (SignedTransaction stVersion stTransactionType stEnergy stExpiryTime stNonce stSigner stPayload stSignature) =
-        let payload = case stTransactionType of
-                TTUpdate ->
-                    AE.object
-                        [ "address" AE..= uAddress stPayload,
-                          "amount" AE..= uAmount stPayload,
-                          "message" AE..= uMessage stPayload,
-                          "receiveName" AE..= uReceiveName stPayload
-                        ]
-                _ -> error "Unrecognized 'TransactionType' tag: TODO: add tag in error message TODO add additional types"
-        in  AE.object
-                [ "version" AE..= stVersion,
-                  "transactionType" AE..= stTransactionType,
-                  "energy" AE..= stEnergy,
-                  "expiryTime" AE..= stExpiryTime,
-                  "nonce" AE..= stNonce,
-                  "signer" AE..= stSigner,
-                  "payload" AE..= payload,
-                  "signature" AE..= stSignature
-                ]
-
+    toJSON (SignedTransaction stVersion stEnergy stExpiryTime stNonce stSigner stPayload stSignature) =
+        AE.object
+            [ "version" AE..= stVersion,
+              "energy" AE..= stEnergy,
+              "expiryTime" AE..= stExpiryTime,
+              "nonce" AE..= stNonce,
+              "signer" AE..= stSigner,
+              "payload" AE..= stPayload,
+              "signature" AE..= stSignature
+            ]
 instance FromJSON SignedTransaction where
     parseJSON = AE.withObject "SignedTransaction" $ \obj -> do
         stVersion <- obj AE..: "version"
-        stTransactionType <- obj AE..: "transactionType"
         stEnergy <- obj AE..: "energy"
         stExpiryTime <- obj AE..: "expiryTime"
         stNonce <- obj AE..: "nonce"
         stSigner <- obj AE..: "signer"
         stSignature <- obj AE..: "signature"
-        tempPayload <- obj AE..: "payload"
-
-        stPayload <- case stTransactionType of
-            TTUpdate -> do
-                uMessage <- tempPayload AE..: "message"
-                uReceiveName <- tempPayload AE..: "receiveName"
-                uAddress <- tempPayload AE..: "address"
-                uAmount <- tempPayload AE..: "amount"
-
-                let updatePayload :: Payload
-                    updatePayload =
-                        Update uAmount uAddress uReceiveName uMessage
-                return updatePayload
-            _ -> fail "Unrecognized 'TransactionType' tag: TODO: add `tag` in error message TODO add additional types"
+        stPayload <- obj AE..: "payload"
 
         return
             SignedTransaction
@@ -421,8 +394,7 @@ instance FromJSON SignedTransaction where
                   stNonce = stNonce,
                   stSigner = stSigner,
                   stSignature = stSignature,
-                  stPayload = stPayload,
-                  stTransactionType = stTransactionType
+                  stPayload = stPayload
                 }
 
 -----------------
@@ -462,17 +434,6 @@ data BareBlockItem
         { biUpdate :: !UpdateInstruction
         }
     deriving (Eq, Show)
-
--- | Concordium-client can output partially signed transactions into a JSON-file to support multi-sig.
--- 'CredentialDeployment' and 'ChainUpdate' are not created by regular user accounts
--- hence the `ToJSON` is not implemented for these types of transactions.
-instance ToJSON BareBlockItem where
-    toJSON (NormalTransaction transaction) =
-        toJSON transaction
-    toJSON (CredentialDeployment _transaction) =
-        error "ToJSON for CredentialDeployment in BareBlockItem is not implemented"
-    toJSON (ChainUpdate _transaction) =
-        error "ToJSON for ChainUpdate in BareBlockItem is not implemented"
 
 instance HashableTo TransactionHash BareBlockItem where
     getHash = transactionHashFromBareBlockItem

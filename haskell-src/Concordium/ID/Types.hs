@@ -773,6 +773,9 @@ data CredentialDeploymentInformation = CredentialDeploymentInformation
     }
     deriving (Show)
 
+instance ToJSON CredentialDeploymentInformation where
+    toJSON = error "Not yet implemented"
+
 -- | NB: This must match the one defined in rust. In particular the
 --  proof is serialized with 4 byte length.
 instance Serialize CredentialDeploymentInformation where
