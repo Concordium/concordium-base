@@ -1622,7 +1622,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Request<C, AttributeType> {
 /// issuer's public key for Web3ID credentials which do not store commitments on
 /// the chain.
 #[derive(Debug, serde::Deserialize)]
-#[serde(bound = "C: Curve", rename_all = "camelCase", rename_all_fields = "camelCase", tag = "type")]
+#[serde(
+    bound = "C: Curve",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
 pub enum CredentialsInputs<C: Curve> {
     Account {
         // All the commitments of the credential.
