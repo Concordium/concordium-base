@@ -30,6 +30,7 @@ import qualified Data.Vector as Vec
 
 import Concordium.ID.Types
 import Concordium.Types
+import Concordium.Types.Execution
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
 import Concordium.Utils
@@ -320,6 +321,110 @@ fromICDI wmdArrivalTime messageExpiry icdi =
         wmdHash = getHash (CredentialDeployment wmdData)
     in  WithMetadata{..}
 
+signedTransactionVersion :: Int
+signedTransactionVersion = 1
+
+-----------------------------------------------------------------
+
+-- * JSON representation of a signed/partially-signed transaction
+
+-----------------------------------------------------------------
+
+-- TODO: convert expiryTime to a human-readable RFC 3339 string
+
+-- | A 'SignedTransaction' is a transaction that is signed by an account (the signer)
+-- with some keys. The representation might be a fully signed transaction ready to be
+-- sent on-chain or a partially-signed transaction that needs additional signatures
+-- added to be ready to be sent on-chain.
+--
+-- The `ToJSON` instance has the purpose converting the object into a human-readable
+-- representation ready to be printed into a JSON file. This file can be shared among
+-- different tools of the Concordium ecosystem for adding additional signatures.
+--
+--  The chosen representation is the minimal necessary data needed to construct the
+-- 'TransactionSignHash' which is the value that is signed by the signer. The
+-- 'TransactionSignHash' and 'payloadSize' should be re-computed when processing a
+-- 'SignedTransaction' (e.g. when adding signatures or sending the transaction on-chain).
+--
+-- The representation has a `version` field.
+data SignedTransaction = SignedTransaction
+    { -- | Signature
+      stVersion :: !Int,
+      -- | Header
+      stTransactionType :: !TransactionType,
+      -- | Hash used for signing
+      stEnergy :: !Energy,
+      -- | Hash used for signing
+      stExpiryTime :: !TransactionExpiryTime,
+      -- | Hash used for signing
+      stNonce :: !Nonce,
+      -- | Hash used for signing
+      stSigner :: !AccountAddress,
+      -- | Hash used for signing payload find something better TODO
+      stPayload :: !Payload,
+      -- | Serialized
+      stSignature :: !TransactionSignature
+    }
+    deriving (Eq, Show)
+
+instance ToJSON SignedTransaction where
+    toJSON (SignedTransaction stVersion stTransactionType stEnergy stExpiryTime stNonce stSigner stPayload stSignature) =
+        let payload = case stTransactionType of
+                TTUpdate ->
+                    AE.object
+                        [ "address" AE..= uAddress stPayload,
+                          "amount" AE..= uAmount stPayload,
+                          "message" AE..= uMessage stPayload,
+                          "receiveName" AE..= uReceiveName stPayload
+                        ]
+                _ -> error "Unrecognized 'TransactionType' tag: TODO: add tag in error message TODO add additional types"
+        in  AE.object
+                [ "version" AE..= stVersion,
+                  "transactionType" AE..= stTransactionType,
+                  "energy" AE..= stEnergy,
+                  "expiryTime" AE..= stExpiryTime,
+                  "nonce" AE..= stNonce,
+                  "signer" AE..= stSigner,
+                  "payload" AE..= payload,
+                  "signature" AE..= stSignature
+                ]
+
+instance FromJSON SignedTransaction where
+    parseJSON = AE.withObject "SignedTransaction" $ \obj -> do
+        stVersion <- obj AE..: "version"
+        stTransactionType <- obj AE..: "transactionType"
+        stEnergy <- obj AE..: "energy"
+        stExpiryTime <- obj AE..: "expiryTime"
+        stNonce <- obj AE..: "nonce"
+        stSigner <- obj AE..: "signer"
+        stSignature <- obj AE..: "signature"
+        tempPayload <- obj AE..: "payload"
+
+        stPayload <- case stTransactionType of
+            TTUpdate -> do
+                uMessage <- tempPayload AE..: "message"
+                uReceiveName <- tempPayload AE..: "receiveName"
+                uAddress <- tempPayload AE..: "address"
+                uAmount <- tempPayload AE..: "amount"
+
+                let updatePayload :: Payload
+                    updatePayload =
+                        Update uAmount uAddress uReceiveName uMessage
+                return updatePayload
+            _ -> fail "Unrecognized 'TransactionType' tag: TODO: add `tag` in error message TODO add additional types"
+
+        return
+            SignedTransaction
+                { stVersion = stVersion,
+                  stEnergy = stEnergy,
+                  stExpiryTime = stExpiryTime,
+                  stNonce = stNonce,
+                  stSigner = stSigner,
+                  stSignature = stSignature,
+                  stPayload = stPayload,
+                  stTransactionType = stTransactionType
+                }
+
 -----------------
 
 -- * Block items
@@ -554,15 +659,13 @@ signTransactionSingle kp = signTransaction [(0, [(0, kp)])]
 --  * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransaction :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransaction keys atrHeader atrPayload =
-    let
-        atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
+    let atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
         -- only sign the hash of the transaction
         bodyHash = transactionSignHashToByteString atrSignHash
         credSignature cKeys = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) cKeys
         tsSignatures = Map.fromList $ map (\(idx, cKeys) -> (idx, credSignature cKeys)) keys
         atrSignature = TransactionSignature{..}
-    in
-        AccountTransaction{..}
+    in  AccountTransaction{..}
 
 -- | Verify credential signatures. This checks
 --
