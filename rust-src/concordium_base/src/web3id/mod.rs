@@ -849,7 +849,9 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Presentation<C, AttributeTyp
         for (cred_public, cred_proof) in public.zip(&self.verifiable_credential) {
             request.credential_statements.push(cred_proof.statement());
             if let CredentialProof::Web3Id { holder: owner, .. } = &cred_proof {
-                let Some(sig) = linking_proof_iter.next() else {return Err(PresentationVerificationError::MissingLinkingProof)};
+                let Some(sig) = linking_proof_iter.next() else {
+                    return Err(PresentationVerificationError::MissingLinkingProof);
+                };
                 if owner.public_key.verify(&to_sign, &sig.signature).is_err() {
                     return Err(PresentationVerificationError::InvalidLinkinProof);
                 }
@@ -1154,10 +1156,11 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
             anyhow::bail!("id field is not a valid DID");
         };
         let IdentifierType::ContractData {
-                address,
-                entrypoint,
-                parameter,
-        } = id.ty else {
+            address,
+            entrypoint,
+            parameter,
+        } = id.ty
+        else {
             anyhow::bail!("Only Web3 credentials are supported.")
         };
         anyhow::ensure!(entrypoint == "credentialEntry", "Incorrect entrypoint.");
@@ -1175,7 +1178,8 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
                 address: issuer_address,
                 entrypoint: issuer_entrypoint,
                 parameter: issuer_parameter,
-            } = id.ty else {
+            } = id.ty
+            else {
                 anyhow::bail!("Only Web3 credentials are supported.")
             };
             anyhow::ensure!(address == issuer_address, "Inconsistent issuer addresses.");
@@ -1201,9 +1205,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
             let Some(Ok((_, cred_id))) = cred_id.as_str().map(parse_did) else {
                 anyhow::bail!("credentialSubject/id field is not a valid DID");
             };
-            let IdentifierType::PublicKey {
-                key,
-            } = cred_id.ty else {
+            let IdentifierType::PublicKey { key } = cred_id.ty else {
                 anyhow::bail!("Credential subject id must be a public key.")
             };
             anyhow::ensure!(
@@ -1231,9 +1233,7 @@ impl<C: Curve, AttributeType: DeserializeOwned> TryFrom<serde_json::Value>
             let Some(Ok((_, method))) = method.as_str().map(parse_did) else {
                 anyhow::bail!("verificationMethod field is not a valid DID");
             };
-            let IdentifierType::PublicKey {
-                key,
-            } = method.ty else {
+            let IdentifierType::PublicKey { key } = method.ty else {
                 anyhow::bail!("Verification method must be a public key.")
             };
             anyhow::ensure!(method.network == id.network, "Inconsistent networks.");
@@ -1681,6 +1681,10 @@ impl TryFrom<serde_json::Value> for Web3IdAttribute {
             let dt: chrono::DateTime<chrono::Utc> = serde_json::from_value(dt_value)?;
             let timestamp = dt
                 .signed_duration_since(chrono::DateTime::<chrono::Utc>::MIN_UTC)
+                .checked_add(
+                    &chrono::Duration::try_days(366).expect("Can contain 366 day duration"),
+                )
+                .context("Timesetamp out of range")?
                 .num_milliseconds();
             let timestamp = Timestamp::from_timestamp_millis(
                 timestamp
@@ -1703,7 +1707,9 @@ impl serde::Serialize for Web3IdAttribute {
             Web3IdAttribute::Timestamp(ts) => {
                 let epoch = chrono::DateTime::<chrono::Utc>::MIN_UTC;
                 let millis: i64 = ts.timestamp_millis().try_into().map_err(S::Error::custom)?;
-                let Some(time_delta) = chrono::Duration::try_milliseconds(millis) else {
+                let Some(time_delta) = chrono::Duration::try_milliseconds(millis)
+                    .and_then(|d| d.checked_sub(&chrono::Duration::try_days(366)?))
+                else {
                     return Err(S::Error::custom("Timestamp out of range."));
                 };
                 let Some(dt) = epoch.checked_add_signed(time_delta) else {
@@ -1763,7 +1769,10 @@ impl std::fmt::Display for Web3IdAttribute {
                     .try_into()
                     .ok()
                     .and_then(chrono::Duration::try_milliseconds)
-                    .and_then(|ms| epoch.checked_add_signed(ms))
+                    .and_then(|ms| {
+                        let ms = ms.checked_sub(&chrono::Duration::try_days(366)?)?;
+                        epoch.checked_add_signed(ms)
+                    })
                 {
                     dt.fmt(f)
                 } else {
