@@ -713,12 +713,12 @@ instance Show Address where
 newtype TransactionTime = TransactionTime {ttsSeconds :: Word64}
     deriving (Show, Read, Eq, Num, Ord, Real, Enum, Integral) via Word64
 
--- Implement `ToJSON` instances for `TransactionTime`.
+-- Implement `ToJSON` instance for `TransactionTime`.
 instance ToJSON TransactionTime where
     toJSON (TransactionTime seconds) =
         String $ T.pack $ formatTime defaultTimeLocale "%FT%T%QZ+00:00" (posixSecondsToUTCTime (fromIntegral seconds))
 
--- Implement `FromJSON` instances for `TransactionTime`.
+-- Implement `FromJSON` instance for `TransactionTime`.
 instance FromJSON TransactionTime where
     parseJSON (String v) =
         case parseTimeM True defaultTimeLocale "%FT%T%QZ+00:00" (T.unpack v) of

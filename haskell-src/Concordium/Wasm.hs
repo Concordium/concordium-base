@@ -268,11 +268,11 @@ demoteWasmVersion SV1 = V1
 newtype ModuleSource (v :: WasmVersion) = ModuleSource {moduleSource :: ByteString}
     deriving (Eq, Show)
 
--- Implement `ToJSON` instances for `ModuleSource`.
+-- Implement `ToJSON` instance for `ModuleSource`.
 instance AE.ToJSON (ModuleSource v) where
     toJSON (ModuleSource v) = AE.String (Text.decodeUtf8 (BS16.encode v))
 
--- Implement `FromJSON` instances for `ModuleSource`.
+-- Implement `FromJSON` instance for `ModuleSource`.
 instance AE.FromJSON (ModuleSource v) where
     parseJSON = AE.withText "source" $ \t ->
         case BS16.decode (Text.encodeUtf8 t) of
