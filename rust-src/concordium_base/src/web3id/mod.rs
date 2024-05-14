@@ -1655,7 +1655,75 @@ pub enum Web3IdAttribute {
     /// A timestamp in milliseconds that is embedded like the
     /// [`Numeric`](Self::Numeric) variant, but has a different JSON
     /// representation, in ISO8601 compatible format.
+    ///
+    /// The inner timestamp is reflected as the duration (in milliseconds) from
+    /// [`Web3IdAttribute::TIMESTAMP_MIN_DATETIME`] -
+    /// [`Web3IdAttribute::TIMESTAMP_DATE_OFFSET`]
     Timestamp(Timestamp),
+}
+
+impl Web3IdAttribute {
+    /// Used to offset the duration stored in [`Web3IdAttribute::Timestamp`] to
+    /// align with previous versions of chrono (<0.32), which introduced
+    /// breaking changes to the value of [chrono::DateTime::MIN_UTC]
+    const TIMESTAMP_DATE_OFFSET: i64 = 366;
+    /// The lowest possible value to record in a [`Web3IdAttribute::Timestamp`]
+    const TIMESTAMP_MIN_DATETIME: chrono::DateTime<chrono::Utc> =
+        chrono::DateTime::<chrono::Utc>::MIN_UTC;
+}
+
+impl TryFrom<chrono::DateTime<chrono::Utc>> for Web3IdAttribute {
+    type Error = anyhow::Error;
+
+    fn try_from(value: chrono::DateTime<chrono::Utc>) -> Result<Self, Self::Error> {
+        use anyhow::Context;
+
+        // We construct a timestamp in milliseconds from the lowest possible value, and
+        // add the offset to align with the previously defined lowest possible
+        // value.
+        let timestamp = value
+            .signed_duration_since(Self::TIMESTAMP_MIN_DATETIME)
+            .checked_add(
+                &chrono::Duration::try_days(Self::TIMESTAMP_DATE_OFFSET)
+                    .expect("Can contain offset duration"),
+            )
+            .context("Timesetamp out of range")?
+            .num_milliseconds();
+        let timestamp = Timestamp::from_timestamp_millis(
+            timestamp
+                .try_into()
+                .context("Timesetamps before -262144-01-01T00:00:00Z are not supported.")?,
+        );
+        Ok(Self::Timestamp(timestamp))
+    }
+}
+
+impl TryFrom<&Web3IdAttribute> for chrono::DateTime<chrono::Utc> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Web3IdAttribute) -> Result<Self, Self::Error> {
+        use anyhow::Context;
+
+        let Web3IdAttribute::Timestamp(timestamp) = value else {
+            anyhow::bail!("Cannot convert non timestamp web3 attribute values into date-time");
+        };
+
+        let millis: i64 = timestamp.timestamp_millis().try_into()?;
+        // We construct a date-time by subtracting the timestamp offset from the
+        // timestamp, and add this to the minimum date, thus acting as a
+        // reversing the conversion from date-time to tiemstamp within the web3
+        // id attribute context
+        let date_time = chrono::Duration::try_milliseconds(millis)
+            .and_then(|dur| {
+                let ms = dur.checked_sub(
+                    &chrono::Duration::try_days(Web3IdAttribute::TIMESTAMP_DATE_OFFSET)
+                        .expect("Can contain offset duration"),
+                )?;
+                Web3IdAttribute::TIMESTAMP_MIN_DATETIME.checked_add_signed(ms)
+            })
+            .context("Timestamp out of range")?;
+        Ok(date_time)
+    }
 }
 
 impl TryFrom<serde_json::Value> for Web3IdAttribute {
@@ -1663,6 +1731,7 @@ impl TryFrom<serde_json::Value> for Web3IdAttribute {
 
     fn try_from(mut value: serde_json::Value) -> Result<Self, Self::Error> {
         use anyhow::Context;
+
         if let Some(v) = value.as_str() {
             Ok(Self::String(v.parse()?))
         } else if let Some(v) = value.as_u64() {
@@ -1679,19 +1748,7 @@ impl TryFrom<serde_json::Value> for Web3IdAttribute {
                 .context("Missing timestamp value.")?
                 .take();
             let dt: chrono::DateTime<chrono::Utc> = serde_json::from_value(dt_value)?;
-            let timestamp = dt
-                .signed_duration_since(chrono::DateTime::<chrono::Utc>::MIN_UTC)
-                .checked_add(
-                    &chrono::Duration::try_days(366).expect("Can contain 366 day duration"),
-                )
-                .context("Timesetamp out of range")?
-                .num_milliseconds();
-            let timestamp = Timestamp::from_timestamp_millis(
-                timestamp
-                    .try_into()
-                    .context("Timesetamps before -262144-01-01T00:00:00Z are not supported.")?,
-            );
-            Ok(Self::Timestamp(timestamp))
+            dt.try_into()
         }
     }
 }
@@ -1704,17 +1761,9 @@ impl serde::Serialize for Web3IdAttribute {
         match self {
             Web3IdAttribute::String(ak) => ak.serialize(serializer),
             Web3IdAttribute::Numeric(n) => n.serialize(serializer),
-            Web3IdAttribute::Timestamp(ts) => {
-                let epoch = chrono::DateTime::<chrono::Utc>::MIN_UTC;
-                let millis: i64 = ts.timestamp_millis().try_into().map_err(S::Error::custom)?;
-                let Some(time_delta) = chrono::Duration::try_milliseconds(millis)
-                    .and_then(|d| d.checked_sub(&chrono::Duration::try_days(366)?))
-                else {
-                    return Err(S::Error::custom("Timestamp out of range."));
-                };
-                let Some(dt) = epoch.checked_add_signed(time_delta) else {
-                    return Err(S::Error::custom("Timestamp out of range."));
-                };
+            Web3IdAttribute::Timestamp(_) => {
+                let dt =
+                    chrono::DateTime::<chrono::Utc>::try_from(self).map_err(S::Error::custom)?;
                 let mut map = serializer.serialize_map(Some(2))?;
                 map.serialize_entry("type", "date-time")?;
                 map.serialize_entry("timestamp", &dt)?;
@@ -1763,17 +1812,7 @@ impl std::fmt::Display for Web3IdAttribute {
             Web3IdAttribute::Timestamp(ts) => {
                 // If possible render as a RFC3339 string.
                 // Revert to millisecond timestamp if this is not possible due to overflow.
-                let epoch = chrono::DateTime::<chrono::Utc>::MIN_UTC;
-                if let Some(dt) = ts
-                    .timestamp_millis()
-                    .try_into()
-                    .ok()
-                    .and_then(chrono::Duration::try_milliseconds)
-                    .and_then(|ms| {
-                        let ms = ms.checked_sub(&chrono::Duration::try_days(366)?)?;
-                        epoch.checked_add_signed(ms)
-                    })
-                {
+                if let Ok(dt) = chrono::DateTime::<chrono::Utc>::try_from(self) {
                     dt.fmt(f)
                 } else {
                     ts.fmt(f)
@@ -1818,6 +1857,12 @@ mod tests {
         let issuer_2 = ed25519_dalek::SigningKey::generate(&mut rng);
         let contract_1 = ContractAddress::new(1337, 42);
         let contract_2 = ContractAddress::new(1338, 0);
+        let min_timestamp = chrono::Duration::try_days(Web3IdAttribute::TIMESTAMP_DATE_OFFSET)
+            .unwrap()
+            .num_milliseconds()
+            .try_into()
+            .unwrap();
+
         let credential_statements = vec![
             CredentialStatement::Web3Id {
                 ty:         [
@@ -1891,10 +1936,10 @@ mod tests {
                         statement: AttributeInRangeStatement {
                             attribute_tag: 2.to_string(),
                             lower:         Web3IdAttribute::Timestamp(
-                                Timestamp::from_timestamp_millis(10000),
+                                Timestamp::from_timestamp_millis(min_timestamp),
                             ),
                             upper:         Web3IdAttribute::Timestamp(
-                                Timestamp::from_timestamp_millis(20000),
+                                Timestamp::from_timestamp_millis(min_timestamp * 3),
                             ),
                             _phantom:      PhantomData,
                         },
@@ -1948,7 +1993,7 @@ mod tests {
         );
         values_2.insert(
             2.to_string(),
-            Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(15000)),
+            Web3IdAttribute::Timestamp(Timestamp::from_timestamp_millis(min_timestamp * 2)),
         );
         let mut randomness_2 = BTreeMap::new();
         randomness_2.insert(
@@ -2257,5 +2302,26 @@ mod tests {
             .expect("JSON parsing succeeds");
 
         assert_eq!(value, cred, "Credential and parsed credential differ.");
+    }
+
+    #[test]
+    fn test_web3_id_attribute_timestamp_serde() {
+        let date_time = chrono::DateTime::parse_from_rfc3339("2023-08-28T00:00:00.000Z")
+            .expect("Can parse datetime value");
+        let value = serde_json::json!({"type": "date-time", "timestamp": date_time});
+        let attr: Web3IdAttribute =
+            serde_json::from_value(value.clone()).expect("Can deserialize from JSON");
+
+        assert_eq!(
+            attr,
+            Web3IdAttribute::Timestamp(8336326032000000.into()),
+            "Unexpected value for deserialized attribute"
+        );
+
+        let ser = serde_json::to_value(attr).expect("Serialize does not fail");
+        assert_eq!(
+            ser, value,
+            "Expected deserialized value to serialize into its origin"
+        );
     }
 }
