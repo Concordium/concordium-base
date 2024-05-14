@@ -2,6 +2,7 @@
 
 - Add a new module `cis3_types` that defines the interface types for CIS3
   compatible contracts.
+- Fix discrepancy in (de)serializing `Web3IdAttribute::Timestamp`s due to an unexpected breaking change introduced in an update to the `chrono` dependency.
 
 ## 5.0.0 (2024-03-25)
 
