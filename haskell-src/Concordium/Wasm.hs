@@ -147,13 +147,14 @@ module Concordium.Wasm (
 
 import Control.Monad
 import qualified Data.Aeson as AE
+import Data.Aeson.TH
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
-import Data.Char (isAlphaNum, isAscii, isPunctuation)
+import Data.Char (isAlphaNum, isAscii, isLower, isPunctuation)
 import qualified Data.HashMap.Strict as HM
 import Data.Hashable
 import Data.Int (Int32)
@@ -175,6 +176,7 @@ import qualified Concordium.Crypto.SHA256 as H
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.HashableTo
+import Concordium.Utils
 import Concordium.Utils.Serialization
 
 --------------------------------------------------------------------------------
@@ -266,6 +268,17 @@ demoteWasmVersion SV1 = V1
 newtype ModuleSource (v :: WasmVersion) = ModuleSource {moduleSource :: ByteString}
     deriving (Eq, Show)
 
+-- Implement `ToJSON` instances for `ModuleSource`.
+instance AE.ToJSON (ModuleSource v) where
+    toJSON (ModuleSource v) = AE.String (Text.decodeUtf8 (BS16.encode v))
+
+-- Implement `FromJSON` instances for `ModuleSource`.
+instance AE.FromJSON (ModuleSource v) where
+    parseJSON = AE.withText "source" $ \t ->
+        case BS16.decode (Text.encodeUtf8 t) of
+            Right bs -> return $ ModuleSource bs
+            Left _ -> fail "Could not decode ModuleSource from JSON"
+
 instance Serialize (ModuleSource V0) where
     get = do
         len <- getWord32be
@@ -291,6 +304,15 @@ moduleSourceLength = fromIntegral . BS.length . moduleSource
 newtype WasmModuleV (v :: WasmVersion) = WasmModuleV {wmvSource :: ModuleSource v}
     deriving (Eq, Show)
 
+-- Implement `FromJSON` and `ToJSON` instances for `WasmModuleV`.
+$( deriveJSON
+    defaultOptions
+        { AE.constructorTagModifier = firstLower,
+          AE.fieldLabelModifier = firstLower . dropWhile isLower
+        }
+    ''WasmModuleV
+ )
+
 instance (IsWasmVersion v) => Serialize (WasmModuleV v) where
     put (WasmModuleV ws) = case getWasmVersion @v of
         SV0 -> put V0 <> put ws
@@ -312,11 +334,19 @@ data WasmModule
     | WasmModuleV1 (WasmModuleV V1)
     deriving (Eq, Show)
 
-instance AE.FromJSON WasmModule where
-    parseJSON = error "Not yet implemented"
-
-instance AE.ToJSON WasmModule where
-    toJSON = error "Not yet implemented"
+-- Implement `FromJSON` and `ToJSON` instances for `WasmModule`.
+$( deriveJSON
+    defaultOptions
+        { AE.constructorTagModifier = firstLower,
+          AE.fieldLabelModifier = firstLower . dropWhile isLower,
+          AE.sumEncoding =
+            AE.TaggedObject
+                { AE.tagFieldName = "version",
+                  AE.contentsFieldName = "content"
+                }
+        }
+    ''WasmModule
+ )
 
 getModuleRef :: forall v. (IsWasmVersion v) => WasmModuleV v -> ModuleRef
 getModuleRef wm = case getWasmVersion @v of
