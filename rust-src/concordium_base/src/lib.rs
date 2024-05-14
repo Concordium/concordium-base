@@ -33,10 +33,11 @@ pub mod ps_sig;
 
 pub mod dodis_yampolskiy_prf;
 
-/// We expose the `PublicKey`, `SecretKey`, `SigningKey` and `Signature` from the third-party
-/// `ed25519_dalek` crate here because these types appear in Concordium's API.
+/// We expose the `PublicKey`, `SecretKey`, `SigningKey` and `Signature` from
+/// the third-party `ed25519_dalek` crate here because these types appear in
+/// Concordium's API.
 pub mod ed25519 {
-    pub use ed25519_dalek::{SecretKey, Signature, VerifyingKey as PublicKey, SigningKey};
+    pub use ed25519_dalek::{SecretKey, Signature, SigningKey, VerifyingKey as PublicKey};
 }
 
 #[cfg(feature = "ffi")]
