@@ -160,13 +160,8 @@ instance S.Serialize TransactionSignature where
 -- 'TransactionSignHash' which is the value that is signed by the signer. The
 -- 'TransactionSignHash' and 'payloadSize' should be re-computed when processing a
 -- 'SignedTransaction' (e.g. when adding signatures or sending the transaction on-chain).
---
--- The representation has a `version` field.
 data SignedTransaction = SignedTransaction
-    { -- | A version to distinguish between future formats of signed/partially-signed transactions.
-      -- The initial version is 1 and will be incremented for every new format.
-      stVersion :: !Int,
-      -- | Amount of energy dedicated to the execution of this transaction.
+    { -- | Amount of energy dedicated to the execution of this transaction.
       stEnergy :: !Energy,
       -- | Absolute expiration time after which transaction will not be executed.
       stExpiryTime :: !TransactionExpiryTime,
@@ -183,14 +178,34 @@ data SignedTransaction = SignedTransaction
     deriving (Eq, Show)
 
 -- | Implement `FromJSON` and `ToJSON` instances for `SignedTransaction`.
-$( deriveJSON
-    defaultOptions
-        { AE.fieldLabelModifier = firstLower . dropWhile isLower
-        }
-    ''SignedTransaction
- )
+instance ToJSON SignedTransaction where
+    toJSON SignedTransaction{..} =
+        AE.object
+            [ "version" AE..= signedTransactionVersion,
+              "energy" AE..= stEnergy,
+              "expiryTime" AE..= stExpiryTime,
+              "nonce" AE..= stNonce,
+              "signer" AE..= stSigner,
+              "payload" AE..= stPayload,
+              "signature" AE..= stSignature
+            ]
 
--- | The initial version of the above `SignedTransaction` type.
+-- Implement `FromJSON` instance for `SignedTransaction`.
+instance FromJSON SignedTransaction where
+    parseJSON = AE.withObject "SignedTransaction" $ \obj -> do
+        stVersion <- obj AE..: "version"
+        if stVersion /= signedTransactionVersion
+            then fail $ "Unexpected version: " ++ show stVersion
+            else do
+                stEnergy <- obj AE..: "energy"
+                stExpiryTime <- obj AE..: "expiryTime"
+                stNonce <- obj AE..: "nonce"
+                stSigner <- obj AE..: "signer"
+                stSignature <- obj AE..: "signature"
+                stPayload <- obj AE..: "payload"
+                return SignedTransaction{..}
+
+-- | The initial version of the above `SignedTransaction` JSON representation.
 -- The version will be incremented when introducing a new format in the future.
 signedTransactionVersion :: Int
 signedTransactionVersion = 1

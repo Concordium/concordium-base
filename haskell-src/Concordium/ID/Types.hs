@@ -800,7 +800,10 @@ instance FromJSON CredentialDeploymentInformation where
 
 -- Implement `ToJSON` instance for `CredentialDeploymentInformation`.
 instance ToJSON CredentialDeploymentInformation where
-    toJSON = error "Not yet implemented"
+    toJSON CredentialDeploymentInformation{..} =
+        object $
+            ("proofs" .= cdiProofs)
+                : credentialDeploymentValuesList cdiValues
 
 -- | Information about the account that should be created as part of the initial
 --  credential deployment.

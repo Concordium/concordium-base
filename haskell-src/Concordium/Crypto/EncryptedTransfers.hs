@@ -298,7 +298,13 @@ instance FromJSON EncryptedAmountTransferData where
         return EncryptedAmountTransferData{..}
 
 instance ToJSON EncryptedAmountTransferData where
-    toJSON = error "Will not be implemented since feature will be deprecated soon"
+    toJSON EncryptedAmountTransferData{..} =
+        object
+            [ "remainingAmount" .= eatdRemainingAmount,
+              "transferAmount" .= eatdTransferAmount,
+              "index" .= eatdIndex,
+              "proof" .= eatdProof
+            ]
 
 withEncryptedAmountTransferData ::
     EncryptedAmountTransferData ->
@@ -495,8 +501,13 @@ instance FromJSON SecToPubAmountTransferData where
         return SecToPubAmountTransferData{..}
 
 instance ToJSON SecToPubAmountTransferData where
-    toJSON = error "Will not be implemented since feature will be deprecated soon"
-
+    toJSON SecToPubAmountTransferData{..} =
+        object
+            [ "remainingAmount" .= stpatdRemainingAmount,
+              "transferAmount" .= stpatdTransferAmount,
+              "index" .= stpatdIndex,
+              "proof" .= stpatdProof
+            ]
 withSecToPubAmountTransferData ::
     SecToPubAmountTransferData ->
     (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Word64 -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a) ->
