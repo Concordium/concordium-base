@@ -711,7 +711,23 @@ instance Show Address where
 
 -- | Time in seconds since the unix epoch
 newtype TransactionTime = TransactionTime {ttsSeconds :: Word64}
-    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON, Real, Enum, Integral) via Word64
+    deriving (Show, Read, Eq, Num, Ord, Real, Enum, Integral) via Word64
+
+-- Implement `ToJSON` instances for `TransactionTime`.
+instance ToJSON TransactionTime where
+    toJSON (TransactionTime seconds) =
+        String $ T.pack $ formatTime defaultTimeLocale "%FT%T%QZ+00:00" (posixSecondsToUTCTime (fromIntegral seconds))
+
+-- Implement `FromJSON` instances for `TransactionTime`.
+instance FromJSON TransactionTime where
+    parseJSON (String v) =
+        case parseTimeM True defaultTimeLocale "%FT%T%QZ+00:00" (T.unpack v) of
+            Just time -> return $ TransactionTime (convertToWord64 $ utcTimeToPOSIXSeconds time)
+            Nothing -> fail "Invalid RFC 3339 timestamp format for TransactionTime (expect %FT%T%QZ+00:00)"
+    parseJSON _ = fail "Expect JSON string for TransactionTime"
+
+convertToWord64 :: NominalDiffTime -> Word64
+convertToWord64 = floor . nominalDiffTimeToSeconds
 
 instance S.Serialize TransactionTime where
     put = P.putWord64be . ttsSeconds
