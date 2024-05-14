@@ -773,9 +773,6 @@ data CredentialDeploymentInformation = CredentialDeploymentInformation
     }
     deriving (Show)
 
-instance ToJSON CredentialDeploymentInformation where
-    toJSON = error "Not yet implemented"
-
 -- | NB: This must match the one defined in rust. In particular the
 --  proof is serialized with 4 byte length.
 instance Serialize CredentialDeploymentInformation where
@@ -787,6 +784,7 @@ instance Serialize CredentialDeploymentInformation where
 instance Eq CredentialDeploymentInformation where
     cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
+-- Implement `FromJSON` instances for `CredentialDeploymentInformation`.
 instance FromJSON CredentialDeploymentInformation where
     parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
         cdiValues <- parseJSON (Object x)
@@ -799,6 +797,10 @@ instance FromJSON CredentialDeploymentInformation where
                           ..
                         }
             Left _ -> fail "\"proofs\" is not a valid base16 string."
+
+-- Implement `ToJSON` instances for `CredentialDeploymentInformation`.
+instance ToJSON CredentialDeploymentInformation where
+    toJSON = error "Not yet implemented"
 
 -- | Information about the account that should be created as part of the initial
 --  credential deployment.

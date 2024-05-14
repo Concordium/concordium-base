@@ -160,11 +160,13 @@ bakerKeysWithProofsSize :: Int
 bakerKeysWithProofsSize =
     VRF.publicKeySize + dlogProofSize + Sig.publicKeySize + dlogProofSize + Bls.publicKeySize + Bls.proofSize
 
-instance AE.FromJSON BakerKeysWithProofs where
-    parseJSON = error "Not yet implemented"
-
-instance AE.ToJSON BakerKeysWithProofs where
-    toJSON = error "Not yet implemented"
+-- Implement `FromJSON` and `ToJSON` instances for `BakerKeysWithProofs`.
+$( deriveJSON
+    defaultOptions
+        { AE.fieldLabelModifier = firstLower . dropWhile isLower
+        }
+    ''BakerKeysWithProofs
+ )
 
 -- | The transaction payload. Defines the supported kinds of transactions.
 --

@@ -192,6 +192,10 @@ $( deriveJSON
     ''SignedTransaction
  )
 
+-- | The initial version `SignedTransaction`. The version will be incremented when introducing a new format in the future.
+signedTransactionVersion :: Int
+signedTransactionVersion = 1
+
 -- | An 'AccountTransaction' is a transaction that originates from
 --  a specific account (the sender), and is paid for by the sender.
 --
@@ -363,9 +367,6 @@ fromICDI wmdArrivalTime messageExpiry icdi =
         wmdData = AccountCreation{credential = InitialACWP icdi, ..}
         wmdHash = getHash (CredentialDeployment wmdData)
     in  WithMetadata{..}
-
-signedTransactionVersion :: Int
-signedTransactionVersion = 1
 
 -----------------
 
