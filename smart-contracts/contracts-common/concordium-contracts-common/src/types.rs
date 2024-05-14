@@ -454,8 +454,24 @@ pub struct ZeroSignatureThreshold;
 
 /// Public key for Ed25519. Must be 32 bytes long.
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, crate::Deserial, crate::Serial)]
+#[cfg_attr(
+    feature = "derive-serde",
+    derive(SerdeSerialize, SerdeDeserialize),
+    serde(into = "String", try_from = "String")
+)]
 #[repr(transparent)]
 pub struct PublicKeyEd25519(pub [u8; 32]);
+
+impl From<PublicKeyEd25519> for String {
+    fn from(pk: PublicKeyEd25519) -> String { pk.to_string() }
+}
+
+#[cfg(feature = "derive-serde")]
+impl TryFrom<String> for PublicKeyEd25519 {
+    type Error = ParseError;
+
+    fn try_from(s: String) -> Result<Self, ParseError> { Self::from_str(s.as_str()) }
+}
 
 impl fmt::Display for PublicKeyEd25519 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
