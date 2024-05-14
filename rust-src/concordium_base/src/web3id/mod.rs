@@ -1683,12 +1683,12 @@ impl TryFrom<chrono::DateTime<chrono::Utc>> for Web3IdAttribute {
                 &chrono::Duration::try_days(Self::TIMESTAMP_DATE_OFFSET)
                     .expect("Can contain offset duration"),
             )
-            .context("Timesetamp out of range")?
+            .context("Timestamp out of range")?
             .num_milliseconds();
         let timestamp = Timestamp::from_timestamp_millis(
             timestamp
                 .try_into()
-                .context("Timesetamps before -262144-01-01T00:00:00Z are not supported.")?,
+                .context("Timestamps before -262144-01-01T00:00:00Z are not supported.")?,
         );
         Ok(Self::Timestamp(timestamp))
     }
