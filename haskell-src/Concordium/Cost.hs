@@ -1,4 +1,5 @@
-{-# LANGUAGE DerivingVia, TypeFamilies #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Definition of cost functions for the different transactions.
@@ -237,11 +238,11 @@ initializeContractInstanceCreateCost = 200
 updateContractInstanceBaseCost :: Energy
 updateContractInstanceBaseCost = 300
 
--- |Maximum amount of nested V1 contract calls. That is, the maximum amount of
--- execution frames that need to be kept alive at the same time.
+-- | Maximum amount of nested V1 contract calls. That is, the maximum amount of
+--  execution frames that need to be kept alive at the same time.
 --
--- Since each frame that is kept alive can consume up to 32MB of memory this limits
--- the worst case memory use of contract calls.
+--  Since each frame that is kept alive can consume up to 32MB of memory this limits
+--  the worst case memory use of contract calls.
 allowedContractCallDepth :: SProtocolVersion pv -> Word -> Bool
 allowedContractCallDepth spv n = demoteProtocolVersion spv <= P6 || n < 384
 

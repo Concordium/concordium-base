@@ -193,8 +193,8 @@ pvCostSemanticsVersion = \case
     SP6 -> CSV0
     SP7 -> CSV1
 
--- |Convert the version to a Word8. This is used when transferring information
--- via FFI.
+-- | Convert the version to a Word8. This is used when transferring information
+--  via FFI.
 costSemanticsVersionToWord8 :: CostSemanticsVersion -> Word8
 costSemanticsVersionToWord8 = \case
     CSV0 -> 0

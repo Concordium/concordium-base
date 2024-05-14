@@ -1655,10 +1655,6 @@ pub enum Web3IdAttribute {
     /// A timestamp in milliseconds that is embedded like the
     /// [`Numeric`](Self::Numeric) variant, but has a different JSON
     /// representation, in ISO8601 compatible format.
-    ///
-    /// The inner timestamp is reflected as the duration (in milliseconds) from
-    /// [`Web3IdAttribute::TIMESTAMP_MIN_DATETIME`] -
-    /// [`Web3IdAttribute::TIMESTAMP_DATE_OFFSET`]
     Timestamp(Timestamp),
 }
 
