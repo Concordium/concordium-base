@@ -271,6 +271,7 @@ data Payload
         { ttpData :: !SecToPubAmountTransferData
         }
     | -- | Send a transfer with an attached schedule.
+      --  There can be at most 255 scheduled releases in the transfer.
       TransferWithSchedule
         { twsTo :: !AccountAddress,
           twsSchedule :: ![(Timestamp, Amount)]
@@ -610,7 +611,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 uckCredId <- S.get
                 uckKeys <- S.get
                 return UpdateCredentialKeys{..}
-            16 -> do
+            16 | supportEncrypted -> do
                 eatTo <- S.get
                 eatdRemainingAmount <- S.get
                 eatdTransferAmount <- S.get
@@ -620,10 +621,13 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 -- and bytesRead
                 eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
                 return EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..}
-            17 -> do
+            17 | supportEncrypted -> do
                 tteAmount <- S.get
                 return TransferToEncrypted{..}
             18 -> do
+                -- Note: transfer to public is supported even if encrypted transfers are not,
+                -- allowing accounts to decrypt any existing encrypted balance. This facility
+                -- may be removed in a future protocol version.
                 stpatdRemainingAmount <- S.get
                 stpatdTransferAmount <- S.get
                 stpatdIndex <- S.get
@@ -652,17 +656,19 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 twmMemo <- S.get
                 twmAmount <- S.get
                 return TransferWithMemo{..}
-            23 | supportMemo -> do
-                eatwmTo <- S.get
-                eatwmMemo <- S.get
-                eatdRemainingAmount <- S.get
-                eatdTransferAmount <- S.get
-                eatdIndex <- S.get
-                cur <- S.bytesRead
-                -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
-                -- and bytesRead
-                eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
-                return EncryptedAmountTransferWithMemo{eatwmData = EncryptedAmountTransferData{..}, ..}
+            23
+                | supportMemo,
+                  supportEncrypted -> do
+                    eatwmTo <- S.get
+                    eatwmMemo <- S.get
+                    eatdRemainingAmount <- S.get
+                    eatdTransferAmount <- S.get
+                    eatdIndex <- S.get
+                    cur <- S.bytesRead
+                    -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
+                    -- and bytesRead
+                    eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
+                    return EncryptedAmountTransferWithMemo{eatwmData = EncryptedAmountTransferData{..}, ..}
             24 | supportMemo -> do
                 twswmTo <- S.get
                 twswmMemo <- S.get
@@ -701,6 +707,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
+    supportEncrypted = supportsEncryptedTransfers spv
     configureBakerBitMask = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
 
@@ -721,8 +728,9 @@ encodePayload = EncodedPayload . BSS.toShort . S.runPut . putPayload
 
 -- | Deserialize a payload.
 --  This will only deserialize payloads that are supported at the given protocol version.
-decodePayload :: SProtocolVersion pv -> PayloadSize -> EncodedPayload -> Either String Payload
-decodePayload spv size (EncodedPayload s) = S.runGet (getPayload spv size) . BSS.fromShort $ s
+decodePayload :: SProtocolVersion pv -> EncodedPayload -> Either String Payload
+decodePayload spv (EncodedPayload s) =
+    S.runGet (getPayload spv (fromIntegral $ BSS.length s)) . BSS.fromShort $ s
 {-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}

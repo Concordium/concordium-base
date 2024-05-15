@@ -7,6 +7,7 @@ import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 
+import Control.Monad
 import qualified Data.Bits as Bit
 import qualified Data.ByteString as BS
 import Data.Either (isLeft)
@@ -21,26 +22,64 @@ import Concordium.ID.Types
 
 import Concordium.Types
 import Concordium.Types.Execution
+import qualified Concordium.Wasm as Wasm
 
 import Generators
 
-testSerializeEncryptedTransfer :: Property
-testSerializeEncryptedTransfer =
+-- | Check if a payload is supported by the given protocol version.
+isPayloadSupported :: ProtocolVersion -> Payload -> Bool
+isPayloadSupported pv DeployModule{..} =
+    -- At P3 and earlier, only version 0 modules are supported.
+    pv > P3 || Wasm.wasmVersion dmMod == Wasm.V0
+isPayloadSupported _ InitContract{} = True
+isPayloadSupported _ Update{} = True
+isPayloadSupported _ Transfer{} = True
+isPayloadSupported pv AddBaker{} = pv <= P3
+isPayloadSupported pv RemoveBaker{} = pv <= P3
+isPayloadSupported pv UpdateBakerStake{} = pv <= P3
+isPayloadSupported pv UpdateBakerRestakeEarnings{} = pv <= P3
+isPayloadSupported pv UpdateBakerKeys{} = pv <= P3
+isPayloadSupported _ UpdateCredentialKeys{} = True
+isPayloadSupported pv EncryptedAmountTransfer{} = pv <= P6
+isPayloadSupported pv TransferToEncrypted{} = pv <= P6
+isPayloadSupported _ TransferToPublic{} = True
+isPayloadSupported _ TransferWithSchedule{} = True
+isPayloadSupported _ UpdateCredentials{} = True
+isPayloadSupported _ RegisterData{} = True
+isPayloadSupported pv TransferWithMemo{} = pv > P1
+isPayloadSupported pv EncryptedAmountTransferWithMemo{} = pv > P1 && pv <= P6
+isPayloadSupported pv TransferWithScheduleAndMemo{} = pv > P1
+isPayloadSupported pv ConfigureBaker{} = pv > P3
+isPayloadSupported pv ConfigureDelegation{} = pv > P3
+
+testSerializeEncryptedTransfer :: SProtocolVersion pv -> Property
+testSerializeEncryptedTransfer spv =
     property $ \gen gen1 seed1 seed2 -> forAll genAccountAddress $ \addr -> monadicIO $ do
         let public = AccountEncryptionKey . deriveElgamalPublicKey globalContext . generateGroupElementFromSeed globalContext $ seed1
         let private = generateElgamalSecretKeyFromSeed globalContext seed2
         let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
         let amount = gen `div` 2
         Just eatd <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey public) private agg amount)
-        return (checkPayload SP1 (EncryptedAmountTransfer addr eatd))
+        return (checkPayload spv (EncryptedAmountTransfer addr eatd))
 
-testSecToPubTransfer :: Property
-testSecToPubTransfer = property $ \gen gen1 seed1 -> monadicIO $ do
+testSerializeEncryptedTransferWithMemo :: SProtocolVersion pv -> Property
+testSerializeEncryptedTransferWithMemo spv =
+    property $ \gen gen1 seed1 seed2 -> forAll genAccountAddress $ \addr ->
+        forAll genMemo $ \memo -> monadicIO $ do
+            let public = AccountEncryptionKey . deriveElgamalPublicKey globalContext . generateGroupElementFromSeed globalContext $ seed1
+            let private = generateElgamalSecretKeyFromSeed globalContext seed2
+            let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
+            let amount = gen `div` 2
+            Just eatd <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey public) private agg amount)
+            return (checkPayload spv (EncryptedAmountTransferWithMemo addr memo eatd))
+
+testSecToPubTransfer :: SProtocolVersion pv -> Property
+testSecToPubTransfer spv = property $ \gen gen1 seed1 -> monadicIO $ do
     let private = generateElgamalSecretKeyFromSeed globalContext seed1
     let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
     let amount = gen `div` 2
     Just eatd <- run (makeSecToPubAmountTransferData globalContext private agg amount)
-    return (checkPayload SP1 (TransferToPublic eatd))
+    return (checkPayload spv (TransferToPublic eatd))
 
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
@@ -56,9 +95,13 @@ groupIntoSize s =
 checkPayload :: SProtocolVersion pv -> Payload -> Property
 checkPayload spv e =
     let bs = S.runPut $ putPayload e
-    in  case S.runGet (getPayload spv (fromIntegral (BS.length bs))) bs of
-            Left err -> counterexample err False
-            Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
+    in  label (groupIntoSize (fromIntegral (BS.length bs))) $ case S.runGet (getPayload spv (fromIntegral (BS.length bs))) bs of
+            Left err -> counterexample err (not supported)
+            Right e'
+                | supported -> e === e'
+                | otherwise -> counterexample "Payload is not supported, but was decoded" False
+  where
+    supported = isPayloadSupported (demoteProtocolVersion spv) e
 
 -- Modify the bitmap portion of a payload. Assumes that the input bytestring
 -- is at least 24 bits long.
@@ -95,6 +138,15 @@ genInvalidPayloadByteString :: Gen BS.ByteString
 genInvalidPayloadByteString =
     oneof [genInvalidPayloadConfigureBaker, genInvalidPayloadConfigureDelegation]
 
+-- | Generate a bytestring representing a valid payload, but with additional bytes appended to it.
+genPaddedPayloadByteString :: ProtocolVersion -> Gen BS.ByteString
+genPaddedPayloadByteString pv = do
+    payload <- genPayload pv
+    padding <- BS.pack <$> sized (\n -> vectorOf (n + 1) arbitrary)
+    return . S.runPut $ do
+        putPayload payload
+        S.putByteString padding
+
 checkInvalidPayloadByteString :: SProtocolVersion pv -> BS.ByteString -> Property
 checkInvalidPayloadByteString spv bs =
     property $ isLeft $ S.runGet (getPayload spv (fromIntegral (BS.length bs))) bs
@@ -107,11 +159,30 @@ tests = do
         test SP3 50 500
         test SP4 25 1000
         test SP4 50 500
-    describe "Negative payload serialization tests" $
+        test SP5 25 1000
+        test SP5 50 500
+        test SP6 25 1000
+        test SP6 50 500
+        test SP7 25 1000
+        test SP7 50 500
+    describe "Negative payload serialization tests" $ do
         negativeTest SP4 20 200
-    describe "Encrypted transfer payloads" $ do
-        specify "Encrypted transfer" $ testSerializeEncryptedTransfer
-        specify "Transfer to public" $ testSecToPubTransfer
+        negativeTest SP6 20 200
+        negativeTest SP7 20 200
+        negativeTestPadded SP6 20 200
+        negativeTestPadded SP7 20 200
+    describe "Encrypted transfer payloads P6" $ do
+        specify "Encrypted transfer" $ testSerializeEncryptedTransfer SP6
+        specify "Encrypted transfer with memo" $ testSerializeEncryptedTransferWithMemo SP6
+        specify "Transfer to public" $ testSecToPubTransfer SP6
+    describe "Encrypted transfer payloads P7" $ do
+        specify "Encrypted transfer" $ testSerializeEncryptedTransfer SP7
+        specify "Encrypted transfer with memo" $ testSerializeEncryptedTransferWithMemo SP7
+        specify "Transfer to public" $ testSecToPubTransfer SP7
+    describe "Unsafe payload serialization tests" $ do
+        forM_ [P1, P2, P3, P4, P5, P6, P7] $ \pv -> do
+            case promoteProtocolVersion pv of
+                (SomeProtocolVersion spv) -> testUnsafe spv 25 1000
   where
     test spv size num =
         modifyMaxSuccess (const num)
@@ -133,3 +204,31 @@ tests = do
                     ++ ":"
                 )
             $ forAll (resize size genInvalidPayloadByteString) (checkInvalidPayloadByteString spv)
+    negativeTestPadded spv size num =
+        modifyMaxSuccess (const num)
+            $ specify
+                ( "Negative payload serialization with padding ("
+                    ++ show (demoteProtocolVersion spv)
+                    ++ ") with size = "
+                    ++ show size
+                    ++ ":"
+                )
+            $ forAll (resize size $ genPaddedPayloadByteString (demoteProtocolVersion spv)) (checkInvalidPayloadByteString spv)
+    testUnsafe spv size num =
+        modifyMaxSuccess (const num)
+            $ specify
+                ( "Payload deserialization including invalid types ("
+                    ++ show (demoteProtocolVersion spv)
+                    ++ ") with size = "
+                    ++ show size
+                    ++ ":"
+                )
+            $ forAll
+                (resize size genPayloadUnsafe)
+                (checkPayloadLabelled spv)
+    checkPayloadLabelled spv payload =
+        label lbl $ checkPayload spv payload
+      where
+        lbl
+            | isPayloadSupported (demoteProtocolVersion spv) payload = "supported"
+            | otherwise = "unsupported"
