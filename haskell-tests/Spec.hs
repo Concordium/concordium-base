@@ -55,4 +55,5 @@ main = hspec $ parallel $ do
     -- Types.AddressesSpec.tests
     -- Types.ParametersSpec.tests
     Types.PayloadSpec.tests
-    -- Genesis.ParametersSpec.tests
+
+-- Genesis.ParametersSpec.tests

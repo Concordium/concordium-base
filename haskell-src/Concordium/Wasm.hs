@@ -349,7 +349,6 @@ instance AE.FromJSON WasmModule where
             1 -> WasmModuleV1 <$> AE.parseJSON content
             _ -> fail "Invalid version number"
 
-
 getModuleRef :: forall v. (IsWasmVersion v) => WasmModuleV v -> ModuleRef
 getModuleRef wm = case getWasmVersion @v of
     SV0 -> ModuleRef (getHash wm)

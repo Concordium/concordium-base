@@ -1,19 +1,21 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MonoLocalBinds #-}
 
--- | Tests for JSON encoding and decoding of 'Payload'.
+-- | Tests for JSON encoding and decoding of 'Payload' and 'SignedTransaction'.
 module Types.PayloadSpec (tests) where
 
 import Concordium.Crypto.SHA256
+import qualified Concordium.Crypto.SignatureScheme as ID
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Types
-import Concordium.Types.Execution 
-import Concordium.Types.Transactions (SignedTransaction (SignedTransaction))
+import Concordium.Types.Execution
+import Concordium.Types.Transactions as ST
 import Concordium.Wasm
 import qualified Data.Aeson as AE
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Short as SBS
 import Data.FixedByteString
+import qualified Data.Map.Strict as Map
 import Data.Primitive.ByteArray
 import qualified Data.Text as T
 import Data.Word (Word8)
@@ -77,14 +79,28 @@ exampleTransferWithScheduleAndMemoPayload = TransferWithScheduleAndMemo{twswmTo 
 exampleConfigureDelegationPayload :: Payload
 exampleConfigureDelegationPayload = ConfigureDelegation{cdCapital = Nothing, cdRestakeEarnings = Just True, cdDelegationTarget = Nothing}
 
--- exampleSignedTransaction :: SignedTransaction
--- exampleSignedTransaction = SignedTransaction {stEnergy =Energy,
---     stExpiryTime =exampleTimestamp,
---     stNonce =Nonce,
---     stSigner =exampleAccountAddress,
---     stPayload =exampleTransferWithSchedulePayload,
---     stSignature =TransactionSignature
--- }
+exampleSignatureMapEmpty :: Map.Map IDTypes.KeyIndex ID.Signature
+exampleSignatureMapEmpty = Map.empty
+
+exampleSignatureMap :: Map.Map IDTypes.KeyIndex ID.Signature
+exampleSignatureMap = Map.insert (1 :: IDTypes.KeyIndex) (ID.Signature exampleShortByteString) exampleSignatureMapEmpty
+
+exampleCredentialSignatureMapEmpty :: Map.Map IDTypes.CredentialIndex (Map.Map IDTypes.KeyIndex ID.Signature)
+exampleCredentialSignatureMapEmpty = Map.empty
+
+exampleCredentialSignatureMap :: Map.Map IDTypes.CredentialIndex (Map.Map IDTypes.KeyIndex ID.Signature)
+exampleCredentialSignatureMap = Map.insert (1 :: IDTypes.CredentialIndex) exampleSignatureMap exampleCredentialSignatureMapEmpty
+
+exampleSignedTransaction :: ST.SignedTransaction
+exampleSignedTransaction =
+    ST.SignedTransaction
+        { stEnergy = Energy 1,
+          stExpiryTime = TransactionTime 2,
+          stNonce = Nonce 3,
+          stSigner = exampleAccountAddress,
+          stPayload = exampleTransferWithSchedulePayload,
+          stSignature = TransactionSignature exampleCredentialSignatureMap
+        }
 
 -- tests
 tests :: Spec
@@ -109,6 +125,5 @@ tests = describe "payload JSON encode and decode" $ do
         (AE.eitherDecode . AE.encode $ exampleTransferWithScheduleAndMemoPayload) `shouldBe` Right exampleTransferWithScheduleAndMemoPayload
     specify "configure delegation payload example:" $ do
         (AE.eitherDecode . AE.encode $ exampleConfigureDelegationPayload) `shouldBe` Right exampleConfigureDelegationPayload
-    -- specify "configure delegation payload example:" $ do
-    --     (AE.eitherDecode . AE.encode $ exampleSignedTransaction) `shouldBe` Right exampleSignedTransaction
-
+    specify "configure delegation payload example:" $ do
+        (AE.eitherDecode . AE.encode $ exampleSignedTransaction) `shouldBe` Right exampleSignedTransaction
