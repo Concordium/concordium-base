@@ -7,7 +7,8 @@ module Types.PayloadSpec (tests) where
 import Concordium.Crypto.SHA256
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Types
-import Concordium.Types.Execution
+import Concordium.Types.Execution 
+import Concordium.Types.Transactions (SignedTransaction (SignedTransaction))
 import Concordium.Wasm
 import qualified Data.Aeson as AE
 import qualified Data.ByteString.Char8 as BS
@@ -76,6 +77,15 @@ exampleTransferWithScheduleAndMemoPayload = TransferWithScheduleAndMemo{twswmTo 
 exampleConfigureDelegationPayload :: Payload
 exampleConfigureDelegationPayload = ConfigureDelegation{cdCapital = Nothing, cdRestakeEarnings = Just True, cdDelegationTarget = Nothing}
 
+-- exampleSignedTransaction :: SignedTransaction
+-- exampleSignedTransaction = SignedTransaction {stEnergy =Energy,
+--     stExpiryTime =exampleTimestamp,
+--     stNonce =Nonce,
+--     stSigner =exampleAccountAddress,
+--     stPayload =exampleTransferWithSchedulePayload,
+--     stSignature =TransactionSignature
+-- }
+
 -- tests
 tests :: Spec
 tests = describe "payload JSON encode and decode" $ do
@@ -99,3 +109,6 @@ tests = describe "payload JSON encode and decode" $ do
         (AE.eitherDecode . AE.encode $ exampleTransferWithScheduleAndMemoPayload) `shouldBe` Right exampleTransferWithScheduleAndMemoPayload
     specify "configure delegation payload example:" $ do
         (AE.eitherDecode . AE.encode $ exampleConfigureDelegationPayload) `shouldBe` Right exampleConfigureDelegationPayload
+    -- specify "configure delegation payload example:" $ do
+    --     (AE.eitherDecode . AE.encode $ exampleSignedTransaction) `shouldBe` Right exampleSignedTransaction
+

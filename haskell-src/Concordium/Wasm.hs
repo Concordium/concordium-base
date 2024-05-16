@@ -334,19 +334,21 @@ data WasmModule
     | WasmModuleV1 (WasmModuleV V1)
     deriving (Eq, Show)
 
--- Implement `FromJSON` and `ToJSON` instances for `WasmModule`.
-$( deriveJSON
-    defaultOptions
-        { AE.constructorTagModifier = firstLower,
-          AE.fieldLabelModifier = firstLower . dropWhile isLower,
-          AE.sumEncoding =
-            AE.TaggedObject
-                { AE.tagFieldName = "version",
-                  AE.contentsFieldName = "content"
-                }
-        }
-    ''WasmModule
- )
+-- Custom implementation of ToJSON for WasmModule
+instance AE.ToJSON WasmModule where
+    toJSON (WasmModuleV0 wasmV0) = AE.object ["version" AE..= (0 :: Int), "content" AE..= AE.toJSON wasmV0]
+    toJSON (WasmModuleV1 wasmV1) = AE.object ["version" AE..= (1 :: Int), "content" AE..= AE.toJSON wasmV1]
+
+-- Custom implementation of FromJSON for WasmModule
+instance AE.FromJSON WasmModule where
+    parseJSON = AE.withObject "WasmModule" $ \obj -> do
+        version <- obj AE..: "version"
+        content <- obj AE..: "content"
+        case version :: Int of
+            0 -> WasmModuleV0 <$> AE.parseJSON content
+            1 -> WasmModuleV1 <$> AE.parseJSON content
+            _ -> fail "Invalid version number"
+
 
 getModuleRef :: forall v. (IsWasmVersion v) => WasmModuleV v -> ModuleRef
 getModuleRef wm = case getWasmVersion @v of
