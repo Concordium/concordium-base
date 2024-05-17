@@ -157,7 +157,7 @@ instance S.Serialize BakerKeysWithProofs where
 
     get = BakerKeysWithProofs <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
 
--- | Size of a serialized 'BakerKeysWithProofs'
+-- | Size of a serialized 'BakerKeysWithProofs' structure
 bakerKeysWithProofsSize :: Int
 bakerKeysWithProofsSize =
     VRF.publicKeySize + dlogProofSize + Sig.publicKeySize + dlogProofSize + Bls.publicKeySize + Bls.proofSize
