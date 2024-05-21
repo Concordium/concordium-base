@@ -996,7 +996,6 @@ instance S.Serialize PayloadSize where
 -- | Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload {_spayload :: BSS.ShortByteString}
     deriving (Eq, Show)
-    deriving (AE.ToJSON, AE.FromJSON) via BSH.ByteStringHex
 
 -- | There is no corresponding getter (to fit into the Serialize instance) since
 --  encoded payload does not encode its own length. See 'getPayload' below.
