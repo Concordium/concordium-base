@@ -4,9 +4,9 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Concordium.Types.Execution where
@@ -48,7 +48,6 @@ import Concordium.Types.Execution.TH
 import Concordium.Types.Updates
 import Concordium.Utils
 import qualified Concordium.Wasm as Wasm
-import Data.Char (isLower)
 
 -- | We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -162,13 +161,28 @@ bakerKeysWithProofsSize :: Int
 bakerKeysWithProofsSize =
     VRF.publicKeySize + dlogProofSize + Sig.publicKeySize + dlogProofSize + Bls.publicKeySize + Bls.proofSize
 
--- Implement `FromJSON` and `ToJSON` instances for `BakerKeysWithProofs`.
-$( deriveJSON
-    defaultOptions
-        { AE.fieldLabelModifier = firstLower . dropWhile isLower
-        }
-    ''BakerKeysWithProofs
- )
+-- Implement `ToJSON` instance for `BakerKeysWithProofs`.
+instance AE.ToJSON BakerKeysWithProofs where
+    toJSON BakerKeysWithProofs{..} =
+        AE.object
+            [ "electionVerifyKey" AE..= bkwpElectionVerifyKey,
+              "electionKeyOwnershipProof" AE..= bkwpProofElection,
+              "signatureVerifyKey" AE..= bkwpSignatureVerifyKey,
+              "signatureKeyOwnershipProof" AE..= bkwpProofSig,
+              "aggregationVerifyKey" AE..= bkwpAggregationVerifyKey,
+              "aggregationKeyOwnershipProof" AE..= bkwpProofAggregation
+            ]
+
+-- Implement `FromJSON` instance for `BakerKeysWithProofs`.
+instance AE.FromJSON BakerKeysWithProofs where
+    parseJSON = AE.withObject "BakerKeysWithProofs" $ \obj -> do
+        bkwpElectionVerifyKey <- obj AE..: "electionVerifyKey"
+        bkwpProofElection <- obj AE..: "electionKeyOwnershipProof"
+        bkwpSignatureVerifyKey <- obj AE..: "signatureVerifyKey"
+        bkwpProofSig <- obj AE..: "signatureKeyOwnershipProof"
+        bkwpAggregationVerifyKey <- obj AE..: "aggregationVerifyKey"
+        bkwpProofAggregation <- obj AE..: "aggregationKeyOwnershipProof"
+        return BakerKeysWithProofs{..}
 
 -- | The transaction payload. Defines the supported kinds of transactions.
 --
@@ -417,28 +431,28 @@ instance S.Serialize TransactionType where
 
 instance AE.ToJSON Payload where
     -- `mod` was renamed to `module`
-    toJSON DeployModule{dmMod} = AE.object ["module" AE..= dmMod, "transactionType" AE..= AE.String "deployModule"]
-    toJSON InitContract{icAmount, icModRef, icInitName, icParam} = AE.object ["amount" AE..= icAmount, "modRef" AE..= icModRef, "initName" AE..= icInitName, "param" AE..= icParam, "transactionType" AE..= AE.String "initContract"]
-    toJSON Update{uAmount, uAddress, uReceiveName, uMessage} = AE.object ["amount" AE..= uAmount, "address" AE..= uAddress, "receiveName" AE..= uReceiveName, "message" AE..= uMessage, "transactionType" AE..= AE.String "update"]
-    toJSON Transfer{tToAddress, tAmount} = AE.object ["toAddress" AE..= tToAddress, "amount" AE..= tAmount, "transactionType" AE..= AE.String "transfer"]
-    toJSON UpdateCredentialKeys{uckCredId, uckKeys} = AE.object ["credId" AE..= uckCredId, "keys" AE..= uckKeys, "transactionType" AE..= AE.String "updateCredentialKeys"]
-    toJSON EncryptedAmountTransfer{eatTo, eatData} = AE.object ["to" AE..= eatTo, "data" AE..= eatData, "transactionType" AE..= AE.String "encryptedAmountTransfer"]
-    toJSON TransferToEncrypted{tteAmount} = AE.object ["amount" AE..= tteAmount, "transactionType" AE..= AE.String "transferToEncrypted"]
-    toJSON TransferToPublic{ttpData} = AE.object ["data" AE..= ttpData, "transactionType" AE..= AE.String "transferToPublic"]
-    toJSON TransferWithSchedule{twsTo, twsSchedule} = AE.object ["to" AE..= twsTo, "schedule" AE..= twsSchedule, "transactionType" AE..= AE.String "transferWithSchedule"]
-    toJSON UpdateCredentials{ucNewCredInfos, ucRemoveCredIds, ucNewThreshold} = AE.object ["newCredInfos" AE..= ucNewCredInfos, "removeCredIds" AE..= ucRemoveCredIds, "newThreshold" AE..= ucNewThreshold, "transactionType" AE..= AE.String "updateCredentials"]
-    toJSON RegisterData{rdData} = AE.object ["data" AE..= rdData, "transactionType" AE..= AE.String "registerData"]
-    toJSON TransferWithMemo{twmToAddress, twmMemo, twmAmount} = AE.object ["toAddress" AE..= twmToAddress, "memo" AE..= twmMemo, "amount" AE..= twmAmount, "transactionType" AE..= AE.String "transferWithMemo"]
-    toJSON EncryptedAmountTransferWithMemo{eatwmTo, eatwmMemo, eatwmData} = AE.object ["to" AE..= eatwmTo, "memo" AE..= eatwmMemo, "data" AE..= eatwmData, "transactionType" AE..= AE.String "encryptedAmountTransferWithMemo"]
-    toJSON TransferWithScheduleAndMemo{twswmTo, twswmMemo, twswmSchedule} = AE.object ["to" AE..= twswmTo, "memo" AE..= twswmMemo, "schedule" AE..= twswmSchedule, "transactionType" AE..= AE.String "transferWithScheduleAndMemo"]
+    toJSON DeployModule{..} = AE.object ["module" AE..= dmMod, "transactionType" AE..= AE.String "deployModule"]
+    toJSON InitContract{..} = AE.object ["amount" AE..= icAmount, "modRef" AE..= icModRef, "initName" AE..= icInitName, "param" AE..= icParam, "transactionType" AE..= AE.String "initContract"]
+    toJSON Update{..} = AE.object ["amount" AE..= uAmount, "address" AE..= uAddress, "receiveName" AE..= uReceiveName, "message" AE..= uMessage, "transactionType" AE..= AE.String "update"]
+    toJSON Transfer{..} = AE.object ["toAddress" AE..= tToAddress, "amount" AE..= tAmount, "transactionType" AE..= AE.String "transfer"]
+    toJSON UpdateCredentialKeys{..} = AE.object ["credId" AE..= uckCredId, "keys" AE..= uckKeys, "transactionType" AE..= AE.String "updateCredentialKeys"]
+    toJSON EncryptedAmountTransfer{..} = AE.object ["to" AE..= eatTo, "data" AE..= eatData, "transactionType" AE..= AE.String "encryptedAmountTransfer"]
+    toJSON TransferToEncrypted{..} = AE.object ["amount" AE..= tteAmount, "transactionType" AE..= AE.String "transferToEncrypted"]
+    toJSON TransferToPublic{..} = AE.object ["data" AE..= ttpData, "transactionType" AE..= AE.String "transferToPublic"]
+    toJSON TransferWithSchedule{..} = AE.object ["to" AE..= twsTo, "schedule" AE..= twsSchedule, "transactionType" AE..= AE.String "transferWithSchedule"]
+    toJSON UpdateCredentials{..} = AE.object ["newCredInfos" AE..= ucNewCredInfos, "removeCredIds" AE..= ucRemoveCredIds, "newThreshold" AE..= ucNewThreshold, "transactionType" AE..= AE.String "updateCredentials"]
+    toJSON RegisterData{..} = AE.object ["data" AE..= rdData, "transactionType" AE..= AE.String "registerData"]
+    toJSON TransferWithMemo{..} = AE.object ["toAddress" AE..= twmToAddress, "memo" AE..= twmMemo, "amount" AE..= twmAmount, "transactionType" AE..= AE.String "transferWithMemo"]
+    toJSON EncryptedAmountTransferWithMemo{..} = AE.object ["to" AE..= eatwmTo, "memo" AE..= eatwmMemo, "data" AE..= eatwmData, "transactionType" AE..= AE.String "encryptedAmountTransferWithMemo"]
+    toJSON TransferWithScheduleAndMemo{..} = AE.object ["to" AE..= twswmTo, "memo" AE..= twswmMemo, "schedule" AE..= twswmSchedule, "transactionType" AE..= AE.String "transferWithScheduleAndMemo"]
     -- `configureBaker` was renamed to `configureValidator`
-    toJSON ConfigureBaker{cbCapital, cbRestakeEarnings, cbOpenForDelegation, cbKeysWithProofs, cbMetadataURL, cbTransactionFeeCommission, cbBakingRewardCommission, cbFinalizationRewardCommission} = AE.object ["capital" AE..= cbCapital, "restakeEarnings" AE..= cbRestakeEarnings, "openForDelegation" AE..= cbOpenForDelegation, "keysWithProofs" AE..= cbKeysWithProofs, "metadataURL" AE..= cbMetadataURL, "transactionFeeCommission" AE..= cbTransactionFeeCommission, "bakingRewardCommission" AE..= cbBakingRewardCommission, "finalizationRewardCommission" AE..= cbFinalizationRewardCommission, "transactionType" AE..= AE.String "configureValidator"]
-    toJSON ConfigureDelegation{cdCapital, cdRestakeEarnings, cdDelegationTarget} = AE.object ["capital" AE..= cdCapital, "restakeEarnings" AE..= cdRestakeEarnings, "delegationTarget" AE..= cdDelegationTarget, "transactionType" AE..= AE.String "configureDelegation"]
-    toJSON AddBaker{abElectionVerifyKey, abSignatureVerifyKey, abAggregationVerifyKey, abProofSig, abProofElection, abProofAggregation, abBakingStake, abRestakeEarnings} = AE.object ["electionVerifyKey" AE..= abElectionVerifyKey, "signatureVerifyKey" AE..= abSignatureVerifyKey, "aggregationVerifyKey" AE..= abAggregationVerifyKey, "proofSig" AE..= abProofSig, "proofElection" AE..= abProofElection, "proofAggregation" AE..= abProofAggregation, "bakingStake" AE..= abBakingStake, "restakeEarnings" AE..= abRestakeEarnings, "transactionType" AE..= AE.String "addBaker"]
+    toJSON ConfigureBaker{..} = AE.object ["capital" AE..= cbCapital, "restakeEarnings" AE..= cbRestakeEarnings, "openForDelegation" AE..= cbOpenForDelegation, "keysWithProofs" AE..= cbKeysWithProofs, "metadataURL" AE..= cbMetadataURL, "transactionFeeCommission" AE..= cbTransactionFeeCommission, "bakingRewardCommission" AE..= cbBakingRewardCommission, "finalizationRewardCommission" AE..= cbFinalizationRewardCommission, "transactionType" AE..= AE.String "configureValidator"]
+    toJSON ConfigureDelegation{..} = AE.object ["capital" AE..= cdCapital, "restakeEarnings" AE..= cdRestakeEarnings, "delegationTarget" AE..= cdDelegationTarget, "transactionType" AE..= AE.String "configureDelegation"]
+    toJSON AddBaker{..} = AE.object ["electionVerifyKey" AE..= abElectionVerifyKey, "signatureVerifyKey" AE..= abSignatureVerifyKey, "aggregationVerifyKey" AE..= abAggregationVerifyKey, "proofSig" AE..= abProofSig, "proofElection" AE..= abProofElection, "proofAggregation" AE..= abProofAggregation, "bakingStake" AE..= abBakingStake, "restakeEarnings" AE..= abRestakeEarnings, "transactionType" AE..= AE.String "addBaker"]
     toJSON RemoveBaker = AE.object ["transactionType" AE..= AE.String "removeBaker"]
-    toJSON UpdateBakerStake{ubsStake} = AE.object ["stake" AE..= ubsStake, "transactionType" AE..= AE.String "updateBakerStake"]
-    toJSON UpdateBakerRestakeEarnings{ubreRestakeEarnings} = AE.object ["restakeEarnings" AE..= ubreRestakeEarnings, "transactionType" AE..= AE.String "updateBakerRestakeEarnings"]
-    toJSON UpdateBakerKeys{ubkElectionVerifyKey, ubkSignatureVerifyKey, ubkAggregationVerifyKey, ubkProofSig, ubkProofElection, ubkProofAggregation} = AE.object ["electionVerifyKey" AE..= ubkElectionVerifyKey, "signatureVerifyKey" AE..= ubkSignatureVerifyKey, "aggregationVerifyKey" AE..= ubkAggregationVerifyKey, "proofSig" AE..= ubkProofSig, "proofElection" AE..= ubkProofElection, "proofAggregation" AE..= ubkProofAggregation, "transactionType" AE..= AE.String "updateBakerKeys"]
+    toJSON UpdateBakerStake{..} = AE.object ["stake" AE..= ubsStake, "transactionType" AE..= AE.String "updateBakerStake"]
+    toJSON UpdateBakerRestakeEarnings{..} = AE.object ["restakeEarnings" AE..= ubreRestakeEarnings, "transactionType" AE..= AE.String "updateBakerRestakeEarnings"]
+    toJSON UpdateBakerKeys{..} = AE.object ["electionVerifyKey" AE..= ubkElectionVerifyKey, "signatureVerifyKey" AE..= ubkSignatureVerifyKey, "aggregationVerifyKey" AE..= ubkAggregationVerifyKey, "proofSig" AE..= ubkProofSig, "proofElection" AE..= ubkProofElection, "proofAggregation" AE..= ubkProofAggregation, "transactionType" AE..= AE.String "updateBakerKeys"]
 
 instance AE.FromJSON Payload where
     parseJSON = AE.withObject "payload" $ \obj -> do
@@ -447,29 +461,29 @@ instance AE.FromJSON Payload where
         case transactionType of
             "deployModule" -> do
                 dmMod <- obj AE..: "module"
-                return DeployModule{dmMod}
+                return DeployModule{..}
             "initContract" -> do
                 icAmount <- obj AE..: "amount"
                 icModRef <- obj AE..: "modRef"
                 icInitName <- obj AE..: "initName"
                 icParam <- obj AE..: "param"
-                return InitContract{icAmount, icModRef, icInitName, icParam}
+                return InitContract{..}
             "update" -> do
                 uAmount <- obj AE..: "amount"
                 uAddress <- obj AE..: "address"
                 uReceiveName <- obj AE..: "receiveName"
                 uMessage <- obj AE..: "message"
-                return Update{uAmount, uAddress, uReceiveName, uMessage}
+                return Update{..}
             "transfer" -> do
                 tToAddress <- obj AE..: "toAddress"
                 tAmount <- obj AE..: "amount"
-                return Transfer{tToAddress, tAmount}
+                return Transfer{..}
             "UpdateBakerStake" -> do
                 ubsStake <- obj AE..: "stake"
-                return UpdateBakerStake{ubsStake}
+                return UpdateBakerStake{..}
             "updateBakerRestakeEarnings" -> do
                 ubreRestakeEarnings <- obj AE..: "restakeEarnings"
-                return UpdateBakerRestakeEarnings{ubreRestakeEarnings}
+                return UpdateBakerRestakeEarnings{..}
             "updateBakerKeys" -> do
                 ubkElectionVerifyKey <- obj AE..: "electionVerifyKey"
                 ubkSignatureVerifyKey <- obj AE..: "signatureVerifyKey"
@@ -477,11 +491,11 @@ instance AE.FromJSON Payload where
                 ubkProofSig <- obj AE..: "proofSig"
                 ubkProofElection <- obj AE..: "proofElection"
                 ubkProofAggregation <- obj AE..: "proofAggregation"
-                return UpdateBakerKeys{ubkElectionVerifyKey, ubkSignatureVerifyKey, ubkAggregationVerifyKey, ubkProofSig, ubkProofElection, ubkProofAggregation}
+                return UpdateBakerKeys{..}
             "updateCredentialKeys" -> do
                 uckCredId <- obj AE..: "credId"
                 uckKeys <- obj AE..: "keys"
-                return UpdateCredentialKeys{uckCredId, uckKeys}
+                return UpdateCredentialKeys{..}
             "removeBaker" -> do
                 return RemoveBaker
             "addBaker" -> do
@@ -493,44 +507,44 @@ instance AE.FromJSON Payload where
                 abProofAggregation <- obj AE..: "proofAggregation"
                 abBakingStake <- obj AE..: "bakingStake"
                 abRestakeEarnings <- obj AE..: "restakeEarnings"
-                return AddBaker{abElectionVerifyKey, abSignatureVerifyKey, abAggregationVerifyKey, abProofSig, abProofElection, abProofAggregation, abBakingStake, abRestakeEarnings}
+                return AddBaker{..}
             "encryptedAmountTransfer" -> do
                 eatTo <- obj AE..: "to"
                 eatData <- obj AE..: "data"
-                return EncryptedAmountTransfer{eatTo, eatData}
+                return EncryptedAmountTransfer{..}
             "transferToEncrypted" -> do
                 tteAmount <- obj AE..: "amount"
-                return TransferToEncrypted{tteAmount}
+                return TransferToEncrypted{..}
             "transferToPublic" -> do
                 ttpData <- obj AE..: "data"
-                return TransferToPublic{ttpData}
+                return TransferToPublic{..}
             "transferWithSchedule" -> do
                 twsTo <- obj AE..: "to"
                 twsSchedule <- obj AE..: "schedule"
-                return TransferWithSchedule{twsTo, twsSchedule}
+                return TransferWithSchedule{..}
             "updateCredentials" -> do
                 ucNewCredInfos <- obj AE..: "newCredInfos"
                 ucRemoveCredIds <- obj AE..: "removeCredIds"
                 ucNewThreshold <- obj AE..: "newThreshold"
-                return UpdateCredentials{ucNewCredInfos, ucRemoveCredIds, ucNewThreshold}
+                return UpdateCredentials{..}
             "registerData" -> do
                 rdData <- obj AE..: "data"
-                return RegisterData{rdData}
+                return RegisterData{..}
             "transferWithMemo" -> do
                 twmToAddress <- obj AE..: "toAddress"
                 twmMemo <- obj AE..: "memo"
                 twmAmount <- obj AE..: "amount"
-                return TransferWithMemo{twmToAddress, twmMemo, twmAmount}
+                return TransferWithMemo{..}
             "encryptedAmountTransferWithMemo" -> do
                 eatwmTo <- obj AE..: "to"
                 eatwmMemo <- obj AE..: "memo"
                 eatwmData <- obj AE..: "data"
-                return EncryptedAmountTransferWithMemo{eatwmTo, eatwmMemo, eatwmData}
+                return EncryptedAmountTransferWithMemo{..}
             "transferWithScheduleAndMemo" -> do
                 twswmTo <- obj AE..: "to"
                 twswmMemo <- obj AE..: "memo"
                 twswmSchedule <- obj AE..: "schedule"
-                return TransferWithScheduleAndMemo{twswmTo, twswmMemo, twswmSchedule}
+                return TransferWithScheduleAndMemo{..}
             "configureValidator" -> do
                 cbCapital <- obj AE..: "capital"
                 cbRestakeEarnings <- obj AE..: "restakeEarnings"
@@ -540,12 +554,12 @@ instance AE.FromJSON Payload where
                 cbTransactionFeeCommission <- obj AE..: "transactionFeeCommission"
                 cbBakingRewardCommission <- obj AE..: "bakingRewardCommission"
                 cbFinalizationRewardCommission <- obj AE..: "finalizationRewardCommission"
-                return ConfigureBaker{cbCapital, cbRestakeEarnings, cbOpenForDelegation, cbKeysWithProofs, cbMetadataURL, cbTransactionFeeCommission, cbBakingRewardCommission, cbFinalizationRewardCommission}
+                return ConfigureBaker{..}
             "configureDelegation" -> do
                 cdCapital <- obj AE..: "capital"
                 cdRestakeEarnings <- obj AE..: "restakeEarnings"
                 cdDelegationTarget <- obj AE..: "delegationTarget"
-                return ConfigureDelegation{cdCapital, cdRestakeEarnings, cdDelegationTarget}
+                return ConfigureDelegation{..}
             _ -> fail "Unrecognized 'TransactionType' tag"
 
 -- | Payload serialization according to
@@ -2402,6 +2416,7 @@ instance S.Serialize RejectReason where
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
+
 instance AE.FromJSON RejectReason
 
 -- | Reasons for the execution of a transaction to fail on the current block state.

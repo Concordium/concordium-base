@@ -18,7 +18,6 @@ import Data.Aeson (FromJSON (..), ToJSON (..))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import qualified Data.ByteString as BS
-import Data.Char (isLower)
 import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Serialize as S
@@ -31,7 +30,6 @@ import qualified Data.Vector as Vec
 
 import Concordium.ID.Types
 import Concordium.Types
-import Concordium.Types.Execution
 import Concordium.Types.HashableTo
 import Concordium.Types.Updates
 import Concordium.Utils
