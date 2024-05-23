@@ -129,6 +129,9 @@ genInclusiveRangeOfAmountFraction = do
             `suchThat` (\(i0, i1) -> i0 <= i1)
     return InclusiveRange{..}
 
+-- | Generate payloads that are valid for the given protocol version.
+--  This includes all payload types except encrypted transfers (with and without memo) and
+--  transfer to public.
 genPayload :: ProtocolVersion -> Gen Payload
 genPayload pv =
     oneof $
@@ -138,9 +141,11 @@ genPayload pv =
           genPayloadTransfer,
           genPayloadUpdateCredentials,
           genPayloadUpdateCredentialKeys,
-          genPayloadTransferToEncrypted,
-          genPayloadRegisterData
+          genPayloadRegisterData,
+          genPayloadTransferWithSchedule
         ]
+            ++ [genPayloadTransferToEncrypted | pv < P7]
+            ++ (if pv >= P2 then [genTransferWithMemo, genTransferWithScheduleAndMemo] else [])
             ++ if pv < P4
                 then
                     [ genPayloadAddBaker,
@@ -153,6 +158,31 @@ genPayload pv =
                     [ genPayloadConfigureBaker,
                       genPayloadConfigureDelegation
                     ]
+
+-- | Generate payloads that are valid for some protocol version, but may not be valid for all.
+genPayloadUnsafe :: Gen Payload
+genPayloadUnsafe =
+    oneof
+        [ -- All module version are supported at P4.
+          genPayloadDeployModule P4,
+          genPayloadInitContract,
+          genPayloadUpdate,
+          genPayloadTransfer,
+          genPayloadUpdateCredentials,
+          genPayloadUpdateCredentialKeys,
+          genPayloadRegisterData,
+          genPayloadTransferWithSchedule,
+          genPayloadTransferToEncrypted,
+          genTransferWithMemo,
+          genTransferWithScheduleAndMemo,
+          genPayloadAddBaker,
+          genPayloadRemoveBaker,
+          genPayloadUpdateBakerStake,
+          genPayloadUpdateBakerRestateEarnings,
+          genPayloadUpdateBakerKeys,
+          genPayloadConfigureBaker,
+          genPayloadConfigureDelegation
+        ]
 
 genPayloadUpdateCredentials :: Gen Payload
 genPayloadUpdateCredentials = do
@@ -268,6 +298,34 @@ genPayloadConfigureBaker = do
     cbBakingRewardCommission <- liftArbitrary genAmountFraction
     cbFinalizationRewardCommission <- liftArbitrary genAmountFraction
     return ConfigureBaker{..}
+
+genPayloadTransferWithSchedule :: Gen Payload
+genPayloadTransferWithSchedule = do
+    twsTo <- genAccountAddress
+    len <- chooseBoundedIntegral (0, 255)
+    twsSchedule :: [(Timestamp, Amount)] <- vectorOf len $ do
+        ts <- genTimestamp
+        amnt <- Amount <$> arbitrary
+        return (ts, amnt)
+    return $ TransferWithSchedule{..}
+
+genTransferWithMemo :: Gen Payload
+genTransferWithMemo = do
+    twmToAddress <- genAccountAddress
+    twmMemo <- genMemo
+    twmAmount <- Amount <$> arbitrary
+    return TransferWithMemo{..}
+
+genTransferWithScheduleAndMemo :: Gen Payload
+genTransferWithScheduleAndMemo = do
+    twswmTo <- genAccountAddress
+    twswmMemo <- genMemo
+    len <- chooseBoundedIntegral (0, 255)
+    twswmSchedule :: [(Timestamp, Amount)] <- vectorOf len $ do
+        ts <- genTimestamp
+        amnt <- Amount <$> arbitrary
+        return (ts, amnt)
+    return TransferWithScheduleAndMemo{..}
 
 genDelegationTarget :: Gen DelegationTarget
 genDelegationTarget =
