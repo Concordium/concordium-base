@@ -4,6 +4,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- |
@@ -265,6 +266,17 @@ demoteWasmVersion SV1 = V1
 newtype ModuleSource (v :: WasmVersion) = ModuleSource {moduleSource :: ByteString}
     deriving (Eq, Show)
 
+-- Implement `ToJSON` instance for `ModuleSource`.
+instance AE.ToJSON (ModuleSource v) where
+    toJSON (ModuleSource v) = AE.String (Text.decodeUtf8 (BS16.encode v))
+
+-- Implement `FromJSON` instance for `ModuleSource`.
+instance AE.FromJSON (ModuleSource v) where
+    parseJSON = AE.withText "source" $ \t ->
+        case BS16.decode (Text.encodeUtf8 t) of
+            Right bs -> return $ ModuleSource bs
+            Left _ -> fail "Could not decode ModuleSource from JSON"
+
 instance Serialize (ModuleSource V0) where
     get = do
         len <- getWord32be
@@ -290,6 +302,24 @@ moduleSourceLength = fromIntegral . BS.length . moduleSource
 newtype WasmModuleV (v :: WasmVersion) = WasmModuleV {wmvSource :: ModuleSource v}
     deriving (Eq, Show)
 
+-- Implement `ToJSON` instance for `WasmModuleV`.
+instance (IsWasmVersion v) => AE.ToJSON (WasmModuleV v) where
+    toJSON (WasmModuleV ws) =
+        AE.object
+            [ "version" AE..= wasmVersionToWord (demoteWasmVersion (getWasmVersion @v)),
+              "source" AE..= ModuleSource (moduleSource ws)
+            ]
+
+-- Implement `FromJSON` instance for `WasmModuleV`.
+instance (IsWasmVersion v) => AE.FromJSON (WasmModuleV v) where
+    parseJSON = AE.withObject "WasmModuleV" $ \obj -> do
+        version <- obj AE..: "version"
+        if wordToWasmVersion version == Just (demoteWasmVersion (getWasmVersion @v))
+            then do
+                source <- obj AE..: "source"
+                return $ WasmModuleV (ModuleSource $ moduleSource source)
+            else fail $ "Expecting a " ++ show (demoteWasmVersion $ getWasmVersion @v) ++ " module."
+
 instance (IsWasmVersion v) => Serialize (WasmModuleV v) where
     put (WasmModuleV ws) = case getWasmVersion @v of
         SV0 -> put V0 <> put ws
@@ -310,6 +340,21 @@ data WasmModule
     = WasmModuleV0 (WasmModuleV V0)
     | WasmModuleV1 (WasmModuleV V1)
     deriving (Eq, Show)
+
+-- Custom implementation of ToJSON for WasmModule
+instance AE.ToJSON WasmModule where
+    toJSON = \case
+        WasmModuleV0 wm -> AE.toJSON wm
+        WasmModuleV1 wm -> AE.toJSON wm
+
+-- Custom implementation of FromJSON for WasmModule
+instance AE.FromJSON WasmModule where
+    parseJSON = AE.withObject "WasmModule" $ \obj -> do
+        version <- obj AE..: "version"
+        case wordToWasmVersion version of
+            Just V0 -> WasmModuleV0 . WasmModuleV <$> obj AE..: "source"
+            Just V1 -> WasmModuleV1 . WasmModuleV <$> obj AE..: "source"
+            Nothing -> fail $ "Unsupported Wasm version " ++ show version
 
 getModuleRef :: forall v. (IsWasmVersion v) => WasmModuleV v -> ModuleRef
 getModuleRef wm = case getWasmVersion @v of

@@ -711,7 +711,7 @@ instance Show Address where
 
 -- | Time in seconds since the unix epoch
 newtype TransactionTime = TransactionTime {ttsSeconds :: Word64}
-    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON, Real, Enum, Integral) via Word64
+    deriving (Show, Read, Eq, Num, Ord, Real, FromJSON, ToJSON, Enum, Integral) via Word64
 
 instance S.Serialize TransactionTime where
     put = P.putWord64be . ttsSeconds

@@ -784,6 +784,7 @@ instance Serialize CredentialDeploymentInformation where
 instance Eq CredentialDeploymentInformation where
     cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
+-- Implement `FromJSON` instance for `CredentialDeploymentInformation`.
 instance FromJSON CredentialDeploymentInformation where
     parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
         cdiValues <- parseJSON (Object x)
@@ -796,6 +797,13 @@ instance FromJSON CredentialDeploymentInformation where
                           ..
                         }
             Left _ -> fail "\"proofs\" is not a valid base16 string."
+
+-- Implement `ToJSON` instance for `CredentialDeploymentInformation`.
+instance ToJSON CredentialDeploymentInformation where
+    toJSON CredentialDeploymentInformation{..} =
+        object $
+            ("proofs" .= cdiProofs)
+                : credentialDeploymentValuesList cdiValues
 
 -- | Information about the account that should be created as part of the initial
 --  credential deployment.
