@@ -432,27 +432,123 @@ instance S.Serialize TransactionType where
 instance AE.ToJSON Payload where
     -- `mod` was renamed to `module`
     toJSON DeployModule{..} = AE.object ["module" AE..= dmMod, "transactionType" AE..= AE.String "deployModule"]
-    toJSON InitContract{..} = AE.object ["amount" AE..= icAmount, "modRef" AE..= icModRef, "initName" AE..= icInitName, "param" AE..= icParam, "transactionType" AE..= AE.String "initContract"]
-    toJSON Update{..} = AE.object ["amount" AE..= uAmount, "address" AE..= uAddress, "receiveName" AE..= uReceiveName, "message" AE..= uMessage, "transactionType" AE..= AE.String "update"]
-    toJSON Transfer{..} = AE.object ["toAddress" AE..= tToAddress, "amount" AE..= tAmount, "transactionType" AE..= AE.String "transfer"]
-    toJSON UpdateCredentialKeys{..} = AE.object ["credId" AE..= uckCredId, "keys" AE..= uckKeys, "transactionType" AE..= AE.String "updateCredentialKeys"]
-    toJSON EncryptedAmountTransfer{..} = AE.object ["to" AE..= eatTo, "data" AE..= eatData, "transactionType" AE..= AE.String "encryptedAmountTransfer"]
+    toJSON InitContract{..} =
+        AE.object
+            [ "amount" AE..= icAmount,
+              "modRef" AE..= icModRef,
+              "initName" AE..= icInitName,
+              "param" AE..= icParam,
+              "transactionType" AE..= AE.String "initContract"
+            ]
+    toJSON Update{..} =
+        AE.object
+            [ "amount" AE..= uAmount,
+              "address" AE..= uAddress,
+              "receiveName" AE..= uReceiveName,
+              "message" AE..= uMessage,
+              "transactionType" AE..= AE.String "update"
+            ]
+    toJSON Transfer{..} =
+        AE.object
+            ["toAddress" AE..= tToAddress, "amount" AE..= tAmount, "transactionType" AE..= AE.String "transfer"]
+    toJSON UpdateCredentialKeys{..} =
+        AE.object
+            [ "credId" AE..= uckCredId,
+              "keys" AE..= uckKeys,
+              "transactionType" AE..= AE.String "updateCredentialKeys"
+            ]
+    toJSON EncryptedAmountTransfer{..} =
+        AE.object
+            [ "to" AE..= eatTo,
+              "data" AE..= eatData,
+              "transactionType" AE..= AE.String "encryptedAmountTransfer"
+            ]
     toJSON TransferToEncrypted{..} = AE.object ["amount" AE..= tteAmount, "transactionType" AE..= AE.String "transferToEncrypted"]
     toJSON TransferToPublic{..} = AE.object ["data" AE..= ttpData, "transactionType" AE..= AE.String "transferToPublic"]
-    toJSON TransferWithSchedule{..} = AE.object ["to" AE..= twsTo, "schedule" AE..= twsSchedule, "transactionType" AE..= AE.String "transferWithSchedule"]
-    toJSON UpdateCredentials{..} = AE.object ["newCredInfos" AE..= ucNewCredInfos, "removeCredIds" AE..= ucRemoveCredIds, "newThreshold" AE..= ucNewThreshold, "transactionType" AE..= AE.String "updateCredentials"]
+    toJSON TransferWithSchedule{..} =
+        AE.object
+            [ "to" AE..= twsTo,
+              "schedule" AE..= twsSchedule,
+              "transactionType" AE..= AE.String "transferWithSchedule"
+            ]
+    toJSON UpdateCredentials{..} =
+        AE.object
+            [ "newCredInfos" AE..= ucNewCredInfos,
+              "removeCredIds" AE..= ucRemoveCredIds,
+              "newThreshold" AE..= ucNewThreshold,
+              "transactionType" AE..= AE.String "updateCredentials"
+            ]
     toJSON RegisterData{..} = AE.object ["data" AE..= rdData, "transactionType" AE..= AE.String "registerData"]
-    toJSON TransferWithMemo{..} = AE.object ["toAddress" AE..= twmToAddress, "memo" AE..= twmMemo, "amount" AE..= twmAmount, "transactionType" AE..= AE.String "transferWithMemo"]
-    toJSON EncryptedAmountTransferWithMemo{..} = AE.object ["to" AE..= eatwmTo, "memo" AE..= eatwmMemo, "data" AE..= eatwmData, "transactionType" AE..= AE.String "encryptedAmountTransferWithMemo"]
-    toJSON TransferWithScheduleAndMemo{..} = AE.object ["to" AE..= twswmTo, "memo" AE..= twswmMemo, "schedule" AE..= twswmSchedule, "transactionType" AE..= AE.String "transferWithScheduleAndMemo"]
+    toJSON TransferWithMemo{..} =
+        AE.object
+            [ "toAddress" AE..= twmToAddress,
+              "memo" AE..= twmMemo,
+              "amount" AE..= twmAmount,
+              "transactionType" AE..= AE.String "transferWithMemo"
+            ]
+    toJSON EncryptedAmountTransferWithMemo{..} =
+        AE.object
+            [ "to" AE..= eatwmTo,
+              "memo" AE..= eatwmMemo,
+              "data" AE..= eatwmData,
+              "transactionType" AE..= AE.String "encryptedAmountTransferWithMemo"
+            ]
+    toJSON TransferWithScheduleAndMemo{..} =
+        AE.object
+            [ "to" AE..= twswmTo,
+              "memo" AE..= twswmMemo,
+              "schedule" AE..= twswmSchedule,
+              "transactionType" AE..= AE.String "transferWithScheduleAndMemo"
+            ]
     -- `configureBaker` was renamed to `configureValidator`
-    toJSON ConfigureBaker{..} = AE.object ["capital" AE..= cbCapital, "restakeEarnings" AE..= cbRestakeEarnings, "openForDelegation" AE..= cbOpenForDelegation, "keysWithProofs" AE..= cbKeysWithProofs, "metadataURL" AE..= cbMetadataURL, "transactionFeeCommission" AE..= cbTransactionFeeCommission, "bakingRewardCommission" AE..= cbBakingRewardCommission, "finalizationRewardCommission" AE..= cbFinalizationRewardCommission, "transactionType" AE..= AE.String "configureValidator"]
-    toJSON ConfigureDelegation{..} = AE.object ["capital" AE..= cdCapital, "restakeEarnings" AE..= cdRestakeEarnings, "delegationTarget" AE..= cdDelegationTarget, "transactionType" AE..= AE.String "configureDelegation"]
-    toJSON AddBaker{..} = AE.object ["electionVerifyKey" AE..= abElectionVerifyKey, "signatureVerifyKey" AE..= abSignatureVerifyKey, "aggregationVerifyKey" AE..= abAggregationVerifyKey, "proofSig" AE..= abProofSig, "proofElection" AE..= abProofElection, "proofAggregation" AE..= abProofAggregation, "bakingStake" AE..= abBakingStake, "restakeEarnings" AE..= abRestakeEarnings, "transactionType" AE..= AE.String "addBaker"]
+    toJSON ConfigureBaker{..} =
+        AE.object
+            [ "capital" AE..= cbCapital,
+              "restakeEarnings" AE..= cbRestakeEarnings,
+              "openForDelegation" AE..= cbOpenForDelegation,
+              "keysWithProofs" AE..= cbKeysWithProofs,
+              "metadataURL" AE..= cbMetadataURL,
+              "transactionFeeCommission" AE..= cbTransactionFeeCommission,
+              "bakingRewardCommission" AE..= cbBakingRewardCommission,
+              "finalizationRewardCommission" AE..= cbFinalizationRewardCommission,
+              "transactionType" AE..= AE.String "configureValidator"
+            ]
+    toJSON ConfigureDelegation{..} =
+        AE.object
+            [ "capital" AE..= cdCapital,
+              "restakeEarnings" AE..= cdRestakeEarnings,
+              "delegationTarget" AE..= cdDelegationTarget,
+              "transactionType" AE..= AE.String "configureDelegation"
+            ]
+    toJSON AddBaker{..} =
+        AE.object
+            [ "electionVerifyKey" AE..= abElectionVerifyKey,
+              "signatureVerifyKey" AE..= abSignatureVerifyKey,
+              "aggregationVerifyKey" AE..= abAggregationVerifyKey,
+              "proofSig" AE..= abProofSig,
+              "proofElection" AE..= abProofElection,
+              "proofAggregation" AE..= abProofAggregation,
+              "bakingStake" AE..= abBakingStake,
+              "restakeEarnings" AE..= abRestakeEarnings,
+              "transactionType" AE..= AE.String "addBaker"
+            ]
     toJSON RemoveBaker = AE.object ["transactionType" AE..= AE.String "removeBaker"]
     toJSON UpdateBakerStake{..} = AE.object ["stake" AE..= ubsStake, "transactionType" AE..= AE.String "updateBakerStake"]
-    toJSON UpdateBakerRestakeEarnings{..} = AE.object ["restakeEarnings" AE..= ubreRestakeEarnings, "transactionType" AE..= AE.String "updateBakerRestakeEarnings"]
-    toJSON UpdateBakerKeys{..} = AE.object ["electionVerifyKey" AE..= ubkElectionVerifyKey, "signatureVerifyKey" AE..= ubkSignatureVerifyKey, "aggregationVerifyKey" AE..= ubkAggregationVerifyKey, "proofSig" AE..= ubkProofSig, "proofElection" AE..= ubkProofElection, "proofAggregation" AE..= ubkProofAggregation, "transactionType" AE..= AE.String "updateBakerKeys"]
+    toJSON UpdateBakerRestakeEarnings{..} =
+        AE.object
+            [ "restakeEarnings" AE..= ubreRestakeEarnings,
+              "transactionType" AE..= AE.String "updateBakerRestakeEarnings"
+            ]
+    toJSON UpdateBakerKeys{..} =
+        AE.object
+            [ "electionVerifyKey" AE..= ubkElectionVerifyKey,
+              "signatureVerifyKey" AE..= ubkSignatureVerifyKey,
+              "aggregationVerifyKey" AE..= ubkAggregationVerifyKey,
+              "proofSig" AE..= ubkProofSig,
+              "proofElection" AE..= ubkProofElection,
+              "proofAggregation" AE..= ubkProofAggregation,
+              "transactionType" AE..= AE.String "updateBakerKeys"
+            ]
 
 instance AE.FromJSON Payload where
     parseJSON = AE.withObject "payload" $ \obj -> do
