@@ -20,7 +20,6 @@ import qualified Types.AccountEncryptedAmountSpec
 import qualified Types.AddressesSpec
 import qualified Types.AmountFraction
 import qualified Types.AmountSpec
-import qualified Types.Cooldown
 import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.TransactionSerializationSpec
@@ -54,5 +53,4 @@ main = hspec $ parallel $ do
     Types.TransactionSummarySpec.tests
     Types.AddressesSpec.tests
     Types.ParametersSpec.tests
-    Types.Cooldown.tests
     Genesis.ParametersSpec.tests
