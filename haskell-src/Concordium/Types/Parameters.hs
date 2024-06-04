@@ -214,6 +214,7 @@ module Concordium.Types.Parameters (
     cpBakerExtraCooldownEpochs,
     cpPoolOwnerCooldown,
     cpDelegatorCooldown,
+    cpUnifiedCooldown,
     putCooldownParameters,
     getCooldownParameters,
 
@@ -1134,6 +1135,12 @@ cpDelegatorCooldown ::
     Lens' (CooldownParameters' 'CooldownParametersVersion1) DurationSeconds
 cpDelegatorCooldown =
     lens _cpDelegatorCooldown (\cp x -> cp{_cpDelegatorCooldown = x})
+
+-- | Getter for the cooldown period that applies when the protocol version supports flexible
+--  cooldowns. This is defined as the minimum of the pool owner and delegator cooldowns.
+{-# INLINE cpUnifiedCooldown #-}
+cpUnifiedCooldown :: SimpleGetter (CooldownParameters' 'CooldownParametersVersion1) DurationSeconds
+cpUnifiedCooldown = to $ \cp -> min (_cpPoolOwnerCooldown cp) (_cpDelegatorCooldown cp)
 
 deriving instance Eq (CooldownParameters' cpv)
 deriving instance Show (CooldownParameters' cpv)
@@ -2110,6 +2117,7 @@ type IsConsensusV1 (pv :: ProtocolVersion) =
       IsSupported 'PTTimeParameters (ChainParametersVersionFor pv) ~ 'True,
       PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1,
       MintDistributionVersionFor (ChainParametersVersionFor pv) ~ 'MintDistributionVersion1,
+      CooldownParametersVersionFor (ChainParametersVersionFor pv) ~ 'CooldownParametersVersion1,
       PVSupportsDelegation pv
     )
 

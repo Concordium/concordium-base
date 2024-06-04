@@ -75,6 +75,8 @@ module Concordium.Types.Accounts (
     AccountStakingInfo (..),
     toAccountStakingInfo,
     toAccountStakingInfoP4,
+    CooldownStatus (..),
+    Cooldown (..),
 
     -- * Account structure version
     AccountStructureVersion (..),
@@ -82,7 +84,6 @@ module Concordium.Types.Accounts (
 ) where
 
 import Data.Aeson
-import Data.Aeson.Types (Parser)
 import Data.Bool.Singletons
 import qualified Data.Map as Map
 import Data.Serialize
@@ -598,17 +599,6 @@ pendingChangeToJSON (RemoveStake eff) =
             ["change" .= String "RemoveStake", "effectiveTime" .= eff]
     ]
 
-pendingChangeFromJSON :: Object -> Parser (StakePendingChange' UTCTime)
-pendingChangeFromJSON obj = do
-    pc <- obj .:? "pendingChange"
-    case pc of
-        Just pco -> do
-            pco .: "change" >>= \case
-                (String "ReduceStake") -> ReduceStake <$> pco .: "newStake" <*> pco .: "effectiveTime"
-                (String "RemoveStake") -> RemoveStake <$> pco .: "effectiveTime"
-                _ -> fail "Invalid pendingChange"
-        Nothing -> return NoChange
-
 accountStakingInfoToJSON :: (KeyValue kv) => AccountStakingInfo -> [kv]
 accountStakingInfoToJSON AccountStakingNone = []
 accountStakingInfoToJSON AccountStakingBaker{..} = ["accountBaker" .= bi]
@@ -634,30 +624,32 @@ accountStakingInfoToJSON AccountStakingDelegated{..} = ["accountDelegation" .= d
             ]
                 <> pendingChangeToJSON asiDelegationPendingChange
 
-accountStakingInfoFromJSON :: Object -> Parser AccountStakingInfo
-accountStakingInfoFromJSON obj = do
-    baker <- obj .:? "accountBaker"
-    delegation <- obj .:? "accountDelegation"
-    case (baker, delegation) of
-        (Nothing, Nothing) -> return AccountStakingNone
-        (Just bkr, Nothing) -> do
-            asiStakedAmount <- bkr .: "stakedAmount"
-            asiStakeEarnings <- bkr .: "restakeEarnings"
-            _bakerIdentity <- bkr .: "bakerId"
-            _bakerElectionVerifyKey <- bkr .: "bakerElectionVerifyKey"
-            _bakerSignatureVerifyKey <- bkr .: "bakerSignatureVerifyKey"
-            _bakerAggregationVerifyKey <- bkr .: "bakerAggregationVerifyKey"
-            let asiBakerInfo = BakerInfo{..}
-            asiPendingChange <- pendingChangeFromJSON bkr
-            asiPoolInfo <- bkr .:? "bakerPoolInfo"
-            return AccountStakingBaker{..}
-        (Nothing, Just dlg) -> do
-            asiStakedAmount <- dlg .: "stakedAmount"
-            asiStakeEarnings <- dlg .: "restakeEarnings"
-            asiDelegationTarget <- dlg .: "delegationTarget"
-            asiDelegationPendingChange <- pendingChangeFromJSON dlg
-            return AccountStakingDelegated{..}
-        (_, _) -> fail "Account must not have both accountBaker and accountDelegation."
+data CooldownStatus = StatusCooldown | StatusPreCooldown | StatusPrePreCooldown
+    deriving (Eq, Show)
+
+instance ToJSON CooldownStatus where
+    toJSON StatusCooldown = String "cooldown"
+    toJSON StatusPreCooldown = String "precooldown"
+    toJSON StatusPrePreCooldown = String "preprecooldown"
+
+-- | A portion of an account's inactive stake that is subject to a cooldown period.
+data Cooldown = Cooldown
+    { -- | The timestamp at which the cooldown period is projected to end.
+      cooldownTimestamp :: !Timestamp,
+      -- | The amount of the inactive stake that is subject to the cooldown period.
+      cooldownAmount :: !Amount,
+      -- | The status of the cooldown period.
+      cooldownStatus :: !CooldownStatus
+    }
+    deriving (Eq, Show)
+
+instance ToJSON Cooldown where
+    toJSON Cooldown{..} =
+        object
+            [ "timestamp" .= cooldownTimestamp,
+              "amount" .= cooldownAmount,
+              "status" .= cooldownStatus
+            ]
 
 -- | The details of the state of an account on the chain, as may be returned by a
 --  query. At present the account credentials map must always contain credential
@@ -685,7 +677,11 @@ data AccountInfo = AccountInfo
       -- | The canonical address of the account, derived from the first
       --  credential. While this is not necessary, since it is derived from
       --  another field of this type, it is convenient for consumers to have it.
-      aiAccountAddress :: !AccountAddress
+      aiAccountAddress :: !AccountAddress,
+      -- | The inactive stake of the account (subject to cooldown).
+      aiAccountCooldowns :: ![Cooldown],
+      -- | The balance of the account that is available for transactions.
+      aiAccountAvailableAmount :: !Amount
     }
     deriving (Eq, Show)
 
@@ -701,34 +697,12 @@ accountInfoPairs AccountInfo{..} =
       "accountEncryptedAmount" .= aiAccountEncryptedAmount,
       "accountEncryptionKey" .= aiAccountEncryptionKey,
       "accountIndex" .= aiAccountIndex,
-      "accountAddress" .= aiAccountAddress
+      "accountAddress" .= aiAccountAddress,
+      "accountCooldowns" .= aiAccountCooldowns,
+      "accountAvailableAmount" .= aiAccountAvailableAmount
     ]
         <> accountStakingInfoToJSON aiStakingInfo
 
 instance ToJSON AccountInfo where
     toJSON ai = object $ accountInfoPairs ai
     toEncoding ai = pairs $ mconcat $ accountInfoPairs ai
-
--- Due to the inconsistent naming of the AccountInfo fields we have to write the fromJSON instance manually.
-instance FromJSON AccountInfo where
-    parseJSON = withObject "Account info" $ \obj -> do
-        aiAccountNonce <- obj .: "accountNonce"
-        aiAccountAmount <- obj .: "accountAmount"
-        aiAccountReleaseSchedule <- obj .: "accountReleaseSchedule"
-        aiAccountCredentials <- obj .: "accountCredentials"
-        creatingCredential <-
-            case Map.lookup (CredentialIndex 0) aiAccountCredentials of
-                Nothing -> fail "Accounts must have a credential with index 0."
-                Just ac -> return ac
-        aiAccountThreshold <- obj .: "accountThreshold"
-        aiAccountEncryptedAmount <- obj .: "accountEncryptedAmount"
-        aiAccountEncryptionKey <- obj .: "accountEncryptionKey"
-        aiAccountIndex <- obj .: "accountIndex"
-        -- For backwards compatibility we retrieve the account address from the
-        -- credential.
-        aiAccountAddress <-
-            obj .:! "accountAddress" >>= \case
-                Nothing -> return (addressFromRegIdRaw (credId (vValue creatingCredential)))
-                Just addr -> return addr
-        aiStakingInfo <- accountStakingInfoFromJSON obj
-        return AccountInfo{..}
