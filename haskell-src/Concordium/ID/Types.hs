@@ -431,7 +431,11 @@ attributeNames =
       "idDocExpiresAt",
       "nationalIdNo",
       "taxIdNo",
-      "lei"
+      "lei",
+      "legalName",
+      "legalCountry",
+      "businessNumber",
+      "registrationAuth"
     ]
 
 mapping :: Map.Map Text.Text AttributeTag

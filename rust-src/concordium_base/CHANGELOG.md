@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+- Extend `id::types::ATTRIBUTE_NAMES` with new company attribute tags: "legalName", "legalCountry", "businessNumber" and "registationAuth".
+
 ## 5.0.0 (2024-03-25)
 
 - Set minimum supported Rust version to 1.73.
