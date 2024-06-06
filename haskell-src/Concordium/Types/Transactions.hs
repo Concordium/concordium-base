@@ -526,15 +526,13 @@ signTransactionSingle kp = signTransaction [(0, [(0, kp)])]
 --  * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransaction :: [(CredentialIndex, [(KeyIndex, KeyPair)])] -> TransactionHeader -> EncodedPayload -> AccountTransaction
 signTransaction keys atrHeader atrPayload =
-    let
-        atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
+    let atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
         -- only sign the hash of the transaction
         bodyHash = transactionSignHashToByteString atrSignHash
         credSignature cKeys = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) cKeys
         tsSignatures = Map.fromList $ map (\(idx, cKeys) -> (idx, credSignature cKeys)) keys
         atrSignature = TransactionSignature{..}
-    in
-        AccountTransaction{..}
+    in  AccountTransaction{..}
 
 -- | Verify credential signatures. This checks
 --

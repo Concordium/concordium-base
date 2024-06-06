@@ -46,6 +46,7 @@ use concordium_wasm::{
     machine::{self, ExecutionOutcome, NoInterrupt},
     utils,
     validate::ValidationConfig,
+    CostConfiguration,
 };
 use machine::Value;
 use sha3::Digest;
@@ -441,9 +442,6 @@ impl crate::DebugInfo for DebugTracker {
     fn trace_host_call(&mut self, f: self::ImportFunc, energy_used: InterpreterEnergy) {
         let next_idx = self.next_index;
         match f {
-            ImportFunc::ChargeEnergy => self.operation.add(energy_used),
-            ImportFunc::TrackCall => (),
-            ImportFunc::TrackReturn => (),
             ImportFunc::ChargeMemoryAlloc => self.memory_alloc.add(energy_used),
             ImportFunc::Common(c) => {
                 self.next_index += 1;
@@ -1361,6 +1359,19 @@ impl<
         self.energy.charge_memory_alloc(num_pages)
     }
 
+    #[inline(always)]
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    #[inline(always)]
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        v0::host::track_call(&mut self.activation_frames)
+    }
+
+    #[inline(always)]
+    fn track_return(&mut self) { v0::host::track_return(&mut self.activation_frames) }
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,
@@ -1370,9 +1381,6 @@ impl<
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         let energy_before = self.energy;
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => v0::host::track_call(&mut self.activation_frames)?,
-            ImportFunc::TrackReturn => v0::host::track_return(&mut self.activation_frames),
             ImportFunc::ChargeMemoryAlloc => {
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
@@ -1518,6 +1526,19 @@ impl<
         self.energy.charge_memory_alloc(num_pages)
     }
 
+    #[inline(always)]
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    #[inline(always)]
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        v0::host::track_call(&mut self.stateless.activation_frames)
+    }
+
+    #[inline(always)]
+    fn track_return(&mut self) { v0::host::track_return(&mut self.stateless.activation_frames) }
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,
@@ -1527,11 +1548,6 @@ impl<
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         let energy_before = self.energy;
         match f.tag {
-            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::TrackCall => v0::host::track_call(&mut self.stateless.activation_frames)?,
-            ImportFunc::TrackReturn => {
-                v0::host::track_return(&mut self.stateless.activation_frames)
-            }
             ImportFunc::ChargeMemoryAlloc => {
                 v0::host::charge_memory_alloc(stack, &mut self.energy)?
             }
@@ -2019,10 +2035,12 @@ pub fn invoke_init_with_metering_from_source<BackingStore: BackingStoreLoad, A: 
     init_name: &str,
     loader: BackingStore,
     validation_config: ValidationConfig,
+    cost_config: impl CostConfiguration,
     limit_logs_and_return_values: bool,
 ) -> ExecResult<InitResult<A>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
+        cost_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
             enable_debug:    A::ENABLE_DEBUG,
@@ -2469,6 +2487,7 @@ pub fn invoke_receive_with_metering_from_source<
     A: DebugInfo,
 >(
     validation_config: ValidationConfig,
+    cost_config: impl CostConfiguration,
     ctx: InvokeFromSourceCtx,
     receive_ctx: Ctx1,
     receive_name: ReceiveName,
@@ -2477,6 +2496,7 @@ pub fn invoke_receive_with_metering_from_source<
 ) -> ExecResult<ReceiveResult<CompiledFunction, A, Ctx2>> {
     let artifact = utils::instantiate_with_metering(
         validation_config,
+        cost_config,
         &ConcordiumAllowedImports {
             support_upgrade: ctx.support_upgrade,
             enable_debug:    A::ENABLE_DEBUG,

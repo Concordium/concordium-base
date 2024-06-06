@@ -22,6 +22,7 @@ import qualified Types.AmountFraction
 import qualified Types.AmountSpec
 import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
+import qualified Types.PayloadSpec
 import qualified Types.TransactionSerializationSpec
 import qualified Types.TransactionSummarySpec
 import qualified Types.UpdatesSpec
@@ -53,4 +54,5 @@ main = hspec $ parallel $ do
     Types.TransactionSummarySpec.tests
     Types.AddressesSpec.tests
     Types.ParametersSpec.tests
+    Types.PayloadSpec.tests
     Genesis.ParametersSpec.tests

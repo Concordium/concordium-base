@@ -112,9 +112,26 @@ pub struct ValidationState {
     pub(crate) ctrls:                ControlStack,
     /// Maximum reachable stack height.
     pub(crate) max_reachable_height: usize,
+    /// The smallest index of a control frame that has entered unreachable
+    /// section, if any.
+    pub(crate) unreachable_section:  Option<usize>,
 }
 
 impl ValidationState {
+    /// Return whether the frame we are in currently is completely unreachable,
+    /// the frame is reachable but the instruction inside it is not, or the
+    /// instruction is reachable.
+    pub fn reachability(&self) -> Reachability {
+        let Some(idx) = self.unreachable_section else {
+            return Reachability::Reachable
+        };
+        if idx + 1 < self.ctrls.stack.len() {
+            Reachability::UnreachableFrame
+        } else {
+            Reachability::UnreachableInstruction
+        }
+    }
+
     /// Check whether we are done, meaning that the control stack is
     /// exhausted.
     pub fn done(&self) -> bool { self.ctrls.stack.is_empty() }
@@ -139,11 +156,15 @@ impl ValidationState {
     /// Push a new type to the stack.
     fn push_opd(&mut self, m_type: MaybeKnown) {
         self.opds.stack.push(m_type);
-        if let Some(ur) = self.ctrls.stack.last().map(|frame| frame.unreachable) {
-            if !ur {
-                self.max_reachable_height =
-                    std::cmp::max(self.max_reachable_height, self.opds.stack.len());
-            }
+        if matches!(
+            self.ctrls.stack.last(),
+            Some(ControlFrame {
+                unreachable: false,
+                ..
+            })
+        ) {
+            self.max_reachable_height =
+                std::cmp::max(self.max_reachable_height, self.opds.stack.len());
         }
     }
 
@@ -241,6 +262,13 @@ impl ValidationState {
                 ensure!(self.opds.stack.len() == height, "Operand stack not exhausted.");
                 // Finally pop after we've made sure the stack is properly cleared.
                 self.ctrls.stack.pop();
+                // If the just-popped control frame was the lowest one that was unreachable
+                // then we have entered reachable code section again.
+                if let Some(idx) = self.unreachable_section {
+                    if idx == self.ctrls.stack.len() {
+                        self.unreachable_section = None;
+                    } // otherwise remain in unreachable code.
+                }
                 Ok((end_type, opcode))
             }
         }
@@ -252,6 +280,13 @@ impl ValidationState {
             Some(frame) => {
                 self.opds.stack.truncate(frame.height);
                 frame.unreachable = true;
+                let last_idx = self.ctrls.stack.len() - 1;
+                if let Some(idx) = self.unreachable_section {
+                    self.unreachable_section = Some(std::cmp::min(idx, last_idx));
+                // -1 is safe since we know the stack is inhabited
+                } else {
+                    self.unreachable_section = Some(last_idx);
+                }
                 Ok(())
             }
         }
@@ -413,21 +448,33 @@ fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
     Ok(())
 }
 
+/// The state of validation with respect to reachability of the instructions
+/// that were processed.
+#[derive(Debug, Clone, Copy)]
+pub enum Reachability {
+    /// A state that is reachable.
+    Reachable,
+    /// An unreachable instruction inside a reachable frame.
+    UnreachableInstruction,
+    /// A frame that is not reachable.
+    UnreachableFrame,
+}
+
 /// Trait to handle the results of validation.
 /// The type parameter should be instantiated with an opcode. The reason it is a
 /// type parameter is to support both opcodes and references to opcodes as
 /// parameters. The latter is useful because opcodes are not copyable.
-pub trait Handler<O> {
+pub trait Handler<Ctx: HasValidationContext, O> {
     type Outcome: Sized;
 
     /// Handle the opcode. This function is called __after__ the `validate`
     /// function itself processes the opcode. Hence the validation state is
-    /// already updated. However the function does get access to the stack
-    /// height __before__ the opcode is processed.
+    /// already updated.
     fn handle_opcode(
         &mut self,
+        ctx: &Ctx,
         state: &ValidationState,
-        stack_heigh: usize,
+        reachability: Reachability,
         opcode: O,
     ) -> anyhow::Result<()>;
 
@@ -436,17 +483,26 @@ pub trait Handler<O> {
     fn finish(self, state: &ValidationState) -> anyhow::Result<Self::Outcome>;
 }
 
-impl Handler<OpCode> for Vec<OpCode> {
+/// A [`Handler`] that is used during validation of a pure Wasm module.
+/// The [`Default`] instance creates an empty handler.
+#[derive(Default)]
+pub struct PureWasmModuleHandler {
+    pub(crate) instr: Vec<OpCode>,
+}
+
+impl<Ctx: HasValidationContext> Handler<Ctx, OpCode> for PureWasmModuleHandler {
     type Outcome = (Self, usize);
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn handle_opcode(
         &mut self,
+        _ctx: &Ctx,
         _state: &ValidationState,
-        _stack_height: usize,
+        _reachability: Reachability,
         opcode: OpCode,
     ) -> anyhow::Result<()> {
-        self.push(opcode);
+        anyhow::ensure!(!matches!(opcode, OpCode::TickEnergy(_)));
+        self.instr.push(opcode);
         Ok(())
     }
 
@@ -462,8 +518,8 @@ impl Handler<OpCode> for Vec<OpCode> {
 /// the iterator is fully consumed and properly terminated by an `End` opcode.
 /// The return value is the outcome determined by the handler, as well as
 /// the maximum reachable stack height in this function.
-pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
-    context: &impl HasValidationContext,
+pub fn validate<O: Borrow<OpCode>, Ctx: HasValidationContext, H: Handler<Ctx, O>>(
+    context: &Ctx,
     opcodes: impl Iterator<Item = ParseResult<O>>,
     mut handler: H,
 ) -> ValidateResult<H::Outcome> {
@@ -471,12 +527,17 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
         opds:                 OperandStack::default(),
         ctrls:                ControlStack::default(),
         max_reachable_height: 0,
+        unreachable_section:  None,
     };
     state.push_ctrl(false, context.return_type(), context.return_type());
     for opcode in opcodes {
         let next_opcode = opcode?;
-        let old_stack_height = state.opds.stack.len();
+        let unreachable_before = state.reachability();
         match next_opcode.borrow() {
+            OpCode::TickEnergy(_) => {
+                // Do nothing, this does not affect the stack, it acts as a
+                // function of type () => ().
+            }
             OpCode::End => {
                 let (res, is_if) = state.pop_ctrl()?;
                 if is_if {
@@ -840,7 +901,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
                 state.push_opd(Known(ValueType::I64));
             }
         }
-        handler.handle_opcode(&state, old_stack_height, next_opcode)?;
+        handler.handle_opcode(context, &state, unreachable_before, next_opcode)?;
     }
     if state.done() {
         handler.finish(&state)
@@ -1006,7 +1067,7 @@ pub fn validate_module(
                 let (opcodes, max_height) = validate(
                     &ctx,
                     &mut OpCodeIterator::new(config.allow_sign_extension_instr, c.expr_bytes),
-                    Vec::new(),
+                    PureWasmModuleHandler::default(),
                 )?;
                 ensure!(
                     num_locals as usize + max_height <= MAX_ALLOWED_STACK_HEIGHT,
@@ -1019,7 +1080,7 @@ pub fn validate_module(
                     num_locals,
                     locals: c.locals,
                     expr: Expression {
-                        instrs: opcodes,
+                        instrs: opcodes.instr,
                     },
                 };
                 parsed_code.push(code)
