@@ -261,7 +261,7 @@ impl std::borrow::Borrow<u8> for AttributeTag {
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
 /// haskell-src/Concordium/ID/Types.hs
-pub const ATTRIBUTE_NAMES: [&str; 14] = [
+pub const ATTRIBUTE_NAMES: [&str; 18] = [
     "firstName",
     "lastName",
     "sex",
@@ -276,6 +276,10 @@ pub const ATTRIBUTE_NAMES: [&str; 14] = [
     "nationalIdNo",
     "taxIdNo",
     "lei",
+    "legalName",
+    "legalCountry",
+    "businessNumber",
+    "registrationAuth",
 ];
 
 /// Attribute tag for the LEI attribute.

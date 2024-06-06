@@ -12,7 +12,7 @@
 
     <ItemGroup>
     <!-- Include libidiss.dll on Windows -->
-    <None Include="../../idiss/target/release/libidiss.dll" Condition="'$(IsWindows)'=='true'">
+    <None Include="../../idiss/target/release/idiss.dll" Condition="'$(IsWindows)'=='true'">
       <PackageCopyToOutput>true</PackageCopyToOutput>
       <Pack>True</Pack>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
