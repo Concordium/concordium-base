@@ -301,7 +301,7 @@ namespace IdissLib
     /// Typically an IP will hold a more than one.
     public class ArInfo
     {
-        /// Unique identifier of the anonymity revoker. 
+        /// Unique identifier of the anonymity revoker.
         public UInt32 arIdentity { get; set; }
         /// Free form description, e.g., how to contact them off-chain
         public Description arDescription { get; set; }
@@ -324,7 +324,7 @@ namespace IdissLib
 
 
     /// A set of cryptographic parameters that are particular to the chain and
-    /// shared by everybody that interacts with the chain.  
+    /// shared by everybody that interacts with the chain.
     public class GlobalContext
     {
         /// A shared commitment key known to the chain and the account holder (and
