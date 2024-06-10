@@ -590,6 +590,19 @@ instance ToProto AccountEncryptionKey where
     type Output AccountEncryptionKey = Proto.EncryptionKey
     toProto = mkSerialize
 
+instance ToProto CooldownStatus where
+    type Output CooldownStatus = Proto.Cooldown'CooldownStatus
+    toProto StatusCooldown = Proto.Cooldown'COOLDOWN
+    toProto StatusPreCooldown = Proto.Cooldown'PRE_COOLDOWN
+    toProto StatusPrePreCooldown = Proto.Cooldown'PRE_PRE_COOLDOWN
+
+instance ToProto Cooldown where
+    type Output Cooldown = Proto.Cooldown
+    toProto Cooldown{..} = Proto.make $ do
+        ProtoFields.endTime .= toProto cooldownTimestamp
+        ProtoFields.amount .= toProto cooldownAmount
+        ProtoFields.status .= toProto cooldownStatus
+
 instance ToProto AccountInfo where
     type Output AccountInfo = Proto.AccountInfo
     toProto AccountInfo{..} = Proto.make $ do
@@ -603,6 +616,8 @@ instance ToProto AccountInfo where
         ProtoFields.index .= toProto aiAccountIndex
         ProtoFields.address .= toProto aiAccountAddress
         ProtoFields.maybe'stake .= toProto aiStakingInfo
+        ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
+        ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
