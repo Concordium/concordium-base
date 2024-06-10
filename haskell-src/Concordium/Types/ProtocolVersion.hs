@@ -171,6 +171,8 @@ module Concordium.Types.ProtocolVersion (
     -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
     -- different pieces of stake (on singletons).
     sSupportsFlexibleCooldown,
+    AVSupportsFlexibleCooldown,
+    PVSupportsFlexibleCooldown,
 
     -- * Block hash version
 
@@ -524,6 +526,17 @@ protocolSupportsDelegation :: SProtocolVersion pv -> Bool
 protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor spv) of
     STrue -> True
     SFalse -> False
+
+-- | Constraint that an account version supports flexible cooldown.
+--
+-- Note, we do not use 'Assert' here, since that results in a weaker constraint that requires
+-- pattern matching on the 'AccountVersion' to fully recover the equality constraint.
+type AVSupportsFlexibleCooldown (av :: AccountVersion) =
+    SupportsFlexibleCooldown av ~ 'True
+
+-- | Constraint that a protocol version supports flexible cooldown.
+type PVSupportsFlexibleCooldown (pv :: ProtocolVersion) =
+    AVSupportsFlexibleCooldown (AccountVersionFor pv)
 
 -- | Whether the protocol version supports memo functionality.
 --  (Memos are supported in 'P2' onwards.)
