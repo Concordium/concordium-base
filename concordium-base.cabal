@@ -315,6 +315,7 @@ test-suite test
       Types.AmountSpec
       Types.ParametersSpec
       Types.PayloadSerializationSpec
+      Types.PayloadSpec
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec

@@ -117,6 +117,21 @@ impl Host<MeteringImport> for MeteringHost {
         self.energy.charge_memory_alloc(num_pages)
     }
 
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        if let Some(fr) = self.activation_frames.checked_sub(1) {
+            self.activation_frames = fr;
+            Ok(())
+        } else {
+            bail!("Too many nested functions.")
+        }
+    }
+
+    fn track_return(&mut self) { self.activation_frames += 1; }
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,
@@ -179,7 +194,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -193,7 +211,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -227,7 +245,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -240,7 +261,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -277,7 +298,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -290,7 +314,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -405,7 +429,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_LOOP)).unwrap();
         let mut module =
             validate::validate_module(ValidationConfig::V1, &NoDuplicateImport, &skeleton).unwrap();
-        module.inject_metering().unwrap();
+        module.inject_metering(CostConfigurationV1).unwrap();
         let artifact = module.compile::<MeteringImport>().unwrap();
 
         // Execute the function `name` with arguments `args` until running out of
@@ -551,7 +575,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 &skeleton,
             )
             .unwrap();
-            module.inject_metering().expect("Metering injection should succeed.");
+            module
+                .inject_metering(CostConfigurationV1)
+                .expect("Metering injection should succeed.");
             module
         };
 

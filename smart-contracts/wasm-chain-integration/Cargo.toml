@@ -2,7 +2,7 @@
 name = "concordium-smart-contract-engine"
 version = "5.0.0"
 authors = ["Concordium <developers@concordium.com>"]
-edition = "2018"
+edition = "2021"
 license-file = "../../LICENSE"
 description = "Concordium's smart contract execution engine"
 homepage = "https://github.com/Concordium/concordium-base/tree/main/smart-contracts/wasm-chain-integration"

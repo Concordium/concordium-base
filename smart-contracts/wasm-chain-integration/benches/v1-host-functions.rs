@@ -23,6 +23,7 @@ use concordium_smart_contract_engine::{
 use concordium_wasm::{
     machine, parse,
     validate::{self, ValidationConfig},
+    CostConfigurationV1,
 };
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use sha2::Digest;
@@ -76,7 +77,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             &skeleton,
         )
         .unwrap();
-        module.inject_metering().expect("Metering injection should succeed.");
+        module.inject_metering(CostConfigurationV1).expect("Metering injection should succeed.");
         module
     };
 
@@ -349,7 +350,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     {
         // n is the length of the parameter
-        for n in [0, 10, 20, 50, 100, 1000, 10000] {
+        for n in [0, 10, 20, 50, 100] {
             let name = "hostfn.invoke_contract";
             let mut params = vec![0u8; 16 + 2 + n + 2 + 8]; // address + amount
             params[16..16 + 2].copy_from_slice(&(n as u16).to_le_bytes());

@@ -207,6 +207,7 @@ module Concordium.Types.ProtocolVersion (
     omitCustomSectionFromSize,
     supportsAccountSignatureChecks,
     supportsContractInspectionQueries,
+    supportsEncryptedTransfers,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -657,3 +658,15 @@ supportsContractInspectionQueries = \case
     SP5 -> False
     SP6 -> False
     SP7 -> True
+
+-- | Whether the protocol version supports encrypting balances and sending encrypted transfers.
+--  (Disabled in 'P7' and onwards.)
+supportsEncryptedTransfers :: SProtocolVersion pv -> Bool
+supportsEncryptedTransfers = \case
+    SP1 -> True
+    SP2 -> True
+    SP3 -> True
+    SP4 -> True
+    SP5 -> True
+    SP6 -> True
+    _ -> False

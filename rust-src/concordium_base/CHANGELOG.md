@@ -1,5 +1,10 @@
 ## Unreleased changes
 
+- Add a new module `cis3_types` that defines the interface types for CIS3
+  compatible contracts.
+- Fix discrepancy in (de)serializing `Web3IdAttribute::Timestamp`s due to an unexpected breaking change introduced in version 0.4.32 of `chrono`.
+- `concordium_base::ed25519` now also exports `SigningKey` to enable constructing `KeyPair` structs.
+
 ## 5.0.0 (2024-03-25)
 
 - Set minimum supported Rust version to 1.73.

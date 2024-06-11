@@ -12,7 +12,7 @@ use crate::types::*;
 use std::rc::Rc;
 
 use crate::{
-    metering_transformation::{cost::*, *},
+    metering_transformation::{cost_v0::*, *},
     types::{
         BlockType::{EmptyType, ValueType as BlockValue},
         OpCode::*,
@@ -39,7 +39,7 @@ macro_rules! flatten {
 
 macro_rules! energy {
     ($e:expr) => {
-        [I64Const($e as i64), Call(FN_IDX_ACCOUNT_ENERGY)]
+        [TickEnergy($e as u32)]
     };
 }
 
@@ -144,7 +144,7 @@ fn test_body_ctx(
         ty:         Rc::new(ty),
         num_locals: 2,
     };
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, body_expect);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, body_expect);
 }
 
 // Tests with different locals
@@ -160,7 +160,7 @@ fn test_locals_1() {
     };
     let expected = flatten![[End]];
 
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, expected);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn test_locals_2() {
         num_locals: 2,
     };
     let expected = flatten![energy!(invoke_after(2)), [End]];
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, expected);
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn test_locals_3() {
         // NOTE: this is a random value and does not correspond to the body
     };
     let expected = flatten![energy!(invoke_after(2)), [End]];
-    assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
+    assert_eq!(inject_accounting(&CostConfigurationV0, &f, &ctx).unwrap().expr.instrs, expected);
 }
 
 // Tests for function bodies.
@@ -278,13 +278,7 @@ fn test_call() {
         vec![I32Const(10), I32Const(20), Call(0), I32Const(40), I32Sub, End],
         flatten![
             energy!(ENTRY + 2 * CONST + invoke_before(2, 1)),
-            [
-                I32Const(10),
-                I32Const(20),
-                Call(FN_IDX_TRACK_CALL),
-                Call(NUM_ADDED_FUNCTIONS),
-                Call(FN_IDX_TRACK_RETURN)
-            ],
+            [I32Const(10), I32Const(20), Call(NUM_ADDED_FUNCTIONS),],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],
             [End]
@@ -312,14 +306,7 @@ fn test_call_indirect() {
         vec![I32Const(10), I32Const(20), I32Const(0), CallIndirect(1), I32Const(40), I32Sub, End],
         flatten![
             energy!(ENTRY + 3 * CONST + call_indirect(2, 1)),
-            [
-                I32Const(10),
-                I32Const(20),
-                I32Const(0),
-                Call(FN_IDX_TRACK_CALL),
-                CallIndirect(1),
-                Call(FN_IDX_TRACK_RETURN)
-            ],
+            [I32Const(10), I32Const(20), I32Const(0), CallIndirect(1),],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],
             [End]
