@@ -125,6 +125,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     // respectively.
     let mut csprng = thread_rng();
 
+    #[allow(deprecated)]
     let payload = encrypted_transfers::make_transfer_data(
         &global_context,
         &receiver_pk,
@@ -140,6 +141,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let remaining_amount = payload.remaining_amount.clone();
     let pre_tx = match maybe_memo {
+        #[allow(deprecated)]
         Some(memo) => transactions::construct::encrypted_transfer_with_memo(
             ctx.keys.num_keys(),
             ctx.from,
@@ -149,6 +151,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
             payload,
             memo,
         ),
+        #[allow(deprecated)]
         None => transactions::construct::encrypted_transfer(
             ctx.keys.num_keys(),
             ctx.from,
@@ -505,8 +508,10 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> anyhow::Result<String> {
     // context with parameters
     let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
+    #[allow(deprecated)]
     let encryption =
         encrypted_transfers::encrypt_amount_with_fixed_randomness(&global_context, amount);
+    #[allow(deprecated)]
     let pre_tx = transactions::construct::transfer_to_encrypted(
         ctx.keys.num_keys(),
         ctx.from,
@@ -583,6 +588,7 @@ fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress
 fn combine_encrypted_amounts_aux(left: &str, right: &str) -> anyhow::Result<String> {
     let left = from_str(left)?;
     let right = from_str(right)?;
+    #[allow(deprecated)]
     Ok(to_string(&encrypted_transfers::aggregate::<ArCurve>(
         &left, &right,
     ))?)
@@ -1472,7 +1478,10 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_encrypted_transfer -> create_encrypted_transfer_aux);
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )] => create_encrypted_transfer -> create_encrypted_transfer_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -1486,7 +1495,10 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => create_pub_to_sec_transfer -> create_pub_to_sec_transfer_aux);
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )] => create_pub_to_sec_transfer -> create_pub_to_sec_transfer_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -1516,7 +1528,10 @@ make_wrapper!(
     /// # Safety
     /// The input pointers must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    => combine_encrypted_amounts --> combine_encrypted_amounts_aux);
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )] => combine_encrypted_amounts --> combine_encrypted_amounts_aux);
 
 make_wrapper!(
     /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
