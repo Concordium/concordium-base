@@ -472,7 +472,7 @@ dependencies = [
 
 [[package]]
 name = "concordium_base"
-version = "5.0.1"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "ark-bls12-381",

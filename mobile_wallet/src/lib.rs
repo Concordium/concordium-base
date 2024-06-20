@@ -1478,10 +1478,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    #[deprecated(
-        since = "5.0.1",
-        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
-    )] => create_encrypted_transfer -> create_encrypted_transfer_aux);
+    => create_encrypted_transfer -> create_encrypted_transfer_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -1495,10 +1492,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    #[deprecated(
-        since = "5.0.1",
-        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
-    )] => create_pub_to_sec_transfer -> create_pub_to_sec_transfer_aux);
+    => create_pub_to_sec_transfer -> create_pub_to_sec_transfer_aux);
 
 make_wrapper!(
     /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
@@ -1528,10 +1522,7 @@ make_wrapper!(
     /// # Safety
     /// The input pointers must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
-    #[deprecated(
-        since = "5.0.1",
-        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
-    )] => combine_encrypted_amounts --> combine_encrypted_amounts_aux);
+    => combine_encrypted_amounts --> combine_encrypted_amounts_aux);
 
 make_wrapper!(
     /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
