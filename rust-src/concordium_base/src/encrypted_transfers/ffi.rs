@@ -86,6 +86,7 @@ unsafe extern "C" fn encrypt_amount_with_zero_randomness(
     out_high_ptr: *mut *const Cipher<Group>,
     out_low_ptr: *mut *const Cipher<Group>,
 ) {
+    #[allow(deprecated)]
     let encrypted =
         encrypt_amount_with_fixed_randomness(from_ptr!(ctx_ptr), Amount::from_micro_ccd(micro_ccd));
     *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
@@ -119,6 +120,7 @@ unsafe extern "C" fn make_encrypted_transfer_data(
 
     let mut csprng = thread_rng();
 
+    #[allow(deprecated)]
     let data = match make_transfer_data(
         ctx,
         receiver_pk,
@@ -383,6 +385,7 @@ unsafe extern "C" fn encrypt_amount(
 ) {
     let gc = from_ptr!(ctx_ptr);
     let pk = from_ptr!(pk_ptr);
+    #[allow(deprecated)]
     let encrypted = super::encrypt_amount(
         gc,
         pk,
