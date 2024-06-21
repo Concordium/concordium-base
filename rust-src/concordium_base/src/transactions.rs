@@ -87,30 +87,59 @@ pub enum TransactionType {
     Update,
     /// Transfer CCD from an account to another.
     Transfer,
+
     /// Register an account as a baker.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+    )]
     AddBaker,
+
     /// Remove an account as a baker.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+    )]
     RemoveBaker,
+
     /// Update the staked amount.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+    )]
     UpdateBakerStake,
+
     /// Update whether the baker automatically restakes earnings.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+    )]
     UpdateBakerRestakeEarnings,
+
     /// Update baker keys
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+    )]
     UpdateBakerKeys,
+
     /// Update given credential keys
     UpdateCredentialKeys,
+
     /// Transfer encrypted amount.
     #[deprecated(
         since = "5.0.1",
         note = "encrypted transfers are deprecated and partially removed since protocol version 7"
     )]
     EncryptedAmountTransfer,
+
     /// Transfer from public to encrypted balance of the same account.
     #[deprecated(
         since = "5.0.1",
         note = "encrypted transfers are deprecated and partially removed since protocol version 7"
     )]
     TransferToEncrypted,
+
     /// Transfer from encrypted to public balance of the same account.
     TransferToPublic,
     /// Transfer a CCD with a release schedule.
@@ -121,12 +150,14 @@ pub enum TransactionType {
     RegisterData,
     /// Same as transfer but with a memo field.
     TransferWithMemo,
+
     /// Same as encrypted transfer, but with a memo.
     #[deprecated(
         since = "5.0.1",
         note = "encrypted transfers are deprecated and partially removed since protocol version 7"
     )]
     EncryptedAmountTransferWithMemo,
+
     /// Same as transfer with schedule, but with an added memo.
     TransferWithScheduleAndMemo,
     ///  Configure an account's baker.
@@ -1914,7 +1945,7 @@ pub mod cost {
         Energy::from(u64::from(num_releases) * (300 + 64))
     }
 
-    /// Additional cost of registerding the account as a baker.
+    /// Additional cost of registering the account as a baker.
     pub const ADD_BAKER: Energy = Energy { energy: 4050 };
 
     /// Additional cost of updating baker's keys.
