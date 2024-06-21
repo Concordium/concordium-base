@@ -91,35 +91,35 @@ pub enum TransactionType {
     /// Register an account as a baker.
     #[deprecated(
         since = "5.0.1",
-        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
     )]
     AddBaker,
 
     /// Remove an account as a baker.
     #[deprecated(
         since = "5.0.1",
-        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
     )]
     RemoveBaker,
 
     /// Update the staked amount.
     #[deprecated(
         since = "5.0.1",
-        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
     )]
     UpdateBakerStake,
 
     /// Update whether the baker automatically restakes earnings.
     #[deprecated(
         since = "5.0.1",
-        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
     )]
     UpdateBakerRestakeEarnings,
 
     /// Update baker keys
     #[deprecated(
         since = "5.0.1",
-        note = "baking is changed since protocol 4, use ConfigureBaker and ConfigureDelegation instead"
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
     )]
     UpdateBakerKeys,
 
