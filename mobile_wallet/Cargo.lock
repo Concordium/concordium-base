@@ -1041,7 +1041,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "mobile_wallet"
-version = "0.25.1"
+version = "0.25.2"
 dependencies = [
  "anyhow",
  "base64",
