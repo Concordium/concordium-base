@@ -14,6 +14,10 @@ use rand::*;
 
 /// Encrypt a single amount using the given public key, returning the encrypted
 /// amount as well as the randomness used in the encryption of chunks.
+#[deprecated(
+    since = "5.0.1",
+    note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+)]
 pub fn encrypt_amount<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
     pk: &PublicKey<C>,
@@ -50,6 +54,10 @@ pub fn encrypt_amount<C: Curve, R: Rng>(
 /// Since randomness is 0 this method does not depend on the public key,
 /// only on the global context that defines the relevant generators for
 /// encryption in the exponent.
+#[deprecated(
+    since = "5.0.1",
+    note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+)]
 pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
     context: &GlobalContext<C>,
     amount: Amount,
@@ -79,6 +87,10 @@ pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
 /// Combine two encrypted amounts into one.
 /// This is only meaningful if both encrypted amounts are encrypted with the
 /// same public key, otherwise the result is meaningless.
+#[deprecated(
+    since = "5.0.1",
+    note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+)]
 pub fn aggregate<C: Curve>(
     left: &EncryptedAmount<C>,
     right: &EncryptedAmount<C>,
@@ -139,6 +151,10 @@ impl<C: Curve> EncryptedAmount<C> {
 /// The return value is going to be `None` if a transfer could not be produced.
 /// This could be because the `to_transfer` is too large, or because of some
 /// other data inconsistency that means a proof could not be produced.
+#[deprecated(
+    since = "5.0.1",
+    note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+)]
 pub fn make_transfer_data<C: Curve, R: Rng>(
     ctx: &GlobalContext<C>,
     receiver_pk: &PublicKey<C>,
@@ -297,6 +313,7 @@ mod tests {
 
         let amount = Amount::from_micro_ccd(csprng.gen::<u64>());
 
+        #[allow(deprecated)]
         let (enc_amount, _) = encrypt_amount(&context, &pk, amount, &mut csprng);
 
         let m = 1 << 16;
@@ -321,6 +338,7 @@ mod tests {
         let amount_1 = u64::from(csprng.gen::<u32>());
         let amount_1 = Amount::from_micro_ccd(amount_1 << 2);
 
+        #[allow(deprecated)]
         let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut csprng);
 
         let m = 1 << 16;
@@ -341,6 +359,7 @@ mod tests {
         let context = GlobalContext::<SomeCurve>::generate(String::from("genesis_string"));
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let amount = Amount::from_micro_ccd(csprng.gen::<u64>());
+        #[allow(deprecated)]
         let dummy_encryption = encrypt_amount_with_fixed_randomness(&context, amount);
         let m = 1 << 16;
         let table = BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
@@ -370,6 +389,7 @@ mod tests {
         let nm = n * m;
 
         let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
+        #[allow(deprecated)]
         let S_in_chunks =
             encrypt_amount(&context, &pk_sender, Amount::from_micro_ccd(s), &mut csprng);
 
@@ -379,6 +399,7 @@ mod tests {
             agg_encrypted_amount: S_in_chunks.0.clone(),
             agg_index:            index,
         };
+        #[allow(deprecated)]
         let transfer_data = make_transfer_data(
             &context,
             &pk_receiver,
@@ -416,6 +437,7 @@ mod tests {
         let nm = n * m;
 
         let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
+        #[allow(deprecated)]
         let S_in_chunks =
             encrypt_amount(&context, &pk_sender, Amount::from_micro_ccd(s), &mut csprng);
 

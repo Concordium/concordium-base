@@ -4,6 +4,7 @@
   compatible contracts.
 - Fix discrepancy in (de)serializing `Web3IdAttribute::Timestamp`s due to an unexpected breaking change introduced in version 0.4.32 of `chrono`.
 - `concordium_base::ed25519` now also exports `SigningKey` to enable constructing `KeyPair` structs.
+- Deprecated various functions related to encrypted transfers, as encrypted transfers are no longer supported in protocol version 7.
 
 ## 5.0.0 (2024-03-25)
 
