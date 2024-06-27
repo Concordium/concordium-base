@@ -624,7 +624,17 @@ accountStakingInfoToJSON AccountStakingDelegated{..} = ["accountDelegation" .= d
             ]
                 <> pendingChangeToJSON asiDelegationPendingChange
 
-data CooldownStatus = StatusCooldown | StatusPreCooldown | StatusPrePreCooldown
+-- | Tag indicating whether a cooldown amount is:
+--   - In cooldown, with a fully-determined expiry time.
+--   - In pre-cooldown, and will enter cooldown at the next payday.
+--   - In pre-pre-cooldown, and will enter pre-cooldown at the next snapshot epoch.
+data CooldownStatus
+    = -- | In cooldown
+      StatusCooldown
+    | -- | In pre-cooldown
+      StatusPreCooldown
+    | -- | In pre-pre-cooldown
+      StatusPrePreCooldown
     deriving (Eq, Show)
 
 instance ToJSON CooldownStatus where
@@ -679,6 +689,13 @@ data AccountInfo = AccountInfo
       --  another field of this type, it is convenient for consumers to have it.
       aiAccountAddress :: !AccountAddress,
       -- | The inactive stake of the account (subject to cooldown).
+      --  The order of the cooldown amounts is not guaranteed, but is expected to be
+      --   - the cooldowns, with the earliest expiration first,
+      --   - the pre-cooldown (if any: there can be at most one),
+      --   - the pre-pre-cooldown (if any: there can be at most one).
+      --  Note that pre-cooldown and pre-pre-cooldown expiry times are not guaranteed to be
+      --  accurate. It is also possible to have a cooldown with a later expiry time than a
+      --  pre-cooldown or pre-pre-cooldown (e.g. if the cooldown interval has been decreased).
       aiAccountCooldowns :: ![Cooldown],
       -- | The balance of the account that is available for transactions.
       aiAccountAvailableAmount :: !Amount
