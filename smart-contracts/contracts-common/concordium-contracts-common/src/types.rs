@@ -46,9 +46,9 @@ pub type ContractSubIndex = u64;
 /// NB: This is different from the Base58 representation.
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
-/// The type of amounts on the chain
+/// The type of amounts on the chain.
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct Amount {
     pub micro_ccd: u64,
