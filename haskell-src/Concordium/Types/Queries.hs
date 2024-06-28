@@ -455,6 +455,30 @@ makePoolPendingChange (RemoveStake et) = PPCRemovePool{..}
   where
     ppcEffectiveTime = timestampToUTCTime et
 
+-- | Information about a baker pool's active stake and status. This does not reflect the stake used
+--  for the current reward period, but rather the stake that is currently active.
+data ActiveBakerPoolStatus = ActiveBakerPoolStatus
+    { -- | The equity capital provided by the pool owner.
+      abpsBakerEquityCapital :: !Amount,
+      -- | The capital delegated to the pool by other accounts.
+      abpsDelegatedCapital :: !Amount,
+      -- | The maximum amount that may be delegated to the pool, accounting for leverage and
+      --  stake limits.
+      abpsDelegatedCapitalCap :: !Amount,
+      -- | The pool info associated with the pool: open status, metadata URL and commission rates.
+      abpsPoolInfo :: !BakerPoolInfo,
+      -- | Any pending change to the baker's stake.
+      abpsBakerStakePendingChange :: !PoolPendingChange
+    }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower
+        }
+    ''ActiveBakerPoolStatus
+ )
+
 -- | Information about the status of a baker pool in the current reward period.
 data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
     { -- | The number of blocks baked in the current reward period.
@@ -483,46 +507,22 @@ $( deriveJSON
     ''CurrentPaydayBakerPoolStatus
  )
 
--- | Status information about a given pool, or of the passive delegators.
---
---  Commission rates for the passive delegation provide a basis for comparison with baking pools, however,
---  whereas the commission for baking pools is paid to the pool owner, "commission" is not paid
---  to anyone.  Rather, it is used to determine the level of rewards paid to delegators, so that
---  their earnings are commensurate to delegating to a baking pool with the same commission rates.
-data PoolStatus
-    = BakerPoolStatus
-        { -- | The 'BakerId' of the pool owner.
-          psBakerId :: !BakerId,
-          -- | The account address of the pool owner.
-          psBakerAddress :: !AccountAddress,
-          -- | The equity capital provided by the pool owner.
-          psBakerEquityCapital :: !Amount,
-          -- | The capital delegated to the pool by other accounts.
-          psDelegatedCapital :: !Amount,
-          -- | The maximum amount that may be delegated to the pool, accounting for leverage and
-          --  stake limits.
-          psDelegatedCapitalCap :: !Amount,
-          -- | The pool info associated with the pool: open status, metadata URL and commission rates.
-          psPoolInfo :: !BakerPoolInfo,
-          -- | Any pending change to the baker's stake.
-          psBakerStakePendingChange :: !PoolPendingChange,
-          -- | Status of the pool in the current reward period.
-          psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus),
-          -- | Total capital staked across all pools, including passive delegation.
-          psAllPoolTotalCapital :: !Amount
-        }
-    | PassiveDelegationStatus
-        { -- | The total capital delegated passively.
-          psDelegatedCapital :: !Amount,
-          -- | The passive delegation commission rates.
-          psCommissionRates :: !CommissionRates,
-          -- | The transaction fees accruing to the passive delegators in the current reward period.
-          psCurrentPaydayTransactionFeesEarned :: !Amount,
-          -- | The effective delegated capital of passive delegators for the current reward period.
-          psCurrentPaydayDelegatedCapital :: !Amount,
-          -- | Total capital staked across all pools, including passive delegation.
-          psAllPoolTotalCapital :: !Amount
-        }
+-- | Status information about a given validator pool.
+data BakerPoolStatus = BakerPoolStatus
+    { -- | The 'BakerId' of the pool owner.
+      psBakerId :: !BakerId,
+      -- | The account address of the pool owner.
+      psBakerAddress :: !AccountAddress,
+      -- | The active status of the pool. This reflects any changes to the pool since
+      --  the last snapshot.
+      psActiveStatus :: !(Maybe ActiveBakerPoolStatus),
+      -- | Status of the pool in the current reward period.
+      --  This is a snapshot that is used to calculate the lottery power and reward distribution
+      --  for the current reward period.
+      psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus),
+      -- | Total capital staked across all pools, including passive delegation.
+      psAllPoolTotalCapital :: !Amount
+    }
     deriving (Eq, Show)
 
 $( deriveJSON
@@ -531,7 +531,36 @@ $( deriveJSON
           constructorTagModifier = reverse . drop (length ("Status" :: String)) . reverse,
           sumEncoding = TaggedObject{tagFieldName = "poolType", contentsFieldName = "poolStatus"}
         }
-    ''PoolStatus
+    ''BakerPoolStatus
+ )
+
+-- | Status of the passive delegators.
+--
+--  Commission rates for the passive delegation provide a basis for comparison with baking pools, however,
+--  whereas the commission for baking pools is paid to the pool owner, "commission" is not paid
+--  to anyone.  Rather, it is used to determine the level of rewards paid to delegators, so that
+--  their earnings are commensurate to delegating to a baking pool with the same commission rates.
+data PassiveDelegationStatus = PassiveDelegationStatus
+    { -- | The total capital delegated passively.
+      pdsDelegatedCapital :: !Amount,
+      -- | The passive delegation commission rates.
+      pdsCommissionRates :: !CommissionRates,
+      -- | The transaction fees accruing to the passive delegators in the current reward period.
+      pdsCurrentPaydayTransactionFeesEarned :: !Amount,
+      -- | The effective delegated capital of passive delegators for the current reward period.
+      pdsCurrentPaydayDelegatedCapital :: !Amount,
+      -- | Total capital staked across all pools, including passive delegation.
+      pdsAllPoolTotalCapital :: !Amount
+    }
+    deriving (Eq, Show)
+
+$( deriveJSON
+    defaultOptions
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          constructorTagModifier = reverse . drop (length ("Status" :: String)) . reverse,
+          sumEncoding = TaggedObject{tagFieldName = "poolType", contentsFieldName = "poolStatus"}
+        }
+    ''PassiveDelegationStatus
  )
 
 -- | Pending chain parameters update effect.

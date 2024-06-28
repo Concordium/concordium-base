@@ -106,6 +106,8 @@ module Concordium.Types.ProtocolVersion (
     --    * 'AccountV1' is used in 'P4'. Adds stake delegation.
     --
     --    * 'AccountV2' is used in 'P5' and 'P6'. Modifies the hash calculation.
+    --
+    --    * 'AccountV3' is used in 'P7'. Modifies the stake cooldown behaviour.
     AccountVersion (..),
     -- | Singleton type corresponding to 'AccountVersion'.
     SAccountVersion (..),
@@ -146,10 +148,6 @@ module Concordium.Types.ProtocolVersion (
 
     -- * Delegation support
 
-    -- | Whether or not delegation is supported at a particular account version.
-    DelegationSupport (..),
-    -- Singleton type corresponding to 'DelegationSupport'.
-    SDelegationSupport (..),
     -- | Determine whether delegation is supported for a particular account version.
     supportsDelegation,
     -- | Determine whether delegation is supported for a particular account version (at the type level).
@@ -161,6 +159,20 @@ module Concordium.Types.ProtocolVersion (
     PVSupportsDelegation,
     delegationSupport,
     protocolSupportsDelegation,
+
+    -- * Flexible cooldown support
+
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake.
+    supportsFlexibleCooldown,
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake (at the type level).
+    SupportsFlexibleCooldown,
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake (on singletons).
+    sSupportsFlexibleCooldown,
+    AVSupportsFlexibleCooldown,
+    PVSupportsFlexibleCooldown,
 
     -- * Block hash version
 
@@ -218,6 +230,7 @@ import Data.Singletons.Base.TH
 import Data.Word
 
 import Concordium.Utils.Serialization.Put (PutT)
+import GHC.TypeError
 
 -- See the splice documentation in 'Parameters.hs' for an explanation of what is generated.
 $( singletons
@@ -259,8 +272,10 @@ $( singletons
               AccountV0
             | -- \|Account version used in P4. Adds stake delegation.
               AccountV1
-            | -- \|Account version used in P5. Modifies hashing.
+            | -- \|Account version used in P5, and P6. Modifies hashing.
               AccountV2
+            | -- \|Account version used from P7. Modifies stake cooldown.
+              AccountV3
 
         -- \|'AccountVersion' associated with a 'ProtocolVersion'.
         accountVersionFor :: ProtocolVersion -> AccountVersion
@@ -270,7 +285,7 @@ $( singletons
         accountVersionFor P4 = AccountV1
         accountVersionFor P5 = AccountV2
         accountVersionFor P6 = AccountV2
-        accountVersionFor P7 = AccountV2
+        accountVersionFor P7 = AccountV3
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
@@ -296,28 +311,17 @@ $( singletons
         transactionOutcomesVersionFor P6 = TOV1
         transactionOutcomesVersionFor P7 = TOV2
 
-        -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
-        -- at an account version. This is intended to give more descriptive type errors in cases where the
-        -- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
-        -- @AVSupportsDelegation 'AccountV0@ will give a type error:
-        --
-        -- @
-        --   Couldn't match type: 'DelegationNotSupported 'AccountV0
-        --   with: 'DelegationSupported 'AccountV0
-        -- @
-        --
-        -- This is more meaningful than @Couldn't match type: 'False with: 'True@.
-        -- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
-        data DelegationSupport
-            = -- \|Delegation is supported at the account version
-              DelegationSupported AccountVersion
-            | -- \|Delegation is not supported at the account version
-              DelegationNotSupported AccountVersion
+        supportsDelegation :: AccountVersion -> Bool
+        supportsDelegation AccountV0 = False
+        supportsDelegation AccountV1 = True
+        supportsDelegation AccountV2 = True
+        supportsDelegation AccountV3 = True
 
-        supportsDelegation :: AccountVersion -> DelegationSupport
-        supportsDelegation AccountV0 = DelegationNotSupported AccountV0
-        supportsDelegation AccountV1 = DelegationSupported AccountV1
-        supportsDelegation AccountV2 = DelegationSupported AccountV2
+        supportsFlexibleCooldown :: AccountVersion -> Bool
+        supportsFlexibleCooldown AccountV0 = False
+        supportsFlexibleCooldown AccountV1 = False
+        supportsFlexibleCooldown AccountV2 = False
+        supportsFlexibleCooldown AccountV3 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -493,9 +497,10 @@ blockHashVersion :: (IsBlockHashVersion bhv) => SBlockHashVersion bhv
 blockHashVersion = sing
 
 -- | Constraint that an account version supports delegation.
---
---  TODO: As of ghc 9.4, @Assert@ should be used to give better type errors.
-type AVSupportsDelegation (av :: AccountVersion) = SupportsDelegation av ~ 'DelegationSupported av
+type AVSupportsDelegation (av :: AccountVersion) =
+    Assert
+        (SupportsDelegation av)
+        (TypeError (Text "Account version " :<>: ShowType av :<>: Text " must support delegation"))
 
 -- | Constraint that a protocol version supports delegation.
 type PVSupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
@@ -514,13 +519,25 @@ delegationSupport = case accountVersion @av of
     SAccountV0 -> SAVDelegationNotSupported
     SAccountV1 -> SAVDelegationSupported
     SAccountV2 -> SAVDelegationSupported
+    SAccountV3 -> SAVDelegationSupported
 
 -- | Whether the protocol supports delegation functionality.
 protocolSupportsDelegation :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsDelegation #-}
 protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor spv) of
-    SDelegationSupported{} -> True
-    _ -> False
+    STrue -> True
+    SFalse -> False
+
+-- | Constraint that an account version supports flexible cooldown.
+--
+-- Note, we do not use 'Assert' here, since that results in a weaker constraint that requires
+-- pattern matching on the 'AccountVersion' to fully recover the equality constraint.
+type AVSupportsFlexibleCooldown (av :: AccountVersion) =
+    SupportsFlexibleCooldown av ~ 'True
+
+-- | Constraint that a protocol version supports flexible cooldown.
+type PVSupportsFlexibleCooldown (pv :: ProtocolVersion) =
+    AVSupportsFlexibleCooldown (AccountVersionFor pv)
 
 -- | Whether the protocol version supports memo functionality.
 --  (Memos are supported in 'P2' onwards.)

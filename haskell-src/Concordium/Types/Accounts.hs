@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -46,6 +47,7 @@ module Concordium.Types.Accounts (
     BakerInfoEx (..),
     bieBakerInfo,
     bieBakerPoolInfo,
+    coerceBakerInfoExV1,
     PendingChangeEffective (..),
     pendingChangeEffectiveTimestamp,
     coercePendingChangeEffectiveV1,
@@ -73,6 +75,8 @@ module Concordium.Types.Accounts (
     AccountStakingInfo (..),
     toAccountStakingInfo,
     toAccountStakingInfoP4,
+    CooldownStatus (..),
+    Cooldown (..),
 
     -- * Account structure version
     AccountStructureVersion (..),
@@ -80,9 +84,10 @@ module Concordium.Types.Accounts (
 ) where
 
 import Data.Aeson
-import Data.Aeson.Types (Parser)
+import Data.Bool.Singletons
 import qualified Data.Map as Map
 import Data.Serialize
+import Data.Singletons
 import Data.Time
 import Lens.Micro.Platform (Lens', lens, makeClassy, makeLenses, (^.))
 
@@ -107,6 +112,7 @@ type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructur
     AccountStructureVersionFor 'AccountV0 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV1 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
+    AccountStructureVersionFor 'AccountV3 = 'AccountStructureV1
 
 -- | The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
@@ -223,6 +229,13 @@ bieBakerPoolInfo :: (AVSupportsDelegation av) => Lens' (BakerInfoEx av) BakerPoo
 bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
+-- | Coerce a 'BakerInfoEx' between two account versions that support delegation.
+coerceBakerInfoExV1 ::
+    (AVSupportsDelegation av1, AVSupportsDelegation av2) =>
+    BakerInfoEx av1 ->
+    BakerInfoEx av2
+coerceBakerInfoExV1 BakerInfoExV1{..} = BakerInfoExV1{..}
+
 -- | Note that the serialization of 'BakerInfoEx' matches exactly
 --  the serialization of 'BakerInfo' for 'AccountV0'. This is needed to preserve
 --  compatibility between versions, allowing 'BakerInfoEx' to be used where
@@ -251,23 +264,30 @@ instance (AVSupportsDelegation av) => HasBakerPoolInfo (BakerInfoEx av) where
 --  this time.)
 --
 --  For 'AccountV0', this is specified as an 'Epoch', which is an absolute number of epochs since
---  the latest genesis.  For 'AccountV1' (onwards), this is an absolute timestamp. This latter choice
---  is preferable, as it does not need to be changed on a protocol update to account for the
---  resetting of the Epoch counter.
+--  the latest genesis.  For 'AccountV1' and 'AccountV2', this is an absolute timestamp. This latter
+--  choice is preferable, as it does not need to be changed on a protocol update to account for the
+--  resetting of the Epoch counter.  For 'AccountV3' (onwards) the type has no values, as pending
+--  changes are replaced by inactive stake.
 data PendingChangeEffective (av :: AccountVersion) where
     PendingChangeEffectiveV0 :: !Epoch -> PendingChangeEffective 'AccountV0
-    PendingChangeEffectiveV1 :: (AVSupportsDelegation av) => !Timestamp -> PendingChangeEffective av
+    PendingChangeEffectiveV1 ::
+        (AVSupportsDelegation av, SupportsFlexibleCooldown av ~ 'False) =>
+        !Timestamp ->
+        PendingChangeEffective av
 
 deriving instance Eq (PendingChangeEffective av)
 deriving instance Ord (PendingChangeEffective av)
 deriving instance Show (PendingChangeEffective av)
 
 instance (IsAccountVersion av) => Serialize (PendingChangeEffective av) where
+    put :: (IsAccountVersion av) => Putter (PendingChangeEffective av)
     put (PendingChangeEffectiveV0 epoch) = put epoch
     put (PendingChangeEffectiveV1 timestamp) = put timestamp
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> PendingChangeEffectiveV0 <$> get
-        SAVDelegationSupported -> PendingChangeEffectiveV1 <$> get
+        SAVDelegationSupported -> case sSupportsFlexibleCooldown (sing @av) of
+            SFalse -> PendingChangeEffectiveV1 <$> get
+            STrue -> fail "PendingChangeEffective is not compatible with flexible cooldown"
 
 -- | Get the 'Timestamp' from a 'PendingChangeEffective' if the account version supports delegation.
 pendingChangeEffectiveTimestamp :: (AVSupportsDelegation av) => PendingChangeEffective av -> Timestamp
@@ -275,7 +295,10 @@ pendingChangeEffectiveTimestamp :: (AVSupportsDelegation av) => PendingChangeEff
 pendingChangeEffectiveTimestamp (PendingChangeEffectiveV1 ts) = ts
 
 -- | Convert a 'PendingChangeEffective' between account versions that support delegation.
-coercePendingChangeEffectiveV1 :: (AVSupportsDelegation av1, AVSupportsDelegation av2) => PendingChangeEffective av1 -> PendingChangeEffective av2
+coercePendingChangeEffectiveV1 ::
+    (AVSupportsDelegation av1, AVSupportsDelegation av2, SupportsFlexibleCooldown av2 ~ 'False) =>
+    PendingChangeEffective av1 ->
+    PendingChangeEffective av2
 coercePendingChangeEffectiveV1 (PendingChangeEffectiveV1 ts) = PendingChangeEffectiveV1 ts
 
 -- | Pending changes to the baker or delegation associated with an account.
@@ -438,6 +461,11 @@ accountStakeNoneHashV2 :: AccountStakeHash 'AccountV2
 {-# NOINLINE accountStakeNoneHashV2 #-}
 accountStakeNoneHashV2 = AccountStakeHash $ Hash.hash "A2NoStake"
 
+-- | Hash of 'AccountStakeNone' in 'AccountV3'.
+accountStakeNoneHashV3 :: AccountStakeHash 'AccountV3
+{-# NOINLINE accountStakeNoneHashV3 #-}
+accountStakeNoneHashV3 = AccountStakeHash $ Hash.hash "A3NoStake"
+
 -- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
@@ -464,12 +492,37 @@ instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) wher
                             put _delegationPendingChange
                         )
 
+-- | The 'AccountV3' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+--  This is since the stake is accounted for separately in the @AccountHash@.
+instance HashableTo (AccountStakeHash 'AccountV3) (AccountStake 'AccountV3) where
+    getHash AccountStakeNone = accountStakeNoneHashV3
+    getHash (AccountStakeBaker AccountBaker{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A3Baker"
+                    <> runPutLazy
+                        ( do
+                            put _stakeEarnings
+                            put _accountBakerInfo
+                        )
+    getHash (AccountStakeDelegate AccountDelegationV1{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A3Delegation"
+                    <> runPutLazy
+                        ( do
+                            put _delegationIdentity
+                            put _delegationStakeEarnings
+                            put _delegationTarget
+                        )
+
 -- | Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
 getAccountStakeHash :: forall av. (IsAccountVersion av) => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
     SAccountV0 -> getHash
     SAccountV1 -> getHash
     SAccountV2 -> getHash
+    SAccountV3 -> getHash
 
 -- | A representation type (used for queries) for the staking status of an account.
 --  This representation is agnostic to the protocol version and represents pending change times
@@ -546,17 +599,6 @@ pendingChangeToJSON (RemoveStake eff) =
             ["change" .= String "RemoveStake", "effectiveTime" .= eff]
     ]
 
-pendingChangeFromJSON :: Object -> Parser (StakePendingChange' UTCTime)
-pendingChangeFromJSON obj = do
-    pc <- obj .:? "pendingChange"
-    case pc of
-        Just pco -> do
-            pco .: "change" >>= \case
-                (String "ReduceStake") -> ReduceStake <$> pco .: "newStake" <*> pco .: "effectiveTime"
-                (String "RemoveStake") -> RemoveStake <$> pco .: "effectiveTime"
-                _ -> fail "Invalid pendingChange"
-        Nothing -> return NoChange
-
 accountStakingInfoToJSON :: (KeyValue kv) => AccountStakingInfo -> [kv]
 accountStakingInfoToJSON AccountStakingNone = []
 accountStakingInfoToJSON AccountStakingBaker{..} = ["accountBaker" .= bi]
@@ -582,30 +624,42 @@ accountStakingInfoToJSON AccountStakingDelegated{..} = ["accountDelegation" .= d
             ]
                 <> pendingChangeToJSON asiDelegationPendingChange
 
-accountStakingInfoFromJSON :: Object -> Parser AccountStakingInfo
-accountStakingInfoFromJSON obj = do
-    baker <- obj .:? "accountBaker"
-    delegation <- obj .:? "accountDelegation"
-    case (baker, delegation) of
-        (Nothing, Nothing) -> return AccountStakingNone
-        (Just bkr, Nothing) -> do
-            asiStakedAmount <- bkr .: "stakedAmount"
-            asiStakeEarnings <- bkr .: "restakeEarnings"
-            _bakerIdentity <- bkr .: "bakerId"
-            _bakerElectionVerifyKey <- bkr .: "bakerElectionVerifyKey"
-            _bakerSignatureVerifyKey <- bkr .: "bakerSignatureVerifyKey"
-            _bakerAggregationVerifyKey <- bkr .: "bakerAggregationVerifyKey"
-            let asiBakerInfo = BakerInfo{..}
-            asiPendingChange <- pendingChangeFromJSON bkr
-            asiPoolInfo <- bkr .:? "bakerPoolInfo"
-            return AccountStakingBaker{..}
-        (Nothing, Just dlg) -> do
-            asiStakedAmount <- dlg .: "stakedAmount"
-            asiStakeEarnings <- dlg .: "restakeEarnings"
-            asiDelegationTarget <- dlg .: "delegationTarget"
-            asiDelegationPendingChange <- pendingChangeFromJSON dlg
-            return AccountStakingDelegated{..}
-        (_, _) -> fail "Account must not have both accountBaker and accountDelegation."
+-- | Tag indicating whether a cooldown amount is:
+--   - In cooldown, with a fully-determined expiry time.
+--   - In pre-cooldown, and will enter cooldown at the next payday.
+--   - In pre-pre-cooldown, and will enter pre-cooldown at the next snapshot epoch.
+data CooldownStatus
+    = -- | In cooldown
+      StatusCooldown
+    | -- | In pre-cooldown
+      StatusPreCooldown
+    | -- | In pre-pre-cooldown
+      StatusPrePreCooldown
+    deriving (Eq, Show)
+
+instance ToJSON CooldownStatus where
+    toJSON StatusCooldown = String "cooldown"
+    toJSON StatusPreCooldown = String "precooldown"
+    toJSON StatusPrePreCooldown = String "preprecooldown"
+
+-- | A portion of an account's inactive stake that is subject to a cooldown period.
+data Cooldown = Cooldown
+    { -- | The timestamp at which the cooldown period is projected to end.
+      cooldownTimestamp :: !Timestamp,
+      -- | The amount of the inactive stake that is subject to the cooldown period.
+      cooldownAmount :: !Amount,
+      -- | The status of the cooldown period.
+      cooldownStatus :: !CooldownStatus
+    }
+    deriving (Eq, Show)
+
+instance ToJSON Cooldown where
+    toJSON Cooldown{..} =
+        object
+            [ "timestamp" .= cooldownTimestamp,
+              "amount" .= cooldownAmount,
+              "status" .= cooldownStatus
+            ]
 
 -- | The details of the state of an account on the chain, as may be returned by a
 --  query. At present the account credentials map must always contain credential
@@ -633,7 +687,18 @@ data AccountInfo = AccountInfo
       -- | The canonical address of the account, derived from the first
       --  credential. While this is not necessary, since it is derived from
       --  another field of this type, it is convenient for consumers to have it.
-      aiAccountAddress :: !AccountAddress
+      aiAccountAddress :: !AccountAddress,
+      -- | The inactive stake of the account (subject to cooldown).
+      --  The order of the cooldown amounts is not guaranteed, but is expected to be
+      --   - the cooldowns, with the earliest expiration first,
+      --   - the pre-cooldown (if any: there can be at most one),
+      --   - the pre-pre-cooldown (if any: there can be at most one).
+      --  Note that pre-cooldown and pre-pre-cooldown expiry times are not guaranteed to be
+      --  accurate. It is also possible to have a cooldown with a later expiry time than a
+      --  pre-cooldown or pre-pre-cooldown (e.g. if the cooldown interval has been decreased).
+      aiAccountCooldowns :: ![Cooldown],
+      -- | The balance of the account that is available for transactions.
+      aiAccountAvailableAmount :: !Amount
     }
     deriving (Eq, Show)
 
@@ -649,34 +714,12 @@ accountInfoPairs AccountInfo{..} =
       "accountEncryptedAmount" .= aiAccountEncryptedAmount,
       "accountEncryptionKey" .= aiAccountEncryptionKey,
       "accountIndex" .= aiAccountIndex,
-      "accountAddress" .= aiAccountAddress
+      "accountAddress" .= aiAccountAddress,
+      "accountCooldowns" .= aiAccountCooldowns,
+      "accountAvailableAmount" .= aiAccountAvailableAmount
     ]
         <> accountStakingInfoToJSON aiStakingInfo
 
 instance ToJSON AccountInfo where
     toJSON ai = object $ accountInfoPairs ai
     toEncoding ai = pairs $ mconcat $ accountInfoPairs ai
-
--- Due to the inconsistent naming of the AccountInfo fields we have to write the fromJSON instance manually.
-instance FromJSON AccountInfo where
-    parseJSON = withObject "Account info" $ \obj -> do
-        aiAccountNonce <- obj .: "accountNonce"
-        aiAccountAmount <- obj .: "accountAmount"
-        aiAccountReleaseSchedule <- obj .: "accountReleaseSchedule"
-        aiAccountCredentials <- obj .: "accountCredentials"
-        creatingCredential <-
-            case Map.lookup (CredentialIndex 0) aiAccountCredentials of
-                Nothing -> fail "Accounts must have a credential with index 0."
-                Just ac -> return ac
-        aiAccountThreshold <- obj .: "accountThreshold"
-        aiAccountEncryptedAmount <- obj .: "accountEncryptedAmount"
-        aiAccountEncryptionKey <- obj .: "accountEncryptionKey"
-        aiAccountIndex <- obj .: "accountIndex"
-        -- For backwards compatibility we retrieve the account address from the
-        -- credential.
-        aiAccountAddress <-
-            obj .:! "accountAddress" >>= \case
-                Nothing -> return (addressFromRegIdRaw (credId (vValue creatingCredential)))
-                Just addr -> return addr
-        aiStakingInfo <- accountStakingInfoFromJSON obj
-        return AccountInfo{..}
