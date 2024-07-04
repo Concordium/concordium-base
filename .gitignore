@@ -31,6 +31,8 @@ pkg
 *.iml
 lib/
 /idiss/libidiss.node
+idiss-csharp/*/bin
+idiss-csharp/*/obj
 
 /smart-contracts/rust-contracts/concordium-std/Cargo.lock
 /smart-contracts/wasm-transform/Cargo.lock

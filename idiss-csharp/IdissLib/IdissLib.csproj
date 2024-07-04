@@ -1,8 +1,39 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
-    <Version>1.1.1</Version>
+    <TargetFramework>net6.0</TargetFramework>
+    <Version>1.2.0</Version>
+
+    <IsWindows Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true'">true</IsWindows>
+    <IsOSX Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'">true</IsOSX>
+    <IsLinux Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' == 'true'">true</IsLinux>
+    <RunRustBuild>true</RunRustBuild>
   </PropertyGroup>
+
+    <ItemGroup>
+    <!-- Include libidiss.dll on Windows -->
+    <None Include="../../idiss/target/release/idiss.dll" Condition="'$(IsWindows)'=='true'">
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+      <Pack>True</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Include libidiss.dylib on macOS -->
+    <None Include="../../idiss/target/release/libidiss.dylib" Condition="'$(IsOSX)'=='true'">
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+      <Pack>True</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Include libidiss.so on Linux -->
+    <None Include="../../idiss/target/release/libidiss.so" Condition="'$(IsLinux)'=='true'">
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+      <Pack>True</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent" Condition="$(RunRustBuild)">
+    <Exec Command="cargo build --manifest-path=../../idiss/Cargo.toml --release --features csharp" />
+  </Target>
+
 
 </Project>
