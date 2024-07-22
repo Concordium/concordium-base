@@ -515,6 +515,7 @@ $( singletons
         mintDistributionVersionFor ChainParametersV0 = MintDistributionVersion0
         mintDistributionVersionFor ChainParametersV1 = MintDistributionVersion1
         mintDistributionVersionFor ChainParametersV2 = MintDistributionVersion1
+        mintDistributionVersionFor ChainParametersV3 = MintDistributionVersion1
 
         -- \|Whether a 'MintDistributionVersion' supports the mint-per-slot parameter.
         supportsMintPerSlot :: MintDistributionVersion -> Bool
@@ -531,6 +532,7 @@ $( singletons
         gasRewardsVersionFor ChainParametersV0 = GASRewardsVersion0
         gasRewardsVersionFor ChainParametersV1 = GASRewardsVersion0
         gasRewardsVersionFor ChainParametersV2 = GASRewardsVersion1
+        gasRewardsVersionFor ChainParametersV3 = GASRewardsVersion1
 
         -- \|Whether a 'GASRewardsVersion' supports GAS rewards for finalization proofs.
         supportsGASFinalizationProof :: GASRewardsVersion -> Bool
@@ -547,6 +549,7 @@ $( singletons
         cooldownParametersVersionFor ChainParametersV0 = CooldownParametersVersion0
         cooldownParametersVersionFor ChainParametersV1 = CooldownParametersVersion1
         cooldownParametersVersionFor ChainParametersV2 = CooldownParametersVersion1
+        cooldownParametersVersionFor ChainParametersV3 = CooldownParametersVersion1
 
         -- \|Pool parameters version.
         data PoolParametersVersion
@@ -558,6 +561,7 @@ $( singletons
         poolParametersVersionFor ChainParametersV0 = PoolParametersVersion0
         poolParametersVersionFor ChainParametersV1 = PoolParametersVersion1
         poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
+        poolParametersVersionFor ChainParametersV3 = PoolParametersVersion1
 
         -- \|Consensus parameters version.
         data ConsensusParametersVersion
@@ -569,6 +573,7 @@ $( singletons
         consensusParametersVersionFor ChainParametersV0 = ConsensusParametersVersion0
         consensusParametersVersionFor ChainParametersV1 = ConsensusParametersVersion0
         consensusParametersVersionFor ChainParametersV2 = ConsensusParametersVersion1
+        consensusParametersVersionFor ChainParametersV3 = ConsensusParametersVersion1
 
         -- \|Authorizations version.
         data AuthorizationsVersion
@@ -580,6 +585,7 @@ $( singletons
         authorizationsVersionFor ChainParametersV0 = AuthorizationsVersion0
         authorizationsVersionFor ChainParametersV1 = AuthorizationsVersion1
         authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion1
+        authorizationsVersionFor ChainParametersV3 = AuthorizationsVersion1
 
         -- \|The authorizations version associated with a protocol version.
         authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
@@ -636,9 +642,11 @@ $( singletons
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
+        isSupported PTFinalizationProof ChainParametersV3 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV0 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV1 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV2 = True
+        isSupported PTFinalizationCommitteeParameters ChainParametersV3 = True
         |]
  )
 
@@ -1918,11 +1926,53 @@ parseJSONForCPV2 =
             _cpConsensusParameters = ConsensusParametersV1{..}
         return ChainParameters{..}
 
+parseJSONForCPV3 :: Value -> Parser (ChainParameters' 'ChainParametersV3)
+parseJSONForCPV3 =
+    withObject "ChainParametersV2" $ \v -> do
+        _cpEuroPerEnergy <- v .: "euroPerEnergy"
+        _cpMicroGTUPerEuro <- v .: "microGTUPerEuro"
+        _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
+        _cpDelegatorCooldown <- v .: "delegatorCooldown"
+        _cpAccountCreationLimit <- v .: "accountCreationLimit"
+        _cpRewardParameters <- v .: "rewardParameters"
+        _cpFoundationAccount <- v .: "foundationAccountIndex"
+        _finalizationCommission <- v .: "passiveFinalizationCommission"
+        _bakingCommission <- v .: "passiveBakingCommission"
+        _transactionCommission <- v .: "passiveTransactionCommission"
+        _finalizationCommissionRange <- v .: "finalizationCommissionRange"
+        _bakingCommissionRange <- v .: "bakingCommissionRange"
+        _transactionCommissionRange <- v .: "transactionCommissionRange"
+        _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
+        _ppCapitalBound <- v .: "capitalBound"
+        _ppLeverageBound <- v .: "leverageBound"
+        _tpRewardPeriodLength <- v .: "rewardPeriodLength"
+        _tpMintPerPayday <- v .: "mintPerPayday"
+        _tpTimeoutBase <- v .: "timeoutBase"
+        _tpTimeoutIncrease <- v .: "timeoutIncrease"
+        _tpTimeoutDecrease <- v .: "timeoutDecrease"
+        let _cpTimeoutParameters = TimeoutParameters{..}
+        _cpMinBlockTime <- v .: "minBlockTime"
+        _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
+        let _cpCooldownParameters = CooldownParametersV1{..}
+            _cpTimeParameters = SomeParam TimeParametersV1{..}
+            _cpPoolParameters = PoolParametersV1{..}
+            _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
+            _ppPassiveCommissions = CommissionRates{..}
+            _ppCommissionBounds = CommissionRanges{..}
+            _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
+            _cpConsensusParameters = ConsensusParametersV1{..}
+        return ChainParameters{..}
+
 instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (ChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> parseJSONForCPV0
         SChainParametersV1 -> parseJSONForCPV1
         SChainParametersV2 -> parseJSONForCPV2
+        SChainParametersV3 -> parseJSONForCPV3
 
 instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' cpv) where
     toJSON ChainParameters{..} = case chainParametersVersion @cpv of
@@ -1960,6 +2010,35 @@ instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' 
                   "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters)
                 ]
         SChainParametersV2 ->
+            object
+                [ "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
+                  "microGTUPerEuro" AE..= _erMicroGTUPerEuro _cpExchangeRates,
+                  "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown _cpCooldownParameters,
+                  "delegatorCooldown" AE..= _cpDelegatorCooldown _cpCooldownParameters,
+                  "accountCreationLimit" AE..= _cpAccountCreationLimit,
+                  "rewardParameters" AE..= _cpRewardParameters,
+                  "foundationAccountIndex" AE..= _cpFoundationAccount,
+                  "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions _cpPoolParameters),
+                  "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions _cpPoolParameters),
+                  "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions _cpPoolParameters),
+                  "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds _cpPoolParameters),
+                  "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds _cpPoolParameters),
+                  "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds _cpPoolParameters),
+                  "minimumEquityCapital" AE..= _ppMinimumEquityCapital _cpPoolParameters,
+                  "capitalBound" AE..= _ppCapitalBound _cpPoolParameters,
+                  "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
+                  "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam _cpTimeParameters),
+                  "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters),
+                  "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters _cpConsensusParameters),
+                  "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters _cpConsensusParameters),
+                  "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters _cpConsensusParameters),
+                  "minBlockTime" AE..= _cpMinBlockTime _cpConsensusParameters,
+                  "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
+                  "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
+                  "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
+                ]
+        SChainParametersV3 ->
             object
                 [ "euroPerEnergy" AE..= _erEuroPerEnergy _cpExchangeRates,
                   "microGTUPerEuro" AE..= _erMicroGTUPerEuro _cpExchangeRates,
@@ -2100,6 +2179,7 @@ delegationChainParameters = case protocolVersion @pv of
     SP5 -> DelegationChainParameters
     SP6 -> DelegationChainParameters
     SP7 -> DelegationChainParameters
+    SP8 -> DelegationChainParameters
 
 -- * Consensus versions
 
@@ -2135,3 +2215,4 @@ consensusVersionFor SP4 = ConsensusV0
 consensusVersionFor SP5 = ConsensusV0
 consensusVersionFor SP6 = ConsensusV1
 consensusVersionFor SP7 = ConsensusV1
+consensusVersionFor SP8 = ConsensusV1

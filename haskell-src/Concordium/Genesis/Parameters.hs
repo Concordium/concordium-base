@@ -50,6 +50,7 @@ instance (IsChainParametersVersion cpv) => FromJSON (GenesisChainParameters' cpv
         SChainParametersV0 -> parseJSONForGCPV0
         SChainParametersV1 -> parseJSONForGCPV1
         SChainParametersV2 -> parseJSONForGCPV2
+        SChainParametersV3 -> parseJSONForGCPV3
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV0'.
 parseJSONForGCPV0 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV0)
@@ -105,6 +106,47 @@ parseJSONForGCPV1 =
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
 parseJSONForGCPV2 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV2)
 parseJSONForGCPV2 =
+    withObject "GenesisChainParametersV2" $ \v -> do
+        _erEuroPerEnergy <- v .: "euroPerEnergy"
+        _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
+        _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
+        _cpDelegatorCooldown <- v .: "delegatorCooldown"
+        gcpAccountCreationLimit <- v .: "accountCreationLimit"
+        gcpRewardParameters <- v .: "rewardParameters"
+        gcpFoundationAccount <- v .: "foundationAccount"
+        _finalizationCommission <- v .: "passiveFinalizationCommission"
+        _bakingCommission <- v .: "passiveBakingCommission"
+        _transactionCommission <- v .: "passiveTransactionCommission"
+        _finalizationCommissionRange <- v .: "finalizationCommissionRange"
+        _bakingCommissionRange <- v .: "bakingCommissionRange"
+        _transactionCommissionRange <- v .: "transactionCommissionRange"
+        _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
+        _ppCapitalBound <- v .: "capitalBound"
+        _ppLeverageBound <- v .: "leverageBound"
+        _tpRewardPeriodLength <- v .: "rewardPeriodLength"
+        _tpMintPerPayday <- v .: "mintPerPayday"
+        _tpTimeoutBase <- v .: "timeoutBase"
+        _tpTimeoutIncrease <- v .: "timeoutIncrease"
+        _tpTimeoutDecrease <- v .: "timeoutDecrease"
+        _cpMinBlockTime <- v .: "minBlockTime"
+        _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
+        let gcpCooldownParameters = CooldownParametersV1{..}
+            gcpTimeParameters = SomeParam TimeParametersV1{..}
+            gcpPoolParameters = PoolParametersV1{..}
+            gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
+            _ppPassiveCommissions = CommissionRates{..}
+            _ppCommissionBounds = CommissionRanges{..}
+            _cpTimeoutParameters = TimeoutParameters{..}
+            gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
+            gcpConsensusParameters = ConsensusParametersV1{..}
+        return GenesisChainParameters{..}
+
+-- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
+parseJSONForGCPV3 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV3)
+parseJSONForGCPV3 =
     withObject "GenesisChainParametersV2" $ \v -> do
         _erEuroPerEnergy <- v .: "euroPerEnergy"
         _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
