@@ -60,12 +60,13 @@ pub const ALLOWED_IDENTITY_RANGE_TAGS: [AttributeTag; 3] =
     [AttributeTag(3), AttributeTag(9), AttributeTag(10)];
 /// List of identity attribute tags that we allow set statements
 /// (membership/nonMembership) for. The list should correspond to "Country
-/// of residence", "Nationality", "IdDocType", "IdDocIssuer".
-pub const ALLOWED_IDENTITY_SET_TAGS: [AttributeTag; 4] = [
+/// of residence", "Nationality", "IdDocType", "IdDocIssuer", "LegalCountry".
+pub const ALLOWED_IDENTITY_SET_TAGS: [AttributeTag; 5] = [
     AttributeTag(4),
     AttributeTag(5),
     AttributeTag(6),
     AttributeTag(8),
+    AttributeTag(15),
 ];
 
 /// Returns the `WalletConfig` that is used by our wallet implementations for
