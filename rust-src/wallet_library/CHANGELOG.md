@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0]
+
+### Added
+
+- Added the company attribute `legalCountry` to the list of allowed attributes for set-membership proofs.
+
 ## [0.3.0]
 
 ### Added
