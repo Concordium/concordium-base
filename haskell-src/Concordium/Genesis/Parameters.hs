@@ -253,6 +253,37 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
               "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters)
             ]
 
+instance ToJSON (GenesisChainParameters' 'ChainParametersV3) where
+    toJSON GenesisChainParameters{..} =
+        object
+            [ "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
+              "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
+              "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown gcpCooldownParameters,
+              "delegatorCooldown" AE..= _cpDelegatorCooldown gcpCooldownParameters,
+              "accountCreationLimit" AE..= gcpAccountCreationLimit,
+              "rewardParameters" AE..= gcpRewardParameters,
+              "foundationAccount" AE..= gcpFoundationAccount,
+              "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions gcpPoolParameters),
+              "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "minimumEquityCapital" AE..= _ppMinimumEquityCapital gcpPoolParameters,
+              "capitalBound" AE..= _ppCapitalBound gcpPoolParameters,
+              "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
+              "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam gcpTimeParameters),
+              "mintPerPayday" AE..= _tpMintPerPayday (unOParam gcpTimeParameters),
+              "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
+              "minBlockTime" AE..= _cpMinBlockTime gcpConsensusParameters,
+              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
+              "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters)
+            ]
+
 -- | 'GenesisParametersV2' provides a convenient abstraction for
 -- constructing 'GenesisData'. The following invariants are
 -- required to hold:
