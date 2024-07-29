@@ -31,6 +31,7 @@ testSerialization cpv size num =
                 ChainParametersV0 -> forAll (resize size genChainParametersV0) (checkPutGetIsIdentity SP1)
                 ChainParametersV1 -> forAll (resize size genChainParametersV1) (checkPutGetIsIdentity SP4)
                 ChainParametersV2 -> forAll (resize size genChainParametersV2) (checkPutGetIsIdentity SP6)
+                ChainParametersV3 -> forAll (resize size genChainParametersV3) (checkPutGetIsIdentity SP8)
 
 checkJSONToFromIsIdentityV0 :: ChainParameters' 'ChainParametersV0 -> Property
 checkJSONToFromIsIdentityV0 cp = do
@@ -50,6 +51,12 @@ checkJSONToFromIsIdentityV2 cp = do
         AE.Error err -> counterexample err False
         AE.Success jsonCp -> cp === jsonCp
 
+checkJSONToFromIsIdentityV3 :: ChainParameters' 'ChainParametersV3 -> Property
+checkJSONToFromIsIdentityV3 cp = do
+    case AE.fromJSON (AE.toJSON cp) of
+        AE.Error err -> counterexample err False
+        AE.Success jsonCp -> cp === jsonCp
+
 testJSON :: ChainParametersVersion -> Int -> Int -> Spec
 testJSON cpv size num =
     modifyMaxSuccess (const num) $
@@ -58,6 +65,7 @@ testJSON cpv size num =
                 ChainParametersV0 -> forAll (resize size genChainParametersV0) checkJSONToFromIsIdentityV0
                 ChainParametersV1 -> forAll (resize size genChainParametersV1) checkJSONToFromIsIdentityV1
                 ChainParametersV2 -> forAll (resize size genChainParametersV2) checkJSONToFromIsIdentityV2
+                ChainParametersV3 -> forAll (resize size genChainParametersV3) checkJSONToFromIsIdentityV3
 
 tests :: Spec
 tests = do
@@ -68,6 +76,8 @@ tests = do
         testSerialization ChainParametersV1 50 500
         testSerialization ChainParametersV2 25 1000
         testSerialization ChainParametersV2 50 500
+        testSerialization ChainParametersV3 25 1000
+        testSerialization ChainParametersV3 50 500
     describe "ChainParameters JSON tests" $ do
         testJSON ChainParametersV0 25 1000
         testJSON ChainParametersV0 50 500
@@ -75,3 +85,5 @@ tests = do
         testJSON ChainParametersV1 50 500
         testJSON ChainParametersV2 25 1000
         testJSON ChainParametersV2 50 500
+        testJSON ChainParametersV3 25 1000
+        testJSON ChainParametersV3 50 500

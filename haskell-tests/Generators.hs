@@ -477,6 +477,19 @@ genChainParametersV2 = do
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
     return ChainParameters{..}
 
+genChainParametersV3 :: Gen (ChainParameters' 'ChainParametersV3)
+genChainParametersV3 = do
+    _cpConsensusParameters <- genConsensusParametersV1
+    _cpExchangeRates <- genExchangeRates
+    _cpCooldownParameters <- genCooldownParametersV1
+    _cpTimeParameters <- SomeParam <$> genTimeParametersV1
+    _cpAccountCreationLimit <- arbitrary
+    _cpRewardParameters <- genRewardParameters
+    _cpFoundationAccount <- AccountIndex <$> arbitrary
+    _cpPoolParameters <- genPoolParametersV1
+    _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    return ChainParameters{..}
+
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
 genGenesisChainParametersV0 = do
     gcpConsensusParameters <- ConsensusParametersV0 <$> genElectionDifficulty
@@ -505,6 +518,19 @@ genGenesisChainParametersV1 = do
 
 genGenesisChainParametersV2 :: Gen (GenesisChainParameters' 'ChainParametersV2)
 genGenesisChainParametersV2 = do
+    gcpConsensusParameters <- genConsensusParametersV1
+    gcpExchangeRates <- genExchangeRates
+    gcpCooldownParameters <- genCooldownParametersV1
+    gcpTimeParameters <- SomeParam <$> genTimeParametersV1
+    gcpAccountCreationLimit <- arbitrary
+    gcpRewardParameters <- genRewardParameters
+    gcpFoundationAccount <- genAccountAddress
+    gcpPoolParameters <- genPoolParametersV1
+    gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    return GenesisChainParameters{..}
+
+genGenesisChainParametersV3 :: Gen (GenesisChainParameters' 'ChainParametersV3)
+genGenesisChainParametersV3 = do
     gcpConsensusParameters <- genConsensusParametersV1
     gcpExchangeRates <- genExchangeRates
     gcpCooldownParameters <- genCooldownParametersV1
@@ -1004,6 +1030,7 @@ genRootUpdate scpv =
             SChainParametersV0 -> Level2KeysRootUpdate <$> genAuthorizations
             SChainParametersV1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
             SChainParametersV2 -> Level2KeysRootUpdateV1 <$> genAuthorizations
+            SChainParametersV3 -> Level2KeysRootUpdateV1 <$> genAuthorizations
         ]
 
 genLevel1Update :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen Level1Update
@@ -1014,6 +1041,7 @@ genLevel1Update scpv =
             SChainParametersV0 -> Level2KeysLevel1Update <$> genAuthorizations
             SChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
             SChainParametersV2 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
+            SChainParametersV3 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
         ]
 
 genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
@@ -1046,6 +1074,22 @@ genLevel2UpdatePayload scpv =
                   TimeParametersCPV1UpdatePayload <$> genTimeParametersV1
                 ]
         SChainParametersV2 ->
+            oneof
+                [ ProtocolUpdatePayload <$> genProtocolUpdate,
+                  EuroPerEnergyUpdatePayload <$> genExchangeRate,
+                  MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+                  FoundationAccountUpdatePayload <$> genAccountAddress,
+                  MintDistributionCPV1UpdatePayload <$> genMintDistribution,
+                  TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+                  CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
+                  PoolParametersCPV1UpdatePayload <$> genPoolParametersV1,
+                  TimeParametersCPV1UpdatePayload <$> genTimeParametersV1,
+                  TimeoutParametersUpdatePayload <$> genTimeoutParameters,
+                  MinBlockTimeUpdatePayload <$> genDuration,
+                  BlockEnergyLimitUpdatePayload . Energy <$> arbitrary,
+                  GASRewardsCPV2UpdatePayload <$> genGASRewards
+                ]
+        SChainParametersV3 ->
             oneof
                 [ ProtocolUpdatePayload <$> genProtocolUpdate,
                   EuroPerEnergyUpdatePayload <$> genExchangeRate,
