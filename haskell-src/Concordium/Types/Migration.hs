@@ -157,7 +157,7 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
     finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
 migrateChainParameters StateMigrationParametersP6ToP7{} cps = cps
 -- TODO (drsk) Chain parameters will change in P8
-migrateChainParameters StateMigrationParametersP7ToP8{} _cps = error "define migration from chain parameters p7 to p8"
+migrateChainParameters StateMigrationParametersP7ToP8{} _cps = error "TODO (drsk). github issue#545. Define migration from chain parameters p7 to p8."
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
