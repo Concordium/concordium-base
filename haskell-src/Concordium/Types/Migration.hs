@@ -83,8 +83,7 @@ migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP6ToP7{} poolParams = poolParams
--- TODO (drsk) this might need to change with new pool parameters in P8
-migratePoolParameters StateMigrationParametersP7ToP8{} poolParams = poolParams
+migratePoolParameters StateMigrationParametersP7ToP8{} _poolParams = error "TODO (drsk) github issue #544. Implement pool parameter migration p7->p8."
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
