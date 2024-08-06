@@ -186,4 +186,4 @@ migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
 migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1
 migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
 migrateStakePendingChange StateMigrationParametersP6ToP7{} = const NoChange
-migrateStakePendingChange StateMigrationParametersP7ToP8{} = id
+migrateStakePendingChange StateMigrationParametersP7ToP8{} = const NoChange
