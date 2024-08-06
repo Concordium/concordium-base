@@ -165,12 +165,15 @@ tests = do
         test SP6 50 500
         test SP7 25 1000
         test SP7 50 500
+        test SP8 50 500
     describe "Negative payload serialization tests" $ do
         negativeTest SP4 20 200
         negativeTest SP6 20 200
         negativeTest SP7 20 200
+        negativeTest SP8 20 200
         negativeTestPadded SP6 20 200
         negativeTestPadded SP7 20 200
+        negativeTestPadded SP8 20 200
     describe "Encrypted transfer payloads P6" $ do
         specify "Encrypted transfer" $ testSerializeEncryptedTransfer SP6
         specify "Encrypted transfer with memo" $ testSerializeEncryptedTransferWithMemo SP6
@@ -179,8 +182,12 @@ tests = do
         specify "Encrypted transfer" $ testSerializeEncryptedTransfer SP7
         specify "Encrypted transfer with memo" $ testSerializeEncryptedTransferWithMemo SP7
         specify "Transfer to public" $ testSecToPubTransfer SP7
+    describe "Encrypted transfer payloads P8" $ do
+        specify "Encrypted transfer" $ testSerializeEncryptedTransfer SP8
+        specify "Encrypted transfer with memo" $ testSerializeEncryptedTransferWithMemo SP8
+        specify "Transfer to public" $ testSecToPubTransfer SP8
     describe "Unsafe payload serialization tests" $ do
-        forM_ [P1, P2, P3, P4, P5, P6, P7] $ \pv -> do
+        forM_ [P1, P2, P3, P4, P5, P6, P7, P8] $ \pv -> do
             case promoteProtocolVersion pv of
                 (SomeProtocolVersion spv) -> testUnsafe spv 25 1000
   where

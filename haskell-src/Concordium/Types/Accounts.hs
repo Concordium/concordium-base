@@ -113,6 +113,7 @@ type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructur
     AccountStructureVersionFor 'AccountV1 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
     AccountStructureVersionFor 'AccountV3 = 'AccountStructureV1
+    AccountStructureVersionFor 'AccountV4 = 'AccountStructureV1
 
 -- | The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
@@ -466,6 +467,11 @@ accountStakeNoneHashV3 :: AccountStakeHash 'AccountV3
 {-# NOINLINE accountStakeNoneHashV3 #-}
 accountStakeNoneHashV3 = AccountStakeHash $ Hash.hash "A3NoStake"
 
+-- | Hash of 'AccountStakeNone' in 'AccountV4'.
+accountStakeNoneHashV4 :: AccountStakeHash 'AccountV4
+{-# NOINLINE accountStakeNoneHashV4 #-}
+accountStakeNoneHashV4 = AccountStakeHash $ Hash.hash "A4NoStake"
+
 -- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
@@ -516,6 +522,32 @@ instance HashableTo (AccountStakeHash 'AccountV3) (AccountStake 'AccountV3) wher
                             put _delegationTarget
                         )
 
+-- | The 'AccountV4' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+--  This is since the stake is accounted for separately in the @AccountHash@.
+instance HashableTo (AccountStakeHash 'AccountV4) (AccountStake 'AccountV4) where
+    getHash AccountStakeNone = accountStakeNoneHashV4
+    getHash (AccountStakeBaker AccountBaker{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A4Baker"
+                    <> runPutLazy
+                        ( do
+                            put _stakeEarnings
+                            put _accountBakerInfo
+                            put _bakerPendingChange
+                        )
+    getHash (AccountStakeDelegate AccountDelegationV1{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A4Delegation"
+                    <> runPutLazy
+                        ( do
+                            put _delegationIdentity
+                            put _delegationStakeEarnings
+                            put _delegationTarget
+                            put _delegationPendingChange
+                        )
+
 -- | Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
 getAccountStakeHash :: forall av. (IsAccountVersion av) => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
@@ -523,6 +555,7 @@ getAccountStakeHash = case accountVersion @av of
     SAccountV1 -> getHash
     SAccountV2 -> getHash
     SAccountV3 -> getHash
+    SAccountV4 -> getHash
 
 -- | A representation type (used for queries) for the staking status of an account.
 --  This representation is agnostic to the protocol version and represents pending change times

@@ -23,6 +23,7 @@ maxPayloadSize SP4 = maxWasmModuleSizeV1 + 1 + 4 + 4 -- +1 for the payload tag, 
 maxPayloadSize SP5 = maxPayloadSize SP4
 maxPayloadSize SP6 = maxPayloadSize SP4
 maxPayloadSize SP7 = maxPayloadSize SP4
+maxPayloadSize SP8 = maxPayloadSize SP4
 
 -- * Web assembly related constants
 
@@ -36,6 +37,7 @@ maxParameterLen SP4 = 1024
 maxParameterLen SP5 = 65535
 maxParameterLen SP6 = maxParameterLen SP5
 maxParameterLen SP7 = maxParameterLen SP5
+maxParameterLen SP8 = maxParameterLen SP5
 
 -- | Whether the number of logs and size of return values should be limited.
 --  The limits have been removed in P5 and onward.
@@ -47,6 +49,7 @@ limitLogsAndReturnValues SP4 = True
 limitLogsAndReturnValues SP5 = False
 limitLogsAndReturnValues SP6 = False
 limitLogsAndReturnValues SP7 = False
+limitLogsAndReturnValues SP8 = False
 
 -- | Maximum module size of a V0 module.
 maxWasmModuleSizeV0 :: Word32
