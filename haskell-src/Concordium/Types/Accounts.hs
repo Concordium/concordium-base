@@ -522,7 +522,7 @@ instance HashableTo (AccountStakeHash 'AccountV3) (AccountStake 'AccountV3) wher
                             put _delegationTarget
                         )
 
--- | The 'AccountV3' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+-- | The 'AccountV4' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV4) (AccountStake 'AccountV4) where
     getHash AccountStakeNone = accountStakeNoneHashV4
