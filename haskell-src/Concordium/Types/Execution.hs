@@ -356,7 +356,9 @@ data Payload
           -- | The commission the pool owner takes on baking rewards.
           cbBakingRewardCommission :: !(Maybe AmountFraction),
           -- | The commission the pool owner takes on finalization rewards.
-          cbFinalizationRewardCommission :: !(Maybe AmountFraction)
+          cbFinalizationRewardCommission :: !(Maybe AmountFraction),
+          -- | Whether the account should be suspended or not.
+          cbSuspended :: !(Maybe Bool)
         }
     | -- | Configure an account's stake delegation.
       -- As with 'ConfigureBaker', the serialization uses a 16-bit bitmap.
@@ -404,7 +406,6 @@ instance S.Serialize TransactionType where
         TTTransferWithScheduleAndMemo -> S.putWord8 18
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
-
     get =
         S.getWord8 >>= \case
             0 -> return TTDeployModule
@@ -651,6 +652,7 @@ instance AE.FromJSON Payload where
                 cbTransactionFeeCommission <- obj AE..: "transactionFeeCommission"
                 cbBakingRewardCommission <- obj AE..: "bakingRewardCommission"
                 cbFinalizationRewardCommission <- obj AE..: "finalizationRewardCommission"
+                cbSuspended <- obj AE..: "bakerSuspended"
                 return ConfigureBaker{..}
             "configureDelegation" -> do
                 cdCapital <- obj AE..: "capital"
@@ -945,6 +947,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cbTransactionFeeCommission <- maybeGet 5
                 cbBakingRewardCommission <- maybeGet 6
                 cbFinalizationRewardCommission <- maybeGet 7
+                cbSuspended <- maybeGet 8
                 return ConfigureBaker{..}
             26 | supportDelegation -> S.label "ConfigureDelgation" $ do
                 bitmap <- S.getWord16be
@@ -1313,6 +1316,18 @@ data Event
           -- | The new 'ModuleRef'.
           euTo :: !ModuleRef
         }
+    | -- | The account has been suspended.
+      BakerSuspended
+        { -- |
+          ebsBakerId :: !BakerId
+        }
+    | -- | The account has been resumed.
+      BakerResumed
+        { -- |
+          ebrBakerId :: !BakerId
+        }
+
+
     deriving (Show, Generic, Eq)
 
 putEvent :: S.Putter Event
@@ -1497,6 +1512,12 @@ putEvent = \case
             <> S.put euAddress
             <> S.put euFrom
             <> S.put euTo
+    BakerSuspended{..} ->
+        S.putWord8 36
+            <> S.put ebsBakerId
+    BakerResumed{..} ->
+        S.putWord8 37
+            <> S.put ebrBakerId
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1937,6 +1958,16 @@ instance AE.ToJSON Event where
                   "address" .= euAddress,
                   "from" .= euFrom,
                   "to" .= euTo
+                ]
+        BakerSuspended{..} ->
+            AE.object
+                [ "tag" .= AE.String "BakerSuspended",
+                  "bakerId" .= ebsBakerId
+                ]
+        BakerResumed{..} ->
+            AE.object
+                [ "tag" .= AE.String "BakerResumed",
+                  "bakerId" .= ebrBakerId
                 ]
 
 instance AE.FromJSON Event where
