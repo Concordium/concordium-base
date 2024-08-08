@@ -731,7 +731,9 @@ data AccountInfo = AccountInfo
       --  pre-cooldown or pre-pre-cooldown (e.g. if the cooldown interval has been decreased).
       aiAccountCooldowns :: ![Cooldown],
       -- | The balance of the account that is available for transactions.
-      aiAccountAvailableAmount :: !Amount
+      aiAccountAvailableAmount :: !Amount,
+      -- | Flag indicating whether the account is currently suspended.
+      aiAccountIsSuspended :: !Bool
     }
     deriving (Eq, Show)
 
@@ -749,7 +751,8 @@ accountInfoPairs AccountInfo{..} =
       "accountIndex" .= aiAccountIndex,
       "accountAddress" .= aiAccountAddress,
       "accountCooldowns" .= aiAccountCooldowns,
-      "accountAvailableAmount" .= aiAccountAvailableAmount
+      "accountAvailableAmount" .= aiAccountAvailableAmount,
+      "accountIsSuspended" .= aiAccountIsSuspended
     ]
         <> accountStakingInfoToJSON aiStakingInfo
 
