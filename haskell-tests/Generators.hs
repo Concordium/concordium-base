@@ -297,6 +297,7 @@ genPayloadConfigureBaker = do
     cbTransactionFeeCommission <- liftArbitrary genAmountFraction
     cbBakingRewardCommission <- liftArbitrary genAmountFraction
     cbFinalizationRewardCommission <- liftArbitrary genAmountFraction
+    cbSuspend <- arbitrary
     return ConfigureBaker{..}
 
 genPayloadTransferWithSchedule :: Gen Payload

@@ -357,8 +357,9 @@ data Payload
           cbBakingRewardCommission :: !(Maybe AmountFraction),
           -- | The commission the pool owner takes on finalization rewards.
           cbFinalizationRewardCommission :: !(Maybe AmountFraction),
-          -- | Whether the account should be suspended or not.
-          cbSuspended :: !(Maybe Bool)
+          -- | Whether the account should be suspended (`Just True`) or resumed
+          --   (`Just False`). `Nothing` has no effect.
+          cbSuspend :: !(Maybe Bool)
         }
     | -- | Configure an account's stake delegation.
       -- As with 'ConfigureBaker', the serialization uses a 16-bit bitmap.
@@ -406,6 +407,7 @@ instance S.Serialize TransactionType where
         TTTransferWithScheduleAndMemo -> S.putWord8 18
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
+
     get =
         S.getWord8 >>= \case
             0 -> return TTDeployModule
@@ -652,7 +654,7 @@ instance AE.FromJSON Payload where
                 cbTransactionFeeCommission <- obj AE..: "transactionFeeCommission"
                 cbBakingRewardCommission <- obj AE..: "bakingRewardCommission"
                 cbFinalizationRewardCommission <- obj AE..: "finalizationRewardCommission"
-                cbSuspended <- obj AE..: "bakerSuspended"
+                cbSuspend <- obj AE..: "bakerSuspend"
                 return ConfigureBaker{..}
             "configureDelegation" -> do
                 cdCapital <- obj AE..: "capital"
@@ -775,6 +777,7 @@ putPayload ConfigureBaker{..} = do
     mapM_ S.put cbTransactionFeeCommission
     mapM_ S.put cbBakingRewardCommission
     mapM_ S.put cbFinalizationRewardCommission
+    mapM_ S.put cbSuspend
   where
     bitmap =
         bitFor 0 cbCapital
@@ -785,6 +788,7 @@ putPayload ConfigureBaker{..} = do
             .|. bitFor 5 cbTransactionFeeCommission
             .|. bitFor 6 cbBakingRewardCommission
             .|. bitFor 7 cbFinalizationRewardCommission
+            .|. bitFor 8 cbSuspend
 putPayload ConfigureDelegation{..} = do
     S.putWord8 26
     S.putWord16be bitmap
@@ -947,7 +951,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cbTransactionFeeCommission <- maybeGet 5
                 cbBakingRewardCommission <- maybeGet 6
                 cbFinalizationRewardCommission <- maybeGet 7
-                cbSuspended <- maybeGet 8
+                cbSuspend <- maybeGet 8
                 return ConfigureBaker{..}
             26 | supportDelegation -> S.label "ConfigureDelgation" $ do
                 bitmap <- S.getWord16be
@@ -965,7 +969,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
     supportEncrypted = supportsEncryptedTransfers spv
-    configureBakerBitMask = 0b0000000011111111
+    configureBakerBitMask = 0b0000000111111111
     configureDelegationBitMask = 0b0000000000000111
 
 -- | Builds a set from a list of ascending elements.
@@ -1318,16 +1322,12 @@ data Event
         }
     | -- | The account has been suspended.
       BakerSuspended
-        { -- |
-          ebsBakerId :: !BakerId
+        { ebsBakerId :: !BakerId
         }
     | -- | The account has been resumed.
       BakerResumed
-        { -- |
-          ebrBakerId :: !BakerId
+        { ebrBakerId :: !BakerId
         }
-
-
     deriving (Show, Generic, Eq)
 
 putEvent :: S.Putter Event
