@@ -2,7 +2,7 @@
 
 ## Unreleased changes
 
-- Add `TryFrom` implementation to convert `&[u8]` to `AccountAddress`.
+- Add `TryFrom` implementation to convert `&[u8]` to `AccountAddress`, when feature `derive-serde` is enabled.
 - Derive `serde::Serialize` and `serde::Serialize` for `PublicKeyEd25519` using
   `FromStr` and `Display` implementations, when feature `derive-serde` is
   enabled.
