@@ -3,7 +3,7 @@ on:
   # but only for the main branch
   push:
     branches:
-      - main
+      - main, 7.0/branch
     paths:
       - 'smart-contracts/contracts-common/**/*.rs'
       - 'smart-contracts/contracts-common/**/*.toml'
@@ -11,7 +11,7 @@ on:
 
   pull_request:
     branches:
-      - main
+      - main, 7.0/branch
     paths:
       - 'smart-contracts/contracts-common/**/*.rs'
       - 'smart-contracts/contracts-common/**/*.toml'
