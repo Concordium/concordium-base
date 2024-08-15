@@ -2719,7 +2719,7 @@ mod serde_impl {
         /// Failed parsing the Base58Check encoding.
         #[error("Invalid Base58Check encoding: {0}")]
         InvalidBase58Check(#[from] bs58::decode::Error),
-        /// The decoded bytes are not of length ACCOUNT_ADDRESS_SIZE.
+        /// The decoded bytes are not of length [`ACCOUNT_ADDRESS_SIZE`].
         #[error("Invalid number of bytes, expected {ACCOUNT_ADDRESS_SIZE}, but got {0}.")]
         InvalidByteLength(usize),
     }
