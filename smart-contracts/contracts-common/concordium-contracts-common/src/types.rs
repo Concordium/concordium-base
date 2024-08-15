@@ -2717,10 +2717,10 @@ mod serde_impl {
     #[derive(Debug, thiserror::Error)]
     pub enum AccountAddressParseError {
         /// Failed parsing the Base58Check encoding.
-        #[error("Invalid Base58Check encoding.")]
+        #[error("Invalid Base58Check encoding: {0}")]
         InvalidBase58Check(#[from] bs58::decode::Error),
-        /// The decoded bytes are not of length 32.
-        #[error("Invalid number of bytes, expected 32, but got {0}.")]
+        /// The decoded bytes are not of length [`ACCOUNT_ADDRESS_SIZE`].
+        #[error("Invalid number of bytes, expected {ACCOUNT_ADDRESS_SIZE}, but got {0}.")]
         InvalidByteLength(usize),
     }
 
@@ -2742,6 +2742,20 @@ mod serde_impl {
             let mut address_bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
             address_bytes.copy_from_slice(&buf[1..1 + ACCOUNT_ADDRESS_SIZE]);
             Ok(AccountAddress(address_bytes))
+        }
+    }
+
+    impl TryFrom<&[u8]> for AccountAddress {
+        type Error = AccountAddressParseError;
+
+        fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
+            if slice.len() == ACCOUNT_ADDRESS_SIZE {
+                let mut array = [0u8; ACCOUNT_ADDRESS_SIZE];
+                array.copy_from_slice(slice);
+                Ok(AccountAddress(array))
+            } else {
+                Err(AccountAddressParseError::InvalidByteLength(slice.len()))
+            }
         }
     }
 
