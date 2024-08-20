@@ -175,7 +175,12 @@ module Concordium.Types.ProtocolVersion (
     PVSupportsFlexibleCooldown,
 
     -- * Account suspension support
+
+    -- | Determine whether accounts can be suspended/resumed. A validator with
+    --   a suspended account is in essence not participating in the consensus.
+    --   Its stake and delegators stay unchanged.
     supportsAccountSuspension,
+    -- | Determine whether the protocol supports suspending/resuming accounts.
     protocolSupportsSuspend,
 
     -- * Block hash version
