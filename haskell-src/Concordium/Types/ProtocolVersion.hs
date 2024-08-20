@@ -174,6 +174,10 @@ module Concordium.Types.ProtocolVersion (
     AVSupportsFlexibleCooldown,
     PVSupportsFlexibleCooldown,
 
+    -- * Account suspension support
+    supportsAccountSuspension,
+    protocolSupportsSuspend,
+
     -- * Block hash version
 
     -- | The version of the block hashing structure.
@@ -332,6 +336,13 @@ $( singletons
         supportsFlexibleCooldown AccountV2 = False
         supportsFlexibleCooldown AccountV3 = True
         supportsFlexibleCooldown AccountV4 = True
+
+        supportsAccountSuspension :: AccountVersion -> Bool
+        supportsAccountSuspension AccountV0 = False
+        supportsAccountSuspension AccountV1 = False
+        supportsAccountSuspension AccountV2 = False
+        supportsAccountSuspension AccountV3 = False
+        supportsAccountSuspension AccountV4 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -541,6 +552,13 @@ delegationSupport = case accountVersion @av of
 protocolSupportsDelegation :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsDelegation #-}
 protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor spv) of
+    STrue -> True
+    SFalse -> False
+
+-- | Whether the protocol supports suspending/resuming validators.
+protocolSupportsSuspend :: SProtocolVersion pv -> Bool
+{-# INLINE protocolSupportsSuspend #-}
+protocolSupportsSuspend spv = case sSupportsAccountSuspension (sAccountVersionFor spv) of
     STrue -> True
     SFalse -> False
 
