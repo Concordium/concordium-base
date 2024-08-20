@@ -12,6 +12,7 @@ import qualified Data.Bits as Bit
 import qualified Data.ByteString as BS
 import Data.Either (isLeft)
 import Data.Int
+import Data.Maybe (isNothing)
 import qualified Data.Serialize as S
 import Data.Word
 
@@ -49,7 +50,9 @@ isPayloadSupported _ RegisterData{} = True
 isPayloadSupported pv TransferWithMemo{} = pv > P1
 isPayloadSupported pv EncryptedAmountTransferWithMemo{} = pv > P1 && pv <= P6
 isPayloadSupported pv TransferWithScheduleAndMemo{} = pv > P1
-isPayloadSupported pv ConfigureBaker{} = pv > P3
+isPayloadSupported pv ConfigureBaker{..}
+    | isNothing cbSuspend = pv > P3
+    | otherwise = pv > P7
 isPayloadSupported pv ConfigureDelegation{} = pv > P3
 
 testSerializeEncryptedTransfer :: SProtocolVersion pv -> Property
@@ -124,9 +127,9 @@ genPayloadWithInvalidBitmap sizeOfBitmap payload = do
     invalidBits <- suchThat (fmap (invalidBitmask Bit..&.) arbitrary) (/= 0)
     return (modifyPayloadBitmap (invalidBits Bit..|.) payload)
 
-genInvalidPayloadConfigureBaker :: Gen BS.ByteString
-genInvalidPayloadConfigureBaker = do
-    bs <- S.runPut . putPayload <$> genPayloadConfigureBaker
+genInvalidPayloadConfigureBaker :: ProtocolVersion -> Gen BS.ByteString
+genInvalidPayloadConfigureBaker pv = do
+    bs <- S.runPut . putPayload <$> genPayloadConfigureBaker pv
     genPayloadWithInvalidBitmap 10 bs
 
 genInvalidPayloadConfigureDelegation :: Gen BS.ByteString
@@ -134,9 +137,9 @@ genInvalidPayloadConfigureDelegation = do
     bs <- S.runPut . putPayload <$> genPayloadConfigureDelegation
     genPayloadWithInvalidBitmap 3 bs
 
-genInvalidPayloadByteString :: Gen BS.ByteString
-genInvalidPayloadByteString =
-    oneof [genInvalidPayloadConfigureBaker, genInvalidPayloadConfigureDelegation]
+genInvalidPayloadByteString :: ProtocolVersion -> Gen BS.ByteString
+genInvalidPayloadByteString pv =
+    oneof [genInvalidPayloadConfigureBaker pv, genInvalidPayloadConfigureDelegation]
 
 -- | Generate a bytestring representing a valid payload, but with additional bytes appended to it.
 genPaddedPayloadByteString :: ProtocolVersion -> Gen BS.ByteString
@@ -210,7 +213,7 @@ tests = do
                     ++ show size
                     ++ ":"
                 )
-            $ forAll (resize size genInvalidPayloadByteString) (checkInvalidPayloadByteString spv)
+            $ forAll (resize size $ genInvalidPayloadByteString (demoteProtocolVersion spv)) (checkInvalidPayloadByteString spv)
     negativeTestPadded spv size num =
         modifyMaxSuccess (const num)
             $ specify

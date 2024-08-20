@@ -969,7 +969,10 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
     supportEncrypted = supportsEncryptedTransfers spv
-    configureBakerBitMask = 0b0000000111111111
+    supportSuspend = protocolSupportsSuspend spv
+    configureBakerBitMask
+        | supportSuspend = 0b0000000111111111
+        | otherwise = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
 
 -- | Builds a set from a list of ascending elements.
