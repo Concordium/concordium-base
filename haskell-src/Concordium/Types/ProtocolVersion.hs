@@ -174,13 +174,13 @@ module Concordium.Types.ProtocolVersion (
     AVSupportsFlexibleCooldown,
     PVSupportsFlexibleCooldown,
 
-    -- * Account suspension support
+    -- * Validator suspension support
 
-    -- | Determine whether accounts can be suspended/resumed. A validator with
+    -- | Determine whether validators can be suspended/resumed. A validator with
     --   a suspended account is in essence not participating in the consensus.
     --   Its stake and delegators stay unchanged.
-    supportsAccountSuspension,
-    -- | Determine whether the protocol supports suspending/resuming accounts.
+    supportsValidatorSuspension,
+    -- | Determine whether the protocol supports suspending/resuming of validators.
     protocolSupportsSuspend,
 
     -- * Block hash version
@@ -342,12 +342,12 @@ $( singletons
         supportsFlexibleCooldown AccountV3 = True
         supportsFlexibleCooldown AccountV4 = True
 
-        supportsAccountSuspension :: AccountVersion -> Bool
-        supportsAccountSuspension AccountV0 = False
-        supportsAccountSuspension AccountV1 = False
-        supportsAccountSuspension AccountV2 = False
-        supportsAccountSuspension AccountV3 = False
-        supportsAccountSuspension AccountV4 = True
+        supportsValidatorSuspension :: AccountVersion -> Bool
+        supportsValidatorSuspension AccountV0 = False
+        supportsValidatorSuspension AccountV1 = False
+        supportsValidatorSuspension AccountV2 = False
+        supportsValidatorSuspension AccountV3 = False
+        supportsValidatorSuspension AccountV4 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -563,7 +563,7 @@ protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor sp
 -- | Whether the protocol supports suspending/resuming validators.
 protocolSupportsSuspend :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsSuspend #-}
-protocolSupportsSuspend spv = case sSupportsAccountSuspension (sAccountVersionFor spv) of
+protocolSupportsSuspend spv = case sSupportsValidatorSuspension (sAccountVersionFor spv) of
     STrue -> True
     SFalse -> False
 
