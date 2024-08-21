@@ -460,6 +460,8 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         maybe_get(&v, "bakingRewardCommission")?;
     let finalization_reward_commission: Option<base::AmountFraction> =
         maybe_get(&v, "finalizationRewardCommission")?;
+    let suspend: Option<bool> = maybe_get(&v, "suspend")?;
+
     let maybe_baker_keys: Option<base::BakerKeyPairs> = maybe_get(&v, "bakerKeys")?;
 
     let keys_with_proofs = match maybe_baker_keys {
@@ -479,6 +481,7 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         transaction_fee_commission,
         baking_reward_commission,
         finalization_reward_commission,
+        suspend,
     };
 
     let pre_tx = transactions::construct::configure_baker(

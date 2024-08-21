@@ -155,14 +155,14 @@ genPayload pv =
                       genPayloadUpdateBakerKeys
                     ]
                 else
-                    [ genPayloadConfigureBaker,
+                    [ genPayloadConfigureBaker pv,
                       genPayloadConfigureDelegation
                     ]
 
 -- | Generate payloads that are valid for some protocol version, but may not be valid for all.
 genPayloadUnsafe :: Gen Payload
 genPayloadUnsafe =
-    oneof
+    oneof $
         [ -- All module version are supported at P4.
           genPayloadDeployModule P4,
           genPayloadInitContract,
@@ -180,9 +180,9 @@ genPayloadUnsafe =
           genPayloadUpdateBakerStake,
           genPayloadUpdateBakerRestateEarnings,
           genPayloadUpdateBakerKeys,
-          genPayloadConfigureBaker,
           genPayloadConfigureDelegation
         ]
+            ++ [genPayloadConfigureBaker pv | pv <- [P4, P5, P6, P7, P8]]
 
 genPayloadUpdateCredentials :: Gen Payload
 genPayloadUpdateCredentials = do
@@ -275,8 +275,8 @@ genPayloadRegisterData = do
     rdData <- RegisteredData . BSS.pack <$> vectorOf n arbitrary
     return RegisterData{..}
 
-genPayloadConfigureBaker :: Gen Payload
-genPayloadConfigureBaker = do
+genPayloadConfigureBaker :: ProtocolVersion -> Gen Payload
+genPayloadConfigureBaker pv = do
     cbCapital <- arbitrary
     cbRestakeEarnings <- arbitrary
     cbOpenForDelegation <- liftArbitrary $ elements [OpenForAll, ClosedForNew, ClosedForAll]
@@ -297,6 +297,10 @@ genPayloadConfigureBaker = do
     cbTransactionFeeCommission <- liftArbitrary genAmountFraction
     cbBakingRewardCommission <- liftArbitrary genAmountFraction
     cbFinalizationRewardCommission <- liftArbitrary genAmountFraction
+    cbSuspend <-
+        if supportsValidatorSuspension (accountVersionFor pv)
+            then arbitrary
+            else return Nothing
     return ConfigureBaker{..}
 
 genPayloadTransferWithSchedule :: Gen Payload

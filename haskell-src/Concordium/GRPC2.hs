@@ -1465,6 +1465,14 @@ convertAccountTransaction ty cost sender result = case ty of
                                                 ProtoFields.bakerId .= toProto ebsfrcBakerId
                                                 ProtoFields.finalizationRewardCommission .= toProto ebsfrcFinalizationRewardCommission
                                             )
+                            BakerSuspended{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.bakerSuspended
+                                        .= Proto.make (ProtoFields.bakerId .= toProto ebsBakerId)
+                            BakerResumed{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.bakerResumed
+                                        .= Proto.make (ProtoFields.bakerId .= toProto ebrBakerId)
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toBakerEvent events
                     Right . Proto.make $ ProtoFields.bakerConfigured . ProtoFields.events .= v

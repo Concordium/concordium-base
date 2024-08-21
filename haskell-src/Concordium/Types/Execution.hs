@@ -356,7 +356,10 @@ data Payload
           -- | The commission the pool owner takes on baking rewards.
           cbBakingRewardCommission :: !(Maybe AmountFraction),
           -- | The commission the pool owner takes on finalization rewards.
-          cbFinalizationRewardCommission :: !(Maybe AmountFraction)
+          cbFinalizationRewardCommission :: !(Maybe AmountFraction),
+          -- | Whether the account should be suspended (`Just True`) or resumed
+          --   (`Just False`). `Nothing` has no effect.
+          cbSuspend :: !(Maybe Bool)
         }
     | -- | Configure an account's stake delegation.
       -- As with 'ConfigureBaker', the serialization uses a 16-bit bitmap.
@@ -651,6 +654,7 @@ instance AE.FromJSON Payload where
                 cbTransactionFeeCommission <- obj AE..: "transactionFeeCommission"
                 cbBakingRewardCommission <- obj AE..: "bakingRewardCommission"
                 cbFinalizationRewardCommission <- obj AE..: "finalizationRewardCommission"
+                cbSuspend <- obj AE..: "bakerSuspend"
                 return ConfigureBaker{..}
             "configureDelegation" -> do
                 cdCapital <- obj AE..: "capital"
@@ -773,6 +777,7 @@ putPayload ConfigureBaker{..} = do
     mapM_ S.put cbTransactionFeeCommission
     mapM_ S.put cbBakingRewardCommission
     mapM_ S.put cbFinalizationRewardCommission
+    mapM_ S.put cbSuspend
   where
     bitmap =
         bitFor 0 cbCapital
@@ -783,6 +788,7 @@ putPayload ConfigureBaker{..} = do
             .|. bitFor 5 cbTransactionFeeCommission
             .|. bitFor 6 cbBakingRewardCommission
             .|. bitFor 7 cbFinalizationRewardCommission
+            .|. bitFor 8 cbSuspend
 putPayload ConfigureDelegation{..} = do
     S.putWord8 26
     S.putWord16be bitmap
@@ -945,6 +951,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cbTransactionFeeCommission <- maybeGet 5
                 cbBakingRewardCommission <- maybeGet 6
                 cbFinalizationRewardCommission <- maybeGet 7
+                cbSuspend <- maybeGet 8
                 return ConfigureBaker{..}
             26 | supportDelegation -> S.label "ConfigureDelgation" $ do
                 bitmap <- S.getWord16be
@@ -962,7 +969,10 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
     supportEncrypted = supportsEncryptedTransfers spv
-    configureBakerBitMask = 0b0000000011111111
+    supportSuspend = protocolSupportsSuspend spv
+    configureBakerBitMask
+        | supportSuspend = 0b0000000111111111
+        | otherwise = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
 
 -- | Builds a set from a list of ascending elements.
@@ -1313,6 +1323,14 @@ data Event
           -- | The new 'ModuleRef'.
           euTo :: !ModuleRef
         }
+    | -- | The account has been suspended.
+      BakerSuspended
+        { ebsBakerId :: !BakerId
+        }
+    | -- | The account has been resumed.
+      BakerResumed
+        { ebrBakerId :: !BakerId
+        }
     deriving (Show, Generic, Eq)
 
 putEvent :: S.Putter Event
@@ -1497,6 +1515,12 @@ putEvent = \case
             <> S.put euAddress
             <> S.put euFrom
             <> S.put euTo
+    BakerSuspended{..} ->
+        S.putWord8 36
+            <> S.put ebsBakerId
+    BakerResumed{..} ->
+        S.putWord8 37
+            <> S.put ebrBakerId
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1937,6 +1961,16 @@ instance AE.ToJSON Event where
                   "address" .= euAddress,
                   "from" .= euFrom,
                   "to" .= euTo
+                ]
+        BakerSuspended{..} ->
+            AE.object
+                [ "tag" .= AE.String "BakerSuspended",
+                  "bakerId" .= ebsBakerId
+                ]
+        BakerResumed{..} ->
+            AE.object
+                [ "tag" .= AE.String "BakerResumed",
+                  "bakerId" .= ebrBakerId
                 ]
 
 instance AE.FromJSON Event where

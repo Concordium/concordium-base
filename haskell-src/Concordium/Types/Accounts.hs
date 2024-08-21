@@ -732,7 +732,10 @@ data AccountInfo = AccountInfo
       aiAccountCooldowns :: ![Cooldown],
       -- | The balance of the account that is available for transactions.
       aiAccountAvailableAmount :: !Amount,
-      -- | Flag indicating whether the account is currently suspended.
+      -- | Flag indicating whether the account is currently suspended. A
+      -- suspended account is in effect not participating in the consensus
+      -- protocol. The aiAccountIsSuspended flag does not have any effect on
+      -- stake or delegators of a validator.
       aiAccountIsSuspended :: !Bool
     }
     deriving (Eq, Show)
