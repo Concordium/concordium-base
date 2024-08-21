@@ -128,9 +128,25 @@ genPayloadWithInvalidBitmap sizeOfBitmap payload = do
     return (modifyPayloadBitmap (invalidBits Bit..|.) payload)
 
 genInvalidPayloadConfigureBaker :: ProtocolVersion -> Gen BS.ByteString
-genInvalidPayloadConfigureBaker pv = do
-    bs <- S.runPut . putPayload <$> genPayloadConfigureBaker pv
-    genPayloadWithInvalidBitmap 10 bs
+genInvalidPayloadConfigureBaker pv =
+    oneof $ invalidBitmap : [invalidSuspendFlag | pv < P8]
+  where
+    invalidBitmap = do
+        bs <- S.runPut . putPayload <$> genPayloadConfigureBaker pv
+        genPayloadWithInvalidBitmap 10 bs
+    invalidSuspendFlag = do
+        p <- genPayloadConfigureBaker pv
+        b <- arbitrary
+        -- we test against a correct and incorrect bitmask for the suspend flag.
+        doSetSuspendBit <- arbitrary
+        -- set the suspend flag and the corresponding bit in the bitmask
+        return $
+            modifyPayloadBitmap (if doSetSuspendBit then setSuspendBit else id) $
+                S.runPut $
+                    putPayload $
+                        p{cbSuspend = Just b}
+    suspendBitmask = Bit.shiftL 1 9
+    setSuspendBit bm = suspendBitmask Bit..|. bm
 
 genInvalidPayloadConfigureDelegation :: Gen BS.ByteString
 genInvalidPayloadConfigureDelegation = do
