@@ -47,6 +47,7 @@ module Concordium.Types.Accounts (
     BakerInfoEx (..),
     bieBakerInfo,
     bieBakerPoolInfo,
+    bieAccountIsSuspended,
     coerceBakerInfoExV1,
     PendingChangeEffective (..),
     pendingChangeEffectiveTimestamp,
@@ -96,6 +97,7 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Accounts.Releases
+import Concordium.Types.Conditionally
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
 
@@ -207,11 +209,13 @@ instance FromJSON BakerPoolInfo where
 data BakerInfoEx (av :: AccountVersion) where
     BakerInfoExV0 :: !BakerInfo -> BakerInfoEx 'AccountV0
     BakerInfoExV1 ::
+        forall av.
         (AVSupportsDelegation av) =>
         { -- | The baker ID and keys.
           _bieBakerInfo :: !BakerInfo,
           -- | The baker pool info.
-          _bieBakerPoolInfo :: !BakerPoolInfo
+          _bieBakerPoolInfo :: !BakerPoolInfo,
+          _bieAccountIsSuspended :: !(Conditionally (SupportsValidatorSuspension av) Bool)
         } ->
         BakerInfoEx av
 
@@ -230,9 +234,20 @@ bieBakerPoolInfo :: (AVSupportsDelegation av) => Lens' (BakerInfoEx av) BakerPoo
 bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
+-- | Lens for '_bieBakerIsSuspended'
+{-# INLINE bieAccountIsSuspended #-}
+bieAccountIsSuspended ::
+    (AVSupportsDelegation av) =>
+    Lens' (BakerInfoEx av) (Conditionally (SupportsValidatorSuspension av) Bool)
+bieAccountIsSuspended =
+    lens _bieAccountIsSuspended (\bie x -> bie{_bieAccountIsSuspended = x})
+
 -- | Coerce a 'BakerInfoEx' between two account versions that support delegation.
 coerceBakerInfoExV1 ::
-    (AVSupportsDelegation av1, AVSupportsDelegation av2) =>
+    ( AVSupportsDelegation av1,
+      AVSupportsDelegation av2,
+      AVSupportsValidatorSuspension av1 ~ AVSupportsValidatorSuspension av2
+    ) =>
     BakerInfoEx av1 ->
     BakerInfoEx av2
 coerceBakerInfoExV1 BakerInfoExV1{..} = BakerInfoExV1{..}
@@ -243,12 +258,16 @@ coerceBakerInfoExV1 BakerInfoExV1{..} = BakerInfoExV1{..}
 --  'BakerInfo' was used.
 instance forall av. (IsAccountVersion av) => Serialize (BakerInfoEx av) where
     put (BakerInfoExV0 bi) = put bi
-    put BakerInfoExV1{..} = put _bieBakerInfo >> put _bieBakerPoolInfo
+    put BakerInfoExV1{..} = do
+        put _bieBakerInfo
+        put _bieBakerPoolInfo
+        put _bieAccountIsSuspended
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> BakerInfoExV0 <$> get
         SAVDelegationSupported -> do
             _bieBakerInfo <- get
             _bieBakerPoolInfo <- get
+            _bieAccountIsSuspended <- get
             return BakerInfoExV1{..}
 
 instance HasBakerInfo (BakerInfoEx av) where
