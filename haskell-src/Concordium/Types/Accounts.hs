@@ -261,13 +261,14 @@ instance forall av. (IsAccountVersion av) => Serialize (BakerInfoEx av) where
     put BakerInfoExV1{..} = do
         put _bieBakerInfo
         put _bieBakerPoolInfo
-        put _bieAccountIsSuspended
+        mapM_ put _bieAccountIsSuspended
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> BakerInfoExV0 <$> get
         SAVDelegationSupported -> do
             _bieBakerInfo <- get
             _bieBakerPoolInfo <- get
-            _bieAccountIsSuspended <- get
+            _bieAccountIsSuspended <-
+                conditionallyA (sSupportsValidatorSuspension (accountVersion @av)) get
             return BakerInfoExV1{..}
 
 instance HasBakerInfo (BakerInfoEx av) where

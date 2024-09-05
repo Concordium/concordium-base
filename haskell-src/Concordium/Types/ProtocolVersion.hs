@@ -452,7 +452,7 @@ demoteProtocolVersion = fromSing
 
 -- | Constraint on a type level 'AccountVersion' that can be used to get a corresponding
 --  'SAccountVersion' (see 'accountVersion'). (An alias for 'SingI'.)
-type IsAccountVersion (av :: AccountVersion) = (SingI av, SingI (SupportsValidatorSuspension av))
+type IsAccountVersion (av :: AccountVersion) = SingI av
 
 -- | Constraint on a type level 'ChainParametersVersion' that can be used to get a corresponding
 --  'SChainParametersVersion' (see 'chainParametersVersion'). (An alias for 'SingI'.)
