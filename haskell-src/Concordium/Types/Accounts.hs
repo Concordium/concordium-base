@@ -237,10 +237,10 @@ bieBakerPoolInfo =
 -- | Lens for '_bieBakerIsSuspended'
 {-# INLINE bieAccountIsSuspended #-}
 bieAccountIsSuspended ::
-    (AVSupportsDelegation av) =>
-    Lens' (BakerInfoEx av) (Conditionally (SupportsValidatorSuspension av) Bool)
+    (AVSupportsDelegation av, AVSupportsValidatorSuspension av) =>
+    Lens' (BakerInfoEx av) Bool
 bieAccountIsSuspended =
-    lens _bieAccountIsSuspended (\bie x -> bie{_bieAccountIsSuspended = x})
+    lens (uncond . _bieAccountIsSuspended) (\bie x -> bie{_bieAccountIsSuspended = CTrue x})
 
 -- | Coerce a 'BakerInfoEx' between two account versions that support delegation.
 coerceBakerInfoExV1 ::

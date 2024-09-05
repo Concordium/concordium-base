@@ -80,4 +80,4 @@ uncond (CTrue a) = a
 
 fromCondDef :: Conditionally b a -> a -> a
 fromCondDef (CTrue a) _def = a
-fromCondDef CFalse def = def 
+fromCondDef CFalse def = def
