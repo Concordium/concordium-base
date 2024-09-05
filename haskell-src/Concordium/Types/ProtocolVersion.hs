@@ -179,9 +179,15 @@ module Concordium.Types.ProtocolVersion (
     -- | Determine whether validators can be suspended/resumed. A validator with
     --   a suspended account is in essence not participating in the consensus.
     --   Its stake and delegators stay unchanged.
+    SupportsValidatorSuspension,
     supportsValidatorSuspension,
+    sSupportsValidatorSuspension,
     -- | Determine whether the protocol supports suspending/resuming of validators.
     protocolSupportsSuspend,
+    -- | Deterimne whether a specific account version supports suspending/
+    -- resuming of validators.
+    AVSupportsValidatorSuspension,
+    PVSupportsValidatorSuspension,
 
     -- * Block hash version
 
@@ -566,6 +572,14 @@ protocolSupportsSuspend :: SProtocolVersion pv -> Bool
 protocolSupportsSuspend spv = case sSupportsValidatorSuspension (sAccountVersionFor spv) of
     STrue -> True
     SFalse -> False
+
+-- | Constraint that an account version supports validator suspension.
+type AVSupportsValidatorSuspension (av :: AccountVersion) =
+    SupportsValidatorSuspension av ~ 'True
+
+-- | Constraint that a protocol version supports validator suspension.
+type PVSupportsValidatorSuspension (pv :: ProtocolVersion) =
+    AVSupportsValidatorSuspension (AccountVersionFor pv)
 
 -- | Constraint that an account version supports flexible cooldown.
 --
