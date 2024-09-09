@@ -2,6 +2,8 @@
 
 ## Unreleased changes
 
+## concordium-wasm 5.0.0 (2024-09-09)
+
 - Revise the compilation of Wasm modules to `Artifacts`. The notion of the
   executable artifact is changed to no longer work with a stack.
 - The `Handler` trait is revised to provide `handle_opcode` function information

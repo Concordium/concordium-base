@@ -2,6 +2,13 @@
 
 ## Unreleased changes
 
+## concordium-smart-contract-engine 6.0.0 (2024-09-09)
+
+- Bump `concordium-wasm` to version 5 used by Concordium node version 7.0.0.
+  - Changes Wasm to `Artifact` compilation, meaning already compiled `Artifacts` will need to be recompiled.
+  - Introduces a new version of cost assignment used in Concordium Protocol Version 7.
+- Loose the minor version for `concordium-contracts-common` dependency.
+
 ## concordium-smart-contract-engine 5.0.0 (2024-03-25)
 
 - `TestHost` no longer implements the `ValidateImportExport` trait, instead use `NoDuplicateImport` struct.
