@@ -363,9 +363,8 @@ pub(crate) mod cost_v0 {
     pub(crate) const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
 }
 
-/// Cost configuration for the initial version of the execution engine used
-/// in node versions 1-6. This is more expensive compared to
-/// CostConfigurationV1.
+/// Cost configuration for the second version of the execution engine used
+/// in node versions 7 and up. This is cheaper compared to CostConfigurationV0.
 pub struct CostConfigurationV1;
 
 impl CostConfiguration for CostConfigurationV1 {
