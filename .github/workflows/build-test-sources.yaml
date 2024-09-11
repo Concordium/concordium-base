@@ -21,7 +21,7 @@ name: Check format, docs, build and run tests for Haskell and Rust sources
 
 on:
   pull_request:
-    branches: main, 7.0/branch
+    branches: main
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
     - '.github/workflows/build-test-sources.yaml'
@@ -33,7 +33,7 @@ on:
     - '**.rs'
     - 'testdata/**'
   push:
-    branches: main, 7.0/branch
+    branches: main
     paths:
     - '.github/workflows/build-test-sources.yaml'
     - '**.hs'
