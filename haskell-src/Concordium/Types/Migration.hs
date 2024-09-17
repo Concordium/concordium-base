@@ -36,6 +36,7 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 -- are carried over to consensus parameters v1.
 migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
 migrateAuthorizations StateMigrationParametersP6ToP7{} auths = auths
+migrateAuthorizations StateMigrationParametersP7ToP8{} auths = auths
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -64,6 +65,7 @@ migrateMintDistribution StateMigrationParametersP3ToP4{} MintDistribution{..} =
 migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 migrateMintDistribution StateMigrationParametersP5ToP6{} mint = mint
 migrateMintDistribution StateMigrationParametersP6ToP7{} mint = mint
+migrateMintDistribution StateMigrationParametersP7ToP8{} mint = mint
 
 -- | Apply a state migration to a 'PoolParameters' structure.
 --
@@ -81,6 +83,7 @@ migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP6ToP7{} poolParams = poolParams
+migratePoolParameters StateMigrationParametersP7ToP8{} _poolParams = error "TODO (drsk) github issue #544. Implement pool parameter migration p7->p8."
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
@@ -98,6 +101,7 @@ migrateGASRewards StateMigrationParametersP3ToP4{} gr = gr
 migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
 migrateGASRewards StateMigrationParametersP5ToP6{} GASRewards{..} = GASRewards{_gasFinalizationProof = CFalse, ..}
 migrateGASRewards StateMigrationParametersP6ToP7{} gr = gr
+migrateGASRewards StateMigrationParametersP7ToP8{} gr = gr
 
 -- | Apply a state migration to a 'ChainParameters' structure.
 --
@@ -152,6 +156,8 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
     RewardParameters{..} = _cpRewardParameters
     finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
 migrateChainParameters StateMigrationParametersP6ToP7{} cps = cps
+-- TODO (drsk) Chain parameters will change in P8
+migrateChainParameters StateMigrationParametersP7ToP8{} _cps = error "TODO (drsk). github issue#545. Define migration from chain parameters p7 to p8."
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
@@ -180,3 +186,4 @@ migrateStakePendingChange (StateMigrationParametersP3ToP4 migration) = \case
 migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingChangeEffectiveV1
 migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
 migrateStakePendingChange StateMigrationParametersP6ToP7{} = const NoChange
+migrateStakePendingChange StateMigrationParametersP7ToP8{} = const NoChange

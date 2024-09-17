@@ -617,6 +617,8 @@ pub struct ConfigureBakerPayload {
     pub baking_reward_commission: Option<AmountFraction>,
     /// The commission the pool owner takes on finalization rewards.
     pub finalization_reward_commission: Option<AmountFraction>,
+    /// Whether the account should be suspended or not.
+    pub suspend: Option<bool>,
 }
 
 impl ConfigureBakerPayload {
@@ -692,6 +694,11 @@ impl ConfigureBakerPayload {
         finalization_reward_commission: AmountFraction,
     ) -> &mut Self {
         self.finalization_reward_commission = Some(finalization_reward_commission);
+        self
+    }
+
+    pub fn set_suspend(&mut self, suspend: bool) -> &mut Self {
+        self.suspend = Some(suspend);
         self
     }
 }
@@ -1100,7 +1107,8 @@ impl Serial for Payload {
                     | set_if(4, data.metadata_url.is_some())
                     | set_if(5, data.transaction_fee_commission.is_some())
                     | set_if(6, data.baking_reward_commission.is_some())
-                    | set_if(7, data.finalization_reward_commission.is_some());
+                    | set_if(7, data.finalization_reward_commission.is_some())
+                    | set_if(8, data.suspend.is_some());
                 out.put(&bitmap);
                 if let Some(capital) = &data.capital {
                     out.put(capital);
@@ -1133,6 +1141,9 @@ impl Serial for Payload {
                 }
                 if let Some(finalization_reward_commission) = &data.finalization_reward_commission {
                     out.put(finalization_reward_commission);
+                }
+                if let Some(suspend) = &data.suspend {
+                    out.put(suspend);
                 }
             }
             Payload::ConfigureDelegation {
@@ -1282,6 +1293,7 @@ impl Deserial for Payload {
                 let mut transaction_fee_commission = None;
                 let mut baking_reward_commission = None;
                 let mut finalization_reward_commission = None;
+                let mut suspend = None;
                 if bitmap & 1 != 0 {
                     capital = Some(source.get()?);
                 }
@@ -1323,6 +1335,9 @@ impl Deserial for Payload {
                 if bitmap & (1 << 7) != 0 {
                     finalization_reward_commission = Some(source.get()?);
                 }
+                if bitmap & (1 << 8) != 0 {
+                    suspend = Some(source.get()?);
+                }
                 let data = Box::new(ConfigureBakerPayload {
                     capital,
                     restake_earnings,
@@ -1332,6 +1347,7 @@ impl Deserial for Payload {
                     transaction_fee_commission,
                     baking_reward_commission,
                     finalization_reward_commission,
+                    suspend,
                 });
                 Ok(Payload::ConfigureBaker { data })
             }

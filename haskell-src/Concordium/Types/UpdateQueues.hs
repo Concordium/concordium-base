@@ -273,12 +273,39 @@ pendingUpdatesV2ToJSON
               "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue,
               "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
             ]
+pendingUpdatesV3ToJSON :: PendingUpdates 'ChainParametersV3 -> Value
+pendingUpdatesV3ToJSON
+    PendingUpdates
+        { _pCooldownParametersQueue = SomeParam cpq,
+          _pTimeParametersQueue = SomeParam tpq,
+          ..
+        } =
+        object
+            [ "rootKeys" AE..= _pRootKeysUpdateQueue,
+              "level1Keys" AE..= _pLevel1KeysUpdateQueue,
+              "level2Keys" AE..= _pLevel2KeysUpdateQueue,
+              "protocol" AE..= _pProtocolQueue,
+              "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
+              "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
+              "foundationAccount" AE..= _pFoundationAccountQueue,
+              "mintDistribution" AE..= _pMintDistributionQueue,
+              "transactionFeeDistribution" AE..= _pTransactionFeeDistributionQueue,
+              "gasRewards" AE..= _pGASRewardsQueue,
+              "poolParameters" AE..= _pPoolParametersQueue,
+              "addAnonymityRevoker" AE..= _pAddAnonymityRevokerQueue,
+              "addIdentityProvider" AE..= _pAddIdentityProviderQueue,
+              "cooldownParameters" AE..= cpq,
+              "timeParameters" AE..= tpq,
+              "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue,
+              "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
+            ]
 
 instance (IsChainParametersVersion cpv) => ToJSON (PendingUpdates cpv) where
     toJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> pendingUpdatesV0ToJSON
         SChainParametersV1 -> pendingUpdatesV1ToJSON
         SChainParametersV2 -> pendingUpdatesV2ToJSON
+        SChainParametersV3 -> pendingUpdatesV3ToJSON
 
 parsePendingUpdatesV0 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV0)
 parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
@@ -356,11 +383,38 @@ parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
     return PendingUpdates{..}
 
+parsePendingUpdatesV3 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV3)
+parsePendingUpdatesV3 = withObject "PendingUpdates" $ \o -> do
+    _pRootKeysUpdateQueue <- o AE..: "rootKeys"
+    _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
+    _pLevel2KeysUpdateQueue <- o AE..: "level2Keys"
+    _pProtocolQueue <- o AE..: "protocol"
+    let _pElectionDifficultyQueue = NoParam
+    _pEuroPerEnergyQueue <- o AE..: "euroPerEnergy"
+    _pMicroGTUPerEuroQueue <- o AE..: "microGTUPerEuro"
+    _pFoundationAccountQueue <- o AE..: "foundationAccount"
+    _pMintDistributionQueue <- o AE..: "mintDistribution"
+    _pTransactionFeeDistributionQueue <- o AE..: "transactionFeeDistribution"
+    _pGASRewardsQueue <- o AE..: "gasRewards"
+    _pPoolParametersQueue <- o AE..: "poolParameters"
+    _pAddAnonymityRevokerQueue <- o AE..: "addAnonymityRevoker"
+    _pAddIdentityProviderQueue <- o AE..: "addIdentityProvider"
+    cooldownQueue <- o AE..: "cooldownParameters"
+    timeQueue <- o AE..: "timeParameters"
+    let _pCooldownParametersQueue = SomeParam cooldownQueue
+    let _pTimeParametersQueue = SomeParam timeQueue
+    _pTimeoutParametersQueue <- SomeParam <$> o AE..: "timeoutParameters"
+    _pMinBlockTimeQueue <- SomeParam <$> o AE..: "minBlockTime"
+    _pBlockEnergyLimitQueue <- SomeParam <$> o AE..: "blockEnergyLimit"
+    _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
+    return PendingUpdates{..}
+
 instance (IsChainParametersVersion cpv) => FromJSON (PendingUpdates cpv) where
     parseJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> parsePendingUpdatesV0
         SChainParametersV1 -> parsePendingUpdatesV1
         SChainParametersV2 -> parsePendingUpdatesV2
+        SChainParametersV3 -> parsePendingUpdatesV3
 
 -- | Initial pending updates with empty queues.
 emptyPendingUpdates :: forall cpv. (IsChainParametersVersion cpv) => PendingUpdates cpv

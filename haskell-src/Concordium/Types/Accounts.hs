@@ -47,6 +47,7 @@ module Concordium.Types.Accounts (
     BakerInfoEx (..),
     bieBakerInfo,
     bieBakerPoolInfo,
+    bieAccountIsSuspended,
     coerceBakerInfoExV1,
     PendingChangeEffective (..),
     pendingChangeEffectiveTimestamp,
@@ -96,6 +97,7 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Accounts.Releases
+import Concordium.Types.Conditionally
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
 
@@ -113,6 +115,7 @@ type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructur
     AccountStructureVersionFor 'AccountV1 = 'AccountStructureV0
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
     AccountStructureVersionFor 'AccountV3 = 'AccountStructureV1
+    AccountStructureVersionFor 'AccountV4 = 'AccountStructureV1
 
 -- | The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
@@ -206,11 +209,13 @@ instance FromJSON BakerPoolInfo where
 data BakerInfoEx (av :: AccountVersion) where
     BakerInfoExV0 :: !BakerInfo -> BakerInfoEx 'AccountV0
     BakerInfoExV1 ::
+        forall av.
         (AVSupportsDelegation av) =>
         { -- | The baker ID and keys.
           _bieBakerInfo :: !BakerInfo,
           -- | The baker pool info.
-          _bieBakerPoolInfo :: !BakerPoolInfo
+          _bieBakerPoolInfo :: !BakerPoolInfo,
+          _bieAccountIsSuspended :: !(Conditionally (SupportsValidatorSuspension av) Bool)
         } ->
         BakerInfoEx av
 
@@ -229,9 +234,20 @@ bieBakerPoolInfo :: (AVSupportsDelegation av) => Lens' (BakerInfoEx av) BakerPoo
 bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
+-- | Lens for '_bieBakerIsSuspended'
+{-# INLINE bieAccountIsSuspended #-}
+bieAccountIsSuspended ::
+    (AVSupportsDelegation av, AVSupportsValidatorSuspension av) =>
+    Lens' (BakerInfoEx av) Bool
+bieAccountIsSuspended =
+    lens (uncond . _bieAccountIsSuspended) (\bie x -> bie{_bieAccountIsSuspended = CTrue x})
+
 -- | Coerce a 'BakerInfoEx' between two account versions that support delegation.
 coerceBakerInfoExV1 ::
-    (AVSupportsDelegation av1, AVSupportsDelegation av2) =>
+    ( AVSupportsDelegation av1,
+      AVSupportsDelegation av2,
+      AVSupportsValidatorSuspension av1 ~ AVSupportsValidatorSuspension av2
+    ) =>
     BakerInfoEx av1 ->
     BakerInfoEx av2
 coerceBakerInfoExV1 BakerInfoExV1{..} = BakerInfoExV1{..}
@@ -242,12 +258,17 @@ coerceBakerInfoExV1 BakerInfoExV1{..} = BakerInfoExV1{..}
 --  'BakerInfo' was used.
 instance forall av. (IsAccountVersion av) => Serialize (BakerInfoEx av) where
     put (BakerInfoExV0 bi) = put bi
-    put BakerInfoExV1{..} = put _bieBakerInfo >> put _bieBakerPoolInfo
+    put BakerInfoExV1{..} = do
+        put _bieBakerInfo
+        put _bieBakerPoolInfo
+        mapM_ put _bieAccountIsSuspended
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> BakerInfoExV0 <$> get
         SAVDelegationSupported -> do
             _bieBakerInfo <- get
             _bieBakerPoolInfo <- get
+            _bieAccountIsSuspended <-
+                conditionallyA (sSupportsValidatorSuspension (accountVersion @av)) get
             return BakerInfoExV1{..}
 
 instance HasBakerInfo (BakerInfoEx av) where
@@ -466,6 +487,11 @@ accountStakeNoneHashV3 :: AccountStakeHash 'AccountV3
 {-# NOINLINE accountStakeNoneHashV3 #-}
 accountStakeNoneHashV3 = AccountStakeHash $ Hash.hash "A3NoStake"
 
+-- | Hash of 'AccountStakeNone' in 'AccountV4'.
+accountStakeNoneHashV4 :: AccountStakeHash 'AccountV4
+{-# NOINLINE accountStakeNoneHashV4 #-}
+accountStakeNoneHashV4 = AccountStakeHash $ Hash.hash "A4NoStake"
+
 -- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
@@ -516,6 +542,32 @@ instance HashableTo (AccountStakeHash 'AccountV3) (AccountStake 'AccountV3) wher
                             put _delegationTarget
                         )
 
+-- | The 'AccountV4' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+--  This is since the stake is accounted for separately in the @AccountHash@.
+instance HashableTo (AccountStakeHash 'AccountV4) (AccountStake 'AccountV4) where
+    getHash AccountStakeNone = accountStakeNoneHashV4
+    getHash (AccountStakeBaker AccountBaker{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A4Baker"
+                    <> runPutLazy
+                        ( do
+                            put _stakeEarnings
+                            put _accountBakerInfo
+                            put _bakerPendingChange
+                        )
+    getHash (AccountStakeDelegate AccountDelegationV1{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A4Delegation"
+                    <> runPutLazy
+                        ( do
+                            put _delegationIdentity
+                            put _delegationStakeEarnings
+                            put _delegationTarget
+                            put _delegationPendingChange
+                        )
+
 -- | Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
 getAccountStakeHash :: forall av. (IsAccountVersion av) => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
@@ -523,6 +575,7 @@ getAccountStakeHash = case accountVersion @av of
     SAccountV1 -> getHash
     SAccountV2 -> getHash
     SAccountV3 -> getHash
+    SAccountV4 -> getHash
 
 -- | A representation type (used for queries) for the staking status of an account.
 --  This representation is agnostic to the protocol version and represents pending change times
@@ -698,7 +751,12 @@ data AccountInfo = AccountInfo
       --  pre-cooldown or pre-pre-cooldown (e.g. if the cooldown interval has been decreased).
       aiAccountCooldowns :: ![Cooldown],
       -- | The balance of the account that is available for transactions.
-      aiAccountAvailableAmount :: !Amount
+      aiAccountAvailableAmount :: !Amount,
+      -- | Flag indicating whether the account is currently suspended. A
+      -- suspended account is in effect not participating in the consensus
+      -- protocol. The aiAccountIsSuspended flag does not have any effect on
+      -- stake or delegators of a validator.
+      aiAccountIsSuspended :: !Bool
     }
     deriving (Eq, Show)
 
@@ -716,7 +774,8 @@ accountInfoPairs AccountInfo{..} =
       "accountIndex" .= aiAccountIndex,
       "accountAddress" .= aiAccountAddress,
       "accountCooldowns" .= aiAccountCooldowns,
-      "accountAvailableAmount" .= aiAccountAvailableAmount
+      "accountAvailableAmount" .= aiAccountAvailableAmount,
+      "accountIsSuspended" .= aiAccountIsSuspended
     ]
         <> accountStakingInfoToJSON aiStakingInfo
 
