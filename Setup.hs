@@ -32,7 +32,7 @@ linuxBuild True env verbosity = do
             rawSystemExitWithEnv
                 verbosity
                 "cargo"
-                (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++"/Cargo.toml", "--target", "x86_64-unknown-linux-musl", "--crate-type", "staticlib"] ++ libFeatures)
+                (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--target", "x86_64-unknown-linux-musl", "--crate-type", "staticlib"] ++ libFeatures)
                 (("RUSTFLAGS", "-C target-feature=-crt-static") : env)
             let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ libName ++ ".a"
                 target = "./lib/lib" ++ libName ++ ".a"
@@ -44,7 +44,7 @@ linuxBuild False env verbosity = do
     let makeLib lib = do
             let libName = fst lib
                 libFeatures = snd lib
-            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++"/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
+            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
             notice verbosity "Linking libraries to ./lib"
             let source = "../rust-src/target/release/lib" ++ libName
                 target = "./lib/lib" ++ libName
@@ -58,7 +58,7 @@ windowsBuild env verbosity = do
     let makeLib lib = do
             let libName = fst lib
                 libFeatures = snd lib
-            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++"/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
+            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
             notice verbosity "Copying libraries to ./lib"
             -- We delete the static library if present to ensure that we only link with the
             -- dynamic library.
@@ -77,7 +77,7 @@ osxBuild static env verbosity = do
                 libFeatures = snd lib
             if static
                 then do
-                    rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++"/Cargo.toml", "--crate-type", "staticlib"] ++ libFeatures) env
+                    rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "staticlib"] ++ libFeatures) env
                     notice verbosity "Linking libraries to ./lib"
                     let source = "../rust-src/target/release/lib" ++ libName ++ ".a"
                     let target = "./lib/lib" ++ libName ++ ".a"
@@ -87,7 +87,7 @@ osxBuild static env verbosity = do
                     noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
                     noticeNoWrap verbosity $ "Removed: " ++ others
                 else do
-                    rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++"/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
+                    rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
                     notice verbosity "Linking libraries to ./lib"
                     let source = "../rust-src/target/release/lib" ++ libName ++ ".dylib"
                     let others = "./lib/lib" ++ libName ++ ".a"
