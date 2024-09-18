@@ -1,6 +1,11 @@
 //! Definition of transactions and other transaction-like messages, together
 //! with their serialization, signing, and similar auxiliary methods.
 
+// Various old deprecated protocol features are still exposed in this module.
+// This also prevents deprecation warnings from deprecated enum variants that
+// trigger due to usage of the variants in derived implementations.
+#![allow(deprecated)]
+
 use crate::{
     base::{
         AccountThreshold, AggregateSigPairing, AmountFraction, BakerAggregationVerifyKey,
@@ -82,22 +87,59 @@ pub enum TransactionType {
     Update,
     /// Transfer CCD from an account to another.
     Transfer,
+
     /// Register an account as a baker.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
+    )]
     AddBaker,
+
     /// Remove an account as a baker.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
+    )]
     RemoveBaker,
+
     /// Update the staked amount.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
+    )]
     UpdateBakerStake,
+
     /// Update whether the baker automatically restakes earnings.
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
+    )]
     UpdateBakerRestakeEarnings,
+
     /// Update baker keys
+    #[deprecated(
+        since = "5.0.1",
+        note = "baking is changed in protocol 4, use ConfigureBaker or ConfigureDelegation instead"
+    )]
     UpdateBakerKeys,
+
     /// Update given credential keys
     UpdateCredentialKeys,
+
     /// Transfer encrypted amount.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     EncryptedAmountTransfer,
+
     /// Transfer from public to encrypted balance of the same account.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     TransferToEncrypted,
+
     /// Transfer from encrypted to public balance of the same account.
     TransferToPublic,
     /// Transfer a CCD with a release schedule.
@@ -108,8 +150,14 @@ pub enum TransactionType {
     RegisterData,
     /// Same as transfer but with a memo field.
     TransferWithMemo,
+
     /// Same as encrypted transfer, but with a memo.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     EncryptedAmountTransferWithMemo,
+
     /// Same as transfer with schedule, but with an added memo.
     TransferWithScheduleAndMemo,
     ///  Configure an account's baker.
@@ -435,7 +483,7 @@ impl<T> BakerKeysPayload<T> {
             .prove(csprng, &mut RandomOracle::domain(&challenge));
 
         BakerKeysPayload {
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
             election_verify_key: baker_keys.election_verify.clone(),
             signature_verify_key: baker_keys.signature_verify.clone(),
             aggregation_verify_key: baker_keys.aggregation_verify.clone(),
@@ -569,6 +617,8 @@ pub struct ConfigureBakerPayload {
     pub baking_reward_commission: Option<AmountFraction>,
     /// The commission the pool owner takes on finalization rewards.
     pub finalization_reward_commission: Option<AmountFraction>,
+    /// Whether the account should be suspended or not.
+    pub suspend: Option<bool>,
 }
 
 impl ConfigureBakerPayload {
@@ -644,6 +694,11 @@ impl ConfigureBakerPayload {
         finalization_reward_commission: AmountFraction,
     ) -> &mut Self {
         self.finalization_reward_commission = Some(finalization_reward_commission);
+        self
+    }
+
+    pub fn set_suspend(&mut self, suspend: bool) -> &mut Self {
+        self.suspend = Some(suspend);
         self
     }
 }
@@ -813,6 +868,10 @@ pub enum Payload {
         keys:    CredentialPublicKeys,
     },
     /// Transfer an encrypted amount.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     EncryptedAmountTransfer {
         /// The recepient's address.
         to:   AccountAddress,
@@ -821,6 +880,10 @@ pub enum Payload {
         data: Box<EncryptedAmountTransferData<EncryptedAmountsCurve>>,
     },
     /// Transfer from public to encrypted balance of the sender account.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     TransferToEncrypted {
         /// The amount to transfer.
         amount: Amount,
@@ -862,6 +925,10 @@ pub enum Payload {
         amount:     Amount,
     },
     /// Transfer an encrypted amount.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     EncryptedAmountTransferWithMemo {
         /// The recepient's address.
         to:   AccountAddress,
@@ -1040,7 +1107,8 @@ impl Serial for Payload {
                     | set_if(4, data.metadata_url.is_some())
                     | set_if(5, data.transaction_fee_commission.is_some())
                     | set_if(6, data.baking_reward_commission.is_some())
-                    | set_if(7, data.finalization_reward_commission.is_some());
+                    | set_if(7, data.finalization_reward_commission.is_some())
+                    | set_if(8, data.suspend.is_some());
                 out.put(&bitmap);
                 if let Some(capital) = &data.capital {
                     out.put(capital);
@@ -1073,6 +1141,9 @@ impl Serial for Payload {
                 }
                 if let Some(finalization_reward_commission) = &data.finalization_reward_commission {
                     out.put(finalization_reward_commission);
+                }
+                if let Some(suspend) = &data.suspend {
+                    out.put(suspend);
                 }
             }
             Payload::ConfigureDelegation {
@@ -1222,6 +1293,7 @@ impl Deserial for Payload {
                 let mut transaction_fee_commission = None;
                 let mut baking_reward_commission = None;
                 let mut finalization_reward_commission = None;
+                let mut suspend = None;
                 if bitmap & 1 != 0 {
                     capital = Some(source.get()?);
                 }
@@ -1263,6 +1335,9 @@ impl Deserial for Payload {
                 if bitmap & (1 << 7) != 0 {
                     finalization_reward_commission = Some(source.get()?);
                 }
+                if bitmap & (1 << 8) != 0 {
+                    suspend = Some(source.get()?);
+                }
                 let data = Box::new(ConfigureBakerPayload {
                     capital,
                     restake_earnings,
@@ -1272,6 +1347,7 @@ impl Deserial for Payload {
                     transaction_fee_commission,
                     baking_reward_commission,
                     finalization_reward_commission,
+                    suspend,
                 });
                 Ok(Payload::ConfigureBaker { data })
             }
@@ -1719,7 +1795,7 @@ impl<V> Deserial for BakerKeysPayload<V> {
         let proof_election = source.get()?;
         let proof_aggregation = source.get()?;
         Ok(Self {
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
             election_verify_key,
             signature_verify_key,
             aggregation_verify_key,
@@ -1864,9 +1940,17 @@ pub mod cost {
     pub const SIMPLE_TRANSFER: Energy = Energy { energy: 300 };
 
     /// Additional cost of an encrypted transfer.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub const ENCRYPTED_TRANSFER: Energy = Energy { energy: 27000 };
 
     /// Additional cost of a transfer from public to encrypted balance.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub const TRANSFER_TO_ENCRYPTED: Energy = Energy { energy: 600 };
 
     /// Additional cost of a transfer from encrypted to public balance.
@@ -1877,7 +1961,7 @@ pub mod cost {
         Energy::from(u64::from(num_releases) * (300 + 64))
     }
 
-    /// Additional cost of registerding the account as a baker.
+    /// Additional cost of registering the account as a baker.
     pub const ADD_BAKER: Energy = Energy { energy: 4050 };
 
     /// Additional cost of updating baker's keys.
@@ -2137,6 +2221,10 @@ pub mod construct {
 
     /// Make an encrypted transfer. The payload can be constructed using
     /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub fn encrypted_transfer(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2164,6 +2252,10 @@ pub mod construct {
     /// Make an encrypted transfer with a memo.
     /// The payload can be constructed using
     /// [make_transfer_data](crate::encrypted_transfers::make_transfer_data).
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub fn encrypted_transfer_with_memo(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2193,6 +2285,10 @@ pub mod construct {
 
     /// Transfer the given amount from public to encrypted balance of the given
     /// account.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub fn transfer_to_encrypted(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2755,6 +2851,10 @@ pub mod send {
 
     /// Make an encrypted transfer. The payload can be constructed using
     /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub fn encrypted_transfer(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2770,6 +2870,10 @@ pub mod send {
     /// Make an encrypted transfer with a memo.
     /// The payload can be constructed using
     /// [`make_transfer_data`](crate::encrypted_transfers::make_transfer_data).
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub fn encrypted_transfer_with_memo(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2793,6 +2897,10 @@ pub mod send {
 
     /// Transfer the given amount from public to encrypted balance of the given
     /// account.
+    #[deprecated(
+        since = "5.0.1",
+        note = "encrypted transfers are deprecated and partially removed since protocol version 7"
+    )]
     pub fn transfer_to_encrypted(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2875,7 +2983,6 @@ pub mod send {
                 instead."
     )]
     #[doc(hidden)]
-    #[allow(deprecated)]
     pub fn add_baker(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2908,7 +3015,6 @@ pub mod send {
                 instead."
     )]
     #[doc(hidden)]
-    #[allow(deprecated)]
     pub fn update_baker_keys(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2930,7 +3036,6 @@ pub mod send {
                 instead."
     )]
     #[doc(hidden)]
-    #[allow(deprecated)]
     pub fn remove_baker(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2947,7 +3052,6 @@ pub mod send {
                 instead."
     )]
     #[doc(hidden)]
-    #[allow(deprecated)]
     pub fn update_baker_stake(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2967,7 +3071,6 @@ pub mod send {
                 instead."
     )]
     #[doc(hidden)]
-    #[allow(deprecated)]
     pub fn update_baker_restake_earnings(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,

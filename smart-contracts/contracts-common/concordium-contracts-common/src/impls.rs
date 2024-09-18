@@ -316,12 +316,7 @@ impl<Kind> TryFrom<u8> for NonZeroThresholdU8<Kind> {
 }
 
 impl<Kind> Clone for NonZeroThresholdU8<Kind> {
-    fn clone(&self) -> Self {
-        Self {
-            threshold: self.threshold,
-            kind:      marker::PhantomData,
-        }
-    }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<Kind> Copy for NonZeroThresholdU8<Kind> {}
@@ -336,9 +331,7 @@ impl<Kind> PartialEq for NonZeroThresholdU8<Kind> {
 }
 
 impl<Kind> PartialOrd for NonZeroThresholdU8<Kind> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.threshold.partial_cmp(&other.threshold)
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
 }
 
 impl<Kind> Ord for NonZeroThresholdU8<Kind> {
@@ -520,9 +513,7 @@ impl<C: ?Sized> Serial for marker::PhantomData<C> {
 
 impl<C: ?Sized> Deserial for marker::PhantomData<C> {
     #[inline(always)]
-    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> {
-        Ok(marker::PhantomData::default())
-    }
+    fn deserial<R: Read>(_source: &mut R) -> ParseResult<Self> { Ok(marker::PhantomData) }
 }
 
 /// Serialized if the `Option` is a `None` we write `0u8`. If `Some`, we write

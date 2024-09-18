@@ -8,12 +8,14 @@
 use crate::{
     constants::MAX_NUM_PAGES,
     types::*,
-    validate::{validate, Handler, HasValidationContext, LocalsRange, ValidationState},
+    validate::{
+        validate, Handler, HasValidationContext, LocalsRange, Reachability, ValidationState,
+    },
 };
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail, ensure, Context};
 use derive_more::{Display, From, Into};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     io::Write,
     sync::Arc,
@@ -27,6 +29,7 @@ use std::{
 /// expect on the stack. Using a union saves on the discriminant compared to
 /// using an enum, leading to 50% less space used on the stack, as well as
 /// removes the need to handle impossible cases.
+#[repr(C)]
 pub union StackValue {
     pub short: i32,
     pub long:  i64,
@@ -170,17 +173,22 @@ impl TryFrom<Local> for ArtifactLocal {
 #[derive(Debug, Clone)]
 /// A function which has been processed into a form suitable for execution.
 pub struct CompiledFunction {
-    type_idx:    TypeIndex,
-    return_type: BlockType,
+    type_idx:      TypeIndex,
+    return_type:   BlockType,
     /// Parameters of the function.
-    params:      Vec<ValueType>,
+    params:        Vec<ValueType>,
     /// Number of locals, cached, but should match what is in the
     /// locals vector below.
-    num_locals:  u32,
+    num_locals:    u32,
     /// Vector of types of locals. This __does not__ include function
     /// parameters.
-    locals:      Vec<ArtifactLocal>,
-    code:        Instructions,
+    locals:        Vec<ArtifactLocal>,
+    /// Maximum number of locations needed. This includes parameters,
+    /// locals, and any extra locations needed to preserve values.
+    num_registers: u32,
+    /// The constants in the function.
+    constants:     Vec<i64>,
+    code:          Instructions,
 }
 
 #[derive(Debug)]
@@ -188,27 +196,36 @@ pub struct CompiledFunction {
 /// that does not own the body and locals. This is used to make deserialization
 /// of artifacts cheaper.
 pub struct CompiledFunctionBytes<'a> {
-    pub(crate) type_idx:    TypeIndex,
-    pub(crate) return_type: BlockType,
-    pub(crate) params:      &'a [ValueType],
+    pub(crate) type_idx:      TypeIndex,
+    pub(crate) return_type:   BlockType,
+    pub(crate) params:        &'a [ValueType],
     /// Vector of types of locals. This __does not__ include
     /// parameters.
     /// FIXME: It would be ideal to have this as a zero-copy structure,
     /// but it likely does not matter, and it would be more error-prone.
-    pub(crate) num_locals:  u32,
-    pub(crate) locals:      Vec<ArtifactLocal>,
-    pub(crate) code:        &'a [u8],
+    pub(crate) num_locals:    u32,
+    pub(crate) locals:        Vec<ArtifactLocal>,
+    /// Maximum number of locations needed. This includes parameters,
+    /// locals, and any extra locations needed to preserve values.
+    pub(crate) num_registers: u32,
+    /// The constants in the function. In principle we could make this zero-copy
+    /// (with some complexity due to alignment) but the added complexity is
+    /// not worth it.
+    pub(crate) constants:     Vec<i64>,
+    pub(crate) code:          &'a [u8],
 }
 
 impl<'a> From<CompiledFunctionBytes<'a>> for CompiledFunction {
     fn from(cfb: CompiledFunctionBytes<'a>) -> Self {
         Self {
-            type_idx:    cfb.type_idx,
-            return_type: cfb.return_type,
-            params:      cfb.params.to_vec(),
-            num_locals:  cfb.num_locals,
-            locals:      cfb.locals,
-            code:        cfb.code.to_vec().into(),
+            type_idx:      cfb.type_idx,
+            return_type:   cfb.return_type,
+            params:        cfb.params.to_vec(),
+            num_locals:    cfb.num_locals,
+            locals:        cfb.locals,
+            num_registers: cfb.num_registers,
+            constants:     cfb.constants,
+            code:          cfb.code.to_vec().into(),
         }
     }
 }
@@ -322,6 +339,11 @@ impl<'a> ExactSizeIterator for LocalsIterator<'a> {
 pub trait RunnableCode {
     /// The number of parameters of the function.
     fn num_params(&self) -> u32;
+    /// The number of registers the function needs in the worst case.
+    /// This includes locals and parameters.
+    fn num_registers(&self) -> u32;
+    /// The number of distinct constants that appear in the function body.
+    fn constants(&self) -> &[i64];
     /// The type of the function, as an index into the list of types of the
     /// module.
     fn type_idx(&self) -> TypeIndex;
@@ -341,6 +363,12 @@ pub trait RunnableCode {
 impl RunnableCode for CompiledFunction {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn num_params(&self) -> u32 { self.params.len() as u32 }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn num_registers(&self) -> u32 { self.num_registers }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn constants(&self) -> &[i64] { &self.constants }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
@@ -366,6 +394,12 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     fn num_params(&self) -> u32 { self.params.len() as u32 }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn num_registers(&self) -> u32 { self.num_registers }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
+    fn constants(&self) -> &[i64] { &self.constants }
+
+    #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn type_idx(&self) -> TypeIndex { self.type_idx }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
@@ -384,6 +418,22 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     fn code(&self) -> &[u8] { self.code }
 }
 
+/// Version of the artifact. We only support one version at present in this
+/// library, version 1, but older versions of the library supported a different
+/// version, so this versioning allows us to detect those older versions and
+/// apply migration as needed.
+///
+/// The artifact is always serialized such that it starts with a 4-byte version
+/// prefix, which enables us to detect older versions while only supporting the
+/// new version in the library.
+#[derive(Debug, Clone, Copy)]
+pub enum ArtifactVersion {
+    /// A more efficient instruction set representation that precompiles the
+    /// stack machine into a "register based" one where there is no more
+    /// stack during execution.
+    V1,
+}
+
 /// A processed Wasm module. This no longer has custom sections since they are
 /// not needed for further processing.
 /// The type parameter `ImportFunc` is instantiated with the representation of
@@ -399,6 +449,7 @@ impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
 /// the code up from the database.
 #[derive(Debug, Clone)]
 pub struct Artifact<ImportFunc, CompiledCode> {
+    pub version: ArtifactVersion,
     /// Imports by (module name, item name).
     pub imports: Vec<ImportFunc>,
     /// Types of the module. These are needed for dynamic dispatch, i.e.,
@@ -430,6 +481,7 @@ pub type OwnedArtifact<ImportFunc> = Artifact<ImportFunc, CompiledFunction>;
 impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<ImportFunc> {
     fn from(a: BorrowedArtifact<'a, ImportFunc>) -> Self {
         let Artifact {
+            version,
             imports,
             ty,
             table,
@@ -439,6 +491,7 @@ impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<Im
             code,
         } = a;
         Self {
+            version,
             imports,
             ty,
             table,
@@ -466,23 +519,18 @@ pub enum InternalOpcode {
     Unreachable = 0u8,
     If,
     Br,
-    BrCarry,
     BrIf,
-    BrIfCarry,
     BrTable,
     BrTableCarry,
     Return,
     Call,
+    TickEnergy,
     CallIndirect,
 
     // Parametric instructions
-    Drop,
     Select,
 
     // Variable instructions
-    LocalGet,
-    LocalSet,
-    LocalTee,
     GlobalGet,
     GlobalSet,
 
@@ -508,10 +556,6 @@ pub enum InternalOpcode {
     I64Store32,
     MemorySize,
     MemoryGrow,
-
-    // Numeric instructions
-    I32Const,
-    I64Const,
 
     I32Eqz,
     I32Eq,
@@ -583,6 +627,8 @@ pub enum InternalOpcode {
     I64Extend8S,
     I64Extend16S,
     I64Extend32S,
+
+    Copy,
 }
 
 /// Result of compilation. Either Ok(_) or an error indicating the reason.
@@ -603,8 +649,6 @@ impl Instructions {
 
     fn push_i32(&mut self, x: i32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
-    fn push_i64(&mut self, x: i64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
-
     fn current_offset(&self) -> usize { self.bytes.len() }
 
     fn back_patch(&mut self, back_loc: usize, to_write: u32) -> CompileResult<()> {
@@ -615,9 +659,11 @@ impl Instructions {
 }
 
 /// Target of a jump that we need to keep track of temporarily.
+#[derive(Debug)]
 enum JumpTarget {
     /// We know the position in the instruction sequence where the jump should
-    /// resolve to. This is used in the case of loops.
+    /// resolve to. This is used in the case of loops since jumps to a loop
+    /// block jump to the beginning of the block.
     Known {
         pos: usize,
     },
@@ -625,23 +671,39 @@ enum JumpTarget {
     /// We record the list of places at which we need to back-patch the location
     /// when we get to it.
     Unknown {
+        /// List of locations where we need to insert target location of the
+        /// jump after this is determined.
         backpatch_locations: Vec<usize>,
+        /// If the return type of the block is a value type (not `EmptyType`)
+        /// then this is the location where the value must be available
+        /// after every exit (either via jump or via terminating the block by
+        /// reaching the end of execution) of the block.
+        result:              Option<Provider>,
     },
 }
 
 impl JumpTarget {
-    pub fn new_unknown() -> Self {
+    /// Insert a new jump target with unknown location (this is the case when
+    /// entering a block or if (but not loop)). The `result` indicates where
+    /// the result of the block should be available after every exit of the
+    /// block. It is `None` if the block's return type is `EmptyType`.
+    pub fn new_unknown(result: Option<Provider>) -> Self {
         JumpTarget::Unknown {
             backpatch_locations: Vec::new(),
+            result,
         }
     }
 
-    pub fn new_unknown_loc(pos: usize) -> Self {
+    /// Similar to [`new_unknown`] except we already know one location at which
+    /// we will need to backpatch.
+    pub fn new_unknown_loc(pos: usize, result: Option<Provider>) -> Self {
         JumpTarget::Unknown {
             backpatch_locations: vec![pos],
+            result,
         }
     }
 
+    /// Construct a new known location `JumpTarget`.
     pub fn new_known(pos: usize) -> Self {
         JumpTarget::Known {
             pos,
@@ -659,7 +721,7 @@ impl BackPatchStack {
     pub fn push(&mut self, target: JumpTarget) { self.stack.push(target) }
 
     pub fn pop(&mut self) -> CompileResult<JumpTarget> {
-        self.stack.pop().ok_or_else(|| anyhow!("Attempt to pop from an empty stack."))
+        self.stack.pop().ok_or_else(|| anyhow!("Attempt to pop from an empty backpatch stack."))
     }
 
     pub fn get_mut(&mut self, n: LabelIndex) -> CompileResult<&mut JumpTarget> {
@@ -670,124 +732,547 @@ impl BackPatchStack {
         let lookup_idx = self.stack.len() - n as usize - 1;
         self.stack.get_mut(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
     }
-}
-/// An intermediate structure of the instruction sequence plus any pending
-/// backpatch locations we need to resolve.
-struct BackPatch {
-    out:       Instructions,
-    backpatch: BackPatchStack,
+
+    pub fn get(&self, n: LabelIndex) -> CompileResult<&JumpTarget> {
+        ensure!(
+            (n as usize) < self.stack.len(),
+            "Attempt to access label beyond the size of the stack."
+        );
+        let lookup_idx = self.stack.len() - n as usize - 1;
+        self.stack.get(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
+    }
 }
 
-impl BackPatch {
-    fn new() -> Self {
+/// A generator of dynamic locations needed in addition to the locals during
+/// execution.
+struct DynamicLocations {
+    /// The next location to give out if there are no reusable locations.
+    next_location:      i32,
+    /// A set of locations that are available for use again.
+    /// The two operations that are needed are getting a location out,
+    /// and returning it for reuse. We choose a set here so that we can also
+    /// always return the smallest location. Which location is reused first
+    /// is not relevant for correctness. It might affect performance a bit due
+    /// to memory locality, so reusing smaller locations should be better (since
+    /// locals are also small locations), but that's going to be very case
+    /// specific.
+    reusable_locations: BTreeSet<i32>,
+}
+
+impl DynamicLocations {
+    pub fn new(next_location: i32) -> Self {
         Self {
-            out:       Default::default(),
-            backpatch: BackPatchStack {
-                stack: vec![JumpTarget::new_unknown()],
-            },
+            next_location,
+            reusable_locations: BTreeSet::new(),
         }
     }
 
-    pub fn push_jump(
-        &mut self,
-        label_idx: LabelIndex,
-        state: &ValidationState,
-        old_stack_height: usize, // stack height before the jump
-        instruction: Option<(InternalOpcode, InternalOpcode)>,
-    ) -> CompileResult<()> {
-        let target_frame = state
-            .ctrls
-            .get(label_idx)
-            .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
-        let target_height = target_frame.height;
-        ensure!(
-            old_stack_height >= target_height,
-            "Current height must be at least as much as the target, {} >= {}",
-            old_stack_height,
-            target_height
-        );
-        let diff = if let BlockType::EmptyType = target_frame.label_type {
-            if let Some((l, _)) = instruction {
-                self.out.push(l);
-            }
-            (old_stack_height - target_height).try_into()?
+    /// Inform that a given location, if it is a dynamic location, may be used
+    /// again.
+    pub fn reuse(&mut self, provider: Provider) {
+        if let Provider::Dynamic(idx) = provider {
+            self.reusable_locations.insert(idx);
+        }
+    }
+
+    /// Get the next available location.
+    pub fn get(&mut self) -> i32 {
+        if let Some(idx) = self.reusable_locations.pop_first() {
+            idx
         } else {
-            if let Some((_, r)) = instruction {
-                self.out.push(r);
-            }
-            (old_stack_height - target_height).try_into()?
+            let idx = self.next_location;
+            self.next_location += 1;
+            idx
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// A provider of a value for an instruction.
+/// This is a disjoint union of locations
+/// - locals which go from indices 0..num_locals (including parameters)
+/// - dynamic locations which go from indices `num_locals..num_registers`
+/// - constants which go from indices (-1).. (-however many constants there are
+///   in a function)
+enum Provider {
+    /// The provider is a dynamic location, not one of the locals.
+    Dynamic(i32),
+    /// A provider is a local declared in the Wasm code.
+    Local(i32),
+    /// The provider is a constant embedded in the code.
+    Constant(i32),
+}
+
+/// A stack of providers that is used to statically resolve locations where
+/// instructions will receive arguments.
+struct ProvidersStack {
+    /// The stack of providers. This is meant to correspond to the validation
+    /// stack but instead of types it has locations of where the value for
+    /// the instruction will be found at runtime.
+    stack:             Vec<Provider>,
+    /// An auxiliary structure used to keep track of available dynamic
+    /// locations. These locations are recycled when they no longer appear
+    /// on the stack.
+    dynamic_locations: DynamicLocations,
+    /// A mapping of constant values to their locations. The map is used to
+    /// deduplicate constants embedded in the code.
+    ///
+    /// Note that we coerce i32 constants to i64 constants and only keep track
+    /// of i64 values.
+    constants:         BTreeMap<i64, i32>,
+}
+
+impl ProvidersStack {
+    /// Construct a new [`ProvidersStack`] given the total number of locals
+    /// (parameters and declared locals).
+    pub fn new(num_locals: u32, return_type: Option<ValueType>) -> Self {
+        // We'll always write the return value of the function, if there is one, to
+        // location 0. So we make sure we have this location even if the function
+        // is without parameters and return values.
+        let next_location = if num_locals == 0 && return_type.is_some() {
+            1
+        } else {
+            num_locals
         };
-        // output the difference in stack heights.
-        self.out.push_u32(diff);
-        let target = self.backpatch.get_mut(label_idx)?;
-        match target {
-            JumpTarget::Known {
-                pos,
-            } => {
-                self.out.push_u32(*pos as u32);
-            }
-            JumpTarget::Unknown {
-                backpatch_locations,
-            } => {
-                // output instruction
-                backpatch_locations.push(self.out.current_offset());
-                // output a dummy value
-                self.out.push_u32(0u32);
-            }
+        let dynamic_locations = DynamicLocations::new(next_location as i32);
+        Self {
+            stack: Vec::new(),
+            dynamic_locations,
+            constants: BTreeMap::new(),
+        }
+    }
+
+    /// Consume a provider from the top of the stack and recycle its location
+    /// in case it was a dynamic location.
+    pub fn consume(&mut self) -> CompileResult<Provider> {
+        let operand = self.stack.pop().context("Missing operand for consume")?;
+        // This is kind of expensive to run for each consume and we could do
+        // better by having a map of used locations to their place on the stack.
+        //
+        // However the benchmark using validation-time-consume.wat module indicates
+        // that performance is not an issue. We can optimize this in the future without
+        // breaking changes if we want to improve validation performance a couple of
+        // percent.
+        let is_unused = self.stack.iter().all(|x| *x != operand);
+        if is_unused {
+            self.dynamic_locations.reuse(operand);
+        }
+        Ok(operand)
+    }
+
+    /// Generate a fresh dynamic location and return its index.
+    pub fn provide(&mut self) -> i32 {
+        let result = self.dynamic_locations.get();
+        self.stack.push(Provider::Dynamic(result));
+        result
+    }
+
+    /// Push an existing provider to the providers stack.
+    pub fn provide_existing(&mut self, provider: Provider) {
+        self.stack.push(provider);
+        // Make sure that if the provider is on the stack it's not
+        // free for use. We rely on the property that locations
+        // returned from `dynamic_locations.get` are fresh.
+        if let Provider::Dynamic(idx) = provider {
+            self.dynamic_locations.reusable_locations.remove(&idx);
+        }
+    }
+
+    /// Return the number of values on the provider stack.
+    pub fn len(&self) -> usize { self.stack.len() }
+
+    /// Push a constant onto the provider stack.
+    pub fn push_constant(&mut self, c: i64) -> CompileResult<()> {
+        let next = -i32::try_from(self.constants.len())? - 1;
+        let idx = self.constants.entry(c).or_insert(next);
+        self.stack.push(Provider::Constant(*idx));
+        Ok(())
+    }
+
+    /// Truncate the provider stack to be **at most** `new_len` elements.
+    /// All the extra values are available for reuse.
+    pub fn truncate(&mut self, new_len: usize) -> CompileResult<()> {
+        let drop_len = self.stack.len().saturating_sub(new_len);
+        for _ in 0..drop_len {
+            self.consume()?;
         }
         Ok(())
     }
 }
 
-impl Handler<&OpCode> for BackPatch {
-    type Outcome = Instructions;
+/// An intermediate structure of the instruction sequence plus any pending
+/// backpatch locations we need to resolve.
+struct BackPatch {
+    out:              Instructions,
+    /// The list of locations we need to backpatch, that is, insert jump
+    /// locations at once we know where those jumps end, which is typically at
+    /// the `End` of a block.
+    backpatch:        BackPatchStack,
+    /// The provider stack. This mimics the operand stack but it additionally
+    /// records the register locations where the values are available for
+    /// instructions so that those registers can be added as immediate
+    /// arguments to instructions.
+    providers_stack:  ProvidersStack,
+    /// The return type of the function.
+    return_type:      Option<ValueType>,
+    /// If the last instruction produced something
+    /// in the dynamic area record the location here
+    /// so we can short-circuit the LocalSet that immediately
+    /// follows such an instruction.
+    last_provide_loc: Option<usize>,
+}
+
+impl BackPatch {
+    /// Construct a new instance. The `num_locals` argument is the number of
+    /// locals (this includes parameters + declared locals). The number of
+    /// locals is assumed to be within bounds ensured by the validation.
+    fn new(num_locals: u32, return_type: Option<ValueType>) -> Self {
+        Self {
+            out: Default::default(),
+            backpatch: BackPatchStack {
+                // The return value of a function, if any, will always be at index 0.
+                stack: vec![JumpTarget::new_unknown(return_type.map(|_| RETURN_VALUE_LOCATION))],
+            },
+            providers_stack: ProvidersStack::new(num_locals, return_type),
+            return_type,
+            last_provide_loc: None,
+        }
+    }
+
+    /// Write a provider into the output buffer.
+    fn push_loc(&mut self, loc: Provider) {
+        match loc {
+            Provider::Dynamic(idx) => {
+                self.out.push_i32(idx);
+            }
+            Provider::Constant(idx) => {
+                self.out.push_i32(idx);
+            }
+            Provider::Local(idx) => {
+                self.out.push_i32(idx);
+            }
+        }
+    }
+
+    /// Record a jump to the given label. If the location is already known (if
+    /// the target is a loop) then just record it immediately. Otherwise
+    /// insert a dummy value and record the location to "backpatch" when we
+    /// discover where the jump should end up in the instruction sequence.
+    fn insert_jump_location(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
+        let target = self.backpatch.get_mut(label_idx)?;
+        match target {
+            JumpTarget::Known {
+                pos,
+                ..
+            } => {
+                self.out.push_u32(*pos as u32);
+            }
+            JumpTarget::Unknown {
+                backpatch_locations,
+                ..
+            } => {
+                // output a dummy value that will be backpatched after we pass the End of the
+                // block
+                backpatch_locations.push(self.out.current_offset());
+                self.out.push_u32(0u32);
+            }
+        }
+        Ok(())
+    }
+
+    /// Push a jump that is executed as a result of a `BrIf` instruction.
+    fn push_br_if_jump(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
+        let target = self.backpatch.get(label_idx)?;
+        // Before a jump we must make sure that whenever execution ends up at the
+        // target label we will always have the value
+        if let JumpTarget::Unknown {
+            result: Some(result),
+            ..
+        } = target
+        {
+            let result = *result;
+            let provider = self.providers_stack.consume()?;
+            if provider != result {
+                self.out.push(InternalOpcode::Copy);
+                self.push_loc(provider);
+                self.push_loc(result);
+            }
+            // After BrIf we need to potentially keep executing,
+            // so keep the provider on the stack. But because we inserted a copy
+            // the correct value is `result` on the top of the stack.
+            self.providers_stack.provide_existing(result);
+        }
+        self.out.push(InternalOpcode::BrIf);
+        self.insert_jump_location(label_idx)?;
+        Ok(())
+    }
+
+    /// Push a jump that is the result of a `Br` instruction.
+    fn push_br_jump(
+        &mut self,
+        instruction_reachable: bool,
+        label_idx: LabelIndex,
+    ) -> CompileResult<()> {
+        let target = self.backpatch.get(label_idx)?;
+        // Before a jump we must make sure that whenever execution ends up at the
+        // target label we will always have the value
+        //
+        // If we are in the unreachable section then the instruction
+        // is never going to be reached, so there is no point in inserting
+        // the Copy instruction.
+        if instruction_reachable {
+            if let JumpTarget::Unknown {
+                backpatch_locations: _,
+                result: Some(result),
+            } = target
+            {
+                let result = *result;
+                let provider = self.providers_stack.consume()?;
+                if provider != result {
+                    self.out.push(InternalOpcode::Copy);
+                    self.push_loc(provider);
+                    self.push_loc(result);
+                }
+            }
+        }
+        self.out.push(InternalOpcode::Br);
+        self.insert_jump_location(label_idx)?;
+        Ok(())
+    }
+
+    /// Push a jump to the location specified by the `label_idx`.
+    /// Used when compiling BrTable.
+    fn push_br_table_jump(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
+        let target = self.backpatch.get(label_idx)?;
+        if let JumpTarget::Unknown {
+            backpatch_locations: _,
+            result: Some(result),
+        } = target
+        {
+            // When compiling a jump to a target which expects a value we
+            // insert here the expected location of the value.
+            // This is used by the BrTableCarry instruction handler to do a Copy
+            // before jumping.
+            let result = *result;
+            self.push_loc(result);
+        }
+        self.insert_jump_location(label_idx)?;
+        Ok(())
+    }
+
+    // Push a binary operation, consuming two values and providing the result.
+    fn push_binary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
+        self.out.push(opcode);
+        let _ = self.push_consume()?;
+        let _ = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    // Push a ternary operation, consuming three values and providing the result.
+    fn push_ternary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
+        self.out.push(opcode);
+        let _ = self.push_consume()?;
+        let _ = self.push_consume()?;
+        let _ = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    fn push_mem_load(&mut self, opcode: InternalOpcode, memarg: &MemArg) -> CompileResult<()> {
+        self.out.push(opcode);
+        self.out.push_u32(memarg.offset);
+        let _operand = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    fn push_mem_store(&mut self, opcode: InternalOpcode, memarg: &MemArg) -> CompileResult<()> {
+        self.out.push(opcode);
+        self.out.push_u32(memarg.offset);
+        let _value = self.push_consume()?;
+        let _location = self.push_consume()?;
+        Ok(())
+    }
+
+    fn push_unary(&mut self, opcode: InternalOpcode) -> CompileResult<()> {
+        self.out.push(opcode);
+        let _operand = self.push_consume()?;
+        self.push_provide();
+        Ok(())
+    }
+
+    /// Write a newly generated location to the output buffer.
+    /// This also records the location into `last_provide_loc` so that if
+    /// this instruction is followed by a `SetLocal` (or `TeeLocal`) instruction
+    /// the `SetLocal` is short-circuited in the sense that we tell the
+    /// preceding instruction to directly write the value into the local (as
+    /// long as this is safe, see the handling of `SetLocal` instruction).
+    fn push_provide(&mut self) {
+        let result = self.providers_stack.provide();
+        self.last_provide_loc = Some(self.out.current_offset());
+        self.out.push_i32(result);
+    }
+
+    /// Consume an operand and return the slot that was consumed.
+    fn push_consume(&mut self) -> CompileResult<Provider> {
+        let operand = self.providers_stack.consume()?;
+        self.push_loc(operand);
+        Ok(operand)
+    }
+}
+
+/// We make a choice that we always have the return value of the function
+/// available at index 0.
+const RETURN_VALUE_LOCATION: Provider = Provider::Local(0);
+
+impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
+    type Outcome = (Instructions, i32, Vec<i64>);
 
     fn handle_opcode(
         &mut self,
+        ctx: &Ctx,
         state: &ValidationState,
-        stack_height: usize,
+        reachability: Reachability,
         opcode: &OpCode,
     ) -> CompileResult<()> {
         use InternalOpcode::*;
+        // The last location where the provider wrote the result.
+        // This is used to short-circuit SetLocal
+        let last_provide = self.last_provide_loc.take();
+        // Short circuit the handling if the instruction is definitely not reachable.
+        // Otherwise return if the instruction is directly reachable, or only reachable
+        // through a jump (which is only the case if it is an end of a block, so either
+        // End or Else instruction).
+        let instruction_reachable = match reachability {
+            Reachability::UnreachableFrame => return Ok(()),
+            Reachability::UnreachableInstruction
+            // Else and End instructions can be reached even in
+            // unreachable segments because they can be a target of a jump.
+                if !matches!(opcode, OpCode::Else | OpCode::End) =>
+            {
+                return Ok(())
+            }
+            Reachability::UnreachableInstruction => false,
+            Reachability::Reachable => true,
+        };
         match opcode {
             OpCode::End => {
-                if let JumpTarget::Unknown {
-                    backpatch_locations,
-                } = self.backpatch.pop()?
-                {
-                    // As u32 would be safe here since module sizes are much less than 4GB, but
-                    // we are being extra careful.
-                    let current_pos: u32 = self.out.bytes.len().try_into()?;
-                    for pos in backpatch_locations {
-                        self.out.back_patch(pos, current_pos)?;
+                let jump_target = self.backpatch.pop()?;
+                match jump_target {
+                    JumpTarget::Known {
+                        ..
+                    } => {
+                        // this is the end of a loop. Meaning the only way we
+                        // can get to this location is by executing
+                        // instructions in a sequence. This end cannot be jumped
+                        // to.
+                        //
+                        // But if this is not reachable then we need to correct the
+                        // stack to be of correct size by potentially pushing a dummy value to it
+                        // since after entering an unreachable segment there is no guarantee
+                        // that there is a value on the provider stack which would break the
+                        // assumption that the provider stak is the same length as the operand
+                        // stack.
+                        //
+                        // Note that the operand stack is already updated at this point.
+                        if !instruction_reachable
+                            && self.providers_stack.len() < state.opds.stack.len()
+                        {
+                            self.providers_stack.provide();
+                        }
+                    }
+                    JumpTarget::Unknown {
+                        backpatch_locations,
+                        result,
+                    } => {
+                        // Insert an additional Copy instruction if the top of the provider stack
+                        // does not match what is expected.
+                        if let Some(result) = result {
+                            // if we are in an unreachable segment then
+                            // the stack might be empty at this point, and in general
+                            // there is no point in inserting a copy instruction
+                            // since it'll never be executed.
+                            if instruction_reachable {
+                                let provider = self.providers_stack.consume()?;
+                                if provider != result {
+                                    self.out.push(InternalOpcode::Copy);
+                                    self.push_loc(provider);
+                                    self.push_loc(result);
+                                }
+                            } else {
+                                // There might not actually be anything at the top of the stack
+                                // in the unreachable segment. But there might, in which case
+                                // we must remove it to make sure that the `result` is at the top
+                                // after the block ends.
+                                // Note that the providers stack can never be shorter than
+                                // `state.opds.stack.len()` at this point due to well-formedness of
+                                // blocks.
+                                if self.providers_stack.len() == state.opds.stack.len() {
+                                    self.providers_stack.consume()?;
+                                }
+                            }
+                            self.providers_stack.provide_existing(result);
+                        }
+
+                        // As u32 would be safe here since module sizes are much less than 4GB, but
+                        // we are being extra careful.
+                        let current_pos: u32 = self.out.bytes.len().try_into()?;
+                        for pos in backpatch_locations {
+                            self.out.back_patch(pos, current_pos)?;
+                        }
                     }
                 }
-                // do not emit any code, since end is implicit in generated
-                // code.
             }
-            OpCode::Block(_) => {
-                self.backpatch.push(JumpTarget::new_unknown());
+            OpCode::Block(ty) => {
+                // If the block has a return value (in our version of Wasm that means a single
+                // value only) then we need to reserve a location where this
+                // value will be available after the block ends. The block end
+                // can be reached in multiple ways, e.g. through jumps from multiple locations,
+                // and it is crucial that all of those will yield end up writing the value that
+                // is relevant at the same location. This is the location we
+                // reserve here.
+                let result = if matches!(ty, BlockType::ValueType(_)) {
+                    let r = self.providers_stack.dynamic_locations.get();
+                    Some(Provider::Dynamic(r))
+                } else {
+                    None
+                };
+                self.backpatch.push(JumpTarget::new_unknown(result));
             }
-            OpCode::Loop(_) => {
+            OpCode::Loop(_ty) => {
+                // In contrast to a `Block` or `If`, the only way an end of a block is reached
+                // is through direct execution. Jumps cannot target it. Thus we
+                // don't need to insert any copies or reserve any locations.
                 self.backpatch.push(JumpTarget::new_known(self.out.current_offset()))
             }
             OpCode::If {
-                ..
+                ty,
             } => {
                 self.out.push(If);
-                self.backpatch.push(JumpTarget::new_unknown_loc(self.out.bytes.len()));
+                self.push_consume()?;
+                // Like for `Block`, we need to reserve a location that will have the resulting
+                // value no matter how we end up at it.
+                let result = if matches!(ty, BlockType::ValueType(_)) {
+                    let r = self.providers_stack.dynamic_locations.get();
+                    Some(Provider::Dynamic(r))
+                } else {
+                    None
+                };
+                self.backpatch.push(JumpTarget::new_unknown_loc(self.out.current_offset(), result));
                 self.out.push_u32(0);
             }
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
                 // to the end of else.
-                self.push_jump(0, state, stack_height, Some((Br, BrCarry)))?;
+                self.push_br_jump(instruction_reachable, 0)?;
                 // Because the module is well-formed this can only happen after an if
                 // We do not backpatch the code now, apart from the initial jump to the else
                 // branch. The effect of this will be that any break out of the if statement
                 // will jump to the end of else, as intended.
                 if let JumpTarget::Unknown {
                     backpatch_locations,
+                    result: _,
                 } = self.backpatch.get_mut(0)?
                 {
                     // As u32 would be safe here since module sizes are much less than 4GB, but
@@ -804,48 +1289,112 @@ impl Handler<&OpCode> for BackPatch {
                 }
             }
             OpCode::Br(label_idx) => {
-                self.push_jump(*label_idx, state, stack_height, Some((Br, BrCarry)))?;
+                self.push_br_jump(instruction_reachable, *label_idx)?;
+                // Everything after Br, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
             OpCode::BrIf(label_idx) => {
-                self.push_jump(*label_idx, state, stack_height, Some((BrIf, BrIfCarry)))?;
+                // We output first the target and then the conditional source. This is
+                // maybe not ideal since the conditional will sometimes not be
+                // taken in which case we don't need to read that, but it's simpler.
+                let condition_source = self.providers_stack.consume()?;
+                self.push_br_if_jump(*label_idx)?;
+                self.push_loc(condition_source);
             }
             OpCode::BrTable {
                 labels,
                 default,
             } => {
-                let target_frame = state
-                    .ctrls
-                    .get(*default)
-                    .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
+                // We split the BrTable into two instructions, `BrTable` and `BrTableCarry`.
+                // The former applies where the target of the jump does not expect any value at
+                // the top of the stack, whereas the latter one applies when a single value is
+                // expected.
+                //
+                // Validation (see validate.rs case for BrTable) ensures that all targets of the
+                // jump have the same label type, so we determine the label type
+                // by only checking the label type of the default jump target.
+                //
+                // In the case of BrTableCarry we need to insert additional Copy instructions to
+                // make sure that when execution resumes after the jump the value is available
+                // in the correct register.
+                let target_frame =
+                    state.ctrls.get(*default).context("Could not get jump target frame.")?;
                 if let BlockType::EmptyType = target_frame.label_type {
                     self.out.push(BrTable);
+                    let _condition_source = self.push_consume()?;
                 } else {
                     self.out.push(BrTableCarry);
+                    let _condition_source = self.push_consume()?;
+                    let _copy_source = self.push_consume()?;
                 }
+
                 // the try_into is not needed because MAX_SWITCH_SIZE is small enough
                 // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
-                self.push_jump(*default, state, stack_height, None)?;
+                self.push_br_table_jump(*default)?;
                 // The label types are the same for the default as well all the other
                 // labels.
                 for label_idx in labels {
-                    self.push_jump(*label_idx, state, stack_height, None)?;
+                    self.push_br_table_jump(*label_idx)?;
                 }
+                // Everything after BrTable, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
             OpCode::Return => {
                 // The interpreter will know that return means terminate execution of the
                 // function and from the result type of the function it will be
                 // clear whether anything needs to be returned.
-                self.out.push(Return)
+                if self.return_type.is_some() {
+                    let top = self.providers_stack.consume()?;
+                    if top != RETURN_VALUE_LOCATION {
+                        self.out.push(InternalOpcode::Copy);
+                        self.push_loc(top);
+                        self.push_loc(RETURN_VALUE_LOCATION);
+                    }
+                }
+                self.out.push(Return);
+                // Everything after Return, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
-            OpCode::Call(idx) => {
+            &OpCode::Call(idx) => {
                 self.out.push(Call);
-                self.out.push_u32(*idx);
+                self.out.push_u32(idx);
+                let f = ctx.get_func(idx)?;
+                // The interpreter knows the number of arguments already. No need to record.
+                // Note that arguments are from **last** to first.
+                for _ in &f.parameters {
+                    self.push_consume()?;
+                }
+                // Return value, if it exists. The interpreter knows the return type
+                // already.
+                if f.result.is_some() {
+                    // To clarify any confusion, the return value will be available, by convention,
+                    // in the RETURN_VALUE_LOCATION register of the callee. We
+                    // then need to copy that into the appropriate location in
+                    // the caller's register.
+                    self.push_provide();
+                }
             }
-            OpCode::CallIndirect(x) => {
+            OpCode::TickEnergy(cost) => {
+                self.out.push(TickEnergy);
+                self.out.push_u32(*cost);
+            }
+            &OpCode::CallIndirect(idx) => {
                 self.out.push(CallIndirect);
-                self.out.push_u32(*x);
+                self.out.push_u32(idx);
+                self.push_consume()?;
+                let f = ctx.get_type(idx)?;
+                // The interpreter knows the number of arguments already. No need to record.
+                // Note that arguments are from **last** to first.
+                for _ in &f.parameters {
+                    let provider = self.providers_stack.consume()?;
+                    self.push_loc(provider);
+                }
+                // The interpreter knows the return type already.
+                if f.result.is_some() {
+                    self.push_provide();
+                }
             }
             OpCode::Nop => {
                 // do nothing, we don't need an opcode for that since we don't
@@ -853,329 +1402,416 @@ impl Handler<&OpCode> for BackPatch {
             }
             OpCode::Unreachable => {
                 self.out.push(Unreachable);
+                // Everything after Unreachable, until the end of the block is unreachable.
+                self.providers_stack.truncate(state.opds.stack.len())?;
             }
             OpCode::Drop => {
-                self.out.push(Drop);
+                self.providers_stack.consume()?;
             }
             OpCode::Select => {
-                self.out.push(Select);
+                self.push_ternary(Select)?;
             }
             OpCode::LocalGet(idx) => {
-                self.out.push(LocalGet);
-                // the as u16 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.out.push_u16(*idx as u16);
+                // the as i32 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
+                self.providers_stack.provide_existing(Provider::Local((*idx) as i32));
+                // No instruction
             }
-            OpCode::LocalSet(idx) => {
-                self.out.push(LocalSet);
-                // the as u16 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.out.push_u16(*idx as u16);
-            }
-            OpCode::LocalTee(idx) => {
-                self.out.push(LocalTee);
-                // the as u16 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.out.push_u16(*idx as u16);
+            OpCode::LocalSet(idx) | OpCode::LocalTee(idx) => {
+                // If the last instruction produced something just remove the indirection and
+                // write directly to the local
+                //
+                // If the value of this particular local is somewhere on the providers_stack we
+                // need to preserve that value.
+                // - make a new dynamic value beyond all possible values. (the "preserve" space)
+                // - copy from local to that value
+                let mut reserve = None;
+                // In principle this loop here is "non-linear" behaviour
+                // since we need to iterate the entire length of the stack for each instruction.
+                // The worst case of this is LocalTee since that keeps the stack the same
+                // height. But note that stack height is limited by
+                // `MAX_ALLOWED_STACK_HEIGHT`, so this is not really quadratic
+                // behaviour, it is still linear in the number of instructions
+                // except the constant is rather large.
+                //
+                // There is a benchmark with the module validation-time-preserve.wat that
+                // measure validation of a module that is more than 1MB with a stack height
+                // 1000. with mostly LocalTee instructions. It takes in the range of 13ms to
+                // validate and compile. Which is well within acceptable range. So for the
+                // time being we do not add extra complexity to make the behaviour here more
+                // efficient. But that is an optimization that can be done without making
+                // any breaking changes.
+                for provide_slot in self.providers_stack.stack.iter_mut() {
+                    if let Provider::Local(l) = *provide_slot {
+                        if Ok(*idx) == u32::try_from(l) {
+                            let reserve = match reserve {
+                                Some(r) => r,
+                                None => {
+                                    let result = Provider::Dynamic(
+                                        self.providers_stack.dynamic_locations.get(),
+                                    );
+                                    reserve = Some(result);
+                                    result
+                                }
+                            };
+                            // When an operation actually reads this value it will read it from the
+                            // reserve slot.
+                            *provide_slot = reserve;
+                        }
+                    }
+                }
+                let idx = (*idx).try_into()?; // This should never overflow since we have a very low bound on locals. But we
+                                              // are just playing it safe.
+                if let Some(reserve) = reserve {
+                    self.out.push(Copy);
+                    self.out.push_i32(idx); // from
+                    self.push_loc(reserve); // to
+                }
+                if matches!(opcode, OpCode::LocalSet(..)) {
+                    match last_provide {
+                        // if we had to copy to a reserve location then it is not
+                        // possible to short circuit the instruction.
+                        // We need to insert an additional copy instruction.
+                        Some(back_loc) if reserve.is_none() => {
+                            // instead of inserting LocalSet, just tell the previous
+                            // instruction to copy the value directly into the local.
+                            self.out.back_patch(back_loc, idx as u32)?;
+
+                            // And clear the provider from the stack
+                            self.providers_stack.consume()?;
+                        }
+                        _ => {
+                            self.out.push(Copy);
+                            let _operand = self.push_consume()?; // value first.
+                            self.out.push_i32(idx); //target second
+                        }
+                    }
+                } else {
+                    match last_provide {
+                        // if we had to copy to a reserve location then it is not
+                        // possible to short circuit the instruction since there is an extra Copy
+                        // instruction. We need to insert an additional copy
+                        // instruction.
+                        Some(back_loc) if reserve.is_none() => {
+                            // instead of inserting LocalSet, just tell the previous
+                            // instruction to copy the value directly into the local.
+                            self.out.back_patch(back_loc, idx as u32)?;
+
+                            // And clear the provider from the stack
+                            self.providers_stack.consume()?;
+                            self.providers_stack.provide_existing(Provider::Local(idx));
+                        }
+                        _ => {
+                            // And clear the provider from the stack
+                            self.out.push(Copy);
+                            let _source = self.push_consume()?;
+                            self.out.push_i32(idx); //target second
+                            self.providers_stack.provide_existing(Provider::Local(idx));
+                        }
+                    }
+                }
             }
             OpCode::GlobalGet(idx) => {
+                // In principle globals could also be "providers" or locations to write.
+                // We could have them in front of constants, in the negative space.
+                // This is a bit complex for the same reason that SetLocal is complex.
+                // We need to sometimes insert Copy instructions to preserve values that
+                // are on the operand stack. We have prototyped this as well but it did
+                // not lead to performance improvements on examples, so that case is not handled
+                // here.
                 self.out.push(GlobalGet);
                 // the as u16 is safe because idx < MAX_NUM_GLOBALS <= 2^16
                 self.out.push_u16(*idx as u16);
+                self.push_provide();
             }
             OpCode::GlobalSet(idx) => {
                 self.out.push(GlobalSet);
                 // the as u16 is safe because idx < MAX_NUM_GLOBALS <= 2^16
                 self.out.push_u16(*idx as u16);
+                self.push_consume()?;
             }
             OpCode::I32Load(memarg) => {
-                self.out.push(I32Load);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load, memarg)?;
             }
             OpCode::I64Load(memarg) => {
-                self.out.push(I64Load);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load, memarg)?;
             }
             OpCode::I32Load8S(memarg) => {
-                self.out.push(I32Load8S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load8S, memarg)?;
             }
             OpCode::I32Load8U(memarg) => {
-                self.out.push(I32Load8U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load8U, memarg)?;
             }
             OpCode::I32Load16S(memarg) => {
-                self.out.push(I32Load16S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load16S, memarg)?;
             }
             OpCode::I32Load16U(memarg) => {
-                self.out.push(I32Load16U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I32Load16U, memarg)?;
             }
             OpCode::I64Load8S(memarg) => {
-                self.out.push(I64Load8S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load8S, memarg)?;
             }
             OpCode::I64Load8U(memarg) => {
-                self.out.push(I64Load8U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load8U, memarg)?;
             }
             OpCode::I64Load16S(memarg) => {
-                self.out.push(I64Load16S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load16S, memarg)?;
             }
             OpCode::I64Load16U(memarg) => {
-                self.out.push(I64Load16U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load16U, memarg)?;
             }
             OpCode::I64Load32S(memarg) => {
-                self.out.push(I64Load32S);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load32S, memarg)?;
             }
             OpCode::I64Load32U(memarg) => {
-                self.out.push(I64Load32U);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_load(I64Load32U, memarg)?;
             }
             OpCode::I32Store(memarg) => {
-                self.out.push(I32Store);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I32Store, memarg)?;
             }
             OpCode::I64Store(memarg) => {
-                self.out.push(I64Store);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store, memarg)?;
             }
             OpCode::I32Store8(memarg) => {
-                self.out.push(I32Store8);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I32Store8, memarg)?;
             }
             OpCode::I32Store16(memarg) => {
-                self.out.push(I32Store16);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I32Store16, memarg)?;
             }
             OpCode::I64Store8(memarg) => {
-                self.out.push(I64Store8);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store8, memarg)?;
             }
             OpCode::I64Store16(memarg) => {
-                self.out.push(I64Store16);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store16, memarg)?;
             }
             OpCode::I64Store32(memarg) => {
-                self.out.push(I64Store32);
-                self.out.push_u32(memarg.offset);
+                self.push_mem_store(I64Store32, memarg)?;
             }
-            OpCode::MemorySize => self.out.push(MemorySize),
-            OpCode::MemoryGrow => self.out.push(MemoryGrow),
-            OpCode::I32Const(c) => {
-                self.out.push(I32Const);
-                self.out.push_i32(*c);
+            OpCode::MemorySize => {
+                self.out.push(MemorySize);
+                self.push_provide();
             }
-            OpCode::I64Const(c) => {
-                self.out.push(I64Const);
-                self.out.push_i64(*c);
+            OpCode::MemoryGrow => self.push_unary(MemoryGrow)?,
+            &OpCode::I32Const(c) => {
+                self.providers_stack.push_constant(c as i64)?;
+            }
+            &OpCode::I64Const(c) => {
+                self.providers_stack.push_constant(c)?;
             }
             OpCode::I32Eqz => {
-                self.out.push(I32Eqz);
+                self.push_unary(I32Eqz)?;
             }
             OpCode::I32Eq => {
-                self.out.push(I32Eq);
+                self.push_binary(I32Eq)?;
             }
             OpCode::I32Ne => {
-                self.out.push(I32Ne);
+                self.push_binary(I32Ne)?;
             }
             OpCode::I32LtS => {
-                self.out.push(I32LtS);
+                self.push_binary(I32LtS)?;
             }
             OpCode::I32LtU => {
-                self.out.push(I32LtU);
+                self.push_binary(I32LtU)?;
             }
             OpCode::I32GtS => {
-                self.out.push(I32GtS);
+                self.push_binary(I32GtS)?;
             }
             OpCode::I32GtU => {
-                self.out.push(I32GtU);
+                self.push_binary(I32GtU)?;
             }
             OpCode::I32LeS => {
-                self.out.push(I32LeS);
+                self.push_binary(I32LeS)?;
             }
             OpCode::I32LeU => {
-                self.out.push(I32LeU);
+                self.push_binary(I32LeU)?;
             }
             OpCode::I32GeS => {
-                self.out.push(I32GeS);
+                self.push_binary(I32GeS)?;
             }
             OpCode::I32GeU => {
-                self.out.push(I32GeU);
+                self.push_binary(I32GeU)?;
             }
             OpCode::I64Eqz => {
-                self.out.push(I64Eqz);
+                self.push_unary(I64Eqz)?;
             }
             OpCode::I64Eq => {
-                self.out.push(I64Eq);
+                self.push_binary(I64Eq)?;
             }
             OpCode::I64Ne => {
-                self.out.push(I64Ne);
+                self.push_binary(I64Ne)?;
             }
             OpCode::I64LtS => {
-                self.out.push(I64LtS);
+                self.push_binary(I64LtS)?;
             }
             OpCode::I64LtU => {
-                self.out.push(I64LtU);
+                self.push_binary(I64LtU)?;
             }
             OpCode::I64GtS => {
-                self.out.push(I64GtS);
+                self.push_binary(I64GtS)?;
             }
             OpCode::I64GtU => {
-                self.out.push(I64GtU);
+                self.push_binary(I64GtU)?;
             }
             OpCode::I64LeS => {
-                self.out.push(I64LeS);
+                self.push_binary(I64LeS)?;
             }
             OpCode::I64LeU => {
-                self.out.push(I64LeU);
+                self.push_binary(I64LeU)?;
             }
             OpCode::I64GeS => {
-                self.out.push(I64GeS);
+                self.push_binary(I64GeS)?;
             }
             OpCode::I64GeU => {
-                self.out.push(I64GeU);
+                self.push_binary(I64GeU)?;
             }
             OpCode::I32Clz => {
-                self.out.push(I32Clz);
+                self.push_unary(I32Clz)?;
             }
             OpCode::I32Ctz => {
-                self.out.push(I32Ctz);
+                self.push_unary(I32Ctz)?;
             }
             OpCode::I32Popcnt => {
-                self.out.push(I32Popcnt);
+                self.push_unary(I32Popcnt)?;
             }
             OpCode::I32Add => {
-                self.out.push(I32Add);
+                self.push_binary(I32Add)?;
             }
             OpCode::I32Sub => {
-                self.out.push(I32Sub);
+                self.push_binary(I32Sub)?;
             }
             OpCode::I32Mul => {
-                self.out.push(I32Mul);
+                self.push_binary(I32Mul)?;
             }
             OpCode::I32DivS => {
-                self.out.push(I32DivS);
+                self.push_binary(I32DivS)?;
             }
             OpCode::I32DivU => {
-                self.out.push(I32DivU);
+                self.push_binary(I32DivU)?;
             }
             OpCode::I32RemS => {
-                self.out.push(I32RemS);
+                self.push_binary(I32RemS)?;
             }
             OpCode::I32RemU => {
-                self.out.push(I32RemU);
+                self.push_binary(I32RemU)?;
             }
             OpCode::I32And => {
-                self.out.push(I32And);
+                self.push_binary(I32And)?;
             }
             OpCode::I32Or => {
-                self.out.push(I32Or);
+                self.push_binary(I32Or)?;
             }
             OpCode::I32Xor => {
-                self.out.push(I32Xor);
+                self.push_binary(I32Xor)?;
             }
             OpCode::I32Shl => {
-                self.out.push(I32Shl);
+                self.push_binary(I32Shl)?;
             }
             OpCode::I32ShrS => {
-                self.out.push(I32ShrS);
+                self.push_binary(I32ShrS)?;
             }
             OpCode::I32ShrU => {
-                self.out.push(I32ShrU);
+                self.push_binary(I32ShrU)?;
             }
             OpCode::I32Rotl => {
-                self.out.push(I32Rotl);
+                self.push_binary(I32Rotl)?;
             }
             OpCode::I32Rotr => {
-                self.out.push(I32Rotr);
+                self.push_binary(I32Rotr)?;
             }
             OpCode::I64Clz => {
-                self.out.push(I64Clz);
+                self.push_unary(I64Clz)?;
             }
             OpCode::I64Ctz => {
-                self.out.push(I64Ctz);
+                self.push_unary(I64Ctz)?;
             }
             OpCode::I64Popcnt => {
-                self.out.push(I64Popcnt);
+                self.push_unary(I64Popcnt)?;
             }
             OpCode::I64Add => {
-                self.out.push(I64Add);
+                self.push_binary(I64Add)?;
             }
             OpCode::I64Sub => {
-                self.out.push(I64Sub);
+                self.push_binary(I64Sub)?;
             }
             OpCode::I64Mul => {
-                self.out.push(I64Mul);
+                self.push_binary(I64Mul)?;
             }
             OpCode::I64DivS => {
-                self.out.push(I64DivS);
+                self.push_binary(I64DivS)?;
             }
             OpCode::I64DivU => {
-                self.out.push(I64DivU);
+                self.push_binary(I64DivU)?;
             }
             OpCode::I64RemS => {
-                self.out.push(I64RemS);
+                self.push_binary(I64RemS)?;
             }
             OpCode::I64RemU => {
-                self.out.push(I64RemU);
+                self.push_binary(I64RemU)?;
             }
             OpCode::I64And => {
-                self.out.push(I64And);
+                self.push_binary(I64And)?;
             }
             OpCode::I64Or => {
-                self.out.push(I64Or);
+                self.push_binary(I64Or)?;
             }
             OpCode::I64Xor => {
-                self.out.push(I64Xor);
+                self.push_binary(I64Xor)?;
             }
             OpCode::I64Shl => {
-                self.out.push(I64Shl);
+                self.push_binary(I64Shl)?;
             }
             OpCode::I64ShrS => {
-                self.out.push(I64ShrS);
+                self.push_binary(I64ShrS)?;
             }
             OpCode::I64ShrU => {
-                self.out.push(I64ShrU);
+                self.push_binary(I64ShrU)?;
             }
             OpCode::I64Rotl => {
-                self.out.push(I64Rotl);
+                self.push_binary(I64Rotl)?;
             }
             OpCode::I64Rotr => {
-                self.out.push(I64Rotr);
+                self.push_binary(I64Rotr)?;
             }
             OpCode::I32WrapI64 => {
-                self.out.push(I32WrapI64);
+                self.push_unary(I32WrapI64)?;
             }
             OpCode::I64ExtendI32S => {
-                self.out.push(I64ExtendI32S);
+                self.push_unary(I64ExtendI32S)?;
             }
             OpCode::I64ExtendI32U => {
-                self.out.push(I64ExtendI32U);
+                self.push_unary(I64ExtendI32U)?;
             }
             OpCode::I32Extend8S => {
-                self.out.push(I32Extend8S);
+                self.push_unary(I32Extend8S)?;
             }
             OpCode::I32Extend16S => {
-                self.out.push(I32Extend16S);
+                self.push_unary(I32Extend16S)?;
             }
             OpCode::I64Extend8S => {
-                self.out.push(I64Extend8S);
+                self.push_unary(I64Extend8S)?;
             }
             OpCode::I64Extend16S => {
-                self.out.push(I64Extend16S);
+                self.push_unary(I64Extend16S)?;
             }
             OpCode::I64Extend32S => {
-                self.out.push(I64Extend32S);
+                self.push_unary(I64Extend32S)?;
             }
         }
+        // This opcode handler maintains the invariant that the providers stack is the
+        // same size as the operand stack.
+        assert_eq!(self.providers_stack.stack.len(), state.opds.stack.len(), "{opcode:?}");
         Ok(())
     }
 
     fn finish(self, _state: &ValidationState) -> CompileResult<Self::Outcome> {
         ensure!(self.backpatch.stack.is_empty(), "There are still jumps to backpatch.");
-        Ok(self.out)
+        let mut constants = vec![0; self.providers_stack.constants.len()];
+        for (value, place) in self.providers_stack.constants {
+            *constants
+                .get_mut(usize::try_from(-(place + 1))?)
+                .context("Invariant violation. All locations are meant to be consecutive.")? =
+                value;
+        }
+        Ok((self.out, self.providers_stack.dynamic_locations.next_location, constants))
     }
 }
 
@@ -1281,11 +1917,16 @@ impl Module {
                 locals: &ranges,
                 code,
             };
-
-            let mut exec_code =
-                validate(&context, code.expr.instrs.iter().map(Result::Ok), BackPatch::new())?;
+            let (mut exec_code, num_registers, constants) = validate(
+                &context,
+                code.expr.instrs.iter().map(Result::Ok),
+                BackPatch::new(start, code.ty.result),
+            )?;
             // We add a return instruction at the end so we have an easier time in the
             // interpreter since there is no implicit return.
+
+            // No need to insert an additional Copy here. The `End` block will insert it if
+            // needed.
             exec_code.push(InternalOpcode::Return);
 
             let num_params: u32 = code.ty.parameters.len().try_into()?;
@@ -1296,6 +1937,8 @@ impl Module {
                 num_locals: start - num_params,
                 locals,
                 return_type: BlockType::from(code.ty.result),
+                num_registers: num_registers.try_into()?,
+                constants,
                 code: exec_code,
             };
             code_out.push(result)
@@ -1367,6 +2010,7 @@ impl Module {
             .map(|i| I::try_from_import(&ty, i))
             .collect::<CompileResult<_>>()?;
         Ok(Artifact {
+            version: ArtifactVersion::V1,
             imports,
             ty,
             table,

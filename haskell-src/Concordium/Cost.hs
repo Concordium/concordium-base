@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- Definition of cost functions for the different transactions.
@@ -142,6 +143,7 @@ deployModuleCost size = fromIntegral size `div` 10
 
 -- | C_t for initializing a contract instance.
 initializeContractInstanceCost ::
+    SProtocolVersion pv ->
     -- | How much energy it took to execute the initialization code.
     Wasm.InterpreterEnergy ->
     -- | Size in bytes of the smart contract module that the instance is created from.
@@ -149,12 +151,13 @@ initializeContractInstanceCost ::
     -- | Size of the initial smart contract state if initialization succeeded.
     Maybe Wasm.ByteSize ->
     Energy
-initializeContractInstanceCost ie ms ss =
-    lookupModule ms + toEnergy ie + maybe 0 ((initializeContractInstanceCreateCost +) . toEnergy) ss + initializeContractInstanceBaseCost
+initializeContractInstanceCost spv ie ms ss =
+    lookupModule spv ms + toEnergy ie + maybe 0 ((initializeContractInstanceCreateCost +) . toEnergy) ss + initializeContractInstanceBaseCost
 
 -- | C_t for updating smart contract state.
 --  This will be applied to each smart contract that is affected by the transaction.
 updateContractInstanceCost ::
+    SProtocolVersion pv ->
     -- | How much energy it t ook to execute the update code.
     Wasm.InterpreterEnergy ->
     -- | Size in bytes of the module the contract code belongs to.
@@ -164,8 +167,8 @@ updateContractInstanceCost ::
     -- | Size of the new state, if update was successful.
     Maybe Wasm.ByteSize ->
     Energy
-updateContractInstanceCost ie ms se ss =
-    lookupModule ms + lookupContractState se + toEnergy ie + maybe 0 toEnergy ss + updateContractInstanceBaseCost
+updateContractInstanceCost spv ie ms se ss =
+    lookupModule spv ms + lookupContractState se + toEnergy ie + maybe 0 toEnergy ss + updateContractInstanceBaseCost
 
 -- | C_t for updating existing credential keys. Parametrised by amount of
 --  existing credentials and new keys. Due to the way the accounts are stored a
@@ -212,8 +215,15 @@ interContractMessage = 10
 lookupContractState :: Wasm.ByteSize -> Energy
 lookupContractState ss = fromIntegral ss `div` 50
 
-lookupModule :: Word64 -> Energy
-lookupModule ms = fromIntegral ms `div` 50
+lookupModule :: SProtocolVersion pv -> Word64 -> Energy
+lookupModule SP1 ms = fromIntegral ms `div` 50
+lookupModule SP2 ms = fromIntegral ms `div` 50
+lookupModule SP3 ms = fromIntegral ms `div` 50
+lookupModule SP4 ms = fromIntegral ms `div` 50
+lookupModule SP5 ms = fromIntegral ms `div` 50
+lookupModule SP6 ms = fromIntegral ms `div` 50
+lookupModule SP7 ms = fromIntegral ms `div` 500
+lookupModule SP8 ms = fromIntegral ms `div` 500
 
 -- | The base cost of initializing a contract instance to cover administrative costs.
 -- Even if no code is run and no instance created.
@@ -228,6 +238,14 @@ initializeContractInstanceCreateCost = 200
 -- costs. Even if no code is run.
 updateContractInstanceBaseCost :: Energy
 updateContractInstanceBaseCost = 300
+
+-- | Maximum amount of nested V1 contract calls. That is, the maximum amount of
+--  execution frames that need to be kept alive at the same time.
+--
+--  Since each frame that is kept alive can consume up to 32MB of memory this limits
+--  the worst case memory use of contract calls.
+allowedContractCallDepth :: SProtocolVersion pv -> Word -> Bool
+allowedContractCallDepth spv n = demoteProtocolVersion spv <= P6 || n < 384
 
 -- | Base cost of updating credentials. There is a non-trivial amount of lookup
 --  that needs to be done before we can start any checking. This ensures that
@@ -285,3 +303,13 @@ contractInstanceCheckAccountSignatureCost ::
     Int ->
     Energy
 contractInstanceCheckAccountSignatureCost size numSigs = fromIntegral numSigs * fromIntegral (100 + size `div` 10)
+
+-- | The cost of querying the contract module reference from a smart contract instance.
+contractInstanceQueryContractModuleReferenceCost :: Energy
+contractInstanceQueryContractModuleReferenceCost = 200
+
+-- | The cost of querying the contract module name from a smart contract instance.
+--  While the length of a smart contract name is variable, it is at most 100 characters, so there
+--  is no real benefit to varying the cost based on the length.
+contractInstanceQueryContractNameCost :: Energy
+contractInstanceQueryContractNameCost = 200

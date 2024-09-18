@@ -1,9 +1,9 @@
 [package]
 name = "concordium-contracts-common-derive"
 authors = ["Concordium <developers@concordium.com>"]
-version = "4.0.1"
+version = "4.1.0"
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.73"
 license = "MPL-2.0"
 description = "Procedural macros to ease writing for smart contracts on the Concordium blockchain."
 homepage = "https://github.com/Concordium/concordium-base"

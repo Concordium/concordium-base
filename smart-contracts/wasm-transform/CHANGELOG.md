@@ -2,6 +2,14 @@
 
 ## Unreleased changes
 
+- Revise the compilation of Wasm modules to `Artifacts`. The notion of the
+  executable artifact is changed to no longer work with a stack.
+- The `Handler` trait is revised to provide `handle_opcode` function information
+  about reachability of the instruction that is being handled.
+- The `Host` trait is expanded to special-case instructions for resource
+  accounting.
+- Introduce a new version of cost assignment that is to be used in protocol 7.
+
 ## concordium-wasm 4.0.0 (2024-01-22)
 
 - Update contracts-common dependency to version 9.

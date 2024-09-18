@@ -77,3 +77,7 @@ unconditionally f (CTrue a) = CTrue <$> f a
 -- | Unwrap a conditionally when the guard is 'True'.
 uncond :: Conditionally 'True a -> a
 uncond (CTrue a) = a
+
+fromCondDef :: Conditionally b a -> a -> a
+fromCondDef (CTrue a) _def = a
+fromCondDef CFalse def = def

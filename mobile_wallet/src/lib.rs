@@ -125,6 +125,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
     // respectively.
     let mut csprng = thread_rng();
 
+    #[allow(deprecated)]
     let payload = encrypted_transfers::make_transfer_data(
         &global_context,
         &receiver_pk,
@@ -140,6 +141,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
 
     let remaining_amount = payload.remaining_amount.clone();
     let pre_tx = match maybe_memo {
+        #[allow(deprecated)]
         Some(memo) => transactions::construct::encrypted_transfer_with_memo(
             ctx.keys.num_keys(),
             ctx.from,
@@ -149,6 +151,7 @@ fn create_encrypted_transfer_aux(input: &str) -> anyhow::Result<String> {
             payload,
             memo,
         ),
+        #[allow(deprecated)]
         None => transactions::construct::encrypted_transfer(
             ctx.keys.num_keys(),
             ctx.from,
@@ -457,6 +460,8 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         maybe_get(&v, "bakingRewardCommission")?;
     let finalization_reward_commission: Option<base::AmountFraction> =
         maybe_get(&v, "finalizationRewardCommission")?;
+    let suspend: Option<bool> = maybe_get(&v, "suspend")?;
+
     let maybe_baker_keys: Option<base::BakerKeyPairs> = maybe_get(&v, "bakerKeys")?;
 
     let keys_with_proofs = match maybe_baker_keys {
@@ -476,6 +481,7 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         transaction_fee_commission,
         baking_reward_commission,
         finalization_reward_commission,
+        suspend,
     };
 
     let pre_tx = transactions::construct::configure_baker(
@@ -505,8 +511,10 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> anyhow::Result<String> {
     // context with parameters
     let global_context: GlobalContext<ArCurve> = try_get(&v, "global")?;
 
+    #[allow(deprecated)]
     let encryption =
         encrypted_transfers::encrypt_amount_with_fixed_randomness(&global_context, amount);
+    #[allow(deprecated)]
     let pre_tx = transactions::construct::transfer_to_encrypted(
         ctx.keys.num_keys(),
         ctx.from,
@@ -583,6 +591,7 @@ fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress
 fn combine_encrypted_amounts_aux(left: &str, right: &str) -> anyhow::Result<String> {
     let left = from_str(left)?;
     let right = from_str(right)?;
+    #[allow(deprecated)]
     Ok(to_string(&encrypted_transfers::aggregate::<ArCurve>(
         &left, &right,
     ))?)

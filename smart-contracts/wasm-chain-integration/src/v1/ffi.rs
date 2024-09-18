@@ -25,6 +25,7 @@ use concordium_wasm::{
     output::Output,
     utils::{parse_artifact, InstantiatedModule},
     validate::ValidationConfig,
+    CostConfigurationV0, CostConfigurationV1,
 };
 
 use crate::v0::ffi::slice_from_c_bytes;
@@ -239,6 +240,8 @@ unsafe extern "C" fn call_receive_v1(
     support_queries_tag: u8, // non-zero to enable support of chain queries.
     support_account_signature_checks: u8, /* non-zero to enable support for querying account keys
                               * and checking signatures */
+    support_contract_inspection_queries: u8, /* non-zero to enable support for querying contract
+                                              * module reference and name */
 ) -> *mut u8 {
     let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
     let artifact: BorrowedArtifactV1 = if let Ok(borrowed_artifact) = parse_artifact(artifact_bytes)
@@ -284,12 +287,14 @@ unsafe extern "C" fn call_receive_v1(
 
                 let support_queries = support_queries_tag != 0;
                 let support_account_signature_checks = support_account_signature_checks != 0;
+                let support_contract_inspection_queries = support_contract_inspection_queries != 0;
 
                 let params = ReceiveParams {
                     max_parameter_size,
                     limit_logs_and_return_values,
                     support_queries,
                     support_account_signature_checks,
+                    support_contract_inspection_queries,
                 };
 
                 let res = invoke_receive(
@@ -359,6 +364,8 @@ unsafe extern "C" fn call_receive_v1(
 /// - `wasm_bytes_ptr` a pointer to the Wasm module in Wasm binary format,
 ///   version 1.
 /// - `wasm_bytes_len` the length of the data pointed to by `wasm_bytes_ptr`
+/// - `metering_version` the version of cost assignment to use when building the
+///   artifact.
 /// - `output_len` a pointer where the total length of the output will be
 ///   written.
 /// - `output_artifact_len` a pointer where the length of the serialized
@@ -387,6 +394,7 @@ unsafe extern "C" fn validate_and_process_v1(
     allow_sign_extension_instr: u8,
     wasm_bytes_ptr: *const u8,
     wasm_bytes_len: size_t,
+    metering_version: u8,
     // this is the total length of the output byte array
     output_len: *mut size_t,
     // the length of the artifact byte array
@@ -396,17 +404,31 @@ unsafe extern "C" fn validate_and_process_v1(
     output_artifact_bytes: *mut *const u8,
 ) -> *mut u8 {
     let wasm_bytes = slice_from_c_bytes!(wasm_bytes_ptr, wasm_bytes_len);
-    match utils::instantiate_with_metering::<ProcessedImports, _>(
-        ValidationConfig {
-            allow_globals_in_init:      allow_globals_in_init != 0,
-            allow_sign_extension_instr: allow_sign_extension_instr != 0,
-        },
-        &ConcordiumAllowedImports {
-            support_upgrade: support_upgrade == 1,
-            enable_debug:    false, // we don't allow debugging when running as part of the chain.
-        },
-        wasm_bytes,
-    ) {
+    let validation_config = ValidationConfig {
+        allow_globals_in_init:      allow_globals_in_init != 0,
+        allow_sign_extension_instr: allow_sign_extension_instr != 0,
+    };
+    let allowed_imports = &ConcordiumAllowedImports {
+        support_upgrade: support_upgrade == 1,
+        enable_debug:    false, // we don't allow debugging when running as part of the chain.
+    };
+
+    let metered = match metering_version {
+        0 => utils::instantiate_with_metering::<ProcessedImports>(
+            validation_config,
+            CostConfigurationV0,
+            allowed_imports,
+            wasm_bytes,
+        ),
+        1 => utils::instantiate_with_metering::<ProcessedImports>(
+            validation_config,
+            CostConfigurationV1,
+            allowed_imports,
+            wasm_bytes,
+        ),
+        n => panic!("Precondition violation. Unsupported cost configuration {n}"),
+    };
+    match metered {
         Ok(InstantiatedModule {
             artifact,
             custom_sections_size,
@@ -635,12 +657,18 @@ extern "C" fn migrate_persistent_tree_v1(
 #[no_mangle]
 /// Deallocate the persistent state, freeing as much memory as possible.
 extern "C" fn free_persistent_state_v1(tree: *mut PersistentState) {
-    unsafe { Box::from_raw(tree) };
+    unsafe {
+        let _ = Box::from_raw(tree);
+    }
 }
 
 #[no_mangle]
 /// Deallocate the mutable state.
-extern "C" fn free_mutable_state_v1(tree: *mut MutableState) { unsafe { Box::from_raw(tree) }; }
+extern "C" fn free_mutable_state_v1(tree: *mut MutableState) {
+    unsafe {
+        let _ = Box::from_raw(tree);
+    }
+}
 
 #[no_mangle]
 /// Convert the mutable state to a persistent one. Return a pointer to the
@@ -791,5 +819,20 @@ extern "C" fn generate_persistent_state_from_seed(seed: u64, len: u64) -> *mut P
         Box::into_raw(r)
     } else {
         std::ptr::null_mut()
+    }
+}
+
+#[no_mangle]
+/// Check if the provided byte array belongs to the legacy artifact
+unsafe extern "C" fn is_legacy_artifact(
+    artifact_ptr: *const u8,    // pointer to the artifact
+    artifact_bytes_len: size_t, // length of the artifact
+) -> u8 {
+    let artifact_bytes = slice_from_c_bytes!(artifact_ptr, artifact_bytes_len);
+
+    if utils::check_artifact_version(artifact_bytes).is_err() {
+        1u8
+    } else {
+        0u8
     }
 }

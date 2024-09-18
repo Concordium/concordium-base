@@ -196,8 +196,7 @@ pub extern "C" fn bls_verify_aggregate_hybrid(
             res
         });
 
-    let m_pk_pairs: Vec<(&[u8], Vec<PublicKey<Bls12>>)> =
-        ms.into_iter().zip(pks.into_iter()).collect();
+    let m_pk_pairs: Vec<(&[u8], Vec<PublicKey<Bls12>>)> = ms.into_iter().zip(pks).collect();
     let m_pk_pairs: Vec<(&[u8], &[PublicKey<Bls12>])> = m_pk_pairs
         .iter()
         .map(|(m, pk_vec)| (*m, pk_vec.as_slice()))
@@ -234,7 +233,6 @@ pub extern "C" fn bls_prove(
     ro_len: size_t,
     sk_ptr: *mut SecretKey<Bls12>,
 ) -> *mut Proof<Bls12> {
-    let ro_len = ro_len;
     let ro_bytes = slice_from_c_bytes!(ro_ptr, ro_len);
     let sk = from_ptr!(sk_ptr);
 
@@ -252,7 +250,6 @@ pub extern "C" fn bls_check_proof(
     proof_ptr: *mut Proof<Bls12>,
     pk_ptr: *mut PublicKey<Bls12>,
 ) -> u8 {
-    let ro_len = ro_len;
     let ro_bytes = slice_from_c_bytes!(ro_ptr, ro_len);
     let proof = from_ptr!(proof_ptr);
     let pk = from_ptr!(pk_ptr);

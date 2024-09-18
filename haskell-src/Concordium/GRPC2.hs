@@ -15,6 +15,7 @@ module Concordium.GRPC2 (
 )
 where
 
+import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Coerce
@@ -268,6 +269,7 @@ instance ToProto ProtocolVersion where
     toProto P5 = Proto.PROTOCOL_VERSION_5
     toProto P6 = Proto.PROTOCOL_VERSION_6
     toProto P7 = Proto.PROTOCOL_VERSION_7
+    toProto P8 = Proto.PROTOCOL_VERSION_8
 
 instance ToProto QueryTypes.NextAccountNonce where
     type Output QueryTypes.NextAccountNonce = Proto.NextAccountSequenceNumber
@@ -589,6 +591,19 @@ instance ToProto AccountEncryptionKey where
     type Output AccountEncryptionKey = Proto.EncryptionKey
     toProto = mkSerialize
 
+instance ToProto CooldownStatus where
+    type Output CooldownStatus = Proto.Cooldown'CooldownStatus
+    toProto StatusCooldown = Proto.Cooldown'COOLDOWN
+    toProto StatusPreCooldown = Proto.Cooldown'PRE_COOLDOWN
+    toProto StatusPrePreCooldown = Proto.Cooldown'PRE_PRE_COOLDOWN
+
+instance ToProto Cooldown where
+    type Output Cooldown = Proto.Cooldown
+    toProto Cooldown{..} = Proto.make $ do
+        ProtoFields.endTime .= toProto cooldownTimestamp
+        ProtoFields.amount .= toProto cooldownAmount
+        ProtoFields.status .= toProto cooldownStatus
+
 instance ToProto AccountInfo where
     type Output AccountInfo = Proto.AccountInfo
     toProto AccountInfo{..} = Proto.make $ do
@@ -602,6 +617,9 @@ instance ToProto AccountInfo where
         ProtoFields.index .= toProto aiAccountIndex
         ProtoFields.address .= toProto aiAccountAddress
         ProtoFields.maybe'stake .= toProto aiStakingInfo
+        ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
+        ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
+        ProtoFields.isSuspended .= aiAccountIsSuspended
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
@@ -1447,6 +1465,14 @@ convertAccountTransaction ty cost sender result = case ty of
                                                 ProtoFields.bakerId .= toProto ebsfrcBakerId
                                                 ProtoFields.finalizationRewardCommission .= toProto ebsfrcFinalizationRewardCommission
                                             )
+                            BakerSuspended{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.bakerSuspended
+                                        .= Proto.make (ProtoFields.bakerId .= toProto ebsBakerId)
+                            BakerResumed{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.bakerResumed
+                                        .= Proto.make (ProtoFields.bakerId .= toProto ebrBakerId)
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toBakerEvent events
                     Right . Proto.make $ ProtoFields.bakerConfigured . ProtoFields.events .= v
@@ -1624,24 +1650,28 @@ instance ToProto QueryTypes.BlockInfo where
         ProtoFields.maybe'round .= fmap toProto biRound
         ProtoFields.maybe'epoch .= fmap toProto biEpoch
 
-instance ToProto QueryTypes.PoolStatus where
-    type Output QueryTypes.PoolStatus = Either Proto.PoolInfoResponse Proto.PassiveDelegationInfo
-    toProto QueryTypes.BakerPoolStatus{..} = Left $ Proto.make $ do
+instance ToProto QueryTypes.BakerPoolStatus where
+    type Output QueryTypes.BakerPoolStatus = Proto.PoolInfoResponse
+    toProto QueryTypes.BakerPoolStatus{..} = Proto.make $ do
         ProtoFields.baker .= toProto psBakerId
         ProtoFields.address .= toProto psBakerAddress
-        ProtoFields.equityCapital .= toProto psBakerEquityCapital
-        ProtoFields.delegatedCapital .= toProto psDelegatedCapital
-        ProtoFields.delegatedCapitalCap .= toProto psDelegatedCapitalCap
-        ProtoFields.poolInfo .= toProto psPoolInfo
-        ProtoFields.maybe'equityPendingChange .= toProto psBakerStakePendingChange
+        forM_ psActiveStatus $ \ActiveBakerPoolStatus{..} -> do
+            ProtoFields.equityCapital .= toProto abpsBakerEquityCapital
+            ProtoFields.delegatedCapital .= toProto abpsDelegatedCapital
+            ProtoFields.delegatedCapitalCap .= toProto abpsDelegatedCapitalCap
+            ProtoFields.poolInfo .= toProto abpsPoolInfo
+            ProtoFields.maybe'equityPendingChange .= toProto abpsBakerStakePendingChange
         ProtoFields.maybe'currentPaydayInfo .= fmap toProto psCurrentPaydayStatus
         ProtoFields.allPoolTotalCapital .= toProto psAllPoolTotalCapital
-    toProto QueryTypes.PassiveDelegationStatus{..} = Right $ Proto.make $ do
-        ProtoFields.delegatedCapital .= toProto psDelegatedCapital
-        ProtoFields.commissionRates .= toProto psCommissionRates
-        ProtoFields.currentPaydayTransactionFeesEarned .= toProto psCurrentPaydayTransactionFeesEarned
-        ProtoFields.currentPaydayDelegatedCapital .= toProto psCurrentPaydayDelegatedCapital
-        ProtoFields.allPoolTotalCapital .= toProto psAllPoolTotalCapital
+
+instance ToProto QueryTypes.PassiveDelegationStatus where
+    type Output QueryTypes.PassiveDelegationStatus = Proto.PassiveDelegationInfo
+    toProto QueryTypes.PassiveDelegationStatus{..} = Proto.make $ do
+        ProtoFields.delegatedCapital .= toProto pdsDelegatedCapital
+        ProtoFields.commissionRates .= toProto pdsCommissionRates
+        ProtoFields.currentPaydayTransactionFeesEarned .= toProto pdsCurrentPaydayTransactionFeesEarned
+        ProtoFields.currentPaydayDelegatedCapital .= toProto pdsCurrentPaydayDelegatedCapital
+        ProtoFields.allPoolTotalCapital .= toProto pdsAllPoolTotalCapital
 
 instance ToProto QueryTypes.PoolPendingChange where
     type Output QueryTypes.PoolPendingChange = Maybe Proto.PoolPendingChange
@@ -2037,6 +2067,28 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                 )
             SChainParametersV2 ->
+                let Parameters.ChainParameters{..} = params
+                in  Proto.make $
+                        ProtoFields.v2
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
+                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
+                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
+                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
+                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
+                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
+                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
+                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
+                                    ProtoFields.foundationAccount .= toProto foundationAddr
+                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
+                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
+                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                )
+            SChainParametersV3 ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v2

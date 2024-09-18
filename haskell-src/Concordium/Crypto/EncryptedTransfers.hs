@@ -297,6 +297,15 @@ instance FromJSON EncryptedAmountTransferData where
         eatdProof <- v .: "proof"
         return EncryptedAmountTransferData{..}
 
+instance ToJSON EncryptedAmountTransferData where
+    toJSON EncryptedAmountTransferData{..} =
+        object
+            [ "remainingAmount" .= eatdRemainingAmount,
+              "transferAmount" .= eatdTransferAmount,
+              "index" .= eatdIndex,
+              "proof" .= eatdProof
+            ]
+
 withEncryptedAmountTransferData ::
     EncryptedAmountTransferData ->
     (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a) ->
@@ -491,6 +500,14 @@ instance FromJSON SecToPubAmountTransferData where
         stpatdProof <- v .: "proof"
         return SecToPubAmountTransferData{..}
 
+instance ToJSON SecToPubAmountTransferData where
+    toJSON SecToPubAmountTransferData{..} =
+        object
+            [ "remainingAmount" .= stpatdRemainingAmount,
+              "transferAmount" .= stpatdTransferAmount,
+              "index" .= stpatdIndex,
+              "proof" .= stpatdProof
+            ]
 withSecToPubAmountTransferData ::
     SecToPubAmountTransferData ->
     (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Word64 -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a) ->

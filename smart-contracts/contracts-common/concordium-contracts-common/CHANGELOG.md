@@ -2,6 +2,20 @@
 
 ## Unreleased changes
 
+- Add `TryFrom` implementation to convert `&[u8]` to `AccountAddress`, when feature `derive-serde` is enabled.
+- Derive `serde::Serialize` and `serde::Serialize` for `PublicKeyEd25519` using
+  `FromStr` and `Display` implementations, when feature `derive-serde` is
+  enabled.
+- Derive `Default` on `Amount` (defaults to 0).
+
+## concordium-contracts-common 9.1.0 (2024-03-25)
+
+- Add `get_alias_unchecked` for `AccountAddress` that neglects the bounds check
+  assuming the caller has ensured it.
+- Implement `serde::Serialize` and `serde::Deserialize` for `AccountSignature`, `CredentialSignature`, `Signature`, `SignatureEcdsaSecp256k1` and `SignatureEd25519` when feature `derive-serde` is enabled.
+- Set minimum supported Rust version to 1.73.
+- Change `HashBytes::new` to a `const` function.
+
 ## concordium-contracts-common 9.0.0 (2024-01-22)
 
 - Add `SchemaType` implementation for `&str`.

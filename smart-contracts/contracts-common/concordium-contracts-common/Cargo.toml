@@ -1,9 +1,9 @@
 [package]
 name = "concordium-contracts-common"
-version = "9.0.0"
+version = "9.1.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.73"
 license = "MPL-2.0"
 description = "Common functionality used by smart contracts and the host environment on the Concordium blockchain."
 homepage = "https://github.com/Concordium/concordium-base"
@@ -37,7 +37,7 @@ version = "1.0"
 
 [dependencies.chrono]
 optional = true
-version = "0.4"
+version = "0.4.35" # the patch version is necessary since chrono adds new functionality in patch versions
 
 [dependencies.bs58]
 optional = true
@@ -66,7 +66,7 @@ version = "1.0"
 
 [dependencies.concordium-contracts-common-derive]
 path = "../concordium-contracts-common-derive"
-version = "4"
+version = "4.1"
 
 [dependencies.hex]
 optional = true

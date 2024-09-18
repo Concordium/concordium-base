@@ -2,7 +2,8 @@
 //! basic functionality exposed by other modules.
 
 use crate::{
-    artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, TryFromImport},
+    artifact::{Artifact, ArtifactVersion, CompiledFunction, CompiledFunctionBytes, TryFromImport},
+    metering_transformation::CostConfiguration,
     parse::{parse_skeleton, GetParseable, Parseable, Skeleton},
     validate::{validate_module, ValidateImportExport, ValidationConfig},
 };
@@ -38,15 +39,16 @@ pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
 
 /// Parse a Wasm module, validate, inject metering, and compile to a runnable
 /// artifact.
-pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
+pub fn instantiate_with_metering<I: TryFromImport>(
     config: ValidationConfig,
-    imp: &VI,
+    cost_config: impl CostConfiguration,
+    imp: &impl ValidateImportExport,
     bytes: &[u8],
 ) -> anyhow::Result<InstantiatedModule<I>> {
     let skeleton = parse_skeleton(bytes)?;
     let custom_sections_size = skeleton.custom_sections_size();
     let mut module = validate_module(config, imp, &skeleton)?;
-    module.inject_metering()?;
+    module.inject_metering(cost_config)?;
     let artifact = module.compile()?;
     Ok(InstantiatedModule {
         custom_sections_size,
@@ -64,5 +66,11 @@ pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
 pub fn parse_artifact<'a, I: Parseable<'a, ()>>(
     bytes: &'a [u8],
 ) -> anyhow::Result<Artifact<I, CompiledFunctionBytes<'a>>> {
+    (&mut std::io::Cursor::new(bytes)).next(())
+}
+
+/// Check that the version header of the provided byte array matches the
+/// expected artifact version currently supported by this library.
+pub fn check_artifact_version(bytes: &[u8]) -> anyhow::Result<ArtifactVersion> {
     (&mut std::io::Cursor::new(bytes)).next(())
 }

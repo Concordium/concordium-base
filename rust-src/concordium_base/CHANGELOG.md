@@ -1,5 +1,24 @@
 ## Unreleased changes
 
+- Extend `id::types::ATTRIBUTE_NAMES` with new company attribute tags: "legalName", "legalCountry", "businessNumber" and "registationAuth".
+- Add a new module `cis3_types` that defines the interface types for CIS3
+  compatible contracts.
+- Fix discrepancy in (de)serializing `Web3IdAttribute::Timestamp`s due to an unexpected breaking change introduced in version 0.4.32 of `chrono`.
+- `concordium_base::ed25519` now also exports `SigningKey` to enable constructing `KeyPair` structs.
+- Deprecated various functions related to encrypted transfers, as encrypted transfers are no longer supported in protocol version 7.
+
+## 5.0.0 (2024-03-25)
+
+- Set minimum supported Rust version to 1.73.
+- Make fields of CIS4 events public.
+- Remove the `From<SlotDuration>` and `From<DurationSeconds>` implementations
+  for `chrono::Duration` and replace them with fallible `TryFrom`
+  implementations that fail when durations overflow.
+- `ContractAddress::new`
+- `ContractName`, `ReceiveName`, `EntrypointName`, and `Parameter`
+  `new_unchecked` constructors are made `const` so they can be used when
+  defining constants. Similarly `Parameter::empty` is `const` now.
+
 ## 4.0.0 (2024-01-22)
 
 - Add `MultiExp` trait that allows to have different `multiexp` algorithm implementations for different curves.

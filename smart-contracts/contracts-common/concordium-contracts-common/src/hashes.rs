@@ -100,10 +100,10 @@ pub enum HashFromStrError {
 
 impl<Purpose> HashBytes<Purpose> {
     /// Construct [`HashBytes`] from a slice.
-    pub fn new(bytes: [u8; SHA256]) -> Self {
+    pub const fn new(bytes: [u8; SHA256]) -> Self {
         Self {
             bytes,
-            _phantom: Default::default(),
+            _phantom: PhantomData,
         }
     }
 }

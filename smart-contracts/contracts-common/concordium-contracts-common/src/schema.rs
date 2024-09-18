@@ -774,7 +774,7 @@ impl Deserial for FunctionV2 {
         if matches!(idx, 1 | 2 | 5 | 6) {
             let _ = r.return_value.insert(source.get()?);
         }
-        if matches!(idx, 3 | 4 | 5 | 6) {
+        if matches!(idx, 3..=6) {
             let _ = r.error.insert(source.get()?);
         }
         Ok(r)
@@ -1053,7 +1053,7 @@ mod impls {
         NoParamsInReceive,
         #[error("Init function schema does not contain a parameter schema")]
         NoParamsInInit,
-        #[error("Receive function schema not found in contract schema")]
+        #[error("Receive function schema does not contain an error schema")]
         NoErrorInReceive,
         #[error("Init function schema does not contain an error schema")]
         NoErrorInInit,

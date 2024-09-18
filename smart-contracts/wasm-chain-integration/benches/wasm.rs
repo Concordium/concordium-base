@@ -4,7 +4,7 @@ use concordium_contracts_common::{
 };
 use concordium_smart_contract_engine::{
     constants::MAX_ACTIVATION_FRAMES,
-    utils::TestHost,
+    utils::{NoDuplicateImport, TrapHost},
     v0::{
         ConcordiumAllowedImports, InitContext, InitHost, ProcessedImports, ReceiveContext,
         ReceiveHost, State,
@@ -117,6 +117,21 @@ impl Host<MeteringImport> for MeteringHost {
         self.energy.charge_memory_alloc(num_pages)
     }
 
+    fn tick_energy(&mut self, energy: u64) -> machine::RunResult<()> {
+        self.energy.tick_energy(energy)
+    }
+
+    fn track_call(&mut self) -> machine::RunResult<()> {
+        if let Some(fr) = self.activation_frames.checked_sub(1) {
+            self.activation_frames = fr;
+            Ok(())
+        } else {
+            bail!("Too many nested functions.")
+        }
+    }
+
+    fn track_return(&mut self) { self.activation_frames += 1; }
+
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     fn call(
         &mut self,
@@ -179,7 +194,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -193,7 +211,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -227,7 +245,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -240,7 +261,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -277,7 +298,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                assert!(module.inject_metering().is_ok(), "Metering injection failed.")
+                assert!(
+                    module.inject_metering(CostConfigurationV1).is_ok(),
+                    "Metering injection failed."
+                )
             })
         });
 
@@ -290,7 +314,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &skeleton,
                 )
                 .unwrap();
-                module.inject_metering().unwrap();
+                module.inject_metering(CostConfigurationV1).unwrap();
                 assert!(module.compile::<ProcessedImports>().is_ok(), "Compilation failed.")
             })
         });
@@ -306,16 +330,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_INSTRUCTIONS)).unwrap();
         let module =
-            validate::validate_module(ValidationConfig::V1, &TestHost::uninitialized(), &skeleton)
-                .unwrap();
+            validate::validate_module(ValidationConfig::V1, &NoDuplicateImport, &skeleton).unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
         for n in [0, 1, 10000, 100000, 200000].iter() {
             group.bench_with_input(format!("execute n = {}", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact
-                            .run(&mut TestHost::uninitialized(), "foo_extern", &[Value::I64(*m)])
-                            .is_ok(),
+                        artifact.run(&mut TrapHost, "foo_extern", &[Value::I64(*m)]).is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -325,16 +346,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let skeleton =
             parse::parse_skeleton(black_box(CONTRACT_BYTES_MEMORY_INSTRUCTIONS)).unwrap();
         let module =
-            validate::validate_module(ValidationConfig::V1, &TestHost::uninitialized(), &skeleton)
-                .unwrap();
+            validate::validate_module(ValidationConfig::V1, &NoDuplicateImport, &skeleton).unwrap();
         let artifact = module.compile::<ArtifactNamedImport>().unwrap();
         for n in [1, 10, 50, 100, 250, 500, 1000, 1024].iter() {
             group.bench_with_input(format!("allocate n = {} pages", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact
-                            .run(&mut TestHost::uninitialized(), "foo_extern", &[Value::I32(*m)])
-                            .is_ok(),
+                        artifact.run(&mut TrapHost, "foo_extern", &[Value::I32(*m)]).is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -347,9 +365,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u32 n = {} times", n / 4), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact
-                            .run(&mut TestHost::uninitialized(), "write_u32", &[Value::I32(*m)])
-                            .is_ok(),
+                        artifact.run(&mut TrapHost, "write_u32", &[Value::I32(*m)]).is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -362,9 +378,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u64 n = {} times", n / 8), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact
-                            .run(&mut TestHost::uninitialized(), "write_u64", &[Value::I32(*m)])
-                            .is_ok(),
+                        artifact.run(&mut TrapHost, "write_u64", &[Value::I32(*m)]).is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -377,9 +391,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u32", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact
-                            .run(&mut TestHost::uninitialized(), "write_u32_u8", &[Value::I32(*m)])
-                            .is_ok(),
+                        artifact.run(&mut TrapHost, "write_u32_u8", &[Value::I32(*m)]).is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -392,9 +404,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             group.bench_with_input(format!("write u8 n  = {} times as u64", n), n, |b, m| {
                 b.iter(|| {
                     assert!(
-                        artifact
-                            .run(&mut TestHost::uninitialized(), "write_u64_u8", &[Value::I32(*m)])
-                            .is_ok(),
+                        artifact.run(&mut TrapHost, "write_u64_u8", &[Value::I32(*m)]).is_ok(),
                         "Precondition violation."
                     )
                 })
@@ -418,9 +428,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_LOOP)).unwrap();
         let mut module =
-            validate::validate_module(ValidationConfig::V1, &TestHost::uninitialized(), &skeleton)
-                .unwrap();
-        module.inject_metering().unwrap();
+            validate::validate_module(ValidationConfig::V1, &NoDuplicateImport, &skeleton).unwrap();
+        module.inject_metering(CostConfigurationV1).unwrap();
         let artifact = module.compile::<MeteringImport>().unwrap();
 
         // Execute the function `name` with arguments `args` until running out of
@@ -566,7 +575,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 &skeleton,
             )
             .unwrap();
-            module.inject_metering().expect("Metering injection should succeed.");
+            module
+                .inject_metering(CostConfigurationV1)
+                .expect("Metering injection should succeed.");
             module
         };
 

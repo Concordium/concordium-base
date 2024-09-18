@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.2
+
+- Allowed use of functions deprecated due to the removal of encrypted transfers in protocol version 7.
+
 ## 0.25.1
 
 - Updated the internal library key_derivation to 2.0.0. This enforces that the seed phrase input must be 12, 15, 18, 21 or 24 words.
@@ -76,7 +80,7 @@
      If the JSON field `memo` is given in the input, `create_transfer` will use the payload for
      transfer with memo, and `create_encrypted_transfer` will use the payload for encrypted transfer
     with memo. If the `memo` is not given in the input, the functions will use the payloads for transfer
-    and encrypted transfer, respectively. 
+    and encrypted transfer, respectively.
 
 ## 0.8.0
    - in the response `create_credential` the field `commitmentsRandomness` is added and

@@ -106,6 +106,8 @@ module Concordium.Types.ProtocolVersion (
     --    * 'AccountV1' is used in 'P4'. Adds stake delegation.
     --
     --    * 'AccountV2' is used in 'P5' and 'P6'. Modifies the hash calculation.
+    --
+    --    * 'AccountV3' is used in 'P7'. Modifies the stake cooldown behaviour.
     AccountVersion (..),
     -- | Singleton type corresponding to 'AccountVersion'.
     SAccountVersion (..),
@@ -127,8 +129,11 @@ module Concordium.Types.ProtocolVersion (
     --    * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
     --      All the contents of the transaction summaries are used for computing the hash.
     --
-    --    * 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
+    --    * 'TOV1' is used in P5 and onwards. The hash is computed via a merkle tree and the
     --      exact reject reasons for failed transactions are omitted from the hash.
+    --
+    --    * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
+    --      except the merkle trees are hashed to include the size.
     TransactionOutcomesVersion (..),
     -- | Singleton type corresponding to 'TransactionOutcomesVersion'.
     STransactionOutcomesVersion (..),
@@ -143,10 +148,6 @@ module Concordium.Types.ProtocolVersion (
 
     -- * Delegation support
 
-    -- | Whether or not delegation is supported at a particular account version.
-    DelegationSupport (..),
-    -- Singleton type corresponding to 'DelegationSupport'.
-    SDelegationSupport (..),
     -- | Determine whether delegation is supported for a particular account version.
     supportsDelegation,
     -- | Determine whether delegation is supported for a particular account version (at the type level).
@@ -158,6 +159,35 @@ module Concordium.Types.ProtocolVersion (
     PVSupportsDelegation,
     delegationSupport,
     protocolSupportsDelegation,
+
+    -- * Flexible cooldown support
+
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake.
+    supportsFlexibleCooldown,
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake (at the type level).
+    SupportsFlexibleCooldown,
+    -- | Determine if flexible cooldown is supported. That is, multiple cooldown times for
+    -- different pieces of stake (on singletons).
+    sSupportsFlexibleCooldown,
+    AVSupportsFlexibleCooldown,
+    PVSupportsFlexibleCooldown,
+
+    -- * Validator suspension support
+
+    -- | Determine whether validators can be suspended/resumed. A validator with
+    --   a suspended account is in essence not participating in the consensus.
+    --   Its stake and delegators stay unchanged.
+    SupportsValidatorSuspension,
+    supportsValidatorSuspension,
+    sSupportsValidatorSuspension,
+    -- | Determine whether the protocol supports suspending/resuming of validators.
+    protocolSupportsSuspend,
+    -- | Deterimne whether a specific account version supports suspending/
+    -- resuming of validators.
+    AVSupportsValidatorSuspension,
+    PVSupportsValidatorSuspension,
 
     -- * Block hash version
 
@@ -191,6 +221,8 @@ module Concordium.Types.ProtocolVersion (
     supportsGlobalsInInitSections,
     omitCustomSectionFromSize,
     supportsAccountSignatureChecks,
+    supportsContractInspectionQueries,
+    supportsEncryptedTransfers,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -200,6 +232,7 @@ module Concordium.Types.ProtocolVersion (
     P5Sym0,
     P6Sym0,
     P7Sym0,
+    P8Sym0,
 ) where
 
 import Control.Monad.Except (ExceptT)
@@ -213,6 +246,7 @@ import Data.Singletons.Base.TH
 import Data.Word
 
 import Concordium.Utils.Serialization.Put (PutT)
+import GHC.TypeError
 
 -- See the splice documentation in 'Parameters.hs' for an explanation of what is generated.
 $( singletons
@@ -227,12 +261,14 @@ $( singletons
             | P5
             | P6
             | P7
+            | P8
             deriving (Eq, Ord)
 
         data ChainParametersVersion
             = ChainParametersV0
             | ChainParametersV1
             | ChainParametersV2
+            | ChainParametersV3
             deriving (Eq, Ord)
 
         chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
@@ -243,6 +279,7 @@ $( singletons
         chainParametersVersionFor P5 = ChainParametersV1
         chainParametersVersionFor P6 = ChainParametersV2
         chainParametersVersionFor P7 = ChainParametersV2
+        chainParametersVersionFor P8 = ChainParametersV3
 
         -- \* Account versions
 
@@ -254,8 +291,12 @@ $( singletons
               AccountV0
             | -- \|Account version used in P4. Adds stake delegation.
               AccountV1
-            | -- \|Account version used in P5. Modifies hashing.
+            | -- \|Account version used in P5, and P6. Modifies hashing.
               AccountV2
+            | -- \|Account version used from P7. Modifies stake cooldown.
+              AccountV3
+            | -- \|Account version used in P8. Adds suspension of inactive validators.
+              AccountV4
 
         -- \|'AccountVersion' associated with a 'ProtocolVersion'.
         accountVersionFor :: ProtocolVersion -> AccountVersion
@@ -265,18 +306,22 @@ $( singletons
         accountVersionFor P4 = AccountV1
         accountVersionFor P5 = AccountV2
         accountVersionFor P6 = AccountV2
-        accountVersionFor P7 = AccountV2
+        accountVersionFor P7 = AccountV3
+        accountVersionFor P8 = AccountV4
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
         -- to the hashing scheme.
-        -- \* 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
-        -- All the contents of the transaction summaries are used for computing the hash.
-        -- \* 'TOV1' is used in PV5 and onwards. The hash is computed via a merkle tree and the
-        -- exact reject reasons for failed transactions are omitted from the hash.
+        --  * 'TOVO' is used in P1 to P4. The hash is computed as a simple hash list.
+        --  All the contents of the transaction summaries are used for computing the hash.
+        --  * 'TOV1' is used in P5 and P6. The hash is computed via a merkle tree and the
+        --  exact reject reasons for failed transactions are omitted from the hash.
+        --  * 'TOV2' is used in P7 and onwards. The hash is computed similarly to 'TOV1',
+        --  except the merkle trees are hashed to include the size.
         data TransactionOutcomesVersion
             = TOV0
             | TOV1
+            | TOV2
 
         -- \|Projection of 'ProtocolVersion' to 'TransactionOutcomesVersion'.
         transactionOutcomesVersionFor :: ProtocolVersion -> TransactionOutcomesVersion
@@ -286,30 +331,29 @@ $( singletons
         transactionOutcomesVersionFor P4 = TOV0
         transactionOutcomesVersionFor P5 = TOV1
         transactionOutcomesVersionFor P6 = TOV1
-        transactionOutcomesVersionFor P7 = TOV1
+        transactionOutcomesVersionFor P7 = TOV2
+        transactionOutcomesVersionFor P8 = TOV2
 
-        -- \|A type used at the kind level to denote that delegation is or is not expected to be supported
-        -- at an account version. This is intended to give more descriptive type errors in cases where the
-        -- typechecker simplifies 'AVSupportsDelegationB'. In particular, a required constraint of
-        -- @AVSupportsDelegation 'AccountV0@ will give a type error:
-        --
-        -- @
-        --   Couldn't match type: 'DelegationNotSupported 'AccountV0
-        --   with: 'DelegationSupported 'AccountV0
-        -- @
-        --
-        -- This is more meaningful than @Couldn't match type: 'False with: 'True@.
-        -- From ghc 9.4, @Assert@ and @TypeError@ can be used instead to give even better errors.
-        data DelegationSupport
-            = -- \|Delegation is supported at the account version
-              DelegationSupported AccountVersion
-            | -- \|Delegation is not supported at the account version
-              DelegationNotSupported AccountVersion
+        supportsDelegation :: AccountVersion -> Bool
+        supportsDelegation AccountV0 = False
+        supportsDelegation AccountV1 = True
+        supportsDelegation AccountV2 = True
+        supportsDelegation AccountV3 = True
+        supportsDelegation AccountV4 = True
 
-        supportsDelegation :: AccountVersion -> DelegationSupport
-        supportsDelegation AccountV0 = DelegationNotSupported AccountV0
-        supportsDelegation AccountV1 = DelegationSupported AccountV1
-        supportsDelegation AccountV2 = DelegationSupported AccountV2
+        supportsFlexibleCooldown :: AccountVersion -> Bool
+        supportsFlexibleCooldown AccountV0 = False
+        supportsFlexibleCooldown AccountV1 = False
+        supportsFlexibleCooldown AccountV2 = False
+        supportsFlexibleCooldown AccountV3 = True
+        supportsFlexibleCooldown AccountV4 = True
+
+        supportsValidatorSuspension :: AccountVersion -> Bool
+        supportsValidatorSuspension AccountV0 = False
+        supportsValidatorSuspension AccountV1 = False
+        supportsValidatorSuspension AccountV2 = False
+        supportsValidatorSuspension AccountV3 = False
+        supportsValidatorSuspension AccountV4 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -328,6 +372,7 @@ $( singletons
         blockHashVersionFor P5 = BlockHashVersion0
         blockHashVersionFor P6 = BlockHashVersion0
         blockHashVersionFor P7 = BlockHashVersion1
+        blockHashVersionFor P8 = BlockHashVersion1
 
         -- \| Whether the block state hash is tracked as part of the block metadata.
         blockStateHashInMetadata :: BlockHashVersion -> Bool
@@ -352,6 +397,7 @@ protocolVersionToWord64 P4 = 4
 protocolVersionToWord64 P5 = 5
 protocolVersionToWord64 P6 = 6
 protocolVersionToWord64 P7 = 7
+protocolVersionToWord64 P8 = 8
 
 -- | Parse a 'Word64' as a 'ProtocolVersion'.
 protocolVersionFromWord64 :: (MonadFail m) => Word64 -> m ProtocolVersion
@@ -362,6 +408,7 @@ protocolVersionFromWord64 4 = return P4
 protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 6 = return P6
 protocolVersionFromWord64 7 = return P7
+protocolVersionFromWord64 8 = return P8
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 -- | Convert a @ChainParametersVersion@ to the corresponding 'Word64'.
@@ -369,6 +416,7 @@ chainParameterVersionToWord64 :: ChainParametersVersion -> Word64
 chainParameterVersionToWord64 ChainParametersV0 = 0
 chainParameterVersionToWord64 ChainParametersV1 = 1
 chainParameterVersionToWord64 ChainParametersV2 = 2
+chainParameterVersionToWord64 ChainParametersV3 = 3
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64
@@ -396,6 +444,7 @@ promoteProtocolVersion P4 = SomeProtocolVersion SP4
 promoteProtocolVersion P5 = SomeProtocolVersion SP5
 promoteProtocolVersion P6 = SomeProtocolVersion SP6
 promoteProtocolVersion P7 = SomeProtocolVersion SP7
+promoteProtocolVersion P8 = SomeProtocolVersion SP8
 
 -- | Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
@@ -485,9 +534,10 @@ blockHashVersion :: (IsBlockHashVersion bhv) => SBlockHashVersion bhv
 blockHashVersion = sing
 
 -- | Constraint that an account version supports delegation.
---
---  TODO: As of ghc 9.4, @Assert@ should be used to give better type errors.
-type AVSupportsDelegation (av :: AccountVersion) = SupportsDelegation av ~ 'DelegationSupported av
+type AVSupportsDelegation (av :: AccountVersion) =
+    Assert
+        (SupportsDelegation av)
+        (TypeError (Text "Account version " :<>: ShowType av :<>: Text " must support delegation"))
 
 -- | Constraint that a protocol version supports delegation.
 type PVSupportsDelegation (pv :: ProtocolVersion) = AVSupportsDelegation (AccountVersionFor pv)
@@ -506,13 +556,41 @@ delegationSupport = case accountVersion @av of
     SAccountV0 -> SAVDelegationNotSupported
     SAccountV1 -> SAVDelegationSupported
     SAccountV2 -> SAVDelegationSupported
+    SAccountV3 -> SAVDelegationSupported
+    SAccountV4 -> SAVDelegationSupported
 
 -- | Whether the protocol supports delegation functionality.
 protocolSupportsDelegation :: SProtocolVersion pv -> Bool
 {-# INLINE protocolSupportsDelegation #-}
 protocolSupportsDelegation spv = case sSupportsDelegation (sAccountVersionFor spv) of
-    SDelegationSupported{} -> True
-    _ -> False
+    STrue -> True
+    SFalse -> False
+
+-- | Whether the protocol supports suspending/resuming validators.
+protocolSupportsSuspend :: SProtocolVersion pv -> Bool
+{-# INLINE protocolSupportsSuspend #-}
+protocolSupportsSuspend spv = case sSupportsValidatorSuspension (sAccountVersionFor spv) of
+    STrue -> True
+    SFalse -> False
+
+-- | Constraint that an account version supports validator suspension.
+type AVSupportsValidatorSuspension (av :: AccountVersion) =
+    SupportsValidatorSuspension av ~ 'True
+
+-- | Constraint that a protocol version supports validator suspension.
+type PVSupportsValidatorSuspension (pv :: ProtocolVersion) =
+    AVSupportsValidatorSuspension (AccountVersionFor pv)
+
+-- | Constraint that an account version supports flexible cooldown.
+--
+-- Note, we do not use 'Assert' here, since that results in a weaker constraint that requires
+-- pattern matching on the 'AccountVersion' to fully recover the equality constraint.
+type AVSupportsFlexibleCooldown (av :: AccountVersion) =
+    SupportsFlexibleCooldown av ~ 'True
+
+-- | Constraint that a protocol version supports flexible cooldown.
+type PVSupportsFlexibleCooldown (pv :: ProtocolVersion) =
+    AVSupportsFlexibleCooldown (AccountVersionFor pv)
 
 -- | Whether the protocol version supports memo functionality.
 --  (Memos are supported in 'P2' onwards.)
@@ -524,6 +602,7 @@ supportsMemo SP4 = True
 supportsMemo SP5 = True
 supportsMemo SP6 = True
 supportsMemo SP7 = True
+supportsMemo SP8 = True
 
 -- | Whether the protocol version supports account aliases.
 --  (Account aliases are supported in 'P3' onwards.)
@@ -535,6 +614,7 @@ supportsAccountAliases SP4 = True
 supportsAccountAliases SP5 = True
 supportsAccountAliases SP6 = True
 supportsAccountAliases SP7 = True
+supportsAccountAliases SP8 = True
 
 -- | Whether the protocol version supports V1 smart contracts.
 --  (V1 contracts are supported in 'P4' onwards.)
@@ -546,6 +626,7 @@ supportsV1Contracts SP4 = True
 supportsV1Contracts SP5 = True
 supportsV1Contracts SP6 = True
 supportsV1Contracts SP7 = True
+supportsV1Contracts SP8 = True
 
 -- | Whether the protocol version supports delegation.
 --  (Delegation is supported in 'P4' onwards.)
@@ -553,7 +634,11 @@ supportsDelegationPV :: SProtocolVersion pv -> Bool
 supportsDelegationPV SP1 = False
 supportsDelegationPV SP2 = False
 supportsDelegationPV SP3 = False
-supportsDelegationPV _ = True
+supportsDelegationPV SP4 = True
+supportsDelegationPV SP5 = True
+supportsDelegationPV SP6 = True
+supportsDelegationPV SP7 = True
+supportsDelegationPV SP8 = True
 
 -- | Whether the protocol version supports upgradable smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -566,6 +651,7 @@ supportsUpgradableContracts spv = case spv of
     SP5 -> True
     SP6 -> True
     SP7 -> True
+    SP8 -> True
 
 -- | Whether the protocol version supports chain queries in smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -578,6 +664,7 @@ supportsChainQueryContracts spv = case spv of
     SP5 -> True
     SP6 -> True
     SP7 -> True
+    SP8 -> True
 
 -- | Whether the protocol version supports sign extension instructions for V1
 --  contracts. (Supported in 'P6' and onwards)
@@ -590,6 +677,7 @@ supportsSignExtensionInstructions spv = case spv of
     SP5 -> False
     SP6 -> True
     SP7 -> True
+    SP8 -> True
 
 -- | Whether the protocol version allows globals in data and element sections of
 --  Wasm modules for V1 contracts. (Supported before 'P6')
@@ -602,6 +690,7 @@ supportsGlobalsInInitSections spv = case spv of
     SP5 -> True
     SP6 -> False
     SP7 -> False
+    SP8 -> False
 
 -- | Whether the protocol version specifies that custom section should not be
 --  counted towards module size when executing V1 contracts.
@@ -620,3 +709,31 @@ supportsAccountSignatureChecks spv = case spv of
     SP5 -> False
     SP6 -> True
     SP7 -> True
+    SP8 -> True
+
+-- | Whether the protocol version supports querying a smart contract's module reference and name
+--  from smart contracts.
+--  (Supported in 'P7' and onwards.)
+supportsContractInspectionQueries :: SProtocolVersion pv -> Bool
+supportsContractInspectionQueries = \case
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> False
+    SP7 -> True
+    SP8 -> True
+
+-- | Whether the protocol version supports encrypting balances and sending encrypted transfers.
+--  (Disabled in 'P7' and onwards.)
+supportsEncryptedTransfers :: SProtocolVersion pv -> Bool
+supportsEncryptedTransfers = \case
+    SP1 -> True
+    SP2 -> True
+    SP3 -> True
+    SP4 -> True
+    SP5 -> True
+    SP6 -> True
+    SP7 -> False
+    SP8 -> False
