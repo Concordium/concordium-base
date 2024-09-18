@@ -117,8 +117,9 @@ copyDlls _ flags pkgDescr lbi = case buildOS of
     Windows -> do
         let installDirs = absoluteComponentInstallDirs pkgDescr lbi (localUnitId lbi) copydest
         let copyLib lib = do
-                rawSystemExit verbosity "cp" ["-u", "./lib/" ++ lib ++ ".dll", bindir installDirs]
-                notice verbosity $ "Copy " ++ lib ++ " to " ++ bindir installDirs
+                let libName = fst lib
+                rawSystemExit verbosity "cp" ["-u", "./lib/" ++ libName ++ ".dll", bindir installDirs]
+                notice verbosity $ "Copy " ++ libName ++ " to " ++ bindir installDirs
         mapM_ copyLib concordiumLibs
     _ -> return ()
   where
