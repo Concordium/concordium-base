@@ -1465,6 +1465,11 @@ convertAccountTransaction ty cost sender result = case ty of
                                                 ProtoFields.bakerId .= toProto ebsfrcBakerId
                                                 ProtoFields.finalizationRewardCommission .= toProto ebsfrcFinalizationRewardCommission
                                             )
+                            DelegationRemoved{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.delegationRemoved
+                                        .= Proto.make
+                                            (ProtoFields.delegatorId .= toProto edrDelegatorId)
                             BakerSuspended{..} ->
                                 Right . Proto.make $
                                     ProtoFields.bakerSuspended
@@ -1513,6 +1518,10 @@ convertAccountTransaction ty cost sender result = case ty of
                                             )
                             DelegationAdded{..} -> Right . Proto.make $ ProtoFields.delegationAdded .= toProto edaDelegatorId
                             DelegationRemoved{..} -> Right . Proto.make $ ProtoFields.delegationRemoved .= toProto edrDelegatorId
+                            BakerRemoved{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.bakerRemoved
+                                        .= Proto.make (ProtoFields.bakerId .= toProto ebrBakerId)
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toDelegationEvent events
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v

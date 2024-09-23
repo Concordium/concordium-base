@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+## 6.0.0
+
 - Extend `id::types::ATTRIBUTE_NAMES` with new company attribute tags: "legalName", "legalCountry", "businessNumber" and "registationAuth".
 - Add a new module `cis3_types` that defines the interface types for CIS3
   compatible contracts.

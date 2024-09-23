@@ -12,6 +12,8 @@
 -- | Types for representing the inputs to and results of consensus queries.
 module Concordium.Types.Queries where
 
+import Control.Applicative
+import Control.Monad
 import Data.Aeson
 import Data.Aeson.TH
 import Data.Char (isLower)
@@ -525,14 +527,46 @@ data BakerPoolStatus = BakerPoolStatus
     }
     deriving (Eq, Show)
 
-$( deriveJSON
-    defaultOptions
-        { fieldLabelModifier = firstLower . dropWhile isLower,
-          constructorTagModifier = reverse . drop (length ("Status" :: String)) . reverse,
-          sumEncoding = TaggedObject{tagFieldName = "poolType", contentsFieldName = "poolStatus"}
-        }
-    ''BakerPoolStatus
- )
+instance ToJSON BakerPoolStatus where
+    toJSON BakerPoolStatus{..} =
+        object $
+            [ "poolType" .= ("BakerPool" :: Text),
+              "bakerId" .= psBakerId,
+              "bakerAddress" .= psBakerAddress,
+              "currentPaydayStatus" .= psCurrentPaydayStatus,
+              "allPoolTotalCapital" .= psAllPoolTotalCapital
+            ]
+                ++ activeStatusFields
+      where
+        activeStatusFields = case psActiveStatus of
+            Just ActiveBakerPoolStatus{..} ->
+                [ "bakerEquityCapital" .= abpsBakerEquityCapital,
+                  "delegatedCapital" .= abpsDelegatedCapital,
+                  "delegatedCapitalCap" .= abpsDelegatedCapitalCap,
+                  "poolInfo" .= abpsPoolInfo,
+                  "bakerStakePendingChange" .= abpsBakerStakePendingChange
+                ]
+            Nothing -> []
+
+instance FromJSON BakerPoolStatus where
+    parseJSON = withObject "BakerPoolStatus" $ \obj -> do
+        -- Check the pool type is correct
+        poolType <- obj .: "poolType"
+        unless (poolType == ("BakerPool" :: Text)) $
+            fail "Expected poolType to be 'BakerPool'"
+        psBakerId <- obj .: "bakerId"
+        psBakerAddress <- obj .: "bakerAddress"
+        psCurrentPaydayStatus <- obj .: "currentPaydayStatus"
+        psAllPoolTotalCapital <- obj .: "allPoolTotalCapital"
+        let activeStatusFields = do
+                abpsBakerEquityCapital <- obj .: "bakerEquityCapital"
+                abpsDelegatedCapital <- obj .: "delegatedCapital"
+                abpsDelegatedCapitalCap <- obj .: "delegatedCapitalCap"
+                abpsPoolInfo <- obj .: "poolInfo"
+                abpsBakerStakePendingChange <- obj .: "bakerStakePendingChange"
+                return ActiveBakerPoolStatus{..}
+        psActiveStatus <- optional activeStatusFields
+        return BakerPoolStatus{..}
 
 -- | Status of the passive delegators.
 --
