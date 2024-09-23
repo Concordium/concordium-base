@@ -242,6 +242,7 @@ module Concordium.Types.Parameters (
     LeverageFactor (..),
     applyLeverageFactor,
     CapitalBound (..),
+    SuspensionThreshold (..),
     -- | Versioning for the 'PoolParameters'' structure.
     --
     --  * 'PoolParametersVersion0' ('ChainParametersV0'): just the minimum stake for registering a
@@ -272,6 +273,12 @@ module Concordium.Types.Parameters (
     ppMinimumEquityCapital,
     ppCapitalBound,
     ppLeverageBound,
+    pp2PassiveCommissions,
+    pp2CommissionBounds,
+    pp2MinimumEquityCapital,
+    pp2CapitalBound,
+    pp2LeverageBound,
+    pp2SuspensionThreshold,
     putPoolParameters,
     getPoolParameters,
 
@@ -555,13 +562,14 @@ $( singletons
         data PoolParametersVersion
             = PoolParametersVersion0 -- \^Minimum baker stake
             | PoolParametersVersion1 -- \^Pool commission rates, limits and bounds.
+            | PoolParametersVersion2 -- \^Validator suspension threshold.
 
         -- \|The pool parameters version associated with a chain parameters version.
         poolParametersVersionFor :: ChainParametersVersion -> PoolParametersVersion
         poolParametersVersionFor ChainParametersV0 = PoolParametersVersion0
         poolParametersVersionFor ChainParametersV1 = PoolParametersVersion1
         poolParametersVersionFor ChainParametersV2 = PoolParametersVersion1
-        poolParametersVersionFor ChainParametersV3 = PoolParametersVersion1
+        poolParametersVersionFor ChainParametersV3 = PoolParametersVersion2
 
         -- \|Consensus parameters version.
         data ConsensusParametersVersion
@@ -1351,6 +1359,21 @@ instance FromJSON CapitalBound where
         when (cb == AmountFraction 0) $ fail "zero-valued capital bound"
         return $ CapitalBound cb
 
+newtype SuspensionThreshold = SuspensionThreshold {theSuspensionThreshold :: Word32}
+    deriving newtype (Eq, Ord, Show, ToJSON)
+
+instance Serialize SuspensionThreshold where
+    put = put . theSuspensionThreshold
+    get = do
+        st <- get
+        return $ SuspensionThreshold st
+
+instance FromJSON SuspensionThreshold where
+    parseJSON v = do
+        st <- parseJSON v
+        return $ SuspensionThreshold st
+
+
 deriving instance Eq PoolParametersVersion
 deriving instance Show PoolParametersVersion
 
@@ -1386,6 +1409,23 @@ data PoolParameters' (ppv :: PoolParametersVersion) where
           _ppLeverageBound :: !LeverageFactor
         } ->
         PoolParameters' 'PoolParametersVersion1
+    PoolParametersV2 ::
+        { -- | Commission rates charged for passive delegation.
+          _pp2PassiveCommissions :: !CommissionRates,
+          -- | Bounds on the commission rates that may be charged by bakers.
+          _pp2CommissionBounds :: !CommissionRanges,
+          -- | Minimum equity capital required for a new baker.
+          _pp2MinimumEquityCapital :: !Amount,
+          -- | Maximum fraction of the total staked capital of that a new baker can have.
+          _pp2CapitalBound :: !CapitalBound,
+          -- | The maximum leverage that a baker can have as a ratio of total stake
+          --  to equity capital.
+          _pp2LeverageBound :: !LeverageFactor,
+          -- | The suspension threshold. This is the maximal number of rounds a
+          --   validator can miss before being suspended.
+          _pp2SuspensionThreshold :: !SuspensionThreshold
+        } ->
+        PoolParameters' 'PoolParametersVersion2
 
 -- | Convenience type for a 'PoolParameters'' parametrised by the 'ChainParametersVersion'.
 type PoolParameters (cpv :: ChainParametersVersion) = PoolParameters' (PoolParametersVersionFor cpv)
@@ -1407,6 +1447,18 @@ instance ToJSON (PoolParameters' ppv) where
               "capitalBound" AE..= _ppCapitalBound,
               "leverageBound" AE..= _ppLeverageBound
             ]
+    toJSON PoolParametersV2{..} =
+        object
+            [ "passiveFinalizationCommission" AE..= _finalizationCommission _pp2PassiveCommissions,
+              "passiveBakingCommission" AE..= _bakingCommission _pp2PassiveCommissions,
+              "passiveTransactionCommission" AE..= _transactionCommission _pp2PassiveCommissions,
+              "finalizationCommissionRange" AE..= _finalizationCommissionRange _pp2CommissionBounds,
+              "bakingCommissionRange" AE..= _bakingCommissionRange _pp2CommissionBounds,
+              "transactionCommissionRange" AE..= _transactionCommissionRange _pp2CommissionBounds,
+              "minimumEquityCapital" AE..= _pp2MinimumEquityCapital,
+              "capitalBound" AE..= _pp2CapitalBound,
+              "leverageBound" AE..= _pp2LeverageBound
+            ]
 
 parsePoolParametersJSON :: SPoolParametersVersion ppv -> Value -> Parser (PoolParameters' ppv)
 parsePoolParametersJSON = \case
@@ -1424,6 +1476,20 @@ parsePoolParametersJSON = \case
         let _ppPassiveCommissions = CommissionRates{..}
         let _ppCommissionBounds = CommissionRanges{..}
         return PoolParametersV1{..}
+    SPoolParametersVersion2 -> withObject "PoolParametersV2" $ \v -> do
+        _finalizationCommission <- v .: "passiveFinalizationCommission"
+        _bakingCommission <- v .: "passiveBakingCommission"
+        _transactionCommission <- v .: "passiveTransactionCommission"
+        _finalizationCommissionRange <- v .: "finalizationCommissionRange"
+        _bakingCommissionRange <- v .: "bakingCommissionRange"
+        _transactionCommissionRange <- v .: "transactionCommissionRange"
+        _pp2MinimumEquityCapital <- v .: "minimumEquityCapital"
+        _pp2CapitalBound <- v .: "capitalBound"
+        _pp2LeverageBound <- v .: "leverageBound"
+        _pp2SuspensionThreshold <- v .: "suspensionThreshold"
+        let _pp2PassiveCommissions = CommissionRates{..}
+        let _pp2CommissionBounds = CommissionRanges{..}
+        return PoolParametersV2{..}
 
 instance (IsPoolParametersVersion ppv) => FromJSON (PoolParameters' ppv) where
     parseJSON = parsePoolParametersJSON (sing @ppv)
@@ -1470,6 +1536,48 @@ ppLeverageBound ::
 ppLeverageBound =
     lens _ppLeverageBound (\pp x -> pp{_ppLeverageBound = x})
 
+-- | Lens for '_pp2PassiveCommissions'
+{-# INLINE pp2PassiveCommissions #-}
+pp2PassiveCommissions ::
+    Lens' (PoolParameters' 'PoolParametersVersion2) CommissionRates
+pp2PassiveCommissions =
+    lens _pp2PassiveCommissions (\pp x -> pp{_pp2PassiveCommissions = x})
+
+-- | Lens for '_pp2CommissionBounds'
+{-# INLINE pp2CommissionBounds #-}
+pp2CommissionBounds ::
+    Lens' (PoolParameters' 'PoolParametersVersion2) CommissionRanges
+pp2CommissionBounds =
+    lens _pp2CommissionBounds (\pp x -> pp{_pp2CommissionBounds = x})
+
+-- | Lens for '_pp2MinimumEquityCapital'
+{-# INLINE pp2MinimumEquityCapital #-}
+pp2MinimumEquityCapital ::
+    Lens' (PoolParameters' 'PoolParametersVersion2) Amount
+pp2MinimumEquityCapital =
+    lens _pp2MinimumEquityCapital (\pp x -> pp{_pp2MinimumEquityCapital = x})
+
+-- | Lens for '_pp2CapitalBound'
+{-# INLINE pp2CapitalBound #-}
+pp2CapitalBound ::
+    Lens' (PoolParameters' 'PoolParametersVersion2) CapitalBound
+pp2CapitalBound =
+    lens _pp2CapitalBound (\pp x -> pp{_pp2CapitalBound = x})
+
+-- | Lens for '_pp2LeverageBound'
+{-# INLINE pp2LeverageBound #-}
+pp2LeverageBound ::
+    Lens' (PoolParameters' 'PoolParametersVersion2) LeverageFactor
+pp2LeverageBound =
+    lens _pp2LeverageBound (\pp x -> pp{_pp2LeverageBound = x})
+
+-- | Lens for '_pp2SuspensionThreshold'
+{-# INLINE pp2SuspensionThreshold #-}
+pp2SuspensionThreshold ::
+    Lens' (PoolParameters' 'PoolParametersVersion2) SuspensionThreshold
+pp2SuspensionThreshold =
+    lens _pp2SuspensionThreshold (\pp x -> pp{_pp2SuspensionThreshold = x})
+
 -- | Serialize a 'PoolParameters''.
 putPoolParameters :: Putter (PoolParameters' ppv)
 putPoolParameters PoolParametersV0{..} = do
@@ -1480,6 +1588,13 @@ putPoolParameters PoolParametersV1{..} = do
     put _ppMinimumEquityCapital
     put _ppCapitalBound
     put _ppLeverageBound
+putPoolParameters PoolParametersV2{..} = do
+    put _pp2PassiveCommissions
+    put _pp2CommissionBounds
+    put _pp2MinimumEquityCapital
+    put _pp2CapitalBound
+    put _pp2LeverageBound
+    put _pp2SuspensionThreshold
 
 instance HashableTo Hash.Hash (PoolParameters' ppv) where
     getHash = Hash.hash . runPut . putPoolParameters
@@ -1491,6 +1606,7 @@ getPoolParameters :: forall ppv. SPoolParametersVersion ppv -> Get (PoolParamete
 getPoolParameters = \case
     SPoolParametersVersion0 -> PoolParametersV0 <$> get
     SPoolParametersVersion1 -> PoolParametersV1 <$> get <*> get <*> get <*> get <*> get
+    SPoolParametersVersion2 -> PoolParametersV2 <$> get <*> get <*> get <*> get <*> get <*> get
 
 instance (IsPoolParametersVersion ppv) => Serialize (PoolParameters' ppv) where
     put = putPoolParameters
@@ -1928,7 +2044,7 @@ parseJSONForCPV2 =
 
 parseJSONForCPV3 :: Value -> Parser (ChainParameters' 'ChainParametersV3)
 parseJSONForCPV3 =
-    withObject "ChainParametersV2" $ \v -> do
+    withObject "ChainParametersV3" $ \v -> do
         _cpEuroPerEnergy <- v .: "euroPerEnergy"
         _cpMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -1942,9 +2058,10 @@ parseJSONForCPV3 =
         _finalizationCommissionRange <- v .: "finalizationCommissionRange"
         _bakingCommissionRange <- v .: "bakingCommissionRange"
         _transactionCommissionRange <- v .: "transactionCommissionRange"
-        _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
-        _ppCapitalBound <- v .: "capitalBound"
-        _ppLeverageBound <- v .: "leverageBound"
+        _pp2MinimumEquityCapital <- v .: "minimumEquityCapital"
+        _pp2CapitalBound <- v .: "capitalBound"
+        _pp2LeverageBound <- v .: "leverageBound"
+        _pp2SuspensionThreshold <- v .: "suspensionThreshold"
         _tpRewardPeriodLength <- v .: "rewardPeriodLength"
         _tpMintPerPayday <- v .: "mintPerPayday"
         _tpTimeoutBase <- v .: "timeoutBase"
@@ -1959,10 +2076,10 @@ parseJSONForCPV3 =
         _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let _cpCooldownParameters = CooldownParametersV1{..}
             _cpTimeParameters = SomeParam TimeParametersV1{..}
-            _cpPoolParameters = PoolParametersV1{..}
+            _cpPoolParameters = PoolParametersV2{..}
             _cpExchangeRates = makeExchangeRates _cpEuroPerEnergy _cpMicroGTUPerEuro
-            _ppPassiveCommissions = CommissionRates{..}
-            _ppCommissionBounds = CommissionRanges{..}
+            _pp2PassiveCommissions = CommissionRates{..}
+            _pp2CommissionBounds = CommissionRanges{..}
             _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
         return ChainParameters{..}
@@ -2047,15 +2164,15 @@ instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' 
                   "accountCreationLimit" AE..= _cpAccountCreationLimit,
                   "rewardParameters" AE..= _cpRewardParameters,
                   "foundationAccountIndex" AE..= _cpFoundationAccount,
-                  "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions _cpPoolParameters),
-                  "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions _cpPoolParameters),
-                  "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions _cpPoolParameters),
-                  "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds _cpPoolParameters),
-                  "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds _cpPoolParameters),
-                  "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds _cpPoolParameters),
-                  "minimumEquityCapital" AE..= _ppMinimumEquityCapital _cpPoolParameters,
-                  "capitalBound" AE..= _ppCapitalBound _cpPoolParameters,
-                  "leverageBound" AE..= _ppLeverageBound _cpPoolParameters,
+                  "passiveFinalizationCommission" AE..= _finalizationCommission (_pp2PassiveCommissions _cpPoolParameters),
+                  "passiveBakingCommission" AE..= _bakingCommission (_pp2PassiveCommissions _cpPoolParameters),
+                  "passiveTransactionCommission" AE..= _transactionCommission (_pp2PassiveCommissions _cpPoolParameters),
+                  "finalizationCommissionRange" AE..= _finalizationCommissionRange (_pp2CommissionBounds _cpPoolParameters),
+                  "bakingCommissionRange" AE..= _bakingCommissionRange (_pp2CommissionBounds _cpPoolParameters),
+                  "transactionCommissionRange" AE..= _transactionCommissionRange (_pp2CommissionBounds _cpPoolParameters),
+                  "minimumEquityCapital" AE..= _pp2MinimumEquityCapital _cpPoolParameters,
+                  "capitalBound" AE..= _pp2CapitalBound _cpPoolParameters,
+                  "leverageBound" AE..= _pp2LeverageBound _cpPoolParameters,
                   "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam _cpTimeParameters),
                   "mintPerPayday" AE..= _tpMintPerPayday (unOParam _cpTimeParameters),
                   "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters _cpConsensusParameters),
@@ -2159,7 +2276,7 @@ instance FromJSON FinalizationParameters where
 data DelegationChainParameters (pv :: ProtocolVersion) where
     DelegationChainParameters ::
         ( IsSupported 'PTTimeParameters (ChainParametersVersionFor pv) ~ 'True,
-          PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1,
+          -- PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1,
           CooldownParametersVersionFor (ChainParametersVersionFor pv) ~ 'CooldownParametersVersion1
         ) =>
         DelegationChainParameters pv
@@ -2195,7 +2312,7 @@ type IsConsensusV1 (pv :: ProtocolVersion) =
       SeedStateVersionFor pv ~ 'SeedStateVersion1,
       IsSupported 'PTFinalizationCommitteeParameters (ChainParametersVersionFor pv) ~ 'True,
       IsSupported 'PTTimeParameters (ChainParametersVersionFor pv) ~ 'True,
-      PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1,
+      -- PoolParametersVersionFor (ChainParametersVersionFor pv) ~ 'PoolParametersVersion1,
       MintDistributionVersionFor (ChainParametersVersionFor pv) ~ 'MintDistributionVersion1,
       CooldownParametersVersionFor (ChainParametersVersionFor pv) ~ 'CooldownParametersVersion1,
       PVSupportsDelegation pv

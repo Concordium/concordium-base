@@ -569,6 +569,7 @@ genPoolParametersV1 = do
     _ppMinimumEquityCapital <- genAmount
     _ppCapitalBound <- genCapitalBound
     _ppLeverageBound <- genLeverageFactor
+    _ppSuspensionThreshold <- arbitrary
     return PoolParametersV1{..}
 
 genRewardParameters :: forall cpv. (IsChainParametersVersion cpv) => Gen (RewardParameters cpv)

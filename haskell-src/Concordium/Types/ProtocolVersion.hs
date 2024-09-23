@@ -80,6 +80,7 @@ module Concordium.Types.ProtocolVersion (
     --          * Block energy limit.
     --
     --      - The finalization proof reward is removed from the GAS rewards.
+    -- * 'ChainParametersV2' is used for 'P8'. TODO (drsk) More docs.
     ChainParametersVersion (..),
     -- | Singleton type corresponding to 'ChainParametersVersion'.
     SChainParametersVersion (..),

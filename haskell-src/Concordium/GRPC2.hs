@@ -848,6 +848,24 @@ instance ToProto (Parameters.PoolParameters' 'Parameters.PoolParametersVersion1)
         ProtoFields.capitalBound .= toProto (pp ^. Parameters.ppCapitalBound)
         ProtoFields.leverageBound .= toProto (pp ^. Parameters.ppLeverageBound)
 
+instance ToProto (Parameters.PoolParameters' 'Parameters.PoolParametersVersion2) where
+    type Output (Parameters.PoolParameters' 'Parameters.PoolParametersVersion2) = Proto.PoolParametersCpv2
+    toProto pp = Proto.make $ do
+        ProtoFields.passiveFinalizationCommission .= toProto (pp ^. Parameters.pp2PassiveCommissions . finalizationCommission)
+        ProtoFields.passiveBakingCommission .= toProto (pp ^. Parameters.pp2PassiveCommissions . bakingCommission)
+        ProtoFields.passiveTransactionCommission .= toProto (pp ^. Parameters.pp2PassiveCommissions . transactionCommission)
+        ProtoFields.commissionBounds
+            .= Proto.make
+                ( do
+                    ProtoFields.finalization .= toProto (pp ^. Parameters.pp2CommissionBounds . Parameters.finalizationCommissionRange)
+                    ProtoFields.baking .= toProto (pp ^. Parameters.pp2CommissionBounds . Parameters.bakingCommissionRange)
+                    ProtoFields.transaction .= toProto (pp ^. Parameters.pp2CommissionBounds . Parameters.transactionCommissionRange)
+                )
+        ProtoFields.minimumEquityCapital .= toProto (pp ^. Parameters.pp2MinimumEquityCapital)
+        ProtoFields.capitalBound .= toProto (pp ^. Parameters.pp2CapitalBound)
+        ProtoFields.leverageBound .= toProto (pp ^. Parameters.pp2LeverageBound)
+        ProtoFields.suspensionThreshold .= toProto (pp ^. Parameters.pp2SuspensionThreshold)
+
 instance ToProto (Parameters.CooldownParameters' 'Parameters.CooldownParametersVersion1) where
     type Output (Parameters.CooldownParameters' 'Parameters.CooldownParametersVersion1) = Proto.CooldownParametersCpv1
     toProto (Parameters.CooldownParametersV1{..}) = Proto.make $ do
@@ -961,6 +979,10 @@ instance ToProto (Parameters.InclusiveRange AmountFraction) where
 instance ToProto Parameters.CapitalBound where
     type Output Parameters.CapitalBound = Proto.CapitalBound
     toProto Parameters.CapitalBound{..} = Proto.make $ ProtoFields.value .= toProto theCapitalBound
+
+instance ToProto Parameters.SuspensionThreshold where
+    type Output Parameters.SuspensionThreshold = Proto.SuspensionThreshold
+    toProto Parameters.SuspensionThreshold{..} = mkWord32 theSuspensionThreshold
 
 instance ToProto Parameters.LeverageFactor where
     type Output Parameters.LeverageFactor = Proto.LeverageFactor
@@ -2091,7 +2113,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
             SChainParametersV3 ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
-                        ProtoFields.v2
+                        ProtoFields.v3
                             .= Proto.make
                                 ( do
                                     ProtoFields.consensusParameters .= toProto _cpConsensusParameters

@@ -435,7 +435,7 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
         putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
         printCooldownParametersV1 _cpCooldownParameters
         putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
-        printPoolParametersV1 _cpPoolParameters
+        printPoolParametersV2 _cpPoolParameters
         putStrLn "  - reward parameters:"
         putStrLn "    + mint distribution:"
         putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
@@ -521,6 +521,44 @@ printPoolParametersV1 pp = do
     putStrLn $
         "    + maximum factor a pool may stake relative to the baker's stake: "
             ++ show (pp ^. ppLeverageBound)
+
+printPoolParametersV2 ::
+    PoolParameters' 'PoolParametersVersion2 ->
+    IO ()
+printPoolParametersV2 pp = do
+    putStrLn $ "  - Passive delegation parameters:"
+    putStrLn $
+        "    + finalization commission: "
+            ++ show (pp ^. pp2PassiveCommissions . finalizationCommission)
+    putStrLn $
+        "    + baking commission: "
+            ++ show (pp ^. pp2PassiveCommissions . bakingCommission)
+    putStrLn $
+        "    + transaction commission: "
+            ++ show (pp ^. pp2PassiveCommissions . transactionCommission)
+    putStrLn $ "  - baker pool parameters:"
+    putStrLn $
+        "    + allowed (inclusive) range for finalization commission: "
+            ++ showInclusiveRange show (pp ^. pp2CommissionBounds . finalizationCommissionRange)
+    putStrLn $
+        "    + allowed (inclusive) range for baking commission: "
+            ++ showInclusiveRange show (pp ^. pp2CommissionBounds . bakingCommissionRange)
+    putStrLn $
+        "    + allowed (inclusive) range for transaction commission: "
+            ++ showInclusiveRange show (pp ^. pp2CommissionBounds . transactionCommissionRange)
+    putStrLn $
+        "    + minimum stake to be a baker: "
+            ++ show (pp ^. pp2MinimumEquityCapital)
+    putStrLn $
+        "    + maximum fraction of total stake a pool is allowed hold: "
+            ++ show (pp ^. pp2CapitalBound)
+    putStrLn $
+        "    + maximum factor a pool may stake relative to the baker's stake: "
+            ++ show (pp ^. pp2LeverageBound)
+    putStrLn $
+        "    + maximum number of missed rounds for a validator before it is suspended: "
+            ++ show (pp ^. pp2SuspensionThreshold)
+
 
 showBalance :: Amount -> Amount -> String
 showBalance totalGTU balance =

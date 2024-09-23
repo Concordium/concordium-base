@@ -144,7 +144,7 @@ parseJSONForGCPV2 =
             gcpConsensusParameters = ConsensusParametersV1{..}
         return GenesisChainParameters{..}
 
--- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
+-- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV3'.
 parseJSONForGCPV3 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV3)
 parseJSONForGCPV3 =
     withObject "GenesisChainParametersV2" $ \v -> do
@@ -161,9 +161,10 @@ parseJSONForGCPV3 =
         _finalizationCommissionRange <- v .: "finalizationCommissionRange"
         _bakingCommissionRange <- v .: "bakingCommissionRange"
         _transactionCommissionRange <- v .: "transactionCommissionRange"
-        _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
-        _ppCapitalBound <- v .: "capitalBound"
-        _ppLeverageBound <- v .: "leverageBound"
+        _pp2MinimumEquityCapital <- v .: "minimumEquityCapital"
+        _pp2CapitalBound <- v .: "capitalBound"
+        _pp2LeverageBound <- v .: "leverageBound"
+        _pp2SuspensionThreshold <- v .: "suspensionThreshold"
         _tpRewardPeriodLength <- v .: "rewardPeriodLength"
         _tpMintPerPayday <- v .: "mintPerPayday"
         _tpTimeoutBase <- v .: "timeoutBase"
@@ -176,10 +177,10 @@ parseJSONForGCPV3 =
         _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
         let gcpCooldownParameters = CooldownParametersV1{..}
             gcpTimeParameters = SomeParam TimeParametersV1{..}
-            gcpPoolParameters = PoolParametersV1{..}
+            gcpPoolParameters = PoolParametersV2{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
-            _ppPassiveCommissions = CommissionRates{..}
-            _ppCommissionBounds = CommissionRanges{..}
+            _pp2PassiveCommissions = CommissionRates{..}
+            _pp2CommissionBounds = CommissionRanges{..}
             _cpTimeoutParameters = TimeoutParameters{..}
             gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
@@ -263,15 +264,15 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV3) where
               "accountCreationLimit" AE..= gcpAccountCreationLimit,
               "rewardParameters" AE..= gcpRewardParameters,
               "foundationAccount" AE..= gcpFoundationAccount,
-              "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions gcpPoolParameters),
-              "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions gcpPoolParameters),
-              "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions gcpPoolParameters),
-              "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds gcpPoolParameters),
-              "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds gcpPoolParameters),
-              "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds gcpPoolParameters),
-              "minimumEquityCapital" AE..= _ppMinimumEquityCapital gcpPoolParameters,
-              "capitalBound" AE..= _ppCapitalBound gcpPoolParameters,
-              "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
+              "passiveFinalizationCommission" AE..= _finalizationCommission (_pp2PassiveCommissions gcpPoolParameters),
+              "passiveBakingCommission" AE..= _bakingCommission (_pp2PassiveCommissions gcpPoolParameters),
+              "passiveTransactionCommission" AE..= _transactionCommission (_pp2PassiveCommissions gcpPoolParameters),
+              "finalizationCommissionRange" AE..= _finalizationCommissionRange (_pp2CommissionBounds gcpPoolParameters),
+              "bakingCommissionRange" AE..= _bakingCommissionRange (_pp2CommissionBounds gcpPoolParameters),
+              "transactionCommissionRange" AE..= _transactionCommissionRange (_pp2CommissionBounds gcpPoolParameters),
+              "minimumEquityCapital" AE..= _pp2MinimumEquityCapital gcpPoolParameters,
+              "capitalBound" AE..= _pp2CapitalBound gcpPoolParameters,
+              "leverageBound" AE..= _pp2LeverageBound gcpPoolParameters,
               "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam gcpTimeParameters),
               "mintPerPayday" AE..= _tpMintPerPayday (unOParam gcpTimeParameters),
               "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters gcpConsensusParameters),
