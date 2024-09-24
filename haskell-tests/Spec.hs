@@ -25,6 +25,7 @@ import qualified Types.PayloadSerializationSpec
 import qualified Types.TransactionSerializationSpec
 import qualified Types.TransactionSummarySpec
 import qualified Types.UpdatesSpec
+import qualified Types.ValidName
 
 main :: IO ()
 main = hspec $ parallel $ do
@@ -54,3 +55,4 @@ main = hspec $ parallel $ do
     Types.AddressesSpec.tests
     Types.ParametersSpec.tests
     Genesis.ParametersSpec.tests
+    Types.ValidName.tests
