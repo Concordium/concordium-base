@@ -319,6 +319,7 @@ test-suite test
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec
+      Types.ValidName
       Paths_concordium_base
   autogen-modules:
       Paths_concordium_base
