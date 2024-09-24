@@ -193,14 +193,14 @@ fn get_parameter_as_json(
     let receive_schema: schema::Type = match schema {
         SchemaInputType::Module(raw) => {
             let module_schema = schema::VersionedModuleSchema::new(
-                &base64::engine::general_purpose::STANDARD.decode(raw)?,
+                &base64::engine::general_purpose::STANDARD_NO_PAD.decode(raw)?,
                 schema_version,
             )?;
             module_schema.get_receive_param_schema(contract_name, entrypoint_name)?
         }
-        SchemaInputType::Parameter(raw) => {
-            contracts_common::from_bytes(&base64::engine::general_purpose::STANDARD.decode(raw)?)?
-        }
+        SchemaInputType::Parameter(raw) => contracts_common::from_bytes(
+            &base64::engine::general_purpose::STANDARD_NO_PAD.decode(raw)?,
+        )?,
     };
 
     let mut parameter_cursor = Cursor::new(parameter.as_ref());
