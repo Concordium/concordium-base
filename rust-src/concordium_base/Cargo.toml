@@ -58,7 +58,7 @@ nom = "7.1.3"
 rand_chacha = { version = "0.3", default-features = false, optional = true }
 
 [lib]
-crate-type = ["rlib", "staticlib", "cdylib"]
+crate-type = ["lib"]
 
 # Local dependencies
 [dependencies.concordium-contracts-common]
