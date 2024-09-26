@@ -57,6 +57,8 @@ pub struct TestHost<'a, R, BackingStore> {
     pub debug_events: Vec<EmittedDebugStatement>,
     /// In-memory instance state used for state-related host calls.
     state:            InstanceState<'a, BackingStore>,
+    /// TODO
+    slot_time:        Option<u64>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -69,6 +71,7 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             rng_used: false,
             debug_events: Vec::new(),
             state,
+            slot_time: None,
         }
     }
 }
@@ -232,6 +235,16 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
             host::state_entry_size(stack, &mut energy, &mut self.state)?;
         } else if f.matches("concordium", "state_entry_resize") {
             host::state_entry_resize(stack, &mut energy, &mut self.state)?;
+        } else if f.matches("concordium", "set_slot_time") {
+            // Read slot time from stack
+            let slot_time = unsafe { stack.pop_u64() };
+            // Store locally in Testhost
+            self.slot_time = Some(slot_time);
+        } else if f.matches("concordium", "get_slot_time") {
+            // Read from TestHost
+            let slot_time = self.slot_time.context("slot_time is not set")?;
+            // Put on stack
+            stack.push_value(slot_time);
         } else {
             bail!("Unsupported host function call.")
         }
