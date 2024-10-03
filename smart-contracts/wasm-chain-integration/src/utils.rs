@@ -58,10 +58,12 @@ pub struct TestHost<'a, R, BackingStore> {
     pub debug_events: Vec<EmittedDebugStatement>,
     /// In-memory instance state used for state-related host calls.
     state:            InstanceState<'a, BackingStore>,
-    /// TODO
+    /// Time in milliseconds at the beginning of the smart contract's block.
     slot_time:        Option<u64>,
-    /// TODO
-    self_address:     Option<ContractAddress>,
+    /// The address of this smart contract
+    address:          Option<ContractAddress>,
+    /// The current balance of this smart contract
+    balance:          Option<u64>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -75,7 +77,8 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             debug_events: Vec::new(),
             state,
             slot_time: None,
-            self_address: None,
+            address: None,
+            balance: None,
         }
     }
 }
@@ -232,33 +235,43 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
             "state_entry_size" => state_entry_size(stack, energy, state)?,
             "state_entry_resize" => state_entry_resize(stack, energy, state)?,
             "set_slot_time" => {
-                // Read slot time from stack
                 let slot_time = unsafe { stack.pop_u64() };
-                // Store locally in Testhost
                 self.slot_time = Some(slot_time);
             }
             "get_slot_time" => {
-                // Read from TestHost
                 let slot_time = self.slot_time.context("slot_time is not set")?;
-                // Put on stack
                 stack.push_value(slot_time);
             }
             "get_receive_self_address" => {
-                let x = unsafe { stack.pop_u32() };
-                let mut y = Cursor::new(memory);
-                y.seek(SeekFrom::Start(x))
+                let addr_ptr = unsafe { stack.pop_u32() };
+                let mut cursor = Cursor::new(memory);
+
+                cursor
+                    .seek(SeekFrom::Start(addr_ptr))
                     .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
-                self.self_address
+
+                self.address
                     .context("self_address is not set")?
-                    .serial(&mut y)
+                    .serial(&mut cursor)
                     .map_err(|_| anyhow!("unable to serialize the self address"))?;
             }
             "set_receive_self_address" => {
-                let x = unsafe { stack.pop_u32() };
-                let mut y = Cursor::new(memory);
-                y.seek(SeekFrom::Start(x))
+                let addr_ptr = unsafe { stack.pop_u32() };
+                let mut cursor = Cursor::new(memory);
+
+                cursor
+                    .seek(SeekFrom::Start(addr_ptr))
                     .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
-                self.self_address = Some(ContractAddress::deserial(&mut y)?);
+
+                self.address = Some(ContractAddress::deserial(&mut cursor)?);
+            }
+            "get_receive_self_balance" => {
+                let balance = self.balance.context("no balance was set")?;
+                stack.push_value(balance);
+            }
+            "set_receive_self_balance" => {
+                let balance = unsafe { stack.pop_u64() };
+                self.balance = Some(balance);
             }
             item_name => bail!("Unsupported host function call ({:?}).", item_name),
         }
