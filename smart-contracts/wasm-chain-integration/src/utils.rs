@@ -8,7 +8,7 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Context};
 pub use concordium_contracts_common::WasmVersion;
 use concordium_contracts_common::{
-    self as concordium_std, from_bytes, hashes, schema, Cursor, Deserial,
+    self as concordium_std, from_bytes, hashes, schema, Cursor, Deserial, SlotTime,
 };
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
@@ -178,76 +178,70 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         // We don't track the energy usage in this host, so to reuse code which does, we
         // provide a really large amount of energy to preventing the case of
         // running out of energy.
-        let mut energy = crate::InterpreterEnergy::new(u64::MAX);
-        if f.matches("concordium", "report_error") {
-            let (filename, line, column, msg) = extract_debug(memory, stack)?;
-            bail!(ReportError::Reported {
-                filename,
-                line,
-                column,
-                msg
-            })
-        } else if f.matches("concordium", "get_random") {
-            let size = unsafe { stack.pop_u32() } as usize;
-            let dest = unsafe { stack.pop_u32() } as usize;
-            ensure!(dest + size <= memory.len(), "Illegal memory access.");
-            self.rng_used = true;
-            match self.rng.as_mut() {
-                Some(r) => {
-                    r.try_fill_bytes(&mut memory[dest..dest + size])?;
-                }
-                None => {
-                    bail!("Expected an initialized RNG.");
-                }
+        let energy = &mut crate::InterpreterEnergy::new(u64::MAX);
+        let state = &mut self.state;
+
+        ensure!(f.get_mod_name() == "concordium", "Illegal module name! ({:?})", f.get_mod_name());
+
+        use host::*;
+        match f.get_item_name() {
+            "report_error" => {
+                let (filename, line, column, msg) = extract_debug(memory, stack)?;
+                bail!(ReportError::Reported {
+                    filename,
+                    line,
+                    column,
+                    msg
+                })
             }
-        } else if f.matches("concordium", "debug_print") {
-            let (filename, line, column, msg) = extract_debug(memory, stack)?;
-            self.debug_events.push(EmittedDebugStatement {
-                filename,
-                line,
-                column,
-                msg,
-                remaining_energy: 0.into(), // debug host does not have energy.
-            });
-        } else if f.matches("concordium", "state_lookup_entry") {
-            host::state_lookup_entry(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_create_entry") {
-            host::state_create_entry(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_delete_entry") {
-            host::state_delete_entry(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_delete_prefix") {
-            host::state_delete_prefix(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterate_prefix") {
-            host::state_iterator(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_next") {
-            host::state_iterator_next(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_delete") {
-            host::state_iterator_delete(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_key_size") {
-            host::state_iterator_key_size(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_key_read") {
-            host::state_iterator_key_read(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_read") {
-            host::state_entry_read(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_write") {
-            host::state_entry_write(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_size") {
-            host::state_entry_size(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_resize") {
-            host::state_entry_resize(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "set_slot_time") {
-            // Read slot time from stack
-            let slot_time = unsafe { stack.pop_u64() };
-            // Store locally in Testhost
-            self.slot_time = Some(slot_time);
-        } else if f.matches("concordium", "get_slot_time") {
-            // Read from TestHost
-            let slot_time = self.slot_time.context("slot_time is not set")?;
-            // Put on stack
-            stack.push_value(slot_time);
-        } else {
-            bail!("Unsupported host function call.")
+            "get_random" => {
+                let size = unsafe { stack.pop_u32() } as usize;
+                let dest = unsafe { stack.pop_u32() } as usize;
+                ensure!(dest + size <= memory.len(), "Illegal memory access.");
+                self.rng_used = true;
+                self.rng
+                    .as_mut()
+                    .context("Expected an initialized RNG.")?
+                    .try_fill_bytes(&mut memory[dest..dest + size])?
+            }
+            "debug_print" => {
+                let (filename, line, column, msg) = extract_debug(memory, stack)?;
+                self.debug_events.push(EmittedDebugStatement {
+                    filename,
+                    line,
+                    column,
+                    msg,
+                    remaining_energy: 0.into(), // debug host does not have energy.
+                });
+            }
+            "state_lookup_entry" => state_lookup_entry(memory, stack, energy, state)?,
+            "state_create_entry" => state_create_entry(memory, stack, energy, state)?,
+            "state_delete_entry" => state_delete_entry(memory, stack, energy, state)?,
+            "state_delete_prefix" => state_delete_prefix(memory, stack, energy, state)?,
+            "state_iterate_prefix" => state_iterator(memory, stack, energy, state)?,
+            "state_iterator_next" => state_iterator_next(stack, energy, state)?,
+            "state_iterator_delete" => state_iterator_delete(stack, energy, state)?,
+            "state_iterator_key_size" => state_iterator_key_size(stack, energy, state)?,
+            "state_iterator_key_read" => state_iterator_key_read(memory, stack, energy, state)?,
+            "state_entry_read" => state_entry_read(memory, stack, energy, state)?,
+            "state_entry_write" => state_entry_write(memory, stack, energy, state)?,
+            "state_entry_size" => state_entry_size(stack, energy, state)?,
+            "state_entry_resize" => state_entry_resize(stack, energy, state)?,
+            "set_slot_time" => {
+                // Read slot time from stack
+                let slot_time = unsafe { stack.pop_u64() };
+                // Store locally in Testhost
+                self.slot_time = Some(slot_time);
+            }
+            "get_slot_time" => {
+                // Read from TestHost
+                let slot_time = self.slot_time.context("slot_time is not set")?;
+                // Put on stack
+                stack.push_value(slot_time);
+            }
+            item_name => bail!("Unsupported host function call ({:?}).", item_name),
         }
+
         Ok(None)
     }
 
