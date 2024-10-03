@@ -242,6 +242,16 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let slot_time = self.slot_time.context("slot_time is not set")?;
                 stack.push_value(slot_time);
             }
+            "set_receive_self_address" => {
+                let addr_ptr = unsafe { stack.pop_u32() };
+                let mut cursor = Cursor::new(memory);
+
+                cursor
+                    .seek(SeekFrom::Start(addr_ptr))
+                    .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
+
+                self.address = Some(ContractAddress::deserial(&mut cursor)?);
+            }
             "get_receive_self_address" => {
                 let addr_ptr = unsafe { stack.pop_u32() };
                 let mut cursor = Cursor::new(memory);
@@ -255,23 +265,13 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                     .serial(&mut cursor)
                     .map_err(|_| anyhow!("unable to serialize the self address"))?;
             }
-            "set_receive_self_address" => {
-                let addr_ptr = unsafe { stack.pop_u32() };
-                let mut cursor = Cursor::new(memory);
-
-                cursor
-                    .seek(SeekFrom::Start(addr_ptr))
-                    .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
-
-                self.address = Some(ContractAddress::deserial(&mut cursor)?);
+            "set_receive_self_balance" => {
+                let balance = unsafe { stack.pop_u64() };
+                self.balance = Some(balance);
             }
             "get_receive_self_balance" => {
                 let balance = self.balance.context("no balance was set")?;
                 stack.push_value(balance);
-            }
-            "set_receive_self_balance" => {
-                let balance = unsafe { stack.pop_u64() };
-                self.balance = Some(balance);
             }
             item_name => bail!("Unsupported host function call ({:?}).", item_name),
         }

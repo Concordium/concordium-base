@@ -2,6 +2,14 @@
 
 ## Unreleased changes
 
+- Implemented the following `TestHost` functions:
+  - `set_slot_time`
+  - `get_slot_time`
+  - `set_receive_self_address`
+  - `get_receive_self_address`
+  - `set_receive_self_balance`
+  - `get_receive_self_balance`
+
 ## concordium-smart-contract-engine 6.0.0 (2024-09-09)
 
 - Bump `concordium-wasm` to version 5 used by Concordium node version 7.0.0.
