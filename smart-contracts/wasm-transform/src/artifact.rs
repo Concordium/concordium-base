@@ -248,6 +248,10 @@ pub struct ArtifactNamedImport {
 }
 
 impl ArtifactNamedImport {
+    pub fn matches(&self, mod_name: &str, item_name: &str) -> bool {
+        self.mod_name.as_ref() == mod_name && self.item_name.as_ref() == item_name
+    }
+
     pub fn get_mod_name(&self) -> &str { self.mod_name.as_ref() }
 
     pub fn get_item_name(&self) -> &str { self.item_name.as_ref() }
