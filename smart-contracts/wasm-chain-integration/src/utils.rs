@@ -8,8 +8,10 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Context};
 pub use concordium_contracts_common::WasmVersion;
 use concordium_contracts_common::{
-    self as concordium_std, from_bytes, hashes, schema, Cursor, Deserial, SlotTime,
+    self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, SeekFrom, SlotTime
 };
+use concordium_contracts_common::Seek;
+use concordium_contracts_common::Serial;
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -59,6 +61,8 @@ pub struct TestHost<'a, R, BackingStore> {
     state:            InstanceState<'a, BackingStore>,
     /// TODO
     slot_time:        Option<u64>,
+    /// TODO
+    self_address:     Option<ContractAddress>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -72,6 +76,7 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             debug_events: Vec::new(),
             state,
             slot_time: None,
+            self_address: None,
         }
     }
 }
@@ -238,6 +243,18 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let slot_time = self.slot_time.context("slot_time is not set")?;
                 // Put on stack
                 stack.push_value(slot_time);
+            }
+            "get_receive_self_address" => {
+                let x = unsafe { stack.pop_u32() };
+                let mut y = Cursor::new(memory);
+                y.seek(SeekFrom::Start(x)).map_err(|_| anyhow!("unable to read bytes at the given position"))?;
+                self.self_address.context("self_address is not set")?.serial(&mut y).map_err(|_| anyhow!("unable to serialize the self address"))?;
+            }
+            "set_receive_self_address" => {
+                let x = unsafe { stack.pop_u32() };
+                let mut y = Cursor::new(memory);
+                y.seek(SeekFrom::Start(x)).map_err(|_| anyhow!("unable to read bytes at the given position"))?;
+                self.self_address = Some(ContractAddress::deserial(&mut y)?);
             }
             item_name => bail!("Unsupported host function call ({:?}).", item_name),
         }

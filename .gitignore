@@ -36,3 +36,7 @@ idiss-csharp/*/obj
 
 /smart-contracts/rust-contracts/concordium-std/Cargo.lock
 /smart-contracts/wasm-transform/Cargo.lock
+
+# Nix
+**/*.nix
+**/flake.lock
