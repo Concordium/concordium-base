@@ -248,13 +248,9 @@ pub struct ArtifactNamedImport {
 }
 
 impl ArtifactNamedImport {
-    pub fn get_mod_name(&self) -> &str {
-        self.mod_name.as_ref()
-    }
+    pub fn get_mod_name(&self) -> &str { self.mod_name.as_ref() }
 
-    pub fn get_item_name(&self) -> &str {
-        self.item_name.as_ref()
-    }
+    pub fn get_item_name(&self) -> &str { self.item_name.as_ref() }
 }
 
 impl TryFromImport for ArtifactNamedImport {

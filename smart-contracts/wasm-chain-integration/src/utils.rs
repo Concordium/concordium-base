@@ -8,10 +8,9 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Context};
 pub use concordium_contracts_common::WasmVersion;
 use concordium_contracts_common::{
-    self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, SeekFrom, SlotTime
+    self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, Seek,
+    SeekFrom, Serial,
 };
-use concordium_contracts_common::Seek;
-use concordium_contracts_common::Serial;
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -247,13 +246,18 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
             "get_receive_self_address" => {
                 let x = unsafe { stack.pop_u32() };
                 let mut y = Cursor::new(memory);
-                y.seek(SeekFrom::Start(x)).map_err(|_| anyhow!("unable to read bytes at the given position"))?;
-                self.self_address.context("self_address is not set")?.serial(&mut y).map_err(|_| anyhow!("unable to serialize the self address"))?;
+                y.seek(SeekFrom::Start(x))
+                    .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
+                self.self_address
+                    .context("self_address is not set")?
+                    .serial(&mut y)
+                    .map_err(|_| anyhow!("unable to serialize the self address"))?;
             }
             "set_receive_self_address" => {
                 let x = unsafe { stack.pop_u32() };
                 let mut y = Cursor::new(memory);
-                y.seek(SeekFrom::Start(x)).map_err(|_| anyhow!("unable to read bytes at the given position"))?;
+                y.seek(SeekFrom::Start(x))
+                    .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
                 self.self_address = Some(ContractAddress::deserial(&mut y)?);
             }
             item_name => bail!("Unsupported host function call ({:?}).", item_name),
