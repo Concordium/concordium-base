@@ -239,7 +239,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.slot_time = Some(slot_time);
             }
             "get_slot_time" => {
-                let slot_time = self.slot_time.context("slot_time is not set")?;
+                let slot_time = self.slot_time.context("No slot_time is set. Make sure to prepare this in the test environment")?;
                 stack.push_value(slot_time);
             }
             "set_receive_self_address" => {
