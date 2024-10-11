@@ -188,7 +188,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         let energy = &mut crate::InterpreterEnergy::new(u64::MAX);
         let state = &mut self.state;
 
-        ensure!(f.get_mod_name() == "concordium", "Illegal module name! ({:?})", f.get_mod_name());
+        ensure!(f.get_mod_name() == "concordium", "Unsupported module in host function call: {:?} {:?}", f.get_mod_name(), f.get_item_name());
 
         use host::*;
         match f.get_item_name() {
