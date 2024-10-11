@@ -273,7 +273,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let balance = self.balance.context("no balance was set")?;
                 stack.push_value(balance);
             }
-            item_name => bail!("Unsupported host function call ({:?}).", item_name),
+            item_name => bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), f.get_item_name()),
         }
 
         Ok(None)
