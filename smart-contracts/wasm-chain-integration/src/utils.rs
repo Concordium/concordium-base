@@ -11,6 +11,7 @@ use concordium_contracts_common::{
     self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, Seek,
     SeekFrom, Serial,
 };
+use concordium_std::{HashMap, Read, Write};
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -60,10 +61,12 @@ pub struct TestHost<'a, R, BackingStore> {
     state:            InstanceState<'a, BackingStore>,
     /// Time in milliseconds at the beginning of the smart contract's block.
     slot_time:        Option<u64>,
-    /// The address of this smart contract
+    /// The address of this smart contract.
     address:          Option<ContractAddress>,
-    /// The current balance of this smart contract
+    /// The current balance of this smart contract.
     balance:          Option<u64>,
+    // The parameters of the smart contract.
+    parameter:        HashMap<u32, Vec<u8>>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -79,6 +82,7 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             slot_time: None,
             address: None,
             balance: None,
+            parameter: HashMap::default(),
         }
     }
 }
@@ -188,7 +192,17 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         let energy = &mut crate::InterpreterEnergy::new(u64::MAX);
         let state = &mut self.state;
 
-        ensure!(f.get_mod_name() == "concordium", "Unsupported module in host function call: {:?} {:?}", f.get_mod_name(), f.get_item_name());
+        // TODO: Improve error handling using actual enums preferably thiserror
+        let seek_err = anyhow!("Unable to read bytes at the given position");
+        let unset_err =
+            |x| format!("No {x} is set. Make sure to prepare this in the test environment");
+
+        ensure!(
+            f.get_mod_name() == "concordium",
+            "Unsupported module in host function call: {:?} {:?}",
+            f.get_mod_name(),
+            f.get_item_name()
+        );
 
         use host::*;
         match f.get_item_name() {
@@ -239,16 +253,14 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.slot_time = Some(slot_time);
             }
             "get_slot_time" => {
-                let slot_time = self.slot_time.context("No slot_time is set. Make sure to prepare this in the test environment")?;
+                let slot_time = self.slot_time.context(unset_err("slot_time"))?;
                 stack.push_value(slot_time);
             }
             "set_receive_self_address" => {
                 let addr_ptr = unsafe { stack.pop_u32() };
-                let mut cursor = Cursor::new(memory);
 
-                cursor
-                    .seek(SeekFrom::Start(addr_ptr))
-                    .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| seek_err)?;
 
                 self.address = Some(ContractAddress::deserial(&mut cursor)?);
             }
@@ -256,24 +268,73 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_ptr = unsafe { stack.pop_u32() };
                 let mut cursor = Cursor::new(memory);
 
-                cursor
-                    .seek(SeekFrom::Start(addr_ptr))
-                    .map_err(|_| anyhow!("unable to read bytes at the given position"))?;
+                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| seek_err)?;
 
                 self.address
-                    .context("self_address is not set")?
+                    .context(unset_err("slot_time"))?
                     .serial(&mut cursor)
-                    .map_err(|_| anyhow!("unable to serialize the self address"))?;
+                    .map_err(|_| anyhow!("Unable to serialize the self address"))?;
             }
             "set_receive_self_balance" => {
                 let balance = unsafe { stack.pop_u64() };
                 self.balance = Some(balance);
             }
             "get_receive_self_balance" => {
-                let balance = self.balance.context("no balance was set")?;
+                let balance = self.balance.context(unset_err("balance"))?;
                 stack.push_value(balance);
             }
-            item_name => bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), f.get_item_name()),
+            "set_parameter" => {
+                let param_size = unsafe { stack.pop_u32() };
+                let param_ptr = unsafe { stack.pop_u32() };
+                let param_index = unsafe { stack.pop_u32() };
+
+                let mut param = vec![0; param_size as usize];
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| seek_err)?;
+                cursor.read_exact(&mut param)?;
+
+                self.parameter.insert(param_index, param);
+            }
+            "get_parameter_size" => {
+                let param_index = unsafe { stack.pop_u32() };
+
+                if let Some(param) = self.parameter.get(&param_index) {
+                    stack.push_value(param.len() as u64)
+                } else {
+                    stack.push_value(-1i32)
+                }
+            }
+            "get_parameter_section" => {
+                let offset = unsafe { stack.pop_u32() };
+                let length = unsafe { stack.pop_u32() };
+                let param_bytes = unsafe { stack.pop_u32() };
+                let param_index = unsafe { stack.pop_u32() };
+
+                if let Some(param) = self.parameter.get(&param_index) {
+                    let mut cursor = Cursor::new(memory);
+                    cursor.seek(SeekFrom::Start(param_bytes + offset)).map_err(|_| seek_err)?;
+
+                    let self_param = param.get(..length as usize).context(format!(
+                        "Tried to grap {} bytes of parameter[{}], which has length {}",
+                        length,
+                        param_index,
+                        param.len()
+                    ))?;
+
+                    let bytes_written: i32 = cursor
+                        .write(self_param)
+                        .map_err(|_| anyhow!("Unable to write to given buffer"))?
+                        .try_into()?;
+
+                    stack.push_value(bytes_written)
+                } else {
+                    stack.push_value(-1i32)
+                }
+            }
+            item_name => {
+                bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
+            }
         }
 
         Ok(None)
