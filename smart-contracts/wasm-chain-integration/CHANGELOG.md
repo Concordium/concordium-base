@@ -6,10 +6,13 @@
      - `get_slot_time`
      - `get_receive_self_address`
      - `get_receive_self_balance`
+     - `get_parameter_size`
+     - `get_parameter_section`
   Corresponding new host functions are introduced just for `TestHost` allowing for setting the result of the above:
      - `set_slot_time`
      - `set_receive_self_address`
      - `set_receive_self_balance`
+     - `set_parameter`
   Attempting to get a value before setting it will result in a runtime error.
 
 ## concordium-smart-contract-engine 6.0.0 (2024-09-09)
