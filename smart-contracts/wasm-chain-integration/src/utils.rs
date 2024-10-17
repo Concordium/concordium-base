@@ -65,8 +65,10 @@ pub struct TestHost<'a, R, BackingStore> {
     address:          Option<ContractAddress>,
     /// The current balance of this smart contract.
     balance:          Option<u64>,
-    // The parameters of the smart contract.
-    parameter:        HashMap<u32, Vec<u8>>,
+    /// The parameters of the smart contract.
+    parameters:       HashMap<u32, Vec<u8>>,
+    /// Events logged by the contract
+    events:           Vec<Vec<u8>>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -82,7 +84,8 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             slot_time: None,
             address: None,
             balance: None,
-            parameter: HashMap::default(),
+            parameters: HashMap::default(),
+            events: Vec::new(),
         }
     }
 }
@@ -196,6 +199,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         let seek_err = anyhow!("Unable to read bytes at the given position");
         let unset_err =
             |x| format!("No {x} is set. Make sure to prepare this in the test environment");
+        let write_err = "Unable to write to given buffer";
 
         ensure!(
             f.get_mod_name() == "concordium",
@@ -294,12 +298,12 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| seek_err)?;
                 cursor.read_exact(&mut param)?;
 
-                self.parameter.insert(param_index, param);
+                self.parameters.insert(param_index, param);
             }
             "get_parameter_size" => {
                 let param_index = unsafe { stack.pop_u32() };
 
-                if let Some(param) = self.parameter.get(&param_index) {
+                if let Some(param) = self.parameters.get(&param_index) {
                     stack.push_value(param.len() as u64)
                 } else {
                     stack.push_value(-1i32)
@@ -311,25 +315,68 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let param_bytes = unsafe { stack.pop_u32() };
                 let param_index = unsafe { stack.pop_u32() };
 
-                if let Some(param) = self.parameter.get(&param_index) {
+                if let Some(param) = self.parameters.get(&param_index) {
                     let mut cursor = Cursor::new(memory);
                     cursor.seek(SeekFrom::Start(param_bytes + offset)).map_err(|_| seek_err)?;
 
                     let self_param = param.get(..length as usize).context(format!(
-                        "Tried to grap {} bytes of parameter[{}], which has length {}",
+                        "Tried to grab {} bytes of parameter[{}], which has length {}",
                         length,
                         param_index,
                         param.len()
                     ))?;
 
-                    let bytes_written: i32 = cursor
-                        .write(self_param)
-                        .map_err(|_| anyhow!("Unable to write to given buffer"))?
-                        .try_into()?;
+                    let bytes_written: i32 =
+                        cursor.write(self_param).map_err(|_| anyhow!(write_err))?.try_into()?;
 
                     stack.push_value(bytes_written)
                 } else {
                     stack.push_value(-1i32)
+                }
+            }
+            "log_event" => {
+                let event_length = unsafe { stack.pop_u32() };
+                let event_start = unsafe { stack.pop_u32() };
+
+                // TODO: Log can be full and messages can be too long, but it is unspecified
+                // what the limits are. Find out, document and fail if either is too long.
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(event_start)).map_err(|_| seek_err)?;
+
+                let mut buf = vec![0; event_length as usize];
+                cursor.read(&mut buf).context("Unable to read provided event")?;
+
+                self.events.push(buf);
+
+                stack.push_value(1i32);
+            }
+            "get_event_size" => {
+                let event_index = unsafe { stack.pop_u32() };
+                let event_opt = self.events.get(event_index as usize);
+
+                if let Some(event) = event_opt {
+                    let event_size: i32 = event.len().try_into()?;
+                    stack.push_value(event_size)
+                } else {
+                    stack.push_value(-1i32);
+                }
+            }
+            "get_event" => {
+                let ret_buf_start = unsafe { stack.pop_u32() };
+                let event_index = unsafe { stack.pop_u32() };
+                let event_opt = self.events.get(event_index as usize);
+
+                if let Some(event) = event_opt {
+                    let mut cursor = Cursor::new(memory);
+                    cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+
+                    let bytes_written: i32 =
+                        cursor.write(event).map_err(|_| anyhow!(write_err))?.try_into()?;
+
+                    stack.push_value(bytes_written)
+                } else {
+                    stack.push_value(-1i32);
                 }
             }
             item_name => {
