@@ -11,7 +11,7 @@ use concordium_contracts_common::{
     self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, Seek,
     SeekFrom, Serial,
 };
-use concordium_std::{HashMap, Read, Write};
+use concordium_std::{AccountAddress, HashMap, Read, Write};
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -69,6 +69,8 @@ pub struct TestHost<'a, R, BackingStore> {
     parameters:       HashMap<u32, Vec<u8>>,
     /// Events logged by the contract
     events:           Vec<Vec<u8>>,
+    /// Address of the sender
+    init_origin:      Option<AccountAddress>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -86,6 +88,7 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             balance: None,
             parameters: HashMap::default(),
             events: Vec::new(),
+            init_origin: None,
         }
     }
 }
@@ -378,6 +381,25 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 } else {
                     stack.push_value(-1i32);
                 }
+            }
+            "set_init_origin" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+
+                self.init_origin = Some(AccountAddress::deserial(&mut cursor)?);
+            }
+            "get_init_origin" => {
+                let ret_buf_start = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+
+                self.init_origin
+                    .context(unset_err("init_origin"))?
+                    .serial(&mut cursor)
+                    .map_err(|_| anyhow!(write_err))?;
             }
             item_name => {
                 bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)

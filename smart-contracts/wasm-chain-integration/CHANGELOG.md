@@ -8,11 +8,13 @@
     - `get_receive_self_balance`
     - `get_parameter_size`
     - `get_parameter_section`
+    - `get_init_origin`
   Corresponding new host functions are introduced just for `TestHost` allowing for setting the result of the above:
     - `set_slot_time`
     - `set_receive_self_address`
     - `set_receive_self_balance`
     - `set_parameter`
+    - `set_init_origin`
   Attempting to get a value before setting it will result in a runtime error.
   The following getters are also created just for the `TestHost`:
     - `get_event`
