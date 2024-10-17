@@ -619,7 +619,6 @@ instance ToProto AccountInfo where
         ProtoFields.maybe'stake .= toProto aiStakingInfo
         ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
         ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
-        ProtoFields.isSuspended .= aiAccountIsSuspended
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
