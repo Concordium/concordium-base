@@ -80,6 +80,7 @@ module Concordium.Wasm (
 
     --
 
+    isValidNameChar,
     -- | A contract has one init method and several receive methods. A module can
     -- contain several contracts.
     InitName (..),
@@ -153,7 +154,6 @@ import qualified Data.ByteString.Base16 as BS16
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
-import Data.Char (isAlphaNum, isAscii, isPunctuation)
 import qualified Data.HashMap.Strict as HM
 import Data.Hashable
 import Data.Int (Int32)
@@ -400,6 +400,21 @@ instance HashableTo H.Hash (WasmModuleV V1) where
 
 --------------------------------------------------------------------------------
 
+-- | Check whether the given character is an ascii alphanumeric or punctuation character.
+--  Only these characters can appear in init, receive or entrypoint names.
+--  Note: this is more permissive in terms of punctuation than 'Data.Char.isPunctuation'.
+--  It is intended to align with Rust @char::is_ascii_punctuation@ instead.
+isValidNameChar :: Char -> Bool
+isValidNameChar c
+    | 'A' <= c && c <= 'Z' = True
+    | 'a' <= c && c <= 'z' = True
+    | '0' <= c && c <= '9' = True
+    | '!' <= c && c <= '/' = True
+    | ':' <= c && c <= '@' = True
+    | '[' <= c && c <= '`' = True
+    | '{' <= c && c <= '~' = True
+    | otherwise = False
+
 -- | Name of an init method inside a module.
 newtype InitName = InitName {initName :: Text}
     deriving (Eq, Ord)
@@ -420,7 +435,7 @@ isValidInitName proposal =
     -- The limit is specified in bytes, but Text.length returns the number of chars.
     -- This is not a problem, as we only allow ASCII.
     let hasValidLength = Text.length proposal <= maxFuncNameSize
-        hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+        hasValidCharacters = Text.all isValidNameChar proposal
         hasDot = Text.any (== '.') proposal
     in  "init_" `Text.isPrefixOf` proposal && hasValidLength && hasValidCharacters && not hasDot
 
@@ -482,7 +497,7 @@ isValidReceiveName proposal =
     -- The limit is specified in bytes, but Text.length returns the number of chars.
     -- This is not a problem, as we only allow ASCII.
     let hasValidLength = Text.length proposal <= maxFuncNameSize
-        hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+        hasValidCharacters = Text.all isValidNameChar proposal
         hasDot = Text.any (== '.') proposal
     in  hasValidLength && hasValidCharacters && hasDot
 
@@ -504,7 +519,7 @@ isValidEntrypointName proposal =
     -- The limit is specified in bytes, but Text.length returns the number of chars.
     -- This is not a problem, as we only allow ASCII.
     let hasValidLength = Text.length proposal < maxFuncNameSize
-        hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+        hasValidCharacters = Text.all isValidNameChar proposal
     in  hasValidLength && hasValidCharacters
 
 instance Serialize EntrypointName where
