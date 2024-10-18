@@ -9,12 +9,21 @@
     - `get_parameter_size`
     - `get_parameter_section`
     - `get_init_origin`
+    - `get_receive_invoker`
+    - `get_receive_sender`
+    - `get_receive_owner`
+    - `get_receive_entrypoint`
+    - `get_receive_entrypoint_size`
   Corresponding new host functions are introduced just for `TestHost` allowing for setting the result of the above:
     - `set_slot_time`
     - `set_receive_self_address`
     - `set_receive_self_balance`
     - `set_parameter`
     - `set_init_origin`
+    - `set_receive_invoker`
+    - `set_receive_sender`
+    - `set_receive_owner`
+    - `set_receive_entrypoint`
   Attempting to get a value before setting it will result in a runtime error.
   The following getters are also created just for the `TestHost`:
     - `get_event`

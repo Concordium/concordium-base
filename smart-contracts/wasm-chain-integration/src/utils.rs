@@ -11,7 +11,7 @@ use concordium_contracts_common::{
     self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, Seek,
     SeekFrom, Serial,
 };
-use concordium_std::{AccountAddress, HashMap, Read, Write, Address};
+use concordium_std::{AccountAddress, Address, HashMap, OwnedEntrypointName, Read, Write};
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -52,30 +52,33 @@ impl<I> machine::Host<I> for TrapHost {
 /// generator.
 pub struct TestHost<'a, R, BackingStore> {
     /// A RNG for randomised testing.
-    rng:              Option<R>,
+    rng:                Option<R>,
     /// A flag set to `true` if the RNG was used.
-    rng_used:         bool,
+    rng_used:           bool,
     /// Debug statements in the order they were emitted.
-    pub debug_events: Vec<EmittedDebugStatement>,
+    pub debug_events:   Vec<EmittedDebugStatement>,
     /// In-memory instance state used for state-related host calls.
-    state:            InstanceState<'a, BackingStore>,
+    state:              InstanceState<'a, BackingStore>,
     /// Time in milliseconds at the beginning of the smart contract's block.
-    slot_time:        Option<u64>,
+    slot_time:          Option<u64>,
     /// The address of this smart contract.
-    address:          Option<ContractAddress>,
+    address:            Option<ContractAddress>,
     /// The current balance of this smart contract.
-    balance:          Option<u64>,
+    balance:            Option<u64>,
     /// The parameters of the smart contract.
-    parameters:       HashMap<u32, Vec<u8>>,
+    parameters:         HashMap<u32, Vec<u8>>,
     /// Events logged by the contract.
-    events:           Vec<Vec<u8>>,
+    events:             Vec<Vec<u8>>,
     /// Account address of the sender.
-    init_origin:      Option<AccountAddress>,
+    init_origin:        Option<AccountAddress>,
     /// Invoker of the top-level transaction.
-    receive_invoker:  Option<AccountAddress>,
+    receive_invoker:    Option<AccountAddress>,
     /// Immediate sender of the message.
-    receive_sender:   Option<Address>,
-
+    receive_sender:     Option<Address>,
+    /// Owner of the contract.
+    receive_owner:      Option<AccountAddress>,
+    /// The receive entrypoint name.
+    receive_entrypoint: Option<OwnedEntrypointName>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -96,6 +99,8 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             init_origin: None,
             receive_invoker: None,
             receive_sender: None,
+            receive_owner: None,
+            receive_entrypoint: None,
         }
     }
 }
@@ -444,6 +449,56 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_sender
                     .context(unset_err("receive_sender"))?
                     .serial(&mut cursor)
+                    .map_err(|_| anyhow!(write_err))?;
+            }
+            "set_receive_owner" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+
+                self.receive_owner = Some(AccountAddress::deserial(&mut cursor)?);
+            }
+            "get_receive_owner" => {
+                let ret_buf_start = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+
+                self.receive_owner
+                    .context(unset_err("receive_owner"))?
+                    .serial(&mut cursor)
+                    .map_err(|_| anyhow!(write_err))?;
+            }
+            "set_receive_entrypoint" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+
+                self.receive_entrypoint = Some(OwnedEntrypointName::deserial(&mut cursor)?);
+            }
+            "get_receive_entrypoint_size" => {
+                let size = self.receive_entrypoint
+                    .as_ref()
+                    .context(unset_err("receive_entrypoint"))?
+                    .as_entrypoint_name()
+                    .size();
+                stack.push_value(size);
+            }
+            "get_receive_entrypoint" => {
+                let ret_buf_start = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+
+                let mut bytes = self.receive_entrypoint
+                    .clone()
+                    .context(unset_err("receive_entrypoint"))?
+                    .to_string()
+                    .into_bytes();
+
+                cursor.write(&mut bytes)
                     .map_err(|_| anyhow!(write_err))?;
             }
             item_name => {
