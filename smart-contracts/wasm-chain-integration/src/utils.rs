@@ -11,7 +11,7 @@ use concordium_contracts_common::{
     self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, Seek,
     SeekFrom, Serial,
 };
-use concordium_std::{AccountAddress, HashMap, Read, Write};
+use concordium_std::{AccountAddress, HashMap, Read, Write, Address};
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -67,10 +67,15 @@ pub struct TestHost<'a, R, BackingStore> {
     balance:          Option<u64>,
     /// The parameters of the smart contract.
     parameters:       HashMap<u32, Vec<u8>>,
-    /// Events logged by the contract
+    /// Events logged by the contract.
     events:           Vec<Vec<u8>>,
-    /// Address of the sender
+    /// Account address of the sender.
     init_origin:      Option<AccountAddress>,
+    /// Invoker of the top-level transaction.
+    receive_invoker:  Option<AccountAddress>,
+    /// Immediate sender of the message.
+    receive_sender:   Option<Address>,
+
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -89,6 +94,8 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             parameters: HashMap::default(),
             events: Vec::new(),
             init_origin: None,
+            receive_invoker: None,
+            receive_sender: None,
         }
     }
 }
@@ -398,6 +405,44 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 self.init_origin
                     .context(unset_err("init_origin"))?
+                    .serial(&mut cursor)
+                    .map_err(|_| anyhow!(write_err))?;
+            }
+            "set_receive_invoker" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+
+                self.receive_invoker = Some(AccountAddress::deserial(&mut cursor)?);
+            }
+            "get_receive_invoker" => {
+                let ret_buf_start = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+
+                self.receive_invoker
+                    .context(unset_err("receive_invoker"))?
+                    .serial(&mut cursor)
+                    .map_err(|_| anyhow!(write_err))?;
+            }
+            "set_receive_sender" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+
+                self.receive_sender = Some(Address::deserial(&mut cursor)?);
+            }
+            "get_receive_sender" => {
+                let ret_buf_start = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+
+                self.receive_sender
+                    .context(unset_err("receive_sender"))?
                     .serial(&mut cursor)
                     .map_err(|_| anyhow!(write_err))?;
             }
