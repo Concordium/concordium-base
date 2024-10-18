@@ -211,7 +211,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         let state = &mut self.state;
 
         // TODO: Improve error handling using actual enums preferably thiserror
-        let seek_err = anyhow!("Unable to read bytes at the given position");
+        let seek_err = "Unable to read bytes at the given position";
         let unset_err =
             |x| format!("No {x} is set. Make sure to prepare this in the test environment");
         let write_err = "Unable to write to given buffer";
@@ -279,7 +279,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_ptr = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| anyhow!(seek_err))?;
 
                 self.address = Some(ContractAddress::deserial(&mut cursor)?);
             }
@@ -287,7 +287,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_ptr = unsafe { stack.pop_u32() };
                 let mut cursor = Cursor::new(memory);
 
-                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| anyhow!(seek_err))?;
 
                 self.address
                     .context(unset_err("slot_time"))?
@@ -310,7 +310,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut param = vec![0; param_size as usize];
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| anyhow!(seek_err))?;
                 cursor.read_exact(&mut param)?;
 
                 self.parameters.insert(param_index, param);
@@ -332,7 +332,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 if let Some(param) = self.parameters.get(&param_index) {
                     let mut cursor = Cursor::new(memory);
-                    cursor.seek(SeekFrom::Start(param_bytes + offset)).map_err(|_| seek_err)?;
+                    cursor.seek(SeekFrom::Start(param_bytes + offset)).map_err(|_| anyhow!(seek_err))?;
 
                     let self_param = param.get(..length as usize).context(format!(
                         "Tried to grab {} bytes of parameter[{}], which has length {}",
@@ -357,7 +357,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 // what the limits are. Find out, document and fail if either is too long.
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(event_start)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(event_start)).map_err(|_| anyhow!(seek_err))?;
 
                 let mut buf = vec![0; event_length as usize];
                 cursor.read(&mut buf).context("Unable to read provided event")?;
@@ -384,7 +384,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 if let Some(event) = event_opt {
                     let mut cursor = Cursor::new(memory);
-                    cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+                    cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
                     let bytes_written: i32 =
                         cursor.write(event).map_err(|_| anyhow!(write_err))?.try_into()?;
@@ -398,7 +398,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
 
                 self.init_origin = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -406,7 +406,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
                 self.init_origin
                     .context(unset_err("init_origin"))?
@@ -417,7 +417,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
 
                 self.receive_invoker = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -425,7 +425,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
                 self.receive_invoker
                     .context(unset_err("receive_invoker"))?
@@ -436,7 +436,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
 
                 self.receive_sender = Some(Address::deserial(&mut cursor)?);
             }
@@ -444,7 +444,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
                 self.receive_sender
                     .context(unset_err("receive_sender"))?
@@ -455,7 +455,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
 
                 self.receive_owner = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -463,7 +463,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
                 self.receive_owner
                     .context(unset_err("receive_owner"))?
@@ -474,7 +474,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
 
                 self.receive_entrypoint = Some(OwnedEntrypointName::deserial(&mut cursor)?);
             }
@@ -490,7 +490,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| seek_err)?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
                 let mut bytes = self.receive_entrypoint
                     .clone()
@@ -500,6 +500,36 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 cursor.write(&mut bytes)
                     .map_err(|_| anyhow!(write_err))?;
+            }
+            "verify_ed25519_signature" => {
+                let message_len = unsafe { stack.pop_u32() };
+                let message_ptr = unsafe { stack.pop_u32() };
+                let signature_ptr = unsafe { stack.pop_u32() };
+                let public_key_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+
+                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut public_key_bytes = [0; 32];
+                cursor.read(&mut public_key_bytes)?;
+                let z_pk = ed25519_zebra::VerificationKey::try_from(public_key_bytes)?;
+
+                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut signature_bytes = [0; 64];
+                cursor.read(&mut signature_bytes)?;
+                let z_sig = ed25519_zebra::Signature::from_bytes(&signature_bytes);
+
+                cursor.seek(SeekFrom::Start(message_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut msg = vec![0; message_len as usize];
+                cursor.read(&mut msg)?;
+
+                let is_verified = z_pk.verify(&z_sig, &msg);
+
+                if is_verified.is_ok() {
+                    stack.push_value(1i32)
+                } else {
+                    stack.push_value(0i32)
+                }
             }
             item_name => {
                 bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)

@@ -14,6 +14,7 @@
     - `get_receive_owner`
     - `get_receive_entrypoint`
     - `get_receive_entrypoint_size`
+    - `verify_ed25519_signature`
   Corresponding new host functions are introduced just for `TestHost` allowing for setting the result of the above:
     - `set_slot_time`
     - `set_receive_self_address`
