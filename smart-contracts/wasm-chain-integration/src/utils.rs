@@ -496,14 +496,14 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut cursor = Cursor::new(memory);
                 cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
-                let mut bytes = self
+                let bytes = self
                     .receive_entrypoint
                     .clone()
                     .context(unset_err("receive_entrypoint"))?
                     .to_string()
                     .into_bytes();
 
-                cursor.write(&mut bytes).map_err(|_| anyhow!(write_err))?;
+                cursor.write(&bytes).map_err(|_| anyhow!(write_err))?;
             }
             "verify_ed25519_signature" => {
                 let message_len = unsafe { stack.pop_u32() };
@@ -578,10 +578,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.read(&mut data)?;
 
                 hasher.update(&data);
-                let mut data_hash = hasher.finalize();
+                let data_hash = hasher.finalize();
 
                 cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
-                cursor.write(&mut data_hash).map_err(|_| anyhow!(write_err))?;
+                cursor.write(&data_hash).map_err(|_| anyhow!(write_err))?;
             }
             "hash_sha3_256" => {
                 let output_ptr = unsafe { stack.pop_u32() };
@@ -596,10 +596,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.read(&mut data)?;
 
                 hasher.update(&data);
-                let mut data_hash = hasher.finalize();
+                let data_hash = hasher.finalize();
 
                 cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
-                cursor.write(&mut data_hash).map_err(|_| anyhow!(write_err))?;
+                cursor.write(&data_hash).map_err(|_| anyhow!(write_err))?;
             }
             "hash_keccak_256" => {
                 let output_ptr = unsafe { stack.pop_u32() };
@@ -614,10 +614,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.read(&mut data)?;
 
                 hasher.update(&data);
-                let mut data_hash = hasher.finalize();
+                let data_hash = hasher.finalize();
 
                 cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
-                cursor.write(&mut data_hash).map_err(|_| anyhow!(write_err))?;
+                cursor.write(&data_hash).map_err(|_| anyhow!(write_err))?;
             }
             item_name => {
                 bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
