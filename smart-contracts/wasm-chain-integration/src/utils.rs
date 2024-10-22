@@ -332,7 +332,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 if let Some(param) = self.parameters.get(&param_index) {
                     let mut cursor = Cursor::new(memory);
-                    cursor.seek(SeekFrom::Start(param_bytes + offset)).map_err(|_| anyhow!(seek_err))?;
+                    cursor
+                        .seek(SeekFrom::Start(param_bytes + offset))
+                        .map_err(|_| anyhow!(seek_err))?;
 
                     let self_param = param.get(..length as usize).context(format!(
                         "Tried to grab {} bytes of parameter[{}], which has length {}",
@@ -479,7 +481,8 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_entrypoint = Some(OwnedEntrypointName::deserial(&mut cursor)?);
             }
             "get_receive_entrypoint_size" => {
-                let size = self.receive_entrypoint
+                let size = self
+                    .receive_entrypoint
                     .as_ref()
                     .context(unset_err("receive_entrypoint"))?
                     .as_entrypoint_name()
@@ -492,14 +495,14 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut cursor = Cursor::new(memory);
                 cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
 
-                let mut bytes = self.receive_entrypoint
+                let mut bytes = self
+                    .receive_entrypoint
                     .clone()
                     .context(unset_err("receive_entrypoint"))?
                     .to_string()
                     .into_bytes();
 
-                cursor.write(&mut bytes)
-                    .map_err(|_| anyhow!(write_err))?;
+                cursor.write(&mut bytes).map_err(|_| anyhow!(write_err))?;
             }
             "verify_ed25519_signature" => {
                 let message_len = unsafe { stack.pop_u32() };
