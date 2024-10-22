@@ -589,7 +589,11 @@ data AccountStakingInfo
           asiStakeEarnings :: !Bool,
           asiBakerInfo :: !BakerInfo,
           asiPendingChange :: !(StakePendingChange' UTCTime),
-          asiPoolInfo :: !(Maybe BakerPoolInfo)
+          asiPoolInfo :: !(Maybe BakerPoolInfo),
+          -- | Flag indicating whether the account is currently suspended. A suspended account
+          --  is not participating in the consensus protocol. The `asiIsSuspended` flag does not
+          --  have any effect on stake or delegators of a validator.
+          asiIsSuspended :: !Bool
         }
     | -- | The account is delegating stake to a baker.
       AccountStakingDelegated
@@ -613,7 +617,10 @@ toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =
           asiPendingChange = pcTime <$> _bakerPendingChange,
           asiPoolInfo = case _accountBakerInfo of
             BakerInfoExV0{} -> Nothing
-            BakerInfoExV1{..} -> Just _bieBakerPoolInfo
+            BakerInfoExV1{..} -> Just _bieBakerPoolInfo,
+          asiIsSuspended = case _accountBakerInfo of
+            BakerInfoExV0{} -> False
+            BakerInfoExV1{..} -> fromCondDef _bieAccountIsSuspended False
         }
   where
     pcTime (PendingChangeEffectiveV0 e) = epochConv e
@@ -663,7 +670,8 @@ accountStakingInfoToJSON AccountStakingBaker{..} = ["accountBaker" .= bi]
               "bakerId" .= (asiBakerInfo ^. bakerIdentity),
               "bakerElectionVerifyKey" .= (asiBakerInfo ^. bakerElectionVerifyKey),
               "bakerSignatureVerifyKey" .= (asiBakerInfo ^. bakerSignatureVerifyKey),
-              "bakerAggregationVerifyKey" .= (asiBakerInfo ^. bakerAggregationVerifyKey)
+              "bakerAggregationVerifyKey" .= (asiBakerInfo ^. bakerAggregationVerifyKey),
+              "bakerIsSuspended" .= asiIsSuspended
             ]
                 <> pendingChangeToJSON asiPendingChange
                 <> maybe [] (\bpi -> ["bakerPoolInfo" .= bpi]) asiPoolInfo
@@ -751,12 +759,7 @@ data AccountInfo = AccountInfo
       --  pre-cooldown or pre-pre-cooldown (e.g. if the cooldown interval has been decreased).
       aiAccountCooldowns :: ![Cooldown],
       -- | The balance of the account that is available for transactions.
-      aiAccountAvailableAmount :: !Amount,
-      -- | Flag indicating whether the account is currently suspended. A
-      -- suspended account is in effect not participating in the consensus
-      -- protocol. The aiAccountIsSuspended flag does not have any effect on
-      -- stake or delegators of a validator.
-      aiAccountIsSuspended :: !Bool
+      aiAccountAvailableAmount :: !Amount
     }
     deriving (Eq, Show)
 
@@ -774,8 +777,7 @@ accountInfoPairs AccountInfo{..} =
       "accountIndex" .= aiAccountIndex,
       "accountAddress" .= aiAccountAddress,
       "accountCooldowns" .= aiAccountCooldowns,
-      "accountAvailableAmount" .= aiAccountAvailableAmount,
-      "accountIsSuspended" .= aiAccountIsSuspended
+      "accountAvailableAmount" .= aiAccountAvailableAmount
     ]
         <> accountStakingInfoToJSON aiStakingInfo
 
