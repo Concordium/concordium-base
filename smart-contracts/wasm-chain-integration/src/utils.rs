@@ -21,6 +21,7 @@ use concordium_wasm::{
     validate::{self, ValidationConfig},
 };
 use rand::{prelude::*, RngCore};
+use sha2::Digest;
 use std::{collections::BTreeMap, default::Default};
 
 /// A host which traps for any function call.
@@ -563,6 +564,60 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 } else {
                     stack.push_value(0i32)
                 }
+            }
+            "hash_sha2_256" => {
+                let output_ptr = unsafe { stack.pop_u32() };
+                let data_len = unsafe { stack.pop_u32() };
+                let data_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                let mut hasher = sha2::Sha256::default();
+
+                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut data = vec![0u8; data_len.try_into()?];
+                cursor.read(&mut data)?;
+
+                hasher.update(&data);
+                let mut data_hash = hasher.finalize();
+
+                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.write(&mut data_hash).map_err(|_| anyhow!(write_err))?;
+            }
+            "hash_sha3_256" => {
+                let output_ptr = unsafe { stack.pop_u32() };
+                let data_len = unsafe { stack.pop_u32() };
+                let data_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                let mut hasher = sha3::Sha3_256::default();
+
+                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut data = vec![0u8; data_len.try_into()?];
+                cursor.read(&mut data)?;
+
+                hasher.update(&data);
+                let mut data_hash = hasher.finalize();
+
+                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.write(&mut data_hash).map_err(|_| anyhow!(write_err))?;
+            }
+            "hash_keccak_256" => {
+                let output_ptr = unsafe { stack.pop_u32() };
+                let data_len = unsafe { stack.pop_u32() };
+                let data_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                let mut hasher = sha3::Keccak256::default();
+
+                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut data = vec![0u8; data_len.try_into()?];
+                cursor.read(&mut data)?;
+
+                hasher.update(&data);
+                let mut data_hash = hasher.finalize();
+
+                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.write(&mut data_hash).map_err(|_| anyhow!(write_err))?;
             }
             item_name => {
                 bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
