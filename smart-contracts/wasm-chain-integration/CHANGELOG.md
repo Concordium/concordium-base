@@ -15,6 +15,10 @@
     - `get_receive_entrypoint`
     - `get_receive_entrypoint_size`
     - `verify_ed25519_signature`
+    - `verify_ecdsa_secp256k1_signature`
+    - `hash_sha2_256`
+    - `hash_sha3_256`
+    - `hash_keccak_256`
   Corresponding new host functions are introduced just for `TestHost` allowing for setting the result of the above:
     - `set_slot_time`
     - `set_receive_self_address`
