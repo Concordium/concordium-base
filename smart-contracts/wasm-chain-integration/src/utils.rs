@@ -531,6 +531,36 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                     stack.push_value(0i32)
                 }
             }
+            "verify_ecdsa_secp256k1_signature" => {
+                let message_hash_ptr = unsafe { stack.pop_u32() };
+                let signature_ptr = unsafe { stack.pop_u32() };
+                let public_key_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                let secp = secp256k1::Secp256k1::verification_only();
+
+                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut public_key_bytes = [0; 33];
+                cursor.read(&mut public_key_bytes)?;
+                let pk = secp256k1::PublicKey::from_slice(&public_key_bytes)?;
+
+                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut signature_bytes = [0; 64];
+                cursor.read(&mut signature_bytes)?;
+                let sig = secp256k1::ecdsa::Signature::from_compact(&signature_bytes)?;
+
+                cursor.seek(SeekFrom::Start(message_hash_ptr)).map_err(|_| anyhow!(seek_err))?;
+                let mut message_hash_bytes = [0; 32];
+                cursor.read(&mut message_hash_bytes)?;
+                let msg = secp256k1::Message::from_slice(&message_hash_bytes)?;
+
+                let is_verified = secp.verify_ecdsa(&msg, &sig, &pk);
+                if is_verified.is_ok() {
+                    stack.push_value(1i32)
+                } else {
+                    stack.push_value(0i32)
+                }
+            }
             item_name => {
                 bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
             }
