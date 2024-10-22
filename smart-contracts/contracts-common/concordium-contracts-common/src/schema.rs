@@ -1053,7 +1053,7 @@ mod impls {
         NoParamsInReceive,
         #[error("Init function schema does not contain a parameter schema")]
         NoParamsInInit,
-        #[error("Receive function schema not found in contract schema")]
+        #[error("Receive function schema does not contain an error schema")]
         NoErrorInReceive,
         #[error("Init function schema does not contain an error schema")]
         NoErrorInInit,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.3
+
+- Changed the base64 schema decoding to allow padded and not padded strings.
+
 ## 0.25.2
 
 - Allowed use of functions deprecated due to the removal of encrypted transfers in protocol version 7.

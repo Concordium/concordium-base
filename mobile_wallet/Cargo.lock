@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-contracts-common"
-version = "9.1.0"
+version = "9.2.0"
 dependencies = [
  "base64",
  "bs58",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "concordium_base"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -1041,7 +1041,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "mobile_wallet"
-version = "0.25.2"
+version = "0.25.3"
 dependencies = [
  "anyhow",
  "base64",

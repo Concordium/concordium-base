@@ -1,5 +1,9 @@
 use anyhow::{bail, ensure, Context};
-use base64::Engine;
+use base64::{
+    alphabet,
+    engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
+    Engine,
+};
 use concordium_base::{
     base::{self, Energy, Nonce},
     cis2_types::{self, AdditionalData},
@@ -190,16 +194,19 @@ fn get_parameter_as_json(
     let contract_name = receive_name.as_receive_name().contract_name();
     let entrypoint_name = &receive_name.as_receive_name().entrypoint_name().to_string();
 
+    let decoding_specs = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+
     let receive_schema: schema::Type = match schema {
         SchemaInputType::Module(raw) => {
-            let module_schema = schema::VersionedModuleSchema::new(
-                &base64::engine::general_purpose::STANDARD.decode(raw)?,
-                schema_version,
-            )?;
+            let module_schema =
+                schema::VersionedModuleSchema::new(&decoding_specs.decode(raw)?, schema_version)?;
             module_schema.get_receive_param_schema(contract_name, entrypoint_name)?
         }
         SchemaInputType::Parameter(raw) => {
-            contracts_common::from_bytes(&base64::engine::general_purpose::STANDARD.decode(raw)?)?
+            contracts_common::from_bytes(&decoding_specs.decode(raw)?)?
         }
     };
 
@@ -460,6 +467,8 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         maybe_get(&v, "bakingRewardCommission")?;
     let finalization_reward_commission: Option<base::AmountFraction> =
         maybe_get(&v, "finalizationRewardCommission")?;
+    let suspend: Option<bool> = maybe_get(&v, "suspend")?;
+
     let maybe_baker_keys: Option<base::BakerKeyPairs> = maybe_get(&v, "bakerKeys")?;
 
     let keys_with_proofs = match maybe_baker_keys {
@@ -479,6 +488,7 @@ fn create_configure_baker_transaction_aux(input: &str) -> anyhow::Result<String>
         transaction_fee_commission,
         baking_reward_commission,
         finalization_reward_commission,
+        suspend,
     };
 
     let pre_tx = transactions::construct::configure_baker(

@@ -277,6 +277,7 @@ instance ToProto ProtocolVersion where
     toProto P5 = Proto.PROTOCOL_VERSION_5
     toProto P6 = Proto.PROTOCOL_VERSION_6
     toProto P7 = Proto.PROTOCOL_VERSION_7
+    toProto P8 = Proto.PROTOCOL_VERSION_8
 
 instance ToProto QueryTypes.NextAccountNonce where
     type Output QueryTypes.NextAccountNonce = Proto.NextAccountSequenceNumber
@@ -626,6 +627,7 @@ instance ToProto AccountInfo where
         ProtoFields.maybe'stake .= toProto aiStakingInfo
         ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
         ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
+        ProtoFields.isSuspended .= aiAccountIsSuspended
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
@@ -1476,6 +1478,14 @@ convertAccountTransaction ty cost sender result = case ty of
                                     ProtoFields.delegationRemoved
                                         .= Proto.make
                                             (ProtoFields.delegatorId .= toProto edrDelegatorId)
+                            BakerSuspended{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.bakerSuspended
+                                        .= Proto.make (ProtoFields.bakerId .= toProto ebsBakerId)
+                            BakerResumed{..} ->
+                                Right . Proto.make $
+                                    ProtoFields.bakerResumed
+                                        .= Proto.make (ProtoFields.bakerId .= toProto ebrBakerId)
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toBakerEvent events
                     Right . Proto.make $ ProtoFields.bakerConfigured . ProtoFields.events .= v
@@ -2074,6 +2084,28 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                 )
             SChainParametersV2 ->
+                let Parameters.ChainParameters{..} = params
+                in  Proto.make $
+                        ProtoFields.v2
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
+                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
+                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
+                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
+                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
+                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
+                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
+                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
+                                    ProtoFields.foundationAccount .= toProto foundationAddr
+                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
+                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
+                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                )
+            SChainParametersV3 ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v2
