@@ -25,9 +25,7 @@ linuxBuild :: Bool -> WithEnvAndVerbosity
 linuxBuild True env verbosity = do
     noticeNoWrap verbosity "Static linking."
     -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
-    let makeLib lib = do
-            let libName = fst lib
-                libFeatures = snd lib
+    let makeLib (libName, libFeatures) = do
             -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
             rawSystemExitWithEnv
                 verbosity
@@ -41,11 +39,9 @@ linuxBuild True env verbosity = do
     mapM_ makeLib concordiumLibs
 linuxBuild False env verbosity = do
     noticeNoWrap verbosity "Dynamic linking."
-    let makeLib lib = do
-            let libName = fst lib
-                libFeatures = snd lib
+    let makeLib (libName, libFeatures) = do
             rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
-            notice verbosity "Linking libraries to ./lib"
+            notice verbosity "Linking library to ./lib"
             let source = "../rust-src/target/release/lib" ++ libName
                 target = "./lib/lib" ++ libName
             rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".a", target ++ ".a"]
@@ -55,11 +51,9 @@ linuxBuild False env verbosity = do
 
 windowsBuild :: WithEnvAndVerbosity
 windowsBuild env verbosity = do
-    let makeLib lib = do
-            let libName = fst lib
-                libFeatures = snd lib
+    let makeLib (libName, libFeatures) = do
             rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
-            notice verbosity "Copying libraries to ./lib"
+            notice verbosity "Copying library to ./lib"
             -- We delete the static library if present to ensure that we only link with the
             -- dynamic library.
             rawSystemExit verbosity "rm" ["-f", "./lib/lib" ++ libName ++ ".a"]
@@ -72,13 +66,11 @@ windowsBuild env verbosity = do
 --  The flag tells whether we want a static compilation or not.
 osxBuild :: Bool -> WithEnvAndVerbosity
 osxBuild static env verbosity = do
-    let makeLib lib = do
-            let libName = fst lib
-                libFeatures = snd lib
+    let makeLib (libName, libFeatures) = do
             if static
                 then do
                     rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "staticlib"] ++ libFeatures) env
-                    notice verbosity "Linking libraries to ./lib"
+                    notice verbosity "Linking library to ./lib"
                     let source = "../rust-src/target/release/lib" ++ libName ++ ".a"
                     let target = "./lib/lib" ++ libName ++ ".a"
                         others = "./lib/lib" ++ libName ++ ".dylib"
@@ -88,7 +80,7 @@ osxBuild static env verbosity = do
                     noticeNoWrap verbosity $ "Removed: " ++ others
                 else do
                     rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
-                    notice verbosity "Linking libraries to ./lib"
+                    notice verbosity "Linking library to ./lib"
                     let source = "../rust-src/target/release/lib" ++ libName ++ ".dylib"
                     let others = "./lib/lib" ++ libName ++ ".a"
                         target = "./lib/lib" ++ libName ++ ".dylib"
