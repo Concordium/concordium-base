@@ -1,0 +1,14 @@
+on:
+  push:
+    tags:
+      - identity-provider-service/*
+
+jobs:
+  release-static-libraries-image:
+    uses: concordium/.github/.github/workflows/docker-release-workflow.yaml@main
+    with:
+      SERVICE_NAME: "identity-provider-service"
+      BUILD_ARGS: |
+        base_image_tag=rust1.73-ghc9.6.4
+      DOCKER_FILE: scripts/identity-provider-service.Dockerfile
+    secrets: inherit
