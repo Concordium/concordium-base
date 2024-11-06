@@ -6,12 +6,14 @@ WORKDIR /build/identity-provider-service
 RUN cargo build --release
 
 # Collect build artifacts in fresh image.
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 RUN apt-get update && \
     apt-get -y install \
       libssl-dev \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+LABEL base_image_tag=${base_image_tag}
 
 COPY --from=builder /build/identity-provider-service/target/release/identity-provider-service /identity-provider-service
 COPY --from=builder /build/identity-provider-service/target/release/identity-verifier /identity-verifier
