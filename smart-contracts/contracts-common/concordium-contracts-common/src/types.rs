@@ -1822,7 +1822,7 @@ impl OwnedParameter {
 
 /// Check whether the given string is a valid contract entrypoint name.
 /// This is the case if and only if
-/// - the string is no more than [constants::MAX_FUNC_NAME_SIZE][m] bytes
+/// - the string is less than [constants::MAX_FUNC_NAME_SIZE][m] bytes
 /// - all characters are ascii alphanumeric or punctuation characters.
 ///
 /// [m]: ./constants/constant.MAX_FUNC_NAME_SIZE.html
@@ -3214,12 +3214,23 @@ mod test {
     #[test]
     fn test_valid_new_contract_name() {
         let contract_name = ContractName::new("init_contract");
-        assert!(contract_name.is_ok())
+        assert!(contract_name.is_ok());
+        let contract_name = ContractName::new("init_01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234");
+        assert!(contract_name.is_ok());
+        let contract_name = ContractName::new("init_");
+        assert!(contract_name.is_ok());
+        let contract_name = ContractName::new(
+            "init_!\"#$%&'()*+,-/0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\
+             ]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+        );
+        assert!(contract_name.is_ok());
     }
 
     #[test]
     fn test_invalid_new_contract_name_missing_prefix() {
         let contract_name = ContractName::new("no_init_prefix");
+        assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix));
+        let contract_name = ContractName::new("init");
         assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix))
     }
 
@@ -3228,6 +3239,10 @@ mod test {
         // Is too long when the prefix is included.
         let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE));
         let contract_name = ContractName::new(long_name.as_str());
+        assert_eq!(contract_name, Err(NewContractNameError::TooLong));
+        // One character too long.
+        let long_name = "init_012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345";
+        let contract_name = ContractName::new(long_name);
         assert_eq!(contract_name, Err(NewContractNameError::TooLong))
     }
 
@@ -3241,12 +3256,24 @@ mod test {
     #[test]
     fn test_valid_new_owned_contract_name() {
         let contract_name = OwnedContractName::new("init_contract".to_string());
+        assert!(contract_name.is_ok());
+        let contract_name = OwnedContractName::new("init_01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234".to_string());
+        assert!(contract_name.is_ok());
+        let contract_name = OwnedContractName::new("init_".to_string());
+        assert!(contract_name.is_ok());
+        let contract_name = OwnedContractName::new(
+            "init_!\"#$%&'()*+,-/0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\
+             ]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+                .to_string(),
+        );
         assert!(contract_name.is_ok())
     }
 
     #[test]
     fn test_invalid_new_owned_contract_name_missing_prefix() {
         let contract_name = OwnedContractName::new("no_init_prefix".to_string());
+        assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix));
+        let contract_name = OwnedContractName::new("init".to_string());
         assert_eq!(contract_name, Err(NewContractNameError::MissingInitPrefix))
     }
 
@@ -3255,6 +3282,11 @@ mod test {
         // Is too long when the prefix is included.
         let long_name = format!("init_{}", "c".repeat(constants::MAX_FUNC_NAME_SIZE));
         let contract_name = OwnedContractName::new(long_name);
+        assert_eq!(contract_name, Err(NewContractNameError::TooLong));
+        // One character too long.
+        // One character too long.
+        let long_name = "init_012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345";
+        let contract_name = OwnedContractName::new(long_name.to_string());
         assert_eq!(contract_name, Err(NewContractNameError::TooLong))
     }
 
@@ -3268,6 +3300,15 @@ mod test {
     #[test]
     fn test_valid_new_receive_name() {
         let receive_name = ReceiveName::new("contract.receive");
+        assert!(receive_name.is_ok());
+        let receive_name = ReceiveName::new(".012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
+        assert!(receive_name.is_ok());
+        let receive_name = ReceiveName::new(".");
+        assert!(receive_name.is_ok());
+        let receive_name = ReceiveName::new(
+            "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\
+             ]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+        );
         assert!(receive_name.is_ok())
     }
 
@@ -3286,6 +3327,19 @@ mod test {
     }
 
     #[test]
+    fn test_invalid_new_receive_name_one_too_long() {
+        let long_name = ".0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+        let contract_name = ReceiveName::new(long_name);
+        assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
+    }
+
+    #[test]
+    fn test_invalid_new_receive_name_invalid_character() {
+        let contract_name = ReceiveName::new("contract. receive");
+        assert_eq!(contract_name, Err(NewReceiveNameError::InvalidCharacters))
+    }
+
+    #[test]
     fn test_getters_for_receive_name() {
         let expected_chain_name = "contract.receive";
         let receive_name = ReceiveName::new(expected_chain_name).unwrap();
@@ -3295,6 +3349,16 @@ mod test {
     #[test]
     fn test_valid_new_owned_receive_name() {
         let receive_name = OwnedReceiveName::new("contract.receive".to_string());
+        assert!(receive_name.is_ok());
+        let receive_name = OwnedReceiveName::new(".012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678".to_string());
+        assert!(receive_name.is_ok());
+        let receive_name = OwnedReceiveName::new(".".to_string());
+        assert!(receive_name.is_ok());
+        let receive_name = OwnedReceiveName::new(
+            "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\
+             ]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+                .to_string(),
+        );
         assert!(receive_name.is_ok())
     }
 
@@ -3313,6 +3377,19 @@ mod test {
     }
 
     #[test]
+    fn test_invalid_new_owned_receive_name_one_too_long() {
+        let long_name = ".0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+        let contract_name = OwnedReceiveName::new(long_name.to_string());
+        assert_eq!(contract_name, Err(NewReceiveNameError::TooLong))
+    }
+
+    #[test]
+    fn test_invalid_new_owned_receive_name_invalid_character() {
+        let contract_name = OwnedReceiveName::new("contract. receive".to_string());
+        assert_eq!(contract_name, Err(NewReceiveNameError::InvalidCharacters))
+    }
+
+    #[test]
     fn test_getters_for_owned_receive_name() {
         let receive_name = OwnedReceiveName::new("contract.receive".to_string()).unwrap();
         assert_eq!(receive_name.as_receive_name().get_chain_name(), "contract.receive");
@@ -3321,6 +3398,63 @@ mod test {
             receive_name.as_receive_name().entrypoint_name(),
             EntrypointName::new_unchecked("receive")
         );
+    }
+
+    #[test]
+    fn test_valid_new_entrypoint_name() {
+        let entrypoint_name = EntrypointName::new("entrypoint");
+        assert!(entrypoint_name.is_ok());
+        let entrypoint_name = EntrypointName::new("012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
+        assert!(entrypoint_name.is_ok());
+        let entrypoint_name = EntrypointName::new("");
+        assert!(entrypoint_name.is_ok());
+        let entrypoint_name = EntrypointName::new(
+            "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\
+             ]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+        );
+        assert!(entrypoint_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_new_entrypoint_name_too_long() {
+        let long_name = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+        let entrypoint_name = EntrypointName::new(long_name);
+        assert_eq!(entrypoint_name, Err(NewReceiveNameError::TooLong))
+    }
+
+    #[test]
+    fn test_invalid_new_entrypoint_name_invalid_character() {
+        let entrypoint_name = EntrypointName::new("entry point");
+        assert_eq!(entrypoint_name, Err(NewReceiveNameError::InvalidCharacters))
+    }
+
+    #[test]
+    fn test_valid_owned_entrypoint_name() {
+        let entrypoint_name = OwnedEntrypointName::new("entrypoint".to_string());
+        assert!(entrypoint_name.is_ok());
+        let entrypoint_name = OwnedEntrypointName::new("012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678".to_string());
+        assert!(entrypoint_name.is_ok());
+        let entrypoint_name = OwnedEntrypointName::new("".to_string());
+        assert!(entrypoint_name.is_ok());
+        let entrypoint_name = OwnedEntrypointName::new(
+            "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\
+             ]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+                .to_string(),
+        );
+        assert!(entrypoint_name.is_ok())
+    }
+
+    #[test]
+    fn test_invalid_owned_entrypoint_name_too_long() {
+        let long_name = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+        let entrypoint_name = OwnedEntrypointName::new(long_name.to_string());
+        assert_eq!(entrypoint_name, Err(NewReceiveNameError::TooLong))
+    }
+
+    #[test]
+    fn test_invalid_owned_entrypoint_name_invalid_character() {
+        let entrypoint_name = OwnedEntrypointName::new("entry point".to_string());
+        assert_eq!(entrypoint_name, Err(NewReceiveNameError::InvalidCharacters))
     }
 
     #[test]

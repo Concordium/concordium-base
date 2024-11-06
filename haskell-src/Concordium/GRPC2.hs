@@ -12,6 +12,13 @@ module Concordium.GRPC2 (
     BakerKeysEvent,
     BlockHashInput (..),
     BlockHeightInput (..),
+
+    -- * Helpers
+    mkSerialize,
+    mkWord64,
+    mkWord32,
+    mkWord16,
+    mkWord8,
 )
 where
 
@@ -47,6 +54,7 @@ import qualified Concordium.Types.Transactions as TxTypes
 
 import Concordium.Common.Time
 import Concordium.Common.Version
+import qualified Concordium.Crypto.BlockSignature as BlockSignature
 import Concordium.Crypto.SHA256 (Hash)
 import Concordium.Crypto.SignatureScheme (Signature (..), VerifyKey (..))
 import qualified Concordium.ID.AnonymityRevoker as ArInfo
@@ -475,6 +483,7 @@ instance ToProto AccountStakingInfo where
                             case asiPoolInfo of
                                 Nothing -> return ()
                                 Just asipi -> ProtoFields.poolInfo .= toProto asipi
+                            ProtoFields.isSuspended .= asiIsSuspended
                         )
             )
     toProto AccountStakingDelegated{..} =
@@ -619,7 +628,6 @@ instance ToProto AccountInfo where
         ProtoFields.maybe'stake .= toProto aiStakingInfo
         ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
         ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
-        ProtoFields.isSuspended .= aiAccountIsSuspended
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
@@ -2425,3 +2433,7 @@ instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) wh
             -- Since only account transactions can be executed in a dry run, we should not have
             -- other transaction summary types.
             Left CEInvalidTransactionResult
+
+instance ToProto BlockSignature.Signature where
+    type Output BlockSignature.Signature = Proto.BlockSignature
+    toProto = mkSerialize
