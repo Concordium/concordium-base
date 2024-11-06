@@ -4,7 +4,7 @@ on:
       - identity-provider-service/*
 
 jobs:
-  release-static-libraries-image:
+  release-identity-provider-service:
     uses: concordium/.github/.github/workflows/docker-release-workflow.yaml@main
     with:
       SERVICE_NAME: "identity-provider-service"
