@@ -5,7 +5,7 @@ on:
 
 jobs:
   release-identity-provider-service:
-    uses: concordium/.github/.github/workflows/docker-release-workflow.yaml@main
+    uses: concordium/.github/.github/workflows/docker-release-workflow.yaml@v1
     with:
       SERVICE_NAME: "identity-provider-service"
       BUILD_ARGS: |
