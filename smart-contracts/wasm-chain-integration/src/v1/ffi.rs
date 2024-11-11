@@ -498,7 +498,7 @@ unsafe extern "C" fn resume_receive_v1(
             } else {
                 let mut response_data = Box::from_raw(response);
                 let data = std::mem::take(response_data.as_mut()); // write empty vector to the pointer.
-                Box::into_raw(response_data); // make it safe to reclaim data
+                let _ = Box::into_raw(response_data); // make it safe to reclaim data
                 Some(data)
             }
         };
