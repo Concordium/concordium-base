@@ -1305,8 +1305,9 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
     /// Responses in the proof of knowledge of signature of Identity Provider on
     /// the list
-    /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
-    /// AR[1], ..., AR[m])```
+    /// ```
+    /// (idCredSec, prfKey, attributes[0], attributes[1], ..., attributes[n], AR[1], ..., AR[m])
+    /// ```
     #[serde(
         rename = "proofIpSig",
         serialize_with = "base16_encode",
