@@ -29,6 +29,7 @@ pub struct Response<T: Curve> {
     /// * $\alpha - c R$
     /// * $\beta - c x$
     /// * $\gamma - c r$
+    ///
     /// where
     /// * c is the challenge
     /// * R is the ElGamal randomness

@@ -21,6 +21,7 @@ pub struct Response<T: Curve> {
     /// The pair $(s, t)$ where
     /// * $s = \alpha - c a$
     /// * $t = R - c r$
+    ///
     /// where $c$ is the challenge and $\alpha$ and $R$ are prover chosen
     /// random scalars.
     pub response: (T::Scalar, T::Scalar),

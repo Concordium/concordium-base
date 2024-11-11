@@ -30,7 +30,7 @@ pub enum ProofVersion {
 /// For the case where the verifier wants the user to show the value of an
 /// attribute and prove that it is indeed the value inside the on-chain
 /// commitment. Since the verifier does not know the attribute value before
-/// seing the proof, the value is not present here.
+/// seeing the proof, the value is not present here.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct RevealAttributeStatement<TagType: Serialize> {
     /// The attribute that the verifier wants the user to reveal.
@@ -345,6 +345,7 @@ impl Statement<G1, AttributeKind> {
     /// The functions returns `None` if
     /// - the current year does not fit into a u64, or
     /// - the given age is larger than the current year.
+    ///
     /// Otherwise it returns `Some(statement)` where
     /// `statement` is composed by the statements in `self` and
     /// the "older than" statement.
@@ -372,6 +373,7 @@ impl Statement<G1, AttributeKind> {
     /// The functions returns `None` if
     /// - the current year does not fit into a u64, or
     /// - the given age is larger than the current year.
+    ///
     /// Otherwise it returns `Some(statement)` where
     /// `statement` is composed by the statements in `self` and
     /// the "younger than" statement.
@@ -400,6 +402,7 @@ impl Statement<G1, AttributeKind> {
     /// The functions returns `None` if
     /// - the current year does not fit into a u64, or
     /// - the given lower or upper bound is larger than the current year.
+    ///
     /// Otherwise it returns `Some(statement)` where
     /// `statement` is composed by the statements in `self` and
     /// the "age in range" statement.

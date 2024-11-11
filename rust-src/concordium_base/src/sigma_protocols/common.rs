@@ -42,6 +42,7 @@ pub trait SigmaProtocol: Sized {
     /// - secret -- secret data known to the prover only
     /// - state -- the state returned from the 'compute_commit_message' call
     /// - challenge -- computed challenge
+    ///
     /// This function is pure and deterministic.
     fn compute_response(
         &self,
@@ -54,6 +55,7 @@ pub trait SigmaProtocol: Sized {
     /// and produce a CommitMessage for verification.
     /// - challenge -- computed challenge
     /// - self -- the verifier's public data
+    ///
     /// This function is pure and deterministic.
     /// It is allowed to return 'None' if some of the input data is malformed,
     /// e.g., vectors of inconsistent lengths.

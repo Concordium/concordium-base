@@ -97,9 +97,9 @@ impl RandomOracle {
     /// Append all items from an iterator to the random oracle. Equivalent to
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
-    pub fn extend_from<'a, I, S: 'a, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
+    pub fn extend_from<'a, I, S, B: AsRef<[u8]>>(&mut self, label: B, iter: I)
     where
-        S: Serial,
+        S: Serial + 'a,
         I: IntoIterator<Item = &'a S>, {
         self.add_bytes(label);
         for i in iter.into_iter() {

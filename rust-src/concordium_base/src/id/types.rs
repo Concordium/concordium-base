@@ -406,8 +406,10 @@ impl YearMonth {
     }
 }
 
-impl ToString for YearMonth {
-    fn to_string(&self) -> String { format!("{:04}{:02}", self.year, self.month) }
+impl std::fmt::Display for YearMonth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:04}{:02}", self.year, self.month)
+    }
 }
 
 impl SerdeSerialize for YearMonth {
