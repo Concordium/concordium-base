@@ -345,8 +345,8 @@ unsafe extern "C" fn ar_info_create(
 ///    instance,
 ///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
 ///    each [`size_t`] parameter with the the `_len` suffix holds the length of
-///    its correspondingly named byte array. Returns [`Err`] if a parameter could
-///    not be deserialized.
+///    its correspondingly named byte array. Returns [`Err`] if a parameter
+///    could not be deserialized.
 #[allow(clippy::too_many_arguments)]
 fn ar_info_create_helper(
     identity: u32,
