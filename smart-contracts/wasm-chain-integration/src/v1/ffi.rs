@@ -207,6 +207,7 @@ unsafe extern "C" fn call_init_v1(
 ///   to a freshly allocated vector and `output_config` is __not__ changed. This
 ///   vector must be deallocated with [box_vec_u8_free] otherwise memory will be
 ///   leaked.
+///
 /// In case of execution failure, a panic, or failure to parse a null pointer is
 /// returned.
 ///
