@@ -95,6 +95,7 @@ type ReceiveInterruptedStateV1 = ReceiveInterruptedState<CompiledFunction>;
 /// - In the remaining two cases the `output_return_value` is set to a pointer
 ///   to a freshly allocated vector. This vector must be deallocated with
 ///   [box_vec_u8_free] otherwise memory will be leaked.
+///
 /// In case of execution failure, a panic, or failure to parse a null pointer is
 /// returned.
 #[no_mangle]

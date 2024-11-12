@@ -80,7 +80,7 @@ fn btree_get(b: &mut Criterion) {
     b.bench_function("BTreeMap get", |b| {
         b.iter(|| {
             for w in words.iter() {
-                if tree.get(&w[..]).is_none() {
+                if !tree.contains_key(&w[..]) {
                     panic!("Failure.");
                 }
             }

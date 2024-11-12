@@ -43,7 +43,7 @@ impl<I> Host<I> for TestHost {
     fn call(
         &mut self,
         _f: &I,
-        _memory: &mut Vec<u8>,
+        _memory: &mut [u8],
         _stack: &mut crate::machine::RuntimeStack,
     ) -> crate::machine::RunResult<Option<Self::Interrupt>> {
         unimplemented!("No imports are allowed, so this can never be called in tests.")
