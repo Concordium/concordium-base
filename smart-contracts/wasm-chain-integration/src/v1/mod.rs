@@ -650,7 +650,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn write_return_value(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         rv: &mut ReturnValue,
@@ -678,7 +678,7 @@ pub(crate) mod host {
     /// Handle the `invoke` host function.
     pub(crate) fn invoke(
         params: ReceiveParams,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<Option<Interrupt>> {
@@ -876,7 +876,7 @@ pub(crate) mod host {
     /// Get the parameter section. This differs from the v0 version in that it
     /// expects an argument on the stack to indicate which parameter to use.
     pub(crate) fn get_parameter_section(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         parameters: &[impl AsRef<[u8]>],
@@ -904,7 +904,7 @@ pub(crate) mod host {
     /// Handle the `state_lookup_entry` host function. See
     /// [InstanceState::lookup_entry] for detailed documentation.
     pub(crate) fn state_lookup_entry<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -924,7 +924,7 @@ pub(crate) mod host {
     /// Handle the `state_create_entry` host function. See
     /// [InstanceState::create_entry] for detailed documentation.
     pub(crate) fn state_create_entry<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -944,7 +944,7 @@ pub(crate) mod host {
     /// Handle the `state_delete_entry` host function. See
     /// [InstanceState::delete_entry] for detailed documentation.
     pub(crate) fn state_delete_entry<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -964,7 +964,7 @@ pub(crate) mod host {
     /// Handle the `state_delete_prefix` host function. See
     /// [InstanceState::delete_prefix] for detailed documentation.
     pub(crate) fn state_delete_prefix<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -985,7 +985,7 @@ pub(crate) mod host {
     /// Handle the `state_iterator` host function. See
     /// [InstanceState::iterator] for detailed documentation.
     pub(crate) fn state_iterator<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -1048,7 +1048,7 @@ pub(crate) mod host {
     /// Handle the `state_iterator_key_read` host function. See
     /// [InstanceState::iterator_key_read] for detailed documentation.
     pub(crate) fn state_iterator_key_read<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -1069,7 +1069,7 @@ pub(crate) mod host {
     /// Handle the `state_entry_read` host function. See
     /// [InstanceState::entry_read] for detailed documentation.
     pub(crate) fn state_entry_read<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -1090,7 +1090,7 @@ pub(crate) mod host {
     /// Handle the `state_entry_write` host function. See
     /// [InstanceState::entry_write] for detailed documentation.
     pub(crate) fn state_entry_write<BackingStore: BackingStoreLoad>(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut InstanceState<BackingStore>,
@@ -1154,7 +1154,7 @@ pub(crate) mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `get_receive_entrypoint` host function.
     pub(crate) fn get_receive_entrypoint(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         entrypoint: EntrypointName,
     ) -> machine::RunResult<()> {
@@ -1170,7 +1170,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn verify_ed25519_signature(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
@@ -1207,7 +1207,7 @@ pub(crate) mod host {
 
     pub(crate) fn debug_print<Debug: DebugInfo>(
         debug: &mut Debug,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
@@ -1224,7 +1224,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn verify_ecdsa_secp256k1_signature(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
@@ -1261,7 +1261,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn hash_sha2_256(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
@@ -1281,7 +1281,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn hash_sha3_256(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
@@ -1301,7 +1301,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn hash_keccak_256(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<()> {
@@ -1322,7 +1322,7 @@ pub(crate) mod host {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     /// Handle the `upgrade` host function.
     pub(crate) fn upgrade(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
     ) -> machine::RunResult<Option<Interrupt>> {
@@ -1376,7 +1376,7 @@ impl<
     fn call(
         &mut self,
         f: &ProcessedImports,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         let energy_before = self.energy;
@@ -1543,7 +1543,7 @@ impl<
     fn call(
         &mut self,
         f: &ProcessedImports,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<Self::Interrupt>> {
         let energy_before = self.energy;
