@@ -406,8 +406,10 @@ impl YearMonth {
     }
 }
 
-impl ToString for YearMonth {
-    fn to_string(&self) -> String { format!("{:04}{:02}", self.year, self.month) }
+impl std::fmt::Display for YearMonth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:04}{:02}", self.year, self.month)
+    }
 }
 
 impl SerdeSerialize for YearMonth {
@@ -1305,8 +1307,9 @@ pub struct IdOwnershipProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Response<C>>,
     /// Responses in the proof of knowledge of signature of Identity Provider on
     /// the list
-    /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
-    /// AR[1], ..., AR[m])```
+    ///
+    /// - `(idCredSec, prfKey, attributes[0], attributes[1], ..., attributes[n],
+    ///   AR[1], ..., AR[m])`
     #[serde(
         rename = "proofIpSig",
         serialize_with = "base16_encode",

@@ -28,6 +28,7 @@ pub struct InnerProductProof<C: Curve> {
 /// - Q - the elliptic curve point Q
 /// - a_slice - a slice to the vector a of scalars
 /// - b_slice - a slice to the vector b of scalars
+///
 /// Preconditions:
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
 /// this length must be a power of 2.
@@ -60,7 +61,8 @@ pub fn prove_inner_product<C: Curve>(
 /// - Q - the elliptic curve point Q
 /// - a_slice - a slice to the vector a of scalars
 /// - b_slice - a slice to the vector b of scalars
-/// Precondictions:
+///
+/// Preconditions:
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
 /// this length must be a power of 2.
 #[allow(non_snake_case)]

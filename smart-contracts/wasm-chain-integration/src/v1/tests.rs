@@ -12,11 +12,11 @@ const NUM_TESTS: u64 = 100000;
 /// 1. Entries can be created.
 /// 2. Created entries can be looked up.
 /// 3. Writing to created entries and checking that the returned 'write length'
-/// is accurate.
+///    is accurate.
 /// 4. Reading from an invalidated entry should return u32::MAX.
 /// 5. Writing to an invalidated entry should return u32::MAX.
 /// 6. Entries can be deleted check that equivalent entries are also
-/// invalidated.
+///    invalidated.
 /// 7. Deleting already deleted entries returns u32::MAX
 fn prop_create_write_read_delete() {
     let prop = |inputs: Vec<(Vec<u8>, trie::Value)>| -> anyhow::Result<()> {
@@ -92,9 +92,9 @@ fn prop_create_write_read_delete() {
 /// 1. Writing a buffer of MAX_ENTRY_SIZE succeeds.
 /// 2. Reading a buffer of MAX_ENTRY_SIZE succeeds.
 /// 3. Writing a buffer of MAX_ENTRY_SIZE + 1 only writes the first
-/// MAX_ENTRY_SIZE bytes.
+///    MAX_ENTRY_SIZE bytes.
 /// 4. Reading a buffer of MAX_ENTRY_SIZE + 1 only returns the corresponding
-/// MAX_ENTRY_SIZE bytes.
+///    MAX_ENTRY_SIZE bytes.
 /// 5. Test resizing to 0 bytes followed by a resize to MAX_ENTRY_SIZE
 /// 6. Resizing above MAX_ENTRY_SIZE yields correct result
 /// 7. Resizing without enough energy returns an Err.
@@ -309,10 +309,10 @@ fn test_prefix_removal_fails_if_out_of_energy() -> anyhow::Result<()> {
 /// 1. Entries can be created
 /// 2. Created entries can be looked up.
 /// 3. Writing to created entries and that the returned 'write length' is
-/// accurate.
+///    accurate.
 /// 4. Creating iterators and locking parts of the tree.
 /// 5. Making sure that no locked areas can be subject of structural
-/// modification.
+///    modification.
 fn prop_iterators() {
     let prop = |inputs: Vec<(Vec<u8>, trie::Value)>| -> anyhow::Result<()> {
         let mut loader = trie::Loader {

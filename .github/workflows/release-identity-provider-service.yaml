@@ -9,7 +9,7 @@ jobs:
     with:
       SERVICE_NAME: "identity-provider-service"
       BUILD_ARGS: |
-        base_image_tag=rust1.73-ghc9.6.4
+        base_image_tag=rust-1.82_ghc-9.6.6-1
       DOCKER_FILE_PATH: scripts/identity-provider-service.Dockerfile
       CARGO_FILE_PATH: identity-provider-service/Cargo.toml
     secrets: inherit

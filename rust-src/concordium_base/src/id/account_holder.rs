@@ -72,6 +72,7 @@ pub fn build_pub_info_for_ip<C: Curve>(
 /// * In the version 0 flow, the common prover is AND'ed with a prover showing
 ///   that RegID = PRF(key_PRF, 0)
 /// * In the version 1 flow, the sigma protocol prover is the common prover
+///
 /// The `generate_pio_common` function also produces the bulletproofs rangeproof
 /// used in both flows. The version 0 flow is kept for backwards compatibility.
 
@@ -659,7 +660,7 @@ pub fn commitment_to_share_and_rand<C: Curve>(
 pub fn create_credential<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
+    AttributeType: Clone + Attribute<C::Scalar>,
 >(
     context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
@@ -672,9 +673,7 @@ pub fn create_credential<
 ) -> anyhow::Result<(
     CredentialDeploymentInfo<P, C, AttributeType>,
     CommitmentsRandomness<C>,
-)>
-where
-    AttributeType: Clone, {
+)> {
     let (unsigned_credential_info, commitments_randomness) = create_unsigned_credential(
         context,
         id_object,
@@ -707,7 +706,7 @@ where
 pub fn create_unsigned_credential<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
+    AttributeType: Clone + Attribute<C::Scalar>,
 >(
     context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
@@ -720,9 +719,7 @@ pub fn create_unsigned_credential<
 ) -> anyhow::Result<(
     UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     CommitmentsRandomness<C>,
-)>
-where
-    AttributeType: Clone, {
+)> {
     let mut csprng = thread_rng();
 
     let (ip_sig, prio, alist) = (

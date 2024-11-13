@@ -457,7 +457,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn get_parameter_section(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         param: &[u8],
@@ -478,7 +478,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn get_policy_section(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         policies: ExecResult<&[u8]>,
@@ -500,7 +500,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn log_event(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         logs: &mut Logs,
@@ -524,7 +524,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn load_state(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut State,
@@ -543,7 +543,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn write_state(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         state: &mut State,
@@ -603,7 +603,7 @@ pub(crate) mod host {
     }
 
     pub(crate) fn get_init_origin(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         init_origin: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
@@ -626,7 +626,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn simple_transfer(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         outcomes: &mut Outcome,
@@ -642,7 +642,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn send(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         energy: &mut InterpreterEnergy,
         outcomes: &mut Outcome,
@@ -705,7 +705,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn get_receive_invoker(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         invoker: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
@@ -717,7 +717,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn get_receive_self_address(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         self_address: ExecResult<&ContractAddress>,
     ) -> machine::RunResult<()> {
@@ -740,7 +740,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn get_receive_sender(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         sender: ExecResult<&Address>,
     ) -> machine::RunResult<()> {
@@ -754,7 +754,7 @@ pub(crate) mod host {
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline)]
     pub(crate) fn get_receive_owner(
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
         owner: ExecResult<&AccountAddress>,
     ) -> machine::RunResult<()> {
@@ -800,7 +800,7 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasInitContext> machine::Host<ProcessedImports
     fn call(
         &mut self,
         f: &ProcessedImports,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {
@@ -878,7 +878,7 @@ impl<ParamType: AsRef<[u8]>, Ctx: HasReceiveContext> machine::Host<ProcessedImpo
     fn call(
         &mut self,
         f: &ProcessedImports,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {

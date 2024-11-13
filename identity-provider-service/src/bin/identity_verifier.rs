@@ -139,7 +139,7 @@ async fn main() {
                     };
                     input.remove("endpoint_version");
 
-                    if input.get("fail").is_some() {
+                    if input.contains_key("fail") {
                         let delay = match input.get("fail_delay") {
                             Some(d) => d,
                             None => {

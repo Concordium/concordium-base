@@ -117,7 +117,7 @@ mod tests {
     #[test]
     fn test_version_serialization_minmax() {
         let min = Version::from(0);
-        let max = Version::from(u32::max_value());
+        let max = Version::from(u32::MAX);
         let min_actual: Vec<u8> = vec![0x00];
         let max_actual: Vec<u8> = vec![0x8F, 0xFF, 0xFF, 0xFF, 0x7F];
         let mut buffer: Vec<u8> = Vec::new();

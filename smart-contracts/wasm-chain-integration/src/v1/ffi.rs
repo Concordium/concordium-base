@@ -95,6 +95,7 @@ type ReceiveInterruptedStateV1 = ReceiveInterruptedState<CompiledFunction>;
 /// - In the remaining two cases the `output_return_value` is set to a pointer
 ///   to a freshly allocated vector. This vector must be deallocated with
 ///   [box_vec_u8_free] otherwise memory will be leaked.
+///
 /// In case of execution failure, a panic, or failure to parse a null pointer is
 /// returned.
 #[no_mangle]
@@ -206,6 +207,7 @@ unsafe extern "C" fn call_init_v1(
 ///   to a freshly allocated vector and `output_config` is __not__ changed. This
 ///   vector must be deallocated with [box_vec_u8_free] otherwise memory will be
 ///   leaked.
+///
 /// In case of execution failure, a panic, or failure to parse a null pointer is
 /// returned.
 ///
@@ -498,7 +500,7 @@ unsafe extern "C" fn resume_receive_v1(
             } else {
                 let mut response_data = Box::from_raw(response);
                 let data = std::mem::take(response_data.as_mut()); // write empty vector to the pointer.
-                Box::into_raw(response_data); // make it safe to reclaim data
+                let _ = Box::into_raw(response_data); // make it safe to reclaim data
                 Some(data)
             }
         };

@@ -48,7 +48,7 @@ pub trait Host<I> {
     fn call(
         &mut self,
         f: &I,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut RuntimeStack,
     ) -> RunResult<Option<Self::Interrupt>>;
 
@@ -663,7 +663,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             // The ensure here guarantees that the transmute is safe, provided that
             // InternalOpcode stays as it is.
             // ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
-            match unsafe { std::mem::transmute(instr) } {
+            match unsafe { std::mem::transmute::<u8, InternalOpcode>(instr) } {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
                     let condition = get_local(constants, locals, &mut pc);

@@ -1,5 +1,3 @@
-#![cfg(feature = "ffi")]
-
 use super::*;
 use crate::{common::*, ffi_helpers::*, random_oracle::RandomOracle, sigma_protocols::dlog};
 use rand::{thread_rng, SeedableRng};

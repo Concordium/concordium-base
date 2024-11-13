@@ -1,5 +1,3 @@
-#![cfg(feature = "ffi")]
-
 use super::{
     chain::{self, CdiVerificationError},
     constants::*,
@@ -309,9 +307,9 @@ pub extern "C" fn ip_info_cdi_verify_key(
 ///  - `public_key_ptr` points to a serialized `elgamal::PublicKey<G1>`
 ///    instance,
 ///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
-/// each [`size_t`] parameter with the the `_len` suffix holds the length of
-/// its correspondingly named byte array. Returns a null-pointer if a parameter
-/// could not be deserialized.
+///    each [`size_t`] parameter with the the `_len` suffix holds the length of
+///    its correspondingly named byte array. Returns a null-pointer if a
+///    parameter could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn ar_info_create(
     identity: u32,
@@ -346,9 +344,9 @@ unsafe extern "C" fn ar_info_create(
 ///  - `public_key_ptr` points to a serialized `elgamal::PublicKey<G1>`
 ///    instance,
 ///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
-/// each [`size_t`] parameter with the the `_len` suffix holds the length of
-/// its correspondingly named byte array. Returns [`Err`] if a parameter could
-/// not be deserialized.
+///    each [`size_t`] parameter with the the `_len` suffix holds the length of
+///    its correspondingly named byte array. Returns [`Err`] if a parameter
+///    could not be deserialized.
 #[allow(clippy::too_many_arguments)]
 fn ar_info_create_helper(
     identity: u32,
@@ -406,9 +404,9 @@ fn ar_info_create_helper(
 ///  - `genesis_string_ptr` points to a valid utf8 string,
 ///  - `bulletproof_generators_ptr` to a serialized `Generators<G1>` instance,
 ///  - `on_chain_commitments` to a serialized `CommitmentKey<G1>` instance, and
-/// each [`size_t`] parameter with the the `_len` suffix holds the length of its
-/// correspondingly named byte array. Returns a null-pointer if a parameter
-/// could not be deserialized.
+///    each [`size_t`] parameter with the the `_len` suffix holds the length of
+///    its correspondingly named byte array. Returns a null-pointer if a
+///    parameter could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn global_context_create(
     genesis_string_ptr: *const u8,
@@ -437,9 +435,9 @@ unsafe extern "C" fn global_context_create(
 ///  - `genesis_string_ptr points` to a valid utf8 string,
 ///  - `bulletproof_generators_ptr` to a serialized `Generators<G1>` instance,
 ///  - `on_chain_commitments` to a serialized `CommitmentKey<G1>` instance, and
-/// each [`size_t`] parameter with the the `_len` suffix holds the length
-/// of its correspondingly named byte array. Returns [`Err`] if a parameter
-/// could not be deserialized.
+///    each [`size_t`] parameter with the the `_len` suffix holds the length of
+///    its correspondingly named byte array. Returns [`Err`] if a parameter
+///    could not be deserialized.
 fn global_context_create_helper(
     genesis_string_ptr: *const u8,
     genesis_string_len: size_t,
@@ -485,9 +483,9 @@ fn global_context_create_helper(
 ///    instance,
 ///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
 ///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
-/// each [`size_t`] parameter with the the `_len` suffix holds the length of its
-/// correspondingly named byte array. Returns a null-pointer if a parameter
-/// could not be deserialized.
+///    each [`size_t`] parameter with the the `_len` suffix holds the length of
+///    its correspondingly named byte array. Returns a null-pointer if a
+///    parameter could not be deserialized.
 #[no_mangle]
 unsafe extern "C" fn ip_info_create(
     identity: u32,
@@ -527,9 +525,9 @@ unsafe extern "C" fn ip_info_create(
 ///    instance,
 ///  - `cdi_verify_key_ptr` to a serialized `ed25519_dalek::PublicKey` instance,
 ///  - `name_ptr`, `url_ptr` and `desc_ptr` point to valid utf8 strings, and
-/// each [`size_t`] parameter with the the `_len` suffix holds the length of its
-/// correspondingly named byte array. Returns [`Err`] if a parameter could not
-/// be deserialized.
+///    each [`size_t`] parameter with the the `_len` suffix holds the length of
+///    its correspondingly named byte array. Returns [`Err`] if a parameter
+///    could not be deserialized.
 #[allow(clippy::too_many_arguments)]
 fn ip_info_create_helper(
     identity: u32,

@@ -89,7 +89,7 @@ See documentation for
 
 In order to build the components in this repository you need
 - The [cargo](https://doc.rust-lang.org/cargo/) tool for building the Rust
-components. The currently supported version is 1.73. Others may work, but we
+components. The currently supported version is 1.82. Others may work, but we
 do not regularly test with them. The easiest way to install it is via the
 [rustup](https://rustup.rs/) tool.
 - The [Haskell Stack](https://docs.haskellstack.org/en/stable/README/) tool for
@@ -140,8 +140,8 @@ issues.
 
 ## Rust workflow
 
-We use **stable version** of rust, 1.73, to compile the code. This is the
-minimal supported version.
+We use **stable version** of rust, 1.82, to compile the code. The minimal
+supported rust version is 1.73.
 
 The CI is configured to check two things
 - the [clippy](https://github.com/rust-lang/rust-clippy) tool is run to check

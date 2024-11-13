@@ -1378,6 +1378,9 @@ make_wrapper!(
     ///
     /// See rust-bins/wallet-notes/README.md for the description of input and output
     /// formats.
+    /// 
+    /// # Safety
+    /// The 'success' pointer must be a valid pointer.
     => generate_baker_keys > generate_baker_keys_aux);
 
 make_wrapper!(

@@ -41,7 +41,7 @@ impl Host<ArtifactNamedImport> for TrapHost {
     fn call(
         &mut self,
         f: &ArtifactNamedImport,
-        _memory: &mut Vec<u8>,
+        _memory: &mut [u8],
         _stack: &mut RuntimeStack,
     ) -> RunResult<Option<NoInterrupt>> {
         bail!(HostCallError {
@@ -69,7 +69,7 @@ impl Host<ArtifactNamedImport> for MeteringHost {
     fn call(
         &mut self,
         f: &ArtifactNamedImport,
-        _memory: &mut Vec<u8>,
+        _memory: &mut [u8],
         _stack: &mut RuntimeStack,
     ) -> RunResult<Option<NoInterrupt>> {
         if f.matches("concordium_metering", "account_memory") {
