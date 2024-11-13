@@ -1,4 +1,3 @@
-#![cfg(test)]
 use crate::{
     common::{
         types::{KeyIndex, KeyPair, TransactionTime},
