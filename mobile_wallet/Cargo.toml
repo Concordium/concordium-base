@@ -38,17 +38,6 @@ version = "*"
 path = "../rust-src/concordium_base"
 version = "*"
 
-# Use the same optimization level for building build.rs as for the library
-# itself in release mode. This is necessary because some of the dependencies
-# (e.g., id) have a `cdylib/staticlib` crate-type which builds some artifacts
-# even though they are not needed directly by the build script. This then leads
-# to name clashes and failed compilation.
-#
-# Ideally we would have the crate-type of dependencies feature configurable, but
-# this is not supported by Cargo at the moment.
-[profile.release.build-override]
-opt-level = 3
-
 # this dependency is only needed for Android.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = { version = "0.14.0", default-features = false }

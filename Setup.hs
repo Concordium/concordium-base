@@ -8,17 +8,13 @@ import Distribution.System
 import Distribution.Verbosity
 import System.Environment
 
-concordiumLibs :: [String]
+concordiumLibs :: [(String, [String])]
 concordiumLibs =
-    [ "concordium_base",
-      "sha_2"
+    [ ("concordium_base", ["--features", "ffi"]),
+      ("sha_2", [])
     ]
 
 type WithEnvAndVerbosity = [(String, String)] -> Verbosity -> IO ()
-
--- Add features that should be enabled for the rust-src to the end of options.
-addFeatures :: [String] -> [String]
-addFeatures opts = opts ++ ["--features", "concordium_base/ffi"]
 
 -- | In linux, we will produce two kind of builds:
 --  - Static with musl: the rust libraries will only build static artifacts. Intended to be used inside alpine to produce a static binary.
@@ -29,67 +25,70 @@ linuxBuild :: Bool -> WithEnvAndVerbosity
 linuxBuild True env verbosity = do
     noticeNoWrap verbosity "Static linking."
     -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
-    rawSystemExitWithEnv
-        verbosity
-        "cargo"
-        (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml", "--target", "x86_64-unknown-linux-musl"])
-        (("RUSTFLAGS", "-C target-feature=-crt-static") : env)
-    let copyLib lib = do
-            let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ lib ++ ".a"
-                target = "./lib/lib" ++ lib ++ ".a"
+    let makeLib (libName, libFeatures) = do
+            -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
+            rawSystemExitWithEnv
+                verbosity
+                "cargo"
+                (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--target", "x86_64-unknown-linux-musl", "--crate-type", "staticlib"] ++ libFeatures)
+                (("RUSTFLAGS", "-C target-feature=-crt-static") : env)
+            let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ libName ++ ".a"
+                target = "./lib/lib" ++ libName ++ ".a"
             rawSystemExit verbosity "ln" ["-s", "-f", source, target]
             noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
-    mapM_ copyLib concordiumLibs
+    mapM_ makeLib concordiumLibs
 linuxBuild False env verbosity = do
     noticeNoWrap verbosity "Dynamic linking."
-    rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env
-    let copyLib lib = do
-            let source = "../rust-src/target/release/lib" ++ lib
-                target = "./lib/lib" ++ lib
+    let makeLib (libName, libFeatures) = do
+            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
+            notice verbosity "Linking library to ./lib"
+            let source = "../rust-src/target/release/lib" ++ libName
+                target = "./lib/lib" ++ libName
             rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".a", target ++ ".a"]
             rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".so", target ++ ".so"]
             noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
-    notice verbosity "Linking libraries to ./lib"
-    mapM_ copyLib concordiumLibs
+    mapM_ makeLib concordiumLibs
 
 windowsBuild :: WithEnvAndVerbosity
 windowsBuild env verbosity = do
-    let copyLib lib = do
+    let makeLib (libName, libFeatures) = do
+            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
+            notice verbosity "Copying library to ./lib"
             -- We delete the static library if present to ensure that we only link with the
             -- dynamic library.
-            rawSystemExit verbosity "rm" ["-f", "./lib/lib" ++ lib ++ ".a"]
-            rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
-            notice verbosity $ "Copied " ++ lib ++ "."
-    rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env
-    notice verbosity "Copying libraries to ./lib"
-    mapM_ copyLib concordiumLibs
+            rawSystemExit verbosity "rm" ["-f", "./lib/lib" ++ libName ++ ".a"]
+            rawSystemExit verbosity "cp" ["-u", "rust-src/target/release/" ++ libName ++ ".dll", "./lib/"]
+            notice verbosity $ "Copied " ++ libName ++ "."
+    mapM_ makeLib concordiumLibs
 
 -- | On Mac, we will delete the dynamic artifacts if we want to create a static binary.
 --
 --  The flag tells whether we want a static compilation or not.
 osxBuild :: Bool -> WithEnvAndVerbosity
 osxBuild static env verbosity = do
-    let copyLib lib = do
+    let makeLib (libName, libFeatures) = do
             if static
                 then do
-                    let source = "../rust-src/target/release/lib" ++ lib ++ ".a"
-                    let target = "./lib/lib" ++ lib ++ ".a"
-                        others = "./lib/lib" ++ lib ++ ".dylib"
+                    rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "staticlib"] ++ libFeatures) env
+                    notice verbosity "Linking library to ./lib"
+                    let source = "../rust-src/target/release/lib" ++ libName ++ ".a"
+                    let target = "./lib/lib" ++ libName ++ ".a"
+                        others = "./lib/lib" ++ libName ++ ".dylib"
                     rawSystemExit verbosity "rm" ["-f", others]
                     rawSystemExit verbosity "ln" ["-s", "-f", source, target]
                     noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
                     noticeNoWrap verbosity $ "Removed: " ++ others
                 else do
-                    let source = "../rust-src/target/release/lib" ++ lib ++ ".dylib"
-                    let others = "./lib/lib" ++ lib ++ ".a"
-                        target = "./lib/lib" ++ lib ++ ".dylib"
+                    rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
+                    notice verbosity "Linking library to ./lib"
+                    let source = "../rust-src/target/release/lib" ++ libName ++ ".dylib"
+                    let others = "./lib/lib" ++ libName ++ ".a"
+                        target = "./lib/lib" ++ libName ++ ".dylib"
                     rawSystemExit verbosity "rm" ["-f", others]
                     rawSystemExit verbosity "ln" ["-s", "-f", source, target]
                     noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
                     noticeNoWrap verbosity $ "Removed: " ++ others
-    rawSystemExitWithEnv verbosity "cargo" (addFeatures ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]) env
-    notice verbosity "Linking libraries to ./lib"
-    mapM_ copyLib concordiumLibs
+    mapM_ makeLib concordiumLibs
 
 makeRust :: Args -> ConfigFlags -> PackageDescription -> LocalBuildInfo -> IO ()
 makeRust _ flags _ lbi = do
@@ -110,8 +109,9 @@ copyDlls _ flags pkgDescr lbi = case buildOS of
     Windows -> do
         let installDirs = absoluteComponentInstallDirs pkgDescr lbi (localUnitId lbi) copydest
         let copyLib lib = do
-                rawSystemExit verbosity "cp" ["-u", "./lib/" ++ lib ++ ".dll", bindir installDirs]
-                notice verbosity $ "Copy " ++ lib ++ " to " ++ bindir installDirs
+                let libName = fst lib
+                rawSystemExit verbosity "cp" ["-u", "./lib/" ++ libName ++ ".dll", bindir installDirs]
+                notice verbosity $ "Copy " ++ libName ++ " to " ++ bindir installDirs
         mapM_ copyLib concordiumLibs
     _ -> return ()
   where
