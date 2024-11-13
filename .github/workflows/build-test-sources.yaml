@@ -138,7 +138,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.82
+        - rust: 1.73 # Should be MSRV
 
     steps:
     - name: Checkout
