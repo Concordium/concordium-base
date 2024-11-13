@@ -657,7 +657,11 @@ pub fn commitment_to_share_and_rand<C: Curve>(
 /// a given identity provider, and global parameter.
 /// The 'cred_counter' is used to generate a new credential ID.
 #[allow(clippy::too_many_arguments)]
-pub fn create_credential<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType>(
+pub fn create_credential<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Clone + Attribute<C::Scalar>,
+>(
     context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
@@ -669,9 +673,7 @@ pub fn create_credential<P: Pairing, C: Curve<Scalar = P::ScalarField>, Attribut
 ) -> anyhow::Result<(
     CredentialDeploymentInfo<P, C, AttributeType>,
     CommitmentsRandomness<C>,
-)>
-where
-    AttributeType: Clone + Attribute<C::Scalar>, {
+)> {
     let (unsigned_credential_info, commitments_randomness) = create_unsigned_credential(
         context,
         id_object,
@@ -701,7 +703,11 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn create_unsigned_credential<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType>(
+pub fn create_unsigned_credential<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Clone + Attribute<C::Scalar>,
+>(
     context: IpContext<'_, P, C>,
     id_object: &impl HasIdentityObjectFields<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
@@ -713,9 +719,7 @@ pub fn create_unsigned_credential<P: Pairing, C: Curve<Scalar = P::ScalarField>,
 ) -> anyhow::Result<(
     UnsignedCredentialDeploymentInfo<P, C, AttributeType>,
     CommitmentsRandomness<C>,
-)>
-where
-    AttributeType: Clone + Attribute<C::Scalar>, {
+)> {
     let mut csprng = thread_rng();
 
     let (ip_sig, prio, alist) = (
