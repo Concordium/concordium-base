@@ -40,7 +40,7 @@ linuxBuild True env verbosity = do
 linuxBuild False env verbosity = do
     noticeNoWrap verbosity "Dynamic linking."
     let makeLib (libName, libFeatures) = do
-            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib"] ++ libFeatures) env
+            rawSystemExitWithEnv verbosity "cargo" (["rustc", "--release", "--manifest-path", "rust-src/" ++ libName ++ "/Cargo.toml", "--crate-type", "cdylib", "--crate-type", "staticlib"] ++ libFeatures) env
             notice verbosity "Linking library to ./lib"
             let source = "../rust-src/target/release/lib" ++ libName
                 target = "./lib/lib" ++ libName
