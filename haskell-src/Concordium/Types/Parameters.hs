@@ -621,6 +621,8 @@ $( singletons
               PTFinalizationProof
             | -- Finalization committee selection for V2 consensus
               PTFinalizationCommitteeParameters
+            | -- Maximal score a validator can reach before it gets suspended
+              PTScoreParameters
 
         -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
@@ -647,6 +649,10 @@ $( singletons
         isSupported PTFinalizationCommitteeParameters ChainParametersV1 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV2 = True
         isSupported PTFinalizationCommitteeParameters ChainParametersV3 = True
+        isSupported PTScoreParameters ChainParametersV0 = False
+        isSupported PTScoreParameters ChainParametersV1 = False
+        isSupported PTScoreParameters ChainParametersV2 = False
+        isSupported PTScoreParameters ChainParametersV3 = True
         |]
  )
 
@@ -1639,6 +1645,16 @@ type OFinalizationCommitteeParameters (pv :: ProtocolVersion) =
         (ChainParametersVersionFor pv)
         FinalizationCommitteeParameters
 
+-- * Score parameters
+
+-- | Score specific parameters.
+newtype ScoreParameters = ScoreParameters
+    {
+        -- | Maximal number of rounds a validator can miss before it gets suspended.
+        _spMaxMissedRounds :: Word64
+    }
+    deriving (Eq, Show)
+
 -- * Consensus parameters
 
 -- | Constraint on a type level 'ConsensusParametersVersion' that can be used to get a corresponding
@@ -1771,7 +1787,10 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       -- | The finalization committee parameters.
       --  These parameters are introduced as part of protocol 6 (cpv2).
       --  The set of parameters shares the 'Authorization' with the '_cpPoolParameters'.
-      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
+      _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters),
+      -- | The score parameters.
+      --  These parameters are introduced as part of protocol 8 (cpv3).
+      _cpMaxScore :: !(OParam 'PTScoreParameters cpv ScoreParameters)
     }
     deriving (Eq, Show)
 
