@@ -2,6 +2,7 @@
 
 module Concordium.Common.Time where
 
+import Control.Applicative
 import Control.Monad
 import Data.Aeson
 import Data.Proxy
@@ -11,6 +12,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Read as Text
 import Data.Time
 import Data.Time.Clock.POSIX
+import Data.Time.Format.ISO8601
 import Data.Word
 import Database.Persist.Class
 import Database.Persist.Sql
@@ -64,7 +66,23 @@ instance FromJSON YearMonth where
 
 -- | Time in milliseconds since the epoch
 newtype Timestamp = Timestamp {tsMillis :: Word64}
-    deriving newtype (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, ToJSON, Integral, PersistField)
+    deriving newtype (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, ToJSON, Integral, PersistField)
+
+instance FromJSON Timestamp where
+    parseJSON (String t) = asMillis <|> asUTC <|> asZoned
+      where
+        -- Parse as an integer number of milliseconds.
+        asMillis = do
+            case Text.decimal t of
+                Left err -> fail $ "Timestamp not a valid numeric value: " ++ err
+                Right (millis, rest)
+                    | Text.null rest -> return $ Timestamp millis
+                    | otherwise -> fail "Timestamp not valid."
+        -- Parse as an ISO8601 timestamp in the form yyyy-mm-ddThh:mm:ss[.sss]Z.
+        asUTC = utcTimeToTimestamp <$> iso8601ParseM (Text.unpack t)
+        -- Parse as an ISO8601 timestamp in the form yyyy-mm-ddThh:mm:ss[.sss]±hh:mm.
+        asZoned = utcTimeToTimestamp . zonedTimeToUTC <$> iso8601ParseM (Text.unpack t)
+    parseJSON n = Timestamp <$> parseJSON n
 
 instance PersistFieldSql Timestamp where
     {-# INLINE sqlType #-}

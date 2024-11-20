@@ -23,6 +23,7 @@ import qualified Types.AmountSpec
 import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.PayloadSpec
+import qualified Types.TimestampSpec
 import qualified Types.TransactionSerializationSpec
 import qualified Types.TransactionSummarySpec
 import qualified Types.UpdatesSpec
@@ -49,6 +50,7 @@ main = hspec $ parallel $ do
     Types.PayloadSerializationSpec.tests
     Types.TransactionSerializationSpec.tests
     Types.AmountSpec.tests
+    Types.TimestampSpec.tests
     Types.UpdatesSpec.tests
     Types.AccountEncryptedAmountSpec.tests
     Types.AmountFraction.tests
