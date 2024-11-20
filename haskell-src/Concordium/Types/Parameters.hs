@@ -1790,7 +1790,7 @@ data ChainParameters' (cpv :: ChainParametersVersion) = ChainParameters
       _cpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters),
       -- | The score parameters.
       --  These parameters are introduced as part of protocol 8 (cpv3).
-      _cpMaxScore :: !(OParam 'PTScoreParameters cpv ScoreParameters)
+      _cpValidatorScoreParameters :: !(OParam 'PTValidatorScoreParameters cpv ValidatorScoreParameters)
     }
     deriving (Eq, Show)
 
