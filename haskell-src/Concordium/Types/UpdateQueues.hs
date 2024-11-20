@@ -165,7 +165,9 @@ data PendingUpdates cpv = PendingUpdates
       -- | Block energy limit (CPV2 onwards).
       _pBlockEnergyLimitQueue :: !(OUpdateQueue 'PTBlockEnergyLimit cpv Energy),
       -- | Finalization committee parameters queue (CPV2 onwards).
-      _pFinalizationCommitteeParametersQueue :: !(OUpdateQueue 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
+      _pFinalizationCommitteeParametersQueue :: !(OUpdateQueue 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters),
+      -- | Validator score parameters queue (CPV3 onwards).
+      _pValidatorScoreParametersQueue :: !(OUpdateQueue 'PTValidatorScoreParameters cpv ValidatorScoreParameters)
     }
     deriving (Show, Eq)
 
@@ -329,6 +331,7 @@ parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     let _pMinBlockTimeQueue = NoParam
     let _pBlockEnergyLimitQueue = NoParam
     let _pFinalizationCommitteeParametersQueue = NoParam
+    let _pValidatorScoreParametersQueue = NoParam
     return PendingUpdates{..}
 
 parsePendingUpdatesV1 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV1)
@@ -355,6 +358,7 @@ parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     let _pMinBlockTimeQueue = NoParam
     let _pBlockEnergyLimitQueue = NoParam
     let _pFinalizationCommitteeParametersQueue = NoParam
+    let _pValidatorScoreParametersQueue = NoParam
     return PendingUpdates{..}
 
 parsePendingUpdatesV2 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV2)
@@ -381,6 +385,7 @@ parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     _pMinBlockTimeQueue <- SomeParam <$> o AE..: "minBlockTime"
     _pBlockEnergyLimitQueue <- SomeParam <$> o AE..: "blockEnergyLimit"
     _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
+    let _pValidatorScoreParametersQueue = NoParam
     return PendingUpdates{..}
 
 parsePendingUpdatesV3 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV3)
@@ -407,6 +412,7 @@ parsePendingUpdatesV3 = withObject "PendingUpdates" $ \o -> do
     _pMinBlockTimeQueue <- SomeParam <$> o AE..: "minBlockTime"
     _pBlockEnergyLimitQueue <- SomeParam <$> o AE..: "blockEnergyLimit"
     _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
+    _pValidatorScoreParametersQueue <- SomeParam <$> o AE..: "validatorScoreParameters"
     return PendingUpdates{..}
 
 instance (IsChainParametersVersion cpv) => FromJSON (PendingUpdates cpv) where
@@ -434,6 +440,7 @@ emptyPendingUpdates =
         emptyUpdateQueue
         emptyUpdateQueue
         emptyUpdateQueue
+        (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)
         (whenSupported emptyUpdateQueue)

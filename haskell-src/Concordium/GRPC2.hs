@@ -883,6 +883,12 @@ instance ToProto Parameters.FinalizationCommitteeParameters where
         ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
         ProtoFields.finalizerRelativeStakeThreshold .= toProto _fcpFinalizerRelativeStakeThreshold
 
+instance ToProto Parameters.ValidatorScoreParameters where
+    type Output Parameters.ValidatorScoreParameters = Proto.ValidatorScoreParameters
+    toProto Parameters.ValidatorScoreParameters{..} =
+        Proto.make $
+            ProtoFields.maximumMissedRounds .= _vspMaxMissedRounds
+
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
     toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
@@ -1999,6 +2005,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUEMinBlockTime minBlockTime -> ProtoFields.minBlockTime .= toProto minBlockTime
             QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
             QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
+            QueryTypes.PUEFValidatorScoreParameters validatorScoreParameters -> ProtoFields.validatorScoreParameters .= toProto validatorScoreParameters
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
@@ -2023,6 +2030,7 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.minBlockTime .= toProto _nusnMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _nusnBlockEnergyLimit
         ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
+        ProtoFields.validatorScoreParameters .= toProto _nusnValidatorScoreParameters
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch

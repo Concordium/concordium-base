@@ -329,6 +329,8 @@ module Concordium.Types.Parameters (
     -- | Parameters for baker pools. Prior to P4, this is just the minimum stake threshold
     --  for becoming a baker.
     cpPoolParameters,
+    -- | Parameters for validator suspension. Available since P8.
+    cpValidatorScoreParameters,
     EChainParameters (..),
     ChainParameters,
     putChainParameters,
@@ -357,6 +359,9 @@ module Concordium.Types.Parameters (
     -- | 'FinalizationCommitteeParameters' wrapped in an 'OParam'
     --  supporting ''PTFinalizationCommitteeParameters'.
     OFinalizationCommitteeParameters,
+
+    -- * Validator score parameters
+    ValidatorScoreParameters (..),
 
     -- * Authorizations version
 
@@ -412,6 +417,7 @@ module Concordium.Types.Parameters (
     PTCooldownParametersAccessStructureSym0,
     PTFinalizationProofSym0,
     PTFinalizationCommitteeParametersSym0,
+    PTValidatorScoreParametersSym0,
 ) where
 
 import Control.Monad
@@ -622,7 +628,7 @@ $( singletons
             | -- Finalization committee selection for V2 consensus
               PTFinalizationCommitteeParameters
             | -- Maximal score a validator can reach before it gets suspended
-              PTScoreParameters
+              PTValidatorScoreParameters
 
         -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
@@ -649,10 +655,10 @@ $( singletons
         isSupported PTFinalizationCommitteeParameters ChainParametersV1 = False
         isSupported PTFinalizationCommitteeParameters ChainParametersV2 = True
         isSupported PTFinalizationCommitteeParameters ChainParametersV3 = True
-        isSupported PTScoreParameters ChainParametersV0 = False
-        isSupported PTScoreParameters ChainParametersV1 = False
-        isSupported PTScoreParameters ChainParametersV2 = False
-        isSupported PTScoreParameters ChainParametersV3 = True
+        isSupported PTValidatorScoreParameters ChainParametersV0 = False
+        isSupported PTValidatorScoreParameters ChainParametersV1 = False
+        isSupported PTValidatorScoreParameters ChainParametersV2 = False
+        isSupported PTValidatorScoreParameters ChainParametersV3 = True
         |]
  )
 
@@ -1645,15 +1651,39 @@ type OFinalizationCommitteeParameters (pv :: ProtocolVersion) =
         (ChainParametersVersionFor pv)
         FinalizationCommitteeParameters
 
--- * Score parameters
+-- * Validator score parameters
 
 -- | Score specific parameters.
-newtype ScoreParameters = ScoreParameters
-    {
-        -- | Maximal number of rounds a validator can miss before it gets suspended.
-        _spMaxMissedRounds :: Word64
+newtype ValidatorScoreParameters = ValidatorScoreParameters
+    { -- | Maximal number of rounds a validator can miss before it gets suspended.
+      _vspMaxMissedRounds :: Word64
     }
     deriving (Eq, Show)
+
+instance HashableTo Hash.Hash ValidatorScoreParameters where
+    getHash = Hash.hash . encode
+
+instance (Monad m) => MHashableTo m Hash.Hash ValidatorScoreParameters
+
+instance Serialize ValidatorScoreParameters where
+    put ValidatorScoreParameters{..} = do
+        put _vspMaxMissedRounds
+    get = do
+        _vspMaxMissedRounds <- get
+        unless (_vspMaxMissedRounds >= 0) $ fail "The maximal missed rounds threshold must be positive."
+        return ValidatorScoreParameters{..}
+
+instance ToJSON ValidatorScoreParameters where
+    toJSON ValidatorScoreParameters{..} =
+        object
+            [ "maximumMissedRounds" AE..= _vspMaxMissedRounds
+            ]
+
+instance FromJSON ValidatorScoreParameters where
+    parseJSON = withObject "ValidatorScoreParameters" $ \o -> do
+        _vspMaxMissedRounds <- o .: "maximumMissedRounds"
+        unless (_vspMaxMissedRounds >= 0) $ fail "The maximal missed rounds threshold must be positive."
+        return ValidatorScoreParameters{..}
 
 -- * Consensus parameters
 
@@ -1822,6 +1852,7 @@ putChainParameters ChainParameters{..} = do
     put _cpFoundationAccount
     putPoolParameters _cpPoolParameters
     put _cpFinalizationCommitteeParameters
+    put _cpValidatorScoreParameters
 
 -- | Deserialize a 'ChainParameters''.
 getChainParameters :: forall cpv. (IsChainParametersVersion cpv) => Get (ChainParameters' cpv)
@@ -1835,6 +1866,7 @@ getChainParameters = do
     _cpFoundationAccount <- get
     _cpPoolParameters <- withIsPoolParametersVersionFor (chainParametersVersion @cpv) get
     _cpFinalizationCommitteeParameters <- get
+    _cpValidatorScoreParameters <- get
     return ChainParameters{..}
 
 instance (IsChainParametersVersion cpv) => Serialize (ChainParameters' cpv) where
@@ -1870,6 +1902,7 @@ parseJSONForCPV0 =
                     .: "minimumThresholdForBaking"
         let _cpTimeParameters = NoParam
             _cpFinalizationCommitteeParameters = NoParam
+            _cpValidatorScoreParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV1 :: Value -> Parser (ChainParameters' 'ChainParametersV1)
@@ -1902,6 +1935,7 @@ parseJSONForCPV1 =
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
             _cpFinalizationCommitteeParameters = NoParam
+            _cpValidatorScoreParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV2 :: Value -> Parser (ChainParameters' 'ChainParametersV2)
@@ -1943,11 +1977,12 @@ parseJSONForCPV2 =
             _ppCommissionBounds = CommissionRanges{..}
             _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
+            _cpValidatorScoreParameters = NoParam
         return ChainParameters{..}
 
 parseJSONForCPV3 :: Value -> Parser (ChainParameters' 'ChainParametersV3)
 parseJSONForCPV3 =
-    withObject "ChainParametersV2" $ \v -> do
+    withObject "ChainParametersV3" $ \v -> do
         _cpEuroPerEnergy <- v .: "euroPerEnergy"
         _cpMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -1984,6 +2019,10 @@ parseJSONForCPV3 =
             _ppCommissionBounds = CommissionRanges{..}
             _cpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             _cpConsensusParameters = ConsensusParametersV1{..}
+
+        _vspMaxMissedRounds <- v .: "maximumMissedRounds"
+        let _cpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
+
         return ChainParameters{..}
 
 instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (ChainParameters' cpv) where
