@@ -27,11 +27,7 @@ import Concordium.Types
 import Concordium.Types.Accounts
 import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
-import Concordium.Types.Execution (
-    SupplementedTransactionSummary,
-    TransactionSummary',
-    ValidResult',
- )
+import Concordium.Types.Execution (SupplementedTransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
     AuthorizationsVersion (..),
@@ -361,24 +357,18 @@ data BlockBirkParameters = BlockBirkParameters
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
--- | The status of a transaction that is present in the transaction table.
-data TransactionStatus' (supplemented :: Bool)
+-- | The status of a transaction that is present in the transaction table or a finalized block,
+--  as returned by the @getTransactionStatus@ gRPC query.
+data SupplementedTransactionStatus
     = -- | Transaction was received but is not in any blocks
       Received
     | -- | Transaction was received and is present in some (non-finalized) block(s)
-      Committed (Map.Map BlockHash (Maybe (TransactionSummary' (ValidResult' supplemented))))
+      Committed (Map.Map BlockHash (Maybe SupplementedTransactionSummary))
     | -- | Transaction has been finalized in a block
-      Finalized BlockHash (Maybe (TransactionSummary' (ValidResult' supplemented)))
+      Finalized BlockHash (Maybe SupplementedTransactionSummary)
     deriving (Show)
 
--- | The status of a transaction that is present in the transaction table.
-type TransactionStatus = TransactionStatus' False
-
--- | The status of a transaction that is present in the transaction table, with
---  supplemental information.
-type SupplementedTransactionStatus = TransactionStatus' True
-
-instance ToJSON (TransactionStatus' supplemented) where
+instance ToJSON SupplementedTransactionStatus where
     toJSON Received = object ["status" .= String "received"]
     toJSON (Committed m) =
         object
