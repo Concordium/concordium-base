@@ -1975,6 +1975,14 @@ instance ToProto TxTypes.SpecialTransactionOutcome where
                         ProtoFields.bakerReward .= toProto stoBakerReward
                         ProtoFields.finalizationReward .= toProto stoFinalizationReward
                     )
+    toProto TxTypes.ValidatorPrimedForSuspension{..} =
+        Proto.make $
+            ProtoFields.validatorSuspended
+                .= Proto.make (ProtoFields.bakerId .= toProto vpfsBakerId)
+    toProto TxTypes.ValidatorSuspended{..} =
+        Proto.make $
+            ProtoFields.validatorSuspended
+                .= Proto.make (ProtoFields.bakerId .= toProto vsBakerId)
 
 instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
     type Output (TransactionTime, QueryTypes.PendingUpdateEffect) = Proto.PendingUpdate
