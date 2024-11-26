@@ -47,6 +47,7 @@ import Concordium.Crypto.EncryptedTransfers
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Accounts
+import Concordium.Types.Conditionally
 import Concordium.Types.Queries
 import qualified Concordium.Types.Queries as QueryTypes
 import qualified Concordium.Types.Transactions as Transactions
@@ -725,8 +726,8 @@ instance ToProto RejectReason where
 --   The protobuf type is better structured and removes the need for handling impossible cases.
 --   For example the case of an account transfer resulting in a smart contract update, which is a
 --   technical possibility in the way that the node's trx status is defined.
-instance ToProto QueryTypes.TransactionStatus where
-    type Output QueryTypes.TransactionStatus = Either ConversionError Proto.BlockItemStatus
+instance ToProto QueryTypes.SupplementedTransactionStatus where
+    type Output QueryTypes.SupplementedTransactionStatus = Either ConversionError Proto.BlockItemStatus
     toProto ts = case ts of
         QueryTypes.Received -> Right . Proto.make $ ProtoFields.received .= Proto.defMessage
         QueryTypes.Finalized bh trx -> do
@@ -739,7 +740,7 @@ instance ToProto QueryTypes.TransactionStatus where
       where
         -- \|Convert a transaction summary to a proto block item summary.
         --  The transaction summary can technically be Nothing, but it should never occur.
-        toBis :: Maybe TransactionSummary -> Either ConversionError Proto.BlockItemSummary
+        toBis :: Maybe SupplementedTransactionSummary -> Either ConversionError Proto.BlockItemSummary
         toBis Nothing = Left CEInvalidTransactionResult
         toBis (Just t) = toProto t
 
@@ -747,10 +748,10 @@ instance ToProto QueryTypes.TransactionStatus where
             ProtoFields.blockHash .= toProto bh
             ProtoFields.outcome .= bis
 
--- | Attempt to convert a TransactionSummary type into the protobuf BlockItemSummary type.
---   See @toBlockItemStatus@ for more context.
-instance ToProto TransactionSummary where
-    type Output TransactionSummary = Either ConversionError Proto.BlockItemSummary
+-- | Attempt to convert a SupplementedTransactionSummary type into the protobuf BlockItemSummary
+--   type. See @toBlockItemStatus@ for more context.
+instance ToProto SupplementedTransactionSummary where
+    type Output SupplementedTransactionSummary = Either ConversionError Proto.BlockItemSummary
     toProto TransactionSummary{..} = case tsType of
         TSTAccountTransaction tty -> do
             sender <- case tsSender of
@@ -1136,7 +1137,8 @@ instance ToProto RegisteredData where
     type Output RegisteredData = Proto.RegisteredData
     toProto (RegisteredData shortBS) = Proto.make $ ProtoFields.value .= BSS.fromShort shortBS
 
-convertContractRelatedEvents :: Event -> Either ConversionError Proto.ContractTraceElement
+convertContractRelatedEvents ::
+    SupplementedEvent -> Either ConversionError Proto.ContractTraceElement
 convertContractRelatedEvents event = case event of
     Updated{..} ->
         Right . Proto.make $
@@ -1204,7 +1206,7 @@ convertAccountTransaction ::
     AccountAddress ->
     -- | The result of the transaction. If the transaction was rejected, it contains the reject reason.
     --   Otherwise it contains the events.
-    ValidResult ->
+    SupplementedValidResult ->
     Either ConversionError Proto.AccountTransactionDetails
 convertAccountTransaction ty cost sender result = case ty of
     Nothing -> Right . mkNone $ SerializationFailure
@@ -1227,6 +1229,7 @@ convertAccountTransaction ty cost sender result = case ty of
                             ProtoFields.amount .= toProto ecAmount
                             ProtoFields.initName .= toProto ecInitName
                             ProtoFields.events .= map toProto ecEvents
+                            ProtoFields.parameter .= toProto (uncond ecParameter)
                         _ -> Left CEInvalidTransactionResult
                     Right . Proto.make $ ProtoFields.contractInitialized .= v
             TTUpdate ->
@@ -2407,9 +2410,9 @@ instance ToProto (DryRunResponse InvokeContract.InvokeContractResult) where
                         )
                 ProtoFields.quotaRemaining .= toProto quotaRem
 
-instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) where
+instance ToProto (DryRunResponse (TransactionSummary' SupplementedValidResultWithReturn)) where
     type
-        Output (DryRunResponse (TransactionSummary' ValidResultWithReturn)) =
+        Output (DryRunResponse (TransactionSummary' SupplementedValidResultWithReturn)) =
             Either ConversionError Proto.DryRunResponse
     toProto (DryRunResponse TransactionSummary{..} quotaRem) = case tsType of
         TSTAccountTransaction tty -> do

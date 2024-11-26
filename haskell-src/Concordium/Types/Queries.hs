@@ -27,7 +27,11 @@ import Concordium.Types
 import Concordium.Types.Accounts
 import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
-import Concordium.Types.Execution (TransactionSummary)
+import Concordium.Types.Execution (
+    SupplementedTransactionSummary,
+    TransactionSummary',
+    ValidResult',
+ )
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
     AuthorizationsVersion (..),
@@ -358,16 +362,23 @@ data BlockBirkParameters = BlockBirkParameters
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
 -- | The status of a transaction that is present in the transaction table.
-data TransactionStatus
+data TransactionStatus' (supplemented :: Bool)
     = -- | Transaction was received but is not in any blocks
       Received
     | -- | Transaction was received and is present in some (non-finalized) block(s)
-      Committed (Map.Map BlockHash (Maybe TransactionSummary))
+      Committed (Map.Map BlockHash (Maybe (TransactionSummary' (ValidResult' supplemented))))
     | -- | Transaction has been finalized in a block
-      Finalized BlockHash (Maybe TransactionSummary)
+      Finalized BlockHash (Maybe (TransactionSummary' (ValidResult' supplemented)))
     deriving (Show)
 
-instance ToJSON TransactionStatus where
+-- | The status of a transaction that is present in the transaction table.
+type TransactionStatus = TransactionStatus' False
+
+-- | The status of a transaction that is present in the transaction table, with
+--  supplemental information.
+type SupplementedTransactionStatus = TransactionStatus' True
+
+instance ToJSON (TransactionStatus' supplemented) where
     toJSON Received = object ["status" .= String "received"]
     toJSON (Committed m) =
         object
@@ -387,9 +398,9 @@ data BlockTransactionStatus
     | -- | The transaction was received but not known to be in that block
       BTSReceived
     | -- | The transaction is in that (non-finalized) block
-      BTSCommitted (Maybe TransactionSummary)
+      BTSCommitted (Maybe SupplementedTransactionSummary)
     | -- | The transaction is in that (finalized) block
-      BTSFinalized (Maybe TransactionSummary)
+      BTSFinalized (Maybe SupplementedTransactionSummary)
     deriving (Show)
 
 instance ToJSON BlockTransactionStatus where
