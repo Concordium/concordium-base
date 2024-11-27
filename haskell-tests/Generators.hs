@@ -39,6 +39,7 @@ import Concordium.Genesis.Parameters
 import Concordium.ID.DummyData
 import Concordium.ID.Types
 import Concordium.Types
+import Concordium.Types.Conditionally
 import Concordium.Types.Execution
 import Concordium.Types.Parameters
 import Concordium.Types.Transactions
@@ -685,7 +686,7 @@ genEvent :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen Event
 genEvent spv =
     oneof
         ( [ ModuleDeployed <$> genModuleRef,
-            ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion spv <*> listOf genContractEvent,
+            ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion spv <*> listOf genContractEvent <*> pure CFalse,
             Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> genWasmVersion spv <*> listOf genContractEvent,
             Transferred <$> genAddress <*> genAmount <*> genAddress,
             AccountCreated <$> genAccountAddress,
