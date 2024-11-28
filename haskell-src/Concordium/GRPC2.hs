@@ -2437,3 +2437,9 @@ instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) wh
 instance ToProto BlockSignature.Signature where
     type Output BlockSignature.Signature = Proto.BlockSignature
     toProto = mkSerialize
+
+instance ToProto AccountPending where
+    type Output AccountPending = Proto.AccountPending
+    toProto AccountPending{..} = Proto.make $ do
+        ProtoFields.accountIndex .= toProto apAccountIndex
+        ProtoFields.firstTimestamp .= toProto apFirstTimestamp
