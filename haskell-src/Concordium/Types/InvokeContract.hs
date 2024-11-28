@@ -14,7 +14,7 @@ import qualified Data.ByteString.Base16 as BS16
 import qualified Data.Text.Encoding as Text
 
 import Concordium.Types (Address, Amount, ContractAddress, Energy)
-import Concordium.Types.Execution (Event, RejectReason)
+import Concordium.Types.Execution (RejectReason, SupplementedEvent)
 import qualified Concordium.Wasm as Wasm
 
 -- | Default energy used when using the invoke method functionality.
@@ -93,7 +93,7 @@ data InvokeContractResult
           --  the return value produced by the call.
           rcrReturnValue :: !(Maybe BS.ByteString),
           -- | Events produced by contract execution.
-          rcrEvents :: ![Event],
+          rcrEvents :: ![SupplementedEvent],
           -- | Energy used by the execution.
           rcrUsedEnergy :: !Energy
         }

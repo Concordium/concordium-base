@@ -1,4 +1,5 @@
 {-# LANGUAGE BinaryLiterals #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
@@ -8,6 +9,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Concordium.Types.Execution where
 
@@ -29,8 +31,9 @@ import qualified Data.Serialize as S
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize.Put as P
 import qualified Data.Set as Set
+import Data.Singletons
 import qualified Data.Text as Text
-import Lens.Micro.Platform (Lens, lens)
+import Lens.Micro.Platform (Lens, Traversal, lens)
 
 import Data.Int (Int32)
 import Data.Word
@@ -44,6 +47,7 @@ import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Types
+import Concordium.Types.Conditionally
 import Concordium.Types.Execution.TH
 import Concordium.Types.Updates
 import Concordium.Utils
@@ -1018,7 +1022,12 @@ data VersionedContractEvents = VersionedContractEvents
 -- | Events which are generated during transaction execution.
 --  These are only used for committed transactions.
 --  Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
-data Event
+--
+--  The 'supplemented' parameter indicates whether the event is supplemented
+--  with additional information from the transaction - specifically, the
+--  parameter used to initialize the contract in the case of a 'ContractInitialized'
+--  event. This is used to respond to queries.
+data Event' (supplemented :: Bool)
     = -- | Module with the given address was deployed.
       ModuleDeployed !ModuleRef
     | -- | The contract was deployed.
@@ -1035,7 +1044,9 @@ data Event
           ecContractVersion :: !Wasm.WasmVersion,
           -- | Events as reported by the contract via the log method, in the
           --  order they were reported.
-          ecEvents :: ![Wasm.ContractEvent]
+          ecEvents :: ![Wasm.ContractEvent],
+          -- | Parameter used to initialize the contract.
+          ecParameter :: !(Conditionally supplemented Wasm.Parameter)
         }
     | -- | The given contract was updated.
       Updated
@@ -1333,6 +1344,63 @@ data Event
         }
     deriving (Show, Generic, Eq)
 
+-- | A contract event, without supplemental data. This is what is stored in the database and
+--  hashed in the transaction outcomes.
+type Event = Event' False
+
+-- | A contract event with supplemental data. This is used to respond to queries.
+--  In particular, it makes the parameter of contract initialization available.
+type SupplementedEvent = Event' True
+
+-- | Supplement a 'ContractInitialized' event with the parameter.
+--  The 'Applicative' context here is used to allow for the parameter being unavailable, which is
+--  only a problem for the 'ContractInitialized' event. For instance, if the parameter is
+--  'Nothing', then this will return 'Nothing' for a 'ContractInitialized' event, but will return
+--  @Just e@ for any other event.
+addInitializeParameter :: (Applicative f) => f Wasm.Parameter -> Event -> f SupplementedEvent
+addInitializeParameter _ (ModuleDeployed mref) = pure (ModuleDeployed mref)
+addInitializeParameter mparam ContractInitialized{..} =
+    (\param -> ContractInitialized{ecParameter = CTrue param, ..}) <$> mparam
+addInitializeParameter _ Updated{..} = pure Updated{..}
+addInitializeParameter _ Transferred{..} = pure Transferred{..}
+addInitializeParameter _ (AccountCreated addr) = pure (AccountCreated addr)
+addInitializeParameter _ CredentialDeployed{..} = pure CredentialDeployed{..}
+addInitializeParameter _ BakerAdded{..} = pure BakerAdded{..}
+addInitializeParameter _ BakerRemoved{..} = pure BakerRemoved{..}
+addInitializeParameter _ BakerStakeIncreased{..} = pure BakerStakeIncreased{..}
+addInitializeParameter _ BakerStakeDecreased{..} = pure BakerStakeDecreased{..}
+addInitializeParameter _ BakerSetRestakeEarnings{..} = pure BakerSetRestakeEarnings{..}
+addInitializeParameter _ BakerKeysUpdated{..} = pure BakerKeysUpdated{..}
+addInitializeParameter _ CredentialKeysUpdated{..} = pure CredentialKeysUpdated{..}
+addInitializeParameter _ NewEncryptedAmount{..} = pure NewEncryptedAmount{..}
+addInitializeParameter _ EncryptedAmountsRemoved{..} = pure EncryptedAmountsRemoved{..}
+addInitializeParameter _ AmountAddedByDecryption{..} = pure AmountAddedByDecryption{..}
+addInitializeParameter _ EncryptedSelfAmountAdded{..} = pure EncryptedSelfAmountAdded{..}
+addInitializeParameter _ UpdateEnqueued{..} = pure UpdateEnqueued{..}
+addInitializeParameter _ TransferredWithSchedule{..} = pure TransferredWithSchedule{..}
+addInitializeParameter _ CredentialsUpdated{..} = pure CredentialsUpdated{..}
+addInitializeParameter _ DataRegistered{..} = pure DataRegistered{..}
+addInitializeParameter _ TransferMemo{..} = pure TransferMemo{..}
+addInitializeParameter _ Interrupted{..} = pure Interrupted{..}
+addInitializeParameter _ Resumed{..} = pure Resumed{..}
+addInitializeParameter _ BakerSetOpenStatus{..} = pure BakerSetOpenStatus{..}
+addInitializeParameter _ BakerSetMetadataURL{..} = pure BakerSetMetadataURL{..}
+addInitializeParameter _ BakerSetTransactionFeeCommission{..} =
+    pure BakerSetTransactionFeeCommission{..}
+addInitializeParameter _ BakerSetBakingRewardCommission{..} =
+    pure BakerSetBakingRewardCommission{..}
+addInitializeParameter _ BakerSetFinalizationRewardCommission{..} =
+    pure BakerSetFinalizationRewardCommission{..}
+addInitializeParameter _ DelegationStakeIncreased{..} = pure DelegationStakeIncreased{..}
+addInitializeParameter _ DelegationStakeDecreased{..} = pure DelegationStakeDecreased{..}
+addInitializeParameter _ DelegationSetRestakeEarnings{..} = pure DelegationSetRestakeEarnings{..}
+addInitializeParameter _ DelegationSetDelegationTarget{..} = pure DelegationSetDelegationTarget{..}
+addInitializeParameter _ DelegationAdded{..} = pure DelegationAdded{..}
+addInitializeParameter _ DelegationRemoved{..} = pure DelegationRemoved{..}
+addInitializeParameter _ Upgraded{..} = pure Upgraded{..}
+addInitializeParameter _ BakerSuspended{..} = pure BakerSuspended{..}
+addInitializeParameter _ BakerResumed{..} = pure BakerResumed{..}
+
 putEvent :: S.Putter Event
 putEvent = \case
     ModuleDeployed mref ->
@@ -1536,6 +1604,7 @@ getEvent spv =
             ecContractVersion <- S.get
             ecEventsLength <- fromIntegral <$> S.getWord32be
             ecEvents <- replicateM ecEventsLength S.get
+            let ecParameter = CFalse
             return ContractInitialized{..}
         2 -> do
             euAddress <- S.get
@@ -1711,7 +1780,7 @@ getEvent spv =
     supportV1Contracts = supportsV1Contracts spv
     supportDelegation = protocolSupportsDelegation spv
 
-instance AE.ToJSON Event where
+instance AE.ToJSON (Event' supplemented) where
     toJSON = \case
         ModuleDeployed mref ->
             AE.object
@@ -1719,7 +1788,7 @@ instance AE.ToJSON Event where
                   "contents" .= mref
                 ]
         ContractInitialized{..} ->
-            AE.object
+            AE.object $
                 [ "tag" .= AE.String "ContractInitialized",
                   "ref" .= ecRef,
                   "address" .= ecAddress,
@@ -1728,6 +1797,7 @@ instance AE.ToJSON Event where
                   "contractVersion" .= ecContractVersion,
                   "events" .= ecEvents
                 ]
+                    ++ foldMap (\param -> ["parameter" .= param]) ecParameter
         Updated{..} ->
             AE.object
                 [ "tag" .= AE.String "Updated",
@@ -1973,7 +2043,7 @@ instance AE.ToJSON Event where
                   "bakerId" .= ebrBakerId
                 ]
 
-instance AE.FromJSON Event where
+instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
     parseJSON = AE.withObject "Event" $ \obj -> do
         (obj .: "tag") >>= \case
             "ModuleDeployed" -> do
@@ -1986,6 +2056,7 @@ instance AE.FromJSON Event where
                 ecInitName <- obj .: "initName"
                 ecContractVersion <- obj AE..:! "contractVersion" AE..!= Wasm.V0 -- default for backwards compatibility
                 ecEvents <- obj .: "events"
+                ecParameter <- conditionallyA sing (obj .: "parameter")
                 return ContractInitialized{..}
             "Updated" -> do
                 euAddress <- obj .: "address"
@@ -2155,6 +2226,15 @@ instance AE.FromJSON Event where
                 return Upgraded{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
+-- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with
+--  'SupplementedEvent's.
+class SupplementEvents a where
+    -- | The result type of supplementing the events in 'a'.
+    type Supplemented a
+
+    -- | A traversal that can be used to replace 'Event's with 'SupplementedEvent's.
+    supplementEvents :: Traversal a (Supplemented a) Event SupplementedEvent
+
 -- | Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
     deriving (Eq, Ord, Enum, Bits, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
@@ -2205,6 +2285,15 @@ summaryResult =
 --  containing either a 'TxSuccess' or 'TxReject'.
 type TransactionSummary = TransactionSummary' ValidResult
 
+-- | A transaction summary parameterized with an outcome of a valid transaction
+--  containing either a 'TxSuccess' or 'TxReject'.
+type SupplementedTransactionSummary = TransactionSummary' (ValidResult' True)
+
+instance (SupplementEvents a) => SupplementEvents (TransactionSummary' a) where
+    type Supplemented (TransactionSummary' a) = TransactionSummary' (Supplemented a)
+    supplementEvents f TransactionSummary{..} =
+        (\res -> TransactionSummary{tsResult = res, ..}) <$> supplementEvents f tsResult
+
 -- | An abstraction for constructing the result of a transaction.
 --  This is instantiated by both 'ValidResult' and 'ValidResultWithReturn'.
 class TransactionResult a where
@@ -2229,8 +2318,45 @@ class TransactionResult a where
 --  successful transaction with a list of events which occurred during execution.
 --  We also record the cost of the transaction.
 --  The 'TransactionResult' instance ignores the return value.
-data ValidResult = TxSuccess {vrEvents :: ![Event]} | TxReject {vrRejectReason :: !RejectReason}
+--
+--  The 'supplemented' parameter indicates whether the events are supplemented
+--  with additional information from the transaction - specifically, the
+--  parameter used to initialize the contract in the case of a 'ContractInitialized'
+--  event.
+data ValidResult' supplemented
+    = TxSuccess {vrEvents :: ![Event' supplemented]}
+    | TxReject {vrRejectReason :: !RejectReason}
     deriving (Show, Generic, Eq)
+
+instance AE.ToJSON (ValidResult' supplemented) where
+    toJSON TxSuccess{..} =
+        AE.object ["outcome" .= AE.String "success", "events" .= vrEvents]
+    toJSON TxReject{..} =
+        AE.object ["outcome" .= AE.String "reject", "rejectReason" .= vrRejectReason]
+
+instance (SingI supplemented) => AE.FromJSON (ValidResult' supplemented) where
+    parseJSON = AE.withObject "ValidResult" $ \v -> do
+        outcome <- v .: "outcome"
+        case outcome of
+            AE.String "success" -> TxSuccess <$> v .: "events"
+            AE.String "reject" -> TxReject <$> v .: "rejectReason"
+            _ -> fail "Cannot parse JSON ValidResult"
+
+instance SupplementEvents (ValidResult' False) where
+    type Supplemented (ValidResult' False) = ValidResult' True
+    supplementEvents f TxSuccess{..} = TxSuccess <$> traverse f vrEvents
+    supplementEvents _ TxReject{..} = pure $ TxReject{..}
+
+-- | Outcomes of a valid transaction. Either a reject with a reason or a
+--  successful transaction with a list of events which occurred during execution.
+--  We also record the cost of the transaction.
+--  The 'TransactionResult' instance ignores the return value.
+type ValidResult = ValidResult' False
+
+-- | Outcomes of a valid transaction. Either a reject with a reason or a
+--  successful transaction with a list of events which occurred during execution.
+--  We also record the cost of the transaction.
+type SupplementedValidResult = ValidResult' True
 
 instance TransactionResult ValidResult where
     transactionSuccess = TxSuccess
@@ -2249,19 +2375,39 @@ getValidResult spv =
         1 -> TxReject <$> S.get
         n -> fail $ "Unrecognized ValidResult tag: " ++ show n
 
+-- | A 'ValidResult'' with an optional return value.
+--  In the 'TransactionResult' instance, 'setTransactionReturnValue' replaces any existing return
+--  value.
+--
+--  The 'supplemented' parameter indicates whether the events are supplemented
+--  with additional information from the transaction - specifically, the
+--  parameter used to initialize the contract in the case of a 'ContractInitialized'
+--  event.
+data ValidResultWithReturn' (supplemented :: Bool) = ValidResultWithReturn
+    { vrwrResult :: !(ValidResult' supplemented),
+      vrwrReturnValue :: !(Maybe BS.ByteString)
+    }
+
 -- | A 'ValidResult' with an optional return value.
 --  In the 'TransactionResult' instance, 'setTransactionReturnValue' replaces any existing return
 --  value.
-data ValidResultWithReturn = ValidResultWithReturn
-    { vrwrResult :: !ValidResult,
-      vrwrReturnValue :: !(Maybe BS.ByteString)
-    }
+type ValidResultWithReturn = ValidResultWithReturn' False
+
+-- | A 'SupplementedValidResult' with an optional return value.
+--  In the 'TransactionResult' instance, 'setTransactionReturnValue' replaces any existing return
+--  value.
+type SupplementedValidResultWithReturn = ValidResultWithReturn' True
 
 instance TransactionResult ValidResultWithReturn where
     transactionSuccess = flip ValidResultWithReturn Nothing . TxSuccess
     transactionReject = flip ValidResultWithReturn Nothing . TxReject
     setTransactionReturnValue rv res = res{vrwrReturnValue = Just rv}
     fromValidResult = flip ValidResultWithReturn Nothing
+
+instance SupplementEvents ValidResultWithReturn where
+    type Supplemented ValidResultWithReturn = SupplementedValidResultWithReturn
+    supplementEvents f ValidResultWithReturn{..} =
+        (\res -> ValidResultWithReturn{vrwrResult = res, ..}) <$> supplementEvents f vrwrResult
 
 instance S.Serialize TransactionSummaryType where
     put (TSTAccountTransaction tt) = S.putWord8 0 <> putMaybe S.put tt
@@ -2601,21 +2747,6 @@ data FailureKind
     deriving (Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
-
--- Derive JSON instance for transaction outcomes
--- At the end of the file to avoid issues with staging restriction.
-$( deriveJSON
-    AE.defaultOptions
-        { AE.constructorTagModifier = firstLower . drop 2,
-          AE.sumEncoding =
-            AE.TaggedObject
-                { AE.tagFieldName = "outcome",
-                  AE.contentsFieldName = "details"
-                },
-          AE.fieldLabelModifier = firstLower . drop 2
-        }
-    ''ValidResult
- )
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
