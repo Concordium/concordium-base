@@ -1111,3 +1111,13 @@ data DryRunResponse a = DryRunResponse
       drrQuotaRemaining :: !Energy
     }
     deriving (Eq)
+
+-- | Indicates that an account is pending -- either a scheduled release or a cooldown, depending on
+--  the context -- and when the first release or cooldown will elapse.
+data AccountPending = AccountPending
+    { -- | Index of the account with pending scheduled release/cooldown.
+      apAccountIndex :: !AccountIndex,
+      -- | Timestamp of the first pending event for the account.
+      apFirstTimestamp :: !Timestamp
+    }
+    deriving (Eq)
