@@ -1670,7 +1670,6 @@ instance Serialize ValidatorScoreParameters where
         put _vspMaxMissedRounds
     get = do
         _vspMaxMissedRounds <- get
-        unless (_vspMaxMissedRounds >= 0) $ fail "The maximal missed rounds threshold must be positive."
         return ValidatorScoreParameters{..}
 
 instance ToJSON ValidatorScoreParameters where
@@ -1682,7 +1681,6 @@ instance ToJSON ValidatorScoreParameters where
 instance FromJSON ValidatorScoreParameters where
     parseJSON = withObject "ValidatorScoreParameters" $ \o -> do
         _vspMaxMissedRounds <- o .: "maximumMissedRounds"
-        unless (_vspMaxMissedRounds >= 0) $ fail "The maximal missed rounds threshold must be positive."
         return ValidatorScoreParameters{..}
 
 -- * Consensus parameters
