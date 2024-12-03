@@ -1121,3 +1121,10 @@ data AccountPending = AccountPending
       apFirstTimestamp :: !Timestamp
     }
     deriving (Eq)
+
+instance ToJSON AccountPending where
+    toJSON AccountPending{..} =
+        object
+            [ "accountIndex" .= apAccountIndex,
+              "firstTimestamp" .= apFirstTimestamp
+            ]
