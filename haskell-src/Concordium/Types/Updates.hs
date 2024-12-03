@@ -687,6 +687,8 @@ data UpdateType
       UpdateBlockEnergyLimit
     | -- | Update the finalization committee parameters for consensus version 2
       UpdateFinalizationCommitteeParameters
+    | -- | Update the validator score parameters for consensus version 2
+      UpdateValidatorScoreParameters
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -720,6 +722,7 @@ instance Serialize UpdateType where
     put UpdateMinBlockTime = putWord8 18
     put UpdateBlockEnergyLimit = putWord8 19
     put UpdateFinalizationCommitteeParameters = putWord8 20
+    put UpdateValidatorScoreParameters = putWord8 21
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -742,6 +745,7 @@ instance Serialize UpdateType where
             18 -> return UpdateMinBlockTime
             19 -> return UpdateBlockEnergyLimit
             20 -> return UpdateFinalizationCommitteeParameters
+            21 -> return UpdateValidatorScoreParameters
             n -> fail $ "invalid update type: " ++ show n
 
 -- | Sequence number for updates of a given type.
@@ -834,6 +838,8 @@ data UpdatePayload
       GASRewardsCPV2UpdatePayload !(GASRewards 'GASRewardsVersion1)
     | -- | Update the finalization committee parameters (chain parameters version 2)
       FinalizationCommitteeParametersUpdatePayload !FinalizationCommitteeParameters
+    | -- | Update the validator score parameters (chain parameters version 3)
+      ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -859,6 +865,7 @@ putUpdatePayload (MinBlockTimeUpdatePayload u) = putWord8 19 >> put u
 putUpdatePayload (BlockEnergyLimitUpdatePayload u) = putWord8 20 >> put u
 putUpdatePayload (GASRewardsCPV2UpdatePayload u) = putWord8 21 >> put u
 putUpdatePayload (FinalizationCommitteeParametersUpdatePayload u) = putWord8 22 >> put u
+putUpdatePayload (ValidatorScoreParametersUpdatePayload u) = putWord8 23 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
@@ -899,6 +906,7 @@ getUpdatePayload spv =
         20 | isSupported PTBlockEnergyLimit cpv -> BlockEnergyLimitUpdatePayload <$> get
         21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
         22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
+        23 | isSupported PTValidatorScoreParameters cpv -> ValidatorScoreParametersUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv
@@ -941,6 +949,7 @@ updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
 updateType FinalizationCommitteeParametersUpdatePayload{} = UpdateFinalizationCommitteeParameters
+updateType ValidatorScoreParametersUpdatePayload{} = UpdateValidatorScoreParameters
 
 -- | Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -968,6 +977,7 @@ extractKeysIndices p =
         MinBlockTimeUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
+        ValidatorScoreParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
