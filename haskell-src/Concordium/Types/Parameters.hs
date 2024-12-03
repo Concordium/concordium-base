@@ -362,6 +362,7 @@ module Concordium.Types.Parameters (
 
     -- * Validator score parameters
     ValidatorScoreParameters (..),
+    vspMaxMissedRounds,
 
     -- * Authorizations version
 
@@ -1659,6 +1660,8 @@ newtype ValidatorScoreParameters = ValidatorScoreParameters
       _vspMaxMissedRounds :: Word64
     }
     deriving (Eq, Show)
+
+makeLenses ''ValidatorScoreParameters
 
 instance HashableTo Hash.Hash ValidatorScoreParameters where
     getHash = Hash.hash . encode
