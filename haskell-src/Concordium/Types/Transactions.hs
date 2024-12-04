@@ -745,6 +745,17 @@ data SpecialTransactionOutcome
           -- | Accrued finalization rewards for pool.
           stoFinalizationReward :: !Amount
         }
+    | -- | A validator is primed for suspension at the next snapshot epoch
+      --  because it missed too many rounds.
+      ValidatorPrimedForSuspension
+        { -- | The id of the validator that will get suspended.
+          vpfsBakerId :: !BakerId
+        }
+    | -- | A validator was suspended because it missed too many rounds.
+      ValidatorSuspended
+        { -- | The id of the suspended validator.
+          vsBakerId :: !BakerId
+        }
     deriving (Show, Eq)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
@@ -804,6 +815,12 @@ instance S.Serialize SpecialTransactionOutcome where
         S.put stoTransactionFees
         S.put stoBakerReward
         S.put stoFinalizationReward
+    put ValidatorPrimedForSuspension{..} = do
+        S.putWord8 8
+        S.put vpfsBakerId
+    put ValidatorSuspended{..} = do
+        S.putWord8 9
+        S.put vsBakerId
 
     get =
         S.getWord8 >>= \case
@@ -855,4 +872,10 @@ instance S.Serialize SpecialTransactionOutcome where
                 stoBakerReward <- S.get
                 stoFinalizationReward <- S.get
                 return PaydayPoolReward{..}
+            8 -> do
+                vpfsBakerId <- S.get
+                return ValidatorPrimedForSuspension{..}
+            9 -> do
+                vsBakerId <- S.get
+                return ValidatorSuspended{..}
             _ -> fail "Invalid SpecialTransactionOutcome type"
