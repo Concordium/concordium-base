@@ -1980,11 +1980,19 @@ instance ToProto TxTypes.SpecialTransactionOutcome where
     toProto TxTypes.ValidatorPrimedForSuspension{..} =
         Proto.make $
             ProtoFields.validatorSuspended
-                .= Proto.make (ProtoFields.bakerId .= toProto vpfsBakerId)
+                .= Proto.make
+                    ( do
+                        ProtoFields.bakerId .= toProto vpfsBakerId
+                        ProtoFields.account .= toProto vpfsAccount
+                    )
     toProto TxTypes.ValidatorSuspended{..} =
         Proto.make $
             ProtoFields.validatorSuspended
-                .= Proto.make (ProtoFields.bakerId .= toProto vsBakerId)
+                .= Proto.make
+                    ( do
+                        ProtoFields.bakerId .= toProto vsBakerId
+                        ProtoFields.account .= toProto vsAccount
+                    )
 
 instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
     type Output (TransactionTime, QueryTypes.PendingUpdateEffect) = Proto.PendingUpdate

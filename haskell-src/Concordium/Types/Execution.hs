@@ -1336,11 +1336,13 @@ data Event' (supplemented :: Bool)
         }
     | -- | The account has been suspended.
       BakerSuspended
-        { ebsBakerId :: !BakerId
+        { ebsBakerId :: !BakerId,
+          ebsAccount :: !AccountAddress
         }
     | -- | The account has been resumed.
       BakerResumed
-        { ebrBakerId :: !BakerId
+        { ebrBakerId :: !BakerId,
+          ebrAccount :: !AccountAddress
         }
     deriving (Show, Generic, Eq)
 
@@ -1586,9 +1588,11 @@ putEvent = \case
     BakerSuspended{..} ->
         S.putWord8 36
             <> S.put ebsBakerId
+            <> S.put ebsAccount
     BakerResumed{..} ->
         S.putWord8 37
             <> S.put ebrBakerId
+            <> S.put ebrAccount
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1774,11 +1778,20 @@ getEvent spv =
             euFrom <- S.get
             euTo <- S.get
             return Upgraded{..}
+        36 | supportSuspend -> do
+            ebsBakerId <- S.get
+            ebsAccount <- S.get
+            return BakerSuspended{..}
+        37 | supportSuspend -> do
+            ebrBakerId <- S.get
+            ebrAccount <- S.get
+            return BakerResumed{..}
         n -> fail $ "Unrecognized event tag: " ++ show n
   where
     supportMemo = supportsMemo spv
     supportV1Contracts = supportsV1Contracts spv
     supportDelegation = protocolSupportsDelegation spv
+    supportSuspend = protocolSupportsSuspend spv
 
 instance AE.ToJSON (Event' supplemented) where
     toJSON = \case
@@ -2035,12 +2048,14 @@ instance AE.ToJSON (Event' supplemented) where
         BakerSuspended{..} ->
             AE.object
                 [ "tag" .= AE.String "BakerSuspended",
-                  "bakerId" .= ebsBakerId
+                  "bakerId" .= ebsBakerId,
+                  "account" .= ebsAccount
                 ]
         BakerResumed{..} ->
             AE.object
                 [ "tag" .= AE.String "BakerResumed",
-                  "bakerId" .= ebrBakerId
+                  "bakerId" .= ebrBakerId,
+                  "account" .= ebrAccount
                 ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
@@ -2224,6 +2239,14 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 euFrom <- obj .: "from"
                 euTo <- obj .: "to"
                 return Upgraded{..}
+            "BakerSuspended" -> do
+                ebsBakerId <- obj .: "bakerId"
+                ebsAccount <- obj .: "account"
+                return BakerSuspended{..}
+            "BakerResumed" -> do
+                ebrBakerId <- obj .: "bakerId"
+                ebrAccount <- obj .: "account"
+                return BakerResumed{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with
