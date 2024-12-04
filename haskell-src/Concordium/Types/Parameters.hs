@@ -2124,7 +2124,8 @@ instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (ChainParameters' 
                   "blockEnergyLimit" AE..= _cpBlockEnergyLimit _cpConsensusParameters,
                   "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam _cpFinalizationCommitteeParameters),
                   "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam _cpFinalizationCommitteeParameters),
-                  "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters)
+                  "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam _cpFinalizationCommitteeParameters),
+                  "maximumMissedRounds" AE..= _vspMaxMissedRounds (unOParam _cpValidatorScoreParameters)
                 ]
 
 -- | Parameters that affect finalization.
