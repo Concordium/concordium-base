@@ -710,7 +710,7 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber,
       -- | Updates to the consensus version 2 finalization committee parameters
       _nusnFinalizationCommitteeParameters :: !U.UpdateSequenceNumber,
-      -- | Updates to the consensus version 3 validator score parameters
+      -- | Updates to the consensus version 2 validator score parameters
       _nusnValidatorScoreParameters :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
