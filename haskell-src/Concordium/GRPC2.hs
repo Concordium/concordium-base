@@ -2013,7 +2013,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUEMinBlockTime minBlockTime -> ProtoFields.minBlockTime .= toProto minBlockTime
             QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
             QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
-            QueryTypes.PUEFValidatorScoreParameters validatorScoreParameters -> ProtoFields.validatorScoreParameters .= toProto validatorScoreParameters
+            QueryTypes.PUEValidatorScoreParameters validatorScoreParameters -> ProtoFields.validatorScoreParameters .= toProto validatorScoreParameters
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
