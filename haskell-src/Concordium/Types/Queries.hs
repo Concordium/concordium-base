@@ -649,7 +649,7 @@ data PendingUpdateEffect
     | -- | Updates to the finalization committee parameters for chain parameters version 2.
       PUEFinalizationCommitteeParameters !FinalizationCommitteeParameters
     | -- | Updates to the validator score parameters for chain parameters version 3
-      PUEFValidatorScoreParameters !ValidatorScoreParameters
+      PUEValidatorScoreParameters !ValidatorScoreParameters
 
 -- | Derive a @ToJSON@ instance for @PendingUpdateEffect@. For instance,
 --  @print $ toJSON (PUETimeParameters a)@ will output something like:
