@@ -44,6 +44,7 @@ import Concordium.Types.Parameters (
     TimeParameters,
     TimeoutParameters,
     TransactionFeeDistribution,
+    ValidatorScoreParameters,
  )
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
@@ -647,6 +648,8 @@ data PendingUpdateEffect
       PUEBlockEnergyLimit !Energy
     | -- | Updates to the finalization committee parameters for chain parameters version 2.
       PUEFinalizationCommitteeParameters !FinalizationCommitteeParameters
+    | -- | Updates to the validator score parameters for chain parameters version 3
+      PUEValidatorScoreParameters !ValidatorScoreParameters
 
 -- | Derive a @ToJSON@ instance for @PendingUpdateEffect@. For instance,
 --  @print $ toJSON (PUETimeParameters a)@ will output something like:
@@ -706,7 +709,9 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       -- | Updates to the consensus version 2 block energy limit.
       _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber,
       -- | Updates to the consensus version 2 finalization committee parameters
-      _nusnFinalizationCommitteeParameters :: !U.UpdateSequenceNumber
+      _nusnFinalizationCommitteeParameters :: !U.UpdateSequenceNumber,
+      -- | Updates to the consensus version 2 validator score parameters
+      _nusnValidatorScoreParameters :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
@@ -737,7 +742,8 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnTimeoutParameters = mNextSequenceNumber _pTimeoutParametersQueue,
           _nusnMinBlockTime = mNextSequenceNumber _pMinBlockTimeQueue,
           _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue,
-          _nusnFinalizationCommitteeParameters = mNextSequenceNumber _pFinalizationCommitteeParametersQueue
+          _nusnFinalizationCommitteeParameters = mNextSequenceNumber _pFinalizationCommitteeParametersQueue,
+          _nusnValidatorScoreParameters = mNextSequenceNumber _pValidatorScoreParametersQueue
         }
   where
     -- Get the next sequence number or 1, if not supported.

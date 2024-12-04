@@ -439,6 +439,9 @@ pub enum ProtocolVersion {
     /// Protocol `P7` modifies hashing to better support light clients, and
     /// implements tokenomics changes.
     P7,
+    #[display(fmt = "P8")]
+    /// Protocol `P8` introduces support for suspended validators.
+    P8,
 }
 
 #[derive(Debug, Error, Display)]
@@ -461,6 +464,7 @@ impl TryFrom<u64> for ProtocolVersion {
             5 => Ok(ProtocolVersion::P5),
             6 => Ok(ProtocolVersion::P6),
             7 => Ok(ProtocolVersion::P7),
+            8 => Ok(ProtocolVersion::P8),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -476,6 +480,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P5 => 5,
             ProtocolVersion::P6 => 6,
             ProtocolVersion::P7 => 7,
+            ProtocolVersion::P8 => 8,
         }
     }
 }

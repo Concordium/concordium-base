@@ -438,6 +438,7 @@ genChainParametersV0 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV0
     let _cpFinalizationCommitteeParameters = NoParam
+    let _cpValidatorScoreParameters = NoParam
     return ChainParameters{..}
 
 genChainParametersV1 :: Gen (ChainParameters' 'ChainParametersV1)
@@ -451,6 +452,7 @@ genChainParametersV1 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     let _cpFinalizationCommitteeParameters = NoParam
+    let _cpValidatorScoreParameters = NoParam
     return ChainParameters{..}
 
 genFinalizationCommitteeParameters :: Gen FinalizationCommitteeParameters
@@ -480,7 +482,13 @@ genChainParametersV2 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    let _cpValidatorScoreParameters = NoParam
     return ChainParameters{..}
+
+genValidatorScoreParameters :: Gen ValidatorScoreParameters
+genValidatorScoreParameters = do
+    _vspMaxMissedRounds <- arbitrary
+    return ValidatorScoreParameters{..}
 
 genChainParametersV3 :: Gen (ChainParameters' 'ChainParametersV3)
 genChainParametersV3 = do
@@ -493,6 +501,7 @@ genChainParametersV3 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
     return ChainParameters{..}
 
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
@@ -506,6 +515,7 @@ genGenesisChainParametersV0 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV0
     let gcpFinalizationCommitteeParameters = NoParam
+    let gcpValidatorScoreParameters = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV1 :: Gen (GenesisChainParameters' 'ChainParametersV1)
@@ -519,6 +529,7 @@ genGenesisChainParametersV1 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV1
     let gcpFinalizationCommitteeParameters = NoParam
+    let gcpValidatorScoreParameters = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV2 :: Gen (GenesisChainParameters' 'ChainParametersV2)
@@ -532,6 +543,7 @@ genGenesisChainParametersV2 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    let gcpValidatorScoreParameters = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV3 :: Gen (GenesisChainParameters' 'ChainParametersV3)
@@ -545,6 +557,7 @@ genGenesisChainParametersV3 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    gcpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
     return GenesisChainParameters{..}
 
 genCooldownParametersV0 :: Gen (CooldownParameters' 'CooldownParametersVersion0)

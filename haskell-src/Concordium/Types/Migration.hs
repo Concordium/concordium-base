@@ -130,6 +130,7 @@ migrateChainParameters m@(StateMigrationParametersP3ToP4 migration) ChainParamet
                 },
           _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
           _cpFinalizationCommitteeParameters = NoParam,
+          _cpValidatorScoreParameters = NoParam,
           ..
         }
   where
@@ -150,6 +151,7 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
           -- We unwrap and wrap here in order to associate the correct cpv
           -- with the time parameters.
           _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
+          _cpValidatorScoreParameters = NoParam,
           ..
         }
   where

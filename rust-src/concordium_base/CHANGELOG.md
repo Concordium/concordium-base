@@ -1,5 +1,8 @@
 ## Unreleased changes
 
+- Introduce new chain parameters `ValidatorScoreParameters` that contain the
+  threshold of maximal missed rounds before a validator gets suspended.
+
 ## 6.0.0
 
 - Extend `id::types::ATTRIBUTE_NAMES` with new company attribute tags: "legalName", "legalCountry", "businessNumber" and "registationAuth".
