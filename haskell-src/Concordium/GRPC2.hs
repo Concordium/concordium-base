@@ -1979,7 +1979,7 @@ instance ToProto TxTypes.SpecialTransactionOutcome where
                     )
     toProto TxTypes.ValidatorPrimedForSuspension{..} =
         Proto.make $
-            ProtoFields.validatorSuspended
+            ProtoFields.validatorPrimedForSuspension
                 .= Proto.make
                     ( do
                         ProtoFields.bakerId .= toProto vpfsBakerId
