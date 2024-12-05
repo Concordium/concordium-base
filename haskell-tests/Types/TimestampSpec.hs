@@ -41,6 +41,6 @@ testExamples = mapM_ testEx decodeExamples
                     "Parsing " ++ show s ++ " expected " ++ show e ++ " but got " ++ show p
 
 tests :: Spec
-tests = focus $ describe "Timestamp" $ parallel $ do
+tests = describe "Timestamp" $ parallel $ do
     specify "Timestamp JSON serialization" $ withMaxSuccess 1000 $ testEncodeDecode
     specify "Timestamp JSON examples" $ testExamples

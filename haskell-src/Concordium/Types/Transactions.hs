@@ -749,12 +749,16 @@ data SpecialTransactionOutcome
       --  because it missed too many rounds.
       ValidatorPrimedForSuspension
         { -- | The id of the validator that will get suspended.
-          vpfsBakerId :: !BakerId
+          vpfsBakerId :: !BakerId,
+          -- | The address of the account associated with the validator.
+          vpfsAccount :: !AccountAddress
         }
     | -- | A validator was suspended because it missed too many rounds.
       ValidatorSuspended
         { -- | The id of the suspended validator.
-          vsBakerId :: !BakerId
+          vsBakerId :: !BakerId,
+          -- | The address of the account associated with the validator.
+          vsAccount :: !AccountAddress
         }
     deriving (Show, Eq)
 
@@ -818,9 +822,11 @@ instance S.Serialize SpecialTransactionOutcome where
     put ValidatorPrimedForSuspension{..} = do
         S.putWord8 8
         S.put vpfsBakerId
+        S.put vpfsAccount
     put ValidatorSuspended{..} = do
         S.putWord8 9
         S.put vsBakerId
+        S.put vsAccount
 
     get =
         S.getWord8 >>= \case
@@ -874,8 +880,10 @@ instance S.Serialize SpecialTransactionOutcome where
                 return PaydayPoolReward{..}
             8 -> do
                 vpfsBakerId <- S.get
+                vpfsAccount <- S.get
                 return ValidatorPrimedForSuspension{..}
             9 -> do
                 vsBakerId <- S.get
+                vsAccount <- S.get
                 return ValidatorSuspended{..}
             _ -> fail "Invalid SpecialTransactionOutcome type"

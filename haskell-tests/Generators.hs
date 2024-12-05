@@ -724,6 +724,7 @@ genEvent spv =
             ++ maybeV1ContractEvents
             ++ maybeDelegationEvents
             ++ maybeUpgrade
+            ++ maybeSuspendEvents
         )
   where
     maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
@@ -749,6 +750,13 @@ genEvent spv =
                   DelegationSetDelegationTarget <$> genDelegatorId <*> genAccountAddress <*> genDelegationTarget,
                   DelegationAdded <$> genDelegatorId <*> genAccountAddress,
                   DelegationRemoved <$> genDelegatorId <*> genAccountAddress
+                ]
+            else []
+    maybeSuspendEvents =
+        if protocolSupportsSuspend spv
+            then
+                [ BakerSuspended <$> genBakerId <*> genAccountAddress,
+                  BakerResumed <$> genBakerId <*> genAccountAddress
                 ]
             else []
     genBakerAdded = do
