@@ -47,7 +47,7 @@ module Concordium.Types.Accounts (
     BakerInfoEx (..),
     bieBakerInfo,
     bieBakerPoolInfo,
-    bieAccountIsSuspended,
+    bieIsSuspended,
     coerceBakerInfoExV1,
     PendingChangeEffective (..),
     pendingChangeEffectiveTimestamp,
@@ -215,7 +215,7 @@ data BakerInfoEx (av :: AccountVersion) where
           _bieBakerInfo :: !BakerInfo,
           -- | The baker pool info.
           _bieBakerPoolInfo :: !BakerPoolInfo,
-          _bieAccountIsSuspended :: !(Conditionally (SupportsValidatorSuspension av) Bool)
+          _bieIsSuspended :: !(Conditionally (SupportsValidatorSuspension av) Bool)
         } ->
         BakerInfoEx av
 
@@ -235,12 +235,12 @@ bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
 -- | Lens for '_bieBakerIsSuspended'
-{-# INLINE bieAccountIsSuspended #-}
-bieAccountIsSuspended ::
+{-# INLINE bieIsSuspended #-}
+bieIsSuspended ::
     (AVSupportsDelegation av, AVSupportsValidatorSuspension av) =>
     Lens' (BakerInfoEx av) Bool
-bieAccountIsSuspended =
-    lens (uncond . _bieAccountIsSuspended) (\bie x -> bie{_bieAccountIsSuspended = CTrue x})
+bieIsSuspended =
+    lens (uncond . _bieIsSuspended) (\bie x -> bie{_bieIsSuspended = CTrue x})
 
 -- | Coerce a 'BakerInfoEx' between two account versions that support delegation.
 coerceBakerInfoExV1 ::
@@ -261,13 +261,13 @@ instance forall av. (IsAccountVersion av) => Serialize (BakerInfoEx av) where
     put BakerInfoExV1{..} = do
         put _bieBakerInfo
         put _bieBakerPoolInfo
-        mapM_ put _bieAccountIsSuspended
+        mapM_ put _bieIsSuspended
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> BakerInfoExV0 <$> get
         SAVDelegationSupported -> do
             _bieBakerInfo <- get
             _bieBakerPoolInfo <- get
-            _bieAccountIsSuspended <-
+            _bieIsSuspended <-
                 conditionallyA (sSupportsValidatorSuspension (accountVersion @av)) get
             return BakerInfoExV1{..}
 
@@ -620,7 +620,7 @@ toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =
             BakerInfoExV1{..} -> Just _bieBakerPoolInfo,
           asiIsSuspended = case _accountBakerInfo of
             BakerInfoExV0{} -> False
-            BakerInfoExV1{..} -> fromCondDef _bieAccountIsSuspended False
+            BakerInfoExV1{..} -> fromCondDef _bieIsSuspended False
         }
   where
     pcTime (PendingChangeEffectiveV0 e) = epochConv e
