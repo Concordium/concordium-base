@@ -7,6 +7,7 @@ module Concordium.Types.Migration where
 import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P4 as P4
 import qualified Concordium.Genesis.Data.P6 as P6
+import qualified Concordium.Genesis.Data.P8 as P8
 import Concordium.Types
 import Concordium.Types.Accounts
 import Concordium.Types.Parameters
@@ -83,7 +84,7 @@ migratePoolParameters (StateMigrationParametersP3ToP4 migration) _ =
 migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP6ToP7{} poolParams = poolParams
-migratePoolParameters StateMigrationParametersP7ToP8{} _poolParams = error "TODO (drsk) github issue #544. Implement pool parameter migration p7->p8."
+migratePoolParameters StateMigrationParametersP7ToP8{} poolParams = poolParams
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
@@ -158,8 +159,22 @@ migrateChainParameters m@(StateMigrationParametersP5ToP6 migration) ChainParamet
     RewardParameters{..} = _cpRewardParameters
     finalizationCommitteeParameters = P6.updateFinalizationCommitteeParameters $ P6.migrationProtocolUpdateData migration
 migrateChainParameters StateMigrationParametersP6ToP7{} cps = cps
--- TODO (drsk) Chain parameters will change in P8
-migrateChainParameters StateMigrationParametersP7ToP8{} _cps = error "TODO (drsk). github issue#545. Define migration from chain parameters p7 to p8."
+migrateChainParameters m@(StateMigrationParametersP7ToP8 migration) ChainParameters{..} =
+    ChainParameters
+        { _cpValidatorScoreParameters = SomeParam $ P8.updateValidatorScoreParameters $ P8.migrationProtocolUpdateData migration,
+          _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
+          _cpFinalizationCommitteeParameters = SomeParam $ unOParam _cpFinalizationCommitteeParameters,
+          _cpPoolParameters = migratePoolParameters m _cpPoolParameters,
+          _cpRewardParameters =
+            RewardParameters
+                { _rpMintDistribution = migrateMintDistribution m _rpMintDistribution,
+                  _rpGASRewards = migrateGASRewards m _rpGASRewards,
+                  ..
+                },
+          ..
+        }
+  where
+    RewardParameters{..} = _cpRewardParameters
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
