@@ -215,6 +215,7 @@ data BakerInfoEx (av :: AccountVersion) where
           _bieBakerInfo :: !BakerInfo,
           -- | The baker pool info.
           _bieBakerPoolInfo :: !BakerPoolInfo,
+          -- | A flag indicating whether the validator is suspended.
           _bieIsSuspended :: !(Conditionally (SupportsValidatorSuspension av) Bool)
         } ->
         BakerInfoEx av
