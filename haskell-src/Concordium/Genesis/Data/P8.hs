@@ -14,6 +14,38 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
+import Concordium.Types.Parameters
+
+-- | Parameters data type for the 'P7' to 'P8' protocol update.
+--  This is provided as a parameter to the protocol update chain update instruction.
+newtype ProtocolUpdateData = ProtocolUpdateData
+    { -- | The 'ValidatorScoreParameters' that the protocol should
+      --  be instantiated with.
+      updateValidatorScoreParameters :: ValidatorScoreParameters
+    }
+    deriving (Eq, Show)
+
+instance Serialize ProtocolUpdateData where
+    put ProtocolUpdateData{..} = do
+        put updateValidatorScoreParameters
+    get = do
+        updateValidatorScoreParameters <- get
+        return ProtocolUpdateData{..}
+
+-- | Parameters used to migrate state from 'P7' to 'P8'.
+newtype StateMigrationData = StateMigrationData
+    { -- | Data provided by the protocol update to be used
+      --  in the migration.
+      migrationProtocolUpdateData :: ProtocolUpdateData
+    }
+    deriving (Eq, Show)
+
+instance Serialize StateMigrationData where
+    put StateMigrationData{..} = do
+        put migrationProtocolUpdateData
+    get = do
+        migrationProtocolUpdateData <- get
+        return StateMigrationData{..}
 
 -- | Initial genesis data for the P8 protocol version.
 data GenesisDataP8 = GDP8Initial
@@ -37,7 +69,7 @@ data RegenesisP8
     = GDP8Regenesis {genesisRegenesis :: !BaseV1.RegenesisDataV1}
     | GDP8RegenesisFromP7
         { genesisRegenesis :: !BaseV1.RegenesisDataV1,
-          genesisMigration :: ()
+          genesisMigration :: !StateMigrationData
         }
     deriving (Eq, Show)
 
