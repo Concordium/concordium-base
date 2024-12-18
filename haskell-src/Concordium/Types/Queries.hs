@@ -500,7 +500,12 @@ data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
       -- | The effective delegated capital to the pool for the current reward period.
       bpsDelegatedCapital :: !Amount,
       -- | The commission rates that apply for the current reward period.
-      bpsCommissionRates :: !CommissionRates
+      bpsCommissionRates :: !CommissionRates,
+      -- | A flag indicating whether the baker is primed for suspension the
+      --  coming snapshot epoch. Present from protocol version P8.
+      bpsIsPrimedForSuspension :: !(Maybe Bool),
+      -- | The missed rounds of the baker. Present from protocol version P8.
+      bpsMissedRounds :: !(Maybe Word64)
     }
     deriving (Eq, Show)
 
@@ -525,7 +530,10 @@ data BakerPoolStatus = BakerPoolStatus
       --  for the current reward period.
       psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus),
       -- | Total capital staked across all pools, including passive delegation.
-      psAllPoolTotalCapital :: !Amount
+      psAllPoolTotalCapital :: !Amount,
+      -- | A flag indicating Whether the pool owner is suspended or not. Present
+      --  from protocol version P8.
+      psIsSuspended :: !(Maybe Bool)
     }
     deriving (Eq, Show)
 
@@ -568,6 +576,7 @@ instance FromJSON BakerPoolStatus where
                 abpsBakerStakePendingChange <- obj .: "bakerStakePendingChange"
                 return ActiveBakerPoolStatus{..}
         psActiveStatus <- optional activeStatusFields
+        psIsSuspended <- optional $ obj .: "isSuspended"
         return BakerPoolStatus{..}
 
 -- | Status of the passive delegators.
