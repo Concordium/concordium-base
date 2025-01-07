@@ -511,7 +511,8 @@ data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
 
 $( deriveJSON
     defaultOptions
-        { fieldLabelModifier = firstLower . dropWhile isLower
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          omitNothingFields = True
         }
     ''CurrentPaydayBakerPoolStatus
  )
@@ -546,6 +547,7 @@ instance ToJSON BakerPoolStatus where
               "currentPaydayStatus" .= psCurrentPaydayStatus,
               "allPoolTotalCapital" .= psAllPoolTotalCapital
             ]
+                ++ ["isSuspended" .= isSuspended | Just isSuspended <- [psIsSuspended]]
                 ++ activeStatusFields
       where
         activeStatusFields = case psActiveStatus of
