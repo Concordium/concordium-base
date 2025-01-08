@@ -1691,6 +1691,7 @@ instance ToProto QueryTypes.BakerPoolStatus where
             ProtoFields.maybe'equityPendingChange .= toProto abpsBakerStakePendingChange
         ProtoFields.maybe'currentPaydayInfo .= fmap toProto psCurrentPaydayStatus
         ProtoFields.allPoolTotalCapital .= toProto psAllPoolTotalCapital
+        ProtoFields.maybe'isSuspended .= psIsSuspended
 
 instance ToProto QueryTypes.PassiveDelegationStatus where
     type Output QueryTypes.PassiveDelegationStatus = Proto.PassiveDelegationInfo
@@ -1731,6 +1732,8 @@ instance ToProto QueryTypes.CurrentPaydayBakerPoolStatus where
         ProtoFields.bakerEquityCapital .= toProto bpsBakerEquityCapital
         ProtoFields.delegatedCapital .= toProto bpsDelegatedCapital
         ProtoFields.commissionRates .= toProto bpsCommissionRates
+        ProtoFields.maybe'isPrimedForSuspension .= bpsIsPrimedForSuspension
+        ProtoFields.maybe'missedRounds .= bpsMissedRounds
 
 instance ToProto QueryTypes.RewardStatus where
     type Output QueryTypes.RewardStatus = Proto.TokenomicsInfo
