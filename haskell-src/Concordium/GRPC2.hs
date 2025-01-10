@@ -1689,9 +1689,9 @@ instance ToProto QueryTypes.BakerPoolStatus where
             ProtoFields.delegatedCapitalCap .= toProto abpsDelegatedCapitalCap
             ProtoFields.poolInfo .= toProto abpsPoolInfo
             ProtoFields.maybe'equityPendingChange .= toProto abpsBakerStakePendingChange
+            ProtoFields.maybe'isSuspended .= abpsIsSuspended
         ProtoFields.maybe'currentPaydayInfo .= fmap toProto psCurrentPaydayStatus
         ProtoFields.allPoolTotalCapital .= toProto psAllPoolTotalCapital
-        ProtoFields.maybe'isSuspended .= psIsSuspended
 
 instance ToProto QueryTypes.PassiveDelegationStatus where
     type Output QueryTypes.PassiveDelegationStatus = Proto.PassiveDelegationInfo
