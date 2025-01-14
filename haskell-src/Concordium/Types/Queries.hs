@@ -472,13 +472,17 @@ data ActiveBakerPoolStatus = ActiveBakerPoolStatus
       -- | The pool info associated with the pool: open status, metadata URL and commission rates.
       abpsPoolInfo :: !BakerPoolInfo,
       -- | Any pending change to the baker's stake.
-      abpsBakerStakePendingChange :: !PoolPendingChange
+      abpsBakerStakePendingChange :: !PoolPendingChange,
+      -- | A flag indicating Whether the pool owner is suspended or not. Present
+      --  from protocol version P8.
+      abpsIsSuspended :: !(Maybe Bool)
     }
     deriving (Eq, Show)
 
 $( deriveJSON
     defaultOptions
-        { fieldLabelModifier = firstLower . dropWhile isLower
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          omitNothingFields = True
         }
     ''ActiveBakerPoolStatus
  )
@@ -531,10 +535,7 @@ data BakerPoolStatus = BakerPoolStatus
       --  for the current reward period.
       psCurrentPaydayStatus :: !(Maybe CurrentPaydayBakerPoolStatus),
       -- | Total capital staked across all pools, including passive delegation.
-      psAllPoolTotalCapital :: !Amount,
-      -- | A flag indicating Whether the pool owner is suspended or not. Present
-      --  from protocol version P8.
-      psIsSuspended :: !(Maybe Bool)
+      psAllPoolTotalCapital :: !Amount
     }
     deriving (Eq, Show)
 
@@ -547,7 +548,6 @@ instance ToJSON BakerPoolStatus where
               "currentPaydayStatus" .= psCurrentPaydayStatus,
               "allPoolTotalCapital" .= psAllPoolTotalCapital
             ]
-                ++ ["isSuspended" .= isSuspended | Just isSuspended <- [psIsSuspended]]
                 ++ activeStatusFields
       where
         activeStatusFields = case psActiveStatus of
@@ -558,6 +558,7 @@ instance ToJSON BakerPoolStatus where
                   "poolInfo" .= abpsPoolInfo,
                   "bakerStakePendingChange" .= abpsBakerStakePendingChange
                 ]
+                    ++ ["isSuspended" .= isSuspended | Just isSuspended <- [abpsIsSuspended]]
             Nothing -> []
 
 instance FromJSON BakerPoolStatus where
@@ -576,9 +577,9 @@ instance FromJSON BakerPoolStatus where
                 abpsDelegatedCapitalCap <- obj .: "delegatedCapitalCap"
                 abpsPoolInfo <- obj .: "poolInfo"
                 abpsBakerStakePendingChange <- obj .: "bakerStakePendingChange"
+                abpsIsSuspended <- obj .:? "isSuspended"
                 return ActiveBakerPoolStatus{..}
         psActiveStatus <- optional activeStatusFields
-        psIsSuspended <- optional $ obj .: "isSuspended"
         return BakerPoolStatus{..}
 
 -- | Status of the passive delegators.
