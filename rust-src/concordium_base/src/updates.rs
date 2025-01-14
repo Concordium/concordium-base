@@ -464,6 +464,10 @@ impl AuthorizationsFamily for ChainParameterVersion2 {
     type Output = AuthorizationsV1;
 }
 
+impl AuthorizationsFamily for ChainParameterVersion3 {
+    type Output = AuthorizationsV1;
+}
+
 /// A mapping of chain parameter versions to authorization versions.
 pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
@@ -628,6 +632,7 @@ pub struct FinalizationCommitteeParameters {
 }
 
 #[derive(Debug, common::Serialize, Clone, Copy, SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
 /// Validator score parameters. These parameters control the threshold of
 /// maximal missed rounds before a validator gets suspended.
 pub struct ValidatorScoreParameters {

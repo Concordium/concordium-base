@@ -503,6 +503,7 @@ impl Deserial for ProtocolVersion {
 pub struct ChainParameterVersion0;
 pub struct ChainParameterVersion1;
 pub struct ChainParameterVersion2;
+pub struct ChainParameterVersion3;
 
 /// Height of a block since chain genesis.
 #[repr(transparent)]
@@ -1204,6 +1205,10 @@ impl MintDistributionFamily for ChainParameterVersion2 {
     type Output = MintDistributionV1;
 }
 
+impl MintDistributionFamily for ChainParameterVersion3 {
+    type Output = MintDistributionV1;
+}
+
 /// Type family mapping a `ChainParameterVersion` to its corresponding type for
 /// the `MintDistribution`.
 pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
@@ -1222,6 +1227,10 @@ impl GASRewardsFamily for ChainParameterVersion1 {
 }
 
 impl GASRewardsFamily for ChainParameterVersion2 {
+    type Output = GASRewardsV1;
+}
+
+impl GASRewardsFamily for ChainParameterVersion3 {
     type Output = GASRewardsV1;
 }
 
