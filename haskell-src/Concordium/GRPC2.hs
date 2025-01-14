@@ -2140,7 +2140,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
             SChainParametersV3 ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
-                        ProtoFields.v2
+                        ProtoFields.v3
                             .= Proto.make
                                 ( do
                                     ProtoFields.consensusParameters .= toProto _cpConsensusParameters
@@ -2158,6 +2158,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
                                 )
 
 instance ToProto FinalizationIndex where
