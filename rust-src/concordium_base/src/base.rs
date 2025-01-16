@@ -350,7 +350,7 @@ impl Nonce {
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
 /// Equivalent of a transaction nonce but for update instructions. Update
-/// sequence numbers are per update type.
+/// sequence numbers are per update type. The minimum sequence number is 1.
 pub struct UpdateSequenceNumber {
     pub number: u64,
 }
@@ -367,6 +367,10 @@ impl UpdateSequenceNumber {
 
     /// Increase the sequence number.
     pub fn next_mut(&mut self) { self.number += 1; }
+}
+
+impl Default for UpdateSequenceNumber {
+    fn default() -> Self { Self { number: 1 } }
 }
 
 #[repr(transparent)]
