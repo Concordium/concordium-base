@@ -18,6 +18,7 @@ import Data.Aeson (FromJSON (..), ToJSON (..))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import qualified Data.ByteString as BS
+import Data.Char (isLower)
 import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Serialize as S
@@ -762,7 +763,7 @@ data SpecialTransactionOutcome
         }
     deriving (Show, Eq)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''SpecialTransactionOutcome)
 
 instance HashableTo H.Hash SpecialTransactionOutcome where
     getHash = H.hash . S.encode
