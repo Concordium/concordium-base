@@ -1,5 +1,6 @@
 ## Unreleased changes
 
+- Add getter function `reward_period_epochs` to access the field in the struct `RewardPeriodLength`.
 - Add constructor `TokenAddress::new` for CIS2 type `TokenAddress`.
 - Introduce new chain parameters `ValidatorScoreParameters` that contain the
   threshold of maximal missed rounds before a validator gets suspended.

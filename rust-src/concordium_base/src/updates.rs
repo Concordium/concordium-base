@@ -581,6 +581,10 @@ pub struct RewardPeriodLength {
     pub(crate) reward_period_epochs: Epoch,
 }
 
+impl RewardPeriodLength {
+    pub fn reward_period_epochs(&self) -> Epoch { self.reward_period_epochs }
+}
+
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Copy, Clone)]
 #[serde(rename_all = "camelCase")]
 /// The time parameters are introduced as of protocol version 4, and consist of
