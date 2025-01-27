@@ -36,6 +36,11 @@ pub enum ElectionNonceMarker {}
 /// epoch finalization entry.
 pub enum SuccessorProofMarker {}
 
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+/// Used as a phantom type to indicate a hash of a finalization committee,
+/// derived from the weights and aggregation keys of the finalizers.
+pub enum FinalizationCommitteeMarker {}
+
 /// The leadership election nonce is an unpredictable value updated once an
 /// epoch to make sure that bakers cannot predict too far in the future when
 /// they will win blocks.
@@ -54,3 +59,5 @@ pub type UpdateSignHash = HashBytes<UpdateSignMarker>;
 pub type StateHash = HashBytes<StateMarker>;
 /// Hash that is a successor proof of an epoch finalization entry.
 pub type SuccessorProof = HashBytes<SuccessorProofMarker>;
+/// Hash of a finalization committee.
+pub type FinalizationCommitteeHash = HashBytes<FinalizationCommitteeMarker>;
