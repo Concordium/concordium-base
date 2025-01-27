@@ -4,6 +4,7 @@
 - Introduce new chain parameters `ValidatorScoreParameters` that contain the
   threshold of maximal missed rounds before a validator gets suspended.
 - Add `Default` instance for `UpdateSequenceNumber`.
+- Add `FinalizationCommitteeHash` type.
 
 ## 6.0.0
 
