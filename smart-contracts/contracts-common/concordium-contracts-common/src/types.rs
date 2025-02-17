@@ -1094,8 +1094,9 @@ impl convert::AsMut<[u8; 32]> for AccountAddress {
 }
 
 impl AccountAddress {
-    /// Get the canonical address representing the unique first 29 bytes of the account address.
-    /// This is used to make client independent of the individual aliases
+    /// Get the canonical address representing the unique first 29 bytes of the
+    /// account address. This is used to make client independent of the
+    /// individual aliases
     pub fn get_canonical_address(&self) -> CanonicalAccountAddress {
         CanonicalAccountAddress(self.0[0..29].try_into().expect("Slice with incorrect length"))
     }
