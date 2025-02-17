@@ -1065,6 +1065,8 @@ impl<'de> SerdeDeserialize<'de> for Duration {
 }
 
 /// Canonical address of an account, as raw bytes.
+/// The canonical address is the first 29 bytes of the account address, uniquely identifying accounts
+/// The last 3 bytes is reserved as an account alias, to be used by for example exchanges to uniquely identify graceful clients
 #[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug, Hash)]
 #[repr(transparent)]
 pub struct CanonicalAccountAddress(pub [u8; CANONICAL_ACCOUNT_ADDRESS_SIZE]);
