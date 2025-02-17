@@ -1095,16 +1095,22 @@ impl convert::AsMut<[u8; 32]> for AccountAddress {
 
 impl AccountAddress {
     /// Get the canonical address representing the unique first 29 bytes of the
-    /// account address. This is the unique account address part and is independent of the
-    /// individual aliases.
+    /// account address. This is the unique account address part and is
+    /// independent of the individual aliases.
     pub fn get_canonical_address(&self) -> CanonicalAccountAddress {
-        CanonicalAccountAddress(self.0[..CANONICAL_ACCOUNT_ADDRESS_SIZE].try_into().expect("Slice with incorrect length"))
+        CanonicalAccountAddress(
+            self.0[..CANONICAL_ACCOUNT_ADDRESS_SIZE]
+                .try_into()
+                .expect("Slice with incorrect length"),
+        )
     }
 
     /// Check whether `self` is an alias of `other`. Two addresses are aliases
     /// if they identify the same account. This is defined to be when the
     /// addresses agree on the first 29 bytes.
-    pub fn is_alias(&self, other: &AccountAddress) -> bool { self.0[..CANONICAL_ACCOUNT_ADDRESS_SIZE] == other.0[..CANONICAL_ACCOUNT_ADDRESS_SIZE] }
+    pub fn is_alias(&self, other: &AccountAddress) -> bool {
+        self.0[..CANONICAL_ACCOUNT_ADDRESS_SIZE] == other.0[..CANONICAL_ACCOUNT_ADDRESS_SIZE]
+    }
 
     /// Get the `n-th` alias of an address. There are 2^24 possible aliases.
     /// If the counter is `>= 2^24` then this function will return [`None`].

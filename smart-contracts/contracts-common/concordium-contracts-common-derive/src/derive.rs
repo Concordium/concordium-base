@@ -164,7 +164,10 @@ fn get_concordium_attributes(attributes: &[syn::Attribute]) -> syn::Result<Vec<s
         }
         // Ensure only list attributes and parse the nested meta.
         let syn::Meta::List(list) = &attr.meta else {
-            abort!(attr.meta.span(), "A 'concordium' attribute must be provided as 'concordium(..)'");
+            abort!(
+                attr.meta.span(),
+                "A 'concordium' attribute must be provided as 'concordium(..)'"
+            );
         };
         // Parse list args tokens as syn::Meta.
         let nested = list.parse_args_with(
@@ -518,10 +521,7 @@ impl TryFrom<&syn::Meta> for ReprAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::List(list) = meta else {
-            abort!(
-                meta.span(),
-                "repr attribute value can only be provided as 'repr(...)'",
-            );
+            abort!(meta.span(), "repr attribute value can only be provided as 'repr(...)'",);
         };
         let nested = list.parse_args_with(
             syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
@@ -631,7 +631,8 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                 let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
-                }) = &name_value.value else {
+                }) = &name_value.value
+                else {
                     abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
@@ -644,7 +645,8 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                 let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
-                }) = &name_value.value else {
+                }) = &name_value.value
+                else {
                     abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
@@ -657,7 +659,8 @@ impl TryFrom<&syn::MetaList> for SeparateBoundValue {
                 let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
-                }) = &name_value.value else {
+                }) = &name_value.value
+                else {
                     abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
@@ -695,7 +698,8 @@ impl TryFrom<&syn::Meta> for BoundAttribute {
                 let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
-                }) = &name_value.value else {
+                }) = &name_value.value
+                else {
                     abort!(name_value.value.span(), "bound attribute must be a string literal");
                 };
                 let value = lit_str.parse_with(BoundAttributeValue::parse_terminated)?;
@@ -949,15 +953,13 @@ impl TryFrom<&syn::Meta> for TagAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::NameValue(name_value) = meta else {
-            abort!(
-                meta.span(),
-                "'tag' attribute value can only be provided as 'tag = ...'.",
-            );
+            abort!(meta.span(), "'tag' attribute value can only be provided as 'tag = ...'.",);
         };
         let syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Int(value),
             ..
-        }) = &name_value.value else {
+        }) = &name_value.value
+        else {
             abort!(name_value.value.span(), "'tag' attribute must be an integer.");
         };
         Ok(TagAttribute {
@@ -972,19 +974,14 @@ impl TryFrom<&syn::Meta> for RenameAttribute {
 
     fn try_from(meta: &syn::Meta) -> Result<Self, Self::Error> {
         let syn::Meta::NameValue(name_value) = meta else {
-            abort!(
-                meta.span(),
-                "'rename' attribute value can only be provided as 'rename = ...'.",
-            );
+            abort!(meta.span(), "'rename' attribute value can only be provided as 'rename = ...'.",);
         };
         let syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Str(lit_str),
             ..
-        }) = &name_value.value else {
-            abort!(
-                name_value.value.span(),
-                "'rename' attribute must be a string."
-            );
+        }) = &name_value.value
+        else {
+            abort!(name_value.value.span(), "'rename' attribute must be a string.");
         };
         Ok(Self {
             value: lit_str.value(),
