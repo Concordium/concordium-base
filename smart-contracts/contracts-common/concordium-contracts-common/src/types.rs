@@ -46,6 +46,8 @@ pub type ContractSubIndex = u64;
 /// NB: This is different from the Base58 representation.
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
+pub const CANONICAL_ACCOUNT_ADDRESS_SIZE: usize = 29;
+
 /// The type of amounts on the chain.
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1062,6 +1064,11 @@ impl<'de> SerdeDeserialize<'de> for Duration {
     }
 }
 
+/// Canonical address of an account, as raw bytes.
+#[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug, Hash)]
+#[cfg_attr(feature = "fuzz", derive(Arbitrary))]
+pub struct CanonicalAccountAddress(pub [u8; CANONICAL_ACCOUNT_ADDRESS_SIZE]);
+
 /// Address of an account, as raw bytes.
 #[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug, Hash)]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
@@ -1087,6 +1094,12 @@ impl convert::AsMut<[u8; 32]> for AccountAddress {
 }
 
 impl AccountAddress {
+
+    /// Check whether `self` is an alias of `other`. Two addresses are aliases
+    /// if they identify the same account. This is defined to be when the
+    /// addresses agree on the first 29 bytes.
+    pub fn get_canonical_address(&self) -> CanonicalAccountAddress { CanonicalAccountAddress(self.0[0..29].try_into().expect("Slice with incorrect length")) }
+
     /// Check whether `self` is an alias of `other`. Two addresses are aliases
     /// if they identify the same account. This is defined to be when the
     /// addresses agree on the first 29 bytes.
