@@ -1,6 +1,6 @@
 ## Unreleased changes
 
-- Publish `get_canonical_address` on `AccountAddress`
+- Publish `get_canonical_address` on `AccountAddress` 
 
 ## 7.0.0 (2025-02-03)
 
