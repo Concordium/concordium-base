@@ -1066,7 +1066,6 @@ impl<'de> SerdeDeserialize<'de> for Duration {
 
 /// Canonical address of an account, as raw bytes.
 #[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug, Hash)]
-#[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct CanonicalAccountAddress(pub [u8; CANONICAL_ACCOUNT_ADDRESS_SIZE]);
 
 /// Address of an account, as raw bytes.
