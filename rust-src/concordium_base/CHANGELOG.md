@@ -1,6 +1,6 @@
 ## Unreleased changes
 
-- Publish get canonical address on account address
+- Publish `get_canonical_address` get canonical address on account address
 
 ## 7.0.0 (2025-02-03)
 
