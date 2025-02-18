@@ -101,11 +101,12 @@ impl IdentifierType {
         ep: EntrypointName,
     ) -> Option<(ContractAddress, D)> {
         let IdentifierType::ContractData {
-        address,
-        entrypoint,
-        parameter,
-        } = self else {
-            return None
+            address,
+            entrypoint,
+            parameter,
+        } = self
+        else {
+            return None;
         };
         if entrypoint.as_entrypoint_name() != ep {
             return None;
@@ -117,10 +118,8 @@ impl IdentifierType {
     /// If `self` is the [`PublicKey`](Self::PublicKey) variant then extract the
     /// public key, otherwise return [`None`].
     pub fn extract_public_key(&self) -> Option<ed25519_dalek::VerifyingKey> {
-        let IdentifierType::PublicKey {
-            key,
-        } = self else {
-            return None
+        let IdentifierType::PublicKey { key } = self else {
+            return None;
         };
         Some(*key)
     }
@@ -268,7 +267,10 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
             nom::multi::many0(nom::character::complete::satisfy(|x| x != '/')),
         ))(input)?;
         let Ok(entrypoint) = OwnedEntrypointName::new(entrypoint_str.into()) else {
-            return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
+            return Err(nom::Err::Failure(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Verify,
+            )));
         };
         let (input, parameter) = {
             let (input, r) = nom::combinator::opt(|input| {
@@ -277,10 +279,16 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
                     nom::character::complete::hex_digit0,
                 ))(input)?;
                 let Ok(v) = hex::decode(param_str) else {
-                    return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
+                    return Err(nom::Err::Failure(nom::error::Error::new(
+                        input,
+                        nom::error::ErrorKind::Verify,
+                    )));
                 };
                 let Ok(param) = OwnedParameter::try_from(v) else {
-                    return Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify)));
+                    return Err(nom::Err::Failure(nom::error::Error::new(
+                        input,
+                        nom::error::ErrorKind::Verify,
+                    )));
                 };
                 Ok((input, param))
             })(input)?;

@@ -965,7 +965,8 @@ pub mod quickcheck {
         let syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Int(i),
             ..
-        }) = &v.value else {
+        }) = &v.value
+        else {
             return Err(syn::Error::new_spanned(
                 &v.value,
                 "unexpected attribute value, expected a non-negative integer",

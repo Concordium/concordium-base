@@ -1,5 +1,7 @@
 ## Unreleased changes
 
+- Publish `get_canonical_address` on `AccountAddress` 
+
 ## 7.0.0 (2025-02-03)
 
 - Add getter function `reward_period_epochs` to access the field in the struct `RewardPeriodLength`.
