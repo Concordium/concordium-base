@@ -280,7 +280,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.slot_time = Some(slot_time);
             }
             "get_slot_time" => {
-                let slot_time = self.slot_time.ok_or_else(|| CallErr::Unset("slot_time"))?;
+                let slot_time = self.slot_time.ok_or(CallErr::Unset("slot_time"))?;
                 stack.push_value(slot_time);
             }
             "set_receive_self_address" => {
@@ -298,7 +298,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| CallErr::Seek)?;
 
                 self.address
-                    .ok_or_else(|| CallErr::Unset("address"))?
+                    .ok_or(CallErr::Unset("address"))?
                     .serial(&mut cursor)
                     .map_err(|_| anyhow!("Unable to serialize the self address"))?;
             }
@@ -307,7 +307,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.balance = Some(balance);
             }
             "get_receive_self_balance" => {
-                let balance = self.balance.ok_or_else(|| CallErr::Unset("balance"))?;
+                let balance = self.balance.ok_or(CallErr::Unset("balance"))?;
                 stack.push_value(balance);
             }
             "set_parameter" => {
@@ -340,9 +340,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 if let Some(param) = self.parameters.get(&param_index) {
                     let mut cursor = Cursor::new(memory);
-                    cursor
-                        .seek(SeekFrom::Start(param_bytes))
-                        .map_err(|_| CallErr::Seek)?;
+                    cursor.seek(SeekFrom::Start(param_bytes)).map_err(|_| CallErr::Seek)?;
 
                     let self_param = param.get(offset..length + offset).context(format!(
                         "Tried to grab {} bytes of parameter[{}], which has length {}",
@@ -423,7 +421,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.init_origin
-                    .ok_or_else(|| CallErr::Unset("init_origin"))?
+                    .ok_or(CallErr::Unset("init_origin"))?
                     .serial(&mut cursor)
                     .map_err(|_| CallErr::Write)?;
             }
@@ -442,7 +440,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_invoker
-                    .ok_or_else(|| CallErr::Unset("receive_invoker"))?
+                    .ok_or(CallErr::Unset("receive_invoker"))?
                     .serial(&mut cursor)
                     .map_err(|_| CallErr::Write)?;
             }
@@ -461,7 +459,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_sender
-                    .ok_or_else(|| CallErr::Unset("receive_sender"))?
+                    .ok_or(CallErr::Unset("receive_sender"))?
                     .serial(&mut cursor)
                     .map_err(|_| CallErr::Write)?;
             }
@@ -480,7 +478,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_owner
-                    .ok_or_else(|| CallErr::Unset("receive_owner"))?
+                    .ok_or(CallErr::Unset("receive_owner"))?
                     .serial(&mut cursor)
                     .map_err(|_| CallErr::Write)?;
             }
@@ -496,7 +494,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let size = self
                     .receive_entrypoint
                     .as_ref()
-                    .ok_or_else(|| CallErr::Unset("receive_entrypoint"))?
+                    .ok_or(CallErr::Unset("receive_entrypoint"))?
                     .as_entrypoint_name()
                     .size();
                 stack.push_value(size);
@@ -510,7 +508,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let bytes = self
                     .receive_entrypoint
                     .clone()
-                    .ok_or_else(|| CallErr::Unset("receive_entrypoint"))?
+                    .ok_or(CallErr::Unset("receive_entrypoint"))?
                     .to_string()
                     .into_bytes();
 
