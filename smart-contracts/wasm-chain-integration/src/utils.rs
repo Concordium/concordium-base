@@ -2,6 +2,7 @@
 //! information.
 
 use crate::{
+    constants::{MAX_LOG_SIZE, MAX_NUM_LOGS},
     v1::{host, trie, EmittedDebugStatement, InstanceState},
     ExecResult,
 };
@@ -21,8 +22,10 @@ use concordium_wasm::{
     validate::{self, ValidationConfig},
 };
 use rand::{prelude::*, RngCore};
+use rayon::prelude::*;
 use sha2::Digest;
 use std::{collections::BTreeMap, default::Default};
+use thiserror::Error;
 
 /// A host which traps for any function call.
 pub struct TrapHost;
@@ -189,6 +192,16 @@ pub(crate) fn extract_debug(
     Ok((filename, line, column, msg))
 }
 
+#[derive(Error, Debug)]
+enum CallErr {
+    #[error("Unable to read bytes at the given position")]
+    Seek,
+    #[error("No \"{0}\" is set. Make sure to prepare this in the test environment")]
+    Unset(&'static str),
+    #[error("Unable to write to given buffer")]
+    Write,
+}
+
 impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<ArtifactNamedImport>
     for TestHost<'a, R, BackingStore>
 {
@@ -210,12 +223,6 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         // running out of energy.
         let energy = &mut crate::InterpreterEnergy::new(u64::MAX);
         let state = &mut self.state;
-
-        // TODO: Improve error handling using actual enums preferably thiserror
-        let seek_err = "Unable to read bytes at the given position";
-        let unset_err =
-            |x| format!("No {x} is set. Make sure to prepare this in the test environment");
-        let write_err = "Unable to write to given buffer";
 
         ensure!(
             f.get_mod_name() == "concordium",
@@ -273,14 +280,14 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.slot_time = Some(slot_time);
             }
             "get_slot_time" => {
-                let slot_time = self.slot_time.context(unset_err("slot_time"))?;
+                let slot_time = self.slot_time.ok_or_else(|| CallErr::Unset("slot_time"))?;
                 stack.push_value(slot_time);
             }
             "set_receive_self_address" => {
                 let addr_ptr = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| CallErr::Seek)?;
 
                 self.address = Some(ContractAddress::deserial(&mut cursor)?);
             }
@@ -288,10 +295,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_ptr = unsafe { stack.pop_u32() };
                 let mut cursor = Cursor::new(memory);
 
-                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| CallErr::Seek)?;
 
                 self.address
-                    .context(unset_err("slot_time"))?
+                    .ok_or_else(|| CallErr::Unset("address"))?
                     .serial(&mut cursor)
                     .map_err(|_| anyhow!("Unable to serialize the self address"))?;
             }
@@ -300,7 +307,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.balance = Some(balance);
             }
             "get_receive_self_balance" => {
-                let balance = self.balance.context(unset_err("balance"))?;
+                let balance = self.balance.ok_or_else(|| CallErr::Unset("balance"))?;
                 stack.push_value(balance);
             }
             "set_parameter" => {
@@ -311,7 +318,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut param = vec![0; param_size as usize];
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| CallErr::Seek)?;
                 cursor.read_exact(&mut param)?;
 
                 self.parameters.insert(param_index, param);
@@ -326,18 +333,18 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 }
             }
             "get_parameter_section" => {
-                let offset = unsafe { stack.pop_u32() };
-                let length = unsafe { stack.pop_u32() };
+                let offset = unsafe { stack.pop_u32() } as usize;
+                let length = unsafe { stack.pop_u32() } as usize;
                 let param_bytes = unsafe { stack.pop_u32() };
                 let param_index = unsafe { stack.pop_u32() };
 
                 if let Some(param) = self.parameters.get(&param_index) {
                     let mut cursor = Cursor::new(memory);
                     cursor
-                        .seek(SeekFrom::Start(param_bytes + offset))
-                        .map_err(|_| anyhow!(seek_err))?;
+                        .seek(SeekFrom::Start(param_bytes))
+                        .map_err(|_| CallErr::Seek)?;
 
-                    let self_param = param.get(..length as usize).context(format!(
+                    let self_param = param.get(offset..length + offset).context(format!(
                         "Tried to grab {} bytes of parameter[{}], which has length {}",
                         length,
                         param_index,
@@ -345,7 +352,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                     ))?;
 
                     let bytes_written: i32 =
-                        cursor.write(self_param).map_err(|_| anyhow!(write_err))?.try_into()?;
+                        cursor.write(self_param).map_err(|_| CallErr::Write)?.try_into()?;
 
                     stack.push_value(bytes_written)
                 } else {
@@ -356,18 +363,22 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let event_length = unsafe { stack.pop_u32() };
                 let event_start = unsafe { stack.pop_u32() };
 
-                // TODO: Log can be full and messages can be too long, but it is unspecified
-                // what the limits are. Find out, document and fail if either is too long.
+                if self.events.len() >= MAX_NUM_LOGS {
+                    stack.push_value(0i32);
+                }
+                if event_length > MAX_LOG_SIZE {
+                    stack.push_value(-1i32);
+                } else {
+                    let mut cursor = Cursor::new(memory);
+                    cursor.seek(SeekFrom::Start(event_start)).map_err(|_| CallErr::Seek)?;
 
-                let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(event_start)).map_err(|_| anyhow!(seek_err))?;
+                    let mut buf = vec![0; event_length as usize];
+                    cursor.read(&mut buf).context("Unable to read provided event")?;
 
-                let mut buf = vec![0; event_length as usize];
-                cursor.read(&mut buf).context("Unable to read provided event")?;
+                    self.events.push(buf);
 
-                self.events.push(buf);
-
-                stack.push_value(1i32);
+                    stack.push_value(1i32);
+                }
             }
             "get_event_size" => {
                 let event_index = unsafe { stack.pop_u32() };
@@ -387,10 +398,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 if let Some(event) = event_opt {
                     let mut cursor = Cursor::new(memory);
-                    cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
+                    cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                     let bytes_written: i32 =
-                        cursor.write(event).map_err(|_| anyhow!(write_err))?.try_into()?;
+                        cursor.write(event).map_err(|_| CallErr::Write)?.try_into()?;
 
                     stack.push_value(bytes_written)
                 } else {
@@ -401,7 +412,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
 
                 self.init_origin = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -409,18 +420,18 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.init_origin
-                    .context(unset_err("init_origin"))?
+                    .ok_or_else(|| CallErr::Unset("init_origin"))?
                     .serial(&mut cursor)
-                    .map_err(|_| anyhow!(write_err))?;
+                    .map_err(|_| CallErr::Write)?;
             }
             "set_receive_invoker" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_invoker = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -428,18 +439,18 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_invoker
-                    .context(unset_err("receive_invoker"))?
+                    .ok_or_else(|| CallErr::Unset("receive_invoker"))?
                     .serial(&mut cursor)
-                    .map_err(|_| anyhow!(write_err))?;
+                    .map_err(|_| CallErr::Write)?;
             }
             "set_receive_sender" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_sender = Some(Address::deserial(&mut cursor)?);
             }
@@ -447,18 +458,18 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_sender
-                    .context(unset_err("receive_sender"))?
+                    .ok_or_else(|| CallErr::Unset("receive_sender"))?
                     .serial(&mut cursor)
-                    .map_err(|_| anyhow!(write_err))?;
+                    .map_err(|_| CallErr::Write)?;
             }
             "set_receive_owner" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_owner = Some(AccountAddress::deserial(&mut cursor)?);
             }
@@ -466,18 +477,18 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_owner
-                    .context(unset_err("receive_owner"))?
+                    .ok_or_else(|| CallErr::Unset("receive_owner"))?
                     .serial(&mut cursor)
-                    .map_err(|_| anyhow!(write_err))?;
+                    .map_err(|_| CallErr::Write)?;
             }
             "set_receive_entrypoint" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
 
                 self.receive_entrypoint = Some(OwnedEntrypointName::deserial(&mut cursor)?);
             }
@@ -485,7 +496,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let size = self
                     .receive_entrypoint
                     .as_ref()
-                    .context(unset_err("receive_entrypoint"))?
+                    .ok_or_else(|| CallErr::Unset("receive_entrypoint"))?
                     .as_entrypoint_name()
                     .size();
                 stack.push_value(size);
@@ -494,16 +505,16 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let ret_buf_start = unsafe { stack.pop_u32() };
 
                 let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
 
                 let bytes = self
                     .receive_entrypoint
                     .clone()
-                    .context(unset_err("receive_entrypoint"))?
+                    .ok_or_else(|| CallErr::Unset("receive_entrypoint"))?
                     .to_string()
                     .into_bytes();
 
-                cursor.write(&bytes).map_err(|_| anyhow!(write_err))?;
+                cursor.write(&bytes).map_err(|_| CallErr::Write)?;
             }
             "verify_ed25519_signature" => {
                 let message_len = unsafe { stack.pop_u32() };
@@ -513,17 +524,17 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
 
                 let mut cursor = Cursor::new(memory);
 
-                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut public_key_bytes = [0; 32];
                 cursor.read(&mut public_key_bytes)?;
                 let z_pk = ed25519_zebra::VerificationKey::try_from(public_key_bytes)?;
 
-                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut signature_bytes = [0; 64];
                 cursor.read(&mut signature_bytes)?;
                 let z_sig = ed25519_zebra::Signature::from_bytes(&signature_bytes);
 
-                cursor.seek(SeekFrom::Start(message_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(message_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut msg = vec![0; message_len as usize];
                 cursor.read(&mut msg)?;
 
@@ -543,17 +554,17 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut cursor = Cursor::new(memory);
                 let secp = secp256k1::Secp256k1::verification_only();
 
-                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut public_key_bytes = [0; 33];
                 cursor.read(&mut public_key_bytes)?;
                 let pk = secp256k1::PublicKey::from_slice(&public_key_bytes)?;
 
-                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut signature_bytes = [0; 64];
                 cursor.read(&mut signature_bytes)?;
                 let sig = secp256k1::ecdsa::Signature::from_compact(&signature_bytes)?;
 
-                cursor.seek(SeekFrom::Start(message_hash_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(message_hash_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut message_hash_bytes = [0; 32];
                 cursor.read(&mut message_hash_bytes)?;
                 let msg = secp256k1::Message::from_slice(&message_hash_bytes)?;
@@ -573,15 +584,15 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut cursor = Cursor::new(memory);
                 let mut hasher = sha2::Sha256::default();
 
-                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut data = vec![0u8; data_len.try_into()?];
                 cursor.read(&mut data)?;
 
                 hasher.update(&data);
                 let data_hash = hasher.finalize();
 
-                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
-                cursor.write(&data_hash).map_err(|_| anyhow!(write_err))?;
+                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor.write(&data_hash).map_err(|_| CallErr::Write)?;
             }
             "hash_sha3_256" => {
                 let output_ptr = unsafe { stack.pop_u32() };
@@ -591,15 +602,15 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut cursor = Cursor::new(memory);
                 let mut hasher = sha3::Sha3_256::default();
 
-                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut data = vec![0u8; data_len.try_into()?];
                 cursor.read(&mut data)?;
 
                 hasher.update(&data);
                 let data_hash = hasher.finalize();
 
-                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
-                cursor.write(&data_hash).map_err(|_| anyhow!(write_err))?;
+                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor.write(&data_hash).map_err(|_| CallErr::Write)?;
             }
             "hash_keccak_256" => {
                 let output_ptr = unsafe { stack.pop_u32() };
@@ -609,15 +620,15 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let mut cursor = Cursor::new(memory);
                 let mut hasher = sha3::Keccak256::default();
 
-                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| anyhow!(seek_err))?;
+                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| CallErr::Seek)?;
                 let mut data = vec![0u8; data_len.try_into()?];
                 cursor.read(&mut data)?;
 
                 hasher.update(&data);
                 let data_hash = hasher.finalize();
 
-                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| anyhow!(seek_err))?;
-                cursor.write(&data_hash).map_err(|_| anyhow!(write_err))?;
+                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor.write(&data_hash).map_err(|_| CallErr::Write)?;
             }
             item_name => {
                 bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
@@ -659,53 +670,56 @@ pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestRe
         module_bytes,
     )?
     .artifact;
-    let mut out = Vec::with_capacity(artifact.export.len());
-    for name in artifact.export.keys() {
-        if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            // create a `TestHost` instance for each test with the usage flag set to `false`
-            let mut initial_state = trie::MutableState::initial_state();
-            let mut loader = trie::Loader::new(Vec::new());
-            let mut test_host = {
-                let inner = initial_state.get_inner(&mut loader);
-                let state = InstanceState::new(loader, inner);
-                TestHost::new(SmallRng::seed_from_u64(seed), state)
-            };
-            let res = artifact.run(&mut test_host, name, &[]);
-            match res {
-                Ok(_) => {
+    let artifact_keys: Vec<_> = artifact.export.keys().collect();
+
+    let get_result = |name: &Name| {
+        let test_name = name.as_ref().strip_prefix("concordium_test ")?;
+
+        // create a `TestHost` instance for each test with the usage flag set to `false`
+        let mut initial_state = trie::MutableState::initial_state();
+        let mut loader = trie::Loader::new(Vec::new());
+        let mut test_host = {
+            let inner = initial_state.get_inner(&mut loader);
+            let state = InstanceState::new(loader, inner);
+            TestHost::new(SmallRng::seed_from_u64(seed), state)
+        };
+        let res = artifact.run(&mut test_host, name, &[]);
+        match res {
+            Ok(_) => {
+                let result = TestResult {
+                    test_name:    test_name.to_owned(),
+                    result:       None,
+                    debug_events: test_host.debug_events,
+                };
+                Some(result)
+            }
+            Err(msg) => {
+                if let Some(err) = msg.downcast_ref::<ReportError>() {
                     let result = TestResult {
                         test_name:    test_name.to_owned(),
-                        result:       None,
+                        result:       Some((err.clone(), test_host.rng_used)),
                         debug_events: test_host.debug_events,
                     };
-                    out.push(result);
+                    Some(result)
+                } else {
+                    let result = TestResult {
+                        test_name:    test_name.to_owned(),
+                        result:       Some((
+                            ReportError::Other {
+                                msg: msg.to_string(),
+                            },
+                            test_host.rng_used,
+                        )),
+                        debug_events: test_host.debug_events,
+                    };
+                    Some(result)
                 }
-                Err(msg) => {
-                    if let Some(err) = msg.downcast_ref::<ReportError>() {
-                        let result = TestResult {
-                            test_name:    test_name.to_owned(),
-                            result:       Some((err.clone(), test_host.rng_used)),
-                            debug_events: test_host.debug_events,
-                        };
-                        out.push(result);
-                    } else {
-                        let result = TestResult {
-                            test_name:    test_name.to_owned(),
-                            result:       Some((
-                                ReportError::Other {
-                                    msg: msg.to_string(),
-                                },
-                                test_host.rng_used,
-                            )),
-                            debug_events: test_host.debug_events,
-                        };
-                        out.push(result);
-                    }
-                }
-            };
+            }
         }
-    }
-    Ok(out)
+    };
+
+    let test_results = artifact_keys.into_par_iter().filter_map(get_result).collect();
+    Ok(test_results)
 }
 
 /// Tries to generate a state schema and schemas for parameters of methods of a
