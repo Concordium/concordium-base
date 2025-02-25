@@ -92,7 +92,7 @@ impl PublicKey {
         h.update(ONE_STRING);
         h.update(self.as_bytes()); // PK_string
         h.update(message); // alpha_string
-        for ctr in 0..=u8::max_value() {
+        for ctr in 0..=u8::MAX {
             // Each iteration fails, independent of other iterations, with probability about
             // a half. This happens if the digest does not represent a point on
             // the curve when decoded as in https://tools.ietf.org/html/rfc8032#section-5.1.3

@@ -195,8 +195,8 @@ pub fn verify_initial_cdi<
     expiry: TransactionTime,
 ) -> Result<(), CdiVerificationError> {
     let mut hasher = Sha256::new();
-    hasher.update(&to_bytes(&expiry));
-    hasher.update(&to_bytes(&cdi.values));
+    hasher.update(to_bytes(&expiry));
+    hasher.update(to_bytes(&cdi.values));
     let signed = hasher.finalize();
     match ip_info.ip_cdi_verify_key.verify(signed.as_ref(), &cdi.sig) {
         Err(_) => Err(CdiVerificationError::Signature),

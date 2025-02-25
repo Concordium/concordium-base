@@ -350,7 +350,7 @@ impl Nonce {
 #[serde(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into)]
 /// Equivalent of a transaction nonce but for update instructions. Update
-/// sequence numbers are per update type.
+/// sequence numbers are per update type. The minimum sequence number is 1.
 pub struct UpdateSequenceNumber {
     pub number: u64,
 }
@@ -367,6 +367,10 @@ impl UpdateSequenceNumber {
 
     /// Increase the sequence number.
     pub fn next_mut(&mut self) { self.number += 1; }
+}
+
+impl Default for UpdateSequenceNumber {
+    fn default() -> Self { Self { number: 1 } }
 }
 
 #[repr(transparent)]
@@ -439,6 +443,9 @@ pub enum ProtocolVersion {
     /// Protocol `P7` modifies hashing to better support light clients, and
     /// implements tokenomics changes.
     P7,
+    #[display(fmt = "P8")]
+    /// Protocol `P8` introduces support for suspended validators.
+    P8,
 }
 
 #[derive(Debug, Error, Display)]
@@ -461,6 +468,7 @@ impl TryFrom<u64> for ProtocolVersion {
             5 => Ok(ProtocolVersion::P5),
             6 => Ok(ProtocolVersion::P6),
             7 => Ok(ProtocolVersion::P7),
+            8 => Ok(ProtocolVersion::P8),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -476,6 +484,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P5 => 5,
             ProtocolVersion::P6 => 6,
             ProtocolVersion::P7 => 7,
+            ProtocolVersion::P8 => 8,
         }
     }
 }
@@ -498,6 +507,7 @@ impl Deserial for ProtocolVersion {
 pub struct ChainParameterVersion0;
 pub struct ChainParameterVersion1;
 pub struct ChainParameterVersion2;
+pub struct ChainParameterVersion3;
 
 /// Height of a block since chain genesis.
 #[repr(transparent)]
@@ -1199,6 +1209,10 @@ impl MintDistributionFamily for ChainParameterVersion2 {
     type Output = MintDistributionV1;
 }
 
+impl MintDistributionFamily for ChainParameterVersion3 {
+    type Output = MintDistributionV1;
+}
+
 /// Type family mapping a `ChainParameterVersion` to its corresponding type for
 /// the `MintDistribution`.
 pub type MintDistribution<CPV> = <CPV as MintDistributionFamily>::Output;
@@ -1217,6 +1231,10 @@ impl GASRewardsFamily for ChainParameterVersion1 {
 }
 
 impl GASRewardsFamily for ChainParameterVersion2 {
+    type Output = GASRewardsV1;
+}
+
+impl GASRewardsFamily for ChainParameterVersion3 {
     type Output = GASRewardsV1;
 }
 

@@ -20,7 +20,7 @@ on:
 name: Clippy & fmt
 
 env:
-  RUST_VERSION: "1.73"
+  RUST_VERSION: "1.82"
   RUST_FMT: "nightly-2023-04-01"
 
 defaults:

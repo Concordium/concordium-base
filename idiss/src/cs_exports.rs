@@ -30,12 +30,8 @@ unsafe fn slice_from_ptr<'a>(data: *const u8, len: usize) -> &'a [u8] {
 ///   serialization of the ArInfos
 /// - `ars_len` - The length of the bytearray that `ars_infos_ptr` points to
 /// - `request_ptr` - A pointer to a bytearray, assumed to represent JSON of the
-///   form
-/// `{
-///     "idObjectRequest": ...
-/// }`,
-/// where `...` denotes the JSON serialization of the versioned pre-identity
-/// object.
+///   form `{ "idObjectRequest": ... }`, where `...` denotes the JSON
+///   serialization of the versioned pre-identity object.
 /// - `request_len` - The length of the bytearray that `request_ptr` points to
 /// - `out_length` - Pointer to an i32 to write the length of the resulting
 ///   bytearray to
@@ -46,6 +42,7 @@ unsafe fn slice_from_ptr<'a>(data: *const u8, len: usize) -> &'a [u8] {
 /// - represents the address of the initial account, if validation was
 ///   successful, or
 /// - represents an error describing what went wrong.
+///
 /// The length of this bytearray is written to the integer that `out_length`
 /// points to. Either 1 or -1 (indicating success/failure) is written to the
 /// integer that `out_success` points to.
@@ -105,12 +102,8 @@ pub unsafe extern "C" fn validate_request_cs(
 ///   serialization of the ArInfos
 /// - `ars_len` - The length of the bytearray that `ars_infos_ptr` points to
 /// - `request_ptr` - A pointer to a bytearray, assumed to represent JSON of the
-///   form
-/// `{
-///     "idObjectRequest": ...
-/// }`,
-/// where `...` denotes the JSON serialization of the versioned pre-identity
-/// object.
+///   form `{ "idObjectRequest": ... }`, where `...` denotes the JSON
+///   serialization of the versioned pre-identity object.
 /// - `request_len` - The length of the bytearray that `request_ptr` points to
 /// - `out_length` - Pointer to an i32 to write the length of the resulting
 ///   bytearray to, in case of failure
@@ -164,11 +157,8 @@ pub unsafe extern "C" fn validate_request_v1_cs(
 ///   serialization of the attribute list
 /// - `alist_len` - The length of the bytearray that `alist_ptr` points to
 /// - `request_ptr` - A pointer to a bytearray, assumed to represent JSON of the
-///   form
-/// `{
-///     idObjectRequest: ...
-/// }`,
-/// where `...` denotes the JSON serialization of the pre-identity object.
+///   form `{ idObjectRequest: ... }`, where `...` denotes the JSON
+///   serialization of the pre-identity object.
 /// - `request_len` - The length of the bytearray that `request_ptr` points to
 /// - `expiry` - the expiry time of the account creation message sent to the
 ///   chain.
@@ -194,6 +184,7 @@ pub unsafe extern "C" fn validate_request_v1_cs(
 ///     * the initial account creation object that is sent to the chain
 ///     * the address of the inital account, or
 /// - represents an error describing what went wrong.
+///
 /// The length of this bytearray is written to the integer that `out_length`
 /// points to. Either 1 or -1 (indicating success/failure) is written to the
 /// integer that `out_success` points to.
@@ -252,12 +243,8 @@ pub unsafe extern "C" fn create_identity_object_cs(
 ///   serialization of the attribute list
 /// - `alist_len` - The length of the bytearray that `alist_ptr` points to
 /// - `request_ptr` - A pointer to a bytearray, assumed to represent JSON of the
-///   form
-/// `{
-///     idObjectRequest: ...
-/// }`,
-/// where `...` denotes the JSON serialization of the version 1 pre-identity
-/// object.
+///   form `{ idObjectRequest: ... }`, where `...` denotes the JSON
+///   serialization of the version 1 pre-identity object.
 /// - `request_len` - The length of the bytearray that `request_ptr` points to
 /// - `expiry` - the expiry time of the account creation message sent to the
 ///   chain.
@@ -276,6 +263,7 @@ pub unsafe extern "C" fn create_identity_object_cs(
 ///     * the version 1 identity object that is returned to the user
 ///     * the anonymity revocation record or
 /// - represents an error describing what went wrong.
+///
 /// The length of this bytearray is written to the integer that `out_length`
 /// points to. Either 1 or -1 (indicating success/failure) is written to the
 /// integer that `out_success` points to.
@@ -327,12 +315,8 @@ pub unsafe extern "C" fn create_identity_object_v1_cs(
 ///   serialization of the IpInfo
 /// - `ip_info_len` - The length of the bytearray that `ip_info_ptr` points to
 /// - `request_ptr` - A pointer to a bytearray, assumed to represent JSON of the
-///   form
-/// `{
-///     "idRecoveryRequest": ...
-/// }`,
-/// where `...` denotes the JSON serialization of the versioned identity
-/// recovery request.
+///   form `{ "idRecoveryRequest": ... }`, where `...` denotes the JSON
+///   serialization of the versioned identity recovery request.
 /// - `request_len` - The length of the bytearray that `request_ptr` points to
 /// - `out_length` - Pointer to an i32 to write the length of the resulting
 ///   bytearray to, in case of failure

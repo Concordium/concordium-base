@@ -54,6 +54,7 @@ impl std::fmt::Display for Reason {
 /// * In the version 0 flow, the common verifier is AND'ed with a verifier
 ///   checking that RegID = PRF(key_PRF, 0)
 /// * In the version 1 flow, the sigma protocol verifier is the common verifier.
+///
 /// The function also verifies the bulletproofs range rangeproof.
 
 /// Validate all the proofs in a version 0 identity object request. This is for
@@ -560,8 +561,8 @@ fn sign_initial_cred_values<C: Curve, AttributeType: Attribute<C::Scalar>>(
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> IpCdiSignature {
     let mut hasher = Sha256::new();
-    hasher.update(&to_bytes(&expiry));
-    hasher.update(&to_bytes(&initial_cred_values));
+    hasher.update(to_bytes(&expiry));
+    hasher.update(to_bytes(&initial_cred_values));
     let to_sign = hasher.finalize();
     let signing_key = ed25519_dalek::SigningKey::from(ip_cdi_secret_key);
     signing_key.sign(to_sign.as_ref()).into()

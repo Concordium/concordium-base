@@ -23,9 +23,11 @@ import qualified Types.AmountSpec
 import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.PayloadSpec
+import qualified Types.TimestampSpec
 import qualified Types.TransactionSerializationSpec
 import qualified Types.TransactionSummarySpec
 import qualified Types.UpdatesSpec
+import qualified Types.ValidName
 
 main :: IO ()
 main = hspec $ parallel $ do
@@ -48,6 +50,7 @@ main = hspec $ parallel $ do
     Types.PayloadSerializationSpec.tests
     Types.TransactionSerializationSpec.tests
     Types.AmountSpec.tests
+    Types.TimestampSpec.tests
     Types.UpdatesSpec.tests
     Types.AccountEncryptedAmountSpec.tests
     Types.AmountFraction.tests
@@ -56,3 +59,4 @@ main = hspec $ parallel $ do
     Types.ParametersSpec.tests
     Types.PayloadSpec.tests
     Genesis.ParametersSpec.tests
+    Types.ValidName.tests

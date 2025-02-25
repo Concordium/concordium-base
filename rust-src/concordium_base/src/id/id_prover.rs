@@ -24,6 +24,7 @@ use sha2::{Digest, Sha256};
 /// - `global` - the on-chain cryptographic parameters
 /// - `challenge` - slice to challenge bytes chosen by the verifier
 /// - `secret` - the secret data needed to produce the proof
+///
 /// Upon success the function will return a proof of the statement
 /// wrapped in a `Some`. Otherwise it returns `None`.
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, AttributeType> {

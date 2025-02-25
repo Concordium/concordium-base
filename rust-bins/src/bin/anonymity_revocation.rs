@@ -226,7 +226,7 @@ fn handle_compute_regids(rid: ComputeRegIds) -> Result<(), String> {
     for x in 0..=max_account {
         if let Ok(secret) = prf_key.prf_exponent(x) {
             let regid = g.mul_by_scalar(&secret);
-            let regid_hex = hex::encode(&to_bytes(&regid));
+            let regid_hex = hex::encode(to_bytes(&regid));
             if !rid.no_secret {
                 regids.push(json!({
                     "regId": regid_hex,

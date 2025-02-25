@@ -136,7 +136,7 @@ impl Host<MeteringImport> for MeteringHost {
     fn call(
         &mut self,
         f: &MeteringImport,
-        _memory: &mut Vec<u8>,
+        _memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         match f.tag {

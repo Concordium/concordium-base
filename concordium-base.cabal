@@ -1,6 +1,6 @@
 cabal-version: 2.0
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -317,9 +317,11 @@ test-suite test
       Types.ParametersSpec
       Types.PayloadSerializationSpec
       Types.PayloadSpec
+      Types.TimestampSpec
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec
+      Types.ValidName
       Paths_concordium_base
   autogen-modules:
       Paths_concordium_base

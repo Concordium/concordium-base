@@ -18,6 +18,7 @@ import Data.Aeson (FromJSON (..), ToJSON (..))
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import qualified Data.ByteString as BS
+import Data.Char (isLower)
 import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Serialize as S
@@ -745,9 +746,24 @@ data SpecialTransactionOutcome
           -- | Accrued finalization rewards for pool.
           stoFinalizationReward :: !Amount
         }
+    | -- | A validator is primed for suspension at the next snapshot epoch
+      --  because it missed too many rounds.
+      ValidatorPrimedForSuspension
+        { -- | The id of the validator that will get suspended.
+          vpfsBakerId :: !BakerId,
+          -- | The address of the account associated with the validator.
+          vpfsAccount :: !AccountAddress
+        }
+    | -- | A validator was suspended because it missed too many rounds.
+      ValidatorSuspended
+        { -- | The id of the suspended validator.
+          vsBakerId :: !BakerId,
+          -- | The address of the account associated with the validator.
+          vsAccount :: !AccountAddress
+        }
     deriving (Show, Eq)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''SpecialTransactionOutcome)
 
 instance HashableTo H.Hash SpecialTransactionOutcome where
     getHash = H.hash . S.encode
@@ -804,6 +820,14 @@ instance S.Serialize SpecialTransactionOutcome where
         S.put stoTransactionFees
         S.put stoBakerReward
         S.put stoFinalizationReward
+    put ValidatorPrimedForSuspension{..} = do
+        S.putWord8 8
+        S.put vpfsBakerId
+        S.put vpfsAccount
+    put ValidatorSuspended{..} = do
+        S.putWord8 9
+        S.put vsBakerId
+        S.put vsAccount
 
     get =
         S.getWord8 >>= \case
@@ -855,4 +879,12 @@ instance S.Serialize SpecialTransactionOutcome where
                 stoBakerReward <- S.get
                 stoFinalizationReward <- S.get
                 return PaydayPoolReward{..}
+            8 -> do
+                vpfsBakerId <- S.get
+                vpfsAccount <- S.get
+                return ValidatorPrimedForSuspension{..}
+            9 -> do
+                vsBakerId <- S.get
+                vsAccount <- S.get
+                return ValidatorSuspended{..}
             _ -> fail "Invalid SpecialTransactionOutcome type"

@@ -106,6 +106,10 @@ pub enum ParseTokenAddressError {
     InvalidTokenId,
 }
 
+impl TokenAddress {
+    pub fn new(contract: ContractAddress, id: TokenId) -> Self { Self { contract, id } }
+}
+
 impl TryFrom<&str> for TokenAddress {
     type Error = ParseTokenAddressError;
 

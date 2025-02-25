@@ -39,7 +39,10 @@ data GenesisChainParameters' (cpv :: ChainParametersVersion) = GenesisChainParam
       -- | Minimum threshold required for registering as a baker.
       gcpPoolParameters :: !(PoolParameters cpv),
       -- | The Finalization committee parameters
-      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters)
+      gcpFinalizationCommitteeParameters :: !(OParam 'PTFinalizationCommitteeParameters cpv FinalizationCommitteeParameters),
+      -- | The score parameters.
+      --  These parameters are introduced as part of protocol 8 (cpv3).
+      gcpValidatorScoreParameters :: !(OParam 'PTValidatorScoreParameters cpv ValidatorScoreParameters)
     }
     deriving (Eq, Show)
 
@@ -69,6 +72,7 @@ parseJSONForGCPV0 =
             gcpPoolParameters = PoolParametersV0{..}
             gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
             gcpFinalizationCommitteeParameters = NoParam
+            gcpValidatorScoreParameters = NoParam
         return GenesisChainParameters{..}
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV1'.
@@ -101,6 +105,7 @@ parseJSONForGCPV1 =
             _ppPassiveCommissions = CommissionRates{..}
             _ppCommissionBounds = CommissionRanges{..}
             gcpFinalizationCommitteeParameters = NoParam
+            gcpValidatorScoreParameters = NoParam
         return GenesisChainParameters{..}
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -142,6 +147,7 @@ parseJSONForGCPV2 =
             _cpTimeoutParameters = TimeoutParameters{..}
             gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
+            gcpValidatorScoreParameters = NoParam
         return GenesisChainParameters{..}
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
@@ -183,6 +189,9 @@ parseJSONForGCPV3 =
             _cpTimeoutParameters = TimeoutParameters{..}
             gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
             gcpConsensusParameters = ConsensusParametersV1{..}
+
+        _vspMaxMissedRounds <- v .: "maximumMissedRounds"
+        let gcpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
         return GenesisChainParameters{..}
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
@@ -281,7 +290,8 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV3) where
               "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
               "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam gcpFinalizationCommitteeParameters),
               "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam gcpFinalizationCommitteeParameters),
-              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters)
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters),
+              "maximumMissedRounds" AE..= _vspMaxMissedRounds (unOParam gcpValidatorScoreParameters)
             ]
 
 -- | 'GenesisParametersV2' provides a convenient abstraction for

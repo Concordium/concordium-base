@@ -206,7 +206,6 @@ struct InitialAccountReponse {
     submission_id: String,
 }
 
-///
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
 struct PendingEntry {
     pub status: PendingStatus,

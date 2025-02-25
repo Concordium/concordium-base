@@ -27,7 +27,7 @@ import Concordium.Types
 import Concordium.Types.Accounts
 import qualified Concordium.Types.AnonymityRevokers as ARS
 import Concordium.Types.Block
-import Concordium.Types.Execution (TransactionSummary)
+import Concordium.Types.Execution (SupplementedTransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
     AuthorizationsVersion (..),
@@ -44,6 +44,7 @@ import Concordium.Types.Parameters (
     TimeParameters,
     TimeoutParameters,
     TransactionFeeDistribution,
+    ValidatorScoreParameters,
  )
 import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
@@ -357,17 +358,18 @@ data BlockBirkParameters = BlockBirkParameters
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower} ''BlockBirkParameters)
 
--- | The status of a transaction that is present in the transaction table.
-data TransactionStatus
+-- | The status of a transaction that is present in the transaction table or a finalized block,
+--  as returned by the @getTransactionStatus@ gRPC query.
+data SupplementedTransactionStatus
     = -- | Transaction was received but is not in any blocks
       Received
     | -- | Transaction was received and is present in some (non-finalized) block(s)
-      Committed (Map.Map BlockHash (Maybe TransactionSummary))
+      Committed (Map.Map BlockHash (Maybe SupplementedTransactionSummary))
     | -- | Transaction has been finalized in a block
-      Finalized BlockHash (Maybe TransactionSummary)
+      Finalized BlockHash (Maybe SupplementedTransactionSummary)
     deriving (Show)
 
-instance ToJSON TransactionStatus where
+instance ToJSON SupplementedTransactionStatus where
     toJSON Received = object ["status" .= String "received"]
     toJSON (Committed m) =
         object
@@ -387,9 +389,9 @@ data BlockTransactionStatus
     | -- | The transaction was received but not known to be in that block
       BTSReceived
     | -- | The transaction is in that (non-finalized) block
-      BTSCommitted (Maybe TransactionSummary)
+      BTSCommitted (Maybe SupplementedTransactionSummary)
     | -- | The transaction is in that (finalized) block
-      BTSFinalized (Maybe TransactionSummary)
+      BTSFinalized (Maybe SupplementedTransactionSummary)
     deriving (Show)
 
 instance ToJSON BlockTransactionStatus where
@@ -470,13 +472,17 @@ data ActiveBakerPoolStatus = ActiveBakerPoolStatus
       -- | The pool info associated with the pool: open status, metadata URL and commission rates.
       abpsPoolInfo :: !BakerPoolInfo,
       -- | Any pending change to the baker's stake.
-      abpsBakerStakePendingChange :: !PoolPendingChange
+      abpsBakerStakePendingChange :: !PoolPendingChange,
+      -- | A flag indicating Whether the pool owner is suspended or not. Present
+      --  from protocol version P8.
+      abpsIsSuspended :: !(Maybe Bool)
     }
     deriving (Eq, Show)
 
 $( deriveJSON
     defaultOptions
-        { fieldLabelModifier = firstLower . dropWhile isLower
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          omitNothingFields = True
         }
     ''ActiveBakerPoolStatus
  )
@@ -498,13 +504,19 @@ data CurrentPaydayBakerPoolStatus = CurrentPaydayBakerPoolStatus
       -- | The effective delegated capital to the pool for the current reward period.
       bpsDelegatedCapital :: !Amount,
       -- | The commission rates that apply for the current reward period.
-      bpsCommissionRates :: !CommissionRates
+      bpsCommissionRates :: !CommissionRates,
+      -- | A flag indicating whether the baker is primed for suspension the
+      --  coming snapshot epoch. Present from protocol version P8.
+      bpsIsPrimedForSuspension :: !(Maybe Bool),
+      -- | The missed rounds of the baker. Present from protocol version P8.
+      bpsMissedRounds :: !(Maybe Word64)
     }
     deriving (Eq, Show)
 
 $( deriveJSON
     defaultOptions
-        { fieldLabelModifier = firstLower . dropWhile isLower
+        { fieldLabelModifier = firstLower . dropWhile isLower,
+          omitNothingFields = True
         }
     ''CurrentPaydayBakerPoolStatus
  )
@@ -546,6 +558,7 @@ instance ToJSON BakerPoolStatus where
                   "poolInfo" .= abpsPoolInfo,
                   "bakerStakePendingChange" .= abpsBakerStakePendingChange
                 ]
+                    ++ ["isSuspended" .= isSuspended | Just isSuspended <- [abpsIsSuspended]]
             Nothing -> []
 
 instance FromJSON BakerPoolStatus where
@@ -564,6 +577,7 @@ instance FromJSON BakerPoolStatus where
                 abpsDelegatedCapitalCap <- obj .: "delegatedCapitalCap"
                 abpsPoolInfo <- obj .: "poolInfo"
                 abpsBakerStakePendingChange <- obj .: "bakerStakePendingChange"
+                abpsIsSuspended <- obj .:? "isSuspended"
                 return ActiveBakerPoolStatus{..}
         psActiveStatus <- optional activeStatusFields
         return BakerPoolStatus{..}
@@ -646,6 +660,8 @@ data PendingUpdateEffect
       PUEBlockEnergyLimit !Energy
     | -- | Updates to the finalization committee parameters for chain parameters version 2.
       PUEFinalizationCommitteeParameters !FinalizationCommitteeParameters
+    | -- | Updates to the validator score parameters for chain parameters version 3
+      PUEValidatorScoreParameters !ValidatorScoreParameters
 
 -- | Derive a @ToJSON@ instance for @PendingUpdateEffect@. For instance,
 --  @print $ toJSON (PUETimeParameters a)@ will output something like:
@@ -705,7 +721,9 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       -- | Updates to the consensus version 2 block energy limit.
       _nusnBlockEnergyLimit :: !U.UpdateSequenceNumber,
       -- | Updates to the consensus version 2 finalization committee parameters
-      _nusnFinalizationCommitteeParameters :: !U.UpdateSequenceNumber
+      _nusnFinalizationCommitteeParameters :: !U.UpdateSequenceNumber,
+      -- | Updates to the consensus version 2 validator score parameters
+      _nusnValidatorScoreParameters :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
@@ -736,7 +754,8 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnTimeoutParameters = mNextSequenceNumber _pTimeoutParametersQueue,
           _nusnMinBlockTime = mNextSequenceNumber _pMinBlockTimeQueue,
           _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue,
-          _nusnFinalizationCommitteeParameters = mNextSequenceNumber _pFinalizationCommitteeParametersQueue
+          _nusnFinalizationCommitteeParameters = mNextSequenceNumber _pFinalizationCommitteeParametersQueue,
+          _nusnValidatorScoreParameters = mNextSequenceNumber _pValidatorScoreParametersQueue
         }
   where
     -- Get the next sequence number or 1, if not supported.
@@ -1110,3 +1129,20 @@ data DryRunResponse a = DryRunResponse
       drrQuotaRemaining :: !Energy
     }
     deriving (Eq)
+
+-- | Indicates that an account is pending -- either a scheduled release or a cooldown, depending on
+--  the context -- and when the first release or cooldown will elapse.
+data AccountPending = AccountPending
+    { -- | Index of the account with pending scheduled release/cooldown.
+      apAccountIndex :: !AccountIndex,
+      -- | Timestamp of the first pending event for the account.
+      apFirstTimestamp :: !Timestamp
+    }
+    deriving (Eq)
+
+instance ToJSON AccountPending where
+    toJSON AccountPending{..} =
+        object
+            [ "accountIndex" .= apAccountIndex,
+              "firstTimestamp" .= apFirstTimestamp
+            ]

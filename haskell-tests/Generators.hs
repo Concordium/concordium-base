@@ -39,6 +39,7 @@ import Concordium.Genesis.Parameters
 import Concordium.ID.DummyData
 import Concordium.ID.Types
 import Concordium.Types
+import Concordium.Types.Conditionally
 import Concordium.Types.Execution
 import Concordium.Types.Parameters
 import Concordium.Types.Transactions
@@ -437,6 +438,7 @@ genChainParametersV0 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV0
     let _cpFinalizationCommitteeParameters = NoParam
+    let _cpValidatorScoreParameters = NoParam
     return ChainParameters{..}
 
 genChainParametersV1 :: Gen (ChainParameters' 'ChainParametersV1)
@@ -450,6 +452,7 @@ genChainParametersV1 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     let _cpFinalizationCommitteeParameters = NoParam
+    let _cpValidatorScoreParameters = NoParam
     return ChainParameters{..}
 
 genFinalizationCommitteeParameters :: Gen FinalizationCommitteeParameters
@@ -479,7 +482,13 @@ genChainParametersV2 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    let _cpValidatorScoreParameters = NoParam
     return ChainParameters{..}
+
+genValidatorScoreParameters :: Gen ValidatorScoreParameters
+genValidatorScoreParameters = do
+    _vspMaxMissedRounds <- arbitrary
+    return ValidatorScoreParameters{..}
 
 genChainParametersV3 :: Gen (ChainParameters' 'ChainParametersV3)
 genChainParametersV3 = do
@@ -492,6 +501,7 @@ genChainParametersV3 = do
     _cpFoundationAccount <- AccountIndex <$> arbitrary
     _cpPoolParameters <- genPoolParametersV1
     _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
     return ChainParameters{..}
 
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
@@ -505,6 +515,7 @@ genGenesisChainParametersV0 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV0
     let gcpFinalizationCommitteeParameters = NoParam
+    let gcpValidatorScoreParameters = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV1 :: Gen (GenesisChainParameters' 'ChainParametersV1)
@@ -518,6 +529,7 @@ genGenesisChainParametersV1 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV1
     let gcpFinalizationCommitteeParameters = NoParam
+    let gcpValidatorScoreParameters = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV2 :: Gen (GenesisChainParameters' 'ChainParametersV2)
@@ -531,6 +543,7 @@ genGenesisChainParametersV2 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    let gcpValidatorScoreParameters = NoParam
     return GenesisChainParameters{..}
 
 genGenesisChainParametersV3 :: Gen (GenesisChainParameters' 'ChainParametersV3)
@@ -544,6 +557,7 @@ genGenesisChainParametersV3 = do
     gcpFoundationAccount <- genAccountAddress
     gcpPoolParameters <- genPoolParametersV1
     gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    gcpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
     return GenesisChainParameters{..}
 
 genCooldownParametersV0 :: Gen (CooldownParameters' 'CooldownParametersVersion0)
@@ -685,7 +699,7 @@ genEvent :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen Event
 genEvent spv =
     oneof
         ( [ ModuleDeployed <$> genModuleRef,
-            ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion spv <*> listOf genContractEvent,
+            ContractInitialized <$> genModuleRef <*> genCAddress <*> genAmount <*> genInitName <*> genWasmVersion spv <*> listOf genContractEvent <*> pure CFalse,
             Updated <$> genCAddress <*> genAddress <*> genAmount <*> genParameter <*> genReceiveName <*> genWasmVersion spv <*> listOf genContractEvent,
             Transferred <$> genAddress <*> genAmount <*> genAddress,
             AccountCreated <$> genAccountAddress,
@@ -710,6 +724,7 @@ genEvent spv =
             ++ maybeV1ContractEvents
             ++ maybeDelegationEvents
             ++ maybeUpgrade
+            ++ maybeSuspendEvents
         )
   where
     maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
@@ -735,6 +750,13 @@ genEvent spv =
                   DelegationSetDelegationTarget <$> genDelegatorId <*> genAccountAddress <*> genDelegationTarget,
                   DelegationAdded <$> genDelegatorId <*> genAccountAddress,
                   DelegationRemoved <$> genDelegatorId <*> genAccountAddress
+                ]
+            else []
+    maybeSuspendEvents =
+        if protocolSupportsSuspend spv
+            then
+                [ BakerSuspended <$> genBakerId <*> genAccountAddress,
+                  BakerResumed <$> genBakerId <*> genAccountAddress
                 ]
             else []
     genBakerAdded = do

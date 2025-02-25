@@ -128,6 +128,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> StatementWithContext<C, Attr
     /// - `challenge` - slice to challenge bytes chosen by the verifier
     /// - `global` - the on-chain cryptographic parameters
     /// - `commitments` - the on-chain commitments of the relevant credential
+    ///
     /// The function returns `true` if the statement is true.
     /// If the statement is false, the function returns false with overwhelming
     /// probability.
@@ -289,6 +290,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Statement<C, AttributeType> 
     /// - `global` - the on-chain cryptographic parameters
     /// - `credential` - the credential for which this statement applies
     /// - `commitments` - the on-chain commitments of the relevant credential
+    ///
     /// The function returns `true` if the statement is true.
     /// If the statement is false, the function returns false with overwhelming
     /// probability.

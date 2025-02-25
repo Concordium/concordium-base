@@ -386,7 +386,7 @@ data StateMigrationParameters (p1 :: ProtocolVersion) (p2 :: ProtocolVersion) wh
     -- | The state is migrated from protocol version 'P6' to 'P7'.
     StateMigrationParametersP6ToP7 :: StateMigrationParameters 'P6 'P7
     -- | The state is migrated from protocol version 'P7' to 'P8'.
-    StateMigrationParametersP7ToP8 :: StateMigrationParameters 'P7 'P8
+    StateMigrationParametersP7ToP8 :: P8.StateMigrationData -> StateMigrationParameters 'P7 'P8
 
 -- | Extract the genesis configuration from the genesis data.
 genesisConfiguration :: (IsProtocolVersion pv, IsConsensusV0 pv) => GenesisData pv -> GenesisConfiguration

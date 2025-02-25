@@ -12,6 +12,13 @@ module Concordium.GRPC2 (
     BakerKeysEvent,
     BlockHashInput (..),
     BlockHeightInput (..),
+
+    -- * Helpers
+    mkSerialize,
+    mkWord64,
+    mkWord32,
+    mkWord16,
+    mkWord8,
 )
 where
 
@@ -40,6 +47,7 @@ import Concordium.Crypto.EncryptedTransfers
 import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.Accounts
+import Concordium.Types.Conditionally
 import Concordium.Types.Queries
 import qualified Concordium.Types.Queries as QueryTypes
 import qualified Concordium.Types.Transactions as Transactions
@@ -47,6 +55,7 @@ import qualified Concordium.Types.Transactions as TxTypes
 
 import Concordium.Common.Time
 import Concordium.Common.Version
+import qualified Concordium.Crypto.BlockSignature as BlockSignature
 import Concordium.Crypto.SHA256 (Hash)
 import Concordium.Crypto.SignatureScheme (Signature (..), VerifyKey (..))
 import qualified Concordium.ID.AnonymityRevoker as ArInfo
@@ -475,6 +484,7 @@ instance ToProto AccountStakingInfo where
                             case asiPoolInfo of
                                 Nothing -> return ()
                                 Just asipi -> ProtoFields.poolInfo .= toProto asipi
+                            ProtoFields.isSuspended .= asiIsSuspended
                         )
             )
     toProto AccountStakingDelegated{..} =
@@ -619,7 +629,6 @@ instance ToProto AccountInfo where
         ProtoFields.maybe'stake .= toProto aiStakingInfo
         ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
         ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
-        ProtoFields.isSuspended .= aiAccountIsSuspended
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
@@ -717,8 +726,8 @@ instance ToProto RejectReason where
 --   The protobuf type is better structured and removes the need for handling impossible cases.
 --   For example the case of an account transfer resulting in a smart contract update, which is a
 --   technical possibility in the way that the node's trx status is defined.
-instance ToProto QueryTypes.TransactionStatus where
-    type Output QueryTypes.TransactionStatus = Either ConversionError Proto.BlockItemStatus
+instance ToProto QueryTypes.SupplementedTransactionStatus where
+    type Output QueryTypes.SupplementedTransactionStatus = Either ConversionError Proto.BlockItemStatus
     toProto ts = case ts of
         QueryTypes.Received -> Right . Proto.make $ ProtoFields.received .= Proto.defMessage
         QueryTypes.Finalized bh trx -> do
@@ -731,7 +740,7 @@ instance ToProto QueryTypes.TransactionStatus where
       where
         -- \|Convert a transaction summary to a proto block item summary.
         --  The transaction summary can technically be Nothing, but it should never occur.
-        toBis :: Maybe TransactionSummary -> Either ConversionError Proto.BlockItemSummary
+        toBis :: Maybe SupplementedTransactionSummary -> Either ConversionError Proto.BlockItemSummary
         toBis Nothing = Left CEInvalidTransactionResult
         toBis (Just t) = toProto t
 
@@ -739,10 +748,10 @@ instance ToProto QueryTypes.TransactionStatus where
             ProtoFields.blockHash .= toProto bh
             ProtoFields.outcome .= bis
 
--- | Attempt to convert a TransactionSummary type into the protobuf BlockItemSummary type.
---   See @toBlockItemStatus@ for more context.
-instance ToProto TransactionSummary where
-    type Output TransactionSummary = Either ConversionError Proto.BlockItemSummary
+-- | Attempt to convert a SupplementedTransactionSummary type into the protobuf BlockItemSummary
+--   type. See @toBlockItemStatus@ for more context.
+instance ToProto SupplementedTransactionSummary where
+    type Output SupplementedTransactionSummary = Either ConversionError Proto.BlockItemSummary
     toProto TransactionSummary{..} = case tsType of
         TSTAccountTransaction tty -> do
             sender <- case tsSender of
@@ -874,6 +883,12 @@ instance ToProto Parameters.FinalizationCommitteeParameters where
         ProtoFields.maximumFinalizers .= _fcpMaxFinalizers
         ProtoFields.finalizerRelativeStakeThreshold .= toProto _fcpFinalizerRelativeStakeThreshold
 
+instance ToProto Parameters.ValidatorScoreParameters where
+    type Output Parameters.ValidatorScoreParameters = Proto.ValidatorScoreParameters
+    toProto Parameters.ValidatorScoreParameters{..} =
+        Proto.make $
+            ProtoFields.maximumMissedRounds .= _vspMaxMissedRounds
+
 instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) where
     type Output (Parameters.ConsensusParameters' 'Parameters.ConsensusParametersVersion1) = Proto.ConsensusParametersV1
     toProto Parameters.ConsensusParametersV1{..} = Proto.make $ do
@@ -914,6 +929,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateMinBlockTime, Updates.MinBlockTimeUpdatePayload mbt) -> Right . Proto.make $ ProtoFields.minBlockTimeUpdate .= toProto mbt
     (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
     (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
+    (Updates.UpdateValidatorScoreParameters, Updates.ValidatorScoreParametersUpdatePayload vsp) -> Right . Proto.make $ ProtoFields.validatorScoreParametersUpdate .= toProto vsp
     _ -> Left CEInvalidUpdateResult
 
 -- | The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
@@ -1128,7 +1144,8 @@ instance ToProto RegisteredData where
     type Output RegisteredData = Proto.RegisteredData
     toProto (RegisteredData shortBS) = Proto.make $ ProtoFields.value .= BSS.fromShort shortBS
 
-convertContractRelatedEvents :: Event -> Either ConversionError Proto.ContractTraceElement
+convertContractRelatedEvents ::
+    SupplementedEvent -> Either ConversionError Proto.ContractTraceElement
 convertContractRelatedEvents event = case event of
     Updated{..} ->
         Right . Proto.make $
@@ -1196,7 +1213,7 @@ convertAccountTransaction ::
     AccountAddress ->
     -- | The result of the transaction. If the transaction was rejected, it contains the reject reason.
     --   Otherwise it contains the events.
-    ValidResult ->
+    SupplementedValidResult ->
     Either ConversionError Proto.AccountTransactionDetails
 convertAccountTransaction ty cost sender result = case ty of
     Nothing -> Right . mkNone $ SerializationFailure
@@ -1219,6 +1236,7 @@ convertAccountTransaction ty cost sender result = case ty of
                             ProtoFields.amount .= toProto ecAmount
                             ProtoFields.initName .= toProto ecInitName
                             ProtoFields.events .= map toProto ecEvents
+                            ProtoFields.parameter .= toProto (uncond ecParameter)
                         _ -> Left CEInvalidTransactionResult
                     Right . Proto.make $ ProtoFields.contractInitialized .= v
             TTUpdate ->
@@ -1572,6 +1590,7 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateMinBlockTime = Proto.UPDATE_MIN_BLOCK_TIME
     toProto Updates.UpdateBlockEnergyLimit = Proto.UPDATE_BLOCK_ENERGY_LIMIT
     toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
+    toProto Updates.UpdateValidatorScoreParameters = Proto.UPDATE_VALIDATOR_SCORE_PARAMETERS
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType
@@ -1670,6 +1689,7 @@ instance ToProto QueryTypes.BakerPoolStatus where
             ProtoFields.delegatedCapitalCap .= toProto abpsDelegatedCapitalCap
             ProtoFields.poolInfo .= toProto abpsPoolInfo
             ProtoFields.maybe'equityPendingChange .= toProto abpsBakerStakePendingChange
+            ProtoFields.maybe'isSuspended .= abpsIsSuspended
         ProtoFields.maybe'currentPaydayInfo .= fmap toProto psCurrentPaydayStatus
         ProtoFields.allPoolTotalCapital .= toProto psAllPoolTotalCapital
 
@@ -1712,6 +1732,8 @@ instance ToProto QueryTypes.CurrentPaydayBakerPoolStatus where
         ProtoFields.bakerEquityCapital .= toProto bpsBakerEquityCapital
         ProtoFields.delegatedCapital .= toProto bpsDelegatedCapital
         ProtoFields.commissionRates .= toProto bpsCommissionRates
+        ProtoFields.maybe'isPrimedForSuspension .= bpsIsPrimedForSuspension
+        ProtoFields.maybe'missedRounds .= bpsMissedRounds
 
 instance ToProto QueryTypes.RewardStatus where
     type Output QueryTypes.RewardStatus = Proto.TokenomicsInfo
@@ -1958,6 +1980,22 @@ instance ToProto TxTypes.SpecialTransactionOutcome where
                         ProtoFields.bakerReward .= toProto stoBakerReward
                         ProtoFields.finalizationReward .= toProto stoFinalizationReward
                     )
+    toProto TxTypes.ValidatorPrimedForSuspension{..} =
+        Proto.make $
+            ProtoFields.validatorPrimedForSuspension
+                .= Proto.make
+                    ( do
+                        ProtoFields.bakerId .= toProto vpfsBakerId
+                        ProtoFields.account .= toProto vpfsAccount
+                    )
+    toProto TxTypes.ValidatorSuspended{..} =
+        Proto.make $
+            ProtoFields.validatorSuspended
+                .= Proto.make
+                    ( do
+                        ProtoFields.bakerId .= toProto vsBakerId
+                        ProtoFields.account .= toProto vsAccount
+                    )
 
 instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
     type Output (TransactionTime, QueryTypes.PendingUpdateEffect) = Proto.PendingUpdate
@@ -1988,6 +2026,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUEMinBlockTime minBlockTime -> ProtoFields.minBlockTime .= toProto minBlockTime
             QueryTypes.PUEBlockEnergyLimit blockEnergyLimit -> ProtoFields.blockEnergyLimit .= toProto blockEnergyLimit
             QueryTypes.PUEFinalizationCommitteeParameters finalizationCommitteeParameters -> ProtoFields.finalizationCommitteeParameters .= toProto finalizationCommitteeParameters
+            QueryTypes.PUEValidatorScoreParameters validatorScoreParameters -> ProtoFields.validatorScoreParameters .= toProto validatorScoreParameters
 
 instance ToProto QueryTypes.NextUpdateSequenceNumbers where
     type Output QueryTypes.NextUpdateSequenceNumbers = Proto.NextUpdateSequenceNumbers
@@ -2012,6 +2051,7 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.minBlockTime .= toProto _nusnMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _nusnBlockEnergyLimit
         ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
+        ProtoFields.validatorScoreParameters .= toProto _nusnValidatorScoreParameters
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
@@ -2100,7 +2140,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
             SChainParametersV3 ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
-                        ProtoFields.v2
+                        ProtoFields.v3
                             .= Proto.make
                                 ( do
                                     ProtoFields.consensusParameters .= toProto _cpConsensusParameters
@@ -2118,6 +2158,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
                                 )
 
 instance ToProto FinalizationIndex where
@@ -2399,9 +2440,9 @@ instance ToProto (DryRunResponse InvokeContract.InvokeContractResult) where
                         )
                 ProtoFields.quotaRemaining .= toProto quotaRem
 
-instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) where
+instance ToProto (DryRunResponse (TransactionSummary' SupplementedValidResultWithReturn)) where
     type
-        Output (DryRunResponse (TransactionSummary' ValidResultWithReturn)) =
+        Output (DryRunResponse (TransactionSummary' SupplementedValidResultWithReturn)) =
             Either ConversionError Proto.DryRunResponse
     toProto (DryRunResponse TransactionSummary{..} quotaRem) = case tsType of
         TSTAccountTransaction tty -> do
@@ -2425,3 +2466,13 @@ instance ToProto (DryRunResponse (TransactionSummary' ValidResultWithReturn)) wh
             -- Since only account transactions can be executed in a dry run, we should not have
             -- other transaction summary types.
             Left CEInvalidTransactionResult
+
+instance ToProto BlockSignature.Signature where
+    type Output BlockSignature.Signature = Proto.BlockSignature
+    toProto = mkSerialize
+
+instance ToProto AccountPending where
+    type Output AccountPending = Proto.AccountPending
+    toProto AccountPending{..} = Proto.make $ do
+        ProtoFields.accountIndex .= toProto apAccountIndex
+        ProtoFields.firstTimestamp .= toProto apFirstTimestamp

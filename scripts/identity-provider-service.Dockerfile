@@ -13,6 +13,8 @@ RUN apt-get update && \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+LABEL base_image_tag=${base_image_tag}
+
 COPY --from=builder /build/identity-provider-service/target/release/identity-provider-service /identity-provider-service
 COPY --from=builder /build/identity-provider-service/target/release/identity-verifier /identity-verifier
 COPY --from=builder /build/scripts/start.sh /start.sh

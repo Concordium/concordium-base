@@ -58,6 +58,7 @@ pub fn evaluate_poly<F: Field, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
 /// - context - the global context,
 /// - pk - the public key for encryption
 /// - share - the share we want to encrypt
+///
 /// The output is a 3-tuple concisting of
 /// 8 Cipher's, 8 Randomness's and 8 scalars.
 /// The ciphers and randomnesses come from the
@@ -283,11 +284,11 @@ pub fn credential_hash_to_sign<
     new_or_existing: &Either<TransactionTime, AccountAddress>,
 ) -> Vec<u8> {
     let mut hasher = Sha256::new();
-    hasher.update(&to_bytes(&values));
-    hasher.update(&to_bytes(&proofs));
+    hasher.update(to_bytes(&values));
+    hasher.update(to_bytes(&proofs));
     // the serialization of Either has 0 tag for the left variant, and 1 for the
     // right
-    hasher.update(&to_bytes(&new_or_existing));
+    hasher.update(to_bytes(&new_or_existing));
     let to_sign = &hasher.finalize();
     to_sign.to_vec()
 }

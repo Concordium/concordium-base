@@ -37,7 +37,7 @@ impl<I> machine::Host<I> for TrapHost {
     fn call(
         &mut self,
         _f: &I,
-        _memory: &mut Vec<u8>,
+        _memory: &mut [u8],
         _stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         bail!("TrapHost traps on all host calls.")
@@ -174,7 +174,7 @@ impl std::fmt::Display for ReportError {
 /// Extract debug information from the memory and stack. This is used when
 /// handling `report_error` and `debug_print` functions.
 pub(crate) fn extract_debug(
-    memory: &mut Vec<u8>,
+    memory: &mut [u8],
     stack: &mut machine::RuntimeStack,
 ) -> anyhow::Result<(String, u32, u32, String)> {
     let column = unsafe { stack.pop_u32() };
@@ -214,7 +214,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
     fn call(
         &mut self,
         f: &ArtifactNamedImport,
-        memory: &mut Vec<u8>,
+        memory: &mut [u8],
         stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<Option<NoInterrupt>> {
         // We don't track the energy usage in this host, so to reuse code which does, we

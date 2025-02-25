@@ -464,6 +464,10 @@ impl AuthorizationsFamily for ChainParameterVersion2 {
     type Output = AuthorizationsV1;
 }
 
+impl AuthorizationsFamily for ChainParameterVersion3 {
+    type Output = AuthorizationsV1;
+}
+
 /// A mapping of chain parameter versions to authorization versions.
 pub type Authorizations<CPV> = <CPV as AuthorizationsFamily>::Output;
 
@@ -577,6 +581,10 @@ pub struct RewardPeriodLength {
     pub(crate) reward_period_epochs: Epoch,
 }
 
+impl RewardPeriodLength {
+    pub fn reward_period_epochs(&self) -> Epoch { self.reward_period_epochs }
+}
+
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Copy, Clone)]
 #[serde(rename_all = "camelCase")]
 /// The time parameters are introduced as of protocol version 4, and consist of
@@ -627,6 +635,15 @@ pub struct FinalizationCommitteeParameters {
     pub finalizers_relative_stake_threshold: PartsPerHundredThousands,
 }
 
+#[derive(Debug, common::Serialize, Clone, Copy, SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+/// Validator score parameters. These parameters control the threshold of
+/// maximal missed rounds before a validator gets suspended.
+pub struct ValidatorScoreParameters {
+    /// Maximal number of missed rounds before a validator gets suspended.
+    pub max_missed_rounds: u64,
+}
+
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
 #[serde(tag = "updateType", content = "update")]
 /// The type of an update payload.
@@ -675,6 +692,8 @@ pub enum UpdatePayload {
     BlockEnergyLimitCPV2(Energy),
     #[serde(rename = "finalizationCommitteeParametersCPV2")]
     FinalizationCommitteeParametersCPV2(FinalizationCommitteeParameters),
+    #[serde(rename = "validatorScoreParametersCPV3")]
+    ValidatorScoreParametersCPV3(ValidatorScoreParameters),
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
@@ -735,6 +754,9 @@ pub enum UpdateType {
     /// Update of the finalization committee parameters. Only applies to
     /// protocol version [`P6`](ProtocolVersion::P6) and up.
     UpdateFinalizationCommitteeParameters,
+    /// Update of the validator score parameters. Only applies to
+    /// protocol version [`P8`](ProtocolVersion::P8) and up.
+    UpdateValidatorScoreParameters,
 }
 
 impl UpdatePayload {
@@ -765,6 +787,7 @@ impl UpdatePayload {
             UpdatePayload::FinalizationCommitteeParametersCPV2(_) => {
                 UpdateFinalizationCommitteeParameters
             }
+            UpdatePayload::ValidatorScoreParametersCPV3(_) => UpdateValidatorScoreParameters,
         }
     }
 }
@@ -982,6 +1005,10 @@ impl Serial for UpdatePayload {
                 22u8.serial(out);
                 update.serial(out)
             }
+            UpdatePayload::ValidatorScoreParametersCPV3(update) => {
+                23u8.serial(out);
+                update.serial(out)
+            }
         }
     }
 }
@@ -1035,6 +1062,7 @@ impl Deserial for UpdatePayload {
             22u8 => Ok(UpdatePayload::FinalizationCommitteeParametersCPV2(
                 source.get()?,
             )),
+            23u8 => Ok(UpdatePayload::ValidatorScoreParametersCPV3(source.get()?)),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
     }

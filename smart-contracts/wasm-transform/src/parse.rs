@@ -599,10 +599,10 @@ pub(crate) struct InstructionValidationContext<'a> {
 /// support.
 ///
 /// - As initializers for globals. In that case the format of constant
-/// expressions is more restricted. They are not allowed to refer to globals
-/// defined in the current modules. This prevents circularity, although a more
-/// relaxed condition could be used. The function supports this mode of constant
-/// expressions by using `None` as the last argument.
+///   expressions is more restricted. They are not allowed to refer to globals
+///   defined in the current modules. This prevents circularity, although a more
+///   relaxed condition could be used. The function supports this mode of
+///   constant expressions by using `None` as the last argument.
 /// - As offset expressions in element and data segments. In these contexts the
 ///   constant expressions are allowed to refer to `GlobalGet` instructions for
 ///   `const` globals of the right type.

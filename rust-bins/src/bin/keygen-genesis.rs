@@ -217,7 +217,7 @@ pub fn hash_to_ed25519(msg: &[u8]) -> Option<ed25519_dalek::VerifyingKey> {
     let mut h: Sha512 = Sha512::new();
     h.update(b"concordium_genesis_ed25519");
     h.update(msg);
-    for ctr in 0..=u8::max_value() {
+    for ctr in 0..=u8::MAX {
         let mut attempt_h = h.clone();
         attempt_h.update(ctr.to_le_bytes()); // ctr_string
         let hash = attempt_h.finalize();

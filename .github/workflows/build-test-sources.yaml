@@ -85,7 +85,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.73
+        - rust: 1.82
         crates:
         - rust-src
         - rust-bins
@@ -138,7 +138,7 @@ jobs:
     strategy:
       matrix:
         plan:
-        - rust: 1.73
+        - rust: 1.73 # Should be MSRV
 
     steps:
     - name: Checkout
@@ -160,8 +160,8 @@ jobs:
     strategy:
       matrix:
         plan:
-        - ghc: 9.6.4 # used as cache key only; stack uses the one specified in stack.yaml
-          rust: 1.73
+        - ghc: 9.6.6 # used as cache key only; stack uses the one specified in stack.yaml
+          rust: 1.82
 
     steps:
     - name: Checkout

@@ -1,6 +1,17 @@
 ## Unreleased changes
 
-## 6.0.0
+- Publish `get_canonical_address` on `AccountAddress` 
+
+## 7.0.0 (2025-02-03)
+
+- Add getter function `reward_period_epochs` to access the field in the struct `RewardPeriodLength`.
+- Add constructor `TokenAddress::new` for CIS2 type `TokenAddress`.
+- Introduce new chain parameters `ValidatorScoreParameters` that contain the
+  threshold of maximal missed rounds before a validator gets suspended.
+- Add `Default` instance for `UpdateSequenceNumber`.
+- Add `FinalizationCommitteeHash` type.
+
+## 6.0.0 (2024-08-26)
 
 - Extend `id::types::ATTRIBUTE_NAMES` with new company attribute tags: "legalName", "legalCountry", "businessNumber" and "registationAuth".
 - Add a new module `cis3_types` that defines the interface types for CIS3

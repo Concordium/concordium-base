@@ -47,7 +47,7 @@ module Concordium.Types.Accounts (
     BakerInfoEx (..),
     bieBakerInfo,
     bieBakerPoolInfo,
-    bieAccountIsSuspended,
+    bieIsSuspended,
     coerceBakerInfoExV1,
     PendingChangeEffective (..),
     pendingChangeEffectiveTimestamp,
@@ -215,7 +215,8 @@ data BakerInfoEx (av :: AccountVersion) where
           _bieBakerInfo :: !BakerInfo,
           -- | The baker pool info.
           _bieBakerPoolInfo :: !BakerPoolInfo,
-          _bieAccountIsSuspended :: !(Conditionally (SupportsValidatorSuspension av) Bool)
+          -- | A flag indicating whether the validator is suspended.
+          _bieIsSuspended :: !(Conditionally (SupportsValidatorSuspension av) Bool)
         } ->
         BakerInfoEx av
 
@@ -235,12 +236,12 @@ bieBakerPoolInfo =
     lens _bieBakerPoolInfo (\bie x -> bie{_bieBakerPoolInfo = x})
 
 -- | Lens for '_bieBakerIsSuspended'
-{-# INLINE bieAccountIsSuspended #-}
-bieAccountIsSuspended ::
+{-# INLINE bieIsSuspended #-}
+bieIsSuspended ::
     (AVSupportsDelegation av, AVSupportsValidatorSuspension av) =>
     Lens' (BakerInfoEx av) Bool
-bieAccountIsSuspended =
-    lens (uncond . _bieAccountIsSuspended) (\bie x -> bie{_bieAccountIsSuspended = CTrue x})
+bieIsSuspended =
+    lens (uncond . _bieIsSuspended) (\bie x -> bie{_bieIsSuspended = CTrue x})
 
 -- | Coerce a 'BakerInfoEx' between two account versions that support delegation.
 coerceBakerInfoExV1 ::
@@ -261,13 +262,13 @@ instance forall av. (IsAccountVersion av) => Serialize (BakerInfoEx av) where
     put BakerInfoExV1{..} = do
         put _bieBakerInfo
         put _bieBakerPoolInfo
-        mapM_ put _bieAccountIsSuspended
+        mapM_ put _bieIsSuspended
     get = case delegationSupport @av of
         SAVDelegationNotSupported -> BakerInfoExV0 <$> get
         SAVDelegationSupported -> do
             _bieBakerInfo <- get
             _bieBakerPoolInfo <- get
-            _bieAccountIsSuspended <-
+            _bieIsSuspended <-
                 conditionallyA (sSupportsValidatorSuspension (accountVersion @av)) get
             return BakerInfoExV1{..}
 
@@ -589,7 +590,11 @@ data AccountStakingInfo
           asiStakeEarnings :: !Bool,
           asiBakerInfo :: !BakerInfo,
           asiPendingChange :: !(StakePendingChange' UTCTime),
-          asiPoolInfo :: !(Maybe BakerPoolInfo)
+          asiPoolInfo :: !(Maybe BakerPoolInfo),
+          -- | Flag indicating whether the account is currently suspended. A suspended account
+          --  is not participating in the consensus protocol. The `asiIsSuspended` flag does not
+          --  have any effect on stake or delegators of a validator.
+          asiIsSuspended :: !Bool
         }
     | -- | The account is delegating stake to a baker.
       AccountStakingDelegated
@@ -613,7 +618,10 @@ toAccountStakingInfo epochConv (AccountStakeBaker AccountBaker{..}) =
           asiPendingChange = pcTime <$> _bakerPendingChange,
           asiPoolInfo = case _accountBakerInfo of
             BakerInfoExV0{} -> Nothing
-            BakerInfoExV1{..} -> Just _bieBakerPoolInfo
+            BakerInfoExV1{..} -> Just _bieBakerPoolInfo,
+          asiIsSuspended = case _accountBakerInfo of
+            BakerInfoExV0{} -> False
+            BakerInfoExV1{..} -> fromCondDef _bieIsSuspended False
         }
   where
     pcTime (PendingChangeEffectiveV0 e) = epochConv e
@@ -663,7 +671,8 @@ accountStakingInfoToJSON AccountStakingBaker{..} = ["accountBaker" .= bi]
               "bakerId" .= (asiBakerInfo ^. bakerIdentity),
               "bakerElectionVerifyKey" .= (asiBakerInfo ^. bakerElectionVerifyKey),
               "bakerSignatureVerifyKey" .= (asiBakerInfo ^. bakerSignatureVerifyKey),
-              "bakerAggregationVerifyKey" .= (asiBakerInfo ^. bakerAggregationVerifyKey)
+              "bakerAggregationVerifyKey" .= (asiBakerInfo ^. bakerAggregationVerifyKey),
+              "bakerIsSuspended" .= asiIsSuspended
             ]
                 <> pendingChangeToJSON asiPendingChange
                 <> maybe [] (\bpi -> ["bakerPoolInfo" .= bpi]) asiPoolInfo
@@ -751,12 +760,7 @@ data AccountInfo = AccountInfo
       --  pre-cooldown or pre-pre-cooldown (e.g. if the cooldown interval has been decreased).
       aiAccountCooldowns :: ![Cooldown],
       -- | The balance of the account that is available for transactions.
-      aiAccountAvailableAmount :: !Amount,
-      -- | Flag indicating whether the account is currently suspended. A
-      -- suspended account is in effect not participating in the consensus
-      -- protocol. The aiAccountIsSuspended flag does not have any effect on
-      -- stake or delegators of a validator.
-      aiAccountIsSuspended :: !Bool
+      aiAccountAvailableAmount :: !Amount
     }
     deriving (Eq, Show)
 
@@ -774,8 +778,7 @@ accountInfoPairs AccountInfo{..} =
       "accountIndex" .= aiAccountIndex,
       "accountAddress" .= aiAccountAddress,
       "accountCooldowns" .= aiAccountCooldowns,
-      "accountAvailableAmount" .= aiAccountAvailableAmount,
-      "accountIsSuspended" .= aiAccountIsSuspended
+      "accountAvailableAmount" .= aiAccountAvailableAmount
     ]
         <> accountStakingInfoToJSON aiStakingInfo
 
