@@ -291,14 +291,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.address = Some(ContractAddress::deserial(&mut cursor)?);
             }
             "get_receive_self_address" => {
-                let addr_ptr = unsafe { stack.pop_u32() };
-                let mut cursor = Cursor::new(memory);
-
-                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| CallErr::Seek)?;
-
+                let addr_ptr = unsafe { stack.pop_u32() } as usize;
                 self.address
                     .ok_or(CallErr::Unset("address"))?
-                    .serial(&mut cursor)
+                    .serial(&mut &mut memory[addr_ptr..])
                     .map_err(|_| anyhow!("Unable to serialize the self address"))?;
             }
             "set_receive_self_balance" => {
@@ -334,13 +330,10 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
             "get_parameter_section" => {
                 let offset = unsafe { stack.pop_u32() } as usize;
                 let length = unsafe { stack.pop_u32() } as usize;
-                let param_bytes = unsafe { stack.pop_u32() };
+                let param_bytes = unsafe { stack.pop_u32() } as usize;
                 let param_index = unsafe { stack.pop_u32() };
 
                 if let Some(param) = self.parameters.get(&param_index) {
-                    let mut cursor = Cursor::new(memory);
-                    cursor.seek(SeekFrom::Start(param_bytes)).map_err(|_| CallErr::Seek)?;
-
                     let self_param = param.get(offset..length + offset).context(format!(
                         "Tried to grab {} bytes of parameter[{}], which has length {}",
                         length,
@@ -348,8 +341,9 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                         param.len()
                     ))?;
 
+                    let mut mem = &mut memory[param_bytes..];
                     let bytes_written: i32 =
-                        cursor.write(self_param).map_err(|_| CallErr::Write)?.try_into()?;
+                        mem.write(self_param).map_err(|_| CallErr::Write)?.try_into()?;
 
                     stack.push_value(bytes_written)
                 } else {
@@ -386,16 +380,14 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 }
             }
             "get_event" => {
-                let ret_buf_start = unsafe { stack.pop_u32() };
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
                 let event_index = unsafe { stack.pop_u32() };
                 let event_opt = self.events.get(event_index as usize);
 
                 if let Some(event) = event_opt {
-                    let mut cursor = Cursor::new(memory);
-                    cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
-
+                    let mut mem = &mut memory[ret_buf_start..];
                     let bytes_written: i32 =
-                        cursor.write(event).map_err(|_| CallErr::Write)?.try_into()?;
+                        mem.write(event).map_err(|_| CallErr::Write)?.try_into()?;
 
                     stack.push_value(bytes_written)
                 } else {
@@ -411,14 +403,12 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.init_origin = Some(AccountAddress::deserial(&mut cursor)?);
             }
             "get_init_origin" => {
-                let ret_buf_start = unsafe { stack.pop_u32() };
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
 
-                let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
-
+                let mut mem = &mut memory[ret_buf_start..];
                 self.init_origin
                     .ok_or(CallErr::Unset("init_origin"))?
-                    .serial(&mut cursor)
+                    .serial(&mut mem)
                     .map_err(|_| CallErr::Write)?;
             }
             "set_receive_invoker" => {
@@ -430,14 +420,12 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_invoker = Some(AccountAddress::deserial(&mut cursor)?);
             }
             "get_receive_invoker" => {
-                let ret_buf_start = unsafe { stack.pop_u32() };
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
 
-                let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
-
+                let mut mem = &mut memory[ret_buf_start..];
                 self.receive_invoker
                     .ok_or(CallErr::Unset("receive_invoker"))?
-                    .serial(&mut cursor)
+                    .serial(&mut mem)
                     .map_err(|_| CallErr::Write)?;
             }
             "set_receive_sender" => {
@@ -449,14 +437,12 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_sender = Some(Address::deserial(&mut cursor)?);
             }
             "get_receive_sender" => {
-                let ret_buf_start = unsafe { stack.pop_u32() };
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
 
-                let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
-
+                let mut mem = &mut memory[ret_buf_start..];
                 self.receive_sender
                     .ok_or(CallErr::Unset("receive_sender"))?
-                    .serial(&mut cursor)
+                    .serial(&mut mem)
                     .map_err(|_| CallErr::Write)?;
             }
             "set_receive_owner" => {
@@ -468,14 +454,12 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_owner = Some(AccountAddress::deserial(&mut cursor)?);
             }
             "get_receive_owner" => {
-                let ret_buf_start = unsafe { stack.pop_u32() };
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
 
-                let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
-
+                let mut mem = &mut memory[ret_buf_start..];
                 self.receive_owner
                     .ok_or(CallErr::Unset("receive_owner"))?
-                    .serial(&mut cursor)
+                    .serial(&mut mem)
                     .map_err(|_| CallErr::Write)?;
             }
             "set_receive_entrypoint" => {
@@ -496,10 +480,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 stack.push_value(size);
             }
             "get_receive_entrypoint" => {
-                let ret_buf_start = unsafe { stack.pop_u32() };
-
-                let mut cursor = Cursor::new(memory);
-                cursor.seek(SeekFrom::Start(ret_buf_start)).map_err(|_| CallErr::Seek)?;
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
 
                 let bytes = self
                     .receive_entrypoint
@@ -508,7 +489,8 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                     .to_string()
                     .into_bytes();
 
-                cursor.write(&bytes).map_err(|_| CallErr::Write)?;
+                let mut mem = &mut memory[ret_buf_start..];
+                mem.write(&bytes).map_err(|_| CallErr::Write)?;
             }
             "verify_ed25519_signature" => {
                 let message_len = unsafe { stack.pop_u32() };
@@ -571,58 +553,40 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 }
             }
             "hash_sha2_256" => {
-                let output_ptr = unsafe { stack.pop_u32() };
-                let data_len = unsafe { stack.pop_u32() };
-                let data_ptr = unsafe { stack.pop_u32() };
+                let output_ptr = unsafe { stack.pop_u32() } as usize;
+                let data_len = unsafe { stack.pop_u32() } as usize;
+                let data_ptr = unsafe { stack.pop_u32() } as usize;
 
-                let mut cursor = Cursor::new(memory);
                 let mut hasher = sha2::Sha256::default();
-
-                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| CallErr::Seek)?;
-                let mut data = vec![0u8; data_len.try_into()?];
-                cursor.read(&mut data)?;
-
-                hasher.update(&data);
+                hasher.update(&memory[data_ptr..data_ptr + data_len]);
                 let data_hash = hasher.finalize();
 
-                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| CallErr::Seek)?;
-                cursor.write(&data_hash).map_err(|_| CallErr::Write)?;
+                let mut mem = &mut memory[output_ptr..];
+                mem.write(&data_hash).map_err(|_| CallErr::Write)?;
             }
             "hash_sha3_256" => {
-                let output_ptr = unsafe { stack.pop_u32() };
-                let data_len = unsafe { stack.pop_u32() };
-                let data_ptr = unsafe { stack.pop_u32() };
+                let output_ptr = unsafe { stack.pop_u32() } as usize;
+                let data_len = unsafe { stack.pop_u32() } as usize;
+                let data_ptr = unsafe { stack.pop_u32() } as usize;
 
-                let mut cursor = Cursor::new(memory);
                 let mut hasher = sha3::Sha3_256::default();
-
-                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| CallErr::Seek)?;
-                let mut data = vec![0u8; data_len.try_into()?];
-                cursor.read(&mut data)?;
-
-                hasher.update(&data);
+                hasher.update(&memory[data_ptr..data_ptr + data_len]);
                 let data_hash = hasher.finalize();
 
-                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| CallErr::Seek)?;
-                cursor.write(&data_hash).map_err(|_| CallErr::Write)?;
+                let mut mem = &mut memory[output_ptr..];
+                mem.write(&data_hash).map_err(|_| CallErr::Write)?;
             }
             "hash_keccak_256" => {
-                let output_ptr = unsafe { stack.pop_u32() };
-                let data_len = unsafe { stack.pop_u32() };
-                let data_ptr = unsafe { stack.pop_u32() };
+                let output_ptr = unsafe { stack.pop_u32() } as usize;
+                let data_len = unsafe { stack.pop_u32() } as usize;
+                let data_ptr = unsafe { stack.pop_u32() } as usize;
 
-                let mut cursor = Cursor::new(memory);
                 let mut hasher = sha3::Keccak256::default();
-
-                cursor.seek(SeekFrom::Start(data_ptr)).map_err(|_| CallErr::Seek)?;
-                let mut data = vec![0u8; data_len.try_into()?];
-                cursor.read(&mut data)?;
-
-                hasher.update(&data);
+                hasher.update(&memory[data_ptr..data_ptr + data_len]);
                 let data_hash = hasher.finalize();
 
-                cursor.seek(SeekFrom::Start(output_ptr)).map_err(|_| CallErr::Seek)?;
-                cursor.write(&data_hash).map_err(|_| CallErr::Write)?;
+                let mut mem = &mut memory[output_ptr..];
+                mem.write(&data_hash).map_err(|_| CallErr::Write)?;
             }
             item_name => {
                 bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
