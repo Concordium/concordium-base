@@ -1038,7 +1038,7 @@ pub struct BuildInfo {
 ///
 /// The value is embedded in a custom section serialized using the smart
 /// contract serialization format
-/// ([`Serial`](concordium_contracts_common::Serial) trait).
+/// ([`Serial`] trait).
 #[derive(Debug, Clone, concordium_contracts_common::Serialize)]
 pub enum VersionedBuildInfo {
     V0(BuildInfo),
