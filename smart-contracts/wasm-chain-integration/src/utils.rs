@@ -361,9 +361,6 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 let event_length = unsafe { stack.pop_u32() };
                 let event_start = unsafe { stack.pop_u32() };
 
-                if self.events.len() >= MAX_NUM_LOGS {
-                    stack.push_value(0i32);
-                }
                 if event_length > MAX_LOG_SIZE {
                     stack.push_value(-1i32);
                 } else {
