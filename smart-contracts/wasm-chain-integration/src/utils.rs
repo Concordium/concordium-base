@@ -20,6 +20,7 @@ use concordium_wasm::{
 };
 use rand::{prelude::*, RngCore};
 use std::{collections::BTreeMap, default::Default};
+use rayon::prelude::*;
 
 /// A host which traps for any function call.
 pub struct TrapHost;
@@ -270,53 +271,56 @@ pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestRe
         module_bytes,
     )?
     .artifact;
-    let mut out = Vec::with_capacity(artifact.export.len());
-    for name in artifact.export.keys() {
-        if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            // create a `TestHost` instance for each test with the usage flag set to `false`
-            let mut initial_state = trie::MutableState::initial_state();
-            let mut loader = trie::Loader::new(Vec::new());
-            let mut test_host = {
-                let inner = initial_state.get_inner(&mut loader);
-                let state = InstanceState::new(loader, inner);
-                TestHost::new(SmallRng::seed_from_u64(seed), state)
-            };
-            let res = artifact.run(&mut test_host, name, &[]);
-            match res {
-                Ok(_) => {
+    let artifact_keys: Vec<_> = artifact.export.keys().collect();
+
+    let get_result = |name: &Name| {
+        let test_name = name.as_ref().strip_prefix("concordium_test ")?;
+
+        // create a `TestHost` instance for each test with the usage flag set to `false`
+        let mut initial_state = trie::MutableState::initial_state();
+        let mut loader = trie::Loader::new(Vec::new());
+        let mut test_host = {
+            let inner = initial_state.get_inner(&mut loader);
+            let state = InstanceState::new(loader, inner);
+            TestHost::new(SmallRng::seed_from_u64(seed), state)
+        };
+        let res = artifact.run(&mut test_host, name, &[]);
+        match res {
+            Ok(_) => {
+                let result = TestResult {
+                    test_name:    test_name.to_owned(),
+                    result:       None,
+                    debug_events: test_host.debug_events,
+                };
+                Some(result)
+            }
+            Err(msg) => {
+                if let Some(err) = msg.downcast_ref::<ReportError>() {
                     let result = TestResult {
                         test_name:    test_name.to_owned(),
-                        result:       None,
+                        result:       Some((err.clone(), test_host.rng_used)),
                         debug_events: test_host.debug_events,
                     };
-                    out.push(result);
+                    Some(result)
+                } else {
+                    let result = TestResult {
+                        test_name:    test_name.to_owned(),
+                        result:       Some((
+                            ReportError::Other {
+                                msg: msg.to_string(),
+                            },
+                            test_host.rng_used,
+                        )),
+                        debug_events: test_host.debug_events,
+                    };
+                    Some(result)
                 }
-                Err(msg) => {
-                    if let Some(err) = msg.downcast_ref::<ReportError>() {
-                        let result = TestResult {
-                            test_name:    test_name.to_owned(),
-                            result:       Some((err.clone(), test_host.rng_used)),
-                            debug_events: test_host.debug_events,
-                        };
-                        out.push(result);
-                    } else {
-                        let result = TestResult {
-                            test_name:    test_name.to_owned(),
-                            result:       Some((
-                                ReportError::Other {
-                                    msg: msg.to_string(),
-                                },
-                                test_host.rng_used,
-                            )),
-                            debug_events: test_host.debug_events,
-                        };
-                        out.push(result);
-                    }
-                }
-            };
+            }
         }
-    }
-    Ok(out)
+    };
+
+    let test_results = artifact_keys.into_par_iter().filter_map(get_result).collect();
+    Ok(test_results)
 }
 
 /// Tries to generate a state schema and schemas for parameters of methods of a

@@ -380,6 +380,7 @@ dependencies = [
  "ptree",
  "quickcheck",
  "rand",
+ "rayon",
  "secp256k1",
  "serde 1.0.213",
  "sha2",
