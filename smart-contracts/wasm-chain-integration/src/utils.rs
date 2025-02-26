@@ -197,6 +197,8 @@ enum CallErr {
     Seek,
     #[error("No \"{0}\" is set. Make sure to prepare this in the test environment")]
     Unset(&'static str),
+    #[error("Unable to serialize \"{0}\"")]
+    Serial(&'static str),
     #[error("Unable to write to given buffer")]
     Write,
 }
@@ -293,16 +295,16 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
             "get_receive_self_address" => {
                 let addr_ptr = unsafe { stack.pop_u32() } as usize;
                 self.address
-                    .ok_or(CallErr::Unset("address"))?
+                    .ok_or(CallErr::Unset("self_address"))?
                     .serial(&mut &mut memory[addr_ptr..])
-                    .map_err(|_| anyhow!("Unable to serialize the self address"))?;
+                    .map_err(|_| CallErr::Serial("self_address"))?;
             }
             "set_receive_self_balance" => {
                 let balance = unsafe { stack.pop_u64() };
                 self.balance = Some(balance);
             }
             "get_receive_self_balance" => {
-                let balance = self.balance.ok_or(CallErr::Unset("balance"))?;
+                let balance = self.balance.ok_or(CallErr::Unset("self_balance"))?;
                 stack.push_value(balance);
             }
             "set_parameter" => {
@@ -409,7 +411,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.init_origin
                     .ok_or(CallErr::Unset("init_origin"))?
                     .serial(&mut mem)
-                    .map_err(|_| CallErr::Write)?;
+                    .map_err(|_| CallErr::Serial("init_origin"))?;
             }
             "set_receive_invoker" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
@@ -426,7 +428,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_invoker
                     .ok_or(CallErr::Unset("receive_invoker"))?
                     .serial(&mut mem)
-                    .map_err(|_| CallErr::Write)?;
+                    .map_err(|_| CallErr::Serial("receive_invoker"))?;
             }
             "set_receive_sender" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
@@ -443,7 +445,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_sender
                     .ok_or(CallErr::Unset("receive_sender"))?
                     .serial(&mut mem)
-                    .map_err(|_| CallErr::Write)?;
+                    .map_err(|_| CallErr::Serial("receive_sender"))?;
             }
             "set_receive_owner" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
@@ -460,7 +462,7 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
                 self.receive_owner
                     .ok_or(CallErr::Unset("receive_owner"))?
                     .serial(&mut mem)
-                    .map_err(|_| CallErr::Write)?;
+                    .map_err(|_| CallErr::Serial("receive_owner"))?;
             }
             "set_receive_entrypoint" => {
                 let addr_bytes = unsafe { stack.pop_u32() };
