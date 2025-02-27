@@ -13,7 +13,7 @@ pub const MAX_LOG_SIZE: u32 = 512;
 
 /// Maximum number of log messages per execution in *protocol version 4 and
 /// lower*. This, together with the previous constant, limits the amount of data
-/// that can be logged to 16kB.
+/// that can be logged to 32kB.
 pub const MAX_NUM_LOGS: usize = 64;
 
 /// Base cost of a log event call.

@@ -2,6 +2,38 @@
 
 ## Unreleased changes
 
+- Support more smart contract host-functions in `TestHost` (used by cargo concordium test):
+    - `get_slot_time`
+    - `get_receive_self_address`
+    - `get_receive_self_balance`
+    - `get_parameter_size`
+    - `get_parameter_section`
+    - `get_init_origin`
+    - `get_receive_invoker`
+    - `get_receive_sender`
+    - `get_receive_owner`
+    - `get_receive_entrypoint`
+    - `get_receive_entrypoint_size`
+    - `verify_ed25519_signature`
+    - `verify_ecdsa_secp256k1_signature`
+    - `hash_sha2_256`
+    - `hash_sha3_256`
+    - `hash_keccak_256`
+  Corresponding new host functions are introduced just for `TestHost` allowing for setting the result of the above:
+    - `set_slot_time`
+    - `set_receive_self_address`
+    - `set_receive_self_balance`
+    - `set_parameter`
+    - `set_init_origin`
+    - `set_receive_invoker`
+    - `set_receive_sender`
+    - `set_receive_owner`
+    - `set_receive_entrypoint`
+  Attempting to get a value before setting it will result in a runtime error.
+  The following getters are also created just for the `TestHost`:
+    - `get_event`
+    - `get_event_size`
+
 ## concordium-smart-contract-engine 6.0.0 (2024-09-09)
 
 - Bump `concordium-wasm` to version 5 used by Concordium node version 7.0.0.

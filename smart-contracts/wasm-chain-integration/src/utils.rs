@@ -2,14 +2,17 @@
 //! information.
 
 use crate::{
+    constants::MAX_LOG_SIZE,
     v1::{host, trie, EmittedDebugStatement, InstanceState},
     ExecResult,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 pub use concordium_contracts_common::WasmVersion;
 use concordium_contracts_common::{
-    self as concordium_std, from_bytes, hashes, schema, Cursor, Deserial,
+    self as concordium_std, from_bytes, hashes, schema, ContractAddress, Cursor, Deserial, Seek,
+    SeekFrom, Serial,
 };
+use concordium_std::{AccountAddress, Address, HashMap, OwnedEntrypointName, Read, Write};
 use concordium_wasm::{
     artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
     machine::{self, NoInterrupt, Value},
@@ -19,7 +22,9 @@ use concordium_wasm::{
     validate::{self, ValidationConfig},
 };
 use rand::{prelude::*, RngCore};
+use sha2::Digest;
 use std::{collections::BTreeMap, default::Default};
+use thiserror::Error;
 
 /// A host which traps for any function call.
 pub struct TrapHost;
@@ -50,13 +55,33 @@ impl<I> machine::Host<I> for TrapHost {
 /// generator.
 pub struct TestHost<'a, R, BackingStore> {
     /// A RNG for randomised testing.
-    rng:              Option<R>,
+    rng:                Option<R>,
     /// A flag set to `true` if the RNG was used.
-    rng_used:         bool,
+    rng_used:           bool,
     /// Debug statements in the order they were emitted.
-    pub debug_events: Vec<EmittedDebugStatement>,
+    pub debug_events:   Vec<EmittedDebugStatement>,
     /// In-memory instance state used for state-related host calls.
-    state:            InstanceState<'a, BackingStore>,
+    state:              InstanceState<'a, BackingStore>,
+    /// Time in milliseconds at the beginning of the smart contract's block.
+    slot_time:          Option<u64>,
+    /// The address of this smart contract.
+    address:            Option<ContractAddress>,
+    /// The current balance of this smart contract.
+    balance:            Option<u64>,
+    /// The parameters of the smart contract.
+    parameters:         HashMap<u32, Vec<u8>>,
+    /// Events logged by the contract.
+    events:             Vec<Vec<u8>>,
+    /// Account address of the sender.
+    init_origin:        Option<AccountAddress>,
+    /// Invoker of the top-level transaction.
+    receive_invoker:    Option<AccountAddress>,
+    /// Immediate sender of the message.
+    receive_sender:     Option<Address>,
+    /// Owner of the contract.
+    receive_owner:      Option<AccountAddress>,
+    /// The receive entrypoint name.
+    receive_entrypoint: Option<OwnedEntrypointName>,
 }
 
 impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
@@ -69,6 +94,16 @@ impl<'a, R: RngCore, BackingStore> TestHost<'a, R, BackingStore> {
             rng_used: false,
             debug_events: Vec::new(),
             state,
+            slot_time: None,
+            address: None,
+            balance: None,
+            parameters: HashMap::default(),
+            events: Vec::new(),
+            init_origin: None,
+            receive_invoker: None,
+            receive_sender: None,
+            receive_owner: None,
+            receive_entrypoint: None,
         }
     }
 }
@@ -156,6 +191,18 @@ pub(crate) fn extract_debug(
     Ok((filename, line, column, msg))
 }
 
+#[derive(Error, Debug)]
+enum CallErr {
+    #[error("Unable to read bytes at the given position")]
+    Seek,
+    #[error("No \"{0}\" is set. Make sure to prepare this in the test environment")]
+    Unset(&'static str),
+    #[error("Unable to serialize \"{0}\"")]
+    Serial(&'static str),
+    #[error("Unable to write to given buffer")]
+    Write,
+}
+
 impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<ArtifactNamedImport>
     for TestHost<'a, R, BackingStore>
 {
@@ -175,66 +222,379 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
         // We don't track the energy usage in this host, so to reuse code which does, we
         // provide a really large amount of energy to preventing the case of
         // running out of energy.
-        let mut energy = crate::InterpreterEnergy::new(u64::MAX);
-        if f.matches("concordium", "report_error") {
-            let (filename, line, column, msg) = extract_debug(memory, stack)?;
-            bail!(ReportError::Reported {
-                filename,
-                line,
-                column,
-                msg
-            })
-        } else if f.matches("concordium", "get_random") {
-            let size = unsafe { stack.pop_u32() } as usize;
-            let dest = unsafe { stack.pop_u32() } as usize;
-            ensure!(dest + size <= memory.len(), "Illegal memory access.");
-            self.rng_used = true;
-            match self.rng.as_mut() {
-                Some(r) => {
-                    r.try_fill_bytes(&mut memory[dest..dest + size])?;
-                }
-                None => {
-                    bail!("Expected an initialized RNG.");
+        let energy = &mut crate::InterpreterEnergy::new(u64::MAX);
+        let state = &mut self.state;
+
+        ensure!(
+            f.get_mod_name() == "concordium",
+            "Unsupported module in host function call: {:?} {:?}",
+            f.get_mod_name(),
+            f.get_item_name()
+        );
+
+        use host::*;
+        match f.get_item_name() {
+            "report_error" => {
+                let (filename, line, column, msg) = extract_debug(memory, stack)?;
+                bail!(ReportError::Reported {
+                    filename,
+                    line,
+                    column,
+                    msg
+                })
+            }
+            "get_random" => {
+                let size = unsafe { stack.pop_u32() } as usize;
+                let dest = unsafe { stack.pop_u32() } as usize;
+                ensure!(dest + size <= memory.len(), "Illegal memory access.");
+                self.rng_used = true;
+                self.rng
+                    .as_mut()
+                    .context("Expected an initialized RNG.")?
+                    .try_fill_bytes(&mut memory[dest..dest + size])?
+            }
+            "debug_print" => {
+                let (filename, line, column, msg) = extract_debug(memory, stack)?;
+                self.debug_events.push(EmittedDebugStatement {
+                    filename,
+                    line,
+                    column,
+                    msg,
+                    remaining_energy: 0.into(), // debug host does not have energy.
+                });
+            }
+            "state_lookup_entry" => state_lookup_entry(memory, stack, energy, state)?,
+            "state_create_entry" => state_create_entry(memory, stack, energy, state)?,
+            "state_delete_entry" => state_delete_entry(memory, stack, energy, state)?,
+            "state_delete_prefix" => state_delete_prefix(memory, stack, energy, state)?,
+            "state_iterate_prefix" => state_iterator(memory, stack, energy, state)?,
+            "state_iterator_next" => state_iterator_next(stack, energy, state)?,
+            "state_iterator_delete" => state_iterator_delete(stack, energy, state)?,
+            "state_iterator_key_size" => state_iterator_key_size(stack, energy, state)?,
+            "state_iterator_key_read" => state_iterator_key_read(memory, stack, energy, state)?,
+            "state_entry_read" => state_entry_read(memory, stack, energy, state)?,
+            "state_entry_write" => state_entry_write(memory, stack, energy, state)?,
+            "state_entry_size" => state_entry_size(stack, energy, state)?,
+            "state_entry_resize" => state_entry_resize(stack, energy, state)?,
+            "set_slot_time" => {
+                let slot_time = unsafe { stack.pop_u64() };
+                self.slot_time = Some(slot_time);
+            }
+            "get_slot_time" => {
+                let slot_time = self.slot_time.ok_or(CallErr::Unset("slot_time"))?;
+                stack.push_value(slot_time);
+            }
+            "set_receive_self_address" => {
+                let addr_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_ptr)).map_err(|_| CallErr::Seek)?;
+
+                self.address = Some(ContractAddress::deserial(&mut cursor)?);
+            }
+            "get_receive_self_address" => {
+                let addr_ptr = unsafe { stack.pop_u32() } as usize;
+                self.address
+                    .ok_or(CallErr::Unset("self_address"))?
+                    .serial(&mut &mut memory[addr_ptr..])
+                    .map_err(|_| CallErr::Serial("self_address"))?;
+            }
+            "set_receive_self_balance" => {
+                let balance = unsafe { stack.pop_u64() };
+                self.balance = Some(balance);
+            }
+            "get_receive_self_balance" => {
+                let balance = self.balance.ok_or(CallErr::Unset("self_balance"))?;
+                stack.push_value(balance);
+            }
+            "set_parameter" => {
+                let param_size = unsafe { stack.pop_u32() };
+                let param_ptr = unsafe { stack.pop_u32() };
+                let param_index = unsafe { stack.pop_u32() };
+
+                let mut param = vec![0; param_size as usize];
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(param_ptr)).map_err(|_| CallErr::Seek)?;
+                cursor.read_exact(&mut param)?;
+
+                self.parameters.insert(param_index, param);
+            }
+            "get_parameter_size" => {
+                let param_index = unsafe { stack.pop_u32() };
+
+                if let Some(param) = self.parameters.get(&param_index) {
+                    stack.push_value(param.len() as u64)
+                } else {
+                    stack.push_value(-1i32)
                 }
             }
-        } else if f.matches("concordium", "debug_print") {
-            let (filename, line, column, msg) = extract_debug(memory, stack)?;
-            self.debug_events.push(EmittedDebugStatement {
-                filename,
-                line,
-                column,
-                msg,
-                remaining_energy: 0.into(), // debug host does not have energy.
-            });
-        } else if f.matches("concordium", "state_lookup_entry") {
-            host::state_lookup_entry(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_create_entry") {
-            host::state_create_entry(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_delete_entry") {
-            host::state_delete_entry(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_delete_prefix") {
-            host::state_delete_prefix(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterate_prefix") {
-            host::state_iterator(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_next") {
-            host::state_iterator_next(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_delete") {
-            host::state_iterator_delete(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_key_size") {
-            host::state_iterator_key_size(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_iterator_key_read") {
-            host::state_iterator_key_read(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_read") {
-            host::state_entry_read(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_write") {
-            host::state_entry_write(memory, stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_size") {
-            host::state_entry_size(stack, &mut energy, &mut self.state)?;
-        } else if f.matches("concordium", "state_entry_resize") {
-            host::state_entry_resize(stack, &mut energy, &mut self.state)?;
-        } else {
-            bail!("Unsupported host function call.")
+            "get_parameter_section" => {
+                let offset = unsafe { stack.pop_u32() } as usize;
+                let length = unsafe { stack.pop_u32() } as usize;
+                let param_bytes = unsafe { stack.pop_u32() } as usize;
+                let param_index = unsafe { stack.pop_u32() };
+
+                if let Some(param) = self.parameters.get(&param_index) {
+                    let self_param = param.get(offset..length + offset).context(format!(
+                        "Tried to grab {} bytes of parameter[{}], which has length {}",
+                        length,
+                        param_index,
+                        param.len()
+                    ))?;
+
+                    let mut mem = &mut memory[param_bytes..];
+                    let bytes_written: i32 =
+                        mem.write(self_param).map_err(|_| CallErr::Write)?.try_into()?;
+
+                    stack.push_value(bytes_written)
+                } else {
+                    stack.push_value(-1i32)
+                }
+            }
+            "log_event" => {
+                let event_length = unsafe { stack.pop_u32() };
+                let event_start = unsafe { stack.pop_u32() };
+
+                if event_length > MAX_LOG_SIZE {
+                    stack.push_value(-1i32);
+                } else {
+                    let mut cursor = Cursor::new(memory);
+                    cursor.seek(SeekFrom::Start(event_start)).map_err(|_| CallErr::Seek)?;
+
+                    let mut buf = vec![0; event_length as usize];
+                    cursor.read(&mut buf).context("Unable to read provided event")?;
+
+                    self.events.push(buf);
+
+                    stack.push_value(1i32);
+                }
+            }
+            "get_event_size" => {
+                let event_index = unsafe { stack.pop_u32() };
+                let event_opt = self.events.get(event_index as usize);
+
+                if let Some(event) = event_opt {
+                    let event_size: i32 = event.len().try_into()?;
+                    stack.push_value(event_size)
+                } else {
+                    stack.push_value(-1i32);
+                }
+            }
+            "get_event" => {
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
+                let event_index = unsafe { stack.pop_u32() };
+                let event_opt = self.events.get(event_index as usize);
+
+                if let Some(event) = event_opt {
+                    let mut mem = &mut memory[ret_buf_start..];
+                    let bytes_written: i32 =
+                        mem.write(event).map_err(|_| CallErr::Write)?.try_into()?;
+
+                    stack.push_value(bytes_written)
+                } else {
+                    stack.push_value(-1i32);
+                }
+            }
+            "set_init_origin" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+
+                self.init_origin = Some(AccountAddress::deserial(&mut cursor)?);
+            }
+            "get_init_origin" => {
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
+
+                let mut mem = &mut memory[ret_buf_start..];
+                self.init_origin
+                    .ok_or(CallErr::Unset("init_origin"))?
+                    .serial(&mut mem)
+                    .map_err(|_| CallErr::Serial("init_origin"))?;
+            }
+            "set_receive_invoker" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+
+                self.receive_invoker = Some(AccountAddress::deserial(&mut cursor)?);
+            }
+            "get_receive_invoker" => {
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
+
+                let mut mem = &mut memory[ret_buf_start..];
+                self.receive_invoker
+                    .ok_or(CallErr::Unset("receive_invoker"))?
+                    .serial(&mut mem)
+                    .map_err(|_| CallErr::Serial("receive_invoker"))?;
+            }
+            "set_receive_sender" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+
+                self.receive_sender = Some(Address::deserial(&mut cursor)?);
+            }
+            "get_receive_sender" => {
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
+
+                let mut mem = &mut memory[ret_buf_start..];
+                self.receive_sender
+                    .ok_or(CallErr::Unset("receive_sender"))?
+                    .serial(&mut mem)
+                    .map_err(|_| CallErr::Serial("receive_sender"))?;
+            }
+            "set_receive_owner" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+
+                self.receive_owner = Some(AccountAddress::deserial(&mut cursor)?);
+            }
+            "get_receive_owner" => {
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
+
+                let mut mem = &mut memory[ret_buf_start..];
+                self.receive_owner
+                    .ok_or(CallErr::Unset("receive_owner"))?
+                    .serial(&mut mem)
+                    .map_err(|_| CallErr::Serial("receive_owner"))?;
+            }
+            "set_receive_entrypoint" => {
+                let addr_bytes = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                cursor.seek(SeekFrom::Start(addr_bytes)).map_err(|_| CallErr::Seek)?;
+
+                self.receive_entrypoint = Some(OwnedEntrypointName::deserial(&mut cursor)?);
+            }
+            "get_receive_entrypoint_size" => {
+                let size = self
+                    .receive_entrypoint
+                    .as_ref()
+                    .ok_or(CallErr::Unset("receive_entrypoint"))?
+                    .as_entrypoint_name()
+                    .size();
+                stack.push_value(size);
+            }
+            "get_receive_entrypoint" => {
+                let ret_buf_start = unsafe { stack.pop_u32() } as usize;
+
+                let bytes = self
+                    .receive_entrypoint
+                    .clone()
+                    .ok_or(CallErr::Unset("receive_entrypoint"))?
+                    .to_string()
+                    .into_bytes();
+
+                let mut mem = &mut memory[ret_buf_start..];
+                mem.write(&bytes).map_err(|_| CallErr::Write)?;
+            }
+            "verify_ed25519_signature" => {
+                let message_len = unsafe { stack.pop_u32() };
+                let message_ptr = unsafe { stack.pop_u32() };
+                let signature_ptr = unsafe { stack.pop_u32() };
+                let public_key_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+
+                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| CallErr::Seek)?;
+                let mut public_key_bytes = [0; 32];
+                cursor.read(&mut public_key_bytes)?;
+                let z_pk = ed25519_zebra::VerificationKey::try_from(public_key_bytes)?;
+
+                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| CallErr::Seek)?;
+                let mut signature_bytes = [0; 64];
+                cursor.read(&mut signature_bytes)?;
+                let z_sig = ed25519_zebra::Signature::from_bytes(&signature_bytes);
+
+                cursor.seek(SeekFrom::Start(message_ptr)).map_err(|_| CallErr::Seek)?;
+                let mut msg = vec![0; message_len as usize];
+                cursor.read(&mut msg)?;
+
+                let is_verified = z_pk.verify(&z_sig, &msg);
+
+                if is_verified.is_ok() {
+                    stack.push_value(1i32)
+                } else {
+                    stack.push_value(0i32)
+                }
+            }
+            "verify_ecdsa_secp256k1_signature" => {
+                let message_hash_ptr = unsafe { stack.pop_u32() };
+                let signature_ptr = unsafe { stack.pop_u32() };
+                let public_key_ptr = unsafe { stack.pop_u32() };
+
+                let mut cursor = Cursor::new(memory);
+                let secp = secp256k1::Secp256k1::verification_only();
+
+                cursor.seek(SeekFrom::Start(public_key_ptr)).map_err(|_| CallErr::Seek)?;
+                let mut public_key_bytes = [0; 33];
+                cursor.read(&mut public_key_bytes)?;
+                let pk = secp256k1::PublicKey::from_slice(&public_key_bytes)?;
+
+                cursor.seek(SeekFrom::Start(signature_ptr)).map_err(|_| CallErr::Seek)?;
+                let mut signature_bytes = [0; 64];
+                cursor.read(&mut signature_bytes)?;
+                let sig = secp256k1::ecdsa::Signature::from_compact(&signature_bytes)?;
+
+                cursor.seek(SeekFrom::Start(message_hash_ptr)).map_err(|_| CallErr::Seek)?;
+                let mut message_hash_bytes = [0; 32];
+                cursor.read(&mut message_hash_bytes)?;
+                let msg = secp256k1::Message::from_slice(&message_hash_bytes)?;
+
+                let is_verified = secp.verify_ecdsa(&msg, &sig, &pk);
+                if is_verified.is_ok() {
+                    stack.push_value(1i32)
+                } else {
+                    stack.push_value(0i32)
+                }
+            }
+            "hash_sha2_256" => {
+                let output_ptr = unsafe { stack.pop_u32() } as usize;
+                let data_len = unsafe { stack.pop_u32() } as usize;
+                let data_ptr = unsafe { stack.pop_u32() } as usize;
+
+                let mut hasher = sha2::Sha256::default();
+                hasher.update(&memory[data_ptr..data_ptr + data_len]);
+                let data_hash = hasher.finalize();
+
+                let mut mem = &mut memory[output_ptr..];
+                mem.write(&data_hash).map_err(|_| CallErr::Write)?;
+            }
+            "hash_sha3_256" => {
+                let output_ptr = unsafe { stack.pop_u32() } as usize;
+                let data_len = unsafe { stack.pop_u32() } as usize;
+                let data_ptr = unsafe { stack.pop_u32() } as usize;
+
+                let mut hasher = sha3::Sha3_256::default();
+                hasher.update(&memory[data_ptr..data_ptr + data_len]);
+                let data_hash = hasher.finalize();
+
+                let mut mem = &mut memory[output_ptr..];
+                mem.write(&data_hash).map_err(|_| CallErr::Write)?;
+            }
+            "hash_keccak_256" => {
+                let output_ptr = unsafe { stack.pop_u32() } as usize;
+                let data_len = unsafe { stack.pop_u32() } as usize;
+                let data_ptr = unsafe { stack.pop_u32() } as usize;
+
+                let mut hasher = sha3::Keccak256::default();
+                hasher.update(&memory[data_ptr..data_ptr + data_len]);
+                let data_hash = hasher.finalize();
+
+                let mut mem = &mut memory[output_ptr..];
+                mem.write(&data_hash).map_err(|_| CallErr::Write)?;
+            }
+            item_name => {
+                bail!("Unsupported host function call: {:?} {:?}", f.get_mod_name(), item_name)
+            }
         }
+
         Ok(None)
     }
 
@@ -680,7 +1040,7 @@ pub struct BuildInfo {
 ///
 /// The value is embedded in a custom section serialized using the smart
 /// contract serialization format
-/// ([`Serial`](concordium_contracts_common::Serial) trait).
+/// ([`Serial`] trait).
 #[derive(Debug, Clone, concordium_contracts_common::Serialize)]
 pub enum VersionedBuildInfo {
     V0(BuildInfo),
