@@ -21,7 +21,7 @@ use concordium_wasm::{
     utils,
     validate::{self, ValidationConfig},
 };
-use rand::{prelude::*, RngCore};
+use rand::RngCore;
 use sha2::Digest;
 use std::{collections::BTreeMap, default::Default};
 use thiserror::Error;
@@ -57,7 +57,7 @@ pub struct TestHost<'a, R, BackingStore> {
     /// A RNG for randomised testing.
     rng:                Option<R>,
     /// A flag set to `true` if the RNG was used.
-    rng_used:           bool,
+    pub rng_used:       bool,
     /// Debug statements in the order they were emitted.
     pub debug_events:   Vec<EmittedDebugStatement>,
     /// In-memory instance state used for state-related host calls.
@@ -603,80 +603,6 @@ impl<'a, R: RngCore, BackingStore: trie::BackingStoreLoad> machine::Host<Artifac
     fn track_call(&mut self) -> machine::RunResult<()> { Ok(()) }
 
     fn track_return(&mut self) {}
-}
-
-/// The type of results returned after running a test.
-pub struct TestResult {
-    /// The name of the test that is being reported.
-    pub test_name:    String,
-    /// The result of the test. [`None`] if the test passed.
-    /// In case of failure the `bool` flag indicates whether randomness was used
-    /// or not.
-    pub result:       Option<(ReportError, bool)>,
-    /// Any debug events emitted as part of the test.
-    pub debug_events: Vec<EmittedDebugStatement>,
-}
-
-/// Instantiates the module with an external function to report back errors and
-/// a seed that is used to instantiate a RNG for randomized testing. Then tries
-/// to run exported test-functions, which are present if compiled with
-/// the wasm-test feature.
-///
-/// The return value is a list of test results.
-pub fn run_module_tests(module_bytes: &[u8], seed: u64) -> ExecResult<Vec<TestResult>> {
-    let artifact = utils::instantiate::<ArtifactNamedImport, _>(
-        ValidationConfig::V1,
-        &NoDuplicateImport,
-        module_bytes,
-    )?
-    .artifact;
-    let mut out = Vec::with_capacity(artifact.export.len());
-    for name in artifact.export.keys() {
-        if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            // create a `TestHost` instance for each test with the usage flag set to `false`
-            let mut initial_state = trie::MutableState::initial_state();
-            let mut loader = trie::Loader::new(Vec::new());
-            let mut test_host = {
-                let inner = initial_state.get_inner(&mut loader);
-                let state = InstanceState::new(loader, inner);
-                TestHost::new(SmallRng::seed_from_u64(seed), state)
-            };
-            let res = artifact.run(&mut test_host, name, &[]);
-            match res {
-                Ok(_) => {
-                    let result = TestResult {
-                        test_name:    test_name.to_owned(),
-                        result:       None,
-                        debug_events: test_host.debug_events,
-                    };
-                    out.push(result);
-                }
-                Err(msg) => {
-                    if let Some(err) = msg.downcast_ref::<ReportError>() {
-                        let result = TestResult {
-                            test_name:    test_name.to_owned(),
-                            result:       Some((err.clone(), test_host.rng_used)),
-                            debug_events: test_host.debug_events,
-                        };
-                        out.push(result);
-                    } else {
-                        let result = TestResult {
-                            test_name:    test_name.to_owned(),
-                            result:       Some((
-                                ReportError::Other {
-                                    msg: msg.to_string(),
-                                },
-                                test_host.rng_used,
-                            )),
-                            debug_events: test_host.debug_events,
-                        };
-                        out.push(result);
-                    }
-                }
-            };
-        }
-    }
-    Ok(out)
 }
 
 /// Tries to generate a state schema and schemas for parameters of methods of a
