@@ -3,7 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | This module defines the genesis data format for the 'P8' protocol version.
+-- | This module defines the genesis data format for the 'P9' protocol version.
 module Concordium.Genesis.Data.P9 where
 
 import Data.Serialize
@@ -17,7 +17,7 @@ import Concordium.Types
 
 -- import Concordium.Types.Parameters
 
--- | Parameters data type for the 'P7' to 'P8' protocol update.
+-- | Parameters data type for the 'P8' to 'P9' protocol update.
 --  This is provided as a parameter to the protocol update chain update instruction.
 data ProtocolUpdateData = ProtocolUpdateData
     deriving (Eq, Show)
@@ -26,7 +26,7 @@ instance Serialize ProtocolUpdateData where
     put ProtocolUpdateData{} = put ()
     get = return ProtocolUpdateData
 
--- | Parameters used to migrate state from 'P7' to 'P8'.
+-- | Parameters used to migrate state from 'P8' to 'P9'.
 newtype StateMigrationData = StateMigrationData
     { -- | Data provided by the protocol update to be used
       --  in the migration.
@@ -75,7 +75,7 @@ getGenesisDataV11 =
             genesisCore <- get
             genesisInitialState <- get
             return GDP9Initial{..}
-        _ -> fail "Unrecognized P8 genesis data type."
+        _ -> fail "Unrecognized P9 genesis data type."
 
 getRegenesisData :: Get RegenesisP9
 getRegenesisData =
@@ -87,7 +87,7 @@ getRegenesisData =
             genesisRegenesis <- get
             genesisMigration <- get
             return GDP9RegenesisFromP8{..}
-        _ -> fail "Unrecognized P8 regenesis data type."
+        _ -> fail "Unrecognized P9 regenesis data type."
 
 -- | Serialize genesis data in the V11 format.
 putGenesisDataV11 :: Putter GenesisDataP9
@@ -102,7 +102,7 @@ getVersionedGenesisData :: Get GenesisDataP9
 getVersionedGenesisData =
     getVersion >>= \case
         11 -> getGenesisDataV11
-        n -> fail $ "Unsupported genesis data version for P8 genesis: " ++ show n
+        n -> fail $ "Unsupported genesis data version for P9 genesis: " ++ show n
 
 -- | Serialize genesis data with a version tag.
 --  This will use the V11 format.
