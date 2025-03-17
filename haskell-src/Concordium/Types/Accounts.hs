@@ -493,6 +493,11 @@ accountStakeNoneHashV4 :: AccountStakeHash 'AccountV4
 {-# NOINLINE accountStakeNoneHashV4 #-}
 accountStakeNoneHashV4 = AccountStakeHash $ Hash.hash "A4NoStake"
 
+-- | Hash of 'AccountStakeNone' in 'AccountV4'.
+accountStakeNoneHashV5 :: AccountStakeHash 'AccountV5
+{-# NOINLINE accountStakeNoneHashV5 #-}
+accountStakeNoneHashV5 = AccountStakeHash $ Hash.hash "A5NoStake"
+
 -- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
@@ -569,6 +574,30 @@ instance HashableTo (AccountStakeHash 'AccountV4) (AccountStake 'AccountV4) wher
                             put _delegationPendingChange
                         )
 
+-- | The 'AccountV5' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+--  This is since the stake is accounted for separately in the @AccountHash@.
+instance HashableTo (AccountStakeHash 'AccountV5) (AccountStake 'AccountV5) where
+    getHash AccountStakeNone = accountStakeNoneHashV5
+    getHash (AccountStakeBaker AccountBaker{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A5Baker"
+                    <> runPutLazy
+                        ( do
+                            put _stakeEarnings
+                            put _accountBakerInfo
+                        )
+    getHash (AccountStakeDelegate AccountDelegationV1{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A5Delegation"
+                    <> runPutLazy
+                        ( do
+                            put _delegationIdentity
+                            put _delegationStakeEarnings
+                            put _delegationTarget
+                        )
+
 -- | Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
 getAccountStakeHash :: forall av. (IsAccountVersion av) => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
@@ -577,6 +606,7 @@ getAccountStakeHash = case accountVersion @av of
     SAccountV2 -> getHash
     SAccountV3 -> getHash
     SAccountV4 -> getHash
+    SAccountV5 -> getHash
 
 -- | A representation type (used for queries) for the staking status of an account.
 --  This representation is agnostic to the protocol version and represents pending change times
