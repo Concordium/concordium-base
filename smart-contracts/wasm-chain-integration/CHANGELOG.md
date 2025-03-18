@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased changes
+## concordium-smart-contract-engine 6.1.0 (2025-03-18)
 
 - Removed `TestResult` and `run_module_tests` since they will be moved to `cargo-concordium`. As part of this `TestHost.rng_used` has been made public.
 - Support more smart contract host-functions in `TestHost` (used by cargo concordium test):
