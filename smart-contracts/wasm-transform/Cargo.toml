@@ -1,6 +1,6 @@
 [package]
 name = "concordium-wasm"
-version = "5.0.0"
+version = "5.1.0"
 authors = ["Concordium <developers@concordium.com>"]
 edition = "2021"
 license-file = "../../LICENSE"

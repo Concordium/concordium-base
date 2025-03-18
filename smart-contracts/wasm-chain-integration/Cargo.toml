@@ -42,7 +42,7 @@ rand = { version = "=0.8", features = ["small_rng"] }
 
 [dependencies.concordium-wasm]
 path = "../wasm-transform"
-version = "5"
+version = "5.1"
 
 [dependencies.concordium-contracts-common]
 version = "9"

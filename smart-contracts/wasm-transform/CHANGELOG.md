@@ -2,6 +2,10 @@
 
 ## Unreleased changes
 
+## concordium-wasm 5.1.0 (2025-03-18)
+
+- Added public methods `get_mod_name` and `get_item_name` to `ArtifactNamedImport`
+
 ## concordium-wasm 5.0.0 (2024-09-09)
 
 - Revise the compilation of Wasm modules to `Artifacts`. The notion of the

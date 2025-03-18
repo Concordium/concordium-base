@@ -391,7 +391,7 @@ dependencies = [
 
 [[package]]
 name = "concordium-wasm"
-version = "5.0.0"
+version = "5.1.0"
 dependencies = [
  "anyhow",
  "concordium-contracts-common",
