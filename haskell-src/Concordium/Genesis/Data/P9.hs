@@ -96,7 +96,7 @@ putGenesisDataV11 GDP9Initial{..} = do
     put genesisCore
     put genesisInitialState
 
--- | Deserialize genesis data with a version tag. The expected version tag is 10
+-- | Deserialize genesis data with a version tag. The expected version tag is 11
 --  and this must be distinct from version tags of other genesis data formats.
 getVersionedGenesisData :: Get GenesisDataP9
 getVersionedGenesisData =
