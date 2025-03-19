@@ -108,6 +108,10 @@ module Concordium.Types.ProtocolVersion (
     --    * 'AccountV2' is used in 'P5' and 'P6'. Modifies the hash calculation.
     --
     --    * 'AccountV3' is used in 'P7'. Modifies the stake cooldown behaviour.
+    --
+    --    * 'AccountV4' is used in 'P8'. Adds suspension of inactive validators.
+    --
+    --    * 'AccountV5' is used in 'P9'. Adds protocol level tokens.
     AccountVersion (..),
     -- | Singleton type corresponding to 'AccountVersion'.
     SAccountVersion (..),

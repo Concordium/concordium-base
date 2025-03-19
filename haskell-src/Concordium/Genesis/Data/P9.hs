@@ -15,8 +15,6 @@ import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
 
--- import Concordium.Types.Parameters
-
 -- | Parameters data type for the 'P8' to 'P9' protocol update.
 --  This is provided as a parameter to the protocol update chain update instruction.
 data ProtocolUpdateData = ProtocolUpdateData

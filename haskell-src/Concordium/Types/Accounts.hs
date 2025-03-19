@@ -550,6 +550,10 @@ instance HashableTo (AccountStakeHash 'AccountV3) (AccountStake 'AccountV3) wher
 
 -- | The 'AccountV4' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
+--
+--  NB: This inadvertently re-introduces '_bakerPendingChange' and '_delegationPendingChange' as part
+--  of the hash calculation. They are therefore removed again in 'AccountV5', since these will always
+--  be 'NoChange' in account version 3, 4 and 5.
 instance HashableTo (AccountStakeHash 'AccountV4) (AccountStake 'AccountV4) where
     getHash AccountStakeNone = accountStakeNoneHashV4
     getHash (AccountStakeBaker AccountBaker{..}) =
