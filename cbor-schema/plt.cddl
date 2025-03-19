@@ -93,14 +93,41 @@ token-burn = {
 }
 
 ; Update an allow or a deny list by adding or removing an account from it.
-token-update-list = {
-    ; The operation type is "update-list".
-    "type": "update-list",
-    ; The action to take: "add" or "remove".
-    "action": "add" / "remove",
-    ; The list to update: "allow" or "deny".
-    "list": "allow" / "deny",
-    ; The account to add or remove.
+token-update-list = 
+    token-add-allow-list
+    / token-remove-allow-list
+    / token-add-deny-list
+    / token-remove-deny-list
+
+; Add an account to the allow list.
+token-add-allow-list = {
+    ; The operation type is "add-allow-list".
+    "type": "add-allow-list",
+    ; The account to add to the allow list.
+    "target": token-receiver
+}
+
+; Remove an account from the allow list.
+token-remove-allow-list = {
+    ; The operation type is "remove-allow-list".
+    "type": "remove-allow-list",
+    ; The account to remove from the allow list.
+    "target": token-receiver
+}
+
+; Add an account to the deny list.
+token-add-deny-list = {
+    ; The operation type is "add-deny-list".
+    "type": "add-deny-list",
+    ; The account to add to the deny list.
+    "target": token-receiver
+}
+
+; Remove an account from the deny list.
+token-remove-deny-list = {
+    ; The operation type is "remove-deny-list".
+    "type": "remove-deny-list",
+    ; The account to remove from the deny list.
     "target": token-receiver
 }
 
