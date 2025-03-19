@@ -233,6 +233,7 @@ module Concordium.Types.ProtocolVersion (
     P6Sym0,
     P7Sym0,
     P8Sym0,
+    P9Sym0,
 ) where
 
 import Control.Monad.Except (ExceptT)
@@ -420,6 +421,7 @@ protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 6 = return P6
 protocolVersionFromWord64 7 = return P7
 protocolVersionFromWord64 8 = return P8
+protocolVersionFromWord64 9 = return P9
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 -- | Convert a @ChainParametersVersion@ to the corresponding 'Word64'.
