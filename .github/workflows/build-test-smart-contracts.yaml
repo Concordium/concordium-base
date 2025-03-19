@@ -5,10 +5,14 @@ name: Build and test smart-contracts
 
 on:
   push:
-    branches: main
+    branches:
+        - main
+        - plt
 
   pull_request:
-    branches: main
+    branches:
+        - main
+        - plt
 
   workflow_dispatch: # allows manual trigger
 
