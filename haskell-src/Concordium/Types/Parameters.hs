@@ -2240,6 +2240,7 @@ delegationChainParameters = case protocolVersion @pv of
     SP6 -> DelegationChainParameters
     SP7 -> DelegationChainParameters
     SP8 -> DelegationChainParameters
+    SP9 -> DelegationChainParameters
 
 -- * Consensus versions
 
@@ -2276,3 +2277,4 @@ consensusVersionFor SP5 = ConsensusV0
 consensusVersionFor SP6 = ConsensusV1
 consensusVersionFor SP7 = ConsensusV1
 consensusVersionFor SP8 = ConsensusV1
+consensusVersionFor SP9 = ConsensusV1
