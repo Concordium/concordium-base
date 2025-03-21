@@ -116,6 +116,7 @@ type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructur
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
     AccountStructureVersionFor 'AccountV3 = 'AccountStructureV1
     AccountStructureVersionFor 'AccountV4 = 'AccountStructureV1
+    AccountStructureVersionFor 'AccountV5 = 'AccountStructureV1
 
 -- | The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
