@@ -9,6 +9,8 @@ copyright:           "Concordium AG"
 extra-source-files:
 - README.md
 - LICENSE
+- ./concordium-grpc-api/v2/concordium/kernel.proto
+- ./concordium-grpc-api/v2/concordium/protocol-level-tokens.proto
 - ./concordium-grpc-api/v2/concordium/types.proto
 - ./concordium-grpc-api/v2/concordium/service.proto
 - ./concordium-grpc-api/v2/concordium/health.proto
@@ -112,6 +114,10 @@ library:
     Proto.V2.Concordium.Service_Fields
     Proto.V2.Concordium.Types
     Proto.V2.Concordium.Types_Fields
+    Proto.V2.Concordium.Kernel
+    Proto.V2.Concordium.Kernel_Fields
+    Proto.V2.Concordium.ProtocolLevelTokens
+    Proto.V2.Concordium.ProtocolLevelTokens_Fields
 
 executables:
   generate-update-keys:
