@@ -40,6 +40,7 @@ import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 import Data.Word
 import Lens.Micro.Platform
+import qualified Proto.V2.Concordium.Kernel as Proto
 import qualified Proto.V2.Concordium.Types as Proto
 import qualified Proto.V2.Concordium.Types_Fields as ProtoFields
 
