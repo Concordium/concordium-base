@@ -798,7 +798,7 @@ data AccountInfo = AccountInfo
       -- | The balance of the account that is available for transactions.
       aiAccountAvailableAmount :: !Amount,
       -- | The protocol level tokens (PLT) held by the account.
-      aiTokens :: ![Token]
+      aiAccountTokens :: ![Token]
     }
     deriving (Eq, Show)
 
