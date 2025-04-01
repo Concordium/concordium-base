@@ -100,7 +100,7 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
-import Concordium.Types.Queries.Tokens
+import Concordium.Types.Queries.Tokens (Token)
 
 -- | The version of the account structure. This is used to index types that vary the account
 --  structure.
@@ -798,7 +798,7 @@ data AccountInfo = AccountInfo
       -- | The balance of the account that is available for transactions.
       aiAccountAvailableAmount :: !Amount,
       -- | The protocol level tokens (PLT) held by the account.
-      aiTokens :: ![Token]
+      aiAccountTokens :: ![Token]
     }
     deriving (Eq, Show)
 
