@@ -179,6 +179,13 @@ module Concordium.Types (
     -- * PartsPerHundredThousands
     PartsPerHundredThousands (..),
     partsPerHundredThousandsToRational,
+
+    -- * Protocol Level Tokens
+    TokenIndex (..),
+    TokenAmount (..),
+    TokenId (..),
+    TokenModuleRef (..),
+    Cbor (..),
 ) where
 
 import Data.Data (Data, Typeable)
@@ -1148,3 +1155,21 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
 makeLenses ''CommissionRates
+
+-- | The index into the global token table.
+newtype TokenIndex = TokenIndex {theTokenIndex :: Word64}
+
+-- | A token amount. The encoding is  VLQ/ULEB128 (TODO: (drsk) tbd). To compute the
+-- actual amount, the number of decimals needs to be queried from the global token
+-- table.
+newtype TokenAmount = TokenAmount {tokenAmount :: Word64}
+
+-- | A globally unique token identifier.
+newtype TokenId = TokenId {tokenSymbol :: BSS.ShortByteString}
+
+-- | Unique token module reference.
+newtype TokenModuleRef = TokenModuleRef {tokenModuleRef :: Hash.Hash}
+    deriving (Eq, Ord, Hashable, Typeable, Data)
+
+-- | A CBOR encoded bytestring
+newtype Cbor = Cbor {bytes :: ByteString}

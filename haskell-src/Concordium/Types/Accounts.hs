@@ -82,10 +82,14 @@ module Concordium.Types.Accounts (
     -- * Account structure version
     AccountStructureVersion (..),
     AccountStructureVersionFor,
+
+    -- * Protocol level tokens
+    TokenAccountState (..),
 ) where
 
 import Data.Aeson
 import Data.Bool.Singletons
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Serialize
 import Data.Singletons
@@ -100,7 +104,7 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
-import Concordium.Types.Queries.Tokens
+import Concordium.Types.Queries.Tokens (Token)
 
 -- | The version of the account structure. This is used to index types that vary the account
 --  structure.
@@ -759,6 +763,14 @@ instance ToJSON Cooldown where
               "status" .= cooldownStatus
             ]
 
+-- | The token state at the account level.
+data TokenAccountState = TokenAccountState
+    { -- | The available balance.
+      tasBalance :: !TokenAmount,
+      -- | The opaque token module state for the account.
+      tasModuleState :: ![(BS.ByteString, BS.ByteString)]
+    }
+
 -- | The details of the state of an account on the chain, as may be returned by a
 --  query. At present the account credentials map must always contain credential
 --  at index 0.
@@ -798,7 +810,7 @@ data AccountInfo = AccountInfo
       -- | The balance of the account that is available for transactions.
       aiAccountAvailableAmount :: !Amount,
       -- | The protocol level tokens (PLT) held by the account.
-      aiTokens :: ![Token]
+      aiAccountTokens :: ![Token]
     }
     deriving (Eq, Show)
 
