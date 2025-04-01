@@ -94,9 +94,9 @@ library
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
       Concordium.Types.Queries.KonsensusV1
+      Concordium.Types.Queries.Tokens
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
-      Concordium.Types.Tokens
       Concordium.Types.Transactions
       Concordium.Types.UpdateQueues
       Concordium.Types.Updates

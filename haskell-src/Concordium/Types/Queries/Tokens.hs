@@ -1,12 +1,12 @@
 -- | Types for protocol level tokens (PLT).
-module Concordium.Types.Tokens where
+module Concordium.Types.Queries.Tokens where
 
-import qualified Data.Text as T
+import qualified Data.ByteString.Short as BS
 import Data.Word
 
 -- | The unique token identifier. This is given as a symbol unique across the
 --  whole chain.
-newtype TokenId = TokenId {symbol :: T.Text} deriving (Eq, Show)
+newtype TokenId = TokenId {symbol :: BS.ShortByteString} deriving (Eq, Show)
 
 -- | The token amount representation.
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.

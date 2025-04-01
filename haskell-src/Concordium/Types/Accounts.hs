@@ -100,7 +100,7 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
-import Concordium.Types.Tokens
+import Concordium.Types.Queries.Tokens
 
 -- | The version of the account structure. This is used to index types that vary the account
 --  structure.
