@@ -100,6 +100,7 @@ import Concordium.Types.Accounts.Releases
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution (DelegationTarget, OpenStatus)
 import Concordium.Types.HashableTo
+import Concordium.Types.Queries.Tokens
 
 -- | The version of the account structure. This is used to index types that vary the account
 --  structure.
@@ -795,7 +796,9 @@ data AccountInfo = AccountInfo
       --  pre-cooldown or pre-pre-cooldown (e.g. if the cooldown interval has been decreased).
       aiAccountCooldowns :: ![Cooldown],
       -- | The balance of the account that is available for transactions.
-      aiAccountAvailableAmount :: !Amount
+      aiAccountAvailableAmount :: !Amount,
+      -- | The protocol level tokens (PLT) held by the account.
+      aiTokens :: ![Token]
     }
     deriving (Eq, Show)
 
