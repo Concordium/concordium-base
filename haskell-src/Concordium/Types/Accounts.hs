@@ -116,6 +116,7 @@ type family AccountStructureVersionFor (av :: AccountVersion) :: AccountStructur
     AccountStructureVersionFor 'AccountV2 = 'AccountStructureV1
     AccountStructureVersionFor 'AccountV3 = 'AccountStructureV1
     AccountStructureVersionFor 'AccountV4 = 'AccountStructureV1
+    AccountStructureVersionFor 'AccountV5 = 'AccountStructureV1
 
 -- | The 'BakerId' of a baker and its public keys.
 data BakerInfo = BakerInfo
@@ -493,6 +494,11 @@ accountStakeNoneHashV4 :: AccountStakeHash 'AccountV4
 {-# NOINLINE accountStakeNoneHashV4 #-}
 accountStakeNoneHashV4 = AccountStakeHash $ Hash.hash "A4NoStake"
 
+-- | Hash of 'AccountStakeNone' in 'AccountV4'.
+accountStakeNoneHashV5 :: AccountStakeHash 'AccountV5
+{-# NOINLINE accountStakeNoneHashV5 #-}
+accountStakeNoneHashV5 = AccountStakeHash $ Hash.hash "A5NoStake"
+
 -- | The 'AccountV2' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
 instance HashableTo (AccountStakeHash 'AccountV2) (AccountStake 'AccountV2) where
@@ -545,6 +551,10 @@ instance HashableTo (AccountStakeHash 'AccountV3) (AccountStake 'AccountV3) wher
 
 -- | The 'AccountV4' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
 --  This is since the stake is accounted for separately in the @AccountHash@.
+--
+--  NB: This inadvertently re-introduces '_bakerPendingChange' and '_delegationPendingChange' as part
+--  of the hash calculation. They are therefore removed again in 'AccountV5', since these will always
+--  be 'NoChange' in account version 3, 4 and 5.
 instance HashableTo (AccountStakeHash 'AccountV4) (AccountStake 'AccountV4) where
     getHash AccountStakeNone = accountStakeNoneHashV4
     getHash (AccountStakeBaker AccountBaker{..}) =
@@ -569,6 +579,30 @@ instance HashableTo (AccountStakeHash 'AccountV4) (AccountStake 'AccountV4) wher
                             put _delegationPendingChange
                         )
 
+-- | The 'AccountV5' hashing of 'AccountStake' DOES NOT INCLUDE the staked amount.
+--  This is since the stake is accounted for separately in the @AccountHash@.
+instance HashableTo (AccountStakeHash 'AccountV5) (AccountStake 'AccountV5) where
+    getHash AccountStakeNone = accountStakeNoneHashV5
+    getHash (AccountStakeBaker AccountBaker{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A5Baker"
+                    <> runPutLazy
+                        ( do
+                            put _stakeEarnings
+                            put _accountBakerInfo
+                        )
+    getHash (AccountStakeDelegate AccountDelegationV1{..}) =
+        AccountStakeHash $
+            Hash.hashLazy $
+                "A5Delegation"
+                    <> runPutLazy
+                        ( do
+                            put _delegationIdentity
+                            put _delegationStakeEarnings
+                            put _delegationTarget
+                        )
+
 -- | Get the 'AccountStakeHash' from an 'AccountStake' for any account version.
 getAccountStakeHash :: forall av. (IsAccountVersion av) => AccountStake av -> AccountStakeHash av
 getAccountStakeHash = case accountVersion @av of
@@ -577,6 +611,7 @@ getAccountStakeHash = case accountVersion @av of
     SAccountV2 -> getHash
     SAccountV3 -> getHash
     SAccountV4 -> getHash
+    SAccountV5 -> getHash
 
 -- | A representation type (used for queries) for the staking status of an account.
 --  This representation is agnostic to the protocol version and represents pending change times

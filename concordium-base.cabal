@@ -63,6 +63,7 @@ library
       Concordium.Genesis.Data.P6
       Concordium.Genesis.Data.P7
       Concordium.Genesis.Data.P8
+      Concordium.Genesis.Data.P9
       Concordium.Genesis.Parameters
       Concordium.GRPC2
       Concordium.ID.Account

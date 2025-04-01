@@ -38,6 +38,7 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
 migrateAuthorizations StateMigrationParametersP6ToP7{} auths = auths
 migrateAuthorizations StateMigrationParametersP7ToP8{} auths = auths
+migrateAuthorizations StateMigrationParametersP8ToP9{} auths = auths
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -67,6 +68,7 @@ migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 migrateMintDistribution StateMigrationParametersP5ToP6{} mint = mint
 migrateMintDistribution StateMigrationParametersP6ToP7{} mint = mint
 migrateMintDistribution StateMigrationParametersP7ToP8{} mint = mint
+migrateMintDistribution StateMigrationParametersP8ToP9{} mint = mint
 
 -- | Apply a state migration to a 'PoolParameters' structure.
 --
@@ -85,6 +87,7 @@ migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP6ToP7{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP7ToP8{} poolParams = poolParams
+migratePoolParameters StateMigrationParametersP8ToP9{} poolParams = poolParams
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
@@ -103,6 +106,7 @@ migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
 migrateGASRewards StateMigrationParametersP5ToP6{} GASRewards{..} = GASRewards{_gasFinalizationProof = CFalse, ..}
 migrateGASRewards StateMigrationParametersP6ToP7{} gr = gr
 migrateGASRewards StateMigrationParametersP7ToP8{} gr = gr
+migrateGASRewards StateMigrationParametersP8ToP9{} gr = gr
 
 -- | Apply a state migration to a 'ChainParameters' structure.
 --
@@ -175,6 +179,7 @@ migrateChainParameters m@(StateMigrationParametersP7ToP8 migration) ChainParamet
         }
   where
     RewardParameters{..} = _cpRewardParameters
+migrateChainParameters StateMigrationParametersP8ToP9{} cps = cps -- TODO: Update this if/when chain parameters change in P9
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
@@ -204,3 +209,4 @@ migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingCha
 migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
 migrateStakePendingChange StateMigrationParametersP6ToP7{} = const NoChange
 migrateStakePendingChange StateMigrationParametersP7ToP8{} = const NoChange
+migrateStakePendingChange StateMigrationParametersP8ToP9{} = const NoChange
