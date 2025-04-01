@@ -82,10 +82,14 @@ module Concordium.Types.Accounts (
     -- * Account structure version
     AccountStructureVersion (..),
     AccountStructureVersionFor,
+
+    -- * Protocol level tokens
+    TokenAccountState (..),
 ) where
 
 import Data.Aeson
 import Data.Bool.Singletons
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Serialize
 import Data.Singletons
@@ -758,6 +762,14 @@ instance ToJSON Cooldown where
               "amount" .= cooldownAmount,
               "status" .= cooldownStatus
             ]
+
+-- | The token state at the account level.
+data TokenAccountState = TokenAccountState
+    { -- | The available balance.
+      tasBalance :: !TokenRawAmount,
+      -- | The opaque token module state for the account.
+      tasModuleState :: ![(BS.ByteString, BS.ByteString)]
+    }
 
 -- | The details of the state of an account on the chain, as may be returned by a
 --  query. At present the account credentials map must always contain credential
