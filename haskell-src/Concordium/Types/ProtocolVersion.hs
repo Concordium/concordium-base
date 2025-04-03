@@ -193,6 +193,17 @@ module Concordium.Types.ProtocolVersion (
     AVSupportsValidatorSuspension,
     PVSupportsValidatorSuspension,
 
+    -- * PLT support
+
+    -- | Determine whether protocol level tokens are supported.
+    SupportsPLT,
+    supportsPLT,
+    sSupportsPLT,
+    -- | Determine whether a specific account version supports protocol level tokens.
+    AVSupportsPLT,
+    -- | Determine whether a specific protocol version supports protocol level tokens.
+    PVSupportsPLT,
+
     -- * Block hash version
 
     -- | The version of the block hashing structure.
@@ -368,6 +379,14 @@ $( singletons
         supportsValidatorSuspension AccountV3 = False
         supportsValidatorSuspension AccountV4 = True
         supportsValidatorSuspension AccountV5 = True
+
+        supportsPLT :: AccountVersion -> Bool
+        supportsPLT AccountV0 = False
+        supportsPLT AccountV1 = False
+        supportsPLT AccountV2 = False
+        supportsPLT AccountV3 = False
+        supportsPLT AccountV4 = False
+        supportsPLT AccountV5 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -599,6 +618,14 @@ type AVSupportsValidatorSuspension (av :: AccountVersion) =
 -- | Constraint that a protocol version supports validator suspension.
 type PVSupportsValidatorSuspension (pv :: ProtocolVersion) =
     AVSupportsValidatorSuspension (AccountVersionFor pv)
+
+-- | Constraint that an account version supports protocol level tokens.
+type AVSupportsPLT (av :: AccountVersion) =
+    SupportsPLT av ~ 'True
+
+-- | Constraint that a protocol version supports protocol level tokens.
+type PVSupportsPLT (pv :: ProtocolVersion) =
+    AVSupportsPLT (AccountVersionFor pv)
 
 -- | Constraint that an account version supports flexible cooldown.
 --
