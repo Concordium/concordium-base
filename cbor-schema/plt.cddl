@@ -139,8 +139,6 @@ token-remove-deny-list = {
 token-initialization-parameters = { 
     ; The name of the token
     "name": text,
-    ; The number of decimals in the representation of the token
-    "decimals": uint,
     ; A URL pointing to the token metadata
     "metadata": text,
     ; Whether the token supports an allow list
