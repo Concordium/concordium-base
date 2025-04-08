@@ -25,8 +25,12 @@ instance Aeson.FromJSON TokenId where
     parseJSON = undefined
 
 instance Serialize.Serialize TokenId where
-    get = TokenId <$> Serialize.get
-    put (TokenId symbol) = Serialize.put symbol
+    get = do
+        len <- Serialize.getWord8
+        TokenId <$> Serialize.getShortByteString (fromIntegral len)
+    put (TokenId symbol) = do
+        Serialize.putWord8 (fromIntegral (BS.length symbol))
+        Serialize.putShortByteString symbol
 
 -- | The token amount representation.
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
@@ -66,8 +70,12 @@ newtype TokenParameter = TokenParameter {parameterBytes :: BS.ShortByteString}
     deriving (Aeson.ToJSON, Aeson.FromJSON, Show) via ByteStringHelpers.ByteStringHex
 
 instance Serialize.Serialize TokenParameter where
-    get = TokenParameter <$> Serialize.get
-    put (TokenParameter parameter) = Serialize.put parameter
+    get = do
+        len <- Serialize.getWord16be
+        TokenParameter <$> Serialize.getShortByteString (fromIntegral len)
+    put (TokenParameter parameter) = do
+        Serialize.putWord16be (fromIntegral (BS.length parameter))
+        Serialize.putShortByteString parameter
 
 -- | Module reference for a token module.
 newtype TokenModuleRef = TokenModuleRef {tokenModuleRef :: SHA256.Hash}
