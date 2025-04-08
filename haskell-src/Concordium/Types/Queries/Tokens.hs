@@ -9,9 +9,11 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import qualified Concordium.Types as Types
 import qualified Concordium.Types.HashableTo as HashableTo
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Short as BS
 import qualified Data.Hashable as Hashable
 import qualified Data.Serialize as Serialize
+import qualified Data.Text.Encoding as Text
 import Data.Word
 
 -- | The unique token identifier. This is given as a symbol unique across the
@@ -19,10 +21,13 @@ import Data.Word
 newtype TokenId = TokenId {symbol :: BS.ShortByteString} deriving (Eq, Show)
 
 instance Aeson.ToJSON TokenId where
-    toJSON TokenId{} = undefined
+    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenId
+    -- should enforce valid UTF-8.
+    toJSON TokenId{..} = Aeson.String $ Text.decodeUtf8 $ BS.fromShort symbol
 
 instance Aeson.FromJSON TokenId where
-    parseJSON = undefined
+    parseJSON (Aeson.String text) = return $ TokenId $ BS.toShort $ Text.encodeUtf8 text
+    parseJSON invalid = Aeson.prependFailure "parsing TokenId failed" (Aeson.typeMismatch "String" invalid)
 
 instance Serialize.Serialize TokenId where
     get = do
