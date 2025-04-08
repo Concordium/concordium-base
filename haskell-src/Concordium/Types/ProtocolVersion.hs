@@ -238,6 +238,7 @@ module Concordium.Types.ProtocolVersion (
     supportsAccountSignatureChecks,
     supportsContractInspectionQueries,
     supportsEncryptedTransfers,
+    supportsProtocolLevelTokens,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -794,3 +795,17 @@ supportsEncryptedTransfers = \case
     SP7 -> False
     SP8 -> False
     SP9 -> False
+
+-- | Whether the protocol version supports Protocol Level Tokens (PLT).
+-- (Supported in 'P9' and onwards.)
+supportsProtocolLevelTokens :: SProtocolVersion pv -> Bool
+supportsProtocolLevelTokens = \case
+    SP1 -> False
+    SP2 -> False
+    SP3 -> False
+    SP4 -> False
+    SP5 -> False
+    SP6 -> False
+    SP7 -> False
+    SP8 -> False
+    SP9 -> True

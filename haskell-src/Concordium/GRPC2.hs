@@ -1593,6 +1593,7 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateBlockEnergyLimit = Proto.UPDATE_BLOCK_ENERGY_LIMIT
     toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
     toProto Updates.UpdateValidatorScoreParameters = Proto.UPDATE_VALIDATOR_SCORE_PARAMETERS
+    toProto Updates.UpdateCreatePLT = Proto.UPDATE_CREATE_PLT
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType

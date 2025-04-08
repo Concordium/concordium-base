@@ -1,12 +1,32 @@
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | Types for protocol level tokens (PLT).
 module Concordium.Types.Queries.Tokens where
 
+import qualified Concordium.Crypto.ByteStringHelpers as ByteStringHelpers
+import qualified Concordium.Crypto.SHA256 as SHA256
+import qualified Concordium.Types as Types
+import qualified Concordium.Types.HashableTo as HashableTo
+import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Short as BS
+import qualified Data.Hashable as Hashable
+import qualified Data.Serialize as Serialize
 import Data.Word
 
 -- | The unique token identifier. This is given as a symbol unique across the
 --  whole chain.
 newtype TokenId = TokenId {symbol :: BS.ShortByteString} deriving (Eq, Show)
+
+instance Aeson.ToJSON TokenId where
+    toJSON TokenId{} = undefined
+
+instance Aeson.FromJSON TokenId where
+    parseJSON = undefined
+
+instance Serialize.Serialize TokenId where
+    get = TokenId <$> Serialize.get
+    put (TokenId symbol) = Serialize.put symbol
 
 -- | The token amount representation.
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
@@ -39,3 +59,78 @@ data TokenAccountState = TokenAccountState
       memberDenyList :: !Bool
     }
     deriving (Eq, Show)
+
+-- | Parameter for a Token module.
+newtype TokenParameter = TokenParameter {parameterBytes :: BS.ShortByteString}
+    deriving (Eq)
+    deriving (Aeson.ToJSON, Aeson.FromJSON, Show) via ByteStringHelpers.ByteStringHex
+
+instance Serialize.Serialize TokenParameter where
+    get = TokenParameter <$> Serialize.get
+    put (TokenParameter parameter) = Serialize.put parameter
+
+-- | Module reference for a token module.
+newtype TokenModuleRef = TokenModuleRef {tokenModuleRef :: SHA256.Hash}
+    deriving (Eq, Ord, Hashable.Hashable)
+    deriving (Aeson.FromJSON, Aeson.ToJSON, Read) via SHA256.Hash
+
+instance Show TokenModuleRef where
+    show (TokenModuleRef m) = show m
+
+instance Serialize.Serialize TokenModuleRef where
+    get = TokenModuleRef <$> Serialize.get
+    put (TokenModuleRef mref) = Serialize.put mref
+
+-- | Update payload for creating a new protocol-level token.
+data CreatePLT = CreatePLT
+    { -- | The symbol of the token.
+      tokenSymbol :: !TokenId,
+      -- | A SHA256 hash that identifies the token module implementation.
+      tokenModule :: !TokenModuleRef,
+      -- | The address of the account that will govern the token.
+      governanceAccount :: !Types.AccountAddress,
+      -- | The number of decimal places used in the representation of amounts of this token. This determines the smallest representable fraction of the token.
+      decimals :: !Word8,
+      -- | The initialization parameters of the token, encoded in CBOR. This consists of the remaining bytes of the update payload.
+      initializationParameters :: !TokenParameter
+    }
+    deriving (Eq, Show)
+
+instance HashableTo.HashableTo SHA256.Hash CreatePLT where
+    getHash = SHA256.hash . Serialize.encode
+
+instance (Monad m) => HashableTo.MHashableTo m SHA256.Hash CreatePLT
+
+instance Serialize.Serialize CreatePLT where
+    put CreatePLT{..} = do
+        Serialize.put tokenSymbol
+        Serialize.put tokenModule
+        Serialize.put governanceAccount
+        Serialize.put decimals
+        Serialize.put initializationParameters
+    get = do
+        tokenSymbol <- Serialize.get
+        tokenModule <- Serialize.get
+        governanceAccount <- Serialize.get
+        decimals <- Serialize.get
+        initializationParameters <- Serialize.get
+        return CreatePLT{..}
+
+instance Aeson.ToJSON CreatePLT where
+    toJSON CreatePLT{..} =
+        Aeson.object
+            [ "tokenSymbol" Aeson..= tokenSymbol,
+              "tokenModule" Aeson..= tokenModule,
+              "governanceAccount" Aeson..= governanceAccount,
+              "decimals" Aeson..= decimals,
+              "initializationParameters" Aeson..= initializationParameters
+            ]
+
+instance Aeson.FromJSON CreatePLT where
+    parseJSON = Aeson.withObject "CreatePLT" $ \o -> do
+        tokenSymbol <- o Aeson..: "tokenSymbol"
+        tokenModule <- o Aeson..: "tokenModule"
+        governanceAccount <- o Aeson..: "governanceAccount"
+        decimals <- o Aeson..: "decimals"
+        initializationParameters <- o Aeson..: "initializationParameters"
+        return CreatePLT{..}
