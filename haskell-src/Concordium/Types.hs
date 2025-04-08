@@ -179,6 +179,11 @@ module Concordium.Types (
     -- * PartsPerHundredThousands
     PartsPerHundredThousands (..),
     partsPerHundredThousandsToRational,
+
+    -- * Protocol-level tokens
+    TokenId (..),
+    makeTokenId,
+    unsafeGetTokenId,
 ) where
 
 import Data.Data (Data, Typeable)
@@ -1144,6 +1149,44 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
   where
     rest = FBS.encodeInteger (toInteger (count .&. 0xffffff))
     mask = complement (FBS.encodeInteger 0xffffff) -- mask to clear out the last three bytes of the addr
+
+-- * Protocol-level tokens
+
+-- | The unique token identifier for a protocol-level token.
+--  This is given as a symbol unique across the whole chain.
+--  The byte string must be at most 255 bytes long and be a valid UTF-8 string.
+newtype TokenId = TokenId {tokenSymbol :: BSS.ShortByteString}
+    deriving newtype (Eq, Ord, Show)
+
+-- | Try to construct a valid 'TokenId' from a 'BSS.ShortByteString'.
+--  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
+--  In the event of a failure @Left err@ is returned, where @err@ describes the failure.
+makeTokenId :: BSS.ShortByteString -> Either String TokenId
+makeTokenId sbs
+    | BSS.length sbs > 255 =
+        Left $ "TokenId length (" ++ show (BSS.length sbs) ++ ") out of bounds."
+    | Left decodeErr <- T.decodeUtf8' (BSS.fromShort sbs) =
+        Left $ "TokenId is not valid UTF-8: " ++ show decodeErr
+    | otherwise = Right $ TokenId sbs
+
+instance S.Serialize TokenId where
+    put (TokenId tid) = do
+        S.putWord8 $ fromIntegral $ BSS.length tid
+        S.putShortByteString tid
+    get = do
+        len <- S.getWord8
+        sbs <- S.getShortByteString (fromIntegral len)
+        case makeTokenId sbs of
+            Left e -> fail e
+            Right tokId -> return tokId
+
+-- | Deserialize a 'TokenId' without checking the invariant that the string is valid UTF-8.
+--  This should only be used where deserializing from a trusted source.
+unsafeGetTokenId :: S.Get TokenId
+unsafeGetTokenId = do
+    len <- S.getWord8
+    sbs <- S.getShortByteString (fromIntegral len)
+    return (TokenId sbs)
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
