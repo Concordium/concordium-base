@@ -85,14 +85,7 @@ instance Serialize.Serialize TokenParameter where
 -- | Module reference for a token module.
 newtype TokenModuleRef = TokenModuleRef {tokenModuleRef :: SHA256.Hash}
     deriving (Eq, Ord, Hashable.Hashable)
-    deriving (Aeson.FromJSON, Aeson.ToJSON, Read) via SHA256.Hash
-
-instance Show TokenModuleRef where
-    show (TokenModuleRef m) = show m
-
-instance Serialize.Serialize TokenModuleRef where
-    get = TokenModuleRef <$> Serialize.get
-    put (TokenModuleRef mref) = Serialize.put mref
+    deriving (Aeson.FromJSON, Aeson.ToJSON, Read, Show, Serialize.Serialize) via SHA256.Hash
 
 -- | Update payload for creating a new protocol-level token.
 data CreatePLT = CreatePLT

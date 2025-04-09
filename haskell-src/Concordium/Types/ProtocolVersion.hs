@@ -199,6 +199,7 @@ module Concordium.Types.ProtocolVersion (
     SupportsPLT,
     supportsPLT,
     sSupportsPLT,
+    protocolSupportsPLT,
     -- | Determine whether a specific account version supports protocol level tokens.
     AVSupportsPLT,
     -- | Determine whether a specific protocol version supports protocol level tokens.
@@ -238,7 +239,6 @@ module Concordium.Types.ProtocolVersion (
     supportsAccountSignatureChecks,
     supportsContractInspectionQueries,
     supportsEncryptedTransfers,
-    supportsProtocolLevelTokens,
 
     -- * Defunctionalisation symbols
     P1Sym0,
@@ -628,6 +628,13 @@ type AVSupportsPLT (av :: AccountVersion) =
 type PVSupportsPLT (pv :: ProtocolVersion) =
     AVSupportsPLT (AccountVersionFor pv)
 
+-- | Whether the protocol version supports Protocol Level Tokens (PLT).
+protocolSupportsPLT :: SProtocolVersion pv -> Bool
+{-# INLINE protocolSupportsPLT #-}
+protocolSupportsPLT spv = case sSupportsPLT (sAccountVersionFor spv) of
+    STrue -> True
+    SFalse -> False
+
 -- | Constraint that an account version supports flexible cooldown.
 --
 -- Note, we do not use 'Assert' here, since that results in a weaker constraint that requires
@@ -795,17 +802,3 @@ supportsEncryptedTransfers = \case
     SP7 -> False
     SP8 -> False
     SP9 -> False
-
--- | Whether the protocol version supports Protocol Level Tokens (PLT).
--- (Supported in 'P9' and onwards.)
-supportsProtocolLevelTokens :: SProtocolVersion pv -> Bool
-supportsProtocolLevelTokens = \case
-    SP1 -> False
-    SP2 -> False
-    SP3 -> False
-    SP4 -> False
-    SP5 -> False
-    SP6 -> False
-    SP7 -> False
-    SP8 -> False
-    SP9 -> True
