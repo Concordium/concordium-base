@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -8,34 +9,12 @@ import qualified Concordium.Crypto.ByteStringHelpers as ByteStringHelpers
 import qualified Concordium.Crypto.SHA256 as SHA256
 import qualified Concordium.Types as Types
 import qualified Concordium.Types.HashableTo as HashableTo
+
 import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Short as BS
 import qualified Data.Hashable as Hashable
 import qualified Data.Serialize as Serialize
-import qualified Data.Text.Encoding as Text
 import Data.Word
-
--- | The unique token identifier. This is given as a symbol unique across the
---  whole chain.
-newtype TokenId = TokenId {symbol :: BS.ShortByteString} deriving (Eq, Show)
-
-instance Aeson.ToJSON TokenId where
-    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenId
-    -- should enforce valid UTF-8.
-    toJSON TokenId{..} = Aeson.String $ Text.decodeUtf8 $ BS.fromShort symbol
-
-instance Aeson.FromJSON TokenId where
-    parseJSON (Aeson.String text) = return $ TokenId $ BS.toShort $ Text.encodeUtf8 text
-    parseJSON invalid = Aeson.prependFailure "parsing TokenId failed" (Aeson.typeMismatch "String" invalid)
-
-instance Serialize.Serialize TokenId where
-    get = do
-        len <- Serialize.getWord8
-        TokenId <$> Serialize.getShortByteString (fromIntegral len)
-    put (TokenId symbol) = do
-        Serialize.putWord8 (fromIntegral (BS.length symbol))
-        Serialize.putShortByteString symbol
 
 -- | The token amount representation.
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
@@ -48,7 +27,7 @@ data TokenAmount = TokenAmount
 -- | Protocol level token.
 data Token = Token
     { -- | The unique token identifier.
-      tokenId :: !TokenId,
+      tokenId :: !Types.TokenId,
       -- | The account level state of the token.
       tokenAccountState :: !TokenAccountState
     }
@@ -90,7 +69,7 @@ newtype TokenModuleRef = TokenModuleRef {tokenModuleRef :: SHA256.Hash}
 -- | Update payload for creating a new protocol-level token.
 data CreatePLT = CreatePLT
     { -- | The symbol of the token.
-      tokenSymbol :: !TokenId,
+      tokenSymbol :: !Types.TokenId,
       -- | A SHA256 hash that identifies the token module implementation.
       tokenModule :: !TokenModuleRef,
       -- | The address of the account that will govern the token.
