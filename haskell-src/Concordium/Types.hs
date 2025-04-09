@@ -181,6 +181,7 @@ module Concordium.Types (
     partsPerHundredThousandsToRational,
 
     -- * Protocol-level tokens
+    CborShortByteString (..),
     TokenId (..),
     makeTokenId,
     unsafeGetTokenId,
@@ -221,8 +222,8 @@ import Data.Ratio
 import qualified Data.Sequence as Seq
 import Data.Word
 
-import Data.Aeson as AE
 import Data.Aeson.TH
+import Data.Aeson.Types as AE
 
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -1157,6 +1158,25 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
 --  The byte string must be at most 255 bytes long and be a valid UTF-8 string.
 newtype TokenId = TokenId {tokenSymbol :: BSS.ShortByteString}
     deriving newtype (Eq, Ord, Show)
+
+instance AE.ToJSON TokenId where
+    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenId
+    -- should enforce valid UTF-8.
+    toJSON TokenId{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenSymbol
+
+instance AE.FromJSON TokenId where
+    parseJSON (AE.String text) = return $ TokenId $ BSS.toShort $ T.encodeUtf8 text
+    parseJSON invalid = AE.prependFailure "parsing TokenId failed" (AE.typeMismatch "String" invalid)
+
+-- | A CBOR encoded byte string.
+-- | Nice-to-have (TODO): Convert byte string into a human-readable JSON format instead of hex string.
+newtype CborShortByteString = CborShortByteString BSS.ShortByteString
+    deriving (Eq)
+    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ByteStringHex
+
+instance S.Serialize CborShortByteString where
+    put (CborShortByteString bs) = S.put bs
+    get = CborShortByteString <$> S.get
 
 -- | Try to construct a valid 'TokenId' from a 'BSS.ShortByteString'.
 --  This can fail if the string is longer than 255 bytes or is not valid UTF-8.

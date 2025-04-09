@@ -1011,6 +1011,54 @@ payloadBodyBytes (EncodedPayload ss) =
         then BS.empty
         else BS.tail (BSS.fromShort ss)
 
+--  Event types emitted by chain as part of a PLT (protocol layer token) account transaction.
+data TokenHolderEventType
+    = -- | Transfer some PLTs from one account to another account.
+      TokenTransfer
+    deriving (Eq, Ord, Show, Bounded, Enum)
+
+-- The JSON instance will encode all values as strings, lower-casing the first
+-- character, so, e.g., `toJSON Transfer = String "transfer"`.
+$( deriveJSON
+    defaultOptions
+        { constructorTagModifier = firstLower,
+          allNullaryToStringTag = True
+        }
+    ''TokenHolderEventType
+ )
+instance S.Serialize TokenHolderEventType where
+    put TokenTransfer = S.putWord8 1
+    get =
+        S.getWord8 >>= \case
+            1 -> return TokenTransfer
+            n -> fail $ "invalid token holder event type: " ++ show n
+
+--  Event types emitted by the chain as part of a PLT (protocol layer token) governance transaction.
+data TokenGovernanceEventType
+    = -- | Minting some PLT tokens.
+      TokenMint
+    | -- | Burning some PLT tokens.
+      TokenBurn
+    deriving (Eq, Ord, Show, Bounded, Enum)
+
+-- The JSON instance will encode all values as strings, lower-casing the first
+-- character, so, e.g., `toJSON Mint = String "mint"`.
+$( deriveJSON
+    defaultOptions
+        { constructorTagModifier = firstLower,
+          allNullaryToStringTag = True
+        }
+    ''TokenGovernanceEventType
+ )
+instance S.Serialize TokenGovernanceEventType where
+    put TokenMint = S.putWord8 1
+    put TokenBurn = S.putWord8 2
+    get =
+        S.getWord8 >>= \case
+            1 -> return TokenMint
+            2 -> return TokenBurn
+            n -> fail $ "invalid token governance event type: " ++ show n
+
 data VersionedContractEvents = VersionedContractEvents
     { -- | Version of the contract that produced the events.
       veContractVersion :: !Wasm.WasmVersion,
@@ -1344,6 +1392,24 @@ data Event' (supplemented :: Bool)
         { ebrBakerId :: !BakerId,
           ebrAccount :: !AccountAddress
         }
+    | -- | A PLT (protocol layer token) event originating from an account transaction.
+      TokenHolder
+        { -- The unique token symbol.
+          ethTokenSymbol :: !TokenId,
+          -- The type of the event.
+          ethType :: !TokenHolderEventType,
+          -- The CBOR encoded event details.
+          ethDetails :: !CborShortByteString
+        }
+    | -- | A PLT (protocol layer token) event originating from a governance transaction.
+      TokenGovernance
+        { -- The unique token symbol.
+          etgTokenSymbol :: !TokenId,
+          -- The type of the event.
+          etgType :: !TokenGovernanceEventType,
+          -- The CBOR encoded event details.
+          etgDetails :: !CborShortByteString
+        }
     deriving (Show, Generic, Eq)
 
 -- | A contract event, without supplemental data. This is what is stored in the database and
@@ -1402,6 +1468,8 @@ addInitializeParameter _ DelegationRemoved{..} = pure DelegationRemoved{..}
 addInitializeParameter _ Upgraded{..} = pure Upgraded{..}
 addInitializeParameter _ BakerSuspended{..} = pure BakerSuspended{..}
 addInitializeParameter _ BakerResumed{..} = pure BakerResumed{..}
+addInitializeParameter _ TokenHolder{..} = pure TokenHolder{..}
+addInitializeParameter _ TokenGovernance{..} = pure TokenGovernance{..}
 
 putEvent :: S.Putter Event
 putEvent = \case
@@ -1593,6 +1661,16 @@ putEvent = \case
         S.putWord8 37
             <> S.put ebrBakerId
             <> S.put ebrAccount
+    TokenHolder{..} ->
+        S.putWord8 38
+            <> S.put ethTokenSymbol
+            <> S.put ethType
+            <> S.put ethDetails
+    TokenGovernance{..} ->
+        S.putWord8 39
+            <> S.put etgTokenSymbol
+            <> S.put etgType
+            <> S.put etgDetails
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -2056,6 +2134,20 @@ instance AE.ToJSON (Event' supplemented) where
                 [ "tag" .= AE.String "BakerResumed",
                   "bakerId" .= ebrBakerId,
                   "account" .= ebrAccount
+                ]
+        TokenHolder{..} ->
+            AE.object
+                [ "tag" .= AE.String "TokenHolder",
+                  "tokenSymbol" .= ethTokenSymbol,
+                  "type" .= ethType,
+                  "details" .= ethDetails
+                ]
+        TokenGovernance{..} ->
+            AE.object
+                [ "tag" .= AE.String "TokenGovernance",
+                  "tokenSymbol" .= etgTokenSymbol,
+                  "type" .= etgType,
+                  "details" .= etgDetails
                 ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
