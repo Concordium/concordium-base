@@ -419,7 +419,7 @@ module Concordium.Types.Parameters (
     PTFinalizationProofSym0,
     PTFinalizationCommitteeParametersSym0,
     PTValidatorScoreParametersSym0,
-    PTProtocolLevelTokensParametersSym0
+    PTProtocolLevelTokensParametersSym0,
 ) where
 
 import Control.Monad
@@ -2087,7 +2087,6 @@ parseJSONForCPV4 =
         let _cpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
 
         return ChainParameters{..}
-
 
 instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (ChainParameters' cpv) where
     parseJSON = case chainParametersVersion @cpv of

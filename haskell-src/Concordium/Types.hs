@@ -222,8 +222,8 @@ import qualified Data.Sequence as Seq
 import Data.Word
 
 import Data.Aeson as AE
-import Data.Aeson.Types as AE
 import Data.Aeson.TH
+import Data.Aeson.Types as AE
 
 import Data.Time
 import Data.Time.Clock.POSIX

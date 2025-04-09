@@ -239,7 +239,6 @@ parseJSONForGCPV4 =
         let gcpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
         return GenesisChainParameters{..}
 
-
 instance ToJSON (GenesisChainParameters' 'ChainParametersV0) where
     toJSON GenesisChainParameters{..} =
         object

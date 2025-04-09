@@ -179,11 +179,12 @@ migrateChainParameters m@(StateMigrationParametersP7ToP8 migration) ChainParamet
         }
   where
     RewardParameters{..} = _cpRewardParameters
-migrateChainParameters StateMigrationParametersP8ToP9{} ChainParameters{..} = ChainParameters
+migrateChainParameters StateMigrationParametersP8ToP9{} ChainParameters{..} =
+    ChainParameters
         { _cpValidatorScoreParameters = SomeParam $ unOParam _cpValidatorScoreParameters,
           _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
           _cpFinalizationCommitteeParameters = SomeParam $ unOParam _cpFinalizationCommitteeParameters,
-          _cpRewardParameters = RewardParameters { .. },
+          _cpRewardParameters = RewardParameters{..},
           ..
         }
   where
