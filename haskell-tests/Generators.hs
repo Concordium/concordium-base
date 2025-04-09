@@ -44,7 +44,6 @@ import Concordium.Types
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution
 import Concordium.Types.Parameters
-import qualified Concordium.Types.Queries.Tokens as Tokens
 import Concordium.Types.Transactions
 import Concordium.Types.Updates
 import qualified Concordium.Wasm as Wasm
@@ -507,6 +506,20 @@ genChainParametersV3 = do
     _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
     return ChainParameters{..}
 
+genChainParametersV4 :: Gen (ChainParameters' 'ChainParametersV4)
+genChainParametersV4 = do
+    _cpConsensusParameters <- genConsensusParametersV1
+    _cpExchangeRates <- genExchangeRates
+    _cpCooldownParameters <- genCooldownParametersV1
+    _cpTimeParameters <- SomeParam <$> genTimeParametersV1
+    _cpAccountCreationLimit <- arbitrary
+    _cpRewardParameters <- genRewardParameters
+    _cpFoundationAccount <- AccountIndex <$> arbitrary
+    _cpPoolParameters <- genPoolParametersV1
+    _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    return ChainParameters{..}
+
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
 genGenesisChainParametersV0 = do
     gcpConsensusParameters <- ConsensusParametersV0 <$> genElectionDifficulty
@@ -551,6 +564,20 @@ genGenesisChainParametersV2 = do
 
 genGenesisChainParametersV3 :: Gen (GenesisChainParameters' 'ChainParametersV3)
 genGenesisChainParametersV3 = do
+    gcpConsensusParameters <- genConsensusParametersV1
+    gcpExchangeRates <- genExchangeRates
+    gcpCooldownParameters <- genCooldownParametersV1
+    gcpTimeParameters <- SomeParam <$> genTimeParametersV1
+    gcpAccountCreationLimit <- arbitrary
+    gcpRewardParameters <- genRewardParameters
+    gcpFoundationAccount <- genAccountAddress
+    gcpPoolParameters <- genPoolParametersV1
+    gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    gcpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    return GenesisChainParameters{..}
+
+genGenesisChainParametersV4 :: Gen (GenesisChainParameters' 'ChainParametersV4)
+genGenesisChainParametersV4 = do
     gcpConsensusParameters <- genConsensusParametersV1
     gcpExchangeRates <- genExchangeRates
     gcpCooldownParameters <- genCooldownParametersV1
@@ -1042,13 +1069,13 @@ genGASRewards = do
     _gasChainUpdate <- makeAmountFraction <$> choose (0, 100000)
     return GASRewards{..}
 
-genTokenParameter :: Gen Tokens.TokenParameter
+genTokenParameter :: Gen TokenParameter
 genTokenParameter = do
     n <- choose (0, 1000)
-    Tokens.TokenParameter . BSS.pack <$> vector n
+    TokenParameter . BSS.pack <$> vector n
 
-genTokenModuleRef :: Gen Tokens.TokenModuleRef
-genTokenModuleRef = Tokens.TokenModuleRef . SHA256.hash . BS.pack <$> vector 32
+genTokenModuleRef :: Gen TokenModuleRef
+genTokenModuleRef = TokenModuleRef . SHA256.hash . BS.pack <$> vector 32
 
 -- | Generate a valid UTF-8 character. The size argument is used to determine how many bytes in
 --  size this can be (up to 4).
@@ -1099,14 +1126,14 @@ genTokenId = do
     len <- chooseBoundedIntegral (0, 255)
     TokenId . BSS.pack <$> genUtf8String len
 
-genCreatePLT :: Gen Tokens.CreatePLT
+genCreatePLT :: Gen CreatePLT
 genCreatePLT = do
-    tokenSymbol <- genTokenId
-    tokenModule <- genTokenModuleRef
-    governanceAccount <- genAccountAddress
-    decimals <- choose (0, 255)
-    initializationParameters <- genTokenParameter
-    return Tokens.CreatePLT{..}
+    _cpltTokenSymbol <- genTokenId
+    _cpltTokenModule <- genTokenModuleRef
+    _cpltGovernanceAccount <- genAccountAddress
+    _cpltDecimals <- choose (0, 255)
+    _cpltInitializationParameters <- genTokenParameter
+    return CreatePLT{..}
 
 genHigherLevelKeys :: Gen (HigherLevelKeys a)
 genHigherLevelKeys = do

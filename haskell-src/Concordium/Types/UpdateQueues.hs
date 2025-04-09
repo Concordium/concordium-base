@@ -511,7 +511,9 @@ data Updates' (cpv :: ChainParametersVersion) = Updates
       -- | Current chain parameters.
       _currentParameters :: !(ChainParameters' cpv),
       -- | Pending updates.
-      _pendingUpdates :: !(PendingUpdates cpv)
+      _pendingUpdates :: !(PendingUpdates cpv),
+      -- | Sequence number for updates to the protocol level tokens (PLT).
+      _pltUpdateSequenceNumber :: !(OParam 'PTProtocolLevelTokensParameters cpv UpdateSequenceNumber)
     }
     deriving (Show, Eq)
 
@@ -541,6 +543,12 @@ instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (Updates' cpv) whe
                   "updateQueues" AE..= _pendingUpdates
                 ]
                     <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
+                    <> case chainParametersVersion @cpv of
+                        SChainParametersV0 -> []
+                        SChainParametersV1 -> []
+                        SChainParametersV2 -> []
+                        SChainParametersV3 -> []
+                        SChainParametersV4 -> ["pltUpdateSequenceNumber" AE..= unOParam _pltUpdateSequenceNumber]
 
 instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (Updates' cpv) where
     parseJSON = withObject "Updates" $ \o -> do
@@ -550,6 +558,12 @@ instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (Updates' cpv) w
         _currentProtocolUpdate <- o AE..:? "protocolUpdate"
         _currentParameters <- o AE..: "chainParameters"
         _pendingUpdates <- o AE..: "updateQueues"
+        _pltUpdateSequenceNumber <- case chainParametersVersion @cpv of
+            SChainParametersV0 -> return NoParam
+            SChainParametersV1 -> return NoParam
+            SChainParametersV2 -> return NoParam
+            SChainParametersV3 -> return NoParam
+            SChainParametersV4 -> SomeParam <$> o AE..: "pltUpdateSequenceNumber"
         return Updates{..}
 
 -- | An initial 'Updates' with the given initial 'Authorizations'
@@ -564,6 +578,7 @@ initialUpdates initialKeyCollection _currentParameters =
         { _currentKeyCollection = makeHashed initialKeyCollection,
           _currentProtocolUpdate = Nothing,
           _pendingUpdates = emptyPendingUpdates,
+          _pltUpdateSequenceNumber = whenSupported minUpdateSequenceNumber,
           ..
         }
 
