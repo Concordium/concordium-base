@@ -845,7 +845,7 @@ data UpdatePayload
       FinalizationCommitteeParametersUpdatePayload !FinalizationCommitteeParameters
     | -- | Update the validator score parameters (chain parameters version 3)
       ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
-    | -- | Issue a new Protocol Level Token (PLT) (Concordium Protocol 9)
+    | -- | Issue a new Protocol Level Token (PLT) (Support starting from protocol version 9)
       CreatePLTUpdatePayload !Tokens.CreatePLT
     deriving (Eq, Show)
 
@@ -915,7 +915,7 @@ getUpdatePayload spv =
         21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
         22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
         23 | isSupported PTValidatorScoreParameters cpv -> ValidatorScoreParametersUpdatePayload <$> get
-        24 | protocolSupportsPLT spv -> CreatePLTUpdatePayload <$> get
+        24 | isSupported PTProtocolLevelTokensParameters cpv -> CreatePLTUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv

@@ -287,6 +287,7 @@ $( singletons
             | ChainParametersV1
             | ChainParametersV2
             | ChainParametersV3
+            | ChainParametersV4
             deriving (Eq, Ord)
 
         chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
@@ -298,7 +299,7 @@ $( singletons
         chainParametersVersionFor P6 = ChainParametersV2
         chainParametersVersionFor P7 = ChainParametersV2
         chainParametersVersionFor P8 = ChainParametersV3
-        chainParametersVersionFor P9 = ChainParametersV3
+        chainParametersVersionFor P9 = ChainParametersV4
 
         -- \* Account versions
 
@@ -454,6 +455,7 @@ chainParameterVersionToWord64 ChainParametersV0 = 0
 chainParameterVersionToWord64 ChainParametersV1 = 1
 chainParameterVersionToWord64 ChainParametersV2 = 2
 chainParameterVersionToWord64 ChainParametersV3 = 3
+chainParameterVersionToWord64 ChainParametersV4 = 4
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64

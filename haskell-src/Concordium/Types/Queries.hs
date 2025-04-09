@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 -- | Types for representing the inputs to and results of consensus queries.
 module Concordium.Types.Queries where
@@ -818,6 +819,12 @@ instance ToJSON EChainParametersAndKeys where
             SChainParametersV3 ->
                 object
                     [ "version" .= toJSON ChainParametersV3,
+                      "parameters" .= toJSON params,
+                      "updateKeys" .= toJSON keys
+                    ]
+            SChainParametersV4 ->
+                object
+                    [ "version" .= toJSON ChainParametersV4,
                       "parameters" .= toJSON params,
                       "updateKeys" .= toJSON keys
                     ]

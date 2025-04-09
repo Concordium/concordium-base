@@ -179,7 +179,15 @@ migrateChainParameters m@(StateMigrationParametersP7ToP8 migration) ChainParamet
         }
   where
     RewardParameters{..} = _cpRewardParameters
-migrateChainParameters StateMigrationParametersP8ToP9{} cps = cps -- TODO: Update this if/when chain parameters change in P9
+migrateChainParameters StateMigrationParametersP8ToP9{} ChainParameters{..} = ChainParameters
+        { _cpValidatorScoreParameters = SomeParam $ unOParam _cpValidatorScoreParameters,
+          _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
+          _cpFinalizationCommitteeParameters = SomeParam $ unOParam _cpFinalizationCommitteeParameters,
+          _cpRewardParameters = RewardParameters { .. },
+          ..
+        }
+  where
+    RewardParameters{..} = _cpRewardParameters
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.

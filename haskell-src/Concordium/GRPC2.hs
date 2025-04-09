@@ -2163,6 +2163,31 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                     ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
                                 )
+            SChainParametersV4 ->
+                let Parameters.ChainParameters{..} = params
+                in  Proto.make $
+                        -- Notice we use v3 and not v4 here, as we decided not to introduce anymore
+                        -- chain parameters versions in the API and instead extend the v3 with optional fields.
+                        ProtoFields.v3
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
+                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
+                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
+                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
+                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
+                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
+                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
+                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
+                                    ProtoFields.foundationAccount .= toProto foundationAddr
+                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
+                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
+                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
+                                )
 
 instance ToProto FinalizationIndex where
     type Output FinalizationIndex = Proto.FinalizationIndex
