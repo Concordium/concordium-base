@@ -322,6 +322,7 @@ test-suite test
       Types.PayloadSerializationSpec
       Types.PayloadSpec
       Types.TimestampSpec
+      Types.TokenIdSpec
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec

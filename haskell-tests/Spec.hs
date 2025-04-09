@@ -24,6 +24,7 @@ import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.PayloadSpec
 import qualified Types.TimestampSpec
+import qualified Types.TokenIdSpec
 import qualified Types.TransactionSerializationSpec
 import qualified Types.TransactionSummarySpec
 import qualified Types.UpdatesSpec
@@ -60,3 +61,4 @@ main = hspec $ parallel $ do
     Types.PayloadSpec.tests
     Genesis.ParametersSpec.tests
     Types.ValidName.tests
+    Types.TokenIdSpec.tests
