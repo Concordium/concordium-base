@@ -93,7 +93,6 @@ import Concordium.ID.IdentityProvider (IpInfo)
 import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Parameters
-import qualified Concordium.Types.Queries.Tokens as Tokens
 import Concordium.Utils
 import Concordium.Utils.Serialization
 
@@ -846,7 +845,7 @@ data UpdatePayload
     | -- | Update the validator score parameters (chain parameters version 3)
       ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
     | -- | Issue a new Protocol Level Token (PLT) (Support starting from protocol version 9)
-      CreatePLTUpdatePayload !Tokens.CreatePLT
+      CreatePLTUpdatePayload !CreatePLT
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
