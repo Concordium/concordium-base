@@ -36,4 +36,6 @@ testInitializationParameters = describe "token-initialization-parameters decodin
                 \allowList\xF4\x6DinitialSupply\xC4\x82\x24\x19\x27\x10"
             )
 
-tests = focus $ testInitializationParameters
+tests :: Spec
+tests = describe "CBOR" $ do
+    testInitializationParameters
