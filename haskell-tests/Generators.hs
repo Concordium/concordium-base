@@ -1069,11 +1069,13 @@ genGASRewards = do
     _gasChainUpdate <- makeAmountFraction <$> choose (0, 100000)
     return GASRewards{..}
 
+-- | Generate a token parameter consisting of up to 1000 arbitrary bytes.
 genTokenParameter :: Gen TokenParameter
 genTokenParameter = do
     n <- choose (0, 1000)
     TokenParameter . BSS.pack <$> vector n
 
+-- | Generate an reference to a token module (always 32 bytes).
 genTokenModuleRef :: Gen TokenModuleRef
 genTokenModuleRef = TokenModuleRef . SHA256.hash . BS.pack <$> vector 32
 
@@ -1121,11 +1123,18 @@ genUtf8String len
         rest <- genUtf8String (len - length c)
         return (c ++ rest)
 
+-- | Generate an arbitrary 'TokenId', consisting of up to 255 bytes that is a valid UTF-8 string.
 genTokenId :: Gen TokenId
 genTokenId = do
     len <- chooseBoundedIntegral (0, 255)
     TokenId . BSS.pack <$> genUtf8String len
 
+-- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
+--   * Random token symbol up to 255 bytes valid UTF-8.
+--   * Token module reference from arbitrary bytes.
+--   * Random address as the governance account.
+--   * Arbitrary decimals between 0 and 255.
+--   * Generated token parameter up to 1000 bytes long.
 genCreatePLT :: Gen CreatePLT
 genCreatePLT = do
     _cpltTokenSymbol <- genTokenId

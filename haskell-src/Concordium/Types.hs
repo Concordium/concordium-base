@@ -1234,7 +1234,7 @@ data CreatePLT = CreatePLT
       _cpltGovernanceAccount :: !AccountAddress,
       -- | The number of decimal places used in the representation of amounts of this token. This determines the smallest representable fraction of the token.
       _cpltDecimals :: !Word8,
-      -- | The initialization parameters of the token, encoded in CBOR. This consists of the remaining bytes of the update payload.
+      -- | The initialization parameters of the token, encoded in CBOR.
       _cpltInitializationParameters :: !TokenParameter
     }
     deriving (Eq, Show)

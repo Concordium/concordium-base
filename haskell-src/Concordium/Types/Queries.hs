@@ -8,7 +8,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 -- | Types for representing the inputs to and results of consensus queries.
 module Concordium.Types.Queries where

@@ -987,7 +987,9 @@ extractKeysIndices p =
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
         ValidatorScoreParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
-        CreatePLTUpdatePayload{} -> error "Not implemented yet, authorization of this update type is planned for a later iteration"
+        -- TODO Not implemented yet, authorization of this update type is planned for a later iteration".
+        -- Tracked by issue NOD-701.
+        CreatePLTUpdatePayload{} -> const (Set.empty, 0)
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys

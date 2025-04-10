@@ -1,13 +1,9 @@
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 -- | Types for protocol level tokens (PLT).
 module Concordium.Types.Queries.Tokens where
 
-import qualified Concordium.Types as Types
-
 import Data.Word
+
+import qualified Concordium.Types as Types
 
 -- | The token amount representation.
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
