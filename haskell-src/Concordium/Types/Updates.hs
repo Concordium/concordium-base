@@ -989,7 +989,7 @@ extractKeysIndices p =
         ValidatorScoreParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
         -- TODO Not implemented yet, authorization of this update type is planned for a later iteration".
         -- Tracked by issue NOD-701.
-        CreatePLTUpdatePayload{} -> const (Set.empty, 0)
+        CreatePLTUpdatePayload{} -> const (Set.fromAscList [1, 2], 2)
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
