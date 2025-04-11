@@ -4,14 +4,34 @@ module Types.CBOR where
 
 import Codec.CBOR.Read
 import Codec.CBOR.Write
-import qualified Data.ByteString.Base16.Lazy as B16L
-import qualified Data.ByteString.Lazy.Char8 as LBS
-
+import qualified Data.ByteString as BS
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Test.HUnit
 import Test.Hspec
+import Test.QuickCheck
 
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
+
+import Generators
+
+genText :: Gen Text.Text
+genText = sized $ \s -> Text.decodeUtf8 . BS.pack <$> genUtf8String s
+
+genTokenAmount :: Gen TokenAmount
+genTokenAmount = TokenAmount <$> arbitrary <*> chooseBoundedIntegral (0, 255)
+
+genTokenInitializationParameters :: Gen TokenInitializationParameters
+genTokenInitializationParameters = do
+    tipName <- genText
+    tipMetadata <- genText
+    tipAllowList <- arbitrary
+    tipDenyList <- arbitrary
+    tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
+    tipMintable <- arbitrary
+    tipBurnable <- arbitrary
+    return TokenInitializationParameters{..}
 
 -- | A test value for 'TokenInitializationParameters'.
 tip1 :: TokenInitializationParameters
@@ -29,7 +49,7 @@ tip1 =
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
 testInitializationParameters :: Spec
 testInitializationParameters = describe "token-initialization-parameters decoding" $ do
-    it "example 1" $
+    it "Decode success" $
         assertEqual
             "Decoded CBOR"
             (Right ("", tip1))
@@ -59,24 +79,18 @@ testInitializationParameters = describe "token-initialization-parameters decodin
                 \allowList\xF4\x6DinitialSupply\xC4\x82\x24\x19\x27\x10\
                 \\x64name\x65token"
             )
-    it "Encode and decode (no defaults)" $ do
-        -- LBS.putStrLn $ B16L.encode $ toLazyByteString $ encodeTokenInitializationParametersNoDefaults tip1
-        assertEqual
-            "Decode result"
-            (Right ("", tip1))
-            ( deserialiseFromBytes
-                decodeTokenInitializationParameters
-                (toLazyByteString $ encodeTokenInitializationParametersNoDefaults tip1)
-            )
-    it "Encode and decode (with defaults)" $ do
-        LBS.putStrLn $ B16L.encode $ toLazyByteString $ encodeTokenInitializationParametersWithDefaults tip1
-        assertEqual
-            "Decode result"
-            (Right ("", tip1))
-            ( deserialiseFromBytes
-                decodeTokenInitializationParameters
-                (toLazyByteString $ encodeTokenInitializationParametersWithDefaults tip1)
-            )
+    it "Encode and decode (no defaults)" $ withMaxSuccess 10000 $ forAll genTokenInitializationParameters $ \tip ->
+        (Right ("", tip))
+            === ( deserialiseFromBytes
+                    decodeTokenInitializationParameters
+                    (toLazyByteString $ encodeTokenInitializationParametersNoDefaults tip)
+                )
+    it "Encode and decode (with defaults)" $ withMaxSuccess 10000 $ forAll genTokenInitializationParameters $ \tip ->
+        (Right ("", tip))
+            === ( deserialiseFromBytes
+                    decodeTokenInitializationParameters
+                    (toLazyByteString $ encodeTokenInitializationParametersWithDefaults tip)
+                )
 
 tests :: Spec
 tests = describe "CBOR" $ do
