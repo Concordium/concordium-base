@@ -11,55 +11,13 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Serialize
 import Data.Word
+
 import Test.HUnit
 import Test.Hspec
 import Test.QuickCheck hiding ((.&.))
 
 import Concordium.Types
-
--- | Generate a valid UTF-8 character. The size argument is used to determine how many bytes in
---  size this can be (up to 4).
-genUtf8Char :: Gen [Word8]
-genUtf8Char = do
-    sz <- getSize
-    oneof $ [oneByte] ++ [twoByte | sz >= 2] ++ [threeByte | sz >= 3] ++ [fourByte | sz >= 4]
-  where
-    oneByte = do
-        cp <- chooseBoundedIntegral (0x00, 0x7f)
-        return [cp]
-    twoByte = do
-        (cp :: Word32) <- chooseBoundedIntegral (0x80, 0x07ff)
-        return
-            [ 0b11000000 .|. fromIntegral (cp `shiftR` 6),
-              0b10000000 .|. (fromIntegral cp .&. 0b00111111)
-            ]
-    threeByte = do
-        -- Surrogate codepoints are disallowed.
-        (cp :: Word32) <-
-            chooseBoundedIntegral (0x0800, 0xffff)
-                `suchThat` (\x -> x < 0xd800 || x > 0xdfff)
-        return
-            [ 0b11100000 .|. (fromIntegral (cp `shiftR` 12)),
-              0b10000000 .|. (0b00111111 .&. fromIntegral (cp `shiftR` 6)),
-              0b10000000 .|. (0b00111111 .&. fromIntegral cp)
-            ]
-    fourByte = do
-        (cp :: Word32) <- chooseBoundedIntegral (0x010000, 0x10ffff)
-        return
-            [ 0b11110000 .|. (fromIntegral (cp `shiftR` 18)),
-              0b10000000 .|. (0b00111111 .&. fromIntegral (cp `shiftR` 12)),
-              0b10000000 .|. (0b00111111 .&. fromIntegral (cp `shiftR` 6)),
-              0b10000000 .|. (0b00111111 .&. fromIntegral cp)
-            ]
-
--- | Generate a valid UTF-8 string of the specified length.
-genUtf8String :: Int -> Gen [Word8]
-genUtf8String len
-    | len <= 0 = return []
-    | otherwise = do
-        c <- resize len genUtf8Char
-        rest <- genUtf8String (len - length c)
-        return (c ++ rest)
+import Generators
 
 -- | Shrink a UTF-8 string by removing one character in every possible way.
 shrinkUtf8String :: [Word8] -> [[Word8]]
@@ -75,9 +33,7 @@ shrinkUtf8String (a : b : c : d : r)
 shrinkUtf8String _ = error "shrinkUtf8String: invalid UTF-8 string"
 
 instance Arbitrary TokenId where
-    arbitrary = do
-        len <- chooseBoundedIntegral (0, 255)
-        TokenId . BSS.pack <$> genUtf8String len
+    arbitrary = genTokenId
     shrink (TokenId tid) = [TokenId (BSS.pack shrunk) | shrunk <- shrinkUtf8String (BSS.unpack tid)]
 
 -- | Deserialize a value, ensuring that the input is fully consumed.

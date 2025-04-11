@@ -459,6 +459,35 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
                 Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
         putStrLn $ "  - foundation account: " ++ foundAcc
 
+    printInitialChainParametersV4 :: ChainParameters' 'ChainParametersV4 -> IO ()
+    printInitialChainParametersV4 ChainParameters{..} = do
+        putStrLn ""
+        putStrLn "Chain parameters: "
+        putStrLn $ "  - Euro per Energy rate: " ++ showExchangeRate (_cpExchangeRates ^. euroPerEnergy)
+        putStrLn $ "  - microGTU per Euro rate: " ++ showExchangeRate (_cpExchangeRates ^. microGTUPerEuro)
+        printCooldownParametersV1 _cpCooldownParameters
+        putStrLn $ "  - maximum credential deployments per block: " ++ show _cpAccountCreationLimit
+        printPoolParametersV1 _cpPoolParameters
+        putStrLn "  - reward parameters:"
+        putStrLn "    + mint distribution:"
+        putStrLn $ "      * baking reward: " ++ show (_cpRewardParameters ^. mdBakingReward)
+        putStrLn $ "      * finalization reward: " ++ show (_cpRewardParameters ^. mdFinalizationReward)
+        putStrLn "    + transaction fee distribution:"
+        putStrLn $ "      * baker: " ++ show (_cpRewardParameters ^. tfdBaker)
+        putStrLn $ "      * GAS account: " ++ show (_cpRewardParameters ^. tfdGASAccount)
+        putStrLn "    + GAS rewards:"
+        putStrLn $ "      * baking a block: " ++ show (_cpRewardParameters ^. gasBaker)
+        putStrLn $ "      * adding a finalization proof: " ++ showConditionally (_cpRewardParameters ^. gasFinalizationProof)
+        putStrLn $ "      * adding a credential deployment: " ++ show (_cpRewardParameters ^. gasAccountCreation)
+        putStrLn $ "      * adding a chain update: " ++ show (_cpRewardParameters ^. gasChainUpdate)
+        mapM_ printTimeParametersV1 _cpTimeParameters
+        printConsensusParametersV1 _cpConsensusParameters
+
+        let foundAcc = case genesisAccounts ^? ix (fromIntegral _cpFoundationAccount) of
+                Nothing -> "INVALID (" ++ show _cpFoundationAccount ++ ")"
+                Just acc -> show (gaAddress acc) ++ " (index " ++ show _cpFoundationAccount ++ ")"
+        putStrLn $ "  - foundation account: " ++ foundAcc
+
     printInitialChainParameters :: IO ()
     printInitialChainParameters = do
         case sChainParametersVersionFor spv of
@@ -466,6 +495,7 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
             SChainParametersV1 -> printInitialChainParametersV1 genesisChainParameters
             SChainParametersV2 -> printInitialChainParametersV2 genesisChainParameters
             SChainParametersV3 -> printInitialChainParametersV3 genesisChainParameters
+            SChainParametersV4 -> printInitialChainParametersV4 genesisChainParameters
 
 printCooldownParametersV1 ::
     CooldownParameters' 'CooldownParametersVersion1 ->

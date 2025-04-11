@@ -1,11 +1,9 @@
-{-# LANGUAGE DerivingStrategies #-}
-
 -- | Types for protocol level tokens (PLT).
 module Concordium.Types.Queries.Tokens where
 
 import Data.Word
 
-import Concordium.Types
+import qualified Concordium.Types as Types
 
 -- | The token amount representation.
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
@@ -18,7 +16,7 @@ data TokenAmount = TokenAmount
 -- | Protocol level token.
 data Token = Token
     { -- | The unique token identifier.
-      tokenId :: !TokenId,
+      tokenId :: !Types.TokenId,
       -- | The account level state of the token.
       tokenAccountState :: !TokenAccountState
     }

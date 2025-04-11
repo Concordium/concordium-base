@@ -139,6 +139,7 @@ tests = parallel $ do
     specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV1
     specify "UpdatePayload JSON in CP2" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV2
     specify "UpdatePayload JSON in CP3" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV3
+    specify "UpdatePayload JSON in CP3" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV4
     versionedTests SP1
     versionedTests SP2
     versionedTests SP3
@@ -147,6 +148,7 @@ tests = parallel $ do
     versionedTests SP6
     versionedTests SP7
     versionedTests SP8
+    versionedTests SP9
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv

@@ -821,6 +821,12 @@ instance ToJSON EChainParametersAndKeys where
                       "parameters" .= toJSON params,
                       "updateKeys" .= toJSON keys
                     ]
+            SChainParametersV4 ->
+                object
+                    [ "version" .= toJSON ChainParametersV4,
+                      "parameters" .= toJSON params,
+                      "updateKeys" .= toJSON keys
+                    ]
 
 -- | The committee information of a node which is configured with
 --  baker keys but is somehow is _not_ part of the current baking

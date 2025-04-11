@@ -184,6 +184,14 @@ module Concordium.Types (
     TokenId (..),
     makeTokenId,
     unsafeGetTokenId,
+    TokenParameter (..),
+    TokenModuleRef (..),
+    CreatePLT (..),
+    cpltTokenSymbol,
+    cpltTokenModule,
+    cpltGovernanceAccount,
+    cpltDecimals,
+    cpltInitializationParameters,
 ) where
 
 import Data.Data (Data, Typeable)
@@ -223,6 +231,7 @@ import Data.Word
 
 import Data.Aeson as AE
 import Data.Aeson.TH
+import Data.Aeson.Types as AE
 
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -1187,6 +1196,88 @@ unsafeGetTokenId = do
     len <- S.getWord8
     sbs <- S.getShortByteString (fromIntegral len)
     return (TokenId sbs)
+
+instance AE.ToJSON TokenId where
+    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenId
+    -- should enforce valid UTF-8.
+    toJSON TokenId{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenSymbol
+
+instance AE.FromJSON TokenId where
+    parseJSON (AE.String text) = return $ TokenId $ BSS.toShort $ T.encodeUtf8 text
+    parseJSON invalid = AE.prependFailure "parsing TokenId failed" (AE.typeMismatch "String" invalid)
+
+-- | Parameter for a Token module.
+newtype TokenParameter = TokenParameter {parameterBytes :: BSS.ShortByteString}
+    deriving (Eq)
+    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ByteStringHex
+
+instance S.Serialize TokenParameter where
+    get = do
+        len <- S.getWord32be
+        TokenParameter <$> S.getShortByteString (fromIntegral len)
+    put (TokenParameter parameter) = do
+        S.putWord32be (fromIntegral (BSS.length parameter))
+        S.putShortByteString parameter
+
+-- | A hash that identifies the specific implementation to use for a token.
+newtype TokenModuleRef = TokenModuleRef {theTokenModuleRef :: Hash.Hash}
+    deriving newtype (Eq, Ord, S.Serialize, Show, AE.FromJSON, AE.ToJSON)
+
+-- | Update payload for creating a new protocol-level token.
+data CreatePLT = CreatePLT
+    { -- | The symbol of the token.
+      _cpltTokenSymbol :: !TokenId,
+      -- | A SHA256 hash that identifies the token module implementation.
+      _cpltTokenModule :: !TokenModuleRef,
+      -- | The address of the account that will govern the token.
+      _cpltGovernanceAccount :: !AccountAddress,
+      -- | The number of decimal places used in the representation of amounts of this token. This determines the smallest representable fraction of the token.
+      _cpltDecimals :: !Word8,
+      -- | The initialization parameters of the token, encoded in CBOR.
+      _cpltInitializationParameters :: !TokenParameter
+    }
+    deriving (Eq, Show)
+
+makeLenses ''CreatePLT
+
+instance HashableTo Hash.Hash CreatePLT where
+    getHash = Hash.hash . S.encode
+
+instance (Monad m) => MHashableTo m Hash.Hash CreatePLT
+
+instance S.Serialize CreatePLT where
+    put CreatePLT{..} = do
+        S.put _cpltTokenSymbol
+        S.put _cpltTokenModule
+        S.put _cpltGovernanceAccount
+        S.put _cpltDecimals
+        S.put _cpltInitializationParameters
+    get = do
+        _cpltTokenSymbol <- S.get
+        _cpltTokenModule <- S.get
+        _cpltGovernanceAccount <- S.get
+        _cpltDecimals <- S.get
+        _cpltInitializationParameters <- S.get
+        return CreatePLT{..}
+
+instance AE.ToJSON CreatePLT where
+    toJSON CreatePLT{..} =
+        AE.object
+            [ "tokenSymbol" AE..= _cpltTokenSymbol,
+              "tokenModule" AE..= _cpltTokenModule,
+              "governanceAccount" AE..= _cpltGovernanceAccount,
+              "decimals" AE..= _cpltDecimals,
+              "initializationParameters" AE..= _cpltInitializationParameters
+            ]
+
+instance AE.FromJSON CreatePLT where
+    parseJSON = AE.withObject "CreatePLT" $ \o -> do
+        _cpltTokenSymbol <- o AE..: "tokenSymbol"
+        _cpltTokenModule <- o AE..: "tokenModule"
+        _cpltGovernanceAccount <- o AE..: "governanceAccount"
+        _cpltDecimals <- o AE..: "decimals"
+        _cpltInitializationParameters <- o AE..: "initializationParameters"
+        return CreatePLT{..}
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
