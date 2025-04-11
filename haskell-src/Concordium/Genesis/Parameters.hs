@@ -54,6 +54,7 @@ instance (IsChainParametersVersion cpv) => FromJSON (GenesisChainParameters' cpv
         SChainParametersV1 -> parseJSONForGCPV1
         SChainParametersV2 -> parseJSONForGCPV2
         SChainParametersV3 -> parseJSONForGCPV3
+        SChainParametersV4 -> parseJSONForGCPV4
 
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV0'.
 parseJSONForGCPV0 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV0)
@@ -153,7 +154,51 @@ parseJSONForGCPV2 =
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
 parseJSONForGCPV3 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV3)
 parseJSONForGCPV3 =
-    withObject "GenesisChainParametersV2" $ \v -> do
+    withObject "GenesisChainParametersV3" $ \v -> do
+        _erEuroPerEnergy <- v .: "euroPerEnergy"
+        _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
+        _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
+        _cpDelegatorCooldown <- v .: "delegatorCooldown"
+        gcpAccountCreationLimit <- v .: "accountCreationLimit"
+        gcpRewardParameters <- v .: "rewardParameters"
+        gcpFoundationAccount <- v .: "foundationAccount"
+        _finalizationCommission <- v .: "passiveFinalizationCommission"
+        _bakingCommission <- v .: "passiveBakingCommission"
+        _transactionCommission <- v .: "passiveTransactionCommission"
+        _finalizationCommissionRange <- v .: "finalizationCommissionRange"
+        _bakingCommissionRange <- v .: "bakingCommissionRange"
+        _transactionCommissionRange <- v .: "transactionCommissionRange"
+        _ppMinimumEquityCapital <- v .: "minimumEquityCapital"
+        _ppCapitalBound <- v .: "capitalBound"
+        _ppLeverageBound <- v .: "leverageBound"
+        _tpRewardPeriodLength <- v .: "rewardPeriodLength"
+        _tpMintPerPayday <- v .: "mintPerPayday"
+        _tpTimeoutBase <- v .: "timeoutBase"
+        _tpTimeoutIncrease <- v .: "timeoutIncrease"
+        _tpTimeoutDecrease <- v .: "timeoutDecrease"
+        _cpMinBlockTime <- v .: "minBlockTime"
+        _cpBlockEnergyLimit <- v .: "blockEnergyLimit"
+        _fcpMinFinalizers <- v .: "minimumFinalizers"
+        _fcpMaxFinalizers <- v .: "maximumFinalizers"
+        _fcpFinalizerRelativeStakeThreshold <- v .: "finalizerRelativeStakeThreshold"
+        let gcpCooldownParameters = CooldownParametersV1{..}
+            gcpTimeParameters = SomeParam TimeParametersV1{..}
+            gcpPoolParameters = PoolParametersV1{..}
+            gcpExchangeRates = makeExchangeRates _erEuroPerEnergy _erMicroGTUPerEuro
+            _ppPassiveCommissions = CommissionRates{..}
+            _ppCommissionBounds = CommissionRanges{..}
+            _cpTimeoutParameters = TimeoutParameters{..}
+            gcpFinalizationCommitteeParameters = SomeParam FinalizationCommitteeParameters{..}
+            gcpConsensusParameters = ConsensusParametersV1{..}
+
+        _vspMaxMissedRounds <- v .: "maximumMissedRounds"
+        let gcpValidatorScoreParameters = SomeParam ValidatorScoreParameters{..}
+        return GenesisChainParameters{..}
+
+-- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
+parseJSONForGCPV4 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV4)
+parseJSONForGCPV4 =
+    withObject "GenesisChainParametersV4" $ \v -> do
         _erEuroPerEnergy <- v .: "euroPerEnergy"
         _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -263,6 +308,38 @@ instance ToJSON (GenesisChainParameters' 'ChainParametersV2) where
             ]
 
 instance ToJSON (GenesisChainParameters' 'ChainParametersV3) where
+    toJSON GenesisChainParameters{..} =
+        object
+            [ "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,
+              "microGTUPerEuro" AE..= _erMicroGTUPerEuro gcpExchangeRates,
+              "poolOwnerCooldown" AE..= _cpPoolOwnerCooldown gcpCooldownParameters,
+              "delegatorCooldown" AE..= _cpDelegatorCooldown gcpCooldownParameters,
+              "accountCreationLimit" AE..= gcpAccountCreationLimit,
+              "rewardParameters" AE..= gcpRewardParameters,
+              "foundationAccount" AE..= gcpFoundationAccount,
+              "passiveFinalizationCommission" AE..= _finalizationCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveBakingCommission" AE..= _bakingCommission (_ppPassiveCommissions gcpPoolParameters),
+              "passiveTransactionCommission" AE..= _transactionCommission (_ppPassiveCommissions gcpPoolParameters),
+              "finalizationCommissionRange" AE..= _finalizationCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "bakingCommissionRange" AE..= _bakingCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "transactionCommissionRange" AE..= _transactionCommissionRange (_ppCommissionBounds gcpPoolParameters),
+              "minimumEquityCapital" AE..= _ppMinimumEquityCapital gcpPoolParameters,
+              "capitalBound" AE..= _ppCapitalBound gcpPoolParameters,
+              "leverageBound" AE..= _ppLeverageBound gcpPoolParameters,
+              "rewardPeriodLength" AE..= _tpRewardPeriodLength (unOParam gcpTimeParameters),
+              "mintPerPayday" AE..= _tpMintPerPayday (unOParam gcpTimeParameters),
+              "timeoutBase" AE..= _tpTimeoutBase (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutIncrease" AE..= _tpTimeoutIncrease (_cpTimeoutParameters gcpConsensusParameters),
+              "timeoutDecrease" AE..= _tpTimeoutDecrease (_cpTimeoutParameters gcpConsensusParameters),
+              "minBlockTime" AE..= _cpMinBlockTime gcpConsensusParameters,
+              "blockEnergyLimit" AE..= _cpBlockEnergyLimit gcpConsensusParameters,
+              "minimumFinalizers" AE..= _fcpMinFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "maximumFinalizers" AE..= _fcpMaxFinalizers (unOParam gcpFinalizationCommitteeParameters),
+              "finalizerRelativeStakeThreshold" AE..= _fcpFinalizerRelativeStakeThreshold (unOParam gcpFinalizationCommitteeParameters),
+              "maximumMissedRounds" AE..= _vspMaxMissedRounds (unOParam gcpValidatorScoreParameters)
+            ]
+
+instance ToJSON (GenesisChainParameters' 'ChainParametersV4) where
     toJSON GenesisChainParameters{..} =
         object
             [ "euroPerEnergy" AE..= _erEuroPerEnergy gcpExchangeRates,

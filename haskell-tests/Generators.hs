@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,9 +8,10 @@
 -- | This module implements QuickCheck generators for types that are commonly used in tests.
 module Generators where
 
-import Test.QuickCheck
+import Test.QuickCheck hiding ((.&.))
 
 import Control.Monad
+import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.Map.Strict as Map
@@ -504,6 +506,20 @@ genChainParametersV3 = do
     _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
     return ChainParameters{..}
 
+genChainParametersV4 :: Gen (ChainParameters' 'ChainParametersV4)
+genChainParametersV4 = do
+    _cpConsensusParameters <- genConsensusParametersV1
+    _cpExchangeRates <- genExchangeRates
+    _cpCooldownParameters <- genCooldownParametersV1
+    _cpTimeParameters <- SomeParam <$> genTimeParametersV1
+    _cpAccountCreationLimit <- arbitrary
+    _cpRewardParameters <- genRewardParameters
+    _cpFoundationAccount <- AccountIndex <$> arbitrary
+    _cpPoolParameters <- genPoolParametersV1
+    _cpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    _cpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    return ChainParameters{..}
+
 genGenesisChainParametersV0 :: Gen (GenesisChainParameters' 'ChainParametersV0)
 genGenesisChainParametersV0 = do
     gcpConsensusParameters <- ConsensusParametersV0 <$> genElectionDifficulty
@@ -548,6 +564,20 @@ genGenesisChainParametersV2 = do
 
 genGenesisChainParametersV3 :: Gen (GenesisChainParameters' 'ChainParametersV3)
 genGenesisChainParametersV3 = do
+    gcpConsensusParameters <- genConsensusParametersV1
+    gcpExchangeRates <- genExchangeRates
+    gcpCooldownParameters <- genCooldownParametersV1
+    gcpTimeParameters <- SomeParam <$> genTimeParametersV1
+    gcpAccountCreationLimit <- arbitrary
+    gcpRewardParameters <- genRewardParameters
+    gcpFoundationAccount <- genAccountAddress
+    gcpPoolParameters <- genPoolParametersV1
+    gcpFinalizationCommitteeParameters <- SomeParam <$> genFinalizationCommitteeParameters
+    gcpValidatorScoreParameters <- SomeParam <$> genValidatorScoreParameters
+    return GenesisChainParameters{..}
+
+genGenesisChainParametersV4 :: Gen (GenesisChainParameters' 'ChainParametersV4)
+genGenesisChainParametersV4 = do
     gcpConsensusParameters <- genConsensusParametersV1
     gcpExchangeRates <- genExchangeRates
     gcpCooldownParameters <- genCooldownParametersV1
@@ -1039,6 +1069,81 @@ genGASRewards = do
     _gasChainUpdate <- makeAmountFraction <$> choose (0, 100000)
     return GASRewards{..}
 
+-- | Generate a token parameter consisting of up to 1000 arbitrary bytes.
+genTokenParameter :: Gen TokenParameter
+genTokenParameter = do
+    n <- choose (0, 1000)
+    TokenParameter . BSS.pack <$> vector n
+
+-- | Generate an reference to a token module (always 32 bytes).
+genTokenModuleRef :: Gen TokenModuleRef
+genTokenModuleRef = TokenModuleRef . SHA256.hash . BS.pack <$> vector 32
+
+-- | Generate a valid UTF-8 character. The size argument is used to determine how many bytes in
+--  size this can be (up to 4).
+genUtf8Char :: Gen [Word8]
+genUtf8Char = do
+    sz <- getSize
+    oneof $ [oneByte] ++ [twoByte | sz >= 2] ++ [threeByte | sz >= 3] ++ [fourByte | sz >= 4]
+  where
+    oneByte = do
+        cp <- chooseBoundedIntegral (0x00, 0x7f)
+        return [cp]
+    twoByte = do
+        (cp :: Word32) <- chooseBoundedIntegral (0x80, 0x07ff)
+        return
+            [ 0b11000000 .|. fromIntegral (cp `shiftR` 6),
+              0b10000000 .|. (fromIntegral cp .&. 0b00111111)
+            ]
+    threeByte = do
+        -- Surrogate codepoints are disallowed.
+        (cp :: Word32) <-
+            chooseBoundedIntegral (0x0800, 0xffff)
+                `suchThat` (\x -> x < 0xd800 || x > 0xdfff)
+        return
+            [ 0b11100000 .|. (fromIntegral (cp `shiftR` 12)),
+              0b10000000 .|. (0b00111111 .&. fromIntegral (cp `shiftR` 6)),
+              0b10000000 .|. (0b00111111 .&. fromIntegral cp)
+            ]
+    fourByte = do
+        (cp :: Word32) <- chooseBoundedIntegral (0x010000, 0x10ffff)
+        return
+            [ 0b11110000 .|. (fromIntegral (cp `shiftR` 18)),
+              0b10000000 .|. (0b00111111 .&. fromIntegral (cp `shiftR` 12)),
+              0b10000000 .|. (0b00111111 .&. fromIntegral (cp `shiftR` 6)),
+              0b10000000 .|. (0b00111111 .&. fromIntegral cp)
+            ]
+
+-- | Generate a valid UTF-8 string of the specified length.
+genUtf8String :: Int -> Gen [Word8]
+genUtf8String len
+    | len <= 0 = return []
+    | otherwise = do
+        c <- resize len genUtf8Char
+        rest <- genUtf8String (len - length c)
+        return (c ++ rest)
+
+-- | Generate an arbitrary 'TokenId', consisting of up to 255 bytes that is a valid UTF-8 string.
+genTokenId :: Gen TokenId
+genTokenId = do
+    len <- chooseBoundedIntegral (0, 255)
+    TokenId . BSS.pack <$> genUtf8String len
+
+-- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
+--   * Random token symbol up to 255 bytes valid UTF-8.
+--   * Token module reference from arbitrary bytes.
+--   * Random address as the governance account.
+--   * Arbitrary decimals between 0 and 255.
+--   * Generated token parameter up to 1000 bytes long.
+genCreatePLT :: Gen CreatePLT
+genCreatePLT = do
+    _cpltTokenSymbol <- genTokenId
+    _cpltTokenModule <- genTokenModuleRef
+    _cpltGovernanceAccount <- genAccountAddress
+    _cpltDecimals <- choose (0, 255)
+    _cpltInitializationParameters <- genTokenParameter
+    return CreatePLT{..}
+
 genHigherLevelKeys :: Gen (HigherLevelKeys a)
 genHigherLevelKeys = do
     size <- getSize
@@ -1057,6 +1162,7 @@ genRootUpdate scpv =
             SChainParametersV1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
             SChainParametersV2 -> Level2KeysRootUpdateV1 <$> genAuthorizations
             SChainParametersV3 -> Level2KeysRootUpdateV1 <$> genAuthorizations
+            SChainParametersV4 -> Level2KeysRootUpdateV1 <$> genAuthorizations
         ]
 
 genLevel1Update :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen Level1Update
@@ -1068,6 +1174,7 @@ genLevel1Update scpv =
             SChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
             SChainParametersV2 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
             SChainParametersV3 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
+            SChainParametersV4 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
         ]
 
 genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
@@ -1130,6 +1237,23 @@ genLevel2UpdatePayload scpv =
                   MinBlockTimeUpdatePayload <$> genDuration,
                   BlockEnergyLimitUpdatePayload . Energy <$> arbitrary,
                   GASRewardsCPV2UpdatePayload <$> genGASRewards
+                ]
+        SChainParametersV4 ->
+            oneof
+                [ ProtocolUpdatePayload <$> genProtocolUpdate,
+                  EuroPerEnergyUpdatePayload <$> genExchangeRate,
+                  MicroGTUPerEuroUpdatePayload <$> genExchangeRate,
+                  FoundationAccountUpdatePayload <$> genAccountAddress,
+                  MintDistributionCPV1UpdatePayload <$> genMintDistribution,
+                  TransactionFeeDistributionUpdatePayload <$> genTransactionFeeDistribution,
+                  CooldownParametersCPV1UpdatePayload <$> genCooldownParametersV1,
+                  PoolParametersCPV1UpdatePayload <$> genPoolParametersV1,
+                  TimeParametersCPV1UpdatePayload <$> genTimeParametersV1,
+                  TimeoutParametersUpdatePayload <$> genTimeoutParameters,
+                  MinBlockTimeUpdatePayload <$> genDuration,
+                  BlockEnergyLimitUpdatePayload . Energy <$> arbitrary,
+                  GASRewardsCPV2UpdatePayload <$> genGASRewards,
+                  CreatePLTUpdatePayload <$> genCreatePLT
                 ]
 
 genUpdatePayload :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen UpdatePayload

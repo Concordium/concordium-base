@@ -199,6 +199,7 @@ module Concordium.Types.ProtocolVersion (
     SupportsPLT,
     supportsPLT,
     sSupportsPLT,
+    protocolSupportsPLT,
     -- | Determine whether a specific account version supports protocol level tokens.
     AVSupportsPLT,
     -- | Determine whether a specific protocol version supports protocol level tokens.
@@ -286,6 +287,7 @@ $( singletons
             | ChainParametersV1
             | ChainParametersV2
             | ChainParametersV3
+            | ChainParametersV4
             deriving (Eq, Ord)
 
         chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
@@ -297,7 +299,7 @@ $( singletons
         chainParametersVersionFor P6 = ChainParametersV2
         chainParametersVersionFor P7 = ChainParametersV2
         chainParametersVersionFor P8 = ChainParametersV3
-        chainParametersVersionFor P9 = ChainParametersV3
+        chainParametersVersionFor P9 = ChainParametersV4
 
         -- \* Account versions
 
@@ -453,6 +455,7 @@ chainParameterVersionToWord64 ChainParametersV0 = 0
 chainParameterVersionToWord64 ChainParametersV1 = 1
 chainParameterVersionToWord64 ChainParametersV2 = 2
 chainParameterVersionToWord64 ChainParametersV3 = 3
+chainParameterVersionToWord64 ChainParametersV4 = 4
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64
@@ -626,6 +629,13 @@ type AVSupportsPLT (av :: AccountVersion) =
 -- | Constraint that a protocol version supports protocol level tokens.
 type PVSupportsPLT (pv :: ProtocolVersion) =
     AVSupportsPLT (AccountVersionFor pv)
+
+-- | Whether the protocol version supports Protocol Level Tokens (PLT).
+protocolSupportsPLT :: SProtocolVersion pv -> Bool
+{-# INLINE protocolSupportsPLT #-}
+protocolSupportsPLT spv = case sSupportsPLT (sAccountVersionFor spv) of
+    STrue -> True
+    SFalse -> False
 
 -- | Constraint that an account version supports flexible cooldown.
 --

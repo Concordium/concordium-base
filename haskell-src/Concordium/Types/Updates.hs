@@ -689,6 +689,8 @@ data UpdateType
       UpdateFinalizationCommitteeParameters
     | -- | Update the validator score parameters for consensus version 2
       UpdateValidatorScoreParameters
+    | -- | Update creating a protocol level token
+      UpdateCreatePLT
     deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 -- The JSON instance will encode all values as strings, lower-casing the first
@@ -723,6 +725,7 @@ instance Serialize UpdateType where
     put UpdateBlockEnergyLimit = putWord8 19
     put UpdateFinalizationCommitteeParameters = putWord8 20
     put UpdateValidatorScoreParameters = putWord8 21
+    put UpdateCreatePLT = putWord8 22
     get =
         getWord8 >>= \case
             1 -> return UpdateProtocol
@@ -746,6 +749,7 @@ instance Serialize UpdateType where
             19 -> return UpdateBlockEnergyLimit
             20 -> return UpdateFinalizationCommitteeParameters
             21 -> return UpdateValidatorScoreParameters
+            22 -> return UpdateCreatePLT
             n -> fail $ "invalid update type: " ++ show n
 
 -- | Sequence number for updates of a given type.
@@ -840,6 +844,8 @@ data UpdatePayload
       FinalizationCommitteeParametersUpdatePayload !FinalizationCommitteeParameters
     | -- | Update the validator score parameters (chain parameters version 3)
       ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
+    | -- | Issue a new Protocol Level Token (PLT) (Support starting from protocol version 9)
+      CreatePLTUpdatePayload !CreatePLT
     deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
@@ -866,6 +872,7 @@ putUpdatePayload (BlockEnergyLimitUpdatePayload u) = putWord8 20 >> put u
 putUpdatePayload (GASRewardsCPV2UpdatePayload u) = putWord8 21 >> put u
 putUpdatePayload (FinalizationCommitteeParametersUpdatePayload u) = putWord8 22 >> put u
 putUpdatePayload (ValidatorScoreParametersUpdatePayload u) = putWord8 23 >> put u
+putUpdatePayload (CreatePLTUpdatePayload u) = putWord8 24 >> put u
 
 getUpdatePayload :: SProtocolVersion pv -> Get UpdatePayload
 getUpdatePayload spv =
@@ -907,6 +914,7 @@ getUpdatePayload spv =
         21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
         22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
         23 | isSupported PTValidatorScoreParameters cpv -> ValidatorScoreParametersUpdatePayload <$> get
+        24 | isSupported PTProtocolLevelTokensParameters cpv -> CreatePLTUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv
@@ -950,6 +958,7 @@ updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
 updateType FinalizationCommitteeParametersUpdatePayload{} = UpdateFinalizationCommitteeParameters
 updateType ValidatorScoreParametersUpdatePayload{} = UpdateValidatorScoreParameters
+updateType CreatePLTUpdatePayload{} = UpdateCreatePLT
 
 -- | Extract the relevant set of key indices and threshold authorized for the given update instruction.
 extractKeysIndices :: UpdatePayload -> UpdateKeysCollection cpv -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
@@ -978,6 +987,9 @@ extractKeysIndices p =
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
         ValidatorScoreParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
+        -- TODO Not implemented yet, authorization of this update type is planned for a later iteration".
+        -- Tracked by issue NOD-701.
+        CreatePLTUpdatePayload{} -> const (Set.fromAscList [1, 2], 2)
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
