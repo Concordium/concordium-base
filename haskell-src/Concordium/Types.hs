@@ -1219,10 +1219,9 @@ instance S.Serialize TokenParameter where
         S.putWord32be (fromIntegral (BSS.length parameter))
         S.putShortByteString parameter
 
--- | Module reference for a token module.
-newtype TokenModuleRef = TokenModuleRef {tokenModuleRef :: Hash.Hash}
-    deriving (Eq, Ord, Hashable)
-    deriving (AE.FromJSON, AE.ToJSON, Read, Show, S.Serialize) via Hash.Hash
+-- | A hash that identifies the specific implementation to use for a token.
+newtype TokenModuleRef = TokenModuleRef {theTokenModuleRef :: Hash.Hash}
+    deriving newtype (Eq, Ord, S.Serialize, Show, AE.FromJSON, AE.ToJSON)
 
 -- | Update payload for creating a new protocol-level token.
 data CreatePLT = CreatePLT
