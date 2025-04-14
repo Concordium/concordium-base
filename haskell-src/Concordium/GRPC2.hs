@@ -36,11 +36,14 @@ import qualified Data.Serialize as S
 import qualified Data.Set as Set
 import Data.Singletons
 import Data.Text (Text)
+import Data.Text.Encoding (decodeUtf8)
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 import Data.Word
 import Lens.Micro.Platform
 import qualified Proto.V2.Concordium.Kernel as Proto
+import qualified Proto.V2.Concordium.ProtocolLevelTokens as Proto
+import qualified Proto.V2.Concordium.ProtocolLevelTokens_Fields as PLTFields
 import qualified Proto.V2.Concordium.Types as Proto
 import qualified Proto.V2.Concordium.Types_Fields as ProtoFields
 
@@ -2504,3 +2507,8 @@ instance ToProto AccountPending where
     toProto AccountPending{..} = Proto.make $ do
         ProtoFields.accountIndex .= toProto apAccountIndex
         ProtoFields.firstTimestamp .= toProto apFirstTimestamp
+
+instance ToProto TokenId where
+    type Output TokenId = Proto.TokenId
+    toProto (TokenId bss) = Proto.make $ do
+        PLTFields.symbol .= decodeUtf8 (BSS.fromShort bss)
