@@ -11,16 +11,18 @@ token-holder-operation = token-transfer
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
-token-transfer = { 
+token-transfer = [
     ; The operation type is "transfer".
-    "type": "transfer",
-    ; The amount of tokens to transfer.
-    "amount": token-amount,
-    ; The recipient account.
-    "recipient": token-receiver,
-    ; An optional memo.
-    ? "memo": memo
-}
+    "transfer",
+    {
+        ; The amount of tokens to transfer.
+        "amount": token-amount,
+        ; The recipient account.
+        "recipient": token-receiver,
+        ; An optional memo.
+        ? "memo": memo
+    }
+]
 
 ; We represent token amounts as a decimal fraction.
 ; The range and precision may be constrained by the token itself.
@@ -77,20 +79,24 @@ token-governance-operation = token-mint
     / token-update-list
 
 ; Mint a specified amount to the sender account.
-token-mint = { 
+token-mint = [
     ; The operation type is "mint".
-    "type": "mint",
-    ; The amount of tokens to mint.
-    "amount": token-amount
-}
+    "mint",
+    {
+        ; The amount of tokens to mint.
+        "amount": token-amount
+    }
+]
 
 ; Burn a specified amount from the sender account.
-token-burn = {
+token-burn = [
     ; The operation type is "burn".
-    "type": "burn",
-    ; The amount of tokens to burn.
-    "amount": token-amount
-}
+    "burn",
+    {
+        ; The amount of tokens to burn.
+        "amount": token-amount
+    }
+]
 
 ; Update an allow or a deny list by adding or removing an account from it.
 token-update-list = 
@@ -100,42 +106,50 @@ token-update-list =
     / token-remove-deny-list
 
 ; Add an account to the allow list.
-token-add-allow-list = {
+token-add-allow-list = [
     ; The operation type is "add-allow-list".
-    "type": "add-allow-list",
-    ; The account to add to the allow list.
-    "target": token-receiver
-}
+    "add-allow-list",
+    {
+        ; The account to add to the allow list.
+        "target": token-receiver
+    }
+]
 
 ; Remove an account from the allow list.
-token-remove-allow-list = {
+token-remove-allow-list = [
     ; The operation type is "remove-allow-list".
-    "type": "remove-allow-list",
-    ; The account to remove from the allow list.
-    "target": token-receiver
-}
+    "remove-allow-list",
+    {
+        ; The account to remove from the allow list.
+        "target": token-receiver
+    }
+]
 
 ; Add an account to the deny list.
-token-add-deny-list = {
+token-add-deny-list = [
     ; The operation type is "add-deny-list".
-    "type": "add-deny-list",
-    ; The account to add to the deny list.
-    "target": token-receiver
-}
+    "add-deny-list",
+    {
+        ; The account to add to the deny list.
+        "target": token-receiver
+    }
+]
 
 ; Remove an account from the deny list.
-token-remove-deny-list = {
+token-remove-deny-list = [
     ; The operation type is "remove-deny-list".
-    "type": "remove-deny-list",
-    ; The account to remove from the deny list.
-    "target": token-receiver
-}
+    "remove-deny-list",
+    {
+        ; The account to remove from the deny list.
+        "target": token-receiver
+    }
+]
 
 ; Chain governance
 
 ; These parameters are passed to the token module to initialize the token.
 ; The token initialization update will also include the ticker symbol, initial account,
-; and a reference to the token module implementation.
+; number of decimals, and a reference to the token module implementation.
 token-initialization-parameters = { 
     ; The name of the token
     "name": text,
