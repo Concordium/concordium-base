@@ -7,14 +7,15 @@
 token-holder-transaction = [ * token-holder-operation ]
 
 ; A token-holder operation. Currently, only token transfers are supported.
+; All token-holder operations are represented as single-entry maps where the key determines
+; the type of the operation.
 token-holder-operation = token-transfer
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
-token-transfer = [
+token-transfer = {
     ; The operation type is "transfer".
-    "transfer",
-    {
+    "transfer": {
         ; The amount of tokens to transfer.
         "amount": token-amount,
         ; The recipient account.
@@ -22,7 +23,7 @@ token-transfer = [
         ; An optional memo.
         ? "memo": memo
     }
-]
+}
 
 ; We represent token amounts as a decimal fraction.
 ; The range and precision may be constrained by the token itself.
@@ -74,29 +75,29 @@ ccd-coininfo = {
 token-governance-transaction = [ * token-governance-operation ]
 
 ; A token governance operation. This can be a mint, burn, or update-list operation.
+; All governance operations are represented as single-entry maps where the key determines
+; the type of the operation.
 token-governance-operation = token-mint
     / token-burn
     / token-update-list
 
 ; Mint a specified amount to the sender account.
-token-mint = [
+token-mint = {
     ; The operation type is "mint".
-    "mint",
-    {
+    "mint": {
         ; The amount of tokens to mint.
         "amount": token-amount
     }
-]
+}
 
 ; Burn a specified amount from the sender account.
-token-burn = [
+token-burn = {
     ; The operation type is "burn".
-    "burn",
-    {
+    "burn": {
         ; The amount of tokens to burn.
         "amount": token-amount
     }
-]
+}
 
 ; Update an allow or a deny list by adding or removing an account from it.
 token-update-list = 
@@ -106,44 +107,40 @@ token-update-list =
     / token-remove-deny-list
 
 ; Add an account to the allow list.
-token-add-allow-list = [
+token-add-allow-list = {
     ; The operation type is "add-allow-list".
-    "add-allow-list",
-    {
+    "add-allow-list": {
         ; The account to add to the allow list.
         "target": token-receiver
     }
-]
+}
 
 ; Remove an account from the allow list.
-token-remove-allow-list = [
+token-remove-allow-list = {
     ; The operation type is "remove-allow-list".
-    "remove-allow-list",
-    {
+    "remove-allow-list": {
         ; The account to remove from the allow list.
         "target": token-receiver
     }
-]
+}
 
 ; Add an account to the deny list.
-token-add-deny-list = [
+token-add-deny-list = {
     ; The operation type is "add-deny-list".
-    "add-deny-list",
-    {
+    "add-deny-list": {
         ; The account to add to the deny list.
         "target": token-receiver
     }
-]
+}
 
 ; Remove an account from the deny list.
-token-remove-deny-list = [
+token-remove-deny-list = {
     ; The operation type is "remove-deny-list".
-    "remove-deny-list",
-    {
+    "remove-deny-list": {
         ; The account to remove from the deny list.
         "target": token-receiver
     }
-]
+}
 
 ; Chain governance
 
