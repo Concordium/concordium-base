@@ -161,6 +161,7 @@ genPayload pv =
                     [ genPayloadConfigureBaker pv,
                       genPayloadConfigureDelegation
                     ]
+                        ++ [genPayloadTokenHolder | pv >= P9]
 
 -- | Generate payloads that are valid for some protocol version, but may not be valid for all.
 genPayloadUnsafe :: Gen Payload
@@ -344,6 +345,13 @@ genPayloadConfigureDelegation = do
     cdRestakeEarnings <- arbitrary
     cdDelegationTarget <- liftArbitrary $ genDelegationTarget
     return ConfigureDelegation{..}
+
+-- | Generate token holder transaction payloads.
+genPayloadTokenHolder :: Gen Payload
+genPayloadTokenHolder = do
+    thTokenSymbol <- genTokenId
+    thOperations <- genTokenParameter
+    return TokenHolder{..}
 
 genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
