@@ -54,6 +54,7 @@ isPayloadSupported pv ConfigureBaker{..}
     | isNothing cbSuspend = pv > P3
     | otherwise = pv > P7
 isPayloadSupported pv ConfigureDelegation{} = pv > P3
+isPayloadSupported pv TokenHolder{} = pv >= P9
 
 testSerializeEncryptedTransfer :: SProtocolVersion pv -> Property
 testSerializeEncryptedTransfer spv =
