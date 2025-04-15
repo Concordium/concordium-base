@@ -6,9 +6,13 @@ module Concordium.Types.ProtocolLevelTokens.CBOR where
 
 import Codec.CBOR.Decoding
 import Codec.CBOR.Encoding
+import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import Control.Monad
+import qualified Data.Aeson as AE
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Foldable
 import Data.Function
 import qualified Data.Map.Lazy as Map
 import Data.Maybe
@@ -17,7 +21,7 @@ import Data.Text
 import Data.Word
 import Lens.Micro.Platform
 
-import Concordium.Types.Queries.Tokens
+import Concordium.Types.Tokens
 
 -- * Decoder helpers
 
@@ -213,6 +217,31 @@ buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
     let tipBurnable = _tipbBurnable `orDefault` False
     return TokenInitializationParameters{..}
 
+instance AE.ToJSON TokenInitializationParameters where
+    toJSON TokenInitializationParameters{..} = do
+        AE.object $
+            [ "name" AE..= tipName,
+              "metadata" AE..= tipMetadata,
+              "allowList" AE..= tipAllowList,
+              "denyList" AE..= tipDenyList,
+              "mintable" AE..= tipMintable,
+              "burnable" AE..= tipBurnable
+            ]
+                ++ ["initialSupply" AE..= initSupply | initSupply <- toList tipInitialSupply]
+
+instance AE.FromJSON TokenInitializationParameters where
+    parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
+        _tipbName <- o AE..:? "name"
+        _tipbMetadata <- o AE..:? "metadata"
+        _tipbAllowList <- o AE..:? "allowList"
+        _tipbDenyList <- o AE..:? "denyList"
+        _tipbInitialSupply <- o AE..:? "initialSupply"
+        _tipbMintable <- o AE..:? "mintable"
+        _tipbBurnable <- o AE..:? "burnable"
+        case buildTokenInitializationParameters TokenInitializationParametersBuilder{..} of
+            Left e -> fail e
+            Right res -> return res
+
 -- | Decode a CBOR-encoded 'TokenInitializationParameters'.
 --  This decoder enforces CBOR-validity (in particular, no duplicate map keys), disallows
 --  extraneous keys, and applies defaults specified by the CDDL schema.  It does not require
@@ -232,6 +261,17 @@ decodeTokenInitializationParameters =
     valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipbMintable
     valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipbBurnable
     valDecoder _ = Nothing
+
+-- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenInitializationParametersFromBytes :: LBS.ByteString -> Either String TokenInitializationParameters
+tokenInitializationParametersFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenInitializationParameters lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining) ++ " bytes remaining after parsing token initialization parameters"
 
 -- | Encode a 'TokenInitializationParameters' as CBOR.
 encodeTokenInitializationParametersNoDefaults :: TokenInitializationParameters -> Encoding
@@ -265,3 +305,9 @@ encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..
     k = at . makeMapKeyEncoding . encodeString
     setIfTrue _ False = id
     setIfTrue key True = k key ?~ encodeBool True
+
+-- | CBOR-encode a 'TokenInitializationParameters' to a (strict) 'BS.ByteString'.
+--  This uses default values in the encoding.
+tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
+tokenInitializationParametersToBytes =
+    CBOR.toStrictByteString . encodeTokenInitializationParametersWithDefaults

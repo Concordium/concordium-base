@@ -211,8 +211,10 @@ import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
 import Concordium.Types.Block
 import Concordium.Types.HashableTo
+import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.ProtocolVersion
 import Concordium.Types.SmartContracts
+import Concordium.Types.Tokens
 import qualified Data.FixedByteString as FBS
 
 import Control.Exception (assert)
@@ -220,6 +222,7 @@ import Control.Monad
 import Control.Monad.Except
 
 import Data.Bits
+import qualified Data.ByteString.Builder as BSBuilder
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Short as BSS
@@ -231,7 +234,6 @@ import Data.Word
 
 import Data.Aeson as AE
 import Data.Aeson.TH
-import Data.Aeson.Types as AE
 
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -1159,53 +1161,6 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
     rest = FBS.encodeInteger (toInteger (count .&. 0xffffff))
     mask = complement (FBS.encodeInteger 0xffffff) -- mask to clear out the last three bytes of the addr
 
--- * Protocol-level tokens
-
--- | The unique token identifier for a protocol-level token.
---  This is given as a symbol unique across the whole chain.
---  The byte string must be at most 255 bytes long and be a valid UTF-8 string.
-newtype TokenId = TokenId {tokenSymbol :: BSS.ShortByteString}
-    deriving newtype (Eq, Ord, Show)
-
--- | Try to construct a valid 'TokenId' from a 'BSS.ShortByteString'.
---  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
---  In the event of a failure @Left err@ is returned, where @err@ describes the failure.
-makeTokenId :: BSS.ShortByteString -> Either String TokenId
-makeTokenId sbs
-    | BSS.length sbs > 255 =
-        Left $ "TokenId length (" ++ show (BSS.length sbs) ++ ") out of bounds."
-    | Left decodeErr <- T.decodeUtf8' (BSS.fromShort sbs) =
-        Left $ "TokenId is not valid UTF-8: " ++ show decodeErr
-    | otherwise = Right $ TokenId sbs
-
-instance S.Serialize TokenId where
-    put (TokenId tid) = do
-        S.putWord8 $ fromIntegral $ BSS.length tid
-        S.putShortByteString tid
-    get = do
-        len <- S.getWord8
-        sbs <- S.getShortByteString (fromIntegral len)
-        case makeTokenId sbs of
-            Left e -> fail e
-            Right tokId -> return tokId
-
--- | Deserialize a 'TokenId' without checking the invariant that the string is valid UTF-8.
---  This should only be used where deserializing from a trusted source.
-unsafeGetTokenId :: S.Get TokenId
-unsafeGetTokenId = do
-    len <- S.getWord8
-    sbs <- S.getShortByteString (fromIntegral len)
-    return (TokenId sbs)
-
-instance AE.ToJSON TokenId where
-    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenId
-    -- should enforce valid UTF-8.
-    toJSON TokenId{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenSymbol
-
-instance AE.FromJSON TokenId where
-    parseJSON (AE.String text) = return $ TokenId $ BSS.toShort $ T.encodeUtf8 text
-    parseJSON invalid = AE.prependFailure "parsing TokenId failed" (AE.typeMismatch "String" invalid)
-
 -- | Parameter for a Token module.
 newtype TokenParameter = TokenParameter {parameterBytes :: BSS.ShortByteString}
     deriving (Eq)
@@ -1218,6 +1173,30 @@ instance S.Serialize TokenParameter where
     put (TokenParameter parameter) = do
         S.putWord32be (fromIntegral (BSS.length parameter))
         S.putShortByteString parameter
+
+-- | A wrapper type for (de)-serializing an CBOR-encoded initialization parameter to/from JSON.
+--  This can parse either an JSON object representation of 'TokenInitializationParameters'
+--  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
+--  it will render as a JSON object if the contents can be decoded to a
+-- 'TokenInitializationParameters', or otherwise as the hex-encoded byte string.
+newtype EncodedTokenInitializationParameters = EncodedTokenInitializationParameters TokenParameter
+
+instance AE.ToJSON EncodedTokenInitializationParameters where
+    toJSON (EncodedTokenInitializationParameters tp@(TokenParameter sbs)) =
+        case CBOR.tokenInitializationParametersFromBytes
+            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
+            Left _ -> AE.toJSON tp
+            Right v -> AE.toJSON v
+
+instance AE.FromJSON EncodedTokenInitializationParameters where
+    parseJSON o@(AE.Object _) = do
+        tip <- AE.parseJSON o
+        return $
+            EncodedTokenInitializationParameters $
+                TokenParameter $
+                    BSS.toShort $
+                        CBOR.tokenInitializationParametersToBytes tip
+    parseJSON val = EncodedTokenInitializationParameters <$> AE.parseJSON val
 
 -- | A hash that identifies the specific implementation to use for a token.
 newtype TokenModuleRef = TokenModuleRef {theTokenModuleRef :: Hash.Hash}
