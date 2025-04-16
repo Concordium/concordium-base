@@ -1161,6 +1161,8 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
     rest = FBS.encodeInteger (toInteger (count .&. 0xffffff))
     mask = complement (FBS.encodeInteger 0xffffff) -- mask to clear out the last three bytes of the addr
 
+-- * Protocol level tokens
+
 -- | Parameter for a Token module.
 newtype TokenParameter = TokenParameter {parameterBytes :: BSS.ShortByteString}
     deriving (Eq)
@@ -1246,7 +1248,8 @@ instance AE.ToJSON CreatePLT where
               "tokenModule" AE..= _cpltTokenModule,
               "governanceAccount" AE..= _cpltGovernanceAccount,
               "decimals" AE..= _cpltDecimals,
-              "initializationParameters" AE..= _cpltInitializationParameters
+              "initializationParameters"
+                AE..= EncodedTokenInitializationParameters _cpltInitializationParameters
             ]
 
 instance AE.FromJSON CreatePLT where
@@ -1255,7 +1258,8 @@ instance AE.FromJSON CreatePLT where
         _cpltTokenModule <- o AE..: "tokenModule"
         _cpltGovernanceAccount <- o AE..: "governanceAccount"
         _cpltDecimals <- o AE..: "decimals"
-        _cpltInitializationParameters <- o AE..: "initializationParameters"
+        (EncodedTokenInitializationParameters _cpltInitializationParameters) <-
+            o AE..: "initializationParameters"
         return CreatePLT{..}
 
 -- Template haskell derivations. At the end to get around staging restrictions.
