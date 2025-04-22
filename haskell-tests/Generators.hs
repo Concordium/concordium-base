@@ -161,7 +161,7 @@ genPayload pv =
                     [ genPayloadConfigureBaker pv,
                       genPayloadConfigureDelegation
                     ]
-                        ++ [genPayloadTokenHolder | pv >= P9]
+                        ++ (if pv >= P9 then [genPayloadTokenHolder, genPayloadTokenGovernance] else [])
 
 -- | Generate payloads that are valid for some protocol version, but may not be valid for all.
 genPayloadUnsafe :: Gen Payload
@@ -352,6 +352,13 @@ genPayloadTokenHolder = do
     thTokenSymbol <- genTokenId
     thOperations <- genTokenParameter
     return TokenHolder{..}
+
+-- | Generate token holder transaction payloads.
+genPayloadTokenGovernance :: Gen Payload
+genPayloadTokenGovernance = do
+    tgTokenSymbol <- genTokenId
+    tgOperations <- genTokenParameter
+    return TokenGovernance{..}
 
 genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
