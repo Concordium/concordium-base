@@ -90,6 +90,7 @@ library
       Concordium.Types.InvokeContract
       Concordium.Types.Migration
       Concordium.Types.Parameters
+      Concordium.Types.ProtocolLevelTokens.CBOR
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
@@ -97,6 +98,7 @@ library
       Concordium.Types.Queries.Tokens
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
+      Concordium.Types.Tokens
       Concordium.Types.Transactions
       Concordium.Types.UpdateQueues
       Concordium.Types.Updates
@@ -140,6 +142,7 @@ library
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , containers >=0.6
     , cryptonite >=0.27
@@ -202,6 +205,7 @@ executable generate-update-keys
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -262,6 +266,7 @@ executable genesis
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , cmdargs >=0.10
     , concordium-base
@@ -318,6 +323,7 @@ test-suite test
       Types.AddressesSpec
       Types.AmountFraction
       Types.AmountSpec
+      Types.CBOR
       Types.ParametersSpec
       Types.PayloadSerializationSpec
       Types.PayloadSpec
@@ -352,6 +358,7 @@ test-suite test
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers
@@ -413,6 +420,7 @@ benchmark bls-perf
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -471,6 +479,7 @@ benchmark ed25519-perf
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -529,6 +538,7 @@ benchmark ed25519dlog-perf
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -587,6 +597,7 @@ benchmark sha256-perf
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -645,6 +656,7 @@ benchmark verify-credential-perf
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
