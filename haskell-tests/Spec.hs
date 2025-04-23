@@ -20,6 +20,7 @@ import qualified Types.AccountEncryptedAmountSpec
 import qualified Types.AddressesSpec
 import qualified Types.AmountFraction
 import qualified Types.AmountSpec
+import qualified Types.CBOR
 import qualified Types.ParametersSpec
 import qualified Types.PayloadSerializationSpec
 import qualified Types.PayloadSpec
@@ -62,3 +63,4 @@ main = hspec $ parallel $ do
     Genesis.ParametersSpec.tests
     Types.ValidName.tests
     Types.TokenIdSpec.tests
+    Types.CBOR.tests
