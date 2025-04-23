@@ -1019,6 +1019,10 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 thTokenSymbol <- S.get
                 thOperations <- S.get
                 return TokenHolder{..}
+            28 | supportProtocolLevelTokens -> S.label "TokenGovernance" $ do
+                tgTokenSymbol <- S.get
+                tgOperations <- S.get
+                return TokenGovernance{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv

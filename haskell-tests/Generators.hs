@@ -353,7 +353,7 @@ genPayloadTokenHolder = do
     thOperations <- genTokenParameter
     return TokenHolder{..}
 
--- | Generate token holder transaction payloads.
+-- | Generate token governance transaction payloads.
 genPayloadTokenGovernance :: Gen Payload
 genPayloadTokenGovernance = do
     tgTokenSymbol <- genTokenId
