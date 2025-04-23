@@ -375,6 +375,13 @@ data Payload
           -- | The target of the delegation.
           cdDelegationTarget :: !(Maybe DelegationTarget)
         }
+    | -- | An update for a protocol level token.
+      TokenHolder
+        { -- | Identifier of the token type to which the transaction refers.
+          thTokenSymbol :: !TokenId,
+          -- | The CBOR-encoded operations to perform.
+          thOperations :: !TokenParameter
+        }
     deriving (Eq, Show)
 
 -- Define `TransactionType`  and relevant conversion function to convert from/to `Payload`.
@@ -411,6 +418,7 @@ instance S.Serialize TransactionType where
         TTTransferWithScheduleAndMemo -> S.putWord8 18
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
+        TTTokenHolder -> S.putWord8 21
 
     get =
         S.getWord8 >>= \case
@@ -435,6 +443,7 @@ instance S.Serialize TransactionType where
             18 -> return TTTransferWithScheduleAndMemo
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
+            21 -> return TTTokenHolder
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 instance AE.ToJSON Payload where
@@ -557,6 +566,12 @@ instance AE.ToJSON Payload where
               "proofAggregation" AE..= ubkProofAggregation,
               "transactionType" AE..= AE.String "updateBakerKeys"
             ]
+    toJSON TokenHolder{..} =
+        AE.object
+            [ "tokenSymbol" AE..= thTokenSymbol,
+              "operations" AE..= thOperations,
+              "transactionType" AE..= AE.String "tokenHolder"
+            ]
 
 instance AE.FromJSON Payload where
     parseJSON = AE.withObject "payload" $ \obj -> do
@@ -665,6 +680,10 @@ instance AE.FromJSON Payload where
                 cdRestakeEarnings <- obj AE..: "restakeEarnings"
                 cdDelegationTarget <- obj AE..: "delegationTarget"
                 return ConfigureDelegation{..}
+            "tokenHolder" -> do
+                thTokenSymbol <- obj AE..: "tokenSymbol"
+                thOperations <- obj AE..: "operations"
+                return TokenHolder{..}
             _ -> fail "Unrecognized 'TransactionType' tag"
 
 -- | Payload serialization according to
@@ -804,6 +823,10 @@ putPayload ConfigureDelegation{..} = do
         bitFor 0 cdCapital
             .|. bitFor 1 cdRestakeEarnings
             .|. bitFor 2 cdDelegationTarget
+putPayload TokenHolder{..} = do
+    S.putWord8 27
+    S.put thTokenSymbol
+    S.put thOperations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -969,6 +992,10 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cdRestakeEarnings <- maybeGet 1
                 cdDelegationTarget <- maybeGet 2
                 return ConfigureDelegation{..}
+            27 | supportProtocolLevelTokens -> S.label "TokenHolder" $ do
+                thTokenSymbol <- S.get
+                thOperations <- S.get
+                return TokenHolder{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -978,6 +1005,7 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
         | supportSuspend = 0b0000000111111111
         | otherwise = 0b0000000011111111
     configureDelegationBitMask = 0b0000000000000111
+    supportProtocolLevelTokens = protocolSupportsPLT spv
 
 -- | Builds a set from a list of ascending elements.
 --  Fails if the elements are not ordered or a duplicate is encountered.
@@ -1344,6 +1372,8 @@ data Event' (supplemented :: Bool)
         { ebrBakerId :: !BakerId,
           ebrAccount :: !AccountAddress
         }
+    | -- | Token module emitted some event
+      TokenModuleEvent TokenEvent
     deriving (Show, Generic, Eq)
 
 -- | A contract event, without supplemental data. This is what is stored in the database and
@@ -1402,6 +1432,7 @@ addInitializeParameter _ DelegationRemoved{..} = pure DelegationRemoved{..}
 addInitializeParameter _ Upgraded{..} = pure Upgraded{..}
 addInitializeParameter _ BakerSuspended{..} = pure BakerSuspended{..}
 addInitializeParameter _ BakerResumed{..} = pure BakerResumed{..}
+addInitializeParameter _ (TokenModuleEvent event) = pure (TokenModuleEvent event)
 
 putEvent :: S.Putter Event
 putEvent = \case
@@ -1593,6 +1624,9 @@ putEvent = \case
         S.putWord8 37
             <> S.put ebrBakerId
             <> S.put ebrAccount
+    TokenModuleEvent event ->
+        S.putWord8 38
+            <> S.put event
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1786,12 +1820,16 @@ getEvent spv =
             ebrBakerId <- S.get
             ebrAccount <- S.get
             return BakerResumed{..}
+        38
+            | supportPlt ->
+                TokenModuleEvent <$> S.get
         n -> fail $ "Unrecognized event tag: " ++ show n
   where
     supportMemo = supportsMemo spv
     supportV1Contracts = supportsV1Contracts spv
     supportDelegation = protocolSupportsDelegation spv
     supportSuspend = protocolSupportsSuspend spv
+    supportPlt = protocolSupportsPLT spv
 
 instance AE.ToJSON (Event' supplemented) where
     toJSON = \case
@@ -2057,6 +2095,11 @@ instance AE.ToJSON (Event' supplemented) where
                   "bakerId" .= ebrBakerId,
                   "account" .= ebrAccount
                 ]
+        TokenModuleEvent event ->
+            AE.object
+                [ "tag" .= AE.String "TokenModuleEvent",
+                  "event" .= AE.toJSON event
+                ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
     parseJSON = AE.withObject "Event" $ \obj -> do
@@ -2247,6 +2290,8 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 ebrBakerId <- obj .: "bakerId"
                 ebrAccount <- obj .: "account"
                 return BakerResumed{..}
+            "TokenModuleEvent" ->
+                TokenModuleEvent <$> obj .: "event"
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with
@@ -2582,6 +2627,8 @@ data RejectReason
       PoolWouldBecomeOverDelegated
     | -- | The pool is not open to delegators.
       PoolClosed
+    | -- | Token ID does not exists.
+      NonExistentTokenId !TokenId
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2653,6 +2700,7 @@ instance S.Serialize RejectReason where
         StakeOverMaximumThresholdForPool -> S.putWord8 52
         PoolWouldBecomeOverDelegated -> S.putWord8 53
         PoolClosed -> S.putWord8 54
+        NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
 
     get =
         S.getWord8 >>= \case
@@ -2720,6 +2768,7 @@ instance S.Serialize RejectReason where
             52 -> return StakeOverMaximumThresholdForPool
             53 -> return PoolWouldBecomeOverDelegated
             54 -> return PoolClosed
+            55 -> NonExistentTokenId <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
