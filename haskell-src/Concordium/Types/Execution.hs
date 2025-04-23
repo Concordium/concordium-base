@@ -2290,6 +2290,8 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 ebrBakerId <- obj .: "bakerId"
                 ebrAccount <- obj .: "account"
                 return BakerResumed{..}
+            "TokenModuleEvent" ->
+                TokenModuleEvent <$> obj .: "event"
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with

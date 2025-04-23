@@ -1217,9 +1217,9 @@ instance AE.FromJSON TokenEventType where
 makeTokenEventType :: BSS.ShortByteString -> Either String TokenEventType
 makeTokenEventType sbs
     | BSS.length sbs > 255 =
-        Left $ "TokenId length (" ++ show (BSS.length sbs) ++ ") out of bounds."
+        Left $ "TokenEventType length (" ++ show (BSS.length sbs) ++ ") out of bounds."
     | Left decodeErr <- T.decodeUtf8' (BSS.fromShort sbs) =
-        Left $ "TokenId is not valid UTF-8: " ++ show decodeErr
+        Left $ "TokenEventType is not valid UTF-8: " ++ show decodeErr
     | otherwise = Right $ TokenEventType sbs
 
 instance S.Serialize TokenEventType where
