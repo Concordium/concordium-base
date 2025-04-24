@@ -800,7 +800,9 @@ instance ToProto SupplementedTransactionSummary where
                             ProtoFields.accountCreation .= details
                 _ -> Left CEInvalidAccountCreation
         TSTUpdateTransaction ut -> case tsResult of
-            TxReject _ -> Left CEFailedUpdate
+            TxReject rr ->
+                Right . Proto.make $
+                    ProtoFields.failedUpdate .= (Proto.make $ ProtoFields.rejectReason .= toProto rr)
             TxSuccess events -> case events of
                 [UpdateEnqueued{..}] -> do
                     payload <- convertUpdatePayload ut uePayload
@@ -916,6 +918,15 @@ instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParameter
         ProtoFields.minBlockTime .= toProto _cpMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
 
+instance ToProto CreatePLT where
+    type Output CreatePLT = Proto.CreatePLT
+    toProto CreatePLT{..} = Proto.make $ do
+        PLTFields.tokenSymbol .= toProto _cpltTokenSymbol
+        PLTFields.tokenModule .= toProto _cpltTokenModule
+        PLTFields.governanceAccount .= toProto _cpltGovernanceAccount
+        PLTFields.decimals .= fromIntegral _cpltDecimals
+        PLTFields.initializationParameters .= toProto _cpltInitializationParameters
+
 -- | Attempt to construct the protobuf updatepayload.
 --   See @toBlockItemStatus@ for more context.
 convertUpdatePayload :: Updates.UpdateType -> Updates.UpdatePayload -> Either ConversionError Proto.UpdatePayload
@@ -950,6 +961,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
     (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     (Updates.UpdateValidatorScoreParameters, Updates.ValidatorScoreParametersUpdatePayload vsp) -> Right . Proto.make $ ProtoFields.validatorScoreParametersUpdate .= toProto vsp
+    (Updates.UpdateCreatePLT, Updates.CreatePLTUpdatePayload cplt) -> Right . Proto.make $ ProtoFields.createPltUpdate .= toProto cplt
     _ -> Left CEInvalidUpdateResult
 
 -- | The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
@@ -1593,6 +1605,10 @@ convertAccountTransaction ty cost sender result = case ty of
                         Nothing -> return ()
                         Just ty' -> ProtoFields.transactionType .= toProto ty'
                )
+
+instance ToProto TokenParameter where
+    type Output TokenParameter = Proto.CBor
+    toProto (TokenParameter parameter) = Proto.make $ PLTFields.value .= BSS.fromShort parameter
 
 instance ToProto TokenEventDetails where
     type Output TokenEventDetails = Proto.CBor
