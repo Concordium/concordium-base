@@ -1,5 +1,4 @@
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- | Types associated with protocol-level tokens.
 module Concordium.Types.Tokens where
