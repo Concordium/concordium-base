@@ -726,6 +726,7 @@ instance ToProto RejectReason where
         StakeOverMaximumThresholdForPool -> Proto.make $ ProtoFields.stakeOverMaximumThresholdForPool .= Proto.defMessage
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
+        NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
@@ -1548,6 +1549,17 @@ convertAccountTransaction ty cost sender result = case ty of
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toDelegationEvent events
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v
+            TTTokenHolder ->
+                mkSuccess <$> do
+                    let eventToProto :: Event' s -> Either ConversionError Proto.TokenHolderEvent
+                        eventToProto = \case
+                            TokenModuleEvent (TokenEvent{..}) -> Right . Proto.make $ do
+                                PLTFields.tokenSymbol .= toProto _teSymbol
+                                PLTFields.type' .= toProto _teType
+                                PLTFields.details .= toProto _teDetails
+                            _ -> Left CEInvalidTransactionResult
+                    v <- mapM eventToProto events
+                    Right . Proto.make $ ProtoFields.tokenHolderEffect . ProtoFields.events .= v
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
@@ -1567,6 +1579,14 @@ convertAccountTransaction ty cost sender result = case ty of
                         Nothing -> return ()
                         Just ty' -> ProtoFields.transactionType .= toProto ty'
                )
+
+instance ToProto TokenEventDetails where
+    type Output TokenEventDetails = Proto.CBor
+    toProto (TokenEventDetails details) = Proto.make $ PLTFields.value .= BSS.fromShort details
+
+instance ToProto TokenEventType where
+    type Output TokenEventType = Text
+    toProto (TokenEventType eventType) = decodeUtf8 (BSS.fromShort eventType)
 
 instance ToProto Address where
     type Output Address = Proto.Address
@@ -1621,6 +1641,7 @@ instance ToProto TransactionType where
     toProto TTTransferWithScheduleAndMemo = Proto.TRANSFER_WITH_SCHEDULE_AND_MEMO
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
+    toProto TTTokenHolder = Proto.TOKEN_HOLDER
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy

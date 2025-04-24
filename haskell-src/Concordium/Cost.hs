@@ -121,6 +121,10 @@ removeBakerCost = 300
 configureDelegationCost :: Energy
 configureDelegationCost = 300
 
+-- | Base cost for token holder transactions.
+tokenHolderBaseCost :: Energy
+tokenHolderBaseCost = 300
+
 -- | C_t for updating account credentials
 updateCredentialsCost ::
     -- | The number of credentials on the account before the update.
