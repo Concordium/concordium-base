@@ -4,6 +4,8 @@
 
 module Concordium.Types.ProtocolLevelTokens.CBOR where
 
+import qualified Codec.CBOR.ByteArray as BA
+import qualified Codec.CBOR.ByteArray.Sliced as SBA
 import Codec.CBOR.Decoding
 import Codec.CBOR.Encoding
 import qualified Codec.CBOR.Read as CBOR
@@ -17,11 +19,15 @@ import Data.Function
 import qualified Data.Map.Lazy as Map
 import Data.Maybe
 import Data.Scientific
+import qualified Data.Sequence as Seq
 import Data.Text
 import Data.Word
 import Lens.Micro.Platform
 
+import Concordium.ID.Types
+import Concordium.Types.Memo
 import Concordium.Types.Tokens
+import qualified Data.FixedByteString as FBS
 
 -- * Decoder helpers
 
@@ -45,6 +51,37 @@ mapValueDecoder key decodeVal l = \builder -> do
         Nothing -> return $ builder & l ?~ val
         Just _ -> fail $ "Key already set: " ++ show key
 
+-- | Helper function for decoding an indefinitely-encoded sequence or map.
+decodeIndefHelper ::
+    -- | Decode the next entry, updating the builder.
+    (builder -> Decoder s builder) ->
+    -- | Initial builder.
+    builder ->
+    Decoder s builder
+{-# INLINE decodeIndefHelper #-}
+decodeIndefHelper decoder = decodeLoop
+  where
+    decodeLoop builder =
+        decodeBreakOr >>= \case
+            True -> return builder
+            False -> decoder builder >>= decodeLoop
+
+-- | Helper function for decoding a sequence or map of known length.
+decodeDefHelper ::
+    -- | Decode the next entry, updating the builder.
+    (builder -> Decoder s builder) ->
+    -- | Number of entries.
+    Int ->
+    -- | Initial builder.
+    builder ->
+    Decoder s builder
+{-# INLINE decodeDefHelper #-}
+decodeDefHelper decoder = decodeLoop
+  where
+    decodeLoop n builder
+        | n > 0 = decoder builder >>= decodeLoop (n - 1)
+        | otherwise = return builder
+
 -- | Decode a CBOR-encoded map to type @r@. This exclusively supports UTF-8 string keys.
 --  The decoding uses a @builder@ type that is used to progressively decode the map.
 --  The first argument is a function that determines if each key is allowed, and if so,
@@ -60,8 +97,8 @@ decodeMap ::
 decodeMap valDecoder runBuilder emptyBuilder = do
     builder <-
         decodeMapLenOrIndef >>= \case
-            Nothing -> decodeIndef emptyBuilder
-            Just len -> decodeDef len emptyBuilder
+            Nothing -> decodeIndefHelper decodeKV emptyBuilder
+            Just len -> decodeDefHelper decodeKV len emptyBuilder
     case runBuilder builder of
         Left e -> fail e
         Right r -> return r
@@ -71,15 +108,6 @@ decodeMap valDecoder runBuilder emptyBuilder = do
         case valDecoder key of
             Nothing -> fail $ "Unexpected key " ++ show key
             Just decoder -> decoder builder
-    decodeIndef builder = do
-        decodeBreakOr >>= \case
-            True -> return builder
-            False -> do
-                builder' <- decodeKV builder
-                decodeIndef builder'
-    decodeDef n builder
-        | n > 0 = decodeDef (n - 1) =<< decodeKV builder
-        | otherwise = return builder
 
 -- | Decode a CBOR decimal fraction into a 'Scientific'. The result is not normalized.
 decodeDecimalFraction :: Decoder s Scientific
@@ -96,13 +124,24 @@ decodeDecimalFraction = do
     when (isNothing mLen) $ decodeBreakOr >>= \b -> unless b (fail "Expected end of array")
     return $ scientific mantissa exp10
 
+-- | Given a decoder for a single value, decode a sequence of values.
+decodeSequence :: Decoder s r -> Decoder s (Seq.Seq r)
+decodeSequence decoder =
+    decodeListLenOrIndef >>= \case
+        Just len -> decodeDefHelper decodeNext len Seq.empty
+        Nothing -> decodeIndefHelper decodeNext Seq.empty
+  where
+    decodeNext l = (l Seq.|>) <$> decoder
+
 -- * Encoding helpers
 
 -- | An 'Encoding' that represents a key in a CBOR map. The 'Ord' instance corresponds to
 --  lexicographic ordering of the CBOR encodings, so that these can be used to order keys for
 --  deterministic CBOR encoding.
 data MapKeyEncoding = MapKeyEncoding
-    { meEncoding :: Encoding,
+    { -- | The encoding of the value
+      meEncoding :: Encoding,
+      -- | The value encoded to a 'LBS.ByteString'.
       meBytes :: LBS.ByteString
     }
 
@@ -161,6 +200,12 @@ encodeTokenAmount TokenAmount{..} =
         <> encodeListLen 2
         <> encodeInteger (-fromIntegral nrDecimals)
         <> encodeWord64 digits
+
+-- | Helper function to encode a sequence.
+encodeSequence :: (a -> Encoding) -> Seq.Seq a -> Encoding
+encodeSequence encodeItem s =
+    encodeListLen (fromIntegral $ Seq.length s)
+        <> foldMap encodeItem s
 
 -- * Initialization parameters
 
@@ -311,3 +356,273 @@ encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..
 tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
 tokenInitializationParametersToBytes =
     CBOR.toStrictByteString . encodeTokenInitializationParametersWithDefaults
+
+-- * Token holder parameters
+
+-- | Coin info that indicates the type of the address. Only Concordium addresses are supported.
+data CoinInfo = CoinInfoConcordium
+    deriving (Eq, Show)
+
+-- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
+decodeCoinInfo :: Decoder s CoinInfo
+decodeCoinInfo = do
+    tag <- decodeTag
+    unless (tag == 40305) $
+        fail $
+            "coininfo: Expected coininfo (tag 40305), but found tag " ++ show tag
+    mLen <- decodeMapLenOrIndef
+    forM_ mLen $ \len ->
+        unless (len == 1) $
+            fail $
+                "coininfo: Expected a map of size 1, but size was " ++ show len
+    key <- decodeInt
+    unless (key == 1) $
+        fail $
+            "coininfo: Expected type key (1), but found " ++ show key
+    coinType <- decodeInt
+    ci <- case coinType of
+        919 -> return CoinInfoConcordium
+        _ -> fail $ "coininfo: Unsupported coin type: " ++ show coinType
+    when (isNothing mLen) $
+        decodeBreakOr >>= \b ->
+            unless b (fail "coininfo: Expected end of array")
+    return ci
+
+-- | Encode a 'CoinInfo' in the tagged-coininfo schema.
+encodeCoinInfo :: CoinInfo -> Encoding
+encodeCoinInfo CoinInfoConcordium =
+    encodeTag 40305
+        <> encodeMapLen 1
+        <> encodeInt 1
+        <> encodeInt 919
+
+-- | Decode a CBOR-encoded account address, that is encoded as a raw byte string.
+decodeAccountAddress :: Decoder s AccountAddress
+decodeAccountAddress = do
+    addressBA <- decodeByteArray
+    let actualSize = BA.sizeofByteArray addressBA
+    unless (actualSize == accountAddressSize) $
+        fail $
+            "account-address: expected "
+                ++ show accountAddressSize
+                ++ " bytes, but saw "
+                ++ show actualSize
+    return $ AccountAddress $ FBS.FixedByteString $ BA.unBA addressBA
+
+-- | Encode an account address as a CBOR byte string.
+encodeAccountAddress :: AccountAddress -> Encoding
+encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
+    encodeByteArray (SBA.fromByteArray ba)
+
+-- | A destination that can receive and hold protocol-level tokens.
+--  Currently, this can only be a Concordium account address.
+data TokenReceiver = ReceiverAccount
+    { -- | THe account address.
+      receiverAccountAddress :: !AccountAddress,
+      -- | Although the account can only be a Concordium address, this specifies whether the
+      --  address type should be explicit in the CBOR encoding.
+      receiverAccountCoinInfo :: !(Maybe CoinInfo)
+    }
+    deriving (Eq, Show)
+
+-- | Create a 'ReceiverAccount' from an 'AccountAddress'. The address type will be present in the
+--  CBOR encoding.
+accountTokenReceiver :: AccountAddress -> TokenReceiver
+accountTokenReceiver addr =
+    ReceiverAccount
+        { receiverAccountAddress = addr,
+          receiverAccountCoinInfo = Just CoinInfoConcordium
+        }
+
+-- | Create a 'ReceiverAccount' from an 'AccountAddress'. The address type will not be present in
+--  the CBOR encoding.
+accountTokenReceiverShort :: AccountAddress -> TokenReceiver
+accountTokenReceiverShort addr =
+    ReceiverAccount
+        { receiverAccountAddress = addr,
+          receiverAccountCoinInfo = Nothing
+        }
+
+-- | A builder for the 'ReceiverAccount' constructor.
+data ReceiverAccountBuilder = ReceiverAccountBuilder
+    { -- | Receiver account address.
+      _rabAccountAddress :: Maybe AccountAddress,
+      -- | Identifier for the address type.
+      _rabCoinInfo :: Maybe CoinInfo
+    }
+
+makeLenses ''ReceiverAccountBuilder
+
+-- | Empty 'ReceiverAccountBuilder'.
+emptyReceiverAccountBuilder :: ReceiverAccountBuilder
+emptyReceiverAccountBuilder = ReceiverAccountBuilder Nothing Nothing
+
+-- | Decode a CBOR-encoded 'TokenReceiver'.
+decodeTokenReceiver :: Decoder s TokenReceiver
+decodeTokenReceiver = do
+    tag <- decodeTag
+    unless (tag == 40307) $
+        fail $
+            "token-receiver: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
+    mLen <- decodeMapLenOrIndef
+    builder <- case mLen of
+        Nothing -> decodeIndefHelper decodeKV emptyReceiverAccountBuilder
+        Just len -> decodeDefHelper decodeKV len emptyReceiverAccountBuilder
+    case builder ^. rabAccountAddress of
+        Nothing -> fail "token-receiver: data (3) field is missing"
+        Just addr -> return $ ReceiverAccount addr (builder ^. rabCoinInfo)
+  where
+    decodeKV builder = do
+        key <- decodeInt
+        case key of
+            1 -> mapValueDecoder "info (1)" decodeCoinInfo rabCoinInfo builder
+            2 -> fail "token-receiver: type (2) field is not supported"
+            3 -> mapValueDecoder "data (3)" decodeAccountAddress rabAccountAddress builder
+            _ -> fail $ "token-receiver: unexpected map key " ++ show key
+
+encodeTokenReceiver :: TokenReceiver -> Encoding
+encodeTokenReceiver ReceiverAccount{..} =
+    encodeTag 40307
+        <> encodeMapDeterministic
+            ( Map.empty
+                & k 1 .~ (encodeCoinInfo <$> receiverAccountCoinInfo)
+                & k 3 ?~ encodeAccountAddress receiverAccountAddress
+            )
+  where
+    k = at . makeMapKeyEncoding . encodeWord
+
+-- | A 'TaggableMemo' represents a 'Memo' that may optionally be tagged as CBOR-encoded.
+--  Memos are often assumed to be CBOR-encoded, but the tag can be used to make this explicit.
+data TaggableMemo
+    = -- | The memo is represented as a byte string with no tag.
+      UntaggedMemo {untaggedMemo :: !Memo}
+    | -- | The memo is represented as a byte string with a tag indicating CBOR-encoded data.
+      CBORMemo {untaggedMemo :: !Memo}
+    deriving (Eq, Show)
+
+-- | Decode a CBOR-encoded 'TaggableMemo'.
+--  A memo can be encoded either directly as a byte string (of length at most 256) or as
+--  such a byte string but tagged as CBOR-encoded (tag 24).
+decodeTaggableMemo :: Decoder s TaggableMemo
+decodeTaggableMemo = do
+    nextTokenType <- peekTokenType
+    constructor <-
+        if nextTokenType == TypeTag
+            then do
+                tag <- decodeTag
+                unless (tag == 24) $
+                    fail $
+                        "memo: expected either a byte string or CBOR-encoded bytes (tag 24), but saw tag "
+                            ++ show tag
+                return CBORMemo
+            else return UntaggedMemo
+    memoBA <- decodeByteArray
+    when (BA.sizeofByteArray memoBA > maxMemoSize) $
+        fail $
+            tooBigErrorString "memo" (BA.sizeofByteArray memoBA) maxMemoSize
+    return . constructor . Memo . BA.toShortByteString $ memoBA
+
+-- | Encode a 'TaggableMemo' as CBOR.
+encodeTaggableMemo :: TaggableMemo -> Encoding
+encodeTaggableMemo (UntaggedMemo (Memo memo)) =
+    encodeByteArray (SBA.fromShortByteString memo)
+encodeTaggableMemo (CBORMemo (Memo memo)) =
+    encodeTag 24 <> encodeByteArray (SBA.fromShortByteString memo)
+
+-- | Token transfer operation. This transfers a specified amount of tokens from the sender account
+--  (implicit) to the recipient account.
+data TokenTransferBody = TokenTransferBody
+    { -- | The amount to transfer.
+      ttAmount :: !TokenAmount,
+      -- | The recipient account address.
+      ttRecipient :: !TokenReceiver,
+      -- | An optional memo associated with the transfer.
+      ttMemo :: !(Maybe TaggableMemo)
+    }
+    deriving (Eq, Show)
+
+-- | Builder
+data TokenTransferBuilder = TokenTransferBuilder
+    { _ttbAmount :: Maybe TokenAmount,
+      _ttbRecipient :: Maybe TokenReceiver,
+      _ttbMemo :: Maybe TaggableMemo
+    }
+
+makeLenses ''TokenTransferBuilder
+
+-- | A 'TokenTransferBuilder' with no fields set.
+emptyTokenTransferBuilder :: TokenTransferBuilder
+emptyTokenTransferBuilder = TokenTransferBuilder Nothing Nothing Nothing
+
+-- | Construct a 'TokenTransferBody' from a 'TokenTransferBuilder'.
+--  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
+--  is missing. Missing optional parameters are populated with the appropriate default values.
+buildTokenTransfer :: TokenTransferBuilder -> Either String TokenTransferBody
+buildTokenTransfer TokenTransferBuilder{..} = do
+    ttAmount <- _ttbAmount `orFail` "Missing \"amount\""
+    ttRecipient <- _ttbRecipient `orFail` "Missing \"recipient\""
+    let ttMemo = _ttbMemo
+    return TokenTransferBody{..}
+
+-- | Decode a CBOR-encoded 'TokenTransferBody'.
+decodeTokenTransfer :: Decoder s TokenTransferBody
+decodeTokenTransfer =
+    decodeMap valDecoder buildTokenTransfer emptyTokenTransferBuilder
+  where
+    valDecoder k@"amount" = Just $ mapValueDecoder k decodeTokenAmount ttbAmount
+    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeTokenReceiver ttbRecipient
+    valDecoder k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo ttbMemo
+    valDecoder _ = Nothing
+
+-- | Encode a 'TokenTransferBody' as CBOR.
+encodeTokenTransfer :: TokenTransferBody -> Encoding
+encodeTokenTransfer TokenTransferBody{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "amount" ?~ encodeTokenAmount ttAmount
+            & k "recipient" ?~ encodeTokenReceiver ttRecipient
+            & k "memo" .~ (encodeTaggableMemo <$> ttMemo)
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+-- | A token-holder operation.
+newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
+    deriving (Eq, Show)
+
+-- | Decode a CBOR-encoded 'TokenHolderOperation'.
+decodeTokenHolderOperation :: Decoder s TokenHolderOperation
+decodeTokenHolderOperation = do
+    maybeMapLen <- decodeMapLenOrIndef
+    forM_ maybeMapLen $ \mapLen ->
+        unless (mapLen == 1) $
+            fail $
+                "token-holder-operation: expected a map of size 1, but saw " ++ show mapLen
+    opType <- decodeString
+    res <- case opType of
+        "transfer" -> TokenHolderTransfer <$> decodeTokenTransfer
+        _ -> fail $ "token-holder-operation: unsupported operation type: " ++ show opType
+    when (isNothing maybeMapLen) $ do
+        isEnd <- decodeBreakOr
+        unless isEnd $ fail "token-holder-operation: expected end of map"
+    return res
+
+-- | Encode a 'TokenHolderOperation' as CBOR.
+encodeTokenHolderOperation :: TokenHolderOperation -> Encoding
+encodeTokenHolderOperation (TokenHolderTransfer ttb) =
+    encodeMapLen 1
+        <> encodeString "transfer"
+        <> encodeTokenTransfer ttb
+
+-- | A token-holder transaction consists of a sequence of token-holder operations.
+newtype TokenHolderTransaction = TokenHolderTransaction
+    { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
+    }
+    deriving (Eq, Show)
+
+-- | Decode a CBOR-encoded 'TokenHolderTransaction'.
+decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
+decodeTokenHolderTransaction = TokenHolderTransaction <$> decodeSequence decodeTokenHolderOperation
+
+-- | Encode a 'TokenHolderTransaction' as CBOR.
+encodeTokenHolderTransaction :: TokenHolderTransaction -> Encoding
+encodeTokenHolderTransaction = encodeSequence encodeTokenHolderOperation . tokenHolderTransactions

@@ -88,6 +88,7 @@ library
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
       Concordium.Types.InvokeContract
+      Concordium.Types.Memo
       Concordium.Types.Migration
       Concordium.Types.Parameters
       Concordium.Types.ProtocolLevelTokens.CBOR
