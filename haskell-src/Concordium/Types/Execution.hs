@@ -2629,12 +2629,6 @@ data RejectReason
       PoolClosed
     | -- | Token ID does not exists.
       NonExistentTokenId !TokenId
-    | -- | Tried to create a protocol-level token where a token with the same 'TokenId' exists.
-      TokenExists !TokenId
-    | -- | Tried to create a protocol-level token but the specified token module is invalid.
-      TokenModuleInvalid !TokenModuleRef
-    | -- | Tried to create a protocol-level token, but the token module's initializer failed.
-      TokenModuleInitializeFailed !TokenModuleRejectReason
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2707,9 +2701,6 @@ instance S.Serialize RejectReason where
         PoolWouldBecomeOverDelegated -> S.putWord8 53
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
-        TokenExists tokId -> S.putWord8 56 >> S.put tokId
-        TokenModuleInvalid modRef -> S.putWord8 57 >> S.put modRef
-        TokenModuleInitializeFailed tmrr -> S.putWord8 58 >> S.put tmrr
 
     get =
         S.getWord8 >>= \case
@@ -2778,9 +2769,6 @@ instance S.Serialize RejectReason where
             53 -> return PoolWouldBecomeOverDelegated
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
-            56 -> TokenExists <$> S.get
-            57 -> TokenModuleInvalid <$> S.get
-            58 -> TokenModuleInitializeFailed <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason

@@ -738,9 +738,6 @@ instance ToProto RejectReason where
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
         NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
-        TokenExists tokenId -> Proto.make $ ProtoFields.tokenExists .= toProto tokenId
-        TokenModuleInvalid moduleRef -> Proto.make $ ProtoFields.tokenModuleInvalid .= toProto moduleRef
-        TokenModuleInitializeFailed tmrr -> Proto.make $ ProtoFields.tokenModuleInitializeFailed .= toProto tmrr
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
