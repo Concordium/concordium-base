@@ -99,7 +99,7 @@ decodeDecimalFraction = do
 -- * Encoding helpers
 
 -- | An 'Encoding' that represents a key in a CBOR map. The 'Ord' instance corresponds to
---  lexicographic ording of the CBOR encodings, so that these can be used to order keys for
+--  lexicographic ordering of the CBOR encodings, so that these can be used to order keys for
 --  deterministic CBOR encoding.
 data MapKeyEncoding = MapKeyEncoding
     { meEncoding :: Encoding,
