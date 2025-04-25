@@ -797,9 +797,7 @@ instance ToProto SupplementedTransactionSummary where
                             ProtoFields.accountCreation .= details
                 _ -> Left CEInvalidAccountCreation
         TSTUpdateTransaction ut -> case tsResult of
-            TxReject rr ->
-                Right . Proto.make $
-                    ProtoFields.failedUpdate .= (Proto.make $ ProtoFields.rejectReason .= toProto rr)
+            TxReject _ -> Left CEFailedUpdate
             TxSuccess events -> case events of
                 [UpdateEnqueued{..}] -> do
                     payload <- convertUpdatePayload ut uePayload
