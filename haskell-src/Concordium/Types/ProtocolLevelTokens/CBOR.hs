@@ -417,7 +417,7 @@ encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
 -- | A destination that can receive and hold protocol-level tokens.
 --  Currently, this can only be a Concordium account address.
 data TokenReceiver = ReceiverAccount
-    { -- | THe account address.
+    { -- | The account address.
       receiverAccountAddress :: !AccountAddress,
       -- | Although the account can only be a Concordium address, this specifies whether the
       --  address type should be explicit in the CBOR encoding.
