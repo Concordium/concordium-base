@@ -189,6 +189,7 @@ module Concordium.Types (
     TokenEventDetails (..),
     TokenEventType (..),
     TokenEvent (..),
+    TokenModuleRejectReason (..),
     teSymbol,
     teType,
     teDetails,
@@ -257,6 +258,7 @@ import Lens.Micro.Platform
 
 import Text.Read (readMaybe)
 
+import Concordium.Utils.Serialization (getMaybe, putMaybe)
 import Test.QuickCheck (Arbitrary, choose)
 import Test.QuickCheck.Arbitrary (Arbitrary (arbitrary))
 
@@ -1277,6 +1279,43 @@ instance AE.FromJSON TokenEvent where
         _teType <- o AE..: "type"
         _teDetails <- o AE..: "details"
         return TokenEvent{..}
+
+-- | Details provided by the token module in the event of rejecting a transaction.
+data TokenModuleRejectReason = TokenModuleRejectReason
+    { -- | The tokens symbol.
+      tmrrTokenSymbol :: !TokenId,
+      -- | The type of the reject reason. At most 255 bytes.
+      tmrrType :: !TokenEventType,
+      -- | (Optional) CBOR-encoded details.
+      tmrrDetails :: !(Maybe TokenEventDetails)
+    }
+    deriving (Eq, Show)
+
+instance S.Serialize TokenModuleRejectReason where
+    put TokenModuleRejectReason{..} = do
+        S.put tmrrTokenSymbol
+        S.put tmrrType
+        putMaybe S.put tmrrDetails
+    get = do
+        tmrrTokenSymbol <- S.get
+        tmrrType <- S.get
+        tmrrDetails <- getMaybe S.get
+        return TokenModuleRejectReason{..}
+
+instance AE.ToJSON TokenModuleRejectReason where
+    toJSON TokenModuleRejectReason{..} =
+        AE.object $
+            [ "tokenSymbol" AE..= tmrrTokenSymbol,
+              "type" AE..= tmrrType
+            ]
+                ++ foldMap (\details -> ["details" AE..= details]) tmrrDetails
+
+instance AE.FromJSON TokenModuleRejectReason where
+    parseJSON = AE.withObject "TokenModuleRejectReason" $ \o -> do
+        tmrrTokenSymbol <- o AE..: "tokenSymbol"
+        tmrrType <- o AE..: "type"
+        tmrrDetails <- o AE..:? "details"
+        return TokenModuleRejectReason{..}
 
 -- | A wrapper type for (de)-serializing an CBOR-encoded initialization parameter to/from JSON.
 --  This can parse either an JSON object representation of 'TokenInitializationParameters'

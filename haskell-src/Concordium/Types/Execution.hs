@@ -2816,6 +2816,10 @@ data FailureKind
       InvalidPayloadSize
     | -- | The operation is not legal at the current protocol version.
       NotSupportedAtCurrentProtocolVersion
+    | -- | A protocol-level token with the given token ID already exists.
+      DuplicateTokenId !TokenId
+    | -- | The token module encountered an error when initializing the protocol-level token.
+      TokenInitializeFailure !String
     deriving (Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
