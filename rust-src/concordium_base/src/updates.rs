@@ -11,7 +11,7 @@ use crate::{
         deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
         SerdeDeserialize, SerdeSerialize, Serial,
     },
-    hashes,
+    hashes, protocol_level_tokens,
     transactions::PayloadSize,
 };
 use derive_more::*;
@@ -694,6 +694,33 @@ pub enum UpdatePayload {
     FinalizationCommitteeParametersCPV2(FinalizationCommitteeParameters),
     #[serde(rename = "validatorScoreParametersCPV3")]
     ValidatorScoreParametersCPV3(ValidatorScoreParameters),
+    #[serde(rename = "createPlt")]
+    CreatePlt(CreatePlt),
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePlt {
+    /// The symbol of the token.
+    pub token_symbol:              protocol_level_tokens::TokenId,
+    /// A SHA256 hash that identifies the token module implementation.
+    pub token_module:              protocol_level_tokens::TokenModuleRef,
+    /// The address of the account that will govern the token.
+    pub governance_account:        AccountAddress,
+    /// The number of decimal places used in the representation of amounts of
+    /// this token. This determines the smallest representable fraction of the
+    /// token.
+    pub decimals:                  u8,
+    /// The initialization parameters of the token, encoded in CBOR.
+    pub initialization_parameters: protocol_level_tokens::RawCbor,
+}
+
+impl Serial for CreatePlt {
+    fn serial<B: Buffer>(&self, out: &mut B) { todo!() }
+}
+
+impl Deserial for CreatePlt {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> { todo!() }
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
@@ -757,6 +784,9 @@ pub enum UpdateType {
     /// Update of the validator score parameters. Only applies to
     /// protocol version [`P8`](ProtocolVersion::P8) and up.
     UpdateValidatorScoreParameters,
+    /// Create a new protocol level token. Only applies to
+    /// protocol version [`P9`](ProtocolVersion::P9) and up.
+    CreatePlt,
 }
 
 impl UpdatePayload {
@@ -788,6 +818,7 @@ impl UpdatePayload {
                 UpdateFinalizationCommitteeParameters
             }
             UpdatePayload::ValidatorScoreParametersCPV3(_) => UpdateValidatorScoreParameters,
+            UpdatePayload::CreatePlt(_) => CreatePlt,
         }
     }
 }
@@ -1009,6 +1040,10 @@ impl Serial for UpdatePayload {
                 23u8.serial(out);
                 update.serial(out)
             }
+            UpdatePayload::CreatePlt(update) => {
+                24u8.serial(out);
+                update.serial(out)
+            }
         }
     }
 }
@@ -1063,6 +1098,7 @@ impl Deserial for UpdatePayload {
                 source.get()?,
             )),
             23u8 => Ok(UpdatePayload::ValidatorScoreParametersCPV3(source.get()?)),
+            24u8 => Ok(UpdatePayload::CreatePlt(source.get()?)),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
     }
