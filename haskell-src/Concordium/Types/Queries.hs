@@ -723,7 +723,9 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
       -- | Updates to the consensus version 2 finalization committee parameters
       _nusnFinalizationCommitteeParameters :: !U.UpdateSequenceNumber,
       -- | Updates to the consensus version 2 validator score parameters
-      _nusnValidatorScoreParameters :: !U.UpdateSequenceNumber
+      _nusnValidatorScoreParameters :: !U.UpdateSequenceNumber,
+      -- | Updates to protocol level tokens. Introduced in protocol version 9.
+      _nusnProtocolLevelTokensParameters :: !U.UpdateSequenceNumber
     }
     deriving (Show, Eq)
 
@@ -732,8 +734,14 @@ $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop (length ("_nu
 
 -- | Build the struct containing all of the next available sequence numbers for updating any of the
 -- chain parameters
-updateQueuesNextSequenceNumbers :: UQ.PendingUpdates cpv -> NextUpdateSequenceNumbers
-updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
+updateQueuesNextSequenceNumbers ::
+    -- | The queues with pending updates
+    UQ.PendingUpdates cpv ->
+    -- | The update sequence number for protocol level tokens.
+    -- No queue is associated with this chain update, so it is provided separately.
+    U.UpdateSequenceNumber ->
+    NextUpdateSequenceNumbers
+updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} protocolLevelTokensSeqNumber =
     NextUpdateSequenceNumbers
         { _nusnRootKeys = UQ._uqNextSequenceNumber _pRootKeysUpdateQueue,
           _nusnLevel1Keys = UQ._uqNextSequenceNumber _pLevel1KeysUpdateQueue,
@@ -755,7 +763,8 @@ updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} =
           _nusnMinBlockTime = mNextSequenceNumber _pMinBlockTimeQueue,
           _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue,
           _nusnFinalizationCommitteeParameters = mNextSequenceNumber _pFinalizationCommitteeParametersQueue,
-          _nusnValidatorScoreParameters = mNextSequenceNumber _pValidatorScoreParametersQueue
+          _nusnValidatorScoreParameters = mNextSequenceNumber _pValidatorScoreParametersQueue,
+          _nusnProtocolLevelTokensParameters = protocolLevelTokensSeqNumber
         }
   where
     -- Get the next sequence number or 1, if not supported.
