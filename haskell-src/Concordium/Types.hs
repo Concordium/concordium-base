@@ -189,11 +189,12 @@ module Concordium.Types (
     TokenEventDetails (..),
     TokenEventType (..),
     TokenEvent (..),
-    TokenModuleRejectReason (..),
     teSymbol,
     teType,
     teDetails,
     makeTokenEventType,
+    TokenModuleRejectReason (..),
+    makeTokenModuleRejectReason,
     CreatePLT (..),
     cpltTokenSymbol,
     cpltTokenModule,
@@ -1158,14 +1159,18 @@ instance S.Serialize TokenEventDetails where
         S.putShortByteString parameter
 
 -- | Token event type string.
---  Must be at most 255 bytes and a valid UTF-8 string.
+--  MUST be at most 255 bytes and SHOULD BE a valid UTF-8 string.
+--
+--  Serialization does not require or check for UTF-8 validity.
+--  Converting to JSON will replace invalid UTF-8 bytes with the unicode replacement character,
+--  which means that converting to JSON and back is only the identity for valid UTF-8.
 newtype TokenEventType = TokenEventType {tokenEventTypeBytes :: BSS.ShortByteString}
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON TokenEventType where
     -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenEventType
     -- should enforce valid UTF-8.
-    toJSON TokenEventType{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenEventTypeBytes
+    toJSON TokenEventType{..} = AE.String $ T.decodeUtf8Lenient $ BSS.fromShort tokenEventTypeBytes
 
 instance AE.FromJSON TokenEventType where
     parseJSON (AE.String text) = return $ TokenEventType $ BSS.toShort $ T.encodeUtf8 text
@@ -1189,9 +1194,7 @@ instance S.Serialize TokenEventType where
     get = do
         len <- S.getWord8
         sbs <- S.getShortByteString (fromIntegral len)
-        case makeTokenEventType sbs of
-            Left e -> fail e
-            Right eventTypeString -> return eventTypeString
+        return $ TokenEventType sbs
 
 -- | Event produced from a token module
 -- This is used for both token holder transactions and for token governance transactions.
@@ -1274,6 +1277,16 @@ instance AE.FromJSON TokenModuleRejectReason where
         tmrrType <- o AE..: "type"
         tmrrDetails <- o AE..:? "details"
         return TokenModuleRejectReason{..}
+
+-- | Make a 'TokenModuleRejectReason' given a 'TokenId' and an 'CBOR.EncodedTokenRejectReason'.
+--  If the type is longer than 255 bytes, it is truncated. This potentially violates the
+makeTokenModuleRejectReason :: TokenId -> CBOR.EncodedTokenRejectReason -> TokenModuleRejectReason
+makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
+    TokenModuleRejectReason
+        { tmrrType = TokenEventType (BSS.take 255 etrrType),
+          tmrrDetails = TokenEventDetails <$> etrrDetails,
+          ..
+        }
 
 -- | A wrapper type for (de)-serializing an CBOR-encoded initialization parameter to/from JSON.
 --  This can parse either an JSON object representation of 'TokenInitializationParameters'
