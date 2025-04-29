@@ -5,6 +5,7 @@ module Types.CBOR where
 import Codec.CBOR.Read
 import Codec.CBOR.Write
 import qualified Data.ByteString as BS
+import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Test.HUnit
@@ -32,6 +33,36 @@ genTokenInitializationParameters = do
     tipMintable <- arbitrary
     tipBurnable <- arbitrary
     return TokenInitializationParameters{..}
+
+-- | Generator for `TokenTransferBody`
+genTokenTransfer :: Gen TokenTransferBody
+genTokenTransfer = do
+    ttAmount <- genTokenAmount
+    ttRecipient <- genTokenReceiver
+    ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
+    return TokenTransferBody{..}
+
+-- | Generator for `TokenReceiver`
+genTokenReceiver :: Gen TokenReceiver
+genTokenReceiver =
+    oneof
+        [ ReceiverAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
+          ReceiverAccount <$> genAccountAddress <*> pure Nothing
+        ]
+
+-- | Generator for `TaggableMemo`
+genTaggableMemo :: Gen TaggableMemo
+genTaggableMemo =
+    oneof
+        [ UntaggedMemo <$> genMemo,
+          CBORMemo <$> genMemo
+        ]
+
+-- | Generator for 'TokenHolderTransaction'.
+genTokenHolderTransaction :: Gen TokenHolderTransaction
+genTokenHolderTransaction =
+    TokenHolderTransaction . Seq.fromList
+        <$> listOf (TokenHolderTransfer <$> genTokenTransfer)
 
 -- | A test value for 'TokenInitializationParameters'.
 tip1 :: TokenInitializationParameters
@@ -93,5 +124,17 @@ testInitializationParameters = describe "token-initialization-parameters decodin
                 )
 
 tests :: Spec
-tests = describe "CBOR" $ do
+tests = parallel $ describe "CBOR" $ do
     testInitializationParameters
+    it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenTransfer
+                    (toLazyByteString $ encodeTokenTransfer tt)
+                )
+    it "Encode and decode TokenHolderTransaction" $ withMaxSuccess 1000 $ forAll genTokenHolderTransaction $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenHolderTransaction
+                    (toLazyByteString $ encodeTokenHolderTransaction tt)
+                )
