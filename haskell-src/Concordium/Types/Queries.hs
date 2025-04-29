@@ -39,14 +39,12 @@ import Concordium.Types.Parameters (
     GASRewardsVersion (..),
     MintDistribution,
     MintDistributionVersion (..),
-    OParam (..),
     PoolParameters,
     TimeParameters,
     TimeoutParameters,
     TransactionFeeDistribution,
     ValidatorScoreParameters,
  )
-import qualified Concordium.Types.UpdateQueues as UQ
 import qualified Concordium.Types.Updates as U
 import Concordium.Utils
 import qualified Concordium.Wasm as Wasm
@@ -731,46 +729,6 @@ data NextUpdateSequenceNumbers = NextUpdateSequenceNumbers
 
 -- Derive JSON format by removing the `_nusn` prefix and lowercasing the initial letter of field names.
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop (length ("_nusn" :: String))} ''NextUpdateSequenceNumbers)
-
--- | Build the struct containing all of the next available sequence numbers for updating any of the
--- chain parameters
-updateQueuesNextSequenceNumbers ::
-    -- | The queues with pending updates
-    UQ.PendingUpdates cpv ->
-    -- | The update sequence number for protocol level tokens.
-    -- No queue is associated with this chain update, so it is provided separately.
-    U.UpdateSequenceNumber ->
-    NextUpdateSequenceNumbers
-updateQueuesNextSequenceNumbers UQ.PendingUpdates{..} protocolLevelTokensSeqNumber =
-    NextUpdateSequenceNumbers
-        { _nusnRootKeys = UQ._uqNextSequenceNumber _pRootKeysUpdateQueue,
-          _nusnLevel1Keys = UQ._uqNextSequenceNumber _pLevel1KeysUpdateQueue,
-          _nusnLevel2Keys = UQ._uqNextSequenceNumber _pLevel2KeysUpdateQueue,
-          _nusnProtocol = UQ._uqNextSequenceNumber _pProtocolQueue,
-          _nusnElectionDifficulty = mNextSequenceNumber _pElectionDifficultyQueue,
-          _nusnEuroPerEnergy = UQ._uqNextSequenceNumber _pEuroPerEnergyQueue,
-          _nusnMicroCCDPerEuro = UQ._uqNextSequenceNumber _pMicroGTUPerEuroQueue,
-          _nusnFoundationAccount = UQ._uqNextSequenceNumber _pFoundationAccountQueue,
-          _nusnMintDistribution = UQ._uqNextSequenceNumber _pMintDistributionQueue,
-          _nusnTransactionFeeDistribution = UQ._uqNextSequenceNumber _pTransactionFeeDistributionQueue,
-          _nusnGASRewards = UQ._uqNextSequenceNumber _pGASRewardsQueue,
-          _nusnPoolParameters = UQ._uqNextSequenceNumber _pPoolParametersQueue,
-          _nusnAddAnonymityRevoker = UQ._uqNextSequenceNumber _pAddAnonymityRevokerQueue,
-          _nusnAddIdentityProvider = UQ._uqNextSequenceNumber _pAddIdentityProviderQueue,
-          _nusnCooldownParameters = mNextSequenceNumber _pCooldownParametersQueue,
-          _nusnTimeParameters = mNextSequenceNumber _pTimeParametersQueue,
-          _nusnTimeoutParameters = mNextSequenceNumber _pTimeoutParametersQueue,
-          _nusnMinBlockTime = mNextSequenceNumber _pMinBlockTimeQueue,
-          _nusnBlockEnergyLimit = mNextSequenceNumber _pBlockEnergyLimitQueue,
-          _nusnFinalizationCommitteeParameters = mNextSequenceNumber _pFinalizationCommitteeParametersQueue,
-          _nusnValidatorScoreParameters = mNextSequenceNumber _pValidatorScoreParametersQueue,
-          _nusnProtocolLevelTokensParameters = protocolLevelTokensSeqNumber
-        }
-  where
-    -- Get the next sequence number or 1, if not supported.
-    mNextSequenceNumber :: UQ.OUpdateQueue pt cpv e -> U.UpdateSequenceNumber
-    mNextSequenceNumber NoParam = 1
-    mNextSequenceNumber (SomeParam q) = UQ._uqNextSequenceNumber q
 
 -- | Information about a registered delegator in a block.
 data DelegatorInfo = DelegatorInfo
