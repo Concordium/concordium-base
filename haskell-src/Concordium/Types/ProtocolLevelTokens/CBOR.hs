@@ -14,6 +14,7 @@ import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Short as BSS
 import Data.Foldable
 import Data.Function
 import qualified Data.Map.Lazy as Map
@@ -623,6 +624,192 @@ newtype TokenHolderTransaction = TokenHolderTransaction
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
 decodeTokenHolderTransaction = TokenHolderTransaction <$> decodeSequence decodeTokenHolderOperation
 
+-- | Parse a 'TokenHolderTransaction' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenHolderTransactionFromBytes :: LBS.ByteString -> Either String TokenHolderTransaction
+tokenHolderTransactionFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenHolderTransaction lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining)
+                    ++ " bytes remaining after parsing token-holder transaction"
+
 -- | Encode a 'TokenHolderTransaction' as CBOR.
 encodeTokenHolderTransaction :: TokenHolderTransaction -> Encoding
 encodeTokenHolderTransaction = encodeSequence encodeTokenHolderOperation . tokenHolderTransactions
+
+-- | CBOR-encode a 'TokenHolderTransaction' to a (strict) 'BS.ByteString'.
+tokenHolderTransactionToBytes :: TokenHolderTransaction -> BS.ByteString
+tokenHolderTransactionToBytes = CBOR.toStrictByteString . encodeTokenHolderTransaction
+
+-- * Reject reasons
+
+-- | Details provided by the token module in the event of rejecting a transaction.
+data EncodedTokenRejectReason = EncodedTokenRejectReason
+    { -- | The type of the reject reason. At most 255 bytes.
+      etrrType :: !BSS.ShortByteString,
+      -- | (Optional) CBOR-encoded details.
+      etrrDetails :: !(Maybe BSS.ShortByteString)
+    }
+    deriving (Eq, Show)
+
+-- | Reasons that a token-holder operation might be rejected by the Token Module.
+data TokenHolderFailure
+    = -- | The recipient address was not valid.
+      RecipientNotFound
+        { -- | The index in the list of operations of the failing operation.
+          thfTransactionIndex :: !Word64,
+          -- | The recipient address that could not be resolved.
+          thfRecipient :: !TokenReceiver
+        }
+    | -- | The balance of tokens on the sender account is insufficient to perform the operation.
+      TokenBalanceInsufficient
+        { -- | The index in the list of operations of the failing operation.
+          thfTransactionIndex :: !Word64,
+          -- | The available balance of the sender.
+          thfAvailableBalance :: !TokenAmount,
+          -- | The minimum required balance to perform the operation.
+          thfRequiredBalance :: !TokenAmount
+        }
+    | -- | The 'TokenHolderTransaction' could not be deserialized.
+      DeserializationFailure
+        { -- | (Optional) text description of the failure mode.
+          thfCause :: !(Maybe Text)
+        }
+    deriving (Eq, Show)
+
+-- | A builder for constructing 'TokenHolderFailure' values with the 'RecipientNotFound'
+--  constructor.
+data RecipientNotFoundBuilder = RecipientNotFoundBuilder
+    { _rnfbTransactionIndex :: Maybe Word64,
+      _rnfbRecipient :: Maybe TokenReceiver
+    }
+
+makeLenses ''RecipientNotFoundBuilder
+
+-- | The empty 'RecipientNotFoundBuilder'.
+emptyRecipientNotFoundBuilder :: RecipientNotFoundBuilder
+emptyRecipientNotFoundBuilder = RecipientNotFoundBuilder Nothing Nothing
+
+-- | Construct a 'TokenHolderFailure' from a 'RecipientNotFoundBuilder'.
+--  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
+--  is missing.
+buildRecipientNotFound :: RecipientNotFoundBuilder -> Either String TokenHolderFailure
+buildRecipientNotFound RecipientNotFoundBuilder{..} = do
+    thfTransactionIndex <- _rnfbTransactionIndex `orFail` "Missing \"index\""
+    thfRecipient <- _rnfbRecipient `orFail` "Missing \"recipient\""
+    return RecipientNotFound{..}
+
+-- | A builder for constructing 'TokenHolderFailure' values with the 'TokenBalanceInsufficient'
+--  constructor.
+data TokenBalanceInsufficientBuilder = TokenBalanceInsufficientBuilder
+    { _tbibTransactionIndex :: Maybe Word64,
+      _tbibAvailableBalance :: Maybe TokenAmount,
+      _tbibRequiredBalance :: Maybe TokenAmount
+    }
+
+makeLenses ''TokenBalanceInsufficientBuilder
+
+-- | The empty 'TokenBalanceInsufficientBuilder'.
+emptyTokenBalanceInsufficientBuilder :: TokenBalanceInsufficientBuilder
+emptyTokenBalanceInsufficientBuilder = TokenBalanceInsufficientBuilder Nothing Nothing Nothing
+
+-- | Construct a 'TokenHolderFailure' from a 'TokenBalanceInsufficientBuilder'.
+--  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
+--  is missing.
+buildTokenBalanceInsufficient :: TokenBalanceInsufficientBuilder -> Either String TokenHolderFailure
+buildTokenBalanceInsufficient TokenBalanceInsufficientBuilder{..} = do
+    thfTransactionIndex <- _tbibTransactionIndex `orFail` "Missing \"index\""
+    thfAvailableBalance <- _tbibAvailableBalance `orFail` "Missing \"availableBalance\""
+    thfRequiredBalance <- _tbibRequiredBalance `orFail` "Missing \"requiredBalance\""
+    return TokenBalanceInsufficient{..}
+
+-- | A builder for constructing 'TokenHolderFailure' values with the 'DeserializationFailure'
+--  constructor.
+newtype DeserializationFailureBuilder = DeserializationFailureBuilder
+    { _dfbCause :: Maybe Text
+    }
+
+makeLenses ''DeserializationFailureBuilder
+
+-- | The empty 'DeserializationFailureBuilder'.
+emptyDeserializationFailureBuilder :: DeserializationFailureBuilder
+emptyDeserializationFailureBuilder = DeserializationFailureBuilder Nothing
+
+-- | Construct a 'TokenHolderFailure' from a 'DeserializationFailureBuilder'.
+--  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
+--  is missing.
+buildDeserializationFailure :: DeserializationFailureBuilder -> Either String TokenHolderFailure
+buildDeserializationFailure DeserializationFailureBuilder{..} = do
+    let thfCause = _dfbCause
+    return DeserializationFailure{..}
+
+-- | Encode a 'TokenHolderFailure' as an 'EncodedTokenRejectReason'.
+encodeTokenHolderFailure :: TokenHolderFailure -> EncodedTokenRejectReason
+encodeTokenHolderFailure RecipientNotFound{..} =
+    EncodedTokenRejectReason
+        { etrrType = "recipientNotFound",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "index" ?~ encodeWord64 thfTransactionIndex
+                    & k "recipient" ?~ encodeTokenReceiver thfRecipient
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
+encodeTokenHolderFailure TokenBalanceInsufficient{..} =
+    EncodedTokenRejectReason
+        { etrrType = "tokenBalanceInsufficient",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "index" ?~ encodeWord64 thfTransactionIndex
+                    & k "availableBalance" ?~ encodeTokenAmount thfAvailableBalance
+                    & k "requiredBalance" ?~ encodeTokenAmount thfRequiredBalance
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
+encodeTokenHolderFailure DeserializationFailure{..} =
+    EncodedTokenRejectReason
+        { etrrType = "deserializationFailure",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "cause" .~ fmap encodeString thfCause
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+-- | Decode a CBOR-encoded 'TokenHolderFailure' given a string representing the type of the failure.
+decodeTokenHolderFailure :: BSS.ShortByteString -> Decoder s TokenHolderFailure
+decodeTokenHolderFailure "recipientNotFound" =
+    decodeMap
+        valDecoder
+        buildRecipientNotFound
+        emptyRecipientNotFoundBuilder
+  where
+    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 rnfbTransactionIndex
+    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeTokenReceiver rnfbRecipient
+    valDecoder _ = Nothing
+decodeTokenHolderFailure "tokenBalanceInsufficient" =
+    decodeMap
+        valDecoder
+        buildTokenBalanceInsufficient
+        emptyTokenBalanceInsufficientBuilder
+  where
+    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 tbibTransactionIndex
+    valDecoder k@"availableBalance" = Just $ mapValueDecoder k decodeTokenAmount tbibAvailableBalance
+    valDecoder k@"requiredBalance" = Just $ mapValueDecoder k decodeTokenAmount tbibRequiredBalance
+    valDecoder _ = Nothing
+decodeTokenHolderFailure "deserializationFailure" =
+    decodeMap
+        valDecoder
+        buildDeserializationFailure
+        emptyDeserializationFailureBuilder
+  where
+    valDecoder k@"cause" = Just $ mapValueDecoder k decodeString dfbCause
+    valDecoder _ = Nothing
+decodeTokenHolderFailure unknownType =
+    fail $ "token-holder-failure: unsupported failure type: " ++ show unknownType

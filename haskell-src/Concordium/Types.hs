@@ -1158,6 +1158,7 @@ instance S.Serialize TokenEventDetails where
         S.putShortByteString parameter
 
 -- | Token event type string.
+--  Must be at most 255 bytes and a valid UTF-8 string.
 newtype TokenEventType = TokenEventType {tokenEventTypeBytes :: BSS.ShortByteString}
     deriving newtype (Eq, Show)
 
@@ -1239,7 +1240,7 @@ instance AE.FromJSON TokenEvent where
 
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason
-    { -- | The tokens symbol.
+    { -- | The token symbol.
       tmrrTokenSymbol :: !TokenId,
       -- | The type of the reject reason. At most 255 bytes.
       tmrrType :: !TokenEventType,
