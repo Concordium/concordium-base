@@ -2627,8 +2627,10 @@ data RejectReason
       PoolWouldBecomeOverDelegated
     | -- | The pool is not open to delegators.
       PoolClosed
-    | -- | Token ID does not exists.
+    | -- | Token ID does not exist.
       NonExistentTokenId !TokenId
+    | -- | The token-holder transaction was rejected.
+      TokenHolderTransactionFailed !TokenModuleRejectReason
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2701,6 +2703,7 @@ instance S.Serialize RejectReason where
         PoolWouldBecomeOverDelegated -> S.putWord8 53
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
+        TokenHolderTransactionFailed reason -> S.putWord8 56 <> S.put reason
 
     get =
         S.getWord8 >>= \case
@@ -2769,6 +2772,7 @@ instance S.Serialize RejectReason where
             53 -> return PoolWouldBecomeOverDelegated
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
+            56 -> TokenHolderTransactionFailed <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
