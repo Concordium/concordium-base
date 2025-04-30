@@ -1279,7 +1279,9 @@ instance AE.FromJSON TokenModuleRejectReason where
         return TokenModuleRejectReason{..}
 
 -- | Make a 'TokenModuleRejectReason' given a 'TokenId' and an 'CBOR.EncodedTokenRejectReason'.
---  If the type is longer than 255 bytes, it is truncated. This potentially violates the
+--  If the type is longer than 255 bytes, it is truncated. It is not checked that the type
+--  is UTF-8 encoded, and the truncation can also break UTF-8 validity (if it truncates in the
+--  middle of a multi-byte character).
 makeTokenModuleRejectReason :: TokenId -> CBOR.EncodedTokenRejectReason -> TokenModuleRejectReason
 makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
     TokenModuleRejectReason

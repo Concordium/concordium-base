@@ -660,14 +660,14 @@ data TokenHolderFailure
     = -- | The recipient address was not valid.
       RecipientNotFound
         { -- | The index in the list of operations of the failing operation.
-          thfTransactionIndex :: !Word64,
+          thfOperationIndex :: !Word64,
           -- | The recipient address that could not be resolved.
           thfRecipient :: !TokenReceiver
         }
     | -- | The balance of tokens on the sender account is insufficient to perform the operation.
       TokenBalanceInsufficient
         { -- | The index in the list of operations of the failing operation.
-          thfTransactionIndex :: !Word64,
+          thfOperationIndex :: !Word64,
           -- | The available balance of the sender.
           thfAvailableBalance :: !TokenAmount,
           -- | The minimum required balance to perform the operation.
@@ -698,7 +698,7 @@ emptyRecipientNotFoundBuilder = RecipientNotFoundBuilder Nothing Nothing
 --  is missing.
 buildRecipientNotFound :: RecipientNotFoundBuilder -> Either String TokenHolderFailure
 buildRecipientNotFound RecipientNotFoundBuilder{..} = do
-    thfTransactionIndex <- _rnfbTransactionIndex `orFail` "Missing \"index\""
+    thfOperationIndex <- _rnfbTransactionIndex `orFail` "Missing \"index\""
     thfRecipient <- _rnfbRecipient `orFail` "Missing \"recipient\""
     return RecipientNotFound{..}
 
@@ -721,7 +721,7 @@ emptyTokenBalanceInsufficientBuilder = TokenBalanceInsufficientBuilder Nothing N
 --  is missing.
 buildTokenBalanceInsufficient :: TokenBalanceInsufficientBuilder -> Either String TokenHolderFailure
 buildTokenBalanceInsufficient TokenBalanceInsufficientBuilder{..} = do
-    thfTransactionIndex <- _tbibTransactionIndex `orFail` "Missing \"index\""
+    thfOperationIndex <- _tbibTransactionIndex `orFail` "Missing \"index\""
     thfAvailableBalance <- _tbibAvailableBalance `orFail` "Missing \"availableBalance\""
     thfRequiredBalance <- _tbibRequiredBalance `orFail` "Missing \"requiredBalance\""
     return TokenBalanceInsufficient{..}
@@ -754,7 +754,7 @@ encodeTokenHolderFailure RecipientNotFound{..} =
           etrrDetails =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
-                    & k "index" ?~ encodeWord64 thfTransactionIndex
+                    & k "index" ?~ encodeWord64 thfOperationIndex
                     & k "recipient" ?~ encodeTokenReceiver thfRecipient
         }
   where
@@ -765,7 +765,7 @@ encodeTokenHolderFailure TokenBalanceInsufficient{..} =
           etrrDetails =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
-                    & k "index" ?~ encodeWord64 thfTransactionIndex
+                    & k "index" ?~ encodeWord64 thfOperationIndex
                     & k "availableBalance" ?~ encodeTokenAmount thfAvailableBalance
                     & k "requiredBalance" ?~ encodeTokenAmount thfRequiredBalance
         }
