@@ -716,11 +716,11 @@ pub struct CreatePlt {
 }
 
 impl Serial for CreatePlt {
-    fn serial<B: Buffer>(&self, out: &mut B) { todo!() }
+    fn serial<B: Buffer>(&self, _out: &mut B) { todo!() }
 }
 
 impl Deserial for CreatePlt {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> { todo!() }
+    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> { todo!() }
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]

@@ -1,3 +1,5 @@
+//! Types and functions for working with Protocol Level Tokens (PLT).
+
 mod cbor;
 mod token_amount;
 mod token_event;
