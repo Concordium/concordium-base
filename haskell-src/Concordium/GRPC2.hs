@@ -2105,6 +2105,7 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.blockEnergyLimit .= toProto _nusnBlockEnergyLimit
         ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
         ProtoFields.validatorScoreParameters .= toProto _nusnValidatorScoreParameters
+        ProtoFields.protocolLevelTokens .= toProto _nusnProtocolLevelTokensParameters
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
