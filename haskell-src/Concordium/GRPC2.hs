@@ -70,6 +70,7 @@ import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
+import Concordium.Types.Queries.Tokens (Token (..), TokenAccountState (..), TokenAmount (..))
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
 
@@ -619,6 +620,23 @@ instance ToProto Cooldown where
         ProtoFields.amount .= toProto cooldownAmount
         ProtoFields.status .= toProto cooldownStatus
 
+instance ToProto TokenAmount where
+    type Output TokenAmount = Proto.TokenAmount
+    toProto TokenAmount{..} = Proto.make $ do
+        PLTFields.digits .= digits
+        PLTFields.nrOfDecimals .= fromIntegral nrDecimals
+
+instance ToProto TokenAccountState where
+    type Output TokenAccountState = Proto.TokenAccountState
+    toProto TokenAccountState{..} = Proto.make $ do
+        PLTFields.balance .= toProto balance
+
+instance ToProto Token where
+    type Output Token = Proto.AccountInfo'Token
+    toProto Token{..} = Proto.make $ do
+        ProtoFields.tokenId .= toProto tokenId
+        ProtoFields.tokenAccountState .= toProto tokenAccountState
+
 instance ToProto AccountInfo where
     type Output AccountInfo = Proto.AccountInfo
     toProto AccountInfo{..} = Proto.make $ do
@@ -634,6 +652,7 @@ instance ToProto AccountInfo where
         ProtoFields.maybe'stake .= toProto aiStakingInfo
         ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
         ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
+        ProtoFields.tokens .= fmap toProto aiAccountTokens
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
