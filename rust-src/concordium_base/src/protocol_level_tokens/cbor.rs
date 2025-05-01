@@ -1,3 +1,9 @@
+use crate::common;
+
+/// CBOR encoded byte string.
+///
+/// Note: There are not checks for whether the bytes represents a valid CBOR
+/// encoding.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
@@ -40,4 +46,23 @@ impl TryFrom<String> for RawCbor {
 
 impl From<RawCbor> for String {
     fn from(value: RawCbor) -> Self { value.to_string() }
+}
+
+impl common::Serial for RawCbor {
+    fn serial<B: common::Buffer>(&self, out: &mut B) {
+        u32::try_from(self.bytes.len())
+            .expect("Invariant violation for byte length of RawCbor")
+            .serial(out);
+        out.write_all(&self.bytes)
+            .expect("Writing RawCbor bytes to buffer should not fail");
+    }
+}
+
+impl common::Deserial for RawCbor {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
+        let len = source.read_u32::<byteorder::BE>()?;
+        let mut buf = vec![0u8; len as usize];
+        source.read_exact(&mut buf)?;
+        Ok(buf.into())
+    }
 }

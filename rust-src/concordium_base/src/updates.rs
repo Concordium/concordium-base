@@ -698,7 +698,7 @@ pub enum UpdatePayload {
     CreatePlt(CreatePlt),
 }
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, common::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlt {
     /// The symbol of the token.
@@ -713,14 +713,6 @@ pub struct CreatePlt {
     pub decimals:                  u8,
     /// The initialization parameters of the token, encoded in CBOR.
     pub initialization_parameters: protocol_level_tokens::RawCbor,
-}
-
-impl Serial for CreatePlt {
-    fn serial<B: Buffer>(&self, _out: &mut B) { todo!() }
-}
-
-impl Deserial for CreatePlt {
-    fn deserial<R: ReadBytesExt>(_source: &mut R) -> ParseResult<Self> { todo!() }
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]

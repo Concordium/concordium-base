@@ -1,3 +1,5 @@
+use crate::common;
+
 /// The limit for the length of the byte encoding of a Token ID.
 pub const TOKEN_ID_MAX_BYTE_LEN: usize = 255;
 
@@ -13,11 +15,12 @@ pub struct TokenId {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum TokenIdFromStringError {
-    #[error(
-        "Byte encoding of TokenID must be within {TOKEN_ID_MAX_BYTE_LEN} bytes, instead got {0}"
-    )]
-    ExceedsMaxByteLength(usize),
+#[error(
+    "Byte encoding of TokenID must be within {TOKEN_ID_MAX_BYTE_LEN} bytes, instead got \
+     {actual_size}"
+)]
+pub struct TokenIdFromStringError {
+    actual_size: usize,
 }
 
 impl AsRef<str> for TokenId {
@@ -36,9 +39,9 @@ impl TryFrom<String> for TokenId {
     fn try_from(symbol: String) -> Result<Self, Self::Error> {
         let symbol_byte_len = symbol.as_bytes().len();
         if symbol_byte_len > TOKEN_ID_MAX_BYTE_LEN {
-            Err(TokenIdFromStringError::ExceedsMaxByteLength(
-                symbol_byte_len,
-            ))
+            Err(TokenIdFromStringError {
+                actual_size: symbol_byte_len,
+            })
         } else {
             Ok(Self { symbol })
         }
@@ -47,4 +50,25 @@ impl TryFrom<String> for TokenId {
 
 impl From<TokenId> for String {
     fn from(value: TokenId) -> Self { value.symbol }
+}
+
+impl common::Serial for TokenId {
+    fn serial<B: common::Buffer>(&self, out: &mut B) {
+        let bytes = self.symbol.as_bytes();
+        u8::try_from(bytes.len())
+            .expect("Invariant violation for byte length of TokenId")
+            .serial(out);
+        out.write_all(bytes)
+            .expect("Writing TokenId bytes to buffer should not fail");
+    }
+}
+
+impl common::Deserial for TokenId {
+    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
+        let len = source.read_u8()?;
+        let mut buf = vec![0u8; len as usize];
+        source.read_exact(&mut buf)?;
+        let symbol = String::from_utf8(buf)?;
+        Ok(Self { symbol })
+    }
 }
