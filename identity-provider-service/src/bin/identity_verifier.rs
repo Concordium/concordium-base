@@ -41,6 +41,28 @@ struct Config {
         env = "IDENTITY_PROVIDER_PUBLIC"
     )]
     identity_provider_pub_file: PathBuf,
+    #[structopt(
+        long = "require-login",
+        help = "Whether to require username/password on the form",
+        parse(try_from_str),
+        default_value = "false",
+        env = "REQUIRE_LOGIN"
+    )]
+    require_login: bool,
+    #[structopt(
+        long = "login-username",
+        help = "The username to compare when login is required and a backend is not used",
+        default_value = "",
+        env = "LOGIN_USERNAME"
+    )]
+    login_username: String,
+    #[structopt(
+        long = "login-password",
+        help = "The password to compare when login is required and a backend is not used",
+        default_value = "",
+        env = "LOGIN_PASSWORD"
+    )]
+    login_password: String,
 }
 
 #[derive(RustEmbed)]
@@ -59,7 +81,16 @@ async fn main() {
     let matches = app.get_matches();
     let opt = Config::from_clap(&matches);
 
-    let attribute_form = Asset::get("attribute_form.html").unwrap();
+    let login_password = opt.login_password;
+    let login_username = opt.login_username;
+    let require_login = opt.require_login;
+
+    let attribute_form = if opt.require_login {
+        Asset::get("attribute_form_with_login.html")
+    } else {
+        Asset::get("attribute_form.html")
+    }.unwrap();
+
     let attribute_form_html = std::str::from_utf8(&attribute_form.data)
         .unwrap()
         .to_string();
@@ -127,6 +158,32 @@ async fn main() {
                                 .status(StatusCode::BAD_REQUEST)
                                 .body("id_cred_pub not present.".to_string());
                         }
+                    };
+
+                    // grab the username
+                    let username: String = match input.get("username")  {
+                        Some(username) => username.clone(),
+                        None => String::from("notprovided")
+                    };
+                    input.remove("username");
+
+                    // grab the password
+                    let password: String = match input.get("password")  {
+                        Some(password) => password.clone(),
+                        None => String::from("notprovided")
+                    };
+                    input.remove("password");
+
+                    info!("username is {username} and password is {password}");
+
+                    // verify credentials, rejecting if they don't match
+                    match require_login && (username != login_username || password != login_password) {
+                        true => {
+                            return Response::builder()
+                                                    .status(StatusCode::UNAUTHORIZED)
+                                                    .body("Incorrect Username or Password.".to_string())
+                        }
+                        false => (),
                     };
 
                     let endpoint_version = match input.get("endpoint_version") {
