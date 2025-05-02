@@ -1,0 +1,165 @@
+; This CDDL schema defines the CBOR encodings used by protocol-level tokens (PLTs) in Concordium.
+; In particular, it defines the types token-holder-transaction, token-governance-transaction, and
+; token-initialization-parameters, which are used as parameters for the token module.
+
+; A token holder transaction body. This is a list of token-holder operations, executed in order.
+; The transaction is executed in the context of a sender account and a designated token.
+token-holder-transaction = [ * token-holder-operation ]
+
+; A token-holder operation. Currently, only token transfers are supported.
+; All token-holder operations are represented as single-entry maps where the key determines
+; the type of the operation.
+token-holder-operation = token-transfer
+
+; A token transfer operation. This transfers a specified amount of tokens from the sender account
+; (implicit) to the recipient account.
+token-transfer = {
+    ; The operation type is "transfer".
+    "transfer": {
+        ; The amount of tokens to transfer.
+        "amount": token-amount,
+        ; The recipient account.
+        "recipient": token-receiver,
+        ; An optional memo.
+        ? "memo": memo
+    }
+}
+
+; We represent token amounts as a decimal fraction.
+; The range and precision may be constrained by the token itself.
+token-amount = decfrac
+
+; A memo can be a byte string of up to 256 bytes.
+; When the memo is CBOR encoded, cbor-memo can be used to indicate that.
+memo = raw-memo / cbor-memo
+
+; A raw memo is a byte string of up to 256 bytes.
+raw-memo = bytes .size (0..256)
+
+; Tag 24 indicates that the contained byte string is CBOR encoded.
+; https://www.rfc-editor.org/rfc/rfc8949.html#name-encoded-cbor-data-item
+cbor-memo = #6.24(raw-memo)
+
+; A destination that can receive and hold tokens.
+; Currently, this can only by a Concordium account address.
+token-receiver = tagged-receiver-account
+
+; We use a subtype of the tagged-address type from
+; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-009-address.md
+tagged-receiver-account = #6.40307(receiver-account)
+
+receiver-account = { 
+    ; If the info (1) field is present, it must indicate CCD.
+    ? 1: tagged-ccd-coininfo,
+    ; We do not support the type (2) field.
+    ; The data (3) field must be the 32-byte representation of a Concordium address
+    3: bytes .size 32
+}
+
+; We use a subtype of the tagged-coininfo type from
+; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
+tagged-ccd-coininfo = #6.40305(ccd-coininfo)
+
+ccd-coininfo = { 
+    ; The type (1) field is the [SLIP44](https://github.com/satoshilabs/slips/blob/master/slip-0044.md)
+    ; code for Concordium
+    1: 919 
+    ; The network (2) field is not supported.
+}
+
+; Token governance
+
+; A token governance transaction body. This is a list of token governance operations, executed in
+; order. The transaction is executed in the context of a sender account and a designated token.
+; The sender account must have the necessary permissions to execute the operations.
+token-governance-transaction = [ * token-governance-operation ]
+
+; A token governance operation. This can be a mint, burn, or update-list operation.
+; All governance operations are represented as single-entry maps where the key determines
+; the type of the operation.
+token-governance-operation = token-mint
+    / token-burn
+    / token-update-list
+
+; Mint a specified amount to the sender account.
+token-mint = {
+    ; The operation type is "mint".
+    "mint": {
+        ; The amount of tokens to mint.
+        "amount": token-amount
+    }
+}
+
+; Burn a specified amount from the sender account.
+token-burn = {
+    ; The operation type is "burn".
+    "burn": {
+        ; The amount of tokens to burn.
+        "amount": token-amount
+    }
+}
+
+; Update an allow or a deny list by adding or removing an account from it.
+token-update-list = 
+    token-add-allow-list
+    / token-remove-allow-list
+    / token-add-deny-list
+    / token-remove-deny-list
+
+; Add an account to the allow list.
+token-add-allow-list = {
+    ; The operation type is "add-allow-list".
+    "add-allow-list": {
+        ; The account to add to the allow list.
+        "target": token-receiver
+    }
+}
+
+; Remove an account from the allow list.
+token-remove-allow-list = {
+    ; The operation type is "remove-allow-list".
+    "remove-allow-list": {
+        ; The account to remove from the allow list.
+        "target": token-receiver
+    }
+}
+
+; Add an account to the deny list.
+token-add-deny-list = {
+    ; The operation type is "add-deny-list".
+    "add-deny-list": {
+        ; The account to add to the deny list.
+        "target": token-receiver
+    }
+}
+
+; Remove an account from the deny list.
+token-remove-deny-list = {
+    ; The operation type is "remove-deny-list".
+    "remove-deny-list": {
+        ; The account to remove from the deny list.
+        "target": token-receiver
+    }
+}
+
+; Chain governance
+
+; These parameters are passed to the token module to initialize the token.
+; The token initialization update will also include the ticker symbol, initial account,
+; number of decimals, and a reference to the token module implementation.
+token-initialization-parameters = { 
+    ; The name of the token
+    "name": text,
+    ; A URL pointing to the token metadata
+    "metadata": text,
+    ; Whether the token supports an allow list
+    ? "allowList": bool .default false,
+    ; Whether the token supports a deny list
+    ? "denyList": bool .default false,
+    ; The initial supply of the token. If not present, no tokens are minted initially.
+    ? "initialSupply": token-amount,
+    ; Whether the token is mintable
+    ? "mintable": bool .default false,
+    ; Whether the token is burnable
+    ? "burnable": bool .default false
+}
