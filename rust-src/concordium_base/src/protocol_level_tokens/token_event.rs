@@ -1,5 +1,4 @@
 use super::{cbor::RawCbor, TokenId};
-use crate::common;
 
 /// Event produced from the effect of a token holder transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -76,25 +75,4 @@ impl TryFrom<String> for TokenEventType {
 
 impl From<TokenEventType> for String {
     fn from(event_type: TokenEventType) -> Self { event_type.value }
-}
-
-impl common::Serial for TokenEventType {
-    fn serial<B: common::Buffer>(&self, out: &mut B) {
-        let bytes = self.value.as_bytes();
-        u8::try_from(bytes.len())
-            .expect("Invariant violation for byte length of TokenEventType")
-            .serial(out);
-        out.write_all(bytes)
-            .expect("Writing TokenEventType bytes to buffer should not fail");
-    }
-}
-
-impl common::Deserial for TokenEventType {
-    fn deserial<R: byteorder::ReadBytesExt>(source: &mut R) -> common::ParseResult<Self> {
-        let len = source.read_u8()?;
-        let mut buf = vec![0u8; len as usize];
-        source.read_exact(&mut buf)?;
-        let value = String::from_utf8(buf)?;
-        Ok(Self { value })
-    }
 }
