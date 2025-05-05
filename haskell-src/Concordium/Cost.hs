@@ -125,6 +125,10 @@ configureDelegationCost = 300
 tokenHolderBaseCost :: Energy
 tokenHolderBaseCost = 300
 
+-- | Base cost for token governance transactions.
+tokenGovernanceBaseCost :: Energy
+tokenGovernanceBaseCost = 300
+
 -- | C_t for updating account credentials
 updateCredentialsCost ::
     -- | The number of credentials on the account before the update.
