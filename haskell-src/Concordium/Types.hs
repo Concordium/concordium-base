@@ -189,11 +189,12 @@ module Concordium.Types (
     TokenEventDetails (..),
     TokenEventType (..),
     TokenEvent (..),
-    TokenModuleRejectReason (..),
     teSymbol,
     teType,
     teDetails,
     makeTokenEventType,
+    TokenModuleRejectReason (..),
+    makeTokenModuleRejectReason,
     CreatePLT (..),
     cpltTokenSymbol,
     cpltTokenModule,
@@ -219,6 +220,7 @@ import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
 import Concordium.Types.Block
 import Concordium.Types.HashableTo
+import Concordium.Types.Memo
 import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.ProtocolVersion
 import Concordium.Types.SmartContracts
@@ -804,50 +806,6 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
--- | Data type for memos that can be added to transfers.
---  Max length of 'maxMemoSize' is assumed.
---  Create new values with 'memoFromBSS' to ensure assumed properties.
---
---  Note that the ToJSON instance of this type is derived, based on hex encoding.
---  The FromJSON instance is manually implemented to ensure length limits.
-newtype Memo = Memo BSS.ShortByteString
-    deriving (Eq)
-    deriving (AE.ToJSON, Show) via BSH.ByteStringHex
-
--- | Maximum size for 'Memo'.
-maxMemoSize :: Int
-maxMemoSize = 256
-
-tooBigErrorString :: String -> Int -> Int -> String
-tooBigErrorString name len maxSize = "Size of the " ++ name ++ " (" ++ show len ++ " bytes) exceeds maximum allowed size (" ++ show maxSize ++ " bytes)."
-
--- | Construct 'Memo' from a 'BSS.ShortByteString'.
---  Fails if the length exceeds 'maxMemoSize'.
-memoFromBSS :: (MonadError String m) => BSS.ShortByteString -> m Memo
-memoFromBSS bss =
-    if len <= maxMemoSize
-        then return . Memo $ bss
-        else throwError $ tooBigErrorString "memo" len maxMemoSize
-  where
-    len = BSS.length bss
-
-instance S.Serialize Memo where
-    put (Memo bss) = do
-        S.putWord16be . fromIntegral . BSS.length $ bss
-        S.putShortByteString bss
-
-    get = G.label "Memo" $ do
-        l <- fromIntegral <$> S.getWord16be
-        unless (l <= maxMemoSize) $ fail $ tooBigErrorString "memo" l maxMemoSize
-        Memo <$> S.getShortByteString l
-
-instance AE.FromJSON Memo where
-    parseJSON v = do
-        (BSH.ByteStringHex bss) <- AE.parseJSON v
-        case memoFromBSS bss of
-            Left err -> fail err
-            Right rd -> return rd
-
 -- | Data type for registering data on chain.
 --  Max length of 'maxRegisteredDataSize' is assumed.
 --  Create new values with 'registeredDataFromBSS' to ensure assumed properties.
@@ -1201,13 +1159,18 @@ instance S.Serialize TokenEventDetails where
         S.putShortByteString parameter
 
 -- | Token event type string.
+--  MUST be at most 255 bytes and SHOULD BE a valid UTF-8 string.
+--
+--  Serialization does not require or check for UTF-8 validity.
+--  Converting to JSON will replace invalid UTF-8 bytes with the unicode replacement character,
+--  which means that converting to JSON and back is only the identity for valid UTF-8.
 newtype TokenEventType = TokenEventType {tokenEventTypeBytes :: BSS.ShortByteString}
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON TokenEventType where
     -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenEventType
     -- should enforce valid UTF-8.
-    toJSON TokenEventType{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenEventTypeBytes
+    toJSON TokenEventType{..} = AE.String $ T.decodeUtf8Lenient $ BSS.fromShort tokenEventTypeBytes
 
 instance AE.FromJSON TokenEventType where
     parseJSON (AE.String text) = return $ TokenEventType $ BSS.toShort $ T.encodeUtf8 text
@@ -1231,9 +1194,7 @@ instance S.Serialize TokenEventType where
     get = do
         len <- S.getWord8
         sbs <- S.getShortByteString (fromIntegral len)
-        case makeTokenEventType sbs of
-            Left e -> fail e
-            Right eventTypeString -> return eventTypeString
+        return $ TokenEventType sbs
 
 -- | Event produced from a token module
 -- This is used for both token holder transactions and for token governance transactions.
@@ -1282,7 +1243,7 @@ instance AE.FromJSON TokenEvent where
 
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason
-    { -- | The tokens symbol.
+    { -- | The token symbol.
       tmrrTokenSymbol :: !TokenId,
       -- | The type of the reject reason. At most 255 bytes.
       tmrrType :: !TokenEventType,
@@ -1316,6 +1277,18 @@ instance AE.FromJSON TokenModuleRejectReason where
         tmrrType <- o AE..: "type"
         tmrrDetails <- o AE..:? "details"
         return TokenModuleRejectReason{..}
+
+-- | Make a 'TokenModuleRejectReason' given a 'TokenId' and an 'CBOR.EncodedTokenRejectReason'.
+--  If the type is longer than 255 bytes, it is truncated. It is not checked that the type
+--  is UTF-8 encoded, and the truncation can also break UTF-8 validity (if it truncates in the
+--  middle of a multi-byte character).
+makeTokenModuleRejectReason :: TokenId -> CBOR.EncodedTokenRejectReason -> TokenModuleRejectReason
+makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
+    TokenModuleRejectReason
+        { tmrrType = TokenEventType (BSS.take 255 etrrType),
+          tmrrDetails = TokenEventDetails <$> etrrDetails,
+          ..
+        }
 
 -- | A wrapper type for (de)-serializing an CBOR-encoded initialization parameter to/from JSON.
 --  This can parse either an JSON object representation of 'TokenInitializationParameters'
