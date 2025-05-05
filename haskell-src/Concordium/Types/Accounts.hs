@@ -816,7 +816,8 @@ accountInfoPairs AccountInfo{..} =
       "accountIndex" .= aiAccountIndex,
       "accountAddress" .= aiAccountAddress,
       "accountCooldowns" .= aiAccountCooldowns,
-      "accountAvailableAmount" .= aiAccountAvailableAmount
+      "accountAvailableAmount" .= aiAccountAvailableAmount,
+      "accountTokens" .= aiAccountTokens
     ]
         <> accountStakingInfoToJSON aiStakingInfo
 
