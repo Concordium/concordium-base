@@ -2654,8 +2654,12 @@ data RejectReason
       PoolWouldBecomeOverDelegated
     | -- | The pool is not open to delegators.
       PoolClosed
-    | -- | Token ID does not exists.
+    | -- | Token ID does not exist.
       NonExistentTokenId !TokenId
+    | -- | The token-holder transaction was rejected.
+      TokenHolderTransactionFailed !TokenModuleRejectReason
+    | -- | The token-governance transaction was rejected.
+      TokenGovernanceTransactionFailed !TokenModuleRejectReason
     | -- | Account sending the transaction is not authorized for governing the token.
       UnauthorizedTokenGovernance !TokenId
     deriving (Show, Eq, Generic)
@@ -2730,7 +2734,9 @@ instance S.Serialize RejectReason where
         PoolWouldBecomeOverDelegated -> S.putWord8 53
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
-        UnauthorizedTokenGovernance tokenId -> S.putWord8 56 <> S.put tokenId
+        TokenHolderTransactionFailed reason -> S.putWord8 56 <> S.put reason
+        TokenGovernanceTransactionFailed reason -> S.putWord8 57 <> S.put reason
+        UnauthorizedTokenGovernance tokenId -> S.putWord8 58 <> S.put tokenId
 
     get =
         S.getWord8 >>= \case
@@ -2799,7 +2805,9 @@ instance S.Serialize RejectReason where
             53 -> return PoolWouldBecomeOverDelegated
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
-            56 -> UnauthorizedTokenGovernance <$> S.get
+            56 -> TokenHolderTransactionFailed <$> S.get
+            57 -> TokenGovernanceTransactionFailed <$> S.get
+            58 -> UnauthorizedTokenGovernance <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
