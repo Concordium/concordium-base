@@ -861,6 +861,11 @@ encodeTokenModuleState TokenModuleState{..} =
             ]
     k = at . makeMapKeyEncoding . encodeString
 
+-- | CBOR-encode a 'TokenModuleState' to a (strict) 'BS.ByteString'.
+--  This uses default values in the encoding.
+tokenModuleStateToBytes :: TokenModuleState -> BS.ByteString
+tokenModuleStateToBytes = CBOR.toStrictByteString . encodeTokenModuleState
+
 -- | Decode a CBOR-encoded 'TokenModuleState'.
 decodeTokenModuleState :: Decoder s TokenModuleState
 decodeTokenModuleState = decodeMap decodeVal build Map.empty
