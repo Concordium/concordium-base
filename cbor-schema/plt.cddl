@@ -11,9 +11,6 @@ token-holder-transaction = [ * token-holder-operation ]
 ; the type of the operation.
 token-holder-operation = token-transfer
 
-; A token holder event, which is the result of executing a token holder operation.
-token-holder-event = token-transfer-details
-
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
 token-transfer = {
@@ -86,10 +83,6 @@ token-governance-transaction = [ * token-governance-operation ]
 token-governance-operation = token-mint
     / token-burn
     / token-update-list
-
-; A token governance event, which is the result of executing a token governance operation.
-token-governance-event = token-supply-update-details
-    / token-list-update-details
 
 ; Mint a specified amount to the sender account.
 token-mint = {
@@ -167,3 +160,33 @@ token-initialization-parameters = {
     ; Whether the token is burnable
     ? "burnable": bool .default false
 }
+
+; Token events
+
+; The details of a token "transfer" event.
+; This is a token kernel event, and indicates funds were transferred from the transaction sender to the "to" account.
+token-transfer-event = token-transfer-details
+
+; The details of a token "mint" event.
+; This is a token kernel event, and indicates funds were minted to the governance account.
+token-mint-event = token-supply-update-details
+
+; The details of a token "burn" event.
+; This is a token kernel event, and indicates funds were burned from the balance of the governance account.
+token-burn-event = token-supply-update-details
+
+; The details of a token "add-allow-list" event.
+; This is a token kernel event, and indicates the account was added to the allow list.
+token-add-allow-list-event = token-list-update-details
+
+; The details of a token "remove-allow-list" event.
+; This is a token kernel event, and indicates the account was removed from the allow list.
+token-remove-allow-list-event = token-list-update-details
+
+; The details of a token "add-deny-list" event.
+; This is a token kernel event, and indicates the account was added to the deny list.
+token-add-deny-list-event = token-list-update-details
+
+; The details of a token "remove-deny-list" event.
+; This is a token kernel event, and indicates the account was removed from the deny list.
+token-remove-deny-list-event = token-list-update-details
