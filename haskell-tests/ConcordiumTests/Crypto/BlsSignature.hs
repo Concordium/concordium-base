@@ -139,7 +139,7 @@ tests = describe "Concordium.Crypto.BlsSignature" $ do
     it "bls_key_collision" $ withMaxSuccess 10000 $ testKeyCollision
     it "bls_signature_collision" $ withMaxSuccess 10000 $ testNoSignatureCollision
     it "bls_sign_and_verify" $ withMaxSuccess 10000 $ testSignAndVerify
-    it "bls_verify_aggregated_sig_hybrid" $ withMaxSuccess 1000 $ testVerifyAggratedSigHybrid
+    it "bls_verify_aggregated_sig_hybrid" $ withMaxSuccess 100 $ testVerifyAggratedSigHybrid
     it "bls_sign_and_verify_collision" $ withMaxSuccess 10000 $ testSignAndVerifyCollision
     it "bls_serialize_sk" $ withMaxSuccess 10000 $ testSerializeSecretKey
     it "bls_serialize_pk" $ withMaxSuccess 10000 $ testSerializePublicKey

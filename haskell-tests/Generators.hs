@@ -119,17 +119,17 @@ genUrlText =
 
 -- | Generate an 'AmountFraction' in the range [0,1].
 genAmountFraction :: Gen AmountFraction
-genAmountFraction = makeAmountFraction <$> arbitrary `suchThat` (<= 100000)
+genAmountFraction = makeAmountFraction <$> chooseBoundedIntegral (0, 100000)
 
 -- | Generate a 'CapitalBound', in the range (0,1]. (0 is not a valid 'CapitalBound'.)
 genCapitalBound :: Gen CapitalBound
-genCapitalBound = CapitalBound . makeAmountFraction <$> arbitrary `suchThat` (\x -> x <= 100000 && x > 0)
+genCapitalBound = CapitalBound . makeAmountFraction <$> chooseBoundedIntegral (1, 100000)
 
 genInclusiveRangeOfAmountFraction :: Gen (InclusiveRange AmountFraction)
 genInclusiveRangeOfAmountFraction = do
-    (irMin, irMax) <-
-        ((,) <$> genAmountFraction <*> genAmountFraction)
-            `suchThat` (\(i0, i1) -> i0 <= i1)
+    i0 <- genAmountFraction
+    i1 <- genAmountFraction
+    let (irMin, irMax) = if i0 <= i1 then (i0, i1) else (i1, i0)
     return InclusiveRange{..}
 
 -- | Generate payloads that are valid for the given protocol version.
@@ -986,7 +986,7 @@ genBlockItem =
         ]
 
 genElectionDifficulty :: Gen ElectionDifficulty
-genElectionDifficulty = makeElectionDifficulty <$> arbitrary `suchThat` (< 100000)
+genElectionDifficulty = makeElectionDifficulty <$> chooseBoundedIntegral (0, 99999)
 
 genAuthorizations :: forall auv. (IsAuthorizationsVersion auv) => Gen (Authorizations auv)
 genAuthorizations = do

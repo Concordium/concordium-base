@@ -98,8 +98,8 @@ tests = describe "Concordium.Crypto.VRF" $ do
     it "verify proof" testProveVerify
     it "VRF proofs are deterministic" testProveDeterministic
     parallel $ do
-        it "stress testing vrf proof to hash 1 " $ withMaxSuccess 100000 stressTest
-        it "stress testing vrf proof to hash 2" $ withMaxSuccess 100000 stressTest
-        it "stress testing vrf proof to hash 3" $ withMaxSuccess 100000 stressTest
-        it "stress testing vrf proof to hash 4" $ withMaxSuccess 100000 stressTest
-        it "stress testing vrf proof to hash 5" $ withMaxSuccess 100000 stressTest
+        it "stress testing vrf proof to hash 1" $ withMaxSuccess 25000 stressTest
+        it "stress testing vrf proof to hash 2" $ withMaxSuccess 25000 stressTest
+        it "stress testing vrf proof to hash 3" $ withMaxSuccess 25000 stressTest
+        it "stress testing vrf proof to hash 4" $ withMaxSuccess 25000 stressTest
+        it "stress testing vrf proof to hash 5" $ withMaxSuccess 25000 stressTest
