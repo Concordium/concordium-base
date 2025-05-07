@@ -164,6 +164,11 @@ pub enum TransactionType {
     ConfigureBaker,
     ///  Configure an account's stake delegation.
     ConfigureDelegation,
+    /// Token holder transaction. Introduced in Concordium protocol version 9.
+    TokenHolder,
+    /// Token governance transaction. Introduced in Concordium protocol version
+    /// 9.
+    TokenGovernance,
 }
 
 /// An error that occurs when trying to convert
@@ -198,6 +203,8 @@ impl TryFrom<i32> for TransactionType {
             18 => Self::TransferWithScheduleAndMemo,
             19 => Self::ConfigureBaker,
             20 => Self::ConfigureDelegation,
+            21 => Self::TokenHolder,
+            22 => Self::TokenGovernance,
             n => return Err(TransactionTypeConversionError(n)),
         })
     }
