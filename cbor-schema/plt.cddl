@@ -191,6 +191,6 @@ token-module-state = {
     ; Whether the token is burnable.
     ? "burnable": bool,
     ; Additional state information may be provided under further text keys, the meaning
-    ; of which are not defined the present specification.
-    * tstr => any
+    ; of which are not defined in the present specification.
+    * text => any
 }
