@@ -3,12 +3,17 @@
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
 pub struct TokenAmount {
     /// The amount of tokens without decimal places.
-    pub value:    u64,
+    value:    u64,
     /// The number of decimals in the token amount.
-    pub decimals: u8,
+    decimals: u8,
 }
 
 impl TokenAmount {
+    /// Construct a [`TokenAmount`] from a value without decimal places and the
+    /// number of decimals, meaning the token amount is computed as `value *
+    /// 10^(-decimals)`.
+    pub fn from_raw(value: u64, decimals: u8) -> Self { Self { value, decimals } }
+
     /// Construct a [`TokenAmount`] representing an integer amount and zero
     /// decimals.
     pub fn from_integer(value: u64) -> Self { Self { value, decimals: 0 } }
@@ -50,6 +55,8 @@ pub enum TokenAmountParseError {
     FailedParsingWholeNumber(std::num::ParseIntError),
     #[error("Unable to parse digits after the decimal point: {0}")]
     FailedParsingFractionalPart(std::num::ParseIntError),
+    #[error("Parse digits are invalid and caused an overflow")]
+    Overflow,
 }
 
 impl std::str::FromStr for TokenAmount {
@@ -67,7 +74,13 @@ impl std::str::FromStr for TokenAmount {
             let fraction: u64 = fraction
                 .parse()
                 .map_err(TokenAmountParseError::FailedParsingFractionalPart)?;
-            let value = integer * 10u64.pow(decimals.into()) + fraction;
+            let value = 10u64
+                .checked_pow(decimals.into())
+                .ok_or(TokenAmountParseError::Overflow)?
+                .checked_mul(integer)
+                .ok_or(TokenAmountParseError::Overflow)?
+                .checked_add(fraction)
+                .ok_or(TokenAmountParseError::Overflow)?;
             Ok(Self { value, decimals })
         } else {
             Ok(Self {
@@ -86,17 +99,48 @@ impl PartialOrd for TokenAmount {
 
 impl Ord for TokenAmount {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.decimals.cmp(&other.decimals) {
-            std::cmp::Ordering::Equal => self.value.cmp(&other.value),
+        let ord_decimals = self.decimals.cmp(&other.decimals);
+        // If the decimals are equal we can compare the values directly.
+        if ord_decimals.is_eq() {
+            return self.value.cmp(&other.value);
+        }
+        // If either of the values are 0 we can ignore the decimals and compare the
+        // values directly.
+        if self.value == 0 || other.value == 0 {
+            return self.value.cmp(&other.value);
+        };
+        // To avoid overflows we check the ordering in floored log_10 first
+        let self_log = self.value.ilog10(); // Safe since the value cannot be 0.
+        let other_log = other.value.ilog10(); // Safe since the value cannot be 0.
+        let left = self_log + u32::from(other.decimals);
+        let right = other_log + u32::from(self.decimals);
+        let log_ord = left.cmp(&right);
+        // When floored log_10 values are not equal we can return this ordering.
+        if !log_ord.is_eq() {
+            return log_ord;
+        }
+        // When floored log_10 values are equal, there must be the same number of digits
+        // in the representation, so we scale value with fewest decimals up to the same
+        // number of decimals and compare.
+        // If this overflows we know the scaled value must be greater.
+        match ord_decimals {
+            std::cmp::Ordering::Equal => panic!("Impossible case: this should be handled above"),
             std::cmp::Ordering::Less => {
                 let decimal_diff = other.decimals - self.decimals;
-                let scaled_self = u128::from(self.value) * 10u128.pow(decimal_diff.into());
-                scaled_self.cmp(&u128::from(other.value))
+                if let Some(scaled_self) = self.value.checked_mul(10u64.pow(decimal_diff.into())) {
+                    scaled_self.cmp(&other.value)
+                } else {
+                    std::cmp::Ordering::Greater
+                }
             }
             std::cmp::Ordering::Greater => {
                 let decimal_diff = self.decimals - other.decimals;
-                let scaled_other = u128::from(other.value) * 10u128.pow(decimal_diff.into());
-                u128::from(self.value).cmp(&scaled_other)
+                if let Some(scaled_other) = other.value.checked_mul(10u64.pow(decimal_diff.into()))
+                {
+                    scaled_other.cmp(&self.value)
+                } else {
+                    std::cmp::Ordering::Less
+                }
             }
         }
     }
@@ -181,21 +225,77 @@ mod test {
             assert!(last > first);
         }
 
-        // Check using different decimals.
-        // 0.123
-        let first = TokenAmount {
-            value:    123,
-            decimals: 3,
-        };
-        // 1.23
-        let last = TokenAmount {
-            value:    123,
-            decimals: 2,
-        };
-        // Note that both directions are needed to cover both branches in the
-        // implementation.
-        assert!(first < last);
-        assert!(last > first);
+        {
+            // Check using different decimals.
+            // 0.123
+            let first = TokenAmount {
+                value:    123,
+                decimals: 3,
+            };
+            // 1.23
+            let last = TokenAmount {
+                value:    123,
+                decimals: 2,
+            };
+            // Note that both directions are needed to cover both branches in the
+            // implementation.
+            assert!(first < last);
+            assert!(last > first);
+        }
+
+        {
+            // Check with matching max decimal
+            // 0.123
+            let first = TokenAmount {
+                value:    1,
+                decimals: u8::MAX,
+            };
+            // 1.23
+            let last = TokenAmount {
+                value:    u64::MAX,
+                decimals: u8::MAX,
+            };
+            // Note that both directions are needed to cover both branches in the
+            // implementation.
+            assert!(first < last);
+            assert!(last > first);
+        }
+
+        {
+            // Check with large difference in decimals
+            // 0.123
+            let first = TokenAmount {
+                value:    u64::MAX,
+                decimals: u8::MAX,
+            };
+            // 1.23
+            let last = TokenAmount {
+                value:    u64::MAX,
+                decimals: u8::MIN,
+            };
+            // Note that both directions are needed to cover both branches in the
+            // implementation.
+            assert!(first < last);
+            assert!(last > first);
+        }
+
+        {
+            // Check with large difference in decimals
+            // 0.123
+            let first = TokenAmount {
+                value:    10_000_000_000_000_000_000,
+                decimals: 19,
+            };
+            // 1.23
+            let last = TokenAmount {
+                value:    2,
+                decimals: 0,
+            };
+            // Note that both directions are needed to cover both branches in the
+            // implementation.
+            assert!(first < last);
+            assert!(last > first);
+        }
     }
 
     #[test]
