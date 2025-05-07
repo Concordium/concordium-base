@@ -53,14 +53,14 @@ genAmount :: Gen Amount
 genAmount = Amount <$> arbitrary
 
 genAttributeValue :: Gen AttributeValue
-genAttributeValue = AttributeValue . BSS.pack <$> (vector =<< choose (0, 31))
+genAttributeValue = AttributeValue <$> (genShortByteStringLen =<< chooseInt (0, 31))
 
 genDlogProof :: Gen Dlog25519Proof
 genDlogProof = fst . randomProof . mkStdGen <$> resize 100000 arbitrary
 
 genAccountOwnershipProof :: Gen AccountOwnershipProof
 genAccountOwnershipProof = do
-    n <- choose (1, 255)
+    n <- chooseInt (1, 255)
     AccountOwnershipProof
         <$> replicateM
             n
@@ -106,8 +106,8 @@ genReceiveName = do
 
 genParameter :: Gen Wasm.Parameter
 genParameter = do
-    n <- choose (0, 1000)
-    Wasm.Parameter . BSS.pack <$> vector n
+    n <- chooseInt (0, 1000)
+    Wasm.Parameter <$> genShortByteStringLen n
 
 -- | Generate a 'UrlText' that is a UTF-8 encoded string of no more than 'maxUrlTextLength' bytes.
 genUrlText :: Gen UrlText
@@ -190,20 +190,21 @@ genPayloadUnsafe =
 
 genPayloadUpdateCredentials :: Gen Payload
 genPayloadUpdateCredentials = do
-    maxNumCredentials <- choose (0, 255)
-    indices <- Set.fromList . map CredentialIndex <$> replicateM maxNumCredentials (choose (0, 255))
+    maxNumCredentials <- chooseInt (0, 255)
+    indices <- Set.fromList . map CredentialIndex <$> replicateM maxNumCredentials (chooseBoundedIntegral (0, 255))
     -- the actual number of key indices. Duplicate key indices might have been generated.
     let numCredentials = Set.size indices
     credentials <- replicateM numCredentials genCredentialDeploymentInformation
-    ucNewThreshold <- AccountThreshold <$> choose (1, 255) -- since we are only updating there is no requirement that the threshold is less than the amount of credentials
-    toRemoveLen <- choose (0, 30)
+    ucNewThreshold <- AccountThreshold <$> chooseBoundedIntegral (1, 255) -- since we are only updating there is no requirement that the threshold is less than the amount of credentials
+    toRemoveLen <- chooseInt (0, 30)
     ucRemoveCredIds <- replicateM toRemoveLen genCredentialId
     return UpdateCredentials{ucNewCredInfos = Map.fromList (zip (Set.toList indices) credentials), ..}
 
 genByteString :: Gen BS.ByteString
 genByteString = do
-    n <- choose (0, 1000)
-    BS.pack <$> vector n
+    n <- chooseInt (0, 1000)
+    gen <- mkStdGen <$> chooseBoundedIntegral (minBound, maxBound)
+    return $ fst $ BS.unfoldrN n (Just . genWord8) gen
 
 genPayloadDeployModule :: ProtocolVersion -> Gen Payload
 genPayloadDeployModule pv =
@@ -276,7 +277,7 @@ genPayloadTransferToEncrypted = TransferToEncrypted . Amount <$> arbitrary
 genPayloadRegisterData :: Gen Payload
 genPayloadRegisterData = do
     n <- chooseInt (0, maxRegisteredDataSize)
-    rdData <- RegisteredData . BSS.pack <$> vectorOf n arbitrary
+    rdData <- RegisteredData <$> genShortByteStringLen n
     return RegisterData{..}
 
 genPayloadConfigureBaker :: ProtocolVersion -> Gen Payload
@@ -357,7 +358,7 @@ genCredentialId :: Gen CredentialRegistrationID
 genCredentialId = RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
 
 genSignThreshold :: Gen SignatureThreshold
-genSignThreshold = SignatureThreshold <$> choose (1, 255)
+genSignThreshold = SignatureThreshold <$> chooseBoundedIntegral (1, 255)
 
 -- | Simply generate a few 'ElgamalCipher' values for testing purposes.
 elgamalCiphers :: Vec.Vector ElgamalCipher
@@ -366,16 +367,16 @@ elgamalCiphers = unsafePerformIO $ Vec.replicateM 200 generateElgamalCipher
 
 genElgamalCipher :: Gen ElgamalCipher
 genElgamalCipher = do
-    i <- choose (0, Vec.length elgamalCiphers - 1)
+    i <- chooseInt (0, Vec.length elgamalCiphers - 1)
     return $ elgamalCiphers Vec.! i
 
 -- generate an increasing list of key indices, at least 1
 genIndices :: Gen [KeyIndex]
 genIndices = do
-    maxLen <- choose (1 :: Int, 255)
+    maxLen <- chooseInt (1 :: Int, 255)
     let go is _ 0 = return is
         go is nextIdx n = do
-            nextIndex <- choose (nextIdx, 255)
+            nextIndex <- chooseBoundedIntegral (nextIdx, 255)
             if nextIndex == 255
                 then return (KeyIndex nextIndex : is)
                 else go (KeyIndex nextIndex : is) (nextIndex + 1) (n - 1)
@@ -397,7 +398,7 @@ genCredentialPublicKeys = do
 
 genPolicy :: Gen Policy
 genPolicy = do
-    let ym = YearMonth <$> choose (1000, 9999) <*> choose (1, 12)
+    let ym = YearMonth <$> chooseBoundedIntegral (1000, 9999) <*> chooseBoundedIntegral (1, 12)
     pValidTo <- ym
     pCreatedAt <- ym
     let pItems = Map.empty
@@ -418,11 +419,11 @@ genCredentialDeploymentInformation = do
                     ardIdCredPubShare <- AREnc <$> genElgamalCipher
                     return (ardName, ChainArData{..})
                 )
-    cdvThreshold <- Threshold <$> choose (1, max 1 (fromIntegral (length cdvArData)))
+    cdvThreshold <- Threshold <$> chooseBoundedIntegral (1, max 1 (fromIntegral (length cdvArData)))
     cdvPolicy <- genPolicy
     cdiProofs <- do
-        l <- choose (0, 10000)
-        Proofs . BSS.pack <$> vector l
+        l <- chooseBoundedIntegral (0, 10000)
+        Proofs <$> genShortByteStringLen l
     let cdiValues = CredentialDeploymentValues{..}
     return CredentialDeploymentInformation{..}
 
@@ -467,8 +468,8 @@ genChainParametersV1 = do
 
 genFinalizationCommitteeParameters :: Gen FinalizationCommitteeParameters
 genFinalizationCommitteeParameters = do
-    _fcpMinFinalizers <- choose (20, 100)
-    _fcpMaxFinalizers <- choose (100, 800)
+    _fcpMinFinalizers <- chooseBoundedIntegral (20, 100)
+    _fcpMaxFinalizers <- chooseBoundedIntegral (100, 800)
     _fcpFinalizerRelativeStakeThreshold <- arbitrary
     return FinalizationCommitteeParameters{..}
 
@@ -606,7 +607,7 @@ genCooldownParametersV1 =
     CooldownParametersV1 <$> (DurationSeconds <$> arbitrary) <*> (DurationSeconds <$> arbitrary)
 
 genRewardPeriodLength :: Gen RewardPeriodLength
-genRewardPeriodLength = RewardPeriodLength <$> choose (1, maxBound) -- to make sure that reward period length is >= 1
+genRewardPeriodLength = RewardPeriodLength <$> chooseBoundedIntegral (1, maxBound) -- to make sure that reward period length is >= 1
 
 genTimeParametersV1 :: Gen TimeParameters
 genTimeParametersV1 = TimeParametersV1 <$> genRewardPeriodLength <*> genMintRate
@@ -636,15 +637,15 @@ genDuration = Duration <$> arbitrary
 -- | x > 1
 genTimeoutIncrease :: Gen (Ratio Word64)
 genTimeoutIncrease = do
-    den <- choose (1, maxBound - 1)
-    num <- choose (den + 1, maxBound)
+    den <- chooseBoundedIntegral (1, maxBound - 1)
+    num <- chooseBoundedIntegral (den + 1, maxBound)
     return $ num % den
 
 -- | x > 0 || x < 1
 genTimeoutDecrease :: Gen (Ratio Word64)
 genTimeoutDecrease = do
-    num <- choose (1, maxBound)
-    den <- choose (num + 1, maxBound)
+    num <- chooseBoundedIntegral (1, maxBound)
+    den <- chooseBoundedIntegral (num + 1, maxBound)
     return $ num % den
 
 genTimeoutParameters :: Gen TimeoutParameters
@@ -692,7 +693,7 @@ genAccountEncryptedAmount :: Gen AccountEncryptedAmount
 genAccountEncryptedAmount = do
     _selfAmount <- genEncryptedAmount
     _startIndex <- EncryptedAmountAggIndex <$> arbitrary
-    len <- choose (0, 100)
+    len <- chooseInt (0, 100)
     _incomingEncryptedAmounts <- Seq.replicateM len genEncryptedAmount
     numAgg <- arbitrary
     aggAmount <- genEncryptedAmount
@@ -701,7 +702,7 @@ genAccountEncryptedAmount = do
         else return AccountEncryptedAmount{_aggregatedAmount = (aggAmount,) <$> numAgg, ..}
 
 genContractEvent :: Gen Wasm.ContractEvent
-genContractEvent = Wasm.ContractEvent . BSS.pack <$> arbitrary
+genContractEvent = Wasm.ContractEvent <$> sized genShortByteStringLen
 
 genAddress :: Gen Address
 genAddress = oneof [AddressAccount <$> genAccountAddress, AddressContract <$> genCAddress]
@@ -714,13 +715,13 @@ genTimestamp = Timestamp <$> arbitrary
 
 genRegisteredData :: Gen RegisteredData
 genRegisteredData = do
-    len <- choose (0, maxRegisteredDataSize)
-    RegisteredData . BSS.pack <$> vector len
+    len <- chooseBoundedIntegral (0, maxRegisteredDataSize)
+    RegisteredData <$> genShortByteStringLen len
 
 genMemo :: Gen Memo
 genMemo = do
-    len <- choose (0, maxMemoSize)
-    Memo . BSS.pack <$> vector len
+    len <- chooseBoundedIntegral (0, maxMemoSize)
+    Memo <$> genShortByteStringLen len
 
 genBakerId :: Gen BakerId
 genBakerId = BakerId . AccountIndex <$> arbitrary
@@ -822,7 +823,7 @@ genEvent spv =
         cuAccount <- genAccountAddress
         cuNewCredIds <- listOf genCredentialId
         cuRemovedCredIds <- listOf genCredentialId
-        cuNewThreshold <- AccountThreshold <$> choose (1, maxBound)
+        cuNewThreshold <- AccountThreshold <$> chooseBoundedIntegral (1, maxBound)
         return CredentialsUpdated{..}
 
 instance Arbitrary RejectReason where
@@ -916,7 +917,7 @@ verifyKeys = unsafePerformIO $ Vec.replicateM 200 (correspondingVerifyKey <$> ne
 
 genVerifyKey :: Gen VerifyKey
 genVerifyKey = do
-    i <- choose (0, Vec.length verifyKeys - 1)
+    i <- chooseInt (0, Vec.length verifyKeys - 1)
     return $ verifyKeys Vec.! i
 
 genSchemeId :: Gen SchemeId
@@ -925,23 +926,33 @@ genSchemeId = elements schemes
 genTransactionHeader :: Gen TransactionHeader
 genTransactionHeader = do
     thSender <- genAccountAddress
-    thPayloadSize <- PayloadSize <$> choose (0, maxPayloadSize SP4)
+    thPayloadSize <- PayloadSize <$> chooseBoundedIntegral (0, maxPayloadSize SP4)
     thNonce <- Nonce <$> arbitrary
     thEnergyAmount <- Energy <$> arbitrary
     thExpiry <- TransactionTime <$> arbitrary
     return $ TransactionHeader{..}
 
+genShortByteStringLen :: Int -> Gen BSS.ShortByteString
+genShortByteStringLen len = do
+    gen <- mkStdGen <$> chooseBoundedIntegral (minBound, maxBound)
+    return $ fst $ BSS.unfoldrN len (Just . genWord8) gen
+
+genShortByteString :: Gen BSS.ShortByteString
+genShortByteString = sized $ \n -> do
+    k <- chooseInt (0, n)
+    genShortByteStringLen k
+
 genAccountTransaction :: Gen AccountTransaction
 genAccountTransaction = do
     atrHeader <- genTransactionHeader
-    atrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize atrHeader))
-    numCredentials <- choose (1, 255)
+    atrPayload <- EncodedPayload <$> genShortByteStringLen (fromIntegral (thPayloadSize atrHeader))
+    numCredentials <- chooseBoundedIntegral (1, 255)
     allKeys <- replicateM numCredentials $ do
-        numKeys <- choose (1, 255)
+        numKeys <- chooseBoundedIntegral (1, 255)
         credentialSignatures <- replicateM numKeys $ do
             idx <- KeyIndex <$> arbitrary
-            sLen <- choose (50, 70)
-            sig <- Signature . BSS.pack <$> vector sLen
+            sLen <- chooseBoundedIntegral (50, 70)
+            sig <- Signature <$> genShortByteStringLen sLen
             return (idx, sig)
         (,Map.fromList credentialSignatures) . CredentialIndex <$> arbitrary
 
@@ -961,7 +972,7 @@ genInitialCredentialDeploymentInformation = do
     icdvIpId <- IP_ID <$> arbitrary
     icdvPolicy <- genPolicy
     let icdiValues = InitialCredentialDeploymentValues{..}
-    icdiSig <- IpCdiSignature . BSS.pack <$> vector 64
+    icdiSig <- IpCdiSignature <$> genShortByteStringLen 64
     return InitialCredentialDeploymentInfo{..}
 
 genAccountCredentialWithProofs :: Gen AccountCredentialWithProofs
@@ -991,12 +1002,12 @@ genElectionDifficulty = makeElectionDifficulty <$> chooseBoundedIntegral (0, 999
 genAuthorizations :: forall auv. (IsAuthorizationsVersion auv) => Gen (Authorizations auv)
 genAuthorizations = do
     size <- getSize
-    nKeys <- choose (1, min 65535 (1 + size))
+    nKeys <- chooseBoundedIntegral (1, min 65535 (1 + size))
     asKeys <- Vec.fromList . fmap correspondingVerifyKey <$> vectorOf nKeys genSigSchemeKeyPair
     let genAccessStructure = do
-            asnKeys <- choose (1, nKeys)
+            asnKeys <- chooseBoundedIntegral (1, nKeys)
             accessPublicKeys <- Set.fromList . take asnKeys <$> shuffle [0 .. fromIntegral nKeys - 1]
-            accessThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral asnKeys)
+            accessThreshold <- UpdateKeysThreshold <$> chooseBoundedIntegral (1, fromIntegral asnKeys)
             return AccessStructure{..}
     asEmergency <- genAccessStructure
     asProtocol <- genAccessStructure
@@ -1025,20 +1036,20 @@ genProtocolUpdate = do
 genMintRate :: Gen MintRate
 genMintRate = do
     mrExponent <- arbitrary
-    mrMantissa <- choose (0, fromIntegral (min (toInteger (maxBound :: Word32)) (10 ^ mrExponent)))
+    mrMantissa <- chooseBoundedIntegral (0, fromIntegral (min (toInteger (maxBound :: Word32)) (10 ^ mrExponent)))
     return MintRate{..}
 
 genRatioOfWord64 :: Gen (Ratio Word64)
 genRatioOfWord64 = do
-    num <- choose (1, maxBound)
-    den <- choose (1, maxBound)
+    num <- chooseBoundedIntegral (1, maxBound)
+    den <- chooseBoundedIntegral (1, maxBound)
     return $ num % den
 
 genLeverageFactor :: Gen LeverageFactor
 genLeverageFactor =
     LeverageFactor <$> do
-        den <- choose (1, maxBound)
-        num <- choose (den, maxBound) -- to make sure that the leverage factor is >= 1
+        den <- chooseBoundedIntegral (1, maxBound)
+        num <- chooseBoundedIntegral (den, maxBound) -- to make sure that the leverage factor is >= 1
         return $ num % den
 
 genExchangeRate :: Gen ExchangeRate
@@ -1053,35 +1064,35 @@ genExchangeRates = makeExchangeRates <$> genExchangeRate <*> genExchangeRate
 genMintDistribution :: forall mdv. (IsMintDistributionVersion mdv) => Gen (MintDistribution mdv)
 genMintDistribution = do
     _mdMintPerSlot <- conditionallyA (sSupportsMintPerSlot (sing @mdv)) genMintRate
-    bf <- choose (0, 100000)
-    ff <- choose (0, 100000 - bf)
+    bf <- chooseBoundedIntegral (0, 100000)
+    ff <- chooseBoundedIntegral (0, 100000 - bf)
     let _mdBakingReward = makeAmountFraction bf
         _mdFinalizationReward = makeAmountFraction ff
     return MintDistribution{..}
 
 genTransactionFeeDistribution :: Gen TransactionFeeDistribution
 genTransactionFeeDistribution = do
-    bf <- choose (0, 100000)
-    gf <- choose (0, 100000 - bf)
+    bf <- chooseBoundedIntegral (0, 100000)
+    gf <- chooseBoundedIntegral (0, 100000 - bf)
     let _tfdBaker = makeAmountFraction bf
         _tfdGASAccount = makeAmountFraction gf
     return TransactionFeeDistribution{..}
 
 genGASRewards :: forall grv. (IsGASRewardsVersion grv) => Gen (GASRewards grv)
 genGASRewards = do
-    _gasBaker <- makeAmountFraction <$> choose (0, 100000)
+    _gasBaker <- makeAmountFraction <$> chooseBoundedIntegral (0, 100000)
     _gasFinalizationProof <-
         conditionallyA (sSupportsGASFinalizationProof (sing @grv)) $
-            makeAmountFraction <$> choose (0, 100000)
-    _gasAccountCreation <- makeAmountFraction <$> choose (0, 100000)
-    _gasChainUpdate <- makeAmountFraction <$> choose (0, 100000)
+            makeAmountFraction <$> chooseBoundedIntegral (0, 100000)
+    _gasAccountCreation <- makeAmountFraction <$> chooseBoundedIntegral (0, 100000)
+    _gasChainUpdate <- makeAmountFraction <$> chooseBoundedIntegral (0, 100000)
     return GASRewards{..}
 
 -- | Generate a token parameter consisting of up to 1000 arbitrary bytes.
 genTokenParameter :: Gen TokenParameter
 genTokenParameter = do
-    n <- choose (0, 1000)
-    TokenParameter . BSS.pack <$> vector n
+    n <- chooseBoundedIntegral (0, 1000)
+    TokenParameter <$> genShortByteStringLen n
 
 -- | Generate an reference to a token module (always 32 bytes).
 genTokenModuleRef :: Gen TokenModuleRef
@@ -1148,16 +1159,16 @@ genCreatePLT = do
     _cpltTokenSymbol <- genTokenId
     _cpltTokenModule <- genTokenModuleRef
     _cpltGovernanceAccount <- genAccountAddress
-    _cpltDecimals <- choose (0, 255)
+    _cpltDecimals <- chooseBoundedIntegral (0, 255)
     _cpltInitializationParameters <- genTokenParameter
     return CreatePLT{..}
 
 genHigherLevelKeys :: Gen (HigherLevelKeys a)
 genHigherLevelKeys = do
     size <- getSize
-    nKeys <- choose (1, min 65535 (1 + size))
+    nKeys <- chooseBoundedIntegral (1, min 65535 (1 + size))
     hlkKeys <- Vec.fromList . fmap correspondingVerifyKey <$> vectorOf nKeys genSigSchemeKeyPair
-    hlkThreshold <- UpdateKeysThreshold <$> choose (1, fromIntegral nKeys)
+    hlkThreshold <- UpdateKeysThreshold <$> chooseBoundedIntegral (1, fromIntegral nKeys)
     return HigherLevelKeys{..}
 
 genRootUpdate :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen RootUpdate
@@ -1303,7 +1314,7 @@ genAuthorizationsAndKeys thr = do
     kps <- vectorOf nKeys genSigSchemeKeyPair
     let asKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     let genAccessStructure = do
-            asnKeys <- choose (fromIntegral thr, nKeys)
+            asnKeys <- chooseBoundedIntegral (fromIntegral thr, nKeys)
             accessPublicKeys <- Set.fromList . take asnKeys <$> shuffle [0 .. fromIntegral nKeys - 1]
             return AccessStructure{accessThreshold = thr, ..}
     asEmergency <- genAccessStructure

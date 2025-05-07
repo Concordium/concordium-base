@@ -30,8 +30,8 @@ checkTransaction tx =
             Left err -> counterexample err False
             Right tx' -> QC.label (groupIntoSize (BS.length bs)) $ tx === tx'
 
-testTransaction :: Int -> Property
-testTransaction size = forAll (resize size genAccountTransaction) checkTransaction
+testTransaction :: Property
+testTransaction = forAll genAccountTransaction checkTransaction
 
 dummyTime :: TransactionTime
 dummyTime = 37
@@ -49,8 +49,7 @@ testBlockItem :: SProtocolVersion pv -> Property
 testBlockItem spv = forAll genBlockItem $ checkBlockItem spv
 tests :: Spec
 tests = parallel $ do
-    specify "Transaction serialization with size = 100." $ withMaxSuccess 10 $ testTransaction 100
-    specify "Transaction serialization with size = 1000." $ withMaxSuccess 10 $ testTransaction 1000
+    specify "Transaction serialization." $ withMaxSuccess 1000 $ testTransaction
     specify "BlockItem serialization in P1." $ withMaxSuccess 100 $ testBlockItem SP1
     specify "BlockItem serialization in P2." $ withMaxSuccess 100 $ testBlockItem SP2
     specify "BlockItem serialization in P3." $ withMaxSuccess 100 $ testBlockItem SP3
