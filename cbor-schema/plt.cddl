@@ -163,3 +163,34 @@ token-initialization-parameters = {
     ; Whether the token is burnable
     ? "burnable": bool .default false
 }
+
+; Token state
+
+; The Token Module state represents global state information that is maintained by the Token Module,
+; and is returned as part of a `GetTokenInfo` query. It does not include state that is managed by
+; the Token Kernel, such as the token identifier, global supply and governance account. It also
+; does not (typically) include account-specific state, which is returned as part of
+; `GetAccountInfo` instead.
+;
+; The "name" and "metadata" fields are required. Other fields are optional, and can be omitted if
+; the module implementation does not support them. The structure supports additional fields for
+; future extensibility. Non-standard fields (i.e. any fields that are not defined by a standard,
+; and are specific to the module implementation) may be included, and their tags should be
+; prefixed with an underscore ("_") to distinguish them as such.
+token-module-state = {
+    ; The name of the token
+    "name": text,
+    ; A URL pointing to the token metadata
+    "metadata": text,
+    ; Whether the token supports an allow list.
+    ? "allowList": bool,
+    ; Whether the token supports a deny list.
+    ? "denyList": bool,
+    ; Whether the token is mintable.
+    ? "mintable": bool,
+    ; Whether the token is burnable.
+    ? "burnable": bool,
+    ; Additional state information may be provided under further text keys, the meaning
+    ; of which are not defined in the present specification.
+    * text => any
+}

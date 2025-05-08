@@ -3,8 +3,10 @@
 module Types.CBOR where
 
 import Codec.CBOR.Read
+import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Write
 import qualified Data.ByteString as BS
+import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -63,6 +65,34 @@ genTokenHolderTransaction :: Gen TokenHolderTransaction
 genTokenHolderTransaction =
     TokenHolderTransaction . Seq.fromList
         <$> listOf (TokenHolderTransfer <$> genTokenTransfer)
+
+genTokenModuleStateSimple :: Gen TokenModuleState
+genTokenModuleStateSimple = do
+    tmsName <- genText
+    tmsMetadata <- genText
+    tmsAllowList <- arbitrary
+    tmsDenyList <- arbitrary
+    tmsMintable <- arbitrary
+    tmsBurnable <- arbitrary
+    let tmsAdditional = Map.empty
+    return TokenModuleState{..}
+
+genTokenModuleStateWithAdditional :: Gen TokenModuleState
+genTokenModuleStateWithAdditional = do
+    tms <- genTokenModuleStateSimple
+    additional <- listOf1 genKV
+    return tms{tmsAdditional = Map.fromList additional}
+  where
+    genKV = do
+        key <- genText
+        val <-
+            oneof
+                [ CBOR.TInt <$> arbitrary,
+                  CBOR.TString <$> genText,
+                  CBOR.TBool <$> arbitrary,
+                  pure CBOR.TNull
+                ]
+        return ("_" <> key, val)
 
 -- | A test value for 'TokenInitializationParameters'.
 tip1 :: TokenInitializationParameters
@@ -137,4 +167,16 @@ tests = parallel $ describe "CBOR" $ do
             === ( deserialiseFromBytes
                     decodeTokenHolderTransaction
                     (toLazyByteString $ encodeTokenHolderTransaction tt)
+                )
+    it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenModuleState
+                    (toLazyByteString $ encodeTokenModuleState tt)
+                )
+    it "Encode and decode TokenModuleState (with additional)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateWithAdditional $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenModuleState
+                    (toLazyByteString $ encodeTokenModuleState tt)
                 )
