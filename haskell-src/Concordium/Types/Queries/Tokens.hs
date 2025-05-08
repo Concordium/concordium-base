@@ -15,7 +15,7 @@ import Data.Word
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Types
 import Concordium.Types.Tokens
-import Data.Aeson as AE
+import Data.Aeson
 
 -- | Protocol level token.
 data Token = Token
