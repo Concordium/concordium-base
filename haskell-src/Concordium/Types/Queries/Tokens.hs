@@ -12,11 +12,10 @@ module Concordium.Types.Queries.Tokens (
 import qualified Data.ByteString as BS
 import Data.Word
 
+import Concordium.Crypto.ByteStringHelpers
 import Concordium.Types
 import Concordium.Types.Tokens
 import Data.Aeson as AE
-import qualified Data.ByteString.Base16 as BS16
-import qualified Data.Text.Encoding as Text
 
 -- | Protocol level token.
 data Token = Token
@@ -79,26 +78,13 @@ data TokenState = TokenState
       -- | The governance account for the token.
       tsIssuer :: !AccountAddress,
       -- | The number of decimals in the token representation.
-      tsDecimals :: !Word32,
+      tsDecimals :: !Word8,
       -- | The total available token supply.
       tsTotalSupply :: !TokenAmount,
       -- | CBOR-encoded module-specific state.
       tsModuleState :: !BS.ByteString
     }
     deriving (Eq, Show)
-
--- Nice-to-have: Use a wrapper for dispalying the decoded CBOR representation instead of displaying the bytes as a hex string.
-newtype HexByteString = HexByteString {_unHex :: BS.ByteString}
-
-instance ToJSON HexByteString where
-    toJSON (HexByteString bs) =
-        String (Text.decodeUtf8 (BS16.encode bs))
-
-instance FromJSON HexByteString where
-    parseJSON = AE.withText "HexByteString" $ \txt ->
-        case BS16.decode (Text.encodeUtf8 txt) of
-            Right bs -> pure $ HexByteString bs
-            _ -> fail "Invalid Base16 encoding"
 
 -- | JSON instances for TokenState
 instance ToJSON TokenState where
@@ -108,7 +94,7 @@ instance ToJSON TokenState where
               "issuer" .= tsIssuer,
               "decimals" .= tsDecimals,
               "totalSupply" .= tsTotalSupply,
-              "moduleState" .= HexByteString tsModuleState
+              "moduleState" .= ByteStringHex tsModuleState
             ]
 
 instance FromJSON TokenState where
@@ -117,7 +103,7 @@ instance FromJSON TokenState where
         tsIssuer <- o .: "issuer"
         tsDecimals <- o .: "decimals"
         tsTotalSupply <- o .: "totalSupply"
-        (HexByteString tsModuleState) <- o .: "moduleState"
+        (ByteStringHex tsModuleState) <- o .: "moduleState"
         return TokenState{..}
 
 -- | The global info about a protocol-level token.

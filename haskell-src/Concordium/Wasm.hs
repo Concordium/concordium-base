@@ -170,7 +170,7 @@ import Foreign.C (CStringLen)
 
 import Concordium.Common.Time
 import Concordium.Constants
-import Concordium.Crypto.ByteStringHelpers (ByteStringHex (..))
+import Concordium.Crypto.ByteStringHelpers (ShortByteStringHex (..))
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.ID.Types
 import Concordium.Types
@@ -586,7 +586,7 @@ instance Serialize ReceiveName where
 --  by deserialization methods.
 newtype Parameter = Parameter {parameter :: ShortByteString}
     deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via ByteStringHex
+    deriving (AE.ToJSON, AE.FromJSON, Show) via ShortByteStringHex
 
 -- | Parameter of size 0.
 emptyParameter :: Parameter
@@ -852,7 +852,7 @@ getActionsTree' size = go HM.empty 0
 -- | Event as reported by contract execution.
 newtype ContractEvent = ContractEvent BSS.ShortByteString
     deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via ByteStringHex
+    deriving (AE.ToJSON, AE.FromJSON, Show) via ShortByteStringHex
 
 instance Serialize ContractEvent where
     put (ContractEvent ev) = putShortByteStringWord32 ev
