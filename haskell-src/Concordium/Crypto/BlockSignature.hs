@@ -38,7 +38,7 @@ instance FromJSON KeyPair where
 
 newtype Signature = Signature BSS.ShortByteString
     deriving (Eq, Ord)
-    deriving (Show) via ByteStringHex
+    deriving (Show) via ShortByteStringHex
     deriving (FromJSON) via Short65K
     deriving (ToJSON) via Short65K
 

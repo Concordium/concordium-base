@@ -258,7 +258,7 @@ foreign import ccall safe "make_encrypted_transfer_data"
 
 -- | Serialized version of `EncryptedAmountTransferProof` in encrypted_transfers/src/types.rs
 newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof {theEncryptedAmountTransferProof :: ShortByteString}
-    deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
+    deriving (Eq, Show, FromJSON, ToJSON) via ShortByteStringHex
     deriving (Serialize) via Short65K
 
 withEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> (CStringLen -> IO a) -> IO a
@@ -464,7 +464,7 @@ foreign import ccall safe "make_sec_to_pub_data"
 
 -- | Serialized version of `SecToPubAmountTransferProof` in encrypted_transfers/src/types.rs
 newtype SecToPubAmountTransferProof = SecToPubAmountTransferProof {theSecToPubAmountTransferProof :: ShortByteString}
-    deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
+    deriving (Eq, Show, FromJSON, ToJSON) via ShortByteStringHex
     deriving (Serialize) via Short65K
 
 withSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> (CStringLen -> IO a) -> IO a
