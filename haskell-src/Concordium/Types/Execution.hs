@@ -382,6 +382,13 @@ data Payload
           -- | The CBOR-encoded operations to perform.
           thOperations :: !TokenParameter
         }
+    | -- | A governance update for a protocol level token.
+      TokenGovernance
+        { -- | Identifier of the token type to which the transaction refers.
+          tgTokenSymbol :: !TokenId,
+          -- | The CBOR-encoded operations to perform.
+          tgOperations :: !TokenParameter
+        }
     deriving (Eq, Show)
 
 -- Define `TransactionType`  and relevant conversion function to convert from/to `Payload`.
@@ -419,6 +426,7 @@ instance S.Serialize TransactionType where
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
         TTTokenHolder -> S.putWord8 21
+        TTTokenGovernance -> S.putWord8 22
 
     get =
         S.getWord8 >>= \case
@@ -444,6 +452,7 @@ instance S.Serialize TransactionType where
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
             21 -> return TTTokenHolder
+            22 -> return TTTokenGovernance
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 instance AE.ToJSON Payload where
@@ -572,6 +581,12 @@ instance AE.ToJSON Payload where
               "operations" AE..= thOperations,
               "transactionType" AE..= AE.String "tokenHolder"
             ]
+    toJSON TokenGovernance{..} =
+        AE.object
+            [ "tokenSymbol" AE..= tgTokenSymbol,
+              "operations" AE..= tgOperations,
+              "transactionType" AE..= AE.String "tokenGovernance"
+            ]
 
 instance AE.FromJSON Payload where
     parseJSON = AE.withObject "payload" $ \obj -> do
@@ -684,6 +699,10 @@ instance AE.FromJSON Payload where
                 thTokenSymbol <- obj AE..: "tokenSymbol"
                 thOperations <- obj AE..: "operations"
                 return TokenHolder{..}
+            "tokenGovernance" -> do
+                tgTokenSymbol <- obj AE..: "tokenSymbol"
+                tgOperations <- obj AE..: "operations"
+                return TokenGovernance{..}
             _ -> fail "Unrecognized 'TransactionType' tag"
 
 -- | Payload serialization according to
@@ -827,6 +846,10 @@ putPayload TokenHolder{..} = do
     S.putWord8 27
     S.put thTokenSymbol
     S.put thOperations
+putPayload TokenGovernance{..} = do
+    S.putWord8 28
+    S.put tgTokenSymbol
+    S.put tgOperations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -996,6 +1019,10 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 thTokenSymbol <- S.get
                 thOperations <- S.get
                 return TokenHolder{..}
+            28 | supportProtocolLevelTokens -> S.label "TokenGovernance" $ do
+                tgTokenSymbol <- S.get
+                tgOperations <- S.get
+                return TokenGovernance{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -2631,6 +2658,10 @@ data RejectReason
       NonExistentTokenId !TokenId
     | -- | The token-holder transaction was rejected.
       TokenHolderTransactionFailed !TokenModuleRejectReason
+    | -- | The token-governance transaction was rejected.
+      TokenGovernanceTransactionFailed !TokenModuleRejectReason
+    | -- | Account sending the transaction is not authorized for governing the token.
+      UnauthorizedTokenGovernance !TokenId
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2704,6 +2735,8 @@ instance S.Serialize RejectReason where
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
         TokenHolderTransactionFailed reason -> S.putWord8 56 <> S.put reason
+        TokenGovernanceTransactionFailed reason -> S.putWord8 57 <> S.put reason
+        UnauthorizedTokenGovernance tokenId -> S.putWord8 58 <> S.put tokenId
 
     get =
         S.getWord8 >>= \case
@@ -2773,6 +2806,8 @@ instance S.Serialize RejectReason where
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
             56 -> TokenHolderTransactionFailed <$> S.get
+            57 -> TokenGovernanceTransactionFailed <$> S.get
+            58 -> UnauthorizedTokenGovernance <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
