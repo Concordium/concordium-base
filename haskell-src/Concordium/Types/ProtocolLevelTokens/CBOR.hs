@@ -701,6 +701,16 @@ data TokenRejectReason
           -- | The maximum representable token amount.
           trrMaxRepresentableAmount :: !TokenAmount
         }
+    | -- | The operation is not permitted.
+      OperationNotPermitted
+        { -- | The index in the list of operations of the failing operation.
+          trrOperationIndex :: !Word64,
+          -- | (Optionally) the address that does not have the necessary permissions to perform
+          --  the operation.
+          trrAddressNotPermitted :: !(Maybe TokenHolder),
+          -- | The reason why the operation is not permitted.
+          trrReason :: !(Maybe Text)
+        }
     deriving (Eq, Show)
 
 -- | A builder for constructing 'TokenRejectReason' values with the 'AddressNotFound'
