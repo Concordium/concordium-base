@@ -15,17 +15,14 @@ token-holder-operation = token-transfer
 ; (implicit) to the recipient account.
 token-transfer = {
     ; The operation type is "transfer".
-    "transfer": token-transfer-details
-}
-
-; The details of a token transfer operation.
-token-transfer-details = {
-    ; the amount of tokens to transfer.
-    "amount": token-amount,
-    ; the recipient account.
-    "recipient": token-receiver,
-    ; an optional memo.
-    ? "memo": memo
+    "transfer": {
+	; the amount of tokens to transfer.
+	"amount": token-amount,
+	; the recipient account.
+	"recipient": token-receiver,
+	; an optional memo.
+	? "memo": memo
+    }
 }
 
 ; We represent token amounts as a decimal fraction.
@@ -161,19 +158,10 @@ token-initialization-parameters = {
     ? "burnable": bool .default false
 }
 
-; Token events
+; Token module events.
 
-; The details of a token "transfer" event.
-; This is a token kernel event, and indicates funds were transferred from the transaction sender to the "to" account.
-token-transfer-event = token-transfer-details
-
-; The details of a token "mint" event.
-; This is a token kernel event, and indicates funds were minted to the governance account.
-token-mint-event = token-supply-update-details
-
-; The details of a token "burn" event.
-; This is a token kernel event, and indicates funds were burned from the balance of the governance account.
-token-burn-event = token-supply-update-details
+; These events are limited to the events emitted by the token module. Events related to protocol-level tokens
+; balance changes are defined from the token kernel.
 
 ; The details of a token "add-allow-list" event.
 ; This is a token kernel event, and indicates the account was added to the allow list.
