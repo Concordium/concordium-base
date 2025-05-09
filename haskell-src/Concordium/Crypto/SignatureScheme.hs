@@ -23,7 +23,7 @@ import qualified Data.ByteString.Short as BSS
 newtype Signature = Signature ShortByteString
     deriving (Eq, Ord)
     deriving newtype (NFData)
-    deriving (Show) via ByteStringHex
+    deriving (Show) via ShortByteStringHex
     deriving (Serialize) via Short65K
     deriving (FromJSON) via Short65K
     deriving (ToJSON) via Short65K

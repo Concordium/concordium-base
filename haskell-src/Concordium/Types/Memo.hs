@@ -37,7 +37,7 @@ tooBigErrorString name len maxSize =
 --  The FromJSON instance is manually implemented to ensure length limits.
 newtype Memo = Memo BSS.ShortByteString
     deriving (Eq)
-    deriving (AE.ToJSON, Show) via BSH.ByteStringHex
+    deriving (AE.ToJSON, Show) via BSH.ShortByteStringHex
 
 -- | Maximum size for 'Memo'.
 maxMemoSize :: Int
@@ -65,7 +65,7 @@ instance S.Serialize Memo where
 
 instance AE.FromJSON Memo where
     parseJSON v = do
-        (BSH.ByteStringHex bss) <- AE.parseJSON v
+        (BSH.ShortByteStringHex bss) <- AE.parseJSON v
         case memoFromBSS bss of
             Left err -> fail err
             Right rd -> return rd

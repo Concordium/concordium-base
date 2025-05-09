@@ -446,6 +446,9 @@ pub enum ProtocolVersion {
     #[display(fmt = "P8")]
     /// Protocol `P8` introduces support for suspended validators.
     P8,
+    #[display(fmt = "P9")]
+    /// Protocol `P9` introduces support for protocol level tokens (PLT).
+    P9,
 }
 
 #[derive(Debug, Error, Display)]
@@ -469,6 +472,7 @@ impl TryFrom<u64> for ProtocolVersion {
             6 => Ok(ProtocolVersion::P6),
             7 => Ok(ProtocolVersion::P7),
             8 => Ok(ProtocolVersion::P8),
+            9 => Ok(ProtocolVersion::P9),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -485,6 +489,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P6 => 6,
             ProtocolVersion::P7 => 7,
             ProtocolVersion::P8 => 8,
+            ProtocolVersion::P9 => 9,
         }
     }
 }

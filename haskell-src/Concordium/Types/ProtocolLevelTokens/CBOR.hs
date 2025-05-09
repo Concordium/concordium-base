@@ -9,6 +9,7 @@ import qualified Codec.CBOR.ByteArray.Sliced as SBA
 import Codec.CBOR.Decoding
 import Codec.CBOR.Encoding
 import qualified Codec.CBOR.Read as CBOR
+import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import Control.Monad
 import qualified Data.Aeson as AE
@@ -22,6 +23,7 @@ import Data.Maybe
 import Data.Scientific
 import qualified Data.Sequence as Seq
 import Data.Text
+import qualified Data.Text.Lazy as LazyText
 import Data.Word
 import Lens.Micro.Platform
 
@@ -813,3 +815,93 @@ decodeTokenHolderFailure "deserializationFailure" =
     valDecoder _ = Nothing
 decodeTokenHolderFailure unknownType =
     fail $ "token-holder-failure: unsupported failure type: " ++ show unknownType
+
+-- * Token Module state
+
+-- | A representation of the global state information maintained by the token module.
+--  The name and metadata fields are required, but all other state is optional and may or may not
+--  be provided depending on whether the token module supports it.
+data TokenModuleState = TokenModuleState
+    { -- | The name of the token.
+      tmsName :: !Text,
+      -- | A URL pointing to the token metadata.
+      tmsMetadata :: !Text,
+      -- | Whether the token supports an allow list.
+      tmsAllowList :: !(Maybe Bool),
+      -- | Whether the token supports a deny list.
+      tmsDenyList :: !(Maybe Bool),
+      -- | Whether the token is mintable.
+      tmsMintable :: !(Maybe Bool),
+      -- | Whether the token is burnable.
+      tmsBurnable :: !(Maybe Bool),
+      -- | Any additional state data. Keys in this map SHOULD NOT overlap those
+      --  used for the other (standardised) fields in this structure as that will
+      --  break the invertability of the CBOR encoding.
+      tmsAdditional :: !(Map.Map Text CBOR.Term)
+    }
+    deriving (Eq, Show)
+
+-- | Encode a 'TokenModuleState' as CBOR. Any keys in 'tmsAdditional' that overlap with
+--  standardized keys (e.g. "name", "metadata", "allowList", etc.) will be ignored.
+encodeTokenModuleState :: TokenModuleState -> Encoding
+encodeTokenModuleState TokenModuleState{..} =
+    encodeMapDeterministic $
+        additionalMap
+            & k "name" ?~ encodeString tmsName
+            & k "metadata" ?~ encodeString tmsMetadata
+            & k "allowList" .~ fmap encodeBool tmsAllowList
+            & k "denyList" .~ fmap encodeBool tmsDenyList
+            & k "mintable" .~ fmap encodeBool tmsMintable
+            & k "burnable" .~ fmap encodeBool tmsBurnable
+  where
+    additionalMap =
+        Map.fromList
+            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
+              | (key, val) <- Map.toList tmsAdditional
+            ]
+    k = at . makeMapKeyEncoding . encodeString
+
+-- | CBOR-encode a 'TokenModuleState' to a (strict) 'BS.ByteString'.
+--  This uses default values in the encoding.
+tokenModuleStateToBytes :: TokenModuleState -> BS.ByteString
+tokenModuleStateToBytes = CBOR.toStrictByteString . encodeTokenModuleState
+
+-- | Decode a CBOR-encoded 'TokenModuleState'.
+decodeTokenModuleState :: Decoder s TokenModuleState
+decodeTokenModuleState = decodeMap decodeVal build Map.empty
+  where
+    decodeVal key = Just $ mapValueDecoder key CBOR.decodeTerm (at key)
+    build :: Map.Map Text CBOR.Term -> Either String TokenModuleState
+    build m0 = do
+        (tmsName, m1) <- getAndClear "name" convertText m0
+        (tmsMetadata, m2) <- getAndClear "metadata" convertText m1
+        (tmsAllowList, m3) <- getMaybeAndClear "allowList" convertBool m2
+        (tmsDenyList, m4) <- getMaybeAndClear "denyList" convertBool m3
+        (tmsMintable, m5) <- getMaybeAndClear "mintable" convertBool m4
+        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m5
+        return TokenModuleState{..}
+    getAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        term <- maybeTerm `orFail` ("Missing " ++ show key)
+        val <- convert term `orFail` ("Invalid " ++ show key)
+        return (val, m')
+    getMaybeAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
+        return (maybeVal, m')
+    convertText (CBOR.TString t) = Just t
+    convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
+    convertText _ = Nothing
+    convertBool (CBOR.TBool b) = Just b
+    convertBool _ = Nothing
+
+-- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenModuleStateFromBytes :: LBS.ByteString -> Either String TokenModuleState
+tokenModuleStateFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenModuleState lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining) ++ " bytes remaining after parsing token module state"

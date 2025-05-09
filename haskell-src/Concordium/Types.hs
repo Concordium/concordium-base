@@ -811,7 +811,7 @@ minNonce = 1
 --  Create new values with 'registeredDataFromBSS' to ensure assumed properties.
 newtype RegisteredData = RegisteredData BSS.ShortByteString
     deriving (Eq)
-    deriving (AE.ToJSON, Show) via BSH.ByteStringHex
+    deriving (AE.ToJSON, Show) via BSH.ShortByteStringHex
 
 -- | Maximum size for 'RegisteredData'.
 maxRegisteredDataSize :: Int
@@ -840,7 +840,7 @@ instance S.Serialize RegisteredData where
 
 instance AE.FromJSON RegisteredData where
     parseJSON v = do
-        (BSH.ByteStringHex bss) <- AE.parseJSON v
+        (BSH.ShortByteStringHex bss) <- AE.parseJSON v
         case registeredDataFromBSS bss of
             Left err -> fail err
             Right rd -> return rd
@@ -1134,7 +1134,7 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
 -- | Parameter for a Token module.
 newtype TokenParameter = TokenParameter {parameterBytes :: BSS.ShortByteString}
     deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ByteStringHex
+    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
 
 instance S.Serialize TokenParameter where
     get = do
@@ -1148,7 +1148,7 @@ instance S.Serialize TokenParameter where
 -- Represented as some arbitrary CBOR encoding.
 newtype TokenEventDetails = TokenEventDetails {tokenEventDetailsBytes :: BSS.ShortByteString}
     deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ByteStringHex
+    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
 
 instance S.Serialize TokenEventDetails where
     get = do

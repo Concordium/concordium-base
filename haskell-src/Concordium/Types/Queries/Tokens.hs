@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | Types for protocol level tokens (PLT).
 module Concordium.Types.Queries.Tokens (
     TokenAmount (..),
@@ -10,8 +12,10 @@ module Concordium.Types.Queries.Tokens (
 import qualified Data.ByteString as BS
 import Data.Word
 
+import Concordium.Crypto.ByteStringHelpers
 import Concordium.Types
 import Concordium.Types.Tokens
+import Data.Aeson
 
 -- | Protocol level token.
 data Token = Token
@@ -21,6 +25,20 @@ data Token = Token
       tokenAccountState :: !TokenAccountState
     }
     deriving (Eq, Show)
+
+-- | JSON instances for Token
+instance ToJSON Token where
+    toJSON (Token tid state) =
+        object
+            [ "tokenId" .= tid,
+              "tokenAccountState" .= state
+            ]
+
+instance FromJSON Token where
+    parseJSON = withObject "Token" $ \o -> do
+        tokenId <- o .: "tokenId"
+        tokenAccountState <- o .: "tokenAccountState"
+        return Token{..}
 
 -- | The account level state of a token.
 data TokenAccountState = TokenAccountState
@@ -37,6 +55,22 @@ data TokenAccountState = TokenAccountState
     }
     deriving (Eq, Show)
 
+-- | JSON instances for TokenAccountState
+instance ToJSON TokenAccountState where
+    toJSON (TokenAccountState balance inAllowList inDenyList) =
+        object
+            [ "balance" .= balance,
+              "inAllowList" .= inAllowList,
+              "inDenyList" .= inDenyList
+            ]
+
+instance FromJSON TokenAccountState where
+    parseJSON = withObject "TokenAccountState" $ \o -> do
+        balance <- o .: "balance"
+        memberAllowList <- o .: "inAllowList"
+        memberDenyList <- o .: "inDenyList"
+        return TokenAccountState{..}
+
 -- | The global token state.
 data TokenState = TokenState
     { -- | The reference of the module implementing the token.
@@ -52,6 +86,26 @@ data TokenState = TokenState
     }
     deriving (Eq, Show)
 
+-- | JSON instances for TokenState
+instance ToJSON TokenState where
+    toJSON (TokenState tsTokenModuleRef tsIssuer tsDecimals tsTotalSupply tsModuleState) =
+        object
+            [ "tokenId" .= tsTokenModuleRef,
+              "issuer" .= tsIssuer,
+              "decimals" .= tsDecimals,
+              "totalSupply" .= tsTotalSupply,
+              "moduleState" .= ByteStringHex tsModuleState
+            ]
+
+instance FromJSON TokenState where
+    parseJSON = withObject "TokenState" $ \o -> do
+        tsTokenModuleRef <- o .: "tokenId"
+        tsIssuer <- o .: "issuer"
+        tsDecimals <- o .: "decimals"
+        tsTotalSupply <- o .: "totalSupply"
+        (ByteStringHex tsModuleState) <- o .: "moduleState"
+        return TokenState{..}
+
 -- | The global info about a protocol-level token.
 data TokenInfo = TokenInfo
     { -- | The symbol uniquely identifying the protocol-level token.
@@ -60,3 +114,17 @@ data TokenInfo = TokenInfo
       tiTokenState :: TokenState
     }
     deriving (Eq, Show)
+
+-- | JSON instances for TokenInfo
+instance ToJSON TokenInfo where
+    toJSON (TokenInfo tiTokenId tiTokenState) =
+        object
+            [ "tokenId" .= tiTokenId,
+              "tokenState" .= tiTokenState
+            ]
+
+instance FromJSON TokenInfo where
+    parseJSON = withObject "TokenInfo" $ \o -> do
+        tiTokenId <- o .: "tokenId"
+        tiTokenState <- o .: "tokenState"
+        return TokenInfo{..}

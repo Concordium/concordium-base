@@ -61,7 +61,7 @@ instance AE.FromJSON TokenId where
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
 data TokenAmount = TokenAmount
     { digits :: !Word64,
-      nrDecimals :: !Word32
+      nrDecimals :: !Word8
     }
     deriving (Eq, Show)
 

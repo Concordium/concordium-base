@@ -1,6 +1,10 @@
 ## Unreleased changes
 
-- Publish `get_canonical_address` on `AccountAddress` 
+- Publish `get_canonical_address` on `AccountAddress`
+- Introduce protocol version 9 `ProtocolVersion::P9`
+- Introduce basic types related to protocol level tokens (PLT)
+  - `RawCbor`, `TokenId`, `TokenAmount`, `TokenModuleRef`.
+  - Extend `UpdatePayload` with `CreatePlt` variant.
 
 ## 7.0.0 (2025-02-03)
 
