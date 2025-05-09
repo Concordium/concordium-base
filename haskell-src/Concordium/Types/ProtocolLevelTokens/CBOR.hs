@@ -637,19 +637,6 @@ newtype TokenHolderTransaction = TokenHolderTransaction
 instance AE.ToJSON TokenHolderTransaction where
     toJSON TokenHolderTransaction{..} = AE.toJSON tokenHolderTransactions
 
--- instance AE.FromJSON TokenHolderTransaction where
---    parseJSON = AE.withArray "TokenHolderTransactions" $ \o -> do
---        _tipbName <- o AE..:? "name"
---        _tipbMetadata <- o AE..:? "metadata"
---        _tipbAllowList <- o AE..:? "allowList"
---        _tipbDenyList <- o AE..:? "denyList"
---        _tipbInitialSupply <- o AE..:? "initialSupply"
---        _tipbMintable <- o AE..:? "mintable"
---        _tipbBurnable <- o AE..:? "burnable"
---        case buildTokenInitializationParameters TokenInitializationParametersBuilder{..} of
---            Left e -> fail e
---            Right res -> return res
-
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
 decodeTokenHolderTransaction = TokenHolderTransaction <$> decodeSequence decodeTokenHolderOperation
