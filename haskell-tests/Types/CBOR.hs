@@ -40,16 +40,16 @@ genTokenInitializationParameters = do
 genTokenTransfer :: Gen TokenTransferBody
 genTokenTransfer = do
     ttAmount <- genTokenAmount
-    ttRecipient <- genTokenReceiver
+    ttRecipient <- genTokenHolder
     ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
     return TokenTransferBody{..}
 
--- | Generator for `TokenReceiver`
-genTokenReceiver :: Gen TokenReceiver
-genTokenReceiver =
+-- | Generator for `TokenHolder`
+genTokenHolder :: Gen TokenHolder
+genTokenHolder =
     oneof
-        [ ReceiverAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
-          ReceiverAccount <$> genAccountAddress <*> pure Nothing
+        [ HolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
+          HolderAccount <$> genAccountAddress <*> pure Nothing
         ]
 
 -- | Generator for `TaggableMemo`
@@ -72,10 +72,10 @@ genTokenGovernanceOperation =
     oneof
         [ TokenMint <$> genTokenAmount,
           TokenBurn <$> genTokenAmount,
-          TokenAddAllowList <$> genTokenReceiver,
-          TokenRemoveAllowList <$> genTokenReceiver,
-          TokenAddDenyList <$> genTokenReceiver,
-          TokenRemoveDenyList <$> genTokenReceiver
+          TokenAddAllowList <$> genTokenHolder,
+          TokenRemoveAllowList <$> genTokenHolder,
+          TokenAddDenyList <$> genTokenHolder,
+          TokenRemoveDenyList <$> genTokenHolder
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -111,6 +111,17 @@ genTokenModuleStateWithAdditional = do
                   pure CBOR.TNull
                 ]
         return ("_" <> key, val)
+
+-- | Generator for 'TokenRejectReason'.
+genTokenRejectReason :: Gen TokenRejectReason
+genTokenRejectReason =
+    oneof
+        [ AddressNotFound <$> arbitrary <*> genTokenHolder,
+          TokenBalanceInsufficient <$> arbitrary <*> genTokenAmount <*> genTokenAmount,
+          DeserializationFailure <$> liftArbitrary genText,
+          UnsupportedOperation <$> arbitrary <*> genText <*> liftArbitrary genText,
+          MintWouldOverflow <$> arbitrary <*> genTokenAmount <*> genTokenAmount <*> genTokenAmount
+        ]
 
 -- | A test value for 'TokenInitializationParameters'.
 tip1 :: TokenInitializationParameters
@@ -210,3 +221,5 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenModuleState
                     (toLazyByteString $ encodeTokenModuleState tt)
                 )
+    it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
+        Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)

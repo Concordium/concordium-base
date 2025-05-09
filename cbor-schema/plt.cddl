@@ -19,7 +19,7 @@ token-transfer = {
         ; The amount of tokens to transfer.
         "amount": token-amount,
         ; The recipient account.
-        "recipient": token-receiver,
+        "recipient": token-holder,
         ; An optional memo.
         ? "memo": memo
     }
@@ -42,13 +42,13 @@ cbor-memo = #6.24(raw-memo)
 
 ; A destination that can receive and hold tokens.
 ; Currently, this can only by a Concordium account address.
-token-receiver = tagged-receiver-account
+token-holder = tagged-holder-account
 
 ; We use a subtype of the tagged-address type from
 ; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-009-address.md
-tagged-receiver-account = #6.40307(receiver-account)
+tagged-holder-account = #6.40307(holder-account)
 
-receiver-account = { 
+holder-account = { 
     ; If the info (1) field is present, it must indicate CCD.
     ? 1: tagged-ccd-coininfo,
     ; We do not support the type (2) field.
@@ -111,7 +111,7 @@ token-add-allow-list = {
     ; The operation type is "add-allow-list".
     "add-allow-list": {
         ; The account to add to the allow list.
-        "target": token-receiver
+        "target": token-holder
     }
 }
 
@@ -120,7 +120,7 @@ token-remove-allow-list = {
     ; The operation type is "remove-allow-list".
     "remove-allow-list": {
         ; The account to remove from the allow list.
-        "target": token-receiver
+        "target": token-holder
     }
 }
 
@@ -129,7 +129,7 @@ token-add-deny-list = {
     ; The operation type is "add-deny-list".
     "add-deny-list": {
         ; The account to add to the deny list.
-        "target": token-receiver
+        "target": token-holder
     }
 }
 
@@ -138,7 +138,7 @@ token-remove-deny-list = {
     ; The operation type is "remove-deny-list".
     "remove-deny-list": {
         ; The account to remove from the deny list.
-        "target": token-receiver
+        "target": token-holder
     }
 }
 
