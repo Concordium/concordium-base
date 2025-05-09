@@ -592,6 +592,18 @@ encodeTokenTransfer TokenTransferBody{..} =
 newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
     deriving (Eq, Show)
 
+instance AE.ToJSON TokenHolderOperation where
+    toJSON (TokenHolderTransfer TokenTransferBody{..}) = do
+        AE.object $
+            [ "amount" AE..= ttAmount,
+              "recipient" AE..= receiverAccountAddress ttRecipient
+            ]
+                ++ [ "memo" AE..= case memo of
+                        UntaggedMemo{..} -> untaggedMemo
+                        CBORMemo{..} -> untaggedMemo
+                     | memo <- toList ttMemo
+                   ]
+
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
 decodeTokenHolderOperation = do
@@ -621,6 +633,9 @@ newtype TokenHolderTransaction = TokenHolderTransaction
     { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenHolderTransaction where
+    toJSON TokenHolderTransaction{..} = AE.toJSON tokenHolderTransactions
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
