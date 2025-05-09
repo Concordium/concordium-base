@@ -16,11 +16,11 @@ token-holder-operation = token-transfer
 token-transfer = {
     ; The operation type is "transfer".
     "transfer": {
-	; the amount of tokens to transfer.
+	; The amount of tokens to transfer.
 	"amount": token-amount,
-	; the recipient account.
+	; The recipient account.
 	"recipient": token-receiver,
-	; an optional memo.
+	; An optional memo.
 	? "memo": memo
     }
 }
@@ -191,8 +191,8 @@ token-module-state = {
 
 ; Token module events.
 
-; These events are limited to the events emitted by the token module. Events related to protocol-level tokens
-; balance changes are defined from the token kernel.
+; These events are limited to the events emitted by the token module. Events related to balance changes
+; for protocol-level tokens are defined separately and are not subject to CBOR encoding.
 
 ; The details of a token "add-allow-list" event.
 ; This is a token kernel event, and indicates the account was added to the allow list.
