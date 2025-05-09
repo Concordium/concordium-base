@@ -16,12 +16,12 @@ token-holder-operation = token-transfer
 token-transfer = {
     ; The operation type is "transfer".
     "transfer": {
-        ; The amount of tokens to transfer.
-        "amount": token-amount,
-        ; The recipient account.
-        "recipient": token-receiver,
-        ; An optional memo.
-        ? "memo": memo
+	; The amount of tokens to transfer.
+	"amount": token-amount,
+	; The recipient account.
+	"recipient": token-receiver,
+	; An optional memo.
+	? "memo": memo
     }
 }
 
@@ -84,19 +84,19 @@ token-governance-operation = token-mint
 ; Mint a specified amount to the sender account.
 token-mint = {
     ; The operation type is "mint".
-    "mint": {
-        ; The amount of tokens to mint.
-        "amount": token-amount
-    }
+    "mint": token-supply-update-details
 }
 
 ; Burn a specified amount from the sender account.
 token-burn = {
     ; The operation type is "burn".
-    "burn": {
-        ; The amount of tokens to burn.
-        "amount": token-amount
-    }
+    "burn": token-supply-update-details
+}
+
+; Specifies the details of a mint/burn operation.
+token-supply-update-details = {
+    ; The amount of tokens to either mint or burn.
+    "amount": token-amount
 }
 
 ; Update an allow or a deny list by adding or removing an account from it.
@@ -109,37 +109,31 @@ token-update-list =
 ; Add an account to the allow list.
 token-add-allow-list = {
     ; The operation type is "add-allow-list".
-    "add-allow-list": {
-        ; The account to add to the allow list.
-        "target": token-receiver
-    }
+    "add-allow-list": token-list-update-details
 }
 
 ; Remove an account from the allow list.
 token-remove-allow-list = {
     ; The operation type is "remove-allow-list".
-    "remove-allow-list": {
-        ; The account to remove from the allow list.
-        "target": token-receiver
-    }
+    "remove-allow-list": token-list-update-details
 }
 
 ; Add an account to the deny list.
 token-add-deny-list = {
     ; The operation type is "add-deny-list".
-    "add-deny-list": {
-        ; The account to add to the deny list.
-        "target": token-receiver
-    }
+    "add-deny-list": token-list-update-details
 }
 
 ; Remove an account from the deny list.
 token-remove-deny-list = {
     ; The operation type is "remove-deny-list".
-    "remove-deny-list": {
-        ; The account to remove from the deny list.
-        "target": token-receiver
-    }
+    "remove-deny-list": token-list-update-details
+}
+
+; Specifies the details of a list update operation.
+token-list-update-details = {
+    ; The account to remove from the deny list.
+    "target": token-receiver
 }
 
 ; Chain governance
@@ -194,3 +188,24 @@ token-module-state = {
     ; of which are not defined in the present specification.
     * text => any
 }
+
+; Token module events.
+
+; These events are limited to the events emitted by the token module. Events related to balance changes
+; for protocol-level tokens are defined separately and are not subject to CBOR encoding.
+
+; The details of a token "add-allow-list" event.
+; This is a token kernel event, and indicates the account was added to the allow list.
+token-add-allow-list-event = token-list-update-details
+
+; The details of a token "remove-allow-list" event.
+; This is a token kernel event, and indicates the account was removed from the allow list.
+token-remove-allow-list-event = token-list-update-details
+
+; The details of a token "add-deny-list" event.
+; This is a token kernel event, and indicates the account was added to the deny list.
+token-add-deny-list-event = token-list-update-details
+
+; The details of a token "remove-deny-list" event.
+; This is a token kernel event, and indicates the account was removed from the deny list.
+token-remove-deny-list-event = token-list-update-details
