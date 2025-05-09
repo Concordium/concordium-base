@@ -592,6 +592,18 @@ encodeTokenTransfer TokenTransferBody{..} =
 newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
     deriving (Eq, Show)
 
+instance AE.ToJSON TokenHolderOperation where
+    toJSON (TokenHolderTransfer TokenTransferBody{..}) = do
+        AE.object $
+            [ "amount" AE..= ttAmount,
+              "recipient" AE..= receiverAccountAddress ttRecipient
+            ]
+                ++ [ "memo" AE..= case memo of
+                        UntaggedMemo{..} -> untaggedMemo
+                        CBORMemo{..} -> untaggedMemo
+                     | memo <- toList ttMemo
+                   ]
+
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
 decodeTokenHolderOperation = do
@@ -621,6 +633,22 @@ newtype TokenHolderTransaction = TokenHolderTransaction
     { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenHolderTransaction where
+    toJSON TokenHolderTransaction{..} = AE.toJSON tokenHolderTransactions
+
+-- instance AE.FromJSON TokenHolderTransaction where
+--    parseJSON = AE.withArray "TokenHolderTransactions" $ \o -> do
+--        _tipbName <- o AE..:? "name"
+--        _tipbMetadata <- o AE..:? "metadata"
+--        _tipbAllowList <- o AE..:? "allowList"
+--        _tipbDenyList <- o AE..:? "denyList"
+--        _tipbInitialSupply <- o AE..:? "initialSupply"
+--        _tipbMintable <- o AE..:? "mintable"
+--        _tipbBurnable <- o AE..:? "burnable"
+--        case buildTokenInitializationParameters TokenInitializationParametersBuilder{..} of
+--            Left e -> fail e
+--            Right res -> return res
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
