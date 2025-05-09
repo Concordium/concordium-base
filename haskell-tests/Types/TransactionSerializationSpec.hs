@@ -30,8 +30,8 @@ checkTransaction tx =
             Left err -> counterexample err False
             Right tx' -> QC.label (groupIntoSize (BS.length bs)) $ tx === tx'
 
-testTransaction :: Int -> Property
-testTransaction size = forAll (resize size genAccountTransaction) checkTransaction
+testTransaction :: Property
+testTransaction = forAll genAccountTransaction checkTransaction
 
 dummyTime :: TransactionTime
 dummyTime = 37
@@ -49,9 +49,13 @@ testBlockItem :: SProtocolVersion pv -> Property
 testBlockItem spv = forAll genBlockItem $ checkBlockItem spv
 tests :: Spec
 tests = parallel $ do
-    specify "Transaction serialization with size = 100." $ withMaxSuccess 1000 $ testTransaction 100
-    specify "Transaction serialization with size = 1000." $ withMaxSuccess 1000 $ testTransaction 1000
-    specify "BlockItem serialization in P1." $ withMaxSuccess 1000 $ testBlockItem SP1
-    specify "BlockItem serialization in P2." $ withMaxSuccess 1000 $ testBlockItem SP2
-    specify "BlockItem serialization in P3." $ withMaxSuccess 1000 $ testBlockItem SP3
-    specify "BlockItem serialization in P4." $ withMaxSuccess 1000 $ testBlockItem SP4
+    specify "Transaction serialization." $ withMaxSuccess 1000 testTransaction
+    specify "BlockItem serialization in P1." $ withMaxSuccess 100 $ testBlockItem SP1
+    specify "BlockItem serialization in P2." $ withMaxSuccess 100 $ testBlockItem SP2
+    specify "BlockItem serialization in P3." $ withMaxSuccess 100 $ testBlockItem SP3
+    specify "BlockItem serialization in P4." $ withMaxSuccess 100 $ testBlockItem SP4
+    specify "BlockItem serialization in P5." $ withMaxSuccess 100 $ testBlockItem SP5
+    specify "BlockItem serialization in P6." $ withMaxSuccess 100 $ testBlockItem SP6
+    specify "BlockItem serialization in P7." $ withMaxSuccess 100 $ testBlockItem SP7
+    specify "BlockItem serialization in P8." $ withMaxSuccess 100 $ testBlockItem SP8
+    specify "BlockItem serialization in P9." $ withMaxSuccess 100 $ testBlockItem SP9
