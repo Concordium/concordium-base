@@ -66,6 +66,24 @@ genTokenHolderTransaction =
     TokenHolderTransaction . Seq.fromList
         <$> listOf (TokenHolderTransfer <$> genTokenTransfer)
 
+-- | Generator for 'TokenGovernanceOperation'.
+genTokenGovernanceOperation :: Gen TokenGovernanceOperation
+genTokenGovernanceOperation =
+    oneof
+        [ TokenMint <$> genTokenAmount,
+          TokenBurn <$> genTokenAmount,
+          TokenAddAllowList <$> genTokenReceiver,
+          TokenRemoveAllowList <$> genTokenReceiver,
+          TokenAddDenyList <$> genTokenReceiver,
+          TokenRemoveDenyList <$> genTokenReceiver
+        ]
+
+-- | Generator for 'TokenGovernanceOperation'.
+genTokenGovernanceTransaction :: Gen TokenGovernanceTransaction
+genTokenGovernanceTransaction =
+    TokenGovernanceTransaction . Seq.fromList
+        <$> listOf genTokenGovernanceOperation
+
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
     tmsName <- genText
@@ -167,6 +185,18 @@ tests = parallel $ describe "CBOR" $ do
             === ( deserialiseFromBytes
                     decodeTokenHolderTransaction
                     (toLazyByteString $ encodeTokenHolderTransaction tt)
+                )
+    it "Encode and decode TokenGovernanceOperation" $ withMaxSuccess 1000 $ forAll genTokenGovernanceOperation $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenGovernanceOperation
+                    (toLazyByteString $ encodeTokenGovernanceOperation tt)
+                )
+    it "Encode and decode TokenGovernanceTransaction" $ withMaxSuccess 1000 $ forAll genTokenGovernanceTransaction $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenGovernanceTransaction
+                    (toLazyByteString $ encodeTokenGovernanceTransaction tt)
                 )
     it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
         (Right ("", tt))

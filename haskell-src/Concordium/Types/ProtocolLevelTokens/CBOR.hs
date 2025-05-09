@@ -22,7 +22,8 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe
 import Data.Scientific
 import qualified Data.Sequence as Seq
-import Data.Text
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LazyText
 import Data.Word
 import Lens.Micro.Platform
@@ -815,6 +816,119 @@ decodeTokenHolderFailure "deserializationFailure" =
     valDecoder _ = Nothing
 decodeTokenHolderFailure unknownType =
     fail $ "token-holder-failure: unsupported failure type: " ++ show unknownType
+
+-- * Token Governance
+
+-- | A token governance operation. This can be a mint, burn or update to the allow or deny list.
+data TokenGovernanceOperation
+    = -- | Mint a specified token amount to the token governance account.
+      TokenMint {tgoMintAmount :: !TokenAmount}
+    | -- | Burn a specified token amount from the token governance account.
+      TokenBurn {tgoBurnAmount :: !TokenAmount}
+    | -- | Add the specified account to the allow list.
+      TokenAddAllowList {tgoTarget :: !TokenReceiver}
+    | -- | Remove the specified account from the allow list.
+      TokenRemoveAllowList {tgoTarget :: !TokenReceiver}
+    | -- | Add the specified account to the deny list.
+      TokenAddDenyList {tgoTarget :: !TokenReceiver}
+    | -- | Remove the specified account from the deny list.
+      TokenRemoveDenyList {tgoTarget :: !TokenReceiver}
+    deriving (Eq, Show)
+
+-- | Decode a CBOR-encoded 'TokenGovernanceOperation'.
+decodeTokenGovernanceOperation :: Decoder s TokenGovernanceOperation
+decodeTokenGovernanceOperation = do
+    maybeMapLen <- decodeMapLenOrIndef
+    forM_ maybeMapLen $ \mapLen ->
+        unless (mapLen == 1) $
+            fail $
+                "token-governance-operation: expected a map of size 1, but saw " ++ show mapLen
+    opType <- decodeString
+    res <- case opType of
+        "mint" -> TokenMint <$> decodeSupplyUpdate opType
+        "burn" -> TokenBurn <$> decodeSupplyUpdate opType
+        "add-allow-list" -> TokenAddAllowList <$> decodeListTarget opType
+        "remove-allow-list" -> TokenRemoveAllowList <$> decodeListTarget opType
+        "add-deny-list" -> TokenAddDenyList <$> decodeListTarget opType
+        "remove-deny-list" -> TokenRemoveDenyList <$> decodeListTarget opType
+        _ -> fail $ "token-governance-operation: unsupported operation type: " ++ show opType
+    when (isNothing maybeMapLen) $ do
+        isEnd <- decodeBreakOr
+        unless isEnd $ fail "token-governance-operation: expected end of map"
+    return res
+  where
+    decodeSupplyUpdate opType = do
+        let valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing amount"
+        decodeMap valDecoder build Nothing
+    decodeListTarget opType = do
+        let valDecoder k@"target" = Just (mapValueDecoder k decodeTokenReceiver id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing target"
+        decodeMap valDecoder build Nothing
+
+-- | Encode a 'TokenGovernanceOperation' as CBOR.
+encodeTokenGovernanceOperation :: TokenGovernanceOperation -> Encoding
+encodeTokenGovernanceOperation = \case
+    TokenMint amount -> encodeSupplyUpdate "mint" amount
+    TokenBurn amount -> encodeSupplyUpdate "burn" amount
+    TokenAddAllowList target -> encodeListTarget "add-allow-list" target
+    TokenRemoveAllowList target -> encodeListTarget "remove-allow-list" target
+    TokenAddDenyList target -> encodeListTarget "add-deny-list" target
+    TokenRemoveDenyList target -> encodeListTarget "remove-deny-list" target
+  where
+    encodeSupplyUpdate opType amount =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "amount"
+            <> encodeTokenAmount amount
+    encodeListTarget opType target =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "target"
+            <> encodeTokenReceiver target
+
+-- | A token governance transaction consists of a sequence of token governance operations.
+newtype TokenGovernanceTransaction = TokenGovernanceTransaction
+    { tokenGovernanceTransactions :: Seq.Seq TokenGovernanceOperation
+    }
+    deriving (Eq, Show)
+
+-- | Decode a CBOR-encoded 'TokenGovernanceTransaction'.
+decodeTokenGovernanceTransaction :: Decoder s TokenGovernanceTransaction
+decodeTokenGovernanceTransaction =
+    TokenGovernanceTransaction <$> decodeSequence decodeTokenGovernanceOperation
+
+-- | Parse a 'TokenGovernanceTransaction' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenGovernanceTransactionFromBytes :: LBS.ByteString -> Either String TokenGovernanceTransaction
+tokenGovernanceTransactionFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenGovernanceTransaction lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining)
+                    ++ " bytes remaining after parsing token-governance transaction"
+
+-- | Encode a 'TokenGovernanceTransaction' as CBOR.
+encodeTokenGovernanceTransaction :: TokenGovernanceTransaction -> Encoding
+encodeTokenGovernanceTransaction =
+    encodeSequence encodeTokenGovernanceOperation . tokenGovernanceTransactions
+
+-- | CBOR-encode a 'TokenGovernanceTransaction' to a (strict) 'BS.ByteString'.
+tokenGovernanceTransactionToBytes :: TokenGovernanceTransaction -> BS.ByteString
+tokenGovernanceTransactionToBytes =
+    CBOR.toStrictByteString . encodeTokenGovernanceTransaction
 
 -- * Token Module state
 
