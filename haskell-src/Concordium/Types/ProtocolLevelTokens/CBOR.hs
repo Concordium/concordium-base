@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -428,6 +429,14 @@ data TokenReceiver = ReceiverAccount
     }
     deriving (Eq, Show)
 
+instance AE.ToJSON TokenReceiver where
+    toJSON ReceiverAccount{..} = do
+        AE.object $
+            [ -- Tag with type of receiver
+              "type" AE..= AE.String "account",
+              "recipient" AE..= receiverAccountAddress
+            ]
+
 -- | Create a 'ReceiverAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
 accountTokenReceiver :: AccountAddress -> TokenReceiver
@@ -500,8 +509,20 @@ data TaggableMemo
     = -- | The memo is represented as a byte string with no tag.
       UntaggedMemo {untaggedMemo :: !Memo}
     | -- | The memo is represented as a byte string with a tag indicating CBOR-encoded data.
-      CBORMemo {untaggedMemo :: !Memo}
+      CBORMemo {cborMemo :: !Memo}
     deriving (Eq, Show)
+
+instance AE.ToJSON TaggableMemo where
+    toJSON UntaggedMemo{..} = do
+        AE.object $
+            [ "type" AE..= AE.String "raw",
+              "memo" AE..= untaggedMemo
+            ]
+    toJSON CBORMemo{..} = do
+        AE.object $
+            [ "type" AE..= AE.String "cbor",
+              "memo" AE..= cborMemo
+            ]
 
 -- | Decode a CBOR-encoded 'TaggableMemo'.
 --  A memo can be encoded either directly as a byte string (of length at most 256) or as
@@ -543,6 +564,14 @@ data TokenTransferBody = TokenTransferBody
       ttMemo :: !(Maybe TaggableMemo)
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenTransferBody where
+    toJSON TokenTransferBody{..} = do
+        AE.object $
+            [ "amount" AE..= ttAmount,
+              "recipient" AE..= ttRecipient
+            ]
+                ++ ["memo" AE..= memo | memo <- toList ttMemo]
 
 -- | Builder
 data TokenTransferBuilder = TokenTransferBuilder
@@ -592,6 +621,9 @@ encodeTokenTransfer TokenTransferBody{..} =
 newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
     deriving (Eq, Show)
 
+instance AE.ToJSON TokenHolderOperation where
+    toJSON (TokenHolderTransfer body) = AE.toJSON body
+
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
 decodeTokenHolderOperation = do
@@ -621,6 +653,9 @@ newtype TokenHolderTransaction = TokenHolderTransaction
     { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenHolderTransaction where
+    toJSON TokenHolderTransaction{..} = AE.toJSON tokenHolderTransactions
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
