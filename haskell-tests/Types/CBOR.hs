@@ -120,7 +120,8 @@ genTokenRejectReason =
           TokenBalanceInsufficient <$> arbitrary <*> genTokenAmount <*> genTokenAmount,
           DeserializationFailure <$> liftArbitrary genText,
           UnsupportedOperation <$> arbitrary <*> genText <*> liftArbitrary genText,
-          MintWouldOverflow <$> arbitrary <*> genTokenAmount <*> genTokenAmount <*> genTokenAmount
+          MintWouldOverflow <$> arbitrary <*> genTokenAmount <*> genTokenAmount <*> genTokenAmount,
+          OperationNotPermitted <$> arbitrary <*> liftArbitrary genTokenHolder <*> liftArbitrary genText
         ]
 
 -- | A test value for 'TokenInitializationParameters'.

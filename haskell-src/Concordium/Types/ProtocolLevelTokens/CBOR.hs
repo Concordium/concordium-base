@@ -828,6 +828,29 @@ buildMintWouldOverflow MintWouldOverflowBuilder{..} = do
     trrMaxRepresentableAmount <- _mwoMaxRepresentableAmount `orFail` "Missing \"maxRepresentableAmount\""
     return MintWouldOverflow{..}
 
+-- | A builder for constructing 'TokenRejectReason' values with the 'OperationNotPermitted'
+--  constructor.
+data OperationNotPermittedBuilder = OperationNotPermittedBuilder
+    { _onpbTransactionIndex :: Maybe Word64,
+      _onpbAddressNotPermitted :: Maybe TokenHolder,
+      _onpbReason :: Maybe Text
+    }
+
+makeLenses ''OperationNotPermittedBuilder
+
+-- | The empty 'OperationNotPermittedBuilder'.
+emptyOperationNotPermittedBuilder :: OperationNotPermittedBuilder
+emptyOperationNotPermittedBuilder =
+    OperationNotPermittedBuilder Nothing Nothing Nothing
+
+-- | Construct a 'TokenRejectReason' from a 'OperationNotPermittedBuilder'.
+buildOperationNotPermitted :: OperationNotPermittedBuilder -> Either String TokenRejectReason
+buildOperationNotPermitted OperationNotPermittedBuilder{..} = do
+    trrOperationIndex <- _onpbTransactionIndex `orFail` "Missing \"index\""
+    let trrAddressNotPermitted = _onpbAddressNotPermitted
+    let trrReason = _onpbReason
+    return OperationNotPermitted{..}
+
 -- | Encode a 'TokenRejectReason' as an 'EncodedTokenRejectReason'.
 encodeTokenRejectReason :: TokenRejectReason -> EncodedTokenRejectReason
 encodeTokenRejectReason AddressNotFound{..} =
@@ -888,6 +911,18 @@ encodeTokenRejectReason MintWouldOverflow{..} =
         }
   where
     k = at . makeMapKeyEncoding . encodeString
+encodeTokenRejectReason OperationNotPermitted{..} =
+    EncodedTokenRejectReason
+        { etrrType = "operationNotPermitted",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "index" ?~ encodeWord64 trrOperationIndex
+                    & k "address" .~ fmap encodeTokenHolder trrAddressNotPermitted
+                    & k "reason" .~ fmap encodeString trrReason
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
 
 -- | Decode a CBOR-encoded 'TokenRejectReason' given a string representing the type of the failure.
 decodeTokenRejectReasonDetails :: BSS.ShortByteString -> Decoder s TokenRejectReason
@@ -938,6 +973,16 @@ decodeTokenRejectReasonDetails "mintWouldOverflow" =
     valDecoder k@"requestedAmount" = Just $ mapValueDecoder k decodeTokenAmount mwoRequestedAmount
     valDecoder k@"currentSupply" = Just $ mapValueDecoder k decodeTokenAmount mwoCurrentSupply
     valDecoder k@"maxRepresentableAmount" = Just $ mapValueDecoder k decodeTokenAmount mwoMaxRepresentableAmount
+    valDecoder _ = Nothing
+decodeTokenRejectReasonDetails "operationNotPermitted" =
+    decodeMap
+        valDecoder
+        buildOperationNotPermitted
+        emptyOperationNotPermittedBuilder
+  where
+    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 onpbTransactionIndex
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeTokenHolder onpbAddressNotPermitted
+    valDecoder k@"reason" = Just $ mapValueDecoder k decodeString onpbReason
     valDecoder _ = Nothing
 decodeTokenRejectReasonDetails unknownType =
     fail $ "token-reject-reason: unsupported reject reason: " ++ show unknownType
