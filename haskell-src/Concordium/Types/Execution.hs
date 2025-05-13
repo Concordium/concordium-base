@@ -697,7 +697,7 @@ instance AE.FromJSON Payload where
                 return ConfigureDelegation{..}
             "tokenHolder" -> do
                 thTokenSymbol <- obj AE..: "tokenSymbol"
-                thOperations <- obj AE..: "operations"
+                (EncodedTokenOperations thOperations) <- obj AE..: "operations"
                 return TokenHolder{..}
             "tokenGovernance" -> do
                 tgTokenSymbol <- obj AE..: "tokenSymbol"

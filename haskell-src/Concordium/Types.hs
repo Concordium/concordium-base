@@ -1391,15 +1391,15 @@ instance AE.ToJSON EncodedTokenOperations where
             Left _ -> AE.toJSON tp
             Right v -> AE.toJSON v
 
--- instance AE.FromJSON EncodedTokenOperations where
---    parseJSON o@(AE.Object _) = do
---        tip <- AE.parseJSON o
---        return $
---            EncodedTokenOperations $
---                TokenParameter $
---                    BSS.toShort $
---                        CBOR.tokenHolderTransactionToBytes tip
---    parseJSON val = EncodedTokenOperations <$> AE.parseJSON val
+instance AE.FromJSON EncodedTokenOperations where
+    parseJSON o@(AE.Object _) = do
+        tip <- AE.parseJSON o
+        return $
+            EncodedTokenOperations $
+                TokenParameter $
+                    BSS.toShort $
+                        CBOR.tokenHolderTransactionToBytes tip
+    parseJSON val = EncodedTokenOperations <$> AE.parseJSON val
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
