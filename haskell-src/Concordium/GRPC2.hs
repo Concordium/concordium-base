@@ -630,6 +630,8 @@ instance ToProto TokenAccountState where
     type Output TokenAccountState = Proto.TokenAccountState
     toProto TokenAccountState{..} = Proto.make $ do
         PLTFields.balance .= toProto balance
+        PLTFields.maybe'memberAllowList .= memberAllowList
+        PLTFields.maybe'memberDenyList .= memberDenyList
 
 instance ToProto Token where
     type Output Token = Proto.AccountInfo'Token
