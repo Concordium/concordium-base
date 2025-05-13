@@ -653,7 +653,7 @@ instance AE.ToJSON TokenHolderOperation where
     toJSON (TokenHolderTransfer body) = AE.toJSON body
 
 instance AE.FromJSON TokenHolderOperation where
-    parseJSON v = TokenHolderTransfer <$> AE.parseJSON v
+    parseJSON = (TokenHolderTransfer <$>) . AE.parseJSON
 
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
@@ -689,7 +689,7 @@ instance AE.ToJSON TokenHolderTransaction where
     toJSON = AE.toJSON . tokenHolderTransactions
 
 instance AE.FromJSON TokenHolderTransaction where
-    parseJSON v = TokenHolderTransaction <$> AE.parseJSON v
+    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
