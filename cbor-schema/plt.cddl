@@ -194,3 +194,73 @@ token-module-state = {
     ; of which are not defined in the present specification.
     * text => any
 }
+
+; Reject reason details
+
+; A token-holder or token-governance transaction may be rejected for various reasons.
+; The reject reason is defined by a string type, and may have additional CBOR-encoded
+; details. The schemas for the details are defined here. (This does not preclude additional
+; reject reasons being defined in the future.)
+
+; "addressNotFound": a token holder address was not valid.
+reject-details-addressNotFound = {
+    ; The index in the list of operations of the failing operation.
+    index: uint,
+    ; The address that could not be resolved.
+    address: token-holder
+}
+
+; "tokenBalanceInsufficient": the balance of toknes on the sender account is insuccient to perform
+; the operation.
+reject-details-tokenBalanceInsufficient = {
+    ; The index in the list of operations of the failing operation.
+    index: uint,
+    ; The available balance of the sender.
+    availableBalance: token-amount,
+    ; The minimum required balance to perform the operation.
+    requiredBalance: token-amount
+}
+
+; "deserializationFailure": the transaction could not be deserialized.
+reject-details-deserializationFailure = {
+    ; Text description of the failure mode.
+    ? cause: text
+}
+
+; "unsupportedOperation": the operation is not supported by the token module.
+; This may be because the operation is not implemented by the module, or because the
+; token is not configured to support the operation. If the operation is not authorized
+; (i.e. the particular participants do not have the authority to perform the operation)
+; then the reject reason is "operationNotPermitted" instead.
+reject-details-unsupportedOperation = {
+    ; The index in the list of operations of the failing operation.
+    index: uint,
+    ; The type of operation that was not supported.
+    operationType: text,
+    ; The reason why the operation was not supported.
+    ? reason: text
+}
+
+; "operationNotPermitted": the operation requires that a participating account has a certain
+; permission, but the account does not have that permission.
+reject-details-operationNotPermitted = {
+    ; The index in the list of operations of the failing operation.
+    index: uint,
+    ; (Optionally) the address that does not have the necessary permissions to perform the
+    ; operation.
+    ? address: token-holder,
+    ; The reason why the operation is not permitted.
+    ? reason: text
+}
+
+; "mintWouldOverflow": minting the requested amount would overflow the representable token amount.
+reject-details-mintWouldOverflow = {
+    ; The index in the list of operations of the failing operation.
+    index: uint,
+    ; The requested amount to mint.
+    requestedAmount: token-amount,
+    ; The current supply of the token.
+    currentSupply: token-amount,
+    ; The maximum representable token amount.
+    maxRepresentableAmount: token-amount,
+}
