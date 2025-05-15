@@ -7,7 +7,7 @@ Encryption utilities.
 module Concordium.Utils.Encryption where
 
 import Control.Exception
-import Control.Monad.Except
+import Control.Monad.Except ( MonadError(throwError) )
 
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as AE
