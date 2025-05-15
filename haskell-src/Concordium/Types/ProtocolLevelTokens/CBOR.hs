@@ -367,6 +367,13 @@ tokenInitializationParametersToBytes =
 data CoinInfo = CoinInfoConcordium
     deriving (Eq, Show)
 
+instance AE.ToJSON CoinInfo where
+    toJSON CoinInfoConcordium = AE.String "concordium"
+
+instance AE.FromJSON CoinInfo where
+    parseJSON (AE.String "concordium") = return CoinInfoConcordium
+    parseJSON _ = fail "CoinInfo JSON must be the string 'concordium'"
+
 -- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
 decodeCoinInfo :: Decoder s CoinInfo
 decodeCoinInfo = do
@@ -431,19 +438,20 @@ data TokenReceiver = ReceiverAccount
 
 instance AE.ToJSON TokenReceiver where
     toJSON ReceiverAccount{..} = do
-        AE.object 
+        AE.object $
             [ -- Tag with type of receiver
               "type" AE..= AE.String "account",
               "recipient" AE..= receiverAccountAddress
             ]
+                ++ ["coininfo" AE..= coinInfo | coinInfo <- toList receiverAccountCoinInfo]
 
 instance AE.FromJSON TokenReceiver where
     parseJSON = AE.withObject "TokenReceiver" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
-                let receiverAccountCoinInfo = Nothing
                 receiverAccountAddress <- o AE..: "recipient"
+                receiverAccountCoinInfo <- o AE..:? "coininfo"
                 return ReceiverAccount{..}
             _ -> fail ("Unknown TokenReceiver type " ++ type_string)
 
@@ -690,7 +698,7 @@ instance AE.ToJSON TokenHolderTransaction where
     toJSON = AE.toJSON . tokenHolderTransactions
 
 instance AE.FromJSON TokenHolderTransaction where
-    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON    
+    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction

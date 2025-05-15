@@ -1392,14 +1392,15 @@ instance AE.ToJSON EncodedTokenOperations where
             Right v -> AE.toJSON v
 
 instance AE.FromJSON EncodedTokenOperations where
-    parseJSON o@(AE.Object _) = do
-        tip <- AE.parseJSON o
+    parseJSON v@(AE.Array _) = do
+        tip <- AE.parseJSON v
         return $
             EncodedTokenOperations $
                 TokenParameter $
                     BSS.toShort $
                         CBOR.tokenHolderTransactionToBytes tip
-    parseJSON val = EncodedTokenOperations <$> AE.parseJSON val
+    parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
+    parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
