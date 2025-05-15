@@ -14,6 +14,7 @@ import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import Control.Monad
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Types as AE
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Short as BSS
@@ -432,7 +433,7 @@ data TokenReceiver = ReceiverAccount
 
 instance AE.ToJSON TokenReceiver where
     toJSON ReceiverAccount{..} = do
-        AE.object $
+        AE.object 
             [ -- Tag with type of receiver
               "type" AE..= AE.String "account",
               "recipient" AE..= receiverAccountAddress
@@ -440,10 +441,10 @@ instance AE.ToJSON TokenReceiver where
 
 instance AE.FromJSON TokenReceiver where
     parseJSON = AE.withObject "TokenReceiver" $ \o -> do
-        let receiverAccountCoinInfo = Nothing
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
+                let receiverAccountCoinInfo = Nothing
                 receiverAccountAddress <- o AE..: "recipient"
                 return ReceiverAccount{..}
             _ -> fail ("Unknown TokenReceiver type " ++ type_string)
@@ -691,7 +692,7 @@ instance AE.ToJSON TokenHolderTransaction where
     toJSON = AE.toJSON . tokenHolderTransactions
 
 instance AE.FromJSON TokenHolderTransaction where
-    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON
+    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON    
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
