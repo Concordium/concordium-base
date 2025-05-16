@@ -8,6 +8,17 @@ import qualified Codec.CBOR.ByteArray as BA
 import qualified Codec.CBOR.ByteArray.Sliced as SBA
 import Codec.CBOR.Decoding
 import Codec.CBOR.Encoding
+    ( encodeBool,
+      encodeByteArray,
+      encodeInt,
+      encodeInteger,
+      encodeListLen,
+      encodeMapLen,
+      encodeString,
+      encodeTag,
+      encodeWord,
+      encodeWord64,
+      Encoding )
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
@@ -367,11 +378,11 @@ data CoinInfo = CoinInfoConcordium
     deriving (Eq, Show)
 
 instance AE.ToJSON CoinInfo where
-    toJSON CoinInfoConcordium = AE.String "concordium"
+    toJSON CoinInfoConcordium = AE.String "CCD"
 
 instance AE.FromJSON CoinInfo where
-    parseJSON (AE.String "concordium") = return CoinInfoConcordium
-    parseJSON _ = fail "CoinInfo JSON must be the string 'concordium'"
+    parseJSON (AE.String "CCD") = return CoinInfoConcordium
+    parseJSON _ = fail "CoinInfo JSON must be the string 'CCD'"
 
 -- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
 decodeCoinInfo :: Decoder s CoinInfo
@@ -440,7 +451,7 @@ instance AE.ToJSON TokenReceiver where
         AE.object $
             [ -- Tag with type of receiver
               "type" AE..= AE.String "account",
-              "recipient" AE..= receiverAccountAddress
+              "address" AE..= receiverAccountAddress
             ]
                 ++ ["coininfo" AE..= coinInfo | coinInfo <- toList receiverAccountCoinInfo]
 
@@ -449,7 +460,7 @@ instance AE.FromJSON TokenReceiver where
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
-                receiverAccountAddress <- o AE..: "recipient"
+                receiverAccountAddress <- o AE..: "address"
                 receiverAccountCoinInfo <- o AE..:? "coininfo"
                 return ReceiverAccount{..}
             _ -> fail ("Unknown TokenReceiver type " ++ type_string)
@@ -533,12 +544,12 @@ instance AE.ToJSON TaggableMemo where
     toJSON UntaggedMemo{..} = do
         AE.object $
             [ "type" AE..= AE.String "raw",
-              "memo" AE..= untaggedMemo
+              "value" AE..= untaggedMemo
             ]
     toJSON CBORMemo{..} = do
         AE.object $
             [ "type" AE..= AE.String "cbor",
-              "memo" AE..= cborMemo
+              "value" AE..= cborMemo
             ]
 
 instance AE.FromJSON TaggableMemo where
@@ -546,10 +557,10 @@ instance AE.FromJSON TaggableMemo where
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "raw" -> do
-                untaggedMemo <- o AE..: "memo"
+                untaggedMemo <- o AE..: "value"
                 return UntaggedMemo{..}
             "cbor" -> do
-                cborMemo <- o AE..: "memo"
+                cborMemo <- o AE..: "value"
                 return CBORMemo{..}
             _ -> fail ("Unknown TaggableMemo type " ++ type_string)
 
@@ -658,10 +669,17 @@ newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenHolderOperation where
-    toJSON (TokenHolderTransfer body) = AE.toJSON body
+    toJSON (TokenHolderTransfer body) = do
+        AE.object
+            [ "transfer" AE..= AE.toJSON body
+            ]
 
 instance AE.FromJSON TokenHolderOperation where
-    parseJSON = (TokenHolderTransfer <$>) . AE.parseJSON
+    parseJSON = AE.withObject "TokenHolderOperation" $ \o -> do
+        transferBodyMaybe <- o AE..:? "transfer"
+        case transferBodyMaybe of
+            Just transferBody -> return $ TokenHolderTransfer transferBody
+            _ -> fail "Unknown TokenHolderOperation type"
 
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
