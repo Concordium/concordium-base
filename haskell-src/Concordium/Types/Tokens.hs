@@ -20,10 +20,7 @@ newtype TokenId = TokenId {tokenSymbol :: BSS.ShortByteString}
     deriving newtype (Eq, Ord)
 
 instance Show TokenId where
-    show (TokenId sbs) =
-        case T.decodeUtf8' (BSS.fromShort sbs) of
-            Right txt -> T.unpack txt
-            Left err -> "TokenId is not valid UTF-8: " ++ show err
+    show (TokenId sbs) = T.unpack (T.decodeUtf8Lenient (BSS.fromShort sbs))
 
 -- | Try to construct a valid 'TokenId' from a 'BSS.ShortByteString'.
 --  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
