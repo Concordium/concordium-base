@@ -21,7 +21,6 @@ name: Check format, docs, build and run tests for Haskell and Rust sources
 
 on:
   pull_request:
-    branches: main
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: main
