@@ -47,11 +47,11 @@ data TokenAccountState = TokenAccountState
       -- | Whether the account is a member of the allow list of the token.
       -- If present, tokens can be transferred only, if both sender and receiver are
       -- members of the allow list of the token.
-      memberAllowList :: !Bool,
+      memberAllowList :: !(Maybe Bool),
       -- | Whether the account is a member of the deny list of the token.
       -- If present, tokens can be transferred only, if neither sender or receiver
       -- are members of the deny list.
-      memberDenyList :: !Bool
+      memberDenyList :: !(Maybe Bool)
     }
     deriving (Eq, Show)
 

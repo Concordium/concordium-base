@@ -22,7 +22,8 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe
 import Data.Scientific
 import qualified Data.Sequence as Seq
-import Data.Text
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LazyText
 import Data.Word
 import Lens.Micro.Platform
@@ -419,77 +420,77 @@ encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
 
 -- | A destination that can receive and hold protocol-level tokens.
 --  Currently, this can only be a Concordium account address.
-data TokenReceiver = ReceiverAccount
+data TokenHolder = HolderAccount
     { -- | The account address.
-      receiverAccountAddress :: !AccountAddress,
+      holderAccountAddress :: !AccountAddress,
       -- | Although the account can only be a Concordium address, this specifies whether the
       --  address type should be explicit in the CBOR encoding.
-      receiverAccountCoinInfo :: !(Maybe CoinInfo)
+      holderAccountCoinInfo :: !(Maybe CoinInfo)
     }
     deriving (Eq, Show)
 
--- | Create a 'ReceiverAccount' from an 'AccountAddress'. The address type will be present in the
+-- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
-accountTokenReceiver :: AccountAddress -> TokenReceiver
-accountTokenReceiver addr =
-    ReceiverAccount
-        { receiverAccountAddress = addr,
-          receiverAccountCoinInfo = Just CoinInfoConcordium
+accountTokenHolder :: AccountAddress -> TokenHolder
+accountTokenHolder addr =
+    HolderAccount
+        { holderAccountAddress = addr,
+          holderAccountCoinInfo = Just CoinInfoConcordium
         }
 
--- | Create a 'ReceiverAccount' from an 'AccountAddress'. The address type will not be present in
+-- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will not be present in
 --  the CBOR encoding.
-accountTokenReceiverShort :: AccountAddress -> TokenReceiver
-accountTokenReceiverShort addr =
-    ReceiverAccount
-        { receiverAccountAddress = addr,
-          receiverAccountCoinInfo = Nothing
+accountTokenHolderShort :: AccountAddress -> TokenHolder
+accountTokenHolderShort addr =
+    HolderAccount
+        { holderAccountAddress = addr,
+          holderAccountCoinInfo = Nothing
         }
 
--- | A builder for the 'ReceiverAccount' constructor.
-data ReceiverAccountBuilder = ReceiverAccountBuilder
+-- | A builder for the 'HolderAccount' constructor.
+data HolderAccountBuilder = HolderAccountBuilder
     { -- | Receiver account address.
-      _rabAccountAddress :: Maybe AccountAddress,
+      _habAccountAddress :: Maybe AccountAddress,
       -- | Identifier for the address type.
-      _rabCoinInfo :: Maybe CoinInfo
+      _habCoinInfo :: Maybe CoinInfo
     }
 
-makeLenses ''ReceiverAccountBuilder
+makeLenses ''HolderAccountBuilder
 
--- | Empty 'ReceiverAccountBuilder'.
-emptyReceiverAccountBuilder :: ReceiverAccountBuilder
-emptyReceiverAccountBuilder = ReceiverAccountBuilder Nothing Nothing
+-- | Empty 'HolderAccountBuilder'.
+emptyHolderAccountBuilder :: HolderAccountBuilder
+emptyHolderAccountBuilder = HolderAccountBuilder Nothing Nothing
 
--- | Decode a CBOR-encoded 'TokenReceiver'.
-decodeTokenReceiver :: Decoder s TokenReceiver
-decodeTokenReceiver = do
+-- | Decode a CBOR-encoded 'TokenHolder'.
+decodeTokenHolder :: Decoder s TokenHolder
+decodeTokenHolder = do
     tag <- decodeTag
     unless (tag == 40307) $
         fail $
-            "token-receiver: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
+            "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
     mLen <- decodeMapLenOrIndef
     builder <- case mLen of
-        Nothing -> decodeIndefHelper decodeKV emptyReceiverAccountBuilder
-        Just len -> decodeDefHelper decodeKV len emptyReceiverAccountBuilder
-    case builder ^. rabAccountAddress of
-        Nothing -> fail "token-receiver: data (3) field is missing"
-        Just addr -> return $ ReceiverAccount addr (builder ^. rabCoinInfo)
+        Nothing -> decodeIndefHelper decodeKV emptyHolderAccountBuilder
+        Just len -> decodeDefHelper decodeKV len emptyHolderAccountBuilder
+    case builder ^. habAccountAddress of
+        Nothing -> fail "token-holder: data (3) field is missing"
+        Just addr -> return $ HolderAccount addr (builder ^. habCoinInfo)
   where
     decodeKV builder = do
         key <- decodeInt
         case key of
-            1 -> mapValueDecoder "info (1)" decodeCoinInfo rabCoinInfo builder
-            2 -> fail "token-receiver: type (2) field is not supported"
-            3 -> mapValueDecoder "data (3)" decodeAccountAddress rabAccountAddress builder
-            _ -> fail $ "token-receiver: unexpected map key " ++ show key
+            1 -> mapValueDecoder "info (1)" decodeCoinInfo habCoinInfo builder
+            2 -> fail "token-holder: type (2) field is not supported"
+            3 -> mapValueDecoder "data (3)" decodeAccountAddress habAccountAddress builder
+            _ -> fail $ "token-holder: unexpected map key " ++ show key
 
-encodeTokenReceiver :: TokenReceiver -> Encoding
-encodeTokenReceiver ReceiverAccount{..} =
+encodeTokenHolder :: TokenHolder -> Encoding
+encodeTokenHolder HolderAccount{..} =
     encodeTag 40307
         <> encodeMapDeterministic
             ( Map.empty
-                & k 1 .~ (encodeCoinInfo <$> receiverAccountCoinInfo)
-                & k 3 ?~ encodeAccountAddress receiverAccountAddress
+                & k 1 .~ (encodeCoinInfo <$> holderAccountCoinInfo)
+                & k 3 ?~ encodeAccountAddress holderAccountAddress
             )
   where
     k = at . makeMapKeyEncoding . encodeWord
@@ -538,7 +539,7 @@ data TokenTransferBody = TokenTransferBody
     { -- | The amount to transfer.
       ttAmount :: !TokenAmount,
       -- | The recipient account address.
-      ttRecipient :: !TokenReceiver,
+      ttRecipient :: !TokenHolder,
       -- | An optional memo associated with the transfer.
       ttMemo :: !(Maybe TaggableMemo)
     }
@@ -547,7 +548,7 @@ data TokenTransferBody = TokenTransferBody
 -- | Builder
 data TokenTransferBuilder = TokenTransferBuilder
     { _ttbAmount :: Maybe TokenAmount,
-      _ttbRecipient :: Maybe TokenReceiver,
+      _ttbRecipient :: Maybe TokenHolder,
       _ttbMemo :: Maybe TaggableMemo
     }
 
@@ -573,7 +574,7 @@ decodeTokenTransfer =
     decodeMap valDecoder buildTokenTransfer emptyTokenTransferBuilder
   where
     valDecoder k@"amount" = Just $ mapValueDecoder k decodeTokenAmount ttbAmount
-    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeTokenReceiver ttbRecipient
+    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeTokenHolder ttbRecipient
     valDecoder k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo ttbMemo
     valDecoder _ = Nothing
 
@@ -583,7 +584,7 @@ encodeTokenTransfer TokenTransferBody{..} =
     encodeMapDeterministic $
         Map.empty
             & k "amount" ?~ encodeTokenAmount ttAmount
-            & k "recipient" ?~ encodeTokenReceiver ttRecipient
+            & k "recipient" ?~ encodeTokenHolder ttRecipient
             & k "memo" .~ (encodeTaggableMemo <$> ttMemo)
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -657,54 +658,84 @@ data EncodedTokenRejectReason = EncodedTokenRejectReason
     }
     deriving (Eq, Show)
 
--- | Reasons that a token-holder operation might be rejected by the Token Module.
-data TokenHolderFailure
-    = -- | The recipient address was not valid.
-      RecipientNotFound
+-- | Reasons that a transaction might be rejected by the Token Module.
+data TokenRejectReason
+    = -- | The token holder address was not valid.
+      AddressNotFound
         { -- | The index in the list of operations of the failing operation.
-          thfOperationIndex :: !Word64,
-          -- | The recipient address that could not be resolved.
-          thfRecipient :: !TokenReceiver
+          trrOperationIndex :: !Word64,
+          -- | The address that could not be resolved.
+          trrAddress :: !TokenHolder
         }
     | -- | The balance of tokens on the sender account is insufficient to perform the operation.
       TokenBalanceInsufficient
         { -- | The index in the list of operations of the failing operation.
-          thfOperationIndex :: !Word64,
+          trrOperationIndex :: !Word64,
           -- | The available balance of the sender.
-          thfAvailableBalance :: !TokenAmount,
+          trrAvailableBalance :: !TokenAmount,
           -- | The minimum required balance to perform the operation.
-          thfRequiredBalance :: !TokenAmount
+          trrRequiredBalance :: !TokenAmount
         }
-    | -- | The 'TokenHolderTransaction' could not be deserialized.
+    | -- | The transaction could not be deserialized.
       DeserializationFailure
         { -- | (Optional) text description of the failure mode.
-          thfCause :: !(Maybe Text)
+          trrCause :: !(Maybe Text)
+        }
+    | -- | The operation was not supported.
+      UnsupportedOperation
+        { -- | The index in the list of operations of the failing operation.
+          trrOperationIndex :: !Word64,
+          -- | The type of the operation that was not supported.
+          trrOperationType :: !Text,
+          -- | The reason why the operation was not supported.
+          trrReason :: !(Maybe Text)
+        }
+    | -- | Minting the requested amount would overflow the representable token amount.
+      MintWouldOverflow
+        { -- | The index in the list of operations of the failing operation.
+          trrOperationIndex :: !Word64,
+          -- | The requested amount to mint.
+          trrRequestedAmount :: !TokenAmount,
+          -- | The current circulating supply.
+          trrCurrentSupply :: !TokenAmount,
+          -- | The maximum representable token amount.
+          trrMaxRepresentableAmount :: !TokenAmount
+        }
+    | -- | The operation is not permitted.
+      OperationNotPermitted
+        { -- | The index in the list of operations of the failing operation.
+          trrOperationIndex :: !Word64,
+          -- | (Optionally) the address that does not have the necessary permissions to perform
+          --  the operation.
+          trrAddressNotPermitted :: !(Maybe TokenHolder),
+          -- | The reason why the operation is not permitted.
+          trrReason :: !(Maybe Text)
         }
     deriving (Eq, Show)
 
--- | A builder for constructing 'TokenHolderFailure' values with the 'RecipientNotFound'
+-- | A builder for constructing 'TokenRejectReason' values with the 'AddressNotFound'
 --  constructor.
-data RecipientNotFoundBuilder = RecipientNotFoundBuilder
-    { _rnfbTransactionIndex :: Maybe Word64,
-      _rnfbRecipient :: Maybe TokenReceiver
+data AddressNotFoundBuilder = AddressNotFoundBuilder
+    { _anfbTransactionIndex :: Maybe Word64,
+      _anfbRecipient :: Maybe TokenHolder
     }
 
-makeLenses ''RecipientNotFoundBuilder
+makeLenses ''AddressNotFoundBuilder
 
--- | The empty 'RecipientNotFoundBuilder'.
-emptyRecipientNotFoundBuilder :: RecipientNotFoundBuilder
-emptyRecipientNotFoundBuilder = RecipientNotFoundBuilder Nothing Nothing
+-- | The empty 'AddressNotFoundBuilder'.
+emptyAddressNotFoundBuilder :: AddressNotFoundBuilder
+emptyAddressNotFoundBuilder = AddressNotFoundBuilder Nothing Nothing
 
--- | Construct a 'TokenHolderFailure' from a 'RecipientNotFoundBuilder'.
+-- | Construct a 'TokenRejectReason' from a 'AddressNotFoundBuilder'.
 --  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
 --  is missing.
-buildRecipientNotFound :: RecipientNotFoundBuilder -> Either String TokenHolderFailure
-buildRecipientNotFound RecipientNotFoundBuilder{..} = do
-    thfOperationIndex <- _rnfbTransactionIndex `orFail` "Missing \"index\""
-    thfRecipient <- _rnfbRecipient `orFail` "Missing \"recipient\""
-    return RecipientNotFound{..}
+buildAddressNotFound :: AddressNotFoundBuilder -> Either String TokenRejectReason
+buildAddressNotFound AddressNotFoundBuilder{..} = do
+    trrOperationIndex <- _anfbTransactionIndex `orFail` "Missing \"index\""
+    trrAddress <- _anfbRecipient `orFail` "Missing \"recipient\""
+    return AddressNotFound{..}
 
--- | A builder for constructing 'TokenHolderFailure' values with the 'TokenBalanceInsufficient'
+-- | A builder for constructing 'TokenRejectReason' values with the 'TokenBalanceInsufficient'
 --  constructor.
 data TokenBalanceInsufficientBuilder = TokenBalanceInsufficientBuilder
     { _tbibTransactionIndex :: Maybe Word64,
@@ -718,17 +749,17 @@ makeLenses ''TokenBalanceInsufficientBuilder
 emptyTokenBalanceInsufficientBuilder :: TokenBalanceInsufficientBuilder
 emptyTokenBalanceInsufficientBuilder = TokenBalanceInsufficientBuilder Nothing Nothing Nothing
 
--- | Construct a 'TokenHolderFailure' from a 'TokenBalanceInsufficientBuilder'.
+-- | Construct a 'TokenRejectReason' from a 'TokenBalanceInsufficientBuilder'.
 --  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
 --  is missing.
-buildTokenBalanceInsufficient :: TokenBalanceInsufficientBuilder -> Either String TokenHolderFailure
+buildTokenBalanceInsufficient :: TokenBalanceInsufficientBuilder -> Either String TokenRejectReason
 buildTokenBalanceInsufficient TokenBalanceInsufficientBuilder{..} = do
-    thfOperationIndex <- _tbibTransactionIndex `orFail` "Missing \"index\""
-    thfAvailableBalance <- _tbibAvailableBalance `orFail` "Missing \"availableBalance\""
-    thfRequiredBalance <- _tbibRequiredBalance `orFail` "Missing \"requiredBalance\""
+    trrOperationIndex <- _tbibTransactionIndex `orFail` "Missing \"index\""
+    trrAvailableBalance <- _tbibAvailableBalance `orFail` "Missing \"availableBalance\""
+    trrRequiredBalance <- _tbibRequiredBalance `orFail` "Missing \"requiredBalance\""
     return TokenBalanceInsufficient{..}
 
--- | A builder for constructing 'TokenHolderFailure' values with the 'DeserializationFailure'
+-- | A builder for constructing 'TokenRejectReason' values with the 'DeserializationFailure'
 --  constructor.
 newtype DeserializationFailureBuilder = DeserializationFailureBuilder
     { _dfbCause :: Maybe Text
@@ -740,62 +771,171 @@ makeLenses ''DeserializationFailureBuilder
 emptyDeserializationFailureBuilder :: DeserializationFailureBuilder
 emptyDeserializationFailureBuilder = DeserializationFailureBuilder Nothing
 
--- | Construct a 'TokenHolderFailure' from a 'DeserializationFailureBuilder'.
+-- | Construct a 'TokenRejectReason' from a 'DeserializationFailureBuilder'.
 --  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
 --  is missing.
-buildDeserializationFailure :: DeserializationFailureBuilder -> Either String TokenHolderFailure
+buildDeserializationFailure :: DeserializationFailureBuilder -> Either String TokenRejectReason
 buildDeserializationFailure DeserializationFailureBuilder{..} = do
-    let thfCause = _dfbCause
+    let trrCause = _dfbCause
     return DeserializationFailure{..}
 
--- | Encode a 'TokenHolderFailure' as an 'EncodedTokenRejectReason'.
-encodeTokenHolderFailure :: TokenHolderFailure -> EncodedTokenRejectReason
-encodeTokenHolderFailure RecipientNotFound{..} =
+-- | A builder for constructing 'TokenRejectReason' values with the 'UnsupportedOperation'
+--  constructor.
+data UnsupportedOperationBuilder = UnsupportedOperationBuilder
+    { _uobTransactionIndex :: Maybe Word64,
+      _uobOperationType :: Maybe Text,
+      _uobReason :: Maybe Text
+    }
+
+makeLenses ''UnsupportedOperationBuilder
+
+-- | The empty 'UnsupportedOperationBuilder'.
+emptyUnsupportedOperationBuilder :: UnsupportedOperationBuilder
+emptyUnsupportedOperationBuilder =
+    UnsupportedOperationBuilder Nothing Nothing Nothing
+
+-- | Construct a 'TokenRejectReason' from a 'UnsupportedOperationBuilder'.
+buildUnsupportedOperation ::
+    UnsupportedOperationBuilder -> Either String TokenRejectReason
+buildUnsupportedOperation UnsupportedOperationBuilder{..} = do
+    trrOperationIndex <- _uobTransactionIndex `orFail` "Missing \"index\""
+    trrOperationType <- _uobOperationType `orFail` "Missing \"operationType\""
+    let trrReason = _uobReason
+    return UnsupportedOperation{..}
+
+-- | A builder for constructing 'TokenRejectReason' values with the 'MintWouldOverflow'
+--  constructor.
+data MintWouldOverflowBuilder = MintWouldOverflowBuilder
+    { _mwoOperationIndex :: Maybe Word64,
+      _mwoRequestedAmount :: Maybe TokenAmount,
+      _mwoCurrentSupply :: Maybe TokenAmount,
+      _mwoMaxRepresentableAmount :: Maybe TokenAmount
+    }
+
+makeLenses ''MintWouldOverflowBuilder
+
+-- | The empty 'MintWouldOverflowBuilder'.
+emptyMintWouldOverflowBuilder :: MintWouldOverflowBuilder
+emptyMintWouldOverflowBuilder =
+    MintWouldOverflowBuilder Nothing Nothing Nothing Nothing
+
+-- | Construct a 'TokenRejectReason' from a 'MintWouldOverflowBuilder'.
+buildMintWouldOverflow :: MintWouldOverflowBuilder -> Either String TokenRejectReason
+buildMintWouldOverflow MintWouldOverflowBuilder{..} = do
+    trrOperationIndex <- _mwoOperationIndex `orFail` "Missing \"index\""
+    trrRequestedAmount <- _mwoRequestedAmount `orFail` "Missing \"requestedAmount\""
+    trrCurrentSupply <- _mwoCurrentSupply `orFail` "Missing \"currentSupply\""
+    trrMaxRepresentableAmount <- _mwoMaxRepresentableAmount `orFail` "Missing \"maxRepresentableAmount\""
+    return MintWouldOverflow{..}
+
+-- | A builder for constructing 'TokenRejectReason' values with the 'OperationNotPermitted'
+--  constructor.
+data OperationNotPermittedBuilder = OperationNotPermittedBuilder
+    { _onpbTransactionIndex :: Maybe Word64,
+      _onpbAddressNotPermitted :: Maybe TokenHolder,
+      _onpbReason :: Maybe Text
+    }
+
+makeLenses ''OperationNotPermittedBuilder
+
+-- | The empty 'OperationNotPermittedBuilder'.
+emptyOperationNotPermittedBuilder :: OperationNotPermittedBuilder
+emptyOperationNotPermittedBuilder =
+    OperationNotPermittedBuilder Nothing Nothing Nothing
+
+-- | Construct a 'TokenRejectReason' from a 'OperationNotPermittedBuilder'.
+buildOperationNotPermitted :: OperationNotPermittedBuilder -> Either String TokenRejectReason
+buildOperationNotPermitted OperationNotPermittedBuilder{..} = do
+    trrOperationIndex <- _onpbTransactionIndex `orFail` "Missing \"index\""
+    let trrAddressNotPermitted = _onpbAddressNotPermitted
+    let trrReason = _onpbReason
+    return OperationNotPermitted{..}
+
+-- | Encode a 'TokenRejectReason' as an 'EncodedTokenRejectReason'.
+encodeTokenRejectReason :: TokenRejectReason -> EncodedTokenRejectReason
+encodeTokenRejectReason AddressNotFound{..} =
     EncodedTokenRejectReason
-        { etrrType = "recipientNotFound",
+        { etrrType = "addressNotFound",
           etrrDetails =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
-                    & k "index" ?~ encodeWord64 thfOperationIndex
-                    & k "recipient" ?~ encodeTokenReceiver thfRecipient
+                    & k "index" ?~ encodeWord64 trrOperationIndex
+                    & k "address" ?~ encodeTokenHolder trrAddress
         }
   where
     k = at . makeMapKeyEncoding . encodeString
-encodeTokenHolderFailure TokenBalanceInsufficient{..} =
+encodeTokenRejectReason TokenBalanceInsufficient{..} =
     EncodedTokenRejectReason
         { etrrType = "tokenBalanceInsufficient",
           etrrDetails =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
-                    & k "index" ?~ encodeWord64 thfOperationIndex
-                    & k "availableBalance" ?~ encodeTokenAmount thfAvailableBalance
-                    & k "requiredBalance" ?~ encodeTokenAmount thfRequiredBalance
+                    & k "index" ?~ encodeWord64 trrOperationIndex
+                    & k "availableBalance" ?~ encodeTokenAmount trrAvailableBalance
+                    & k "requiredBalance" ?~ encodeTokenAmount trrRequiredBalance
         }
   where
     k = at . makeMapKeyEncoding . encodeString
-encodeTokenHolderFailure DeserializationFailure{..} =
+encodeTokenRejectReason DeserializationFailure{..} =
     EncodedTokenRejectReason
         { etrrType = "deserializationFailure",
           etrrDetails =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
-                    & k "cause" .~ fmap encodeString thfCause
+                    & k "cause" .~ fmap encodeString trrCause
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
+encodeTokenRejectReason UnsupportedOperation{..} =
+    EncodedTokenRejectReason
+        { etrrType = "unsupportedOperation",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "index" ?~ encodeWord64 trrOperationIndex
+                    & k "operationType" ?~ encodeString trrOperationType
+                    & k "reason" .~ fmap encodeString trrReason
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
+encodeTokenRejectReason MintWouldOverflow{..} =
+    EncodedTokenRejectReason
+        { etrrType = "mintWouldOverflow",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "index" ?~ encodeWord64 trrOperationIndex
+                    & k "requestedAmount" ?~ encodeTokenAmount trrRequestedAmount
+                    & k "currentSupply" ?~ encodeTokenAmount trrCurrentSupply
+                    & k "maxRepresentableAmount" ?~ encodeTokenAmount trrMaxRepresentableAmount
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
+encodeTokenRejectReason OperationNotPermitted{..} =
+    EncodedTokenRejectReason
+        { etrrType = "operationNotPermitted",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "index" ?~ encodeWord64 trrOperationIndex
+                    & k "address" .~ fmap encodeTokenHolder trrAddressNotPermitted
+                    & k "reason" .~ fmap encodeString trrReason
         }
   where
     k = at . makeMapKeyEncoding . encodeString
 
--- | Decode a CBOR-encoded 'TokenHolderFailure' given a string representing the type of the failure.
-decodeTokenHolderFailure :: BSS.ShortByteString -> Decoder s TokenHolderFailure
-decodeTokenHolderFailure "recipientNotFound" =
+-- | Decode a CBOR-encoded 'TokenRejectReason' given a string representing the type of the failure.
+decodeTokenRejectReasonDetails :: BSS.ShortByteString -> Decoder s TokenRejectReason
+decodeTokenRejectReasonDetails "addressNotFound" =
     decodeMap
         valDecoder
-        buildRecipientNotFound
-        emptyRecipientNotFoundBuilder
+        buildAddressNotFound
+        emptyAddressNotFoundBuilder
   where
-    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 rnfbTransactionIndex
-    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeTokenReceiver rnfbRecipient
+    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 anfbTransactionIndex
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeTokenHolder anfbRecipient
     valDecoder _ = Nothing
-decodeTokenHolderFailure "tokenBalanceInsufficient" =
+decodeTokenRejectReasonDetails "tokenBalanceInsufficient" =
     decodeMap
         valDecoder
         buildTokenBalanceInsufficient
@@ -805,7 +945,7 @@ decodeTokenHolderFailure "tokenBalanceInsufficient" =
     valDecoder k@"availableBalance" = Just $ mapValueDecoder k decodeTokenAmount tbibAvailableBalance
     valDecoder k@"requiredBalance" = Just $ mapValueDecoder k decodeTokenAmount tbibRequiredBalance
     valDecoder _ = Nothing
-decodeTokenHolderFailure "deserializationFailure" =
+decodeTokenRejectReasonDetails "deserializationFailure" =
     decodeMap
         valDecoder
         buildDeserializationFailure
@@ -813,8 +953,169 @@ decodeTokenHolderFailure "deserializationFailure" =
   where
     valDecoder k@"cause" = Just $ mapValueDecoder k decodeString dfbCause
     valDecoder _ = Nothing
-decodeTokenHolderFailure unknownType =
-    fail $ "token-holder-failure: unsupported failure type: " ++ show unknownType
+decodeTokenRejectReasonDetails "unsupportedOperation" =
+    decodeMap
+        valDecoder
+        buildUnsupportedOperation
+        emptyUnsupportedOperationBuilder
+  where
+    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 uobTransactionIndex
+    valDecoder k@"operationType" = Just $ mapValueDecoder k decodeString uobOperationType
+    valDecoder k@"reason" = Just $ mapValueDecoder k decodeString uobReason
+    valDecoder _ = Nothing
+decodeTokenRejectReasonDetails "mintWouldOverflow" =
+    decodeMap
+        valDecoder
+        buildMintWouldOverflow
+        emptyMintWouldOverflowBuilder
+  where
+    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 mwoOperationIndex
+    valDecoder k@"requestedAmount" = Just $ mapValueDecoder k decodeTokenAmount mwoRequestedAmount
+    valDecoder k@"currentSupply" = Just $ mapValueDecoder k decodeTokenAmount mwoCurrentSupply
+    valDecoder k@"maxRepresentableAmount" = Just $ mapValueDecoder k decodeTokenAmount mwoMaxRepresentableAmount
+    valDecoder _ = Nothing
+decodeTokenRejectReasonDetails "operationNotPermitted" =
+    decodeMap
+        valDecoder
+        buildOperationNotPermitted
+        emptyOperationNotPermittedBuilder
+  where
+    valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 onpbTransactionIndex
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeTokenHolder onpbAddressNotPermitted
+    valDecoder k@"reason" = Just $ mapValueDecoder k decodeString onpbReason
+    valDecoder _ = Nothing
+decodeTokenRejectReasonDetails unknownType =
+    fail $ "token-reject-reason: unsupported reject reason: " ++ show unknownType
+
+--  | Decode a 'TokenRejectReason' from an 'EncodedTokenRejectReason'.
+decodeTokenRejectReason :: EncodedTokenRejectReason -> Either String TokenRejectReason
+decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
+    Nothing ->
+        Left $
+            "token-reject-reason: missing details for reject reason type "
+                ++ show etrrType
+    Just details -> do
+        let detailsLBS = LBS.fromStrict $ BSS.fromShort details
+        case CBOR.deserialiseFromBytes (decodeTokenRejectReasonDetails etrrType) detailsLBS of
+            Left e -> Left (show e)
+            Right ("", res) -> return res
+            Right (remaining, _) ->
+                Left $
+                    show (LBS.length remaining)
+                        ++ " bytes remaining after parsing token reject reason details"
+
+-- * Token Governance
+
+-- | A token governance operation. This can be a mint, burn or update to the allow or deny list.
+data TokenGovernanceOperation
+    = -- | Mint a specified token amount to the token governance account.
+      TokenMint {tgoMintAmount :: !TokenAmount}
+    | -- | Burn a specified token amount from the token governance account.
+      TokenBurn {tgoBurnAmount :: !TokenAmount}
+    | -- | Add the specified account to the allow list.
+      TokenAddAllowList {tgoTarget :: !TokenHolder}
+    | -- | Remove the specified account from the allow list.
+      TokenRemoveAllowList {tgoTarget :: !TokenHolder}
+    | -- | Add the specified account to the deny list.
+      TokenAddDenyList {tgoTarget :: !TokenHolder}
+    | -- | Remove the specified account from the deny list.
+      TokenRemoveDenyList {tgoTarget :: !TokenHolder}
+    deriving (Eq, Show)
+
+-- | Decode a CBOR-encoded 'TokenGovernanceOperation'.
+decodeTokenGovernanceOperation :: Decoder s TokenGovernanceOperation
+decodeTokenGovernanceOperation = do
+    maybeMapLen <- decodeMapLenOrIndef
+    forM_ maybeMapLen $ \mapLen ->
+        unless (mapLen == 1) $
+            fail $
+                "token-governance-operation: expected a map of size 1, but saw " ++ show mapLen
+    opType <- decodeString
+    res <- case opType of
+        "mint" -> TokenMint <$> decodeSupplyUpdate opType
+        "burn" -> TokenBurn <$> decodeSupplyUpdate opType
+        "add-allow-list" -> TokenAddAllowList <$> decodeListTarget opType
+        "remove-allow-list" -> TokenRemoveAllowList <$> decodeListTarget opType
+        "add-deny-list" -> TokenAddDenyList <$> decodeListTarget opType
+        "remove-deny-list" -> TokenRemoveDenyList <$> decodeListTarget opType
+        _ -> fail $ "token-governance-operation: unsupported operation type: " ++ show opType
+    when (isNothing maybeMapLen) $ do
+        isEnd <- decodeBreakOr
+        unless isEnd $ fail "token-governance-operation: expected end of map"
+    return res
+  where
+    decodeSupplyUpdate opType = do
+        let valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing amount"
+        decodeMap valDecoder build Nothing
+    decodeListTarget opType = do
+        let valDecoder k@"target" = Just (mapValueDecoder k decodeTokenHolder id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing target"
+        decodeMap valDecoder build Nothing
+
+-- | Encode a 'TokenGovernanceOperation' as CBOR.
+encodeTokenGovernanceOperation :: TokenGovernanceOperation -> Encoding
+encodeTokenGovernanceOperation = \case
+    TokenMint amount -> encodeSupplyUpdate "mint" amount
+    TokenBurn amount -> encodeSupplyUpdate "burn" amount
+    TokenAddAllowList target -> encodeListTarget "add-allow-list" target
+    TokenRemoveAllowList target -> encodeListTarget "remove-allow-list" target
+    TokenAddDenyList target -> encodeListTarget "add-deny-list" target
+    TokenRemoveDenyList target -> encodeListTarget "remove-deny-list" target
+  where
+    encodeSupplyUpdate opType amount =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "amount"
+            <> encodeTokenAmount amount
+    encodeListTarget opType target =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "target"
+            <> encodeTokenHolder target
+
+-- | A token governance transaction consists of a sequence of token governance operations.
+newtype TokenGovernanceTransaction = TokenGovernanceTransaction
+    { tokenGovernanceOperations :: Seq.Seq TokenGovernanceOperation
+    }
+    deriving (Eq, Show)
+
+-- | Decode a CBOR-encoded 'TokenGovernanceTransaction'.
+decodeTokenGovernanceTransaction :: Decoder s TokenGovernanceTransaction
+decodeTokenGovernanceTransaction =
+    TokenGovernanceTransaction <$> decodeSequence decodeTokenGovernanceOperation
+
+-- | Parse a 'TokenGovernanceTransaction' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenGovernanceTransactionFromBytes :: LBS.ByteString -> Either String TokenGovernanceTransaction
+tokenGovernanceTransactionFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenGovernanceTransaction lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining)
+                    ++ " bytes remaining after parsing token-governance transaction"
+
+-- | Encode a 'TokenGovernanceTransaction' as CBOR.
+encodeTokenGovernanceTransaction :: TokenGovernanceTransaction -> Encoding
+encodeTokenGovernanceTransaction =
+    encodeSequence encodeTokenGovernanceOperation . tokenGovernanceOperations
+
+-- | CBOR-encode a 'TokenGovernanceTransaction' to a (strict) 'BS.ByteString'.
+tokenGovernanceTransactionToBytes :: TokenGovernanceTransaction -> BS.ByteString
+tokenGovernanceTransactionToBytes =
+    CBOR.toStrictByteString . encodeTokenGovernanceTransaction
 
 -- * Token Module state
 
