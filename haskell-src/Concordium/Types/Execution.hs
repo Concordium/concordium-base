@@ -578,7 +578,7 @@ instance AE.ToJSON Payload where
     toJSON TokenHolder{..} =
         AE.object
             [ "tokenSymbol" AE..= thTokenSymbol,
-              "operations" AE..= thOperations,
+              "operations" AE..= EncodedTokenOperations thOperations,
               "transactionType" AE..= AE.String "tokenHolder"
             ]
     toJSON TokenGovernance{..} =
@@ -697,7 +697,7 @@ instance AE.FromJSON Payload where
                 return ConfigureDelegation{..}
             "tokenHolder" -> do
                 thTokenSymbol <- obj AE..: "tokenSymbol"
-                thOperations <- obj AE..: "operations"
+                (EncodedTokenOperations thOperations) <- obj AE..: "operations"
                 return TokenHolder{..}
             "tokenGovernance" -> do
                 tgTokenSymbol <- obj AE..: "tokenSymbol"

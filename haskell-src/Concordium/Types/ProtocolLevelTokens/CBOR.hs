@@ -366,6 +366,13 @@ tokenInitializationParametersToBytes =
 data CoinInfo = CoinInfoConcordium
     deriving (Eq, Show)
 
+instance AE.ToJSON CoinInfo where
+    toJSON CoinInfoConcordium = AE.String "CCD"
+
+instance AE.FromJSON CoinInfo where
+    parseJSON (AE.String "CCD") = return CoinInfoConcordium
+    parseJSON _ = fail "CoinInfo JSON must be the string 'CCD'"
+
 -- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
 decodeCoinInfo :: Decoder s CoinInfo
 decodeCoinInfo = do
@@ -427,6 +434,25 @@ data TokenReceiver = ReceiverAccount
       receiverAccountCoinInfo :: !(Maybe CoinInfo)
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenReceiver where
+    toJSON ReceiverAccount{..} = do
+        AE.object $
+            [ -- Tag with type of receiver
+              "type" AE..= AE.String "account",
+              "address" AE..= receiverAccountAddress
+            ]
+                ++ ["coininfo" AE..= coinInfo | coinInfo <- toList receiverAccountCoinInfo]
+
+instance AE.FromJSON TokenReceiver where
+    parseJSON = AE.withObject "TokenReceiver" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "account" -> do
+                receiverAccountAddress <- o AE..: "address"
+                receiverAccountCoinInfo <- o AE..:? "coininfo"
+                return ReceiverAccount{..}
+            _ -> fail ("Unknown TokenReceiver type " ++ type_string)
 
 -- | Create a 'ReceiverAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
@@ -500,8 +526,32 @@ data TaggableMemo
     = -- | The memo is represented as a byte string with no tag.
       UntaggedMemo {untaggedMemo :: !Memo}
     | -- | The memo is represented as a byte string with a tag indicating CBOR-encoded data.
-      CBORMemo {untaggedMemo :: !Memo}
+      CBORMemo {cborMemo :: !Memo}
     deriving (Eq, Show)
+
+instance AE.ToJSON TaggableMemo where
+    toJSON UntaggedMemo{..} = do
+        AE.object $
+            [ "type" AE..= AE.String "raw",
+              "value" AE..= untaggedMemo
+            ]
+    toJSON CBORMemo{..} = do
+        AE.object $
+            [ "type" AE..= AE.String "cbor",
+              "value" AE..= cborMemo
+            ]
+
+instance AE.FromJSON TaggableMemo where
+    parseJSON = AE.withObject "TaggableMemo" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "raw" -> do
+                untaggedMemo <- o AE..: "value"
+                return UntaggedMemo{..}
+            "cbor" -> do
+                cborMemo <- o AE..: "value"
+                return CBORMemo{..}
+            _ -> fail ("Unknown TaggableMemo type " ++ type_string)
 
 -- | Decode a CBOR-encoded 'TaggableMemo'.
 --  A memo can be encoded either directly as a byte string (of length at most 256) or as
@@ -543,6 +593,21 @@ data TokenTransferBody = TokenTransferBody
       ttMemo :: !(Maybe TaggableMemo)
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenTransferBody where
+    toJSON TokenTransferBody{..} = do
+        AE.object $
+            [ "amount" AE..= ttAmount,
+              "recipient" AE..= ttRecipient
+            ]
+                ++ ["memo" AE..= memo | memo <- toList ttMemo]
+
+instance AE.FromJSON TokenTransferBody where
+    parseJSON = AE.withObject "TokenTransferBody" $ \o -> do
+        ttAmount <- o AE..: "amount"
+        ttRecipient <- o AE..: "recipient"
+        ttMemo <- o AE..:? "memo"
+        return TokenTransferBody{..}
 
 -- | Builder
 data TokenTransferBuilder = TokenTransferBuilder
@@ -592,6 +657,19 @@ encodeTokenTransfer TokenTransferBody{..} =
 newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
     deriving (Eq, Show)
 
+instance AE.ToJSON TokenHolderOperation where
+    toJSON (TokenHolderTransfer body) = do
+        AE.object
+            [ "transfer" AE..= AE.toJSON body
+            ]
+
+instance AE.FromJSON TokenHolderOperation where
+    parseJSON = AE.withObject "TokenHolderOperation" $ \o -> do
+        transferBodyMaybe <- o AE..:? "transfer"
+        case transferBodyMaybe of
+            Just transferBody -> return $ TokenHolderTransfer transferBody
+            _ -> fail "Unknown TokenHolderOperation type"
+
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
 decodeTokenHolderOperation = do
@@ -621,6 +699,12 @@ newtype TokenHolderTransaction = TokenHolderTransaction
     { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenHolderTransaction where
+    toJSON = AE.toJSON . tokenHolderTransactions
+
+instance AE.FromJSON TokenHolderTransaction where
+    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
