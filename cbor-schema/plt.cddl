@@ -210,8 +210,8 @@ reject-details-addressNotFound = {
     address: token-holder
 }
 
-; "tokenBalanceInsufficient": the balance of toknes on the sender account is insuccient to perform
-; the operation.
+; "tokenBalanceInsufficient": the balance of tokens on the sender account is insufficient
+; to perform the operation.
 reject-details-tokenBalanceInsufficient = {
     ; The index in the list of operations of the failing operation.
     index: uint,
