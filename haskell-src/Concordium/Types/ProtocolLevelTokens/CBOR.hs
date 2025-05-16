@@ -7,18 +7,19 @@ module Concordium.Types.ProtocolLevelTokens.CBOR where
 import qualified Codec.CBOR.ByteArray as BA
 import qualified Codec.CBOR.ByteArray.Sliced as SBA
 import Codec.CBOR.Decoding
-import Codec.CBOR.Encoding
-    ( encodeBool,
-      encodeByteArray,
-      encodeInt,
-      encodeInteger,
-      encodeListLen,
-      encodeMapLen,
-      encodeString,
-      encodeTag,
-      encodeWord,
-      encodeWord64,
-      Encoding )
+import Codec.CBOR.Encoding (
+    Encoding,
+    encodeBool,
+    encodeByteArray,
+    encodeInt,
+    encodeInteger,
+    encodeListLen,
+    encodeMapLen,
+    encodeString,
+    encodeTag,
+    encodeWord,
+    encodeWord64,
+ )
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
