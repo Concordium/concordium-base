@@ -1,4 +1,3 @@
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -268,7 +267,6 @@ buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
     return TokenInitializationParameters{..}
 
 instance AE.ToJSON TokenInitializationParameters where
-    toJSON :: TokenInitializationParameters -> AE.Value
     toJSON TokenInitializationParameters{..} = do
         AE.object $
             [ "name" AE..= tipName,
