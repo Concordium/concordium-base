@@ -1148,3 +1148,5 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
 makeLenses ''CommissionRates
+
+-- test change
