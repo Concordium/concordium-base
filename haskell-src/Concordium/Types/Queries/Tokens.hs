@@ -90,7 +90,7 @@ data TokenState = TokenState
 instance ToJSON TokenState where
     toJSON (TokenState tsTokenModuleRef tsIssuer tsDecimals tsTotalSupply tsModuleState) =
         object
-            [ "tokenId" .= tsTokenModuleRef,
+            [ "tokenModuleReference" .= tsTokenModuleRef,
               "issuer" .= tsIssuer,
               "decimals" .= tsDecimals,
               "totalSupply" .= tsTotalSupply,
@@ -99,7 +99,7 @@ instance ToJSON TokenState where
 
 instance FromJSON TokenState where
     parseJSON = withObject "TokenState" $ \o -> do
-        tsTokenModuleRef <- o .: "tokenId"
+        tsTokenModuleRef <- o .: "tokenModuleReference"
         tsIssuer <- o .: "issuer"
         tsDecimals <- o .: "decimals"
         tsTotalSupply <- o .: "totalSupply"

@@ -9,6 +9,7 @@ import qualified Data.Aeson.Types as AE
 import qualified Data.ByteString.Short as BSS
 import Data.Scientific
 import qualified Data.Serialize as S
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Word
 
@@ -16,7 +17,13 @@ import Data.Word
 --  This is given as a symbol unique across the whole chain.
 --  The byte string must be at most 255 bytes long and be a valid UTF-8 string.
 newtype TokenId = TokenId {tokenSymbol :: BSS.ShortByteString}
-    deriving newtype (Eq, Ord, Show)
+    deriving newtype (Eq, Ord)
+
+instance Show TokenId where
+    show (TokenId sbs) =
+        case T.decodeUtf8' (BSS.fromShort sbs) of
+            Right txt -> T.unpack txt
+            Left err -> "TokenId is not valid UTF-8: " ++ show err
 
 -- | Try to construct a valid 'TokenId' from a 'BSS.ShortByteString'.
 --  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
