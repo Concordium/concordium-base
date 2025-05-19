@@ -665,10 +665,8 @@ instance AE.ToJSON TokenHolderOperation where
 
 instance AE.FromJSON TokenHolderOperation where
     parseJSON = AE.withObject "TokenHolderOperation" $ \o -> do
-        transferBodyMaybe <- o AE..:? "transfer"
-        case transferBodyMaybe of
-            Just transferBody -> return $ TokenHolderTransfer transferBody
-            _ -> fail "Unknown TokenHolderOperation type"
+        transferBody <- o AE..: "transfer"
+        pure $ TokenHolderTransfer transferBody
 
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
