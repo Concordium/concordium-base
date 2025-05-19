@@ -40,7 +40,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 import Data.Word
-import Lens.Micro.Platform ((.=), (.~), (^.))
+import Lens.Micro.Platform
 import qualified Proto.V2.Concordium.Kernel as Proto
 import qualified Proto.V2.Concordium.ProtocolLevelTokens as Proto
 import qualified Proto.V2.Concordium.ProtocolLevelTokens_Fields as PLTFields
