@@ -49,6 +49,7 @@ import qualified Concordium.ID.Types as IDTypes
 import Concordium.Types
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution.TH
+import Concordium.Types.Tokens
 import Concordium.Types.Updates
 import Concordium.Utils
 import qualified Concordium.Wasm as Wasm
@@ -1400,7 +1401,20 @@ data Event' (supplemented :: Bool)
           ebrAccount :: !AccountAddress
         }
     | -- | Token module emitted some event
-      TokenModuleEvent TokenEvent
+      TokenModuleEvent !TokenEvent
+    | TokenTransfer
+        { ettFrom :: !AccountAddress,
+          ettTo :: !AccountAddress,
+          ettAmount :: !CanonicalTokenAmount
+        }
+    | TokenMint
+        { etmTarget :: !AccountAddress,
+          etmAmount :: !CanonicalTokenAmount
+        }
+    | TokenBurn
+        { etbTarget :: !AccountAddress,
+          etbAmount :: !CanonicalTokenAmount
+        }
     deriving (Show, Generic, Eq)
 
 -- | A contract event, without supplemental data. This is what is stored in the database and

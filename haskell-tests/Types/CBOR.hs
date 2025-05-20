@@ -112,6 +112,15 @@ genTokenModuleStateWithAdditional = do
                 ]
         return ("_" <> key, val)
 
+genTokenEvent :: Gen TokenEvent
+genTokenEvent =
+    oneof
+        [ AddAllowListEvent <$> genTokenHolder,
+          RemoveAllowListEvent <$> genTokenHolder,
+          AddDenyListEvent <$> genTokenHolder,
+          RemoveDenyListEvent <$> genTokenHolder
+        ]
+
 -- | Generator for 'TokenRejectReason'.
 genTokenRejectReason :: Gen TokenRejectReason
 genTokenRejectReason =
@@ -184,7 +193,7 @@ testInitializationParameters = describe "token-initialization-parameters decodin
                 )
 
 tests :: Spec
-tests = parallel $ describe "CBOR" $ do
+tests = focus $ parallel $ describe "CBOR" $ do
     testInitializationParameters
     it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
         (Right ("", tt))
@@ -222,5 +231,7 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenModuleState
                     (toLazyByteString $ encodeTokenModuleState tt)
                 )
+    it "Encode and decode TokenEvent" $ withMaxSuccess 1000 $ forAll genTokenEvent $ \tt ->
+        Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
         Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)

@@ -1200,11 +1200,11 @@ instance S.Serialize TokenEventType where
 -- This is used for both token holder transactions and for token governance transactions.
 data TokenEvent = TokenEvent
     { -- | The unique token symbol identifier.
-      _teSymbol :: TokenId,
+      _teSymbol :: !TokenId,
       -- | Type of the event.
-      _teType :: TokenEventType,
+      _teType :: !TokenEventType,
       -- | The details of the event
-      _teDetails :: TokenEventDetails
+      _teDetails :: !TokenEventDetails
     }
     deriving (Eq, Show)
 

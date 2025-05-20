@@ -6,6 +6,7 @@ module Concordium.Types.Tokens where
 import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Types as AE
+import Data.Bits
 import qualified Data.ByteString.Short as BSS
 import Data.Scientific
 import qualified Data.Serialize as S
@@ -61,6 +62,41 @@ instance AE.FromJSON TokenId where
     parseJSON (AE.String text) = return $ TokenId $ BSS.toShort $ T.encodeUtf8 text
     parseJSON invalid = AE.prependFailure "parsing TokenId failed" (AE.typeMismatch "String" invalid)
 
+-- | Represents the raw amount of a token. This is the amount of the token in its smallest unit.
+newtype TokenRawAmount = TokenRawAmount {theTokenRawAmount :: Word64}
+    deriving newtype (Eq, Ord, Show, Num, Real, Bounded, Enum, Integral)
+
+-- | Serialization of 'TokenRawAmount' is as a variable length quantity (VLQ). We disallow
+--  0-padding to enforce canonical serialization.
+--
+--  The VLQ encoding represents a value in big-endian base 128. Each byte of the encoding uses
+--  the high-order bit to indicate if further bytes follow (when set). The remaining bits represent
+--  the positional value in base 128.  See https://en.wikipedia.org/wiki/Variable-length_quantity
+instance S.Serialize TokenRawAmount where
+    put (TokenRawAmount amt) = do
+        mapM_ S.putWord8 (chunk amt [])
+      where
+        chunk num []
+            | num == 0 = [0]
+            | otherwise = chunk (num `shiftR` 7) [fromIntegral $ num .&. 0x7f]
+        chunk num l
+            | num == 0 = l
+            | otherwise = chunk (num `shiftR` 7) (fromIntegral (0x80 .|. (num .&. 0x7f)) : l)
+    get = TokenRawAmount <$> loop 0
+      where
+        loop accum = do
+            b <- S.getWord8
+            when (b == 0x80 && accum == 0) $
+                fail "Padding bytes are not allowed"
+            -- The following test ensures that @accum * 128 <= maxBound@, i.e. the shift in
+            -- computing @accum'@ will not overflow.
+            when (accum > maxBound `shiftR` 7) $
+                fail "Value out of range"
+            let accum' = accum `shiftL` 7 .|. fromIntegral (b .&. 0x7f)
+            if testBit b 7
+                then loop accum'
+                else return accum'
+
 -- | The token amount representation.
 --  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
 data TokenAmount = TokenAmount
@@ -89,3 +125,21 @@ instance AE.FromJSON TokenAmount where
                       nrDecimals = fromIntegral (-base10Exponent amt)
                     }
     parseJSON _ = fail "Token amount should be a number."
+
+-- | A canonical token amount is a token amount where the number of decimals is exactly
+--  the number of decimals in the token representation.
+newtype CanonicalTokenAmount = CanonicalTokenAmount {theCanonicalTokenAmount :: TokenAmount}
+    deriving newtype (Eq, Show)
+
+-- | Get the 'TokenRawAmount' from a 'CanonicalTokenAmount'.
+rawCanonicalTokenAmount :: CanonicalTokenAmount -> TokenRawAmount
+rawCanonicalTokenAmount (CanonicalTokenAmount TokenAmount{..}) = TokenRawAmount digits
+
+instance S.Serialize CanonicalTokenAmount where
+    put (CanonicalTokenAmount TokenAmount{..}) = do
+        S.put (TokenRawAmount digits)
+        S.putWord8 nrDecimals
+    get = do
+        TokenRawAmount digits <- S.get
+        nrDecimals <- S.getWord8
+        return $ CanonicalTokenAmount $ TokenAmount{..}
