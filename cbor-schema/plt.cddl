@@ -164,7 +164,7 @@ hash = bytes .size(32)
 ; Type alias for metadata with a URL and checksum
 metadata-url = {
     ; A string field representing the URL
-    "value": string,
+    "url": text,
     ; An optional 32-byte checksum value tied to the content of the URL
     ? "checksum": hash
 }
