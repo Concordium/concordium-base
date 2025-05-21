@@ -436,23 +436,23 @@ data TokenHolder = HolderAccount
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON TokenReceiver where
-    toJSON ReceiverAccount{..} = do
+instance AE.ToJSON TokenHolder where
+    toJSON HolderAccount{..} = do
         AE.object $
             [ -- Tag with type of receiver
               "type" AE..= AE.String "account",
-              "address" AE..= receiverAccountAddress
+              "address" AE..= holderAccountAddress
             ]
-                ++ ["coininfo" AE..= coinInfo | coinInfo <- toList receiverAccountCoinInfo]
+                ++ ["coininfo" AE..= coinInfo | coinInfo <- toList holderAccountCoinInfo]
 
-instance AE.FromJSON TokenReceiver where
+instance AE.FromJSON TokenHolder where
     parseJSON = AE.withObject "TokenReceiver" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
-                receiverAccountAddress <- o AE..: "address"
-                receiverAccountCoinInfo <- o AE..:? "coininfo"
-                return ReceiverAccount{..}
+                holderAccountAddress <- o AE..: "address"
+                holderAccountCoinInfo <- o AE..:? "coininfo"
+                return HolderAccount{..}
             _ -> fail ("Unknown TokenReceiver type " ++ type_string)
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
