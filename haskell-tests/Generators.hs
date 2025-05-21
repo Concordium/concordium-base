@@ -772,6 +772,7 @@ genEvent spv =
             ++ maybeDelegationEvents
             ++ maybeUpgrade
             ++ maybeSuspendEvents
+            ++ maybeTokenEvents
         )
   where
     maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
@@ -833,6 +834,19 @@ genEvent spv =
         cuRemovedCredIds <- listOf genCredentialId
         cuNewThreshold <- AccountThreshold <$> chooseBoundedIntegral (1, maxBound)
         return CredentialsUpdated{..}
+    maybeTokenEvents
+        | protocolSupportsPLT spv =
+            [ TokenModuleEvent <$> genTokenId <*> genTokenEventType <*> genTokenEventDetails,
+              TokenTransfer
+                <$> genTokenId
+                <*> genAccountAddress
+                <*> genAccountAddress
+                <*> genTokenAmount
+                <*> liftArbitrary genMemo,
+              TokenMint <$> genTokenId <*> genAccountAddress <*> genTokenAmount,
+              TokenBurn <$> genTokenId <*> genAccountAddress <*> genTokenAmount
+            ]
+        | otherwise = []
 
 instance Arbitrary RejectReason where
     arbitrary =
@@ -1156,6 +1170,11 @@ genTokenId = do
     len <- chooseBoundedIntegral (0, 255)
     TokenId . BSS.pack <$> genUtf8String len
 
+genTokenEventType :: Gen TokenEventType
+genTokenEventType = do
+    len <- chooseBoundedIntegral (0, 255)
+    TokenEventType . BSS.pack <$> genUtf8String len
+
 -- | Generate an arbitrary 'TokenRawAmount'.
 genTokenRawAmount :: Gen TokenRawAmount
 genTokenRawAmount = TokenRawAmount <$> arbitrary
@@ -1163,6 +1182,13 @@ genTokenRawAmount = TokenRawAmount <$> arbitrary
 -- | Generate an arbitrary 'TokenAmount' across all representable values.
 genTokenAmount :: Gen TokenAmount
 genTokenAmount = TokenAmount <$> genTokenRawAmount <*> arbitrary
+
+-- | Generate an arbitrary 'TokenEventDetails', consisting of up to 1000 bytes.
+--  This is not guaranteed to be valid CBOR.
+genTokenEventDetails :: Gen TokenEventDetails
+genTokenEventDetails = do
+    len <- chooseBoundedIntegral (0, 1000)
+    TokenEventDetails . BSS.pack <$> genUtf8String len
 
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.

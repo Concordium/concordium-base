@@ -1400,23 +1400,44 @@ data Event' (supplemented :: Bool)
         { ebrBakerId :: !BakerId,
           ebrAccount :: !AccountAddress
         }
-    | -- | Token module emitted some event
-      TokenModuleEvent !TokenEvent
-    | TokenTransfer
-        { ettTokenId :: !TokenId,
+    | -- | An event emitted by the token module.
+      TokenModuleEvent
+        { -- | The unique token identifier.
+          etmeTokenId :: !TokenId,
+          -- | The type of the event.
+          etmeType :: !TokenEventType,
+          -- | The (CBOR-encoded) event details.
+          etmeDetails :: !TokenEventDetails
+        }
+    | -- | A token transfer event.
+      TokenTransfer
+        { -- | The unique token identifier.
+          ettTokenId :: !TokenId,
+          -- | The source of the transfer.
           ettFrom :: !AccountAddress,
+          -- | The target of the transfer.
           ettTo :: !AccountAddress,
+          -- | The amount transferred.
           ettAmount :: !TokenAmount,
+          -- | An optional memo for the transfer.
           ettMemo :: !(Maybe Memo)
         }
-    | TokenMint
-        { etmTokenId :: !TokenId,
+    | -- | A token mint event.
+      TokenMint
+        { -- | The unique token identifier.
+          etmTokenId :: !TokenId,
+          -- | The account receiving the minted tokens.
           etmTarget :: !AccountAddress,
+          -- | The amount minted.
           etmAmount :: !TokenAmount
         }
-    | TokenBurn
-        { etbTokenId :: !TokenId,
+    | -- | A token burn event.
+      TokenBurn
+        { -- | The unique token identifier.
+          etbTokenId :: !TokenId,
+          -- | The account from which the tokens are burned.
           etbTarget :: !AccountAddress,
+          -- | The amount burned.
           etbAmount :: !TokenAmount
         }
     deriving (Show, Generic, Eq)
@@ -1477,7 +1498,7 @@ addInitializeParameter _ DelegationRemoved{..} = pure DelegationRemoved{..}
 addInitializeParameter _ Upgraded{..} = pure Upgraded{..}
 addInitializeParameter _ BakerSuspended{..} = pure BakerSuspended{..}
 addInitializeParameter _ BakerResumed{..} = pure BakerResumed{..}
-addInitializeParameter _ (TokenModuleEvent event) = pure (TokenModuleEvent event)
+addInitializeParameter _ (TokenModuleEvent{..}) = pure TokenModuleEvent{..}
 addInitializeParameter _ TokenTransfer{..} = pure TokenTransfer{..}
 addInitializeParameter _ TokenMint{..} = pure TokenMint{..}
 addInitializeParameter _ TokenBurn{..} = pure TokenBurn{..}
@@ -1672,9 +1693,11 @@ putEvent = \case
         S.putWord8 37
             <> S.put ebrBakerId
             <> S.put ebrAccount
-    TokenModuleEvent event ->
+    TokenModuleEvent{..} ->
         S.putWord8 38
-            <> S.put event
+            <> S.put etmeTokenId
+            <> S.put etmeType
+            <> S.put etmeDetails
     TokenTransfer{..} ->
         S.putWord8 39
             <> S.put ettTokenId
@@ -1885,9 +1908,11 @@ getEvent spv =
             ebrBakerId <- S.get
             ebrAccount <- S.get
             return BakerResumed{..}
-        38
-            | supportPlt ->
-                TokenModuleEvent <$> S.get
+        38 | supportPlt -> do
+            etmeTokenId <- S.get
+            etmeType <- S.get
+            etmeDetails <- S.get
+            return TokenModuleEvent{..}
         39 | supportPlt -> do
             ettTokenId <- S.get
             ettFrom <- S.get
@@ -2177,10 +2202,12 @@ instance AE.ToJSON (Event' supplemented) where
                   "bakerId" .= ebrBakerId,
                   "account" .= ebrAccount
                 ]
-        TokenModuleEvent event ->
+        TokenModuleEvent{..} ->
             AE.object
                 [ "tag" .= AE.String "TokenModuleEvent",
-                  "event" .= AE.toJSON event
+                  "tokenId" .= etmeTokenId,
+                  "type" .= etmeType,
+                  "details" .= etmeDetails
                 ]
         TokenTransfer{..} ->
             AE.object $
@@ -2395,8 +2422,11 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 ebrBakerId <- obj .: "bakerId"
                 ebrAccount <- obj .: "account"
                 return BakerResumed{..}
-            "TokenModuleEvent" ->
-                TokenModuleEvent <$> obj .: "event"
+            "TokenModuleEvent" -> do
+                etmeTokenId <- obj .: "tokenId"
+                etmeType <- obj .: "type"
+                etmeDetails <- obj .: "details"
+                return TokenModuleEvent{..}
             "TokenTransfer" -> do
                 ettTokenId <- obj .: "tokenId"
                 ettFrom <- obj .: "from"

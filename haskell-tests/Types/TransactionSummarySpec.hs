@@ -53,6 +53,7 @@ tests = describe "Transaction summaries" $ do
     versionedTests SP6
     versionedTests SP7
     versionedTests SP8
+    versionedTests SP9
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "Event: serialize then deserialize is identity" $ withMaxSuccess 10000 $ testEventSerializationIdentity spv

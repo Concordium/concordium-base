@@ -188,10 +188,6 @@ module Concordium.Types (
     TokenModuleRef (..),
     TokenEventDetails (..),
     TokenEventType (..),
-    TokenEvent (..),
-    teSymbol,
-    teType,
-    teDetails,
     makeTokenEventType,
     TokenModuleRejectReason (..),
     makeTokenModuleRejectReason,
@@ -1173,7 +1169,9 @@ instance AE.ToJSON TokenEventType where
     toJSON TokenEventType{..} = AE.String $ T.decodeUtf8Lenient $ BSS.fromShort tokenEventTypeBytes
 
 instance AE.FromJSON TokenEventType where
-    parseJSON (AE.String text) = return $ TokenEventType $ BSS.toShort $ T.encodeUtf8 text
+    parseJSON (AE.String text) = case makeTokenEventType $ BSS.toShort $ T.encodeUtf8 text of
+        Right eventType -> return eventType
+        Left err -> fail err
     parseJSON invalid = AE.prependFailure "parsing TokenEventType failed" (AE.typeMismatch "String" invalid)
 
 -- | Try to construct a valid 'TokenEventType' from a 'BSS.ShortByteString'.
@@ -1195,51 +1193,6 @@ instance S.Serialize TokenEventType where
         len <- S.getWord8
         sbs <- S.getShortByteString (fromIntegral len)
         return $ TokenEventType sbs
-
--- | Event produced from a token module
--- This is used for both token holder transactions and for token governance transactions.
-data TokenEvent = TokenEvent
-    { -- | The unique token symbol identifier.
-      _teSymbol :: !TokenId,
-      -- | Type of the event.
-      _teType :: !TokenEventType,
-      -- | The details of the event
-      _teDetails :: !TokenEventDetails
-    }
-    deriving (Eq, Show)
-
-makeLenses ''TokenEvent
-
-instance HashableTo Hash.Hash TokenEvent where
-    getHash = Hash.hash . S.encode
-
-instance (Monad m) => MHashableTo m Hash.Hash TokenEvent
-
-instance S.Serialize TokenEvent where
-    put TokenEvent{..} = do
-        S.put _teSymbol
-        S.put _teType
-        S.put _teDetails
-    get = do
-        _teSymbol <- S.get
-        _teType <- S.get
-        _teDetails <- S.get
-        return TokenEvent{..}
-
-instance AE.ToJSON TokenEvent where
-    toJSON TokenEvent{..} =
-        AE.object
-            [ "tokenSymbol" AE..= _teSymbol,
-              "type" AE..= _teType,
-              "details" AE..= _teDetails
-            ]
-
-instance AE.FromJSON TokenEvent where
-    parseJSON = AE.withObject "TokenEvent" $ \o -> do
-        _teSymbol <- o AE..: "tokenSymbol"
-        _teType <- o AE..: "type"
-        _teDetails <- o AE..: "details"
-        return TokenEvent{..}
 
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason

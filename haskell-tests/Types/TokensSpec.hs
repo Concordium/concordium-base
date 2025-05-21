@@ -132,7 +132,7 @@ testTokenAmountEncodeDecode = forAll genTokenAmount $ \a ->
 
 -- | Tests for token types.
 tests :: Spec
-tests = focus $ parallel $ do
+tests = parallel $ do
     describe "TokenId" $ do
         it "Serialization and deserialization of valid TokenIds" $
             withMaxSuccess 10000 testTokenIdEncodeDecode
