@@ -47,11 +47,11 @@ data TokenAccountState = TokenAccountState
       -- | Whether the account is a member of the allow list of the token.
       -- If present, tokens can be transferred only, if both sender and receiver are
       -- members of the allow list of the token.
-      memberAllowList :: !Bool,
+      memberAllowList :: !(Maybe Bool),
       -- | Whether the account is a member of the deny list of the token.
       -- If present, tokens can be transferred only, if neither sender or receiver
       -- are members of the deny list.
-      memberDenyList :: !Bool
+      memberDenyList :: !(Maybe Bool)
     }
     deriving (Eq, Show)
 
@@ -90,7 +90,7 @@ data TokenState = TokenState
 instance ToJSON TokenState where
     toJSON (TokenState tsTokenModuleRef tsIssuer tsDecimals tsTotalSupply tsModuleState) =
         object
-            [ "tokenId" .= tsTokenModuleRef,
+            [ "tokenModuleRef" .= tsTokenModuleRef,
               "issuer" .= tsIssuer,
               "decimals" .= tsDecimals,
               "totalSupply" .= tsTotalSupply,
@@ -99,7 +99,7 @@ instance ToJSON TokenState where
 
 instance FromJSON TokenState where
     parseJSON = withObject "TokenState" $ \o -> do
-        tsTokenModuleRef <- o .: "tokenId"
+        tsTokenModuleRef <- o .: "tokenModuleRef"
         tsIssuer <- o .: "issuer"
         tsDecimals <- o .: "decimals"
         tsTotalSupply <- o .: "totalSupply"

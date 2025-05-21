@@ -40,16 +40,16 @@ genTokenInitializationParameters = do
 genTokenTransfer :: Gen TokenTransferBody
 genTokenTransfer = do
     ttAmount <- genTokenAmount
-    ttRecipient <- genTokenReceiver
+    ttRecipient <- genTokenHolder
     ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
     return TokenTransferBody{..}
 
--- | Generator for `TokenReceiver`
-genTokenReceiver :: Gen TokenReceiver
-genTokenReceiver =
+-- | Generator for `TokenHolder`
+genTokenHolder :: Gen TokenHolder
+genTokenHolder =
     oneof
-        [ ReceiverAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
-          ReceiverAccount <$> genAccountAddress <*> pure Nothing
+        [ HolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
+          HolderAccount <$> genAccountAddress <*> pure Nothing
         ]
 
 -- | Generator for `TaggableMemo`
@@ -65,6 +65,24 @@ genTokenHolderTransaction :: Gen TokenHolderTransaction
 genTokenHolderTransaction =
     TokenHolderTransaction . Seq.fromList
         <$> listOf (TokenHolderTransfer <$> genTokenTransfer)
+
+-- | Generator for 'TokenGovernanceOperation'.
+genTokenGovernanceOperation :: Gen TokenGovernanceOperation
+genTokenGovernanceOperation =
+    oneof
+        [ TokenMint <$> genTokenAmount,
+          TokenBurn <$> genTokenAmount,
+          TokenAddAllowList <$> genTokenHolder,
+          TokenRemoveAllowList <$> genTokenHolder,
+          TokenAddDenyList <$> genTokenHolder,
+          TokenRemoveDenyList <$> genTokenHolder
+        ]
+
+-- | Generator for 'TokenGovernanceOperation'.
+genTokenGovernanceTransaction :: Gen TokenGovernanceTransaction
+genTokenGovernanceTransaction =
+    TokenGovernanceTransaction . Seq.fromList
+        <$> listOf genTokenGovernanceOperation
 
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
@@ -93,6 +111,18 @@ genTokenModuleStateWithAdditional = do
                   pure CBOR.TNull
                 ]
         return ("_" <> key, val)
+
+-- | Generator for 'TokenRejectReason'.
+genTokenRejectReason :: Gen TokenRejectReason
+genTokenRejectReason =
+    oneof
+        [ AddressNotFound <$> arbitrary <*> genTokenHolder,
+          TokenBalanceInsufficient <$> arbitrary <*> genTokenAmount <*> genTokenAmount,
+          DeserializationFailure <$> liftArbitrary genText,
+          UnsupportedOperation <$> arbitrary <*> genText <*> liftArbitrary genText,
+          MintWouldOverflow <$> arbitrary <*> genTokenAmount <*> genTokenAmount <*> genTokenAmount,
+          OperationNotPermitted <$> arbitrary <*> liftArbitrary genTokenHolder <*> liftArbitrary genText
+        ]
 
 -- | A test value for 'TokenInitializationParameters'.
 tip1 :: TokenInitializationParameters
@@ -168,6 +198,18 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenHolderTransaction
                     (toLazyByteString $ encodeTokenHolderTransaction tt)
                 )
+    it "Encode and decode TokenGovernanceOperation" $ withMaxSuccess 1000 $ forAll genTokenGovernanceOperation $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenGovernanceOperation
+                    (toLazyByteString $ encodeTokenGovernanceOperation tt)
+                )
+    it "Encode and decode TokenGovernanceTransaction" $ withMaxSuccess 1000 $ forAll genTokenGovernanceTransaction $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenGovernanceTransaction
+                    (toLazyByteString $ encodeTokenGovernanceTransaction tt)
+                )
     it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
         (Right ("", tt))
             === ( deserialiseFromBytes
@@ -180,3 +222,5 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenModuleState
                     (toLazyByteString $ encodeTokenModuleState tt)
                 )
+    it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
+        Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)

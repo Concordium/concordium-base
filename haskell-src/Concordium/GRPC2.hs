@@ -630,6 +630,8 @@ instance ToProto TokenAccountState where
     type Output TokenAccountState = Proto.TokenAccountState
     toProto TokenAccountState{..} = Proto.make $ do
         PLTFields.balance .= toProto balance
+        PLTFields.maybe'memberAllowList .= memberAllowList
+        PLTFields.maybe'memberDenyList .= memberDenyList
 
 instance ToProto Token where
     type Output Token = Proto.AccountInfo'Token
@@ -1609,26 +1611,28 @@ convertAccountTransaction ty cost sender result = case ty of
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v
             TTTokenHolder ->
                 mkSuccess <$> do
-                    let eventToProto :: Event' s -> Either ConversionError Proto.TokenHolderEvent
-                        eventToProto = \case
-                            TokenModuleEvent (TokenEvent{..}) -> Right . Proto.make $ do
-                                PLTFields.tokenSymbol .= toProto _teSymbol
-                                PLTFields.type' .= toProto _teType
-                                PLTFields.details .= toProto _teDetails
-                            _ -> Left CEInvalidTransactionResult
-                    v <- mapM eventToProto events
-                    Right . Proto.make $ ProtoFields.tokenHolderEffect . ProtoFields.events .= v
+                    -- TODO: Generate and handle events: https://linear.app/concordium/issue/COR-705/event-logging
+                    -- let eventToProto :: Event' s -> Either ConversionError Proto.TokenHolderEvent
+                    --     eventToProto = \case
+                    --         TokenModuleEvent (TokenEvent{..}) -> Right . Proto.make $ do
+                    --             PLTFields.tokenSymbol .= toProto _teSymbol
+                    --             PLTFields.type' .= toProto _teType
+                    --             PLTFields.details .= toProto _teDetails
+                    --         _ -> Left CEInvalidTransactionResult
+                    -- v <- mapM eventToProto events
+                    Right . Proto.make $ ProtoFields.tokenHolderEffect . ProtoFields.events .= []
             TTTokenGovernance ->
                 mkSuccess <$> do
-                    let eventToProto :: Event' s -> Either ConversionError Proto.TokenGovernanceEvent
-                        eventToProto = \case
-                            TokenModuleEvent (TokenEvent{..}) -> Right . Proto.make $ do
-                                PLTFields.tokenSymbol .= toProto _teSymbol
-                                PLTFields.type' .= toProto _teType
-                                PLTFields.details .= toProto _teDetails
-                            _ -> Left CEInvalidTransactionResult
-                    v <- mapM eventToProto events
-                    Right . Proto.make $ ProtoFields.tokenGovernanceEffect . ProtoFields.events .= v
+                    -- TODO: Generate and handle events: https://linear.app/concordium/issue/COR-705/event-logging
+                    -- let eventToProto :: Event' s -> Either ConversionError Proto.TokenGovernanceEvent
+                    --     eventToProto = \case
+                    --         TokenModuleEvent (TokenEvent{..}) -> Right . Proto.make $ do
+                    --             PLTFields.tokenSymbol .= toProto _teSymbol
+                    --             PLTFields.type' .= toProto _teType
+                    --             PLTFields.details .= toProto _teDetails
+                    --         _ -> Left CEInvalidTransactionResult
+                    -- v <- mapM eventToProto events
+                    Right . Proto.make $ ProtoFields.tokenGovernanceEffect . ProtoFields.events .= []
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
