@@ -71,6 +71,7 @@ import qualified Concordium.Types.InvokeContract as InvokeContract
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
 import Concordium.Types.Queries.Tokens
+import Concordium.Types.Tokens (TokenRawAmount (..))
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
 
@@ -623,8 +624,8 @@ instance ToProto Cooldown where
 instance ToProto TokenAmount where
     type Output TokenAmount = Proto.TokenAmount
     toProto TokenAmount{..} = Proto.make $ do
-        PLTFields.digits .= digits
-        PLTFields.nrOfDecimals .= fromIntegral nrDecimals
+        PLTFields.digits .= theTokenRawAmount value
+        PLTFields.nrOfDecimals .= fromIntegral decimals
 
 instance ToProto TokenAccountState where
     type Output TokenAccountState = Proto.TokenAccountState

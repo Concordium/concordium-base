@@ -193,8 +193,8 @@ decodeTokenAmount = do
     unless (base10Exponent sci >= -255) $ fail "Token amount exponent is too small"
     return
         TokenAmount
-            { digits = fromIntegral (coefficient sci),
-              nrDecimals = fromIntegral (negate (base10Exponent sci))
+            { value = fromIntegral (coefficient sci),
+              decimals = fromIntegral (negate (base10Exponent sci))
             }
 
 -- | Encode a 'TokenAmount' as CBOR.
@@ -202,8 +202,8 @@ encodeTokenAmount :: TokenAmount -> Encoding
 encodeTokenAmount TokenAmount{..} =
     encodeTag 4
         <> encodeListLen 2
-        <> encodeInteger (-fromIntegral nrDecimals)
-        <> encodeWord64 digits
+        <> encodeInteger (-fromIntegral decimals)
+        <> encodeWord64 (theTokenRawAmount value)
 
 -- | Helper function to encode a sequence.
 encodeSequence :: (a -> Encoding) -> Seq.Seq a -> Encoding
@@ -673,13 +673,13 @@ data TokenEvent
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
 encodeTokenEvent = \case
     AddAllowListEvent target ->
-        EncodedTokenEvent{eteType = "add-allow-list", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent{eteType = "addAllowList", eteDetails = tokenHolderDetails target}
     RemoveAllowListEvent target ->
-        EncodedTokenEvent{eteType = "remove-allow-list", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent{eteType = "removeAllowList", eteDetails = tokenHolderDetails target}
     AddDenyListEvent target ->
-        EncodedTokenEvent{eteType = "add-deny-list", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent{eteType = "addDenyList", eteDetails = tokenHolderDetails target}
     RemoveDenyListEvent target ->
-        EncodedTokenEvent{eteType = "remove-deny-list", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent{eteType = "removeDenyList", eteDetails = tokenHolderDetails target}
   where
     tokenHolderDetails target =
         Just . BSS.toShort . CBOR.toStrictByteString $
@@ -710,10 +710,10 @@ decodeTokenEventTarget = do
 -- | Decode a 'TokenEvent' from an 'EncodedTokenEvent'.
 decodeTokenEvent :: EncodedTokenEvent -> Either String TokenEvent
 decodeTokenEvent EncodedTokenEvent{..} = case eteType of
-    "add-allow-list" -> AddAllowListEvent <$> decodeTarget
-    "remove-allow-list" -> RemoveAllowListEvent <$> decodeTarget
-    "add-deny-list" -> AddDenyListEvent <$> decodeTarget
-    "remove-deny-list" -> RemoveDenyListEvent <$> decodeTarget
+    "addAllowList" -> AddAllowListEvent <$> decodeTarget
+    "removeAllowList" -> RemoveAllowListEvent <$> decodeTarget
+    "addDenyList" -> AddDenyListEvent <$> decodeTarget
+    "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     decodeTarget = case eteDetails of

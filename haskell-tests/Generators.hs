@@ -44,6 +44,7 @@ import Concordium.Types
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution
 import Concordium.Types.Parameters
+import Concordium.Types.Tokens
 import Concordium.Types.Transactions
 import Concordium.Types.Updates
 import qualified Concordium.Wasm as Wasm
@@ -1154,6 +1155,14 @@ genTokenId :: Gen TokenId
 genTokenId = do
     len <- chooseBoundedIntegral (0, 255)
     TokenId . BSS.pack <$> genUtf8String len
+
+-- | Generate an arbitrary 'TokenRawAmount'.
+genTokenRawAmount :: Gen TokenRawAmount
+genTokenRawAmount = TokenRawAmount <$> arbitrary
+
+-- | Generate an arbitrary 'TokenAmount' across all representable values.
+genTokenAmount :: Gen TokenAmount
+genTokenAmount = TokenAmount <$> genTokenRawAmount <*> arbitrary
 
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.

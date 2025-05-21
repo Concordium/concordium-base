@@ -22,9 +22,6 @@ import Generators
 genText :: Gen Text.Text
 genText = sized $ \s -> Text.decodeUtf8 . BS.pack <$> genUtf8String s
 
-genTokenAmount :: Gen TokenAmount
-genTokenAmount = TokenAmount <$> arbitrary <*> chooseBoundedIntegral (0, 255)
-
 genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- genText
@@ -140,7 +137,7 @@ tip1 =
         { tipName = "ABC token",
           tipMetadata = "https://abc.token/meta",
           tipAllowList = False,
-          tipInitialSupply = Just (TokenAmount{digits = 10000, nrDecimals = 5}),
+          tipInitialSupply = Just (TokenAmount{value = 10000, decimals = 5}),
           tipDenyList = False,
           tipMintable = False,
           tipBurnable = False
@@ -193,7 +190,7 @@ testInitializationParameters = describe "token-initialization-parameters decodin
                 )
 
 tests :: Spec
-tests = focus $ parallel $ describe "CBOR" $ do
+tests = parallel $ describe "CBOR" $ do
     testInitializationParameters
     it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
         (Right ("", tt))

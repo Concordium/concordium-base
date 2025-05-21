@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Types associated with protocol-level tokens.
 module Concordium.Types.Tokens where
@@ -8,10 +9,10 @@ import qualified Data.Aeson as AE
 import qualified Data.Aeson.Types as AE
 import Data.Bits
 import qualified Data.ByteString.Short as BSS
-import Data.Scientific
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.Read as T
 import Data.Word
 
 -- | The unique token identifier for a protocol-level token.
@@ -66,6 +67,18 @@ instance AE.FromJSON TokenId where
 newtype TokenRawAmount = TokenRawAmount {theTokenRawAmount :: Word64}
     deriving newtype (Eq, Ord, Show, Num, Real, Bounded, Enum, Integral)
 
+instance AE.ToJSON TokenRawAmount where
+    toJSON (TokenRawAmount amt) = AE.String $ T.pack $ show amt
+instance AE.FromJSON TokenRawAmount where
+    parseJSON = AE.withText "TokenRawAmount" $ \t -> do
+        case T.decimal t of
+            Right (i, "")
+                | i > fromIntegral (maxBound :: TokenRawAmount) ->
+                    fail "TokenRawAmount out of bounds."
+                | otherwise -> return (fromInteger i)
+            Left e -> fail $ "TokenRawAmount is not a valid decimal number: " ++ e
+            _ -> fail "TokenRawAmount is not a valid decimal number."
+
 -- | Serialization of 'TokenRawAmount' is as a variable length quantity (VLQ). We disallow
 --  0-padding to enforce canonical serialization.
 --
@@ -98,48 +111,33 @@ instance S.Serialize TokenRawAmount where
                 else return accum'
 
 -- | The token amount representation.
---  The amount is computed as `amount = digits * 10^(-nrDecimals)`.
+--  The amount is computed as `amount = value * 10^(-decimals)`.
 data TokenAmount = TokenAmount
-    { digits :: !Word64,
-      nrDecimals :: !Word8
+    { -- | The value in the smallest unit of the token.
+      value :: !TokenRawAmount,
+      -- | The number of decimals in the token representation.
+      decimals :: !Word8
     }
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenAmount where
-    toJSON TokenAmount{..} = AE.Number (scientific (fromIntegral digits) (-fromIntegral nrDecimals))
+    toJSON TokenAmount{..} =
+        AE.object
+            [ ("value", AE.String $ T.pack $ show value),
+              ("decimals", AE.toJSON decimals)
+            ]
 
 instance AE.FromJSON TokenAmount where
-    parseJSON (AE.Number amt)
-        | coefficient amt < 0 = fail "Token amount must be positive."
-        | base10Exponent amt > 0 = do
-            let digitsInteger = coefficient amt * 10 ^ base10Exponent amt
-            when (digitsInteger > toInteger (maxBound :: Word64)) $
-                fail "Token amount out of bounds."
-            return TokenAmount{digits = fromInteger digitsInteger, nrDecimals = 0}
-        | base10Exponent amt < -255 =
-            fail "Token amount precision is out of range."
-        | otherwise =
-            return
-                TokenAmount
-                    { digits = fromInteger (coefficient amt),
-                      nrDecimals = fromIntegral (-base10Exponent amt)
-                    }
-    parseJSON _ = fail "Token amount should be a number."
+    parseJSON = AE.withObject "TokenAmount" $ \o -> do
+        value <- o AE..: "value"
+        decimals <- o AE..: "decimals"
+        return $ TokenAmount{..}
 
--- | A canonical token amount is a token amount where the number of decimals is exactly
---  the number of decimals in the token representation.
-newtype CanonicalTokenAmount = CanonicalTokenAmount {theCanonicalTokenAmount :: TokenAmount}
-    deriving newtype (Eq, Show)
-
--- | Get the 'TokenRawAmount' from a 'CanonicalTokenAmount'.
-rawCanonicalTokenAmount :: CanonicalTokenAmount -> TokenRawAmount
-rawCanonicalTokenAmount (CanonicalTokenAmount TokenAmount{..}) = TokenRawAmount digits
-
-instance S.Serialize CanonicalTokenAmount where
-    put (CanonicalTokenAmount TokenAmount{..}) = do
-        S.put (TokenRawAmount digits)
-        S.putWord8 nrDecimals
+instance S.Serialize TokenAmount where
+    put (TokenAmount{..}) = do
+        S.put value
+        S.putWord8 decimals
     get = do
-        TokenRawAmount digits <- S.get
-        nrDecimals <- S.getWord8
-        return $ CanonicalTokenAmount $ TokenAmount{..}
+        value <- S.get
+        decimals <- S.getWord8
+        return $ TokenAmount{..}
