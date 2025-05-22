@@ -41,9 +41,9 @@ testTransactionSummarySerializationIdentity spv = forAll (genTransactionSummary 
 tests :: Spec
 tests = describe "Transaction summaries" $ do
     specify "TransactionType: serialize then deserialize is identity" testTransactionTypesSerialIdentity
-    -- Since the JSON serialization is the same for all protocol versions, we just test for P4,
+    -- Since the JSON serialization is the same for all protocol versions, we just test for P9,
     -- since this includes all events.
-    specify "Event: JSON serialize then deserialize is identity" $ withMaxSuccess 10000 $ testEventJSONSerializationIdentity SP4
+    specify "Event: JSON serialize then deserialize is identity" $ withMaxSuccess 10000 $ testEventJSONSerializationIdentity SP9
     specify "RejectReason: serialize then deserialize is identity" $ withMaxSuccess 10000 testRejectReasonSerializationIdentity
     versionedTests SP1
     versionedTests SP2
