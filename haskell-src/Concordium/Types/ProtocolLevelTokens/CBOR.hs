@@ -798,6 +798,10 @@ data TokenRejectReason
           -- | The reason why the operation is not permitted.
           trrReason :: !(Maybe Text)
         }
+    | ModuleExecutionOutOfEnergy
+        { -- | The index in the list of operations of the failing operation.
+          trrOperationIndex :: !Word64
+        }
     deriving (Eq, Show)
 
 -- | A builder for constructing 'TokenRejectReason' values with the 'AddressNotFound'
@@ -1007,6 +1011,16 @@ encodeTokenRejectReason OperationNotPermitted{..} =
                     & k "index" ?~ encodeWord64 trrOperationIndex
                     & k "address" .~ fmap encodeTokenHolder trrAddressNotPermitted
                     & k "reason" .~ fmap encodeString trrReason
+        }
+  where
+    k = at . makeMapKeyEncoding . encodeString
+encodeTokenRejectReason ModuleExecutionOutOfEnergy{..} =
+    EncodedTokenRejectReason
+        { etrrType = "outOfEnergy",
+          etrrDetails =
+            Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
+                Map.empty
+                    & k "index" ?~ encodeWord64 trrOperationIndex
         }
   where
     k = at . makeMapKeyEncoding . encodeString
