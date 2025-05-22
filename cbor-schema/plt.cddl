@@ -165,8 +165,10 @@ sha256-hash = bytes .size(32)
 metadata-url = {
     ; A string field representing the URL
     "url": text,
-    ; An optional 32-byte checksum value tied to the content of the URL
-    ? "checksum": sha256-hash
+    ; An optional sha256 checksum value tied to the content of the URL
+    ? "checksumSha256": sha256-hash
+    ; Additional fields may be included for future extensibility, e.g. another hash algorithm.
+    * text => any
 }
 
 ; Token state
