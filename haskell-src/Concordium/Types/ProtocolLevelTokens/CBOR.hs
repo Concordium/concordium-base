@@ -1034,10 +1034,10 @@ decodeTokenGovernanceOperation = do
     res <- case opType of
         "mint" -> TokenMint <$> decodeSupplyUpdate opType
         "burn" -> TokenBurn <$> decodeSupplyUpdate opType
-        "add-allow-list" -> TokenAddAllowList <$> decodeListTarget opType
-        "remove-allow-list" -> TokenRemoveAllowList <$> decodeListTarget opType
-        "add-deny-list" -> TokenAddDenyList <$> decodeListTarget opType
-        "remove-deny-list" -> TokenRemoveDenyList <$> decodeListTarget opType
+        "addAllowList" -> TokenAddAllowList <$> decodeListTarget opType
+        "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
+        "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
+        "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
         _ -> fail $ "token-governance-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -1066,10 +1066,10 @@ encodeTokenGovernanceOperation :: TokenGovernanceOperation -> Encoding
 encodeTokenGovernanceOperation = \case
     TokenMint amount -> encodeSupplyUpdate "mint" amount
     TokenBurn amount -> encodeSupplyUpdate "burn" amount
-    TokenAddAllowList target -> encodeListTarget "add-allow-list" target
-    TokenRemoveAllowList target -> encodeListTarget "remove-allow-list" target
-    TokenAddDenyList target -> encodeListTarget "add-deny-list" target
-    TokenRemoveDenyList target -> encodeListTarget "remove-deny-list" target
+    TokenAddAllowList target -> encodeListTarget "addAllowList" target
+    TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
+    TokenAddDenyList target -> encodeListTarget "addDenyList" target
+    TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
   where
     encodeSupplyUpdate opType amount =
         encodeMapLen 1
