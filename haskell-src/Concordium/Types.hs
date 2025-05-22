@@ -202,6 +202,7 @@ module Concordium.Types (
     cpltDecimals,
     cpltInitializationParameters,
     EncodedTokenOperations (..),
+    EncodedTokenInitializationParameters (..),
 ) where
 
 import Data.Data (Data, Typeable)
@@ -1297,6 +1298,7 @@ makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
 --  it will render as a JSON object if the contents can be decoded to a
 -- 'TokenInitializationParameters', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenInitializationParameters = EncodedTokenInitializationParameters TokenParameter
+    deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenInitializationParameters where
     toJSON (EncodedTokenInitializationParameters tp@(TokenParameter sbs)) =
@@ -1383,6 +1385,7 @@ instance AE.FromJSON CreatePLT where
 --  it will render as a JSON object if the contents can be decoded to a
 -- 'TokenHolderTransaction', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
+    deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenOperations where
     toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
