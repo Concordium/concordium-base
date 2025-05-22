@@ -158,15 +158,15 @@ token-initialization-parameters = {
     ? "burnable": bool .default false
 }
 
-; Type alias for a 32-byte hash value
-hash = bytes .size(32)
+; Type alias for a sha256 hash
+sha256-hash = bytes .size(32)
 
 ; Type alias for metadata with a URL and checksum
 metadata-url = {
     ; A string field representing the URL
     "url": text,
     ; An optional 32-byte checksum value tied to the content of the URL
-    ? "checksum": hash
+    ? "checksum": sha256-hash
 }
 
 ; Token state
