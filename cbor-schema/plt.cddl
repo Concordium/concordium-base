@@ -108,26 +108,26 @@ token-update-list =
 
 ; Add an account to the allow list.
 token-add-allow-list = {
-    ; The operation type is "add-allow-list".
-    "add-allow-list": token-list-update-details
+    ; The operation type is "addAllowList".
+    "addAllowList": token-list-update-details
 }
 
 ; Remove an account from the allow list.
 token-remove-allow-list = {
-    ; The operation type is "remove-allow-list".
-    "remove-allow-list": token-list-update-details
+    ; The operation type is "removeAllowList".
+    "removeAllowList": token-list-update-details
 }
 
 ; Add an account to the deny list.
 token-add-deny-list = {
-    ; The operation type is "add-deny-list".
-    "add-deny-list": token-list-update-details
+    ; The operation type is "addDenyList".
+    "addDenyList": token-list-update-details
 }
 
 ; Remove an account from the deny list.
 token-remove-deny-list = {
-    ; The operation type is "remove-deny-list".
-    "remove-deny-list": token-list-update-details
+    ; The operation type is "removeDenyList".
+    "removeDenyList": token-list-update-details
 }
 
 ; Specifies the details of a list update operation.
@@ -218,28 +218,28 @@ token-remove-deny-list-event = token-list-update-details
 ; reject reasons being defined in the future.)
 
 ; "addressNotFound": a token holder address was not valid.
-reject-details-addressNotFound = {
+reject-details-address-not-found = {
     ; The index in the list of operations of the failing operation.
-    index: uint,
+    "index": uint,
     ; The address that could not be resolved.
-    address: token-holder
+    "address": token-holder
 }
 
 ; "tokenBalanceInsufficient": the balance of tokens on the sender account is insufficient
 ; to perform the operation.
-reject-details-tokenBalanceInsufficient = {
+reject-details-token-balance-insufficient = {
     ; The index in the list of operations of the failing operation.
-    index: uint,
+    "index": uint,
     ; The available balance of the sender.
-    availableBalance: token-amount,
+    "availableBalance": token-amount,
     ; The minimum required balance to perform the operation.
-    requiredBalance: token-amount
+    "requiredBalance": token-amount
 }
 
 ; "deserializationFailure": the transaction could not be deserialized.
-reject-details-deserializationFailure = {
+reject-details-deserialization-failure = {
     ; Text description of the failure mode.
-    ? cause: text
+    ? "cause": text
 }
 
 ; "unsupportedOperation": the operation is not supported by the token module.
@@ -247,35 +247,35 @@ reject-details-deserializationFailure = {
 ; token is not configured to support the operation. If the operation is not authorized
 ; (i.e. the particular participants do not have the authority to perform the operation)
 ; then the reject reason is "operationNotPermitted" instead.
-reject-details-unsupportedOperation = {
+reject-details-unsupported-operation = {
     ; The index in the list of operations of the failing operation.
-    index: uint,
+    "index": uint,
     ; The type of operation that was not supported.
-    operationType: text,
+    "operationType": text,
     ; The reason why the operation was not supported.
-    ? reason: text
+    ? "reason": text
 }
 
 ; "operationNotPermitted": the operation requires that a participating account has a certain
 ; permission, but the account does not have that permission.
-reject-details-operationNotPermitted = {
+reject-details-operation-not-permitted = {
     ; The index in the list of operations of the failing operation.
-    index: uint,
+    "index": uint,
     ; (Optionally) the address that does not have the necessary permissions to perform the
     ; operation.
-    ? address: token-holder,
+    ? "address": token-holder,
     ; The reason why the operation is not permitted.
-    ? reason: text
+    ? "reason": text
 }
 
 ; "mintWouldOverflow": minting the requested amount would overflow the representable token amount.
-reject-details-mintWouldOverflow = {
+reject-details-mint-would-overflow = {
     ; The index in the list of operations of the failing operation.
-    index: uint,
+    "index": uint,
     ; The requested amount to mint.
-    requestedAmount: token-amount,
+    "requestedAmount": token-amount,
     ; The current supply of the token.
-    currentSupply: token-amount,
+    "currentSupply": token-amount,
     ; The maximum representable token amount.
-    maxRepresentableAmount: token-amount,
+    "maxRepresentableAmount": token-amount,
 }

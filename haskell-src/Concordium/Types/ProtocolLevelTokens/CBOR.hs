@@ -367,6 +367,13 @@ tokenInitializationParametersToBytes =
 data CoinInfo = CoinInfoConcordium
     deriving (Eq, Show)
 
+instance AE.ToJSON CoinInfo where
+    toJSON CoinInfoConcordium = AE.String "CCD"
+
+instance AE.FromJSON CoinInfo where
+    parseJSON (AE.String "CCD") = return CoinInfoConcordium
+    parseJSON _ = fail "CoinInfo JSON must be the string 'CCD'"
+
 -- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
 decodeCoinInfo :: Decoder s CoinInfo
 decodeCoinInfo = do
@@ -428,6 +435,25 @@ data TokenHolder = HolderAccount
       holderAccountCoinInfo :: !(Maybe CoinInfo)
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenHolder where
+    toJSON HolderAccount{..} = do
+        AE.object $
+            [ -- Tag with type of receiver
+              "type" AE..= AE.String "account",
+              "address" AE..= holderAccountAddress
+            ]
+                ++ ["coininfo" AE..= coinInfo | coinInfo <- toList holderAccountCoinInfo]
+
+instance AE.FromJSON TokenHolder where
+    parseJSON = AE.withObject "TokenReceiver" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "account" -> do
+                holderAccountAddress <- o AE..: "address"
+                holderAccountCoinInfo <- o AE..:? "coininfo"
+                return HolderAccount{..}
+            _ -> fail ("Unknown TokenReceiver type " ++ type_string)
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
@@ -501,8 +527,32 @@ data TaggableMemo
     = -- | The memo is represented as a byte string with no tag.
       UntaggedMemo {untaggedMemo :: !Memo}
     | -- | The memo is represented as a byte string with a tag indicating CBOR-encoded data.
-      CBORMemo {untaggedMemo :: !Memo}
+      CBORMemo {cborMemo :: !Memo}
     deriving (Eq, Show)
+
+instance AE.ToJSON TaggableMemo where
+    toJSON UntaggedMemo{..} = do
+        AE.object $
+            [ "type" AE..= AE.String "raw",
+              "value" AE..= untaggedMemo
+            ]
+    toJSON CBORMemo{..} = do
+        AE.object $
+            [ "type" AE..= AE.String "cbor",
+              "value" AE..= cborMemo
+            ]
+
+instance AE.FromJSON TaggableMemo where
+    parseJSON = AE.withObject "TaggableMemo" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "raw" -> do
+                untaggedMemo <- o AE..: "value"
+                return UntaggedMemo{..}
+            "cbor" -> do
+                cborMemo <- o AE..: "value"
+                return CBORMemo{..}
+            _ -> fail ("Unknown TaggableMemo type " ++ type_string)
 
 -- | Decode a CBOR-encoded 'TaggableMemo'.
 --  A memo can be encoded either directly as a byte string (of length at most 256) or as
@@ -544,6 +594,21 @@ data TokenTransferBody = TokenTransferBody
       ttMemo :: !(Maybe TaggableMemo)
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenTransferBody where
+    toJSON TokenTransferBody{..} = do
+        AE.object $
+            [ "amount" AE..= ttAmount,
+              "recipient" AE..= ttRecipient
+            ]
+                ++ ["memo" AE..= memo | memo <- toList ttMemo]
+
+instance AE.FromJSON TokenTransferBody where
+    parseJSON = AE.withObject "TokenTransferBody" $ \o -> do
+        ttAmount <- o AE..: "amount"
+        ttRecipient <- o AE..: "recipient"
+        ttMemo <- o AE..:? "memo"
+        return TokenTransferBody{..}
 
 -- | Builder
 data TokenTransferBuilder = TokenTransferBuilder
@@ -593,6 +658,17 @@ encodeTokenTransfer TokenTransferBody{..} =
 newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
     deriving (Eq, Show)
 
+instance AE.ToJSON TokenHolderOperation where
+    toJSON (TokenHolderTransfer body) = do
+        AE.object
+            [ "transfer" AE..= AE.toJSON body
+            ]
+
+instance AE.FromJSON TokenHolderOperation where
+    parseJSON = AE.withObject "TokenHolderOperation" $ \o -> do
+        transferBody <- o AE..: "transfer"
+        pure $ TokenHolderTransfer transferBody
+
 -- | Decode a CBOR-encoded 'TokenHolderOperation'.
 decodeTokenHolderOperation :: Decoder s TokenHolderOperation
 decodeTokenHolderOperation = do
@@ -622,6 +698,12 @@ newtype TokenHolderTransaction = TokenHolderTransaction
     { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenHolderTransaction where
+    toJSON = AE.toJSON . tokenHolderTransactions
+
+instance AE.FromJSON TokenHolderTransaction where
+    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON
 
 -- | Decode a CBOR-encoded 'TokenHolderTransaction'.
 decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
@@ -1116,10 +1198,10 @@ decodeTokenGovernanceOperation = do
     res <- case opType of
         "mint" -> TokenMint <$> decodeSupplyUpdate opType
         "burn" -> TokenBurn <$> decodeSupplyUpdate opType
-        "add-allow-list" -> TokenAddAllowList <$> decodeListTarget opType
-        "remove-allow-list" -> TokenRemoveAllowList <$> decodeListTarget opType
-        "add-deny-list" -> TokenAddDenyList <$> decodeListTarget opType
-        "remove-deny-list" -> TokenRemoveDenyList <$> decodeListTarget opType
+        "addAllowList" -> TokenAddAllowList <$> decodeListTarget opType
+        "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
+        "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
+        "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
         _ -> fail $ "token-governance-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -1148,10 +1230,10 @@ encodeTokenGovernanceOperation :: TokenGovernanceOperation -> Encoding
 encodeTokenGovernanceOperation = \case
     TokenMint amount -> encodeSupplyUpdate "mint" amount
     TokenBurn amount -> encodeSupplyUpdate "burn" amount
-    TokenAddAllowList target -> encodeListTarget "add-allow-list" target
-    TokenRemoveAllowList target -> encodeListTarget "remove-allow-list" target
-    TokenAddDenyList target -> encodeListTarget "add-deny-list" target
-    TokenRemoveDenyList target -> encodeListTarget "remove-deny-list" target
+    TokenAddAllowList target -> encodeListTarget "addAllowList" target
+    TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
+    TokenAddDenyList target -> encodeListTarget "addDenyList" target
+    TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
   where
     encodeSupplyUpdate opType amount =
         encodeMapLen 1
