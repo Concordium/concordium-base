@@ -702,7 +702,7 @@ pub enum UpdatePayload {
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlt {
     /// The symbol of the token.
-    pub token_symbol:              protocol_level_tokens::TokenId,
+    pub token_id:                  protocol_level_tokens::TokenId,
     /// A SHA256 hash that identifies the token module implementation.
     pub token_module:              protocol_level_tokens::TokenModuleRef,
     /// The address of the account that will govern the token.
