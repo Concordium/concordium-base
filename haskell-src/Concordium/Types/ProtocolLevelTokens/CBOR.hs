@@ -32,6 +32,7 @@ import Concordium.ID.Types
 import Concordium.Types.Memo
 import Concordium.Types.Tokens
 import qualified Data.FixedByteString as FBS
+import qualified Concordium.Crypto.SHA256 as SHA256
 
 -- * Decoder helpers
 
@@ -211,6 +212,81 @@ encodeSequence encodeItem s =
     encodeListLen (fromIntegral $ Seq.length s)
         <> foldMap encodeItem s
 
+-- | A token metadata URL and an optional checksum. The checksum is a SHA256 hash of the metadata at the location of the URL.
+data TokenMetadataUrl = TokenMetadataUrl
+    { -- | The URL of the token metadata.
+      tmUrl :: !Text,
+      -- | The sha256 hash of the token metadata.
+      tmChecksumSha256 :: !(Maybe SHA256.Hash),
+      -- | Any additional values associated with the metadata url, e.g. checksums produces by alternative hash functions.
+      --  Keys in this map SHOULD NOT overlap those used for the other (standardised) fields in this structure as that will
+      --  break the invertability of the CBOR encoding.
+      tmAdditional :: !(Map.Map Text CBOR.Term)
+    }
+    deriving (Eq, Show)
+
+instance AE.ToJSON TokenMetadataUrl where
+    toJSON TokenMetadataUrl {..} =
+        AE.object $
+            [ "url" AE..= tmUrl,
+              "checksumSha256" AE..= tmChecksumSha256
+            ]
+            ++ map (\(k, v) -> Text.unpack k AE..= v) (Map.toList tmAdditional)
+
+instance AE.FromJSON TokenMetadataUrl where
+    parseJSON = AE.withObject "TokenMetadataUrl" $ \v -> do
+        tmUrl <- v AE..: "url"
+        tmChecksumSha256 <- v AE..:? "checksumSha256"
+        
+        -- Parse any additional fields that are not "url" or "checksumSha256"
+        let standardKeys = ["url", "checksumSha256"]
+        tmAdditional <- Map.fromList <$> traverse parseAdditional (filter (`notElem` standardKeys) (Map.keys v))
+        
+        return TokenMetadataUrl {..}
+      where
+        -- Helper function to parse the additional fields into the tmAdditional Map
+        parseAdditional key = do
+            value <- v AE..: key
+            return (Text.pack key, value)
+
+-- | Decode a CBOR-encoded 'TokenMetadataUrl'.
+decodeTokenMetadataUrl :: Decoder s TokenMetadataUrl
+decodeTokenMetadataUrl = decodeMap decodeVal build Map.empty
+  where
+    decodeVal key = Just $ mapValueDecoder key CBOR.decodeTerm (at key)
+    build :: Map.Map Text CBOR.Term -> Either String TokenMetadataUrl
+    build m0 = do
+        (tmUrl, m1) <- getAndClear "url" convertText m0
+        (tmChecksumSha256, tmAdditional) <- getAndClear "checksumSha256" decodeShortByteString m1
+        return TokenMetadataUrl{..}
+    getAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        term <- maybeTerm `orFail` ("Missing " ++ show key)
+        val <- convert term `orFail` ("Invalid " ++ show key)
+        return (val, m')
+    getMaybeAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
+        return (maybeVal, m')
+    convertText (CBOR.TString t) = Just t
+    convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
+    convertText _ = Nothing
+
+-- | Encode a 'TokenMetadataUrl' as CBOR.
+encodeTokenMetadataUrl :: TokenMetadataUrl -> Encoding
+encodeTokenMetadataUrl TokenMetadataUrl {..} =
+    encodeMapDeterministic $
+        additionalMap
+            & k "url" ?~ encodeString tmUrl
+            & k "checksumSha256" ?~ fmap encodeShortByteString tmChecksumSha256
+  where
+    additionalMap =
+        Map.fromList
+            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
+              | (key, val) <- Map.toList tmAdditional
+            ]
+    k = at . makeMapKeyEncoding . encodeString
+
 -- * Initialization parameters
 
 -- | The parsed token-initialization-parameters. These parameters are passed to the token module
@@ -219,7 +295,7 @@ data TokenInitializationParameters = TokenInitializationParameters
     { -- | The name of the token.
       tipName :: !Text,
       -- | A URL pointing to the token metadata.
-      tipMetadata :: !Text,
+      tipMetadata :: !TokenMetadataUrl,
       -- | Whether the token supports an allow list.
       tipAllowList :: !Bool,
       -- | Whether the token supports a deny list.
@@ -303,7 +379,7 @@ decodeTokenInitializationParameters =
         emptyTokenInitializationParametersBuilder
   where
     valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
-    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeString tipbMetadata
+    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
     valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
     valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
     valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
@@ -328,7 +404,7 @@ encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} 
     encodeMapDeterministic $
         Map.empty
             & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeString tipMetadata
+            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
             & k "allowList" ?~ encodeBool tipAllowList
             & k "denyList" ?~ encodeBool tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
@@ -344,7 +420,7 @@ encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..
     encodeMapDeterministic $
         Map.empty
             & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeString tipMetadata
+            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
             & setIfTrue "allowList" tipAllowList
             & setIfTrue "denyList" tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
@@ -1213,7 +1289,7 @@ data TokenModuleState = TokenModuleState
     { -- | The name of the token.
       tmsName :: !Text,
       -- | A URL pointing to the token metadata.
-      tmsMetadata :: !Text,
+      tmsMetadata :: !TokenMetadataUrl,
       -- | Whether the token supports an allow list.
       tmsAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -1236,7 +1312,7 @@ encodeTokenModuleState TokenModuleState{..} =
     encodeMapDeterministic $
         additionalMap
             & k "name" ?~ encodeString tmsName
-            & k "metadata" ?~ encodeString tmsMetadata
+            & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
@@ -1262,7 +1338,7 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     build :: Map.Map Text CBOR.Term -> Either String TokenModuleState
     build m0 = do
         (tmsName, m1) <- getAndClear "name" convertText m0
-        (tmsMetadata, m2) <- getAndClear "metadata" convertText m1
+        (tmsMetadata, m2) <- getAndClear "metadata" decodeTokenMetadataUrl m1
         (tmsAllowList, m3) <- getMaybeAndClear "allowList" convertBool m2
         (tmsDenyList, m4) <- getMaybeAndClear "denyList" convertBool m3
         (tmsMintable, m5) <- getMaybeAndClear "mintable" convertBool m4
