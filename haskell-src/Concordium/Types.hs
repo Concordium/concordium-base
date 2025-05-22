@@ -201,6 +201,8 @@ module Concordium.Types (
     cpltGovernanceAccount,
     cpltDecimals,
     cpltInitializationParameters,
+    EncodedTokenOperations (..),
+    EncodedTokenInitializationParameters (..),
 ) where
 
 import Data.Data (Data, Typeable)
@@ -1296,6 +1298,7 @@ makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
 --  it will render as a JSON object if the contents can be decoded to a
 -- 'TokenInitializationParameters', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenInitializationParameters = EncodedTokenInitializationParameters TokenParameter
+    deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenInitializationParameters where
     toJSON (EncodedTokenInitializationParameters tp@(TokenParameter sbs)) =
@@ -1375,6 +1378,32 @@ instance AE.FromJSON CreatePLT where
         (EncodedTokenInitializationParameters _cpltInitializationParameters) <-
             o AE..: "initializationParameters"
         return CreatePLT{..}
+
+-- | A wrapper type for (de)-serializing an CBOR-encoded token operations to/from JSON.
+--  This can parse either an JSON object representation of 'TokenHolderTransaction'
+--  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
+--  it will render as a JSON object if the contents can be decoded to a
+-- 'TokenHolderTransaction', or otherwise as the hex-encoded byte string.
+newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
+    deriving newtype (Eq, Show)
+
+instance AE.ToJSON EncodedTokenOperations where
+    toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
+        case CBOR.tokenHolderTransactionFromBytes
+            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
+            Left _ -> AE.toJSON tp
+            Right v -> AE.toJSON v
+
+instance AE.FromJSON EncodedTokenOperations where
+    parseJSON v@(AE.Array _) = do
+        tip <- AE.parseJSON v
+        return $
+            EncodedTokenOperations $
+                TokenParameter $
+                    BSS.toShort $
+                        CBOR.tokenHolderTransactionToBytes tip
+    parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
+    parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
