@@ -523,6 +523,8 @@ dependencies = [
  "cbc",
  "chrono",
  "ciborium",
+ "ciborium-io",
+ "ciborium-ll",
  "concordium-contracts-common",
  "concordium_base_derive",
  "curve25519-dalek",

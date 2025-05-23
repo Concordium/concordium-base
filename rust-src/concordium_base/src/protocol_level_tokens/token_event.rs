@@ -1,5 +1,4 @@
-use super::{cbor::RawCbor, TokenAmount, TokenId};
-use concordium_contracts_common::AccountAddress;
+use super::{cbor::RawCbor, TokenId};
 
 /// Event produced from the effect of a token holder transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

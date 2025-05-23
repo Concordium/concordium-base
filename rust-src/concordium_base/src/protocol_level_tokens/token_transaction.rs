@@ -1,7 +1,8 @@
-use crate::common::{types::*, Buffer};
 use crate::protocol_level_tokens::token_holder::TokenHolder;
 use crate::protocol_level_tokens::{RawCbor, TokenAmount, TokenId};
 use crate::transactions::Memo;
+
+const CBOR_TAG: u64 = 24;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +14,10 @@ pub struct TokenOperationsPayload {
     /// Token operations in the transaction
     pub operations: RawCbor,
 }
+
+// struct TokenOperationsPayloadCbor(TokenOperationsPayload) {
+//
+// }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,7 +34,6 @@ pub struct TokenTransfer {
     /// The recipient account.
     pub recipient: TokenHolder,
     /// An optional memo.
-    // todo consider memo type
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<CborMemo>,
 }
@@ -54,23 +58,54 @@ mod test {
         0x1F, 0x20,
     ]);
 
-    fn cbor_serialize<T: serde::Serialize>(value: &T) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        ciborium::ser::into_writer(value, &mut bytes).unwrap();
-        bytes
-    }
-    
+    // fn cbor_serialize<T: serde::Serialize>(value: &T) -> Vec<u8> {
+    //     let mut bytes = Vec::new();
+    //     ciborium::ser::into_writer(value, &mut bytes).unwrap();
+    //     bytes
+    // }
+
     #[test]
     fn test_transfer_cbor() {
         let operation = TokenOperation::Transfer(TokenTransfer {
             amount: TokenAmount::from_raw(12300, 4),
             recipient: TokenHolder::HolderAccount(HolderAccount {
                 address: TEST_ADDRESS,
+                coin_info: None,
             }),
             memo: None,
         });
-        
-        let bytes = cbor_serialize(&operation);
-        println!("{}", hex::encode(&bytes));
+
+        // let bytes = cbor::cbor_serialize(&operation);
+        todo!()
     }
+
+    // todo ar remove
+    // #[test]
+    // fn test_cbor() {
+    //     let operation = TokenOperation::Transfer(TokenTransfer {
+    //         amount: TokenAmount::from_raw(12300, 4),
+    //         recipient: TokenHolder::HolderAccount(HolderAccount {
+    //             address: TEST_ADDRESS,
+    //             coin_info: None,
+    //         }),
+    //         memo: None,
+    //     });
+    // 
+    //     let bytes = cbor_serialize(&operation);
+    //     println!("cbor: {}", hex::encode(&bytes));
+    //     println!("json: {}", serde_json::to_string(&operation).unwrap());
+    // 
+    //     let value = cbor!({
+    //         123 => 415,
+    //         "message" => null,
+    //         "continue" => false,
+    //         "extra" => { "numbers" => [8.2341e+4, 0.251425] },
+    //     })
+    //     .unwrap();
+    //     let mut bytes = Vec::new();
+    //     ciborium::into_writer(&value, &mut bytes).unwrap();
+    //     println!("cbor: {}", hex::encode(&bytes));
+    //     
+    //     println!("json: {}", serde_json::to_string(&value).unwrap());
+    // }
 }
