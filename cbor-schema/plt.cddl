@@ -194,19 +194,19 @@ token-module-state = {
 ; These events are limited to the events emitted by the token module. Events related to balance changes
 ; for protocol-level tokens are defined separately and are not subject to CBOR encoding.
 
-; The details of a token "add-allow-list" event.
+; The details of a token "addAllowList" event.
 ; This is a token kernel event, and indicates the account was added to the allow list.
 token-add-allow-list-event = token-list-update-details
 
-; The details of a token "remove-allow-list" event.
+; The details of a token "removeAllowList" event.
 ; This is a token kernel event, and indicates the account was removed from the allow list.
 token-remove-allow-list-event = token-list-update-details
 
-; The details of a token "add-deny-list" event.
+; The details of a token "addDenyList" event.
 ; This is a token kernel event, and indicates the account was added to the deny list.
 token-add-deny-list-event = token-list-update-details
 
-; The details of a token "remove-deny-list" event.
+; The details of a token "removeDenyList" event.
 ; This is a token kernel event, and indicates the account was removed from the deny list.
 token-remove-deny-list-event = token-list-update-details
 

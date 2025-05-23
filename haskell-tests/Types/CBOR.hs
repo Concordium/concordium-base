@@ -200,7 +200,7 @@ tip2 :: TokenInitializationParameters
 tip2 =
     tip1
         { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
-          tipInitialSupply = Just (TokenAmount{digits = 12345, nrDecimals = 5})
+          tipInitialSupply = Just (TokenAmount{value = 12345, decimals = 5})
         }
 
 -- | Encoded 'TokenInitializationParameters' that can be successfully CBOR decoded
@@ -250,7 +250,7 @@ tops1 =
             [ TokenHolderTransfer
                 TokenTransferBody
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
-                      ttAmount = TokenAmount{digits = 12345, nrDecimals = 5},
+                      ttAmount = TokenAmount{value = 12345, decimals = 5},
                       ttRecipient =
                         HolderAccount
                             { holderAccountAddress = AccountAddress $ FBS.pack [0x1, 0x1],
