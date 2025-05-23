@@ -1,16 +1,17 @@
-use crate::protocol_level_tokens::token_holder::TokenHolder;
-use crate::protocol_level_tokens::{RawCbor, TokenAmount, TokenId};
-use crate::transactions::Memo;
+use crate::{
+    protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
+    transactions::Memo,
+};
 
 const CBOR_TAG: u64 = 24;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Payload for token transaction. The transaction is a list of token operations.
-/// Operations includes governance operations, transfers etc.
+/// Payload for token transaction. The transaction is a list of token
+/// operations. Operations includes governance operations, transfers etc.
 pub struct TokenOperationsPayload {
     /// Id of the token
-    pub token_id: TokenId,
+    pub token_id:   TokenId,
     /// Token operations in the transaction
     pub operations: RawCbor,
 }
@@ -30,12 +31,12 @@ pub enum TokenOperation {
 #[serde(rename_all = "camelCase")]
 pub struct TokenTransfer {
     /// The amount of tokens to transfer.
-    pub amount: TokenAmount,
+    pub amount:    TokenAmount,
     /// The recipient account.
     pub recipient: TokenHolder,
     /// An optional memo.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub memo: Option<CborMemo>,
+    pub memo:      Option<CborMemo>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -67,12 +68,12 @@ mod test {
     #[test]
     fn test_transfer_cbor() {
         let operation = TokenOperation::Transfer(TokenTransfer {
-            amount: TokenAmount::from_raw(12300, 4),
+            amount:    TokenAmount::from_raw(12300, 4),
             recipient: TokenHolder::HolderAccount(HolderAccount {
-                address: TEST_ADDRESS,
+                address:   TEST_ADDRESS,
                 coin_info: None,
             }),
-            memo: None,
+            memo:      None,
         });
 
         // let bytes = cbor::cbor_serialize(&operation);
@@ -90,11 +91,11 @@ mod test {
     //         }),
     //         memo: None,
     //     });
-    // 
+    //
     //     let bytes = cbor_serialize(&operation);
     //     println!("cbor: {}", hex::encode(&bytes));
     //     println!("json: {}", serde_json::to_string(&operation).unwrap());
-    // 
+    //
     //     let value = cbor!({
     //         123 => 415,
     //         "message" => null,
@@ -105,7 +106,7 @@ mod test {
     //     let mut bytes = Vec::new();
     //     ciborium::into_writer(&value, &mut bytes).unwrap();
     //     println!("cbor: {}", hex::encode(&bytes));
-    //     
+    //
     //     println!("json: {}", serde_json::to_string(&value).unwrap());
     // }
 }

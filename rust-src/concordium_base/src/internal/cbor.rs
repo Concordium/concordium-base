@@ -38,25 +38,15 @@ pub trait EncoderExt {
 }
 
 impl<W: Write> EncoderExt for Encoder<W> {
-    fn push_tag(&mut self, tag: u64) {
-        self.push(Header::Tag(tag));
-    }
+    fn push_tag(&mut self, tag: u64) { self.push(Header::Tag(tag)); }
 
-    fn push_positive(&mut self, positive: u64) {
-        self.push(Header::Positive(positive));
-    }
+    fn push_positive(&mut self, positive: u64) { self.push(Header::Positive(positive)); }
 
-    fn push_map(&mut self, size: usize) {
-        self.push(Header::Map(Some(size)));
-    }
+    fn push_map(&mut self, size: usize) { self.push(Header::Map(Some(size))); }
 
-    fn push_array(&mut self, size: usize) {
-        self.push(Header::Array(Some(size)));
-    }
+    fn push_array(&mut self, size: usize) { self.push(Header::Array(Some(size))); }
 
-    fn push_bytes(&mut self, bytes: &[u8]) {
-        self.bytes(bytes, None);
-    }
+    fn push_bytes(&mut self, bytes: &[u8]) { self.bytes(bytes, None); }
 }
 
 pub trait DecoderExt {
@@ -64,7 +54,7 @@ pub trait DecoderExt {
     fn pull_positive(&mut self) -> u64;
     fn pull_map(&mut self) -> usize;
     fn pull_array(&mut self) -> usize;
-    fn pull_bytes_exact(&mut self, dest: &mut [u8]) ;
+    fn pull_bytes_exact(&mut self, dest: &mut [u8]);
 }
 
 impl<R: Read + Debug> DecoderExt for Decoder<R>
@@ -101,9 +91,11 @@ where
 
     fn pull_bytes_exact(&mut self, dest: &mut [u8]) {
         match self.pull().unwrap() {
-            Header::Bytes(Some(size)) => if size != dest.len() {
-                todo!()
-            },
+            Header::Bytes(Some(size)) => {
+                if size != dest.len() {
+                    todo!()
+                }
+            }
             _ => todo!(),
         };
         let mut segments = self.bytes(Some(dest.len()));

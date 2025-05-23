@@ -6,7 +6,6 @@
 // trigger due to usage of the variants in derived implementations.
 #![allow(deprecated)]
 
-use crate::protocol_level_tokens::TokenOperationsPayload;
 use crate::{
     base::{
         AccountThreshold, AggregateSigPairing, AmountFraction, BakerAggregationVerifyKey,
@@ -26,6 +25,7 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
+    protocol_level_tokens::TokenOperationsPayload,
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -237,16 +237,16 @@ impl Deserial for PayloadSize {
 /// the sender and the transaction is valid.
 pub struct TransactionHeader {
     /// Sender account of the transaction.
-    pub sender: AccountAddress,
+    pub sender:        AccountAddress,
     /// Sequence number of the transaction.
-    pub nonce: Nonce,
+    pub nonce:         Nonce,
     /// Maximum amount of energy the transaction can take to execute.
     pub energy_amount: Energy,
     /// Size of the transaction payload. This is used to deserialize the
     /// payload.
-    pub payload_size: PayloadSize,
+    pub payload_size:  PayloadSize,
     /// Latest time the transaction can be included in a block.
-    pub expiry: TransactionTime,
+    pub expiry:        TransactionTime,
 }
 
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, Into, AsRef)]
@@ -262,7 +262,7 @@ pub struct EncodedPayload {
 #[error("The given byte array of size {actual}B exceeds maximum payload size {max}B")]
 pub struct ExceedsPayloadSize {
     pub actual: usize,
-    pub max: u32,
+    pub max:    u32,
 }
 
 impl TryFrom<Vec<u8>> for EncodedPayload {
@@ -334,9 +334,7 @@ pub trait PayloadLike {
 }
 
 impl PayloadLike for EncodedPayload {
-    fn encode(&self) -> EncodedPayload {
-        self.clone()
-    }
+    fn encode(&self) -> EncodedPayload { self.clone() }
 
     fn encode_to_buffer<B: Buffer>(&self, out: &mut B) {
         out.write_all(&self.payload)
@@ -354,8 +352,8 @@ impl PayloadLike for EncodedPayload {
 /// and the sender account information.
 pub struct AccountTransaction<PayloadType> {
     pub signature: TransactionSignature,
-    pub header: TransactionHeader,
-    pub payload: PayloadType,
+    pub header:    TransactionHeader,
+    pub payload:   PayloadType,
 }
 
 impl<P: PayloadLike> Serial for AccountTransaction<P> {
@@ -435,20 +433,20 @@ pub struct BakerKeysPayload<V> {
     #[serde(skip)] // use default when deserializing
     phantom: PhantomData<V>,
     /// New public key for participating in the election lottery.
-    pub election_verify_key: BakerElectionVerifyKey,
+    pub election_verify_key:    BakerElectionVerifyKey,
     /// New public key for verifying this baker's signatures.
-    pub signature_verify_key: BakerSignatureVerifyKey,
+    pub signature_verify_key:   BakerSignatureVerifyKey,
     /// New public key for verifying this baker's signature on finalization
     /// records.
     pub aggregation_verify_key: BakerAggregationVerifyKey,
     /// Proof of knowledge of the secret key corresponding to the signature
     /// verification key.
-    pub proof_sig: crate::eddsa_ed25519::Ed25519DlogProof,
+    pub proof_sig:              crate::eddsa_ed25519::Ed25519DlogProof,
     /// Proof of knowledge of the election secret key.
-    pub proof_election: crate::eddsa_ed25519::Ed25519DlogProof,
+    pub proof_election:         crate::eddsa_ed25519::Ed25519DlogProof,
     /// Proof of knowledge of the secret key for signing finalization
     /// records.
-    pub proof_aggregation: crate::aggregate_sig::Proof<AggregateSigPairing>,
+    pub proof_aggregation:      crate::aggregate_sig::Proof<AggregateSigPairing>,
 }
 
 /// Baker keys payload containing proofs construct for a `AddBaker` transaction.
@@ -544,9 +542,9 @@ impl ConfigureBakerKeysPayload {
 pub struct AddBakerPayload {
     /// The keys with which the baker registered.
     #[serde(flatten)]
-    pub keys: BakerAddKeysPayload,
+    pub keys:             BakerAddKeysPayload,
     /// Initial baking stake.
-    pub baking_stake: Amount,
+    pub baking_stake:     Amount,
     /// Whether to add earnings to the stake automatically or not.
     pub restake_earnings: bool,
 }
@@ -556,13 +554,13 @@ pub struct AddBakerPayload {
 /// Data needed to initialize a smart contract.
 pub struct InitContractPayload {
     /// Deposit this amount of CCD.
-    pub amount: Amount,
+    pub amount:    Amount,
     /// Reference to the module from which to initialize the instance.
-    pub mod_ref: concordium_contracts_common::ModuleReference,
+    pub mod_ref:   concordium_contracts_common::ModuleReference,
     /// Name of the contract in the module.
     pub init_name: smart_contracts::OwnedContractName,
     /// Message to invoke the initialization method with.
-    pub param: smart_contracts::OwnedParameter,
+    pub param:     smart_contracts::OwnedParameter,
 }
 
 impl InitContractPayload {
@@ -583,13 +581,13 @@ impl InitContractPayload {
 pub struct UpdateContractPayload {
     /// Send the given amount of CCD together with the message to the
     /// contract instance.
-    pub amount: Amount,
+    pub amount:       Amount,
     /// Address of the contract instance to invoke.
-    pub address: ContractAddress,
+    pub address:      ContractAddress,
     /// Name of the method to invoke on the contract.
     pub receive_name: smart_contracts::OwnedReceiveName,
     /// Message to send to the contract instance.
-    pub message: smart_contracts::OwnedParameter,
+    pub message:      smart_contracts::OwnedParameter,
 }
 
 impl UpdateContractPayload {
@@ -632,9 +630,7 @@ pub struct ConfigureBakerPayload {
 }
 
 impl ConfigureBakerPayload {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Construct a new payload to remove a baker.
     pub fn new_remove_baker() -> Self {
@@ -721,18 +717,16 @@ impl ConfigureBakerPayload {
 /// empty configuration that will not change anything.
 pub struct ConfigureDelegationPayload {
     /// The capital delegated to the pool.
-    pub capital: Option<Amount>,
+    pub capital:           Option<Amount>,
     /// Whether the delegator's earnings are restaked.
-    pub restake_earnings: Option<bool>,
+    pub restake_earnings:  Option<bool>,
     /// The target of the delegation.
     pub delegation_target: Option<DelegationTarget>,
 }
 
 impl ConfigureDelegationPayload {
     /// Construct a new payload that has all the options unset.
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Construct a new payload to remove a delegation.
     pub fn new_remove_delegation() -> Self {
@@ -850,7 +844,7 @@ pub enum Payload {
         /// Address to send to.
         to_address: AccountAddress,
         /// Amount to send.
-        amount: Amount,
+        amount:     Amount,
     },
     /// Register the sender account as a baker.
     AddBaker {
@@ -879,7 +873,7 @@ pub enum Payload {
         /// Id of the credential whose keys are to be updated.
         cred_id: CredentialRegistrationID,
         /// The new public keys.
-        keys: CredentialPublicKeys,
+        keys:    CredentialPublicKeys,
     },
     /// Transfer an encrypted amount.
     #[deprecated(
@@ -888,7 +882,7 @@ pub enum Payload {
     )]
     EncryptedAmountTransfer {
         /// The recepient's address.
-        to: AccountAddress,
+        to:   AccountAddress,
         /// The (encrypted) amount to transfer and proof of correctness of
         /// accounting.
         data: Box<EncryptedAmountTransferData<EncryptedAmountsCurve>>,
@@ -911,18 +905,18 @@ pub enum Payload {
     /// Transfer an amount with schedule.
     TransferWithSchedule {
         /// The recepient.
-        to: AccountAddress,
+        to:       AccountAddress,
         /// The release schedule. This can be at most 255 elements.
         schedule: Vec<(Timestamp, Amount)>,
     },
     /// Update the account's credentials.
     UpdateCredentials {
         /// New credentials to add.
-        new_cred_infos: AccountCredentialsMap,
+        new_cred_infos:  AccountCredentialsMap,
         /// Ids of credentials to remove.
         remove_cred_ids: Vec<CredentialRegistrationID>,
         /// The new account threshold.
-        new_threshold: AccountThreshold,
+        new_threshold:   AccountThreshold,
     },
     /// Register the given data on the chain.
     RegisterData {
@@ -934,9 +928,9 @@ pub enum Payload {
         /// Address to send to.
         to_address: AccountAddress,
         /// Memo to include in the transfer.
-        memo: Memo,
+        memo:       Memo,
         /// Amount to send.
-        amount: Amount,
+        amount:     Amount,
     },
     /// Transfer an encrypted amount.
     #[deprecated(
@@ -945,7 +939,7 @@ pub enum Payload {
     )]
     EncryptedAmountTransferWithMemo {
         /// The recepient's address.
-        to: AccountAddress,
+        to:   AccountAddress,
         /// Memo to include in the transfer.
         memo: Memo,
         /// The (encrypted) amount to transfer and proof of correctness of
@@ -955,9 +949,9 @@ pub enum Payload {
     /// Transfer an amount with schedule.
     TransferWithScheduleAndMemo {
         /// The recepient.
-        to: AccountAddress,
+        to:       AccountAddress,
         /// Memo to include in the transfer.
-        memo: Memo,
+        memo:     Memo,
         /// The release schedule. This can be at most 255 elements.
         schedule: Vec<(Timestamp, Amount)>,
     },
@@ -1400,7 +1394,7 @@ impl Deserial for Payload {
                     token_id,
                     operations,
                 };
-                Ok(Payload::TokenHolder { payload }) 
+                Ok(Payload::TokenHolder { payload })
             }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
@@ -1415,9 +1409,7 @@ impl PayloadLike for Payload {
         EncodedPayload { payload }
     }
 
-    fn encode_to_buffer<B: Buffer>(&self, out: &mut B) {
-        out.put(&self)
-    }
+    fn encode_to_buffer<B: Buffer>(&self, out: &mut B) { out.put(&self) }
 }
 
 impl EncodedPayload {
@@ -1465,9 +1457,7 @@ impl<S: TransactionSigner> TransactionSigner for std::sync::Arc<S> {
 }
 
 impl<S: ExactSizeTransactionSigner> ExactSizeTransactionSigner for std::sync::Arc<S> {
-    fn num_keys(&self) -> u32 {
-        self.as_ref().num_keys()
-    }
+    fn num_keys(&self) -> u32 { self.as_ref().num_keys() }
 }
 
 impl<S: TransactionSigner> TransactionSigner for std::rc::Rc<S> {
@@ -1480,9 +1470,7 @@ impl<S: TransactionSigner> TransactionSigner for std::rc::Rc<S> {
 }
 
 impl<S: ExactSizeTransactionSigner> ExactSizeTransactionSigner for std::rc::Rc<S> {
-    fn num_keys(&self) -> u32 {
-        self.as_ref().num_keys()
-    }
+    fn num_keys(&self) -> u32 { self.as_ref().num_keys() }
 }
 
 /// This signs with the first `threshold` credentials and for each
@@ -1534,9 +1522,7 @@ impl<'a, X: TransactionSigner> TransactionSigner for &'a X {
 }
 
 impl<'a, X: ExactSizeTransactionSigner> ExactSizeTransactionSigner for &'a X {
-    fn num_keys(&self) -> u32 {
-        (*self).num_keys()
-    }
+    fn num_keys(&self) -> u32 { (*self).num_keys() }
 }
 
 impl TransactionSigner for BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>> {
@@ -1557,9 +1543,7 @@ impl TransactionSigner for BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>
 }
 
 impl ExactSizeTransactionSigner for BTreeMap<CredentialIndex, BTreeMap<KeyIndex, KeyPair>> {
-    fn num_keys(&self) -> u32 {
-        self.values().map(|v| v.len() as u32).sum::<u32>()
-    }
+    fn num_keys(&self) -> u32 { self.values().map(|v| v.len() as u32).sum::<u32>() }
 }
 
 /// Sign the header and payload, construct the transaction, and return it.
@@ -1592,7 +1576,7 @@ pub trait HasAccountAccessStructure {
 pub struct AccountAccessStructure {
     /// Keys indexed by credential.
     #[concordium(size_length = 1)]
-    pub keys: BTreeMap<CredentialIndex, CredentialPublicKeys>,
+    pub keys:      BTreeMap<CredentialIndex, CredentialPublicKeys>,
     /// The number of credentials that needed to sign a transaction.
     pub threshold: AccountThreshold,
 }
@@ -1622,17 +1606,14 @@ impl AccountAccessStructure {
                 );
             }
 
-            map.insert(
-                credential_structure.0,
-                CredentialPublicKeys {
-                    keys: inner_map,
-                    threshold: credential_structure.1,
-                },
-            );
+            map.insert(credential_structure.0, CredentialPublicKeys {
+                keys:      inner_map,
+                threshold: credential_structure.1,
+            });
         }
 
         AccountAccessStructure {
-            keys: map,
+            keys:      map,
             threshold: account_threshold,
         }
     }
@@ -1640,10 +1621,11 @@ impl AccountAccessStructure {
     /// Generate a new [`AccountAccessStructure`] with a single credential and
     /// public key, at credential and key indices 0.
     pub fn singleton(public_key: ed25519_dalek::VerifyingKey) -> Self {
-        Self::new(
-            AccountThreshold::ONE,
-            &[(0.into(), SignatureThreshold::ONE, &[(0.into(), public_key)])],
-        )
+        Self::new(AccountThreshold::ONE, &[(
+            0.into(),
+            SignatureThreshold::ONE,
+            &[(0.into(), public_key)],
+        )])
     }
 }
 
@@ -1651,26 +1633,23 @@ impl From<&AccountKeys> for AccountAccessStructure {
     fn from(value: &AccountKeys) -> Self {
         Self {
             threshold: value.threshold,
-            keys: value
+            keys:      value
                 .keys
                 .iter()
                 .map(|(k, v)| {
-                    (
-                        *k,
-                        CredentialPublicKeys {
-                            keys: v
-                                .keys
-                                .iter()
-                                .map(|(ki, kp)| {
-                                    (
-                                        *ki,
-                                        VerifyKey::Ed25519VerifyKey(kp.as_ref().verifying_key()),
-                                    )
-                                })
-                                .collect(),
-                            threshold: v.threshold,
-                        },
-                    )
+                    (*k, CredentialPublicKeys {
+                        keys:      v
+                            .keys
+                            .iter()
+                            .map(|(ki, kp)| {
+                                (
+                                    *ki,
+                                    VerifyKey::Ed25519VerifyKey(kp.as_ref().verifying_key()),
+                                )
+                            })
+                            .collect(),
+                        threshold: v.threshold,
+                    })
                 })
                 .collect(),
         }
@@ -1678,9 +1657,7 @@ impl From<&AccountKeys> for AccountAccessStructure {
 }
 
 impl HasAccountAccessStructure for AccountAccessStructure {
-    fn threshold(&self) -> AccountThreshold {
-        self.threshold
-    }
+    fn threshold(&self) -> AccountThreshold { self.threshold }
 
     fn credential_keys(&self, idx: CredentialIndex) -> Option<&CredentialPublicKeys> {
         self.keys.get(&idx)
@@ -1713,9 +1690,7 @@ impl Deserial for AccountAccessStructure {
 
 impl AccountAccessStructure {
     /// Return the total number of keys present in the access structure.
-    pub fn num_keys(&self) -> u32 {
-        self.keys.values().map(|m| m.keys.len() as u32).sum()
-    }
+    pub fn num_keys(&self) -> u32 { self.keys.values().map(|m| m.keys.len() as u32).sum() }
 }
 
 /// Verify a signature on the transaction sign hash. This is a low-level
@@ -1788,9 +1763,7 @@ pub enum BlockItem<PayloadType> {
 }
 
 impl<PayloadType> From<AccountTransaction<PayloadType>> for BlockItem<PayloadType> {
-    fn from(at: AccountTransaction<PayloadType>) -> Self {
-        Self::AccountTransaction(at)
-    }
+    fn from(at: AccountTransaction<PayloadType>) -> Self { Self::AccountTransaction(at) }
 }
 
 impl<PayloadType>
@@ -1814,9 +1787,7 @@ impl<PayloadType>
 }
 
 impl<PayloadType> From<updates::UpdateInstruction> for BlockItem<PayloadType> {
-    fn from(ui: updates::UpdateInstruction) -> Self {
-        Self::UpdateInstruction(ui)
-    }
+    fn from(ui: updates::UpdateInstruction) -> Self { Self::UpdateInstruction(ui) }
 }
 
 impl<PayloadType> BlockItem<PayloadType> {
@@ -1824,8 +1795,7 @@ impl<PayloadType> BlockItem<PayloadType> {
     /// chain.
     pub fn hash(&self) -> hashes::TransactionHash
     where
-        BlockItem<PayloadType>: Serial,
-    {
+        BlockItem<PayloadType>: Serial, {
         let mut hasher = sha2::Sha256::new();
         hasher.put(&self);
         hashes::HashBytes::new(hasher.result())
@@ -2067,9 +2037,7 @@ pub mod cost {
     /// Additional cost of deploying a smart contract module, parametrized by
     /// the size of the module, which is defined to be the size of
     /// the binary `.wasm` file that is sent as part of the transaction.
-    pub fn deploy_module(module_size: u64) -> Energy {
-        Energy::from(module_size / 10)
-    }
+    pub fn deploy_module(module_size: u64) -> Energy { Energy::from(module_size / 10) }
 
     /// There is a non-trivial amount of lookup
     /// that needs to be done before we can start any checking. This ensures
@@ -2117,14 +2085,14 @@ pub mod construct {
     #[derive(Debug, Clone, SerdeSerialize)]
     #[serde(rename_all = "camelCase")]
     pub struct PreAccountTransaction {
-        pub header: TransactionHeader,
+        pub header:       TransactionHeader,
         /// The payload.
-        pub payload: Payload,
+        pub payload:      Payload,
         /// The encoded payload. This is already serialized payload that is
         /// constructed during construction of the prepared transaction
         /// since we need it to compute the cost.
         #[serde(skip_serializing)]
-        pub encoded: EncodedPayload,
+        pub encoded:      EncodedPayload,
         /// Hash of the transaction to sign.
         pub hash_to_sign: hashes::TransactionSignHash,
     }
@@ -2175,7 +2143,7 @@ pub mod construct {
     /// This is deliberately made private so that the inconsistent internal
     /// state does not leak.
     struct TransactionBuilder {
-        header: TransactionHeader,
+        header:  TransactionHeader,
         payload: Payload,
         encoded: EncodedPayload,
     }
@@ -2293,7 +2261,7 @@ pub mod construct {
         data: EncryptedAmountTransferData<EncryptedAmountsCurve>,
     ) -> PreAccountTransaction {
         let payload = Payload::EncryptedAmountTransfer {
-            to: receiver,
+            to:   receiver,
             data: Box::new(data),
         };
         make_transaction(

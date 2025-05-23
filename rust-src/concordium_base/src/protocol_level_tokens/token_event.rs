@@ -5,11 +5,11 @@ use super::{cbor::RawCbor, TokenId};
 #[serde(rename_all = "camelCase")]
 pub struct TokenHolderEvent {
     /// The unique symbol of the token, which produced this event.
-    pub token_id: TokenId,
+    pub token_id:   TokenId,
     /// The type of event produced.
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
-    pub details: RawCbor,
+    pub details:    RawCbor,
 }
 
 /// Event produced from the effect of a token governance transaction.
@@ -17,18 +17,19 @@ pub struct TokenHolderEvent {
 #[serde(rename_all = "camelCase")]
 pub struct TokenGovernanceEvent {
     /// The unique symbol of the token, which produced this event.
-    pub token_id: TokenId,
+    pub token_id:   TokenId,
     /// The type of event produced.
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
-    pub details: RawCbor,
+    pub details:    RawCbor,
 }
 
 /// Maximum number of bytes allowed for an encoding of a token module event type
 /// and token module reject reason type.
 const TYPE_MAX_BYTE_LEN: usize = 255;
 
-/// String representing the type of token module event or token module reject reason type.
+/// String representing the type of token module event or token module reject
+/// reason type.
 ///
 /// Limited to 255 bytes in length and must be valid UTF-8.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -50,17 +51,13 @@ pub struct TypeFromStringError {
 }
 
 impl AsRef<str> for TokenModuleCborTypeDiscriminator {
-    fn as_ref(&self) -> &str {
-        self.value.as_str()
-    }
+    fn as_ref(&self) -> &str { self.value.as_str() }
 }
 
 impl std::str::FromStr for TokenModuleCborTypeDiscriminator {
     type Err = TypeFromStringError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.to_owned().try_into()
-    }
+    fn from_str(s: &str) -> Result<Self, Self::Err> { s.to_owned().try_into() }
 }
 
 impl TryFrom<String> for TokenModuleCborTypeDiscriminator {
@@ -79,7 +76,5 @@ impl TryFrom<String> for TokenModuleCborTypeDiscriminator {
 }
 
 impl From<TokenModuleCborTypeDiscriminator> for String {
-    fn from(event_type: TokenModuleCborTypeDiscriminator) -> Self {
-        event_type.value
-    }
+    fn from(event_type: TokenModuleCborTypeDiscriminator) -> Self { event_type.value }
 }

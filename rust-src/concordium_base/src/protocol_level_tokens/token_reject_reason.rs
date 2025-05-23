@@ -1,5 +1,6 @@
-use crate::protocol_level_tokens::{RawCbor, TokenAmount, TokenId, TokenModuleCborTypeDiscriminator};
-use crate::protocol_level_tokens::token_holder::TokenHolder;
+use crate::protocol_level_tokens::{
+    token_holder::TokenHolder, RawCbor, TokenAmount, TokenId, TokenModuleCborTypeDiscriminator,
+};
 
 /// Details provided by the token module in the event of rejecting a
 /// transaction.
@@ -7,11 +8,11 @@ use crate::protocol_level_tokens::token_holder::TokenHolder;
 #[serde(rename_all = "camelCase")]
 pub struct TokenModuleRejectReason {
     /// The unique symbol of the token, which produced this event.
-    pub token_id: TokenId,
+    pub token_id:    TokenId,
     /// The type of the reject reason.
     pub reason_type: TokenModuleCborTypeDiscriminator,
     /// (Optional) CBOR-encoded details.
-    pub details: Option<RawCbor>,
+    pub details:     Option<RawCbor>,
 }
 
 impl TokenModuleRejectReason {
@@ -41,7 +42,7 @@ pub enum TokenModuleRejectReasonType {
 #[serde(rename_all = "camelCase")]
 pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index:   usize,
     /// The address that could not be resolved.
     pub address: TokenHolder,
 }
@@ -52,11 +53,11 @@ pub struct AddressNotFoundRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct TokenBalanceInsufficientRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index:             usize,
     /// The available balance of the sender.
     pub available_balance: TokenAmount,
     /// The minimum required balance to perform the operation.
-    pub required_balance: TokenAmount,
+    pub required_balance:  TokenAmount,
 }
 
 /// The transaction could not be deserialized.
@@ -68,19 +69,20 @@ pub struct DeserializationFailureRejectReason {
 }
 
 /// The operation is not supported by the token module.
-/// This may be because the operation is not implemented by the module, or because the
-/// token is not configured to support the operation. If the operation is not authorized
-/// (i.e. the particular participants do not have the authority to perform the operation)
-/// then the reject reason is [`Self::operationNotPermitted`] instead.
+/// This may be because the operation is not implemented by the module, or
+/// because the token is not configured to support the operation. If the
+/// operation is not authorized (i.e. the particular participants do not have
+/// the authority to perform the operation) then the reject reason is
+/// [`Self::operationNotPermitted`] instead.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsupportedOperationRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index:          usize,
     /// The type of operation that was not supported.
     pub operation_type: String,
     /// The reason why the operation was not supported.
-    pub reason: Option<String>,
+    pub reason:         Option<String>,
 }
 
 /// The operation requires that a participating account has a certain
@@ -89,12 +91,12 @@ pub struct UnsupportedOperationRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct OperationNotPermittedRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
-    /// (Optionally) the address that does not have the necessary permissions to perform the
-    /// operation.
+    pub index:   usize,
+    /// (Optionally) the address that does not have the necessary permissions to
+    /// perform the operation.
     pub address: Option<TokenHolder>,
     /// The reason why the operation is not permitted.
-    pub reason: Option<String>,
+    pub reason:  Option<String>,
 }
 
 /// Minting the requested amount would overflow the representable token amount.
@@ -102,11 +104,11 @@ pub struct OperationNotPermittedRejectReason {
 #[serde(rename_all = "camelCase")]
 pub struct MintWouldOverflowRejectReason {
     /// The index in the list of operations of the failing operation.
-    pub index: usize,
+    pub index:                    usize,
     /// The requested amount to mint.
-    pub requested_amount: TokenAmount,
+    pub requested_amount:         TokenAmount,
     /// The current supply of the token.
-    pub current_supply: TokenAmount,
+    pub current_supply:           TokenAmount,
     /// The maximum representable token amount.
     pub max_representable_amount: TokenAmount,
 }
