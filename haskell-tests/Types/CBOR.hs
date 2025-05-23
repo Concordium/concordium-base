@@ -28,9 +28,6 @@ import Generators
 genText :: Gen Text.Text
 genText = sized $ \s -> Text.decodeUtf8 . BS.pack <$> genUtf8String s
 
-genTokenAmount :: Gen TokenAmount
-genTokenAmount = TokenAmount <$> arbitrary <*> chooseBoundedIntegral (0, 255)
-
 genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- genText
@@ -118,6 +115,15 @@ genTokenModuleStateWithAdditional = do
                 ]
         return ("_" <> key, val)
 
+genTokenEvent :: Gen TokenEvent
+genTokenEvent =
+    oneof
+        [ AddAllowListEvent <$> genTokenHolder,
+          RemoveAllowListEvent <$> genTokenHolder,
+          AddDenyListEvent <$> genTokenHolder,
+          RemoveDenyListEvent <$> genTokenHolder
+        ]
+
 -- | Generator for 'TokenRejectReason'.
 genTokenRejectReason :: Gen TokenRejectReason
 genTokenRejectReason =
@@ -137,7 +143,7 @@ tip1 =
         { tipName = "ABC token",
           tipMetadata = "https://abc.token/meta",
           tipAllowList = False,
-          tipInitialSupply = Just (TokenAmount{digits = 10000, nrDecimals = 5}),
+          tipInitialSupply = Just (TokenAmount{value = 10000, decimals = 5}),
           tipDenyList = False,
           tipMintable = False,
           tipBurnable = False
@@ -336,5 +342,7 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenModuleState
                     (toLazyByteString $ encodeTokenModuleState tt)
                 )
+    it "Encode and decode TokenEvent" $ withMaxSuccess 1000 $ forAll genTokenEvent $ \tt ->
+        Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
         Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)
