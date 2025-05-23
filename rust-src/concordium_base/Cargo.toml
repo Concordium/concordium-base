@@ -45,6 +45,7 @@ bs58 = { version = "0.5", features = ["check"] }
 leb128 = "0.2"
 rayon = "1.7"
 subtle = "2.3"
+ciborium = "0.2.2"
 
 # Dependencies needed by the encryption feature.
 cbc = { version = "0.1.2", features = ["std"], optional = true }
