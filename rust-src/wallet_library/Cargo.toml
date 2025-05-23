@@ -18,11 +18,9 @@ rust_iso3166 = "0.1"
 
 [dependencies.key_derivation]
 path = "../key_derivation"
-version = "2.0.1"
 
 [dependencies.concordium_base]
 path = "../concordium_base"
-version = "*"
 
 [lib]
 name = "wallet_library"
