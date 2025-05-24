@@ -501,7 +501,6 @@ dependencies = [
  "byteorder",
  "cbc",
  "chrono",
- "ciborium",
  "ciborium-io",
  "ciborium-ll",
  "concordium-contracts-common",

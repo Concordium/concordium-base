@@ -50,6 +50,7 @@ pub enum CborMemo {
 
 #[cfg(test)]
 mod test {
+    use concordium_contracts_common::AccountAddress;
     use super::*;
     use crate::protocol_level_tokens::HolderAccount;
 

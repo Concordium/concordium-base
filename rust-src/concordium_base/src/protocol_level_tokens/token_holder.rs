@@ -1,6 +1,7 @@
-use crate::internal::cbor::{CborDecode, CborEncode, DecoderExt, EncoderExt};
-use ciborium_io::{Read, Write};
-use ciborium_ll::{Decoder, Encoder, Error};
+use crate::internal::cbor::{
+    CborDecode, CborDecoder, CborEncode, CborEncoder, CborResult,
+};
+
 use concordium_contracts_common::AccountAddress;
 use std::fmt::Debug;
 
@@ -18,21 +19,22 @@ pub enum TokenHolder {
 }
 
 impl CborEncode for TokenHolder {
-    fn encode<W: Write>(&self, encoder: &mut Encoder<W>) {
+    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         match self {
             TokenHolder::HolderAccount(account) => {
-                account.encode(encoder);
+                account.encode(encoder)?;
             }
         }
+        Ok(())
     }
 }
 
 impl CborDecode for TokenHolder {
-    fn decode<R: Read + Debug>(decoder: &mut Decoder<R>) -> Result<Self, Error<R>>
+    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        R::Error: Debug,
-        Self: Sized, {
-        Ok(Self::HolderAccount(HolderAccount::decode(decoder).unwrap()))
+        Self: Sized,
+    {
+        Ok(Self::HolderAccount(HolderAccount::decode(decoder)?))
     }
 }
 
@@ -41,71 +43,72 @@ impl CborDecode for TokenHolder {
 #[serde(rename_all = "camelCase")]
 pub struct HolderAccount {
     /// Concordium address
-    pub address:   AccountAddress,
+    pub address: AccountAddress,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coin_info: Option<CoinInfo>,
 }
 
 impl CborEncode for AccountAddress {
-    fn encode<W: Write>(&self, encoder: &mut Encoder<W>) { encoder.push_bytes(self.as_ref()); }
+    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.push_bytes(self.as_ref())
+    }
 }
 
 impl CborDecode for AccountAddress {
-    fn decode<R: Read + Debug>(decoder: &mut Decoder<R>) -> Result<Self, Error<R>>
+    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        R::Error: Debug,
-        Self: Sized, {
+        Self: Sized,
+    {
         let mut address = AccountAddress(Default::default());
-        decoder.pull_bytes_exact(&mut address.0);
+        decoder.pull_bytes_exact(&mut address.0)?;
         Ok(address)
     }
 }
 
 impl CborEncode for HolderAccount {
-    fn encode<W: Write>(&self, encoder: &mut Encoder<W>) {
-        encoder.push_tag(ACCOUNT_HOLDER_TAG);
+    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.push_tag(ACCOUNT_HOLDER_TAG)?;
         if self.coin_info.is_some() {
-            encoder.push_map(2);
+            encoder.push_map(2)?;
         } else {
-            encoder.push_map(1);
+            encoder.push_map(1)?;
         }
 
         if let Some(coin_info) = self.coin_info.as_ref() {
-            encoder.push_positive(1);
-            coin_info.encode(encoder);
+            encoder.push_positive(1)?;
+            coin_info.encode(encoder)?;
         }
 
-        encoder.push_positive(3);
-        self.address.encode(encoder);
+        encoder.push_positive(3)?;
+        self.address.encode(encoder)?;
+        Ok(())
     }
 }
 
 impl CborDecode for HolderAccount {
-    fn decode<R: Read + Debug>(decoder: &mut Decoder<R>) -> Result<Self, Error<R>>
+    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        R::Error: Debug,
-        Self: Sized, {
-        if decoder.pull_tag() != ACCOUNT_HOLDER_TAG {
-            todo!()
-        }
-        let map_size = decoder.pull_map();
+        Self: Sized,
+    {
+        decoder.pull_tag_expect(ACCOUNT_HOLDER_TAG)?;
+        let map_size = decoder.pull_map()?;
         if map_size < 1 || map_size > 2 {
             todo!()
         };
 
         let coin_info = if map_size == 2 {
-            if decoder.pull_positive() != 1 {
+            if decoder.pull_positive()? != 1 {
                 todo!()
             }
-            Some(CoinInfo::decode(decoder).unwrap())
+            Some(CoinInfo::decode(decoder)?)
         } else {
             None
         };
 
-        if decoder.pull_positive() != 3 {
+        if decoder.pull_positive()? != 3 {
             todo!()
         }
-        let address = AccountAddress::decode(decoder).unwrap();
+        let address = AccountAddress::decode(decoder)?;
 
         Ok(Self { address, coin_info })
     }
@@ -118,31 +121,30 @@ pub enum CoinInfo {
 }
 
 impl CborEncode for CoinInfo {
-    fn encode<W: Write>(&self, encoder: &mut Encoder<W>) {
-        encoder.push_tag(COIN_INFO_TAG); // todo ar errors
-        encoder.push_map(1);
-        encoder.push_positive(1);
+    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.push_tag(COIN_INFO_TAG)?;
+        encoder.push_map(1)?;
+        encoder.push_positive(1)?;
         match self {
-            Self::CCD => encoder.push_positive(CONCORDIUM_SLIP_0044_CODE),
+            Self::CCD => encoder.push_positive(CONCORDIUM_SLIP_0044_CODE)?,
         };
+        Ok(())
     }
 }
 
 impl CborDecode for CoinInfo {
-    fn decode<R: Read + Debug>(decoder: &mut Decoder<R>) -> Result<Self, Error<R>>
+    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        R::Error: Debug,
-        Self: Sized, {
-        if decoder.pull_tag() != COIN_INFO_TAG {
+        Self: Sized,
+    {
+        decoder.pull_tag_expect(COIN_INFO_TAG)?;
+        if decoder.pull_map()? != 1 {
             todo!()
         }
-        if decoder.pull_map() != 1 {
+        if decoder.pull_positive()? != 1 {
             todo!()
         }
-        if decoder.pull_positive() != 1 {
-            todo!()
-        }
-        let coin_info = match decoder.pull_positive() {
+        let coin_info = match decoder.pull_positive()? {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
             _ => todo!(),
         };
@@ -174,7 +176,7 @@ mod test {
     #[test]
     fn test_token_holder_cbor_no_coin_info() {
         let token_holder = TokenHolder::HolderAccount(HolderAccount {
-            address:   TEST_ADDRESS,
+            address: TEST_ADDRESS,
             coin_info: None,
         });
 
@@ -190,7 +192,7 @@ mod test {
     #[test]
     fn test_token_holder_cbor() {
         let token_holder = TokenHolder::HolderAccount(HolderAccount {
-            address:   TEST_ADDRESS,
+            address: TEST_ADDRESS,
             coin_info: Some(CoinInfo::CCD),
         });
 
