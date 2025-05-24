@@ -2,7 +2,6 @@ use anyhow::anyhow;
 use ciborium_io::{Read, Write};
 use ciborium_ll::{Decoder, Encoder, Header};
 use std::fmt::{Debug, Display};
-use std::io::Cursor;
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -24,6 +23,14 @@ impl CborError {
 
     pub fn remaining_data() -> Self {
         anyhow!("data remaining after parse").into()
+    }
+
+    pub fn unexpected_map_key(expected: u64, actual: u64) -> Self {
+        anyhow!("expected map key {}, was {}", expected, actual).into()
+    }
+
+    pub fn invalid_data(message: impl Display) -> Self {
+        anyhow!("invalid data: {}", message).into()
     }
 }
 
@@ -47,6 +54,7 @@ impl From<std::io::Error> for CborError {
     }
 }
 
+/// Encodes the given value as CBOR
 pub fn cbor_encode<T: CborEncode>(value: &T) -> CborResult<Vec<u8>> {
     let mut bytes = Vec::new();
     let mut encoder = Encoder::from(&mut bytes);
@@ -54,6 +62,8 @@ pub fn cbor_encode<T: CborEncode>(value: &T) -> CborResult<Vec<u8>> {
     Ok(bytes)
 }
 
+/// Decodes value from the given CBOR. If all input is not parsed,
+/// an error is returned.
 pub fn cbor_decode<T: CborDecode>(cbor: &[u8]) -> CborResult<T> {
     let mut decoder = Decoder::from(cbor);
     let value = T::decode(&mut decoder)?;
@@ -63,99 +73,132 @@ pub fn cbor_decode<T: CborDecode>(cbor: &[u8]) -> CborResult<T> {
     Ok(value)
 }
 
+/// Type that can be CBOR encoded
 pub trait CborEncode {
     fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()>;
 }
 
+/// Type that can be decoded from CBOR
 pub trait CborDecode {
     fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
         Self: Sized;
 }
 
+/// Encoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborEncoder {
-    fn push_tag(&mut self, tag: u64) -> CborResult<()>;
-    fn push_positive(&mut self, positive: u64) -> CborResult<()>;
-    fn push_map(&mut self, size: usize) -> CborResult<()>;
-    fn push_array(&mut self, size: usize) -> CborResult<()>;
-    fn push_bytes(&mut self, bytes: &[u8]) -> CborResult<()>;
+    /// Encodes tag data item with given value
+    fn encode_tag(&mut self, tag: u64) -> CborResult<()>;
+
+    /// Encodes positive integer data item with given value
+    fn encode_positive(&mut self, positive: u64) -> CborResult<()>;
+    
+    /// Encodes start of map with given size
+    fn encode_map(&mut self, size: usize) -> CborResult<()>;
+
+    /// Encodes start of array with given size
+    fn encode_array(&mut self, size: usize) -> CborResult<()>;
+
+    /// Encodes bytes data item
+    fn encode_bytes(&mut self, bytes: &[u8]) -> CborResult<()>;
 }
 
 impl<W: Write> CborEncoder for Encoder<W>
 where
     CborError: From<W::Error>,
 {
-    fn push_tag(&mut self, tag: u64) -> CborResult<()> {
+    fn encode_tag(&mut self, tag: u64) -> CborResult<()> {
         Ok(self.push(Header::Tag(tag))?)
     }
 
-    fn push_positive(&mut self, positive: u64) -> CborResult<()> {
+    fn encode_positive(&mut self, positive: u64) -> CborResult<()> {
         Ok(self.push(Header::Positive(positive))?)
     }
 
-    fn push_map(&mut self, size: usize) -> CborResult<()> {
+    fn encode_map(&mut self, size: usize) -> CborResult<()> {
         Ok(self.push(Header::Map(Some(size)))?)
     }
 
-    fn push_array(&mut self, size: usize) -> CborResult<()> {
+    fn encode_array(&mut self, size: usize) -> CborResult<()> {
         Ok(self.push(Header::Array(Some(size)))?)
     }
 
-    fn push_bytes(&mut self, bytes: &[u8]) -> CborResult<()> {
+    fn encode_bytes(&mut self, bytes: &[u8]) -> CborResult<()> {
         Ok(self.bytes(bytes, None)?)
     }
 }
 
+/// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborDecoder {
-    fn pull_tag(&mut self) -> CborResult<u64>;
-    fn pull_tag_expect(&mut self, expected_tag: u64) -> CborResult<u64>;
-    fn pull_positive(&mut self) -> CborResult<u64>;
-    fn pull_map(&mut self) -> CborResult<usize>;
-    fn pull_array(&mut self) -> CborResult<usize>;
-    fn pull_bytes_exact(&mut self, dest: &mut [u8]) -> CborResult<()>;
+    /// Decode tag data item
+    fn decode_tag(&mut self) -> CborResult<u64>;
+    
+    /// Decode that and check it equals the given `expected_tag` 
+    fn decode_tag_expect(&mut self, expected_tag: u64) -> CborResult<()> {
+        let tag = self.decode_tag()?;
+        if tag != expected_tag {
+            return Err(CborError::unexpected_tag(expected_tag, tag));
+        }
+        Ok(())
+    }
+
+    /// Decode positive integer data item
+    fn decode_positive(&mut self) -> CborResult<u64>;
+
+    /// Decode positive integer data item and check that it equals
+    /// the given map key 
+    fn decode_positive_expect_key(&mut self, expected_key: u64) -> CborResult<()> {
+        let positive = self.decode_positive()?;
+        if positive != expected_key {
+            return Err(CborError::unexpected_map_key(expected_key, positive));
+        }
+        Ok(())
+    }
+
+    /// Decode map start. Returns the map size
+    fn decode_map(&mut self) -> CborResult<usize>;
+
+    /// Decode array start. Returns the array size
+    fn decode_array(&mut self) -> CborResult<usize>;
+    
+    /// Decode bytes into given `destination`. The length of the bytes data item
+    /// must match the `destination` length, else an error is returned.
+    fn decode_bytes_exact(&mut self, destination: &mut [u8]) -> CborResult<()>;
 }
 
 impl<R: Read> CborDecoder for Decoder<R>
 where
     R::Error: Display,
 {
-    fn pull_tag(&mut self) -> CborResult<u64> {
+    fn decode_tag(&mut self) -> CborResult<u64> {
         match self.pull()? {
             Header::Tag(tag) => Ok(tag),
             header => Err(CborError::unexpected_data_item("tag", &header)),
         }
     }
 
-    fn pull_tag_expect(&mut self, expected_tag: u64) -> CborResult<u64> {
-        let tag = self.pull_tag()?;
-        if tag != expected_tag {
-            return Err(CborError::unexpected_tag(expected_tag, tag));
-        }
-        Ok(tag)
-    }
-
-    fn pull_positive(&mut self) -> CborResult<u64> {
+    fn decode_positive(&mut self) -> CborResult<u64> {
         match self.pull()? {
             Header::Positive(positive) => Ok(positive),
             header => Err(CborError::unexpected_data_item("positive", &header)),
         }
     }
 
-    fn pull_map(&mut self) -> CborResult<usize> {
+    fn decode_map(&mut self) -> CborResult<usize> {
         match self.pull()? {
             Header::Map(Some(size)) => Ok(size),
             header => Err(CborError::unexpected_data_item("map", &header)),
         }
     }
 
-    fn pull_array(&mut self) -> CborResult<usize> {
+    fn decode_array(&mut self) -> CborResult<usize> {
         match self.pull()? {
             Header::Array(Some(size)) => Ok(size),
             header => Err(CborError::unexpected_data_item("array", &header)),
         }
     }
 
-    fn pull_bytes_exact(&mut self, dest: &mut [u8]) -> CborResult<()> {
+    fn decode_bytes_exact(&mut self, dest: &mut [u8]) -> CborResult<()> {
         let size = match self.pull()? {
             Header::Bytes(Some(size)) => {
                 if size != dest.len() {

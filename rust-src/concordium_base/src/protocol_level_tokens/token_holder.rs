@@ -1,6 +1,4 @@
-use crate::internal::cbor::{
-    CborDecode, CborDecoder, CborEncode, CborEncoder, CborResult,
-};
+use crate::internal::cbor::{CborDecode, CborDecoder, CborEncode, CborEncoder, CborError, CborResult};
 
 use concordium_contracts_common::AccountAddress;
 use std::fmt::Debug;
@@ -50,7 +48,7 @@ pub struct HolderAccount {
 
 impl CborEncode for AccountAddress {
     fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.push_bytes(self.as_ref())
+        encoder.encode_bytes(self.as_ref())
     }
 }
 
@@ -60,26 +58,26 @@ impl CborDecode for AccountAddress {
         Self: Sized,
     {
         let mut address = AccountAddress(Default::default());
-        decoder.pull_bytes_exact(&mut address.0)?;
+        decoder.decode_bytes_exact(&mut address.0)?;
         Ok(address)
     }
 }
 
 impl CborEncode for HolderAccount {
     fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.push_tag(ACCOUNT_HOLDER_TAG)?;
+        encoder.encode_tag(ACCOUNT_HOLDER_TAG)?;
         if self.coin_info.is_some() {
-            encoder.push_map(2)?;
+            encoder.encode_map(2)?;
         } else {
-            encoder.push_map(1)?;
+            encoder.encode_map(1)?;
         }
 
         if let Some(coin_info) = self.coin_info.as_ref() {
-            encoder.push_positive(1)?;
+            encoder.encode_positive(1)?;
             coin_info.encode(encoder)?;
         }
 
-        encoder.push_positive(3)?;
+        encoder.encode_positive(3)?;
         self.address.encode(encoder)?;
         Ok(())
     }
@@ -90,14 +88,14 @@ impl CborDecode for HolderAccount {
     where
         Self: Sized,
     {
-        decoder.pull_tag_expect(ACCOUNT_HOLDER_TAG)?;
-        let map_size = decoder.pull_map()?;
+        decoder.decode_tag_expect(ACCOUNT_HOLDER_TAG)?;
+        let map_size = decoder.decode_map()?;
         if map_size < 1 || map_size > 2 {
             todo!()
         };
 
         let coin_info = if map_size == 2 {
-            if decoder.pull_positive()? != 1 {
+            if decoder.decode_positive()? != 1 {
                 todo!()
             }
             Some(CoinInfo::decode(decoder)?)
@@ -105,7 +103,7 @@ impl CborDecode for HolderAccount {
             None
         };
 
-        if decoder.pull_positive()? != 3 {
+        if decoder.decode_positive()? != 3 {
             todo!()
         }
         let address = AccountAddress::decode(decoder)?;
@@ -122,11 +120,11 @@ pub enum CoinInfo {
 
 impl CborEncode for CoinInfo {
     fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.push_tag(COIN_INFO_TAG)?;
-        encoder.push_map(1)?;
-        encoder.push_positive(1)?;
+        encoder.encode_tag(COIN_INFO_TAG)?;
+        encoder.encode_map(1)?;
+        encoder.encode_positive(1)?;
         match self {
-            Self::CCD => encoder.push_positive(CONCORDIUM_SLIP_0044_CODE)?,
+            Self::CCD => encoder.encode_positive(CONCORDIUM_SLIP_0044_CODE)?,
         };
         Ok(())
     }
@@ -137,16 +135,14 @@ impl CborDecode for CoinInfo {
     where
         Self: Sized,
     {
-        decoder.pull_tag_expect(COIN_INFO_TAG)?;
-        if decoder.pull_map()? != 1 {
-            todo!()
+        decoder.decode_tag_expect(COIN_INFO_TAG)?;
+        if decoder.decode_map()? != 1 {
+            return Err(CborError::invalid_data("coin info must have exactly one field"));
         }
-        if decoder.pull_positive()? != 1 {
-            todo!()
-        }
-        let coin_info = match decoder.pull_positive()? {
+        decoder.decode_positive_expect_key(1)?;
+        let coin_info = match decoder.decode_positive()? {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
-            _ => todo!(),
+            coin_info_code => return Err(CborError::invalid_data(format_args!("coin info code must be {}, was {}", CONCORDIUM_SLIP_0044_CODE, coin_info_code))),
         };
         Ok(coin_info)
     }
