@@ -1,4 +1,6 @@
-use crate::internal::cbor::{CborDecode, CborDecoder, CborEncode, CborEncoder, CborError, CborResult};
+use crate::internal::cbor::{
+    CborDecode, CborDecoder, CborEncode, CborEncoder, CborError, CborResult,
+};
 
 use concordium_contracts_common::AccountAddress;
 use std::fmt::Debug;
@@ -48,7 +50,7 @@ pub struct HolderAccount {
 
 impl CborEncode for AccountAddress {
     fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.encode_bytes(self.as_ref())
+        self.0.encode(encoder)
     }
 }
 
@@ -57,28 +59,28 @@ impl CborDecode for AccountAddress {
     where
         Self: Sized,
     {
-        let mut address = AccountAddress(Default::default());
-        decoder.decode_bytes_exact(&mut address.0)?;
-        Ok(address)
+        Ok(Self(CborDecode::decode(decoder)?))
     }
 }
 
 impl CborEncode for HolderAccount {
     fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         encoder.encode_tag(ACCOUNT_HOLDER_TAG)?;
-        if self.coin_info.is_some() {
-            encoder.encode_map(2)?;
-        } else {
-            encoder.encode_map(1)?;
-        }
 
-        if let Some(coin_info) = self.coin_info.as_ref() {
+        encoder.encode_map(
+            if self.coin_info.is_null() { 0 } else { 1 }
+                + if self.address.is_null() { 0 } else { 1 },
+        )?;
+
+        if !self.coin_info.is_null() {
             encoder.encode_positive(1)?;
-            coin_info.encode(encoder)?;
+            self.coin_info.encode(encoder)?;
         }
 
-        encoder.encode_positive(3)?;
-        self.address.encode(encoder)?;
+        if !self.address.is_null() {
+            encoder.encode_positive(3)?;
+            self.address.encode(encoder)?;
+        }
         Ok(())
     }
 }
@@ -89,24 +91,37 @@ impl CborDecode for HolderAccount {
         Self: Sized,
     {
         decoder.decode_tag_expect(ACCOUNT_HOLDER_TAG)?;
+
+        let mut coin_info = None;
+        let mut address = None;
         let map_size = decoder.decode_map()?;
-        if map_size < 1 || map_size > 2 {
-            todo!()
-        };
-
-        let coin_info = if map_size == 2 {
-            if decoder.decode_positive()? != 1 {
-                todo!()
+        for _ in 0..map_size {
+            let key = decoder.decode_positive()?;
+            match key {
+                1 => {
+                    coin_info = Some(CborDecode::decode(decoder)?);
+                }
+                3 => {
+                    address = Some(CborDecode::decode(decoder)?);
+                }
+                key => return Err(CborError::unknown_map_key(key)),
             }
-            Some(CoinInfo::decode(decoder)?)
-        } else {
-            None
+        }
+        let coin_info = match coin_info {
+            None => match CborDecode::null() {
+                None => return Err(CborError::map_value_missing(1)),
+                Some(null) => null,
+            },
+            Some(coin_info) => coin_info,
         };
 
-        if decoder.decode_positive()? != 3 {
-            todo!()
-        }
-        let address = AccountAddress::decode(decoder)?;
+        let address = match address {
+            None => match CborDecode::null() {
+                None => return Err(CborError::map_value_missing(3)),
+                Some(null) => null,
+            },
+            Some(address) => address,
+        };
 
         Ok(Self { address, coin_info })
     }
@@ -137,12 +152,19 @@ impl CborDecode for CoinInfo {
     {
         decoder.decode_tag_expect(COIN_INFO_TAG)?;
         if decoder.decode_map()? != 1 {
-            return Err(CborError::invalid_data("coin info must have exactly one field"));
+            return Err(CborError::invalid_data(
+                "coin info must have exactly one field",
+            ));
         }
         decoder.decode_positive_expect_key(1)?;
         let coin_info = match decoder.decode_positive()? {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
-            coin_info_code => return Err(CborError::invalid_data(format_args!("coin info code must be {}, was {}", CONCORDIUM_SLIP_0044_CODE, coin_info_code))),
+            coin_info_code => {
+                return Err(CborError::invalid_data(format_args!(
+                    "coin info code must be {}, was {}",
+                    CONCORDIUM_SLIP_0044_CODE, coin_info_code
+                )))
+            }
         };
         Ok(coin_info)
     }
