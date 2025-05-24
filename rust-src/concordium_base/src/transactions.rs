@@ -25,6 +25,7 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
+    protocol_level_tokens::TokenOperationsPayload,
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -964,6 +965,11 @@ pub enum Payload {
         #[serde(flatten)]
         data: ConfigureDelegationPayload,
     },
+    /// Update a smart contract instance by invoking a specific function.
+    TokenHolder {
+        #[serde(flatten)]
+        payload: TokenOperationsPayload,
+    },
 }
 
 impl Payload {
@@ -998,6 +1004,7 @@ impl Payload {
             }
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
+            Payload::TokenHolder { .. } => TransactionType::TokenHolder,
         }
     }
 }
@@ -1176,6 +1183,10 @@ impl Serial for Payload {
                 if let Some(delegation_target) = delegation_target {
                     out.put(delegation_target);
                 }
+            }
+            Payload::TokenHolder { payload } => {
+                out.put(&payload.token_id);
+                out.put(&payload.operations);
             }
         }
     }
@@ -1375,6 +1386,15 @@ impl Deserial for Payload {
                     data.delegation_target = Some(source.get()?);
                 }
                 Ok(Payload::ConfigureDelegation { data })
+            }
+            27 => {
+                let token_id = source.get()?;
+                let operations = source.get()?;
+                let payload = TokenOperationsPayload {
+                    token_id,
+                    operations,
+                };
+                Ok(Payload::TokenHolder { payload })
             }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)

@@ -41,7 +41,7 @@ raw-memo = bytes .size (0..256)
 cbor-memo = #6.24(raw-memo)
 
 ; A destination that can receive and hold tokens.
-; Currently, this can only by a Concordium account address.
+; Currently, this can only be a Concordium account address.
 token-holder = tagged-holder-account
 
 ; We use a subtype of the tagged-address type from
