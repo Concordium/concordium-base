@@ -16,10 +16,6 @@ pub struct TokenOperationsPayload {
     pub operations: RawCbor,
 }
 
-// struct TokenOperationsPayloadCbor(TokenOperationsPayload) {
-//
-// }
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenOperation {

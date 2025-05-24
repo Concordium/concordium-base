@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 /// CBOR encoded byte string.
 ///
-/// Note: There are not checks for whether the bytes represents a valid CBOR
+/// Note: There are no checks for whether the bytes represent a valid CBOR
 /// encoding.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "String", into = "String")]

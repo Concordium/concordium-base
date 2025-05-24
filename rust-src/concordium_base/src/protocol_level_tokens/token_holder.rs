@@ -167,7 +167,7 @@ mod test {
     fn test_coin_info_cbor() {
         let coin_info = CoinInfo::CCD;
 
-        let cbor = cbor::cbor_encode(&coin_info);
+        let cbor = cbor::cbor_encode(&coin_info).unwrap();
         assert_eq!(hex::encode(&cbor), "d99d71a101190397");
         let coin_info_decoded: CoinInfo = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(coin_info_decoded, coin_info);
@@ -180,7 +180,7 @@ mod test {
             coin_info: None,
         });
 
-        let cbor = cbor::cbor_encode(&token_holder);
+        let cbor = cbor::cbor_encode(&token_holder).unwrap();
         assert_eq!(
             hex::encode(&cbor),
             "d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
@@ -196,7 +196,7 @@ mod test {
             coin_info: Some(CoinInfo::CCD),
         });
 
-        let cbor = cbor::cbor_encode(&token_holder);
+        let cbor = cbor::cbor_encode(&token_holder).unwrap();
         assert_eq!(hex::encode(&cbor), "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let token_holder_decoded: TokenHolder = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_holder_decoded, token_holder);

@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use ciborium_io::{Read, Write};
 use ciborium_ll::{Decoder, Encoder, Header};
 use std::fmt::{Debug, Display};
+use std::io::Cursor;
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -40,8 +41,7 @@ where
     }
 }
 
-impl From<std::io::Error> for CborError
-{
+impl From<std::io::Error> for CborError {
     fn from(err: std::io::Error) -> Self {
         anyhow!("IO error: {}", err).into()
     }
@@ -156,25 +156,27 @@ where
     }
 
     fn pull_bytes_exact(&mut self, dest: &mut [u8]) -> CborResult<()> {
-        match self.pull()? {
+        let size = match self.pull()? {
             Header::Bytes(Some(size)) => {
                 if size != dest.len() {
-                    todo!()
+                    return Err(anyhow!("expected {} bytes, was {}", dest.len(), size).into());
                 }
+                size
             }
-            _ => todo!(),
+            header => return Err(CborError::unexpected_data_item("bytes", &header)),
         };
-        let mut segments = self.bytes(Some(dest.len()));
+        
+        let mut segments = self.bytes(Some(size));
         let Some(mut segment) = segments.pull()? else {
-            todo!()
+            return Err(anyhow!("bytes must have at least one segment").into());
         };
 
         segment.pull(dest)?;
         if segment.left() != 0 {
-            todo!()
+            return Err(anyhow!("bytes left in segment").into());
         }
         if segments.pull()?.is_some() {
-            todo!()
+            return Err(anyhow!("bytes expected to have only one segment").into());
         }
         Ok(())
     }
