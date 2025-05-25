@@ -1,6 +1,4 @@
-use crate::internal::cbor::{
-    CborDecode, CborDecoder, CborEncode, CborEncoder, CborError, CborResult,
-};
+use crate::internal::cbor::{CborDeserialize, CborDecoder, CborSerialize, CborEncoder, CborError, CborResult, MapKey, MapKeyRef};
 
 use concordium_contracts_common::AccountAddress;
 use std::fmt::Debug;
@@ -18,23 +16,23 @@ pub enum TokenHolder {
     HolderAccount(HolderAccount),
 }
 
-impl CborEncode for TokenHolder {
-    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+impl CborSerialize for TokenHolder {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         match self {
             TokenHolder::HolderAccount(account) => {
-                account.encode(encoder)?;
+                account.serialize(encoder)?;
             }
         }
         Ok(())
     }
 }
 
-impl CborDecode for TokenHolder {
-    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+impl CborDeserialize for TokenHolder {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self::HolderAccount(HolderAccount::decode(decoder)?))
+        Ok(Self::HolderAccount(HolderAccount::deserialize(decoder)?))
     }
 }
 
@@ -48,23 +46,23 @@ pub struct HolderAccount {
     pub coin_info: Option<CoinInfo>,
 }
 
-impl CborEncode for AccountAddress {
-    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        self.0.encode(encoder)
+impl CborSerialize for AccountAddress {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        self.0.serialize(encoder)
     }
 }
 
-impl CborDecode for AccountAddress {
-    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+impl CborDeserialize for AccountAddress {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self(CborDecode::decode(decoder)?))
+        Ok(Self(CborDeserialize::deserialize(decoder)?))
     }
 }
 
-impl CborEncode for HolderAccount {
-    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+impl CborSerialize for HolderAccount {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         encoder.encode_tag(ACCOUNT_HOLDER_TAG)?;
 
         encoder.encode_map(
@@ -73,20 +71,20 @@ impl CborEncode for HolderAccount {
         )?;
 
         if !self.coin_info.is_null() {
-            encoder.encode_positive(1)?;
-            self.coin_info.encode(encoder)?;
+            MapKeyRef::Positive(1).serialize(encoder)?;
+            self.coin_info.serialize(encoder)?;
         }
 
         if !self.address.is_null() {
-            encoder.encode_positive(3)?;
-            self.address.encode(encoder)?;
+            MapKeyRef::Positive(3).serialize(encoder)?;
+            self.address.serialize(encoder)?;
         }
         Ok(())
     }
 }
 
-impl CborDecode for HolderAccount {
-    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+impl CborDeserialize for HolderAccount {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
         Self: Sized,
     {
@@ -96,28 +94,28 @@ impl CborDecode for HolderAccount {
         let mut address = None;
         let map_size = decoder.decode_map()?;
         for _ in 0..map_size {
-            let key = decoder.decode_positive()?;
-            match key {
-                1 => {
-                    coin_info = Some(CborDecode::decode(decoder)?);
+            let map_key = MapKey::deserialize(decoder)?;
+            match map_key.as_ref() {
+                MapKeyRef::Positive(1) => {
+                    coin_info = Some(CborDeserialize::deserialize(decoder)?);
                 }
-                3 => {
-                    address = Some(CborDecode::decode(decoder)?);
+                MapKeyRef::Positive(3) => {
+                    address = Some(CborDeserialize::deserialize(decoder)?);
                 }
                 key => return Err(CborError::unknown_map_key(key)),
             }
         }
         let coin_info = match coin_info {
-            None => match CborDecode::null() {
-                None => return Err(CborError::map_value_missing(1)),
+            None => match CborDeserialize::null() {
+                None => return Err(CborError::map_value_missing(MapKeyRef::Positive(1))),
                 Some(null) => null,
             },
             Some(coin_info) => coin_info,
         };
 
         let address = match address {
-            None => match CborDecode::null() {
-                None => return Err(CborError::map_value_missing(3)),
+            None => match CborDeserialize::null() {
+                None => return Err(CborError::map_value_missing(MapKeyRef::Positive(3))),
                 Some(null) => null,
             },
             Some(address) => address,
@@ -133,8 +131,8 @@ pub enum CoinInfo {
     CCD,
 }
 
-impl CborEncode for CoinInfo {
-    fn encode<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+impl CborSerialize for CoinInfo {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         encoder.encode_tag(COIN_INFO_TAG)?;
         encoder.encode_map(1)?;
         encoder.encode_positive(1)?;
@@ -145,8 +143,8 @@ impl CborEncode for CoinInfo {
     }
 }
 
-impl CborDecode for CoinInfo {
-    fn decode<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+impl CborDeserialize for CoinInfo {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
         Self: Sized,
     {
