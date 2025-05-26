@@ -61,7 +61,7 @@ impl CborFields {
                         .clone()
                         .ok_or(syn::Error::new_spanned(field, "unnamed field"))?;
 
-                    let opts = CborFieldOpts::from_field(&field)?;
+                    let opts = CborFieldOpts::from_field(field)?;
 
                     Ok(CborField { ident, opts })
                 })

@@ -88,10 +88,7 @@ impl<T: CborSerialize> CborSerialize for Option<T> {
     }
 
     fn is_null(&self) -> bool {
-        match self {
-            None => true,
-            Some(_) => false,
-        }
+        self.is_none()
     }
 }
 
