@@ -114,30 +114,30 @@ instance S.Serialize TokenRawAmount where
 --  The amount is computed as `amount = value * 10^(-decimals)`.
 data TokenAmount = TokenAmount
     { -- | The value in the smallest unit of the token.
-      value :: !TokenRawAmount,
+      taValue :: !TokenRawAmount,
       -- | The number of decimals in the token representation.
-      decimals :: !Word8
+      taDecimals :: !Word8
     }
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenAmount where
     toJSON TokenAmount{..} =
         AE.object
-            [ ("value", AE.String $ T.pack $ show value),
-              ("decimals", AE.toJSON decimals)
+            [ ("value", AE.String $ T.pack $ show taValue),
+              ("decimals", AE.toJSON taDecimals)
             ]
 
 instance AE.FromJSON TokenAmount where
     parseJSON = AE.withObject "TokenAmount" $ \o -> do
-        value <- o AE..: "value"
-        decimals <- o AE..: "decimals"
+        taValue <- o AE..: "value"
+        taDecimals <- o AE..: "decimals"
         return $ TokenAmount{..}
 
 instance S.Serialize TokenAmount where
     put (TokenAmount{..}) = do
-        S.put value
-        S.putWord8 decimals
+        S.put taValue
+        S.putWord8 taDecimals
     get = do
-        value <- S.get
-        decimals <- S.getWord8
+        taValue <- S.get
+        taDecimals <- S.getWord8
         return $ TokenAmount{..}

@@ -143,7 +143,7 @@ tip1 =
         { tipName = "ABC token",
           tipMetadata = "https://abc.token/meta",
           tipAllowList = False,
-          tipInitialSupply = Just (TokenAmount{value = 10000, decimals = 5}),
+          tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = False,
           tipMintable = False,
           tipBurnable = False
@@ -200,7 +200,7 @@ tip2 :: TokenInitializationParameters
 tip2 =
     tip1
         { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
-          tipInitialSupply = Just (TokenAmount{value = 12345, decimals = 5})
+          tipInitialSupply = Just (TokenAmount{taValue = 12345, taDecimals = 5})
         }
 
 -- | Encoded 'TokenInitializationParameters' that can be successfully CBOR decoded
@@ -250,7 +250,7 @@ tops1 =
             [ TokenHolderTransfer
                 TokenTransferBody
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
-                      ttAmount = TokenAmount{value = 12345, decimals = 5},
+                      ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
                       ttRecipient =
                         HolderAccount
                             { holderAccountAddress = AccountAddress $ FBS.pack [0x1, 0x1],

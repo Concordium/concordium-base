@@ -193,8 +193,8 @@ decodeTokenAmount = do
     unless (base10Exponent sci >= -255) $ fail "Token amount exponent is too small"
     return
         TokenAmount
-            { value = fromIntegral (coefficient sci),
-              decimals = fromIntegral (negate (base10Exponent sci))
+            { taValue = fromIntegral (coefficient sci),
+              taDecimals = fromIntegral (negate (base10Exponent sci))
             }
 
 -- | Encode a 'TokenAmount' as CBOR.
@@ -202,8 +202,8 @@ encodeTokenAmount :: TokenAmount -> Encoding
 encodeTokenAmount TokenAmount{..} =
     encodeTag 4
         <> encodeListLen 2
-        <> encodeInteger (-fromIntegral decimals)
-        <> encodeWord64 (theTokenRawAmount value)
+        <> encodeInteger (-fromIntegral taDecimals)
+        <> encodeWord64 (theTokenRawAmount taValue)
 
 -- | Helper function to encode a sequence.
 encodeSequence :: (a -> Encoding) -> Seq.Seq a -> Encoding

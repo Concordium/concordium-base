@@ -624,8 +624,8 @@ instance ToProto Cooldown where
 instance ToProto TokenAmount where
     type Output TokenAmount = Proto.TokenAmount
     toProto TokenAmount{..} = Proto.make $ do
-        PLTFields.digits .= theTokenRawAmount value
-        PLTFields.nrOfDecimals .= fromIntegral decimals
+        PLTFields.value .= theTokenRawAmount taValue
+        PLTFields.decimals .= fromIntegral taDecimals
 
 instance ToProto TokenAccountState where
     type Output TokenAccountState = Proto.TokenAccountState
@@ -662,7 +662,7 @@ instance ToProto TokenState where
     toProto TokenState{..} = Proto.make $ do
         PLTFields.tokenModuleRef .= toProto tsTokenModuleRef
         PLTFields.issuer .= toProto tsIssuer
-        PLTFields.nrOfDecimals .= fromIntegral tsDecimals
+        PLTFields.decimals .= fromIntegral tsDecimals
         PLTFields.totalSupply .= toProto tsTotalSupply
         PLTFields.moduleState .= Proto.make (PLTFields.value .= tsModuleState)
 
