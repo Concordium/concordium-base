@@ -80,6 +80,7 @@ pub enum CoinInfo {
     CCD,
 }
 
+/// [`CoinInfo`] representation that resembles CBOR structure
 #[derive(Debug, CborSerialize, CborDeserialize)]
 #[cbor(tag = COIN_INFO_TAG)]
 struct CoinInfoCbor {
