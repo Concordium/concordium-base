@@ -624,13 +624,63 @@ mod test {
             field1: u64,
         }
 
-        let value = TestStructWrapper (
-             TestStruct { field1: 3 }
-        );
+        let value = TestStructWrapper(TestStruct { field1: 3 });
 
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
-        
+    }
+
+    #[test]
+    fn test_map_derived_tag() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tag = 1)]
+        struct TestStruct {
+            field1: u64,
+        }
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tag = 2)]
+        struct TestStruct2 {
+            field1: u64,
+        }
+
+        let value = TestStruct { field1: 3 };
+
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let err = cbor_decode::<TestStruct2>(&cbor)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("expected tag 2"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_map_derived_tag_transparent() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(transparent, tag = 1)]
+        struct TestStructWrapper(TestStruct);
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(transparent, tag = 2)]
+        struct TestStructWrapper2(TestStruct);
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+        }
+
+        let value = TestStructWrapper(TestStruct { field1: 3 });
+
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let err = cbor_decode::<TestStructWrapper2>(&cbor)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("expected tag 2"), "err: {}", err);
     }
 }

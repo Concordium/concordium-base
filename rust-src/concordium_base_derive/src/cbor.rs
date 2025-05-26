@@ -132,6 +132,14 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
         }
     };
 
+    let decode_tag = if let Some(tag) = opts.tag {
+        quote!(
+            #cbor_module::CborDecoder::decode_tag_expect(decoder, #tag)?;
+        )
+    } else {
+        quote!()
+    };
+
     let strlit = LitStr::new(&format!("{:?}", opts), Span::call_site());
     Ok(quote! {
         const _ : () = const {
@@ -140,6 +148,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
         impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
             fn deserialize<C: #cbor_module::CborDecoder>(decoder: &mut C) -> #cbor_module::CborResult<Self> {
+                #decode_tag
                 #deserialize_body
             }
         }
@@ -234,9 +243,18 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         }
     };
 
+    let encode_tag = if let Some(tag) = opts.tag {
+        quote!(
+            #cbor_module::CborEncoder::encode_tag(encoder, #tag)?;
+        )
+    } else {
+        quote!()
+    };
+    
     Ok(quote! {
         impl #impl_generics #cbor_module::CborSerialize for #name #ty_generics #where_clauses {
             fn serialize<C: #cbor_module::CborEncoder>(&self, encoder: &mut C) -> #cbor_module::CborResult<()> {
+                #encode_tag
                 #serialize_body
             }
         }
