@@ -424,11 +424,26 @@ impl CborDeserialize for usize {
     where
         Self: Sized,
     {
-        Ok(decoder.decode_positive()?.try_into().context("convert u64 to usize")?)
+        Ok(decoder
+            .decode_positive()?
+            .try_into()
+            .context("convert u64 to usize")?)
+    }
+}
+
+impl CborSerialize for str {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_text(self)
     }
 }
 
 impl CborSerialize for &str {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_text(self)
+    }
+}
+
+impl CborSerialize for String {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         encoder.encode_text(self)
     }
@@ -531,11 +546,12 @@ impl CborDeserialize for MapKey {
 #[cfg(test)]
 mod test {
     use super::*;
+    use concordium_base_derive::{CborDeserialize, CborSerialize};
 
     // todo ar test not well formed bytes and text (different length than specified)
 
     #[test]
-    fn test_bytes_exact() {
+    fn test_bytes_exact_encode_decode() {
         let bytes: [u8; 5] = [1, 2, 3, 4, 5];
 
         let cbor = cbor_encode(&bytes).unwrap();
@@ -544,11 +560,48 @@ mod test {
     }
 
     #[test]
-    fn test_text() {
+    fn test_text_encode_decode() {
         let text = "abcd";
 
         let cbor = cbor_encode(&text).unwrap();
         let text_decoded: String = cbor_decode(&cbor).unwrap();
         assert_eq!(text_decoded, text);
+    }
+
+    
+    #[test]
+    fn test_map_derived_serialize_deserialize() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+            field2: String,
+        }
+
+        let value = TestStruct { field1: 3, field2: "abcd".to_string() };
+
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_map_derived_serialize_deserialize_optional_field() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: Option<u64>,
+            field2: String,
+        }
+
+        let value = TestStruct { field1: Some(3), field2: "abcd".to_string() };
+
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = TestStruct { field1: None, field2: "abcd".to_string() };
+
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 }
