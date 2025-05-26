@@ -1,5 +1,6 @@
 //! Common types and operations used throughout the Concordium chain
 //! development.
+pub mod cbor;
 #[cfg(test)]
 mod helpers;
 mod impls;

@@ -1,6 +1,5 @@
-use crate::internal::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize, MapKey,
-    MapKeyRef,
+use crate::common::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize,
 };
 
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -34,8 +33,7 @@ impl CborSerialize for TokenHolder {
 impl CborDeserialize for TokenHolder {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         Ok(Self::HolderAccount(HolderAccount::deserialize(decoder)?))
     }
 }
@@ -59,7 +57,7 @@ pub struct HolderAccount {
     pub coin_info: Option<CoinInfo>,
     /// Concordium address
     #[cbor(key = 3)]
-    pub address: AccountAddress,
+    pub address:   AccountAddress,
 }
 
 impl CborSerialize for AccountAddress {
@@ -71,8 +69,7 @@ impl CborSerialize for AccountAddress {
 impl CborDeserialize for AccountAddress {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         Ok(Self(CborDeserialize::deserialize(decoder)?))
     }
 }
@@ -103,8 +100,7 @@ impl CborSerialize for CoinInfo {
 impl CborDeserialize for CoinInfo {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         let cbor = CoinInfoCbor::deserialize(decoder)?;
         let coin_info = match cbor.coin_info_code {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
@@ -123,7 +119,7 @@ impl CborDeserialize for CoinInfo {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::internal::cbor;
+    use crate::common::cbor;
 
     pub const ADDRESS: AccountAddress = AccountAddress([
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
@@ -144,7 +140,7 @@ pub mod test {
     #[test]
     fn test_token_holder_cbor_no_coin_info() {
         let token_holder = TokenHolder::HolderAccount(HolderAccount {
-            address: ADDRESS,
+            address:   ADDRESS,
             coin_info: None,
         });
 
@@ -160,7 +156,7 @@ pub mod test {
     #[test]
     fn test_token_holder_cbor() {
         let token_holder = TokenHolder::HolderAccount(HolderAccount {
-            address: ADDRESS,
+            address:   ADDRESS,
             coin_info: Some(CoinInfo::CCD),
         });
 

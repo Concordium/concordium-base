@@ -8,8 +8,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use proc_macro_crate::FoundCrate;
 use quote::{format_ident, quote};
-use syn::parse_macro_input;
-use syn::spanned::Spanned;
+use syn::{parse_macro_input, spanned::Spanned};
 
 fn get_crate_root() -> syn::Result<proc_macro2::TokenStream> {
     let found_crate = proc_macro_crate::crate_name("concordium_base").map_err(|err| {

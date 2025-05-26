@@ -1,5 +1,3 @@
-pub mod cbor;
-
 pub(crate) mod byte_array_hex {
     /// Serialize (via Serde)
     pub fn serialize<S: serde::Serializer>(dt: &[u8], ser: S) -> Result<S::Ok, S::Error> {

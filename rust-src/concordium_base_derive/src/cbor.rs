@@ -1,10 +1,9 @@
 use crate::get_crate_root;
-use proc_macro2::TokenStream;
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{Data, DataStruct, Expr, Fields, FieldsNamed, LitStr};
 
-use darling::{FromDeriveInput, FromField, FromMeta};
+use darling::{FromDeriveInput, FromField};
 
 #[derive(Debug, Default, FromField)]
 #[darling(attributes(cbor))]
@@ -17,22 +16,20 @@ pub struct CborFieldOpts {
 pub struct CborOpts {
     #[darling(default)]
     transparent: bool,
-    tag: Option<Expr>,
+    tag:         Option<Expr>,
 }
 
 #[derive(Debug)]
 struct CborField {
     ident: Ident,
-    opts: CborFieldOpts,
+    opts:  CborFieldOpts,
 }
 
 #[derive(Debug)]
 struct CborFields(Vec<CborField>);
 
 impl CborFields {
-    fn idents(&self) -> Vec<Ident> {
-        self.0.iter().map(|field| field.ident.clone()).collect()
-    }
+    fn idents(&self) -> Vec<Ident> { self.0.iter().map(|field| field.ident.clone()).collect() }
 
     fn cbor_map_keys(&self) -> syn::Result<Vec<TokenStream>> {
         let cbor_module = get_cbor_module()?;
@@ -75,7 +72,7 @@ impl CborFields {
 
 fn get_cbor_module() -> syn::Result<TokenStream> {
     let crate_root = get_crate_root()?;
-    Ok(quote!(#crate_root::internal::cbor))
+    Ok(quote!(#crate_root::common::cbor))
 }
 
 pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
@@ -95,11 +92,6 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
                     Span::call_site(),
                     "cbor(transparent) attribute only valid for tuple structs",
                 ));
-            }
-
-            struct Field {
-                ident: Ident,
-                opts: CborFieldOpts,
             }
 
             let cbor_fields = CborFields::try_from_named_fields(fields_named)?;

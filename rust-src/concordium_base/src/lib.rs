@@ -43,4 +43,3 @@ pub mod ed25519 {
 
 #[cfg(feature = "ffi")]
 mod ffi_helpers;
-
