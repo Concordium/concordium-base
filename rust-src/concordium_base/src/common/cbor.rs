@@ -17,13 +17,17 @@ impl CborError {
         anyhow!("expected data item {:?}, was {:?}", expected, actual).into()
     }
 
-    pub fn remaining_data() -> Self { anyhow!("data remaining after parse").into() }
+    pub fn remaining_data() -> Self {
+        anyhow!("data remaining after parse").into()
+    }
 
     pub fn expected_map_key(expected: u64, actual: u64) -> Self {
         anyhow!("expected map key {}, was {}", expected, actual).into()
     }
 
-    pub fn unknown_map_key(key: MapKeyRef) -> Self { anyhow!("unknown map key {:?}", key).into() }
+    pub fn unknown_map_key(key: MapKeyRef) -> Self {
+        anyhow!("unknown map key {:?}", key).into()
+    }
 
     pub fn invalid_data(message: impl Display) -> Self {
         anyhow!("invalid data: {}", message).into()
@@ -49,7 +53,9 @@ where
 }
 
 impl From<std::io::Error> for CborError {
-    fn from(err: std::io::Error) -> Self { anyhow!("IO error: {}", err).into() }
+    fn from(err: std::io::Error) -> Self {
+        anyhow!("IO error: {}", err).into()
+    }
 }
 
 /// Encodes the given value as CBOR
@@ -77,7 +83,9 @@ pub trait CborSerialize {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()>;
 
     /// Whether the value corresponds to `null`
-    fn is_null(&self) -> bool { false }
+    fn is_null(&self) -> bool {
+        false
+    }
 }
 
 impl<T: CborSerialize> CborSerialize for Option<T> {
@@ -88,7 +96,9 @@ impl<T: CborSerialize> CborSerialize for Option<T> {
         }
     }
 
-    fn is_null(&self) -> bool { self.is_none() }
+    fn is_null(&self) -> bool {
+        self.is_none()
+    }
 }
 
 /// Type that can be deserialized from CBOR
@@ -101,7 +111,8 @@ pub trait CborDeserialize {
     /// Produce value corresponding to `null` if possible for this type
     fn null() -> Option<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         None
     }
 }
@@ -109,13 +120,15 @@ pub trait CborDeserialize {
 impl<T: CborDeserialize> CborDeserialize for Option<T> {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(Some(T::deserialize(decoder)?))
     }
 
     fn null() -> Option<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Some(None)
     }
 }
@@ -148,7 +161,9 @@ impl<W: Write> CborEncoder for Encoder<W>
 where
     CborError: From<W::Error>,
 {
-    fn encode_tag(&mut self, tag: u64) -> CborResult<()> { Ok(self.push(Header::Tag(tag))?) }
+    fn encode_tag(&mut self, tag: u64) -> CborResult<()> {
+        Ok(self.push(Header::Tag(tag))?)
+    }
 
     fn encode_positive(&mut self, positive: u64) -> CborResult<()> {
         Ok(self.push(Header::Positive(positive))?)
@@ -162,11 +177,17 @@ where
         Ok(self.push(Header::Array(Some(size)))?)
     }
 
-    fn encode_bytes(&mut self, bytes: &[u8]) -> CborResult<()> { Ok(self.bytes(bytes, None)?) }
+    fn encode_bytes(&mut self, bytes: &[u8]) -> CborResult<()> {
+        Ok(self.bytes(bytes, None)?)
+    }
 
-    fn encode_text(&mut self, text: &str) -> CborResult<()> { Ok(self.text(text, None)?) }
+    fn encode_text(&mut self, text: &str) -> CborResult<()> {
+        Ok(self.text(text, None)?)
+    }
 
-    fn encode_null(&mut self) -> CborResult<()> { Ok(self.push(Header::Simple(simple::NULL))?) }
+    fn encode_null(&mut self) -> CborResult<()> {
+        Ok(self.push(Header::Simple(simple::NULL))?)
+    }
 }
 
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
@@ -304,7 +325,8 @@ fn decode_definite_length_bytes<R: Read>(
     dest: &mut [u8],
 ) -> CborResult<()>
 where
-    R::Error: Display, {
+    R::Error: Display,
+{
     let mut segments = decoder.bytes(Some(dest.len()));
     let Some(mut segment) = segments.pull()? else {
         return Err(anyhow!("must have at least one segment").into());
@@ -325,12 +347,10 @@ where
 ///
 /// This function works only for text data items of definite length (which means
 /// there is a single segment)
-fn decode_definite_length_text<R: Read>(
-    decoder: &mut Decoder<R>,
-    dest: &mut [u8],
-) -> CborResult<()>
+fn decode_definite_length_text<R: Read>(decoder: &mut Decoder<R>, dest: &mut [u8]) -> CborResult<()>
 where
-    R::Error: Display, {
+    R::Error: Display,
+{
     let mut segments = decoder.text(Some(dest.len()));
     let Some(mut segment) = segments.pull()? else {
         return Err(anyhow!("must have at least one segment").into());
@@ -355,7 +375,8 @@ impl<const N: usize> CborSerialize for [u8; N] {
 impl<const N: usize> CborDeserialize for [u8; N] {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         let mut dest = [0; N];
         decoder.decode_bytes_exact(&mut dest)?;
         Ok(dest)
@@ -371,7 +392,8 @@ impl CborSerialize for u64 {
 impl CborDeserialize for u64 {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         decoder.decode_positive()
     }
 }
@@ -385,7 +407,8 @@ impl CborSerialize for usize {
 impl CborDeserialize for usize {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(decoder
             .decode_positive()?
             .try_into()
@@ -414,7 +437,8 @@ impl CborSerialize for String {
 impl CborDeserialize for String {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(String::from_utf8(decoder.decode_str()?)
             .context("text data item not valid UTF8 encoding")?)
     }
@@ -488,7 +512,8 @@ impl CborSerialize for MapKeyRef<'_> {
 impl CborDeserialize for MapKey {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         match decoder.peek_data_item_type()? {
             DataItemType::Positive => Ok(Self::Positive(u64::deserialize(decoder)?)),
             DataItemType::Text => Ok(Self::Text(String::deserialize(decoder)?)),
@@ -553,6 +578,7 @@ mod test {
         cbor_decode::<String>(&cbor).expect_err("should give error");
     }
 
+    /// Struct with named fields encoded as map. Uses field name string literals as keys.
     #[test]
     fn test_map_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -576,7 +602,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_positive_keys() {
+    fn test_map_derived_explicit_keys() {
         const KEY: u64 = 2;
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -653,8 +679,43 @@ mod test {
         assert!(err.contains("unknown map key"), "err: {}", err);
     }
 
+    /// Tuple encoded as map. Uses field indexes as keys.
     #[test]
-    fn test_map_derived_transparent() {
+    fn test_map_derived_tuple() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct(u64, String);
+
+        let value = TestStruct(3, "abcd".to_string());
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(
+            hex::encode(&cbor),
+            "a20003016461626364"
+        );
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_map_derived_tuple_explicit_keys() {
+        const KEY: u64 = 2;
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct(#[cbor(key = 1)] u64, #[cbor(key = KEY)] String);
+
+        let value = TestStruct(3, "abcd".to_string());
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(
+            hex::encode(&cbor),
+            "a20103026461626364"
+        );
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_derived_transparent_tuple() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent)]
         struct TestStructWrapper(TestStruct);
@@ -673,7 +734,30 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_tag() {
+    fn test_derived_transparent_named() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(transparent)]
+        struct TestStructWrapper {
+            field1: TestStruct,
+        };
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+        }
+
+        let value = TestStructWrapper {
+            field1: TestStruct { field1: 3 },
+        };
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1666669656c643103");
+        let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_tag_derived_map() {
         const TAG: u64 = 39999;
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -700,7 +784,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_tag_transparent() {
+    fn test_tag_derived_transparent() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent, tag = 39999)]
         struct TestStructWrapper(TestStruct);

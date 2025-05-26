@@ -1,12 +1,20 @@
+use concordium_base_derive::{CborDeserialize, CborSerialize};
+use crate::common::cbor::{CborDecoder, CborDeserialize, CborEncoder, CborResult, CborSerialize};
+
+const DECIMAL_FRACTION_TAG: u64 = 4;
+
 /// Protocol level token (PLT) amount representation.
-#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)] //  CborSerialize, CborDeserialize
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
+// #[cbor(array, tag = DECIMAL_FRACTION_TAG)]
 pub struct TokenAmount {
     /// The amount of tokens without decimal places.
     value:    u64,
     /// The number of decimals in the token amount.
     decimals: u8,
 }
+
+
 
 impl TokenAmount {
     /// Construct a [`TokenAmount`] from a value without decimal places and the
@@ -331,5 +339,15 @@ mod test {
             assert_eq!(a, b);
             assert_eq!(b, a);
         }
+    }
+
+    #[test]
+    fn test_token_amount_cbor() {
+        // let token_amount = ;
+        // 
+        // let cbor = cbor::cbor_encode(&coin_info).unwrap();
+        // assert_eq!(hex::encode(&cbor), "d99d71a101190397");
+        // let coin_info_decoded: CoinInfo = cbor::cbor_decode(&cbor).unwrap();
+        // assert_eq!(coin_info_decoded, coin_info);
     }
 }
