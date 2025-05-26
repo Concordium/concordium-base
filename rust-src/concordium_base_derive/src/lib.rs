@@ -1,16 +1,32 @@
 //! Derive macros for deriving serialization in the Concordium binary format.
 //! This crate is intended to be used together with the [`concordium_base`](https://crates.io/crates/concordium_base)
 //! crate and should **not** be imported directly.
-//!
-//! The derivation macros will only work in a context where `concordium_base` is
-//! available as a module.
 
-#[macro_use]
-extern crate quote;
+mod cbor;
+
 use proc_macro::TokenStream;
+use proc_macro2::{Ident, Span};
+use proc_macro_crate::FoundCrate;
+use quote::{format_ident, quote};
+use syn::parse_macro_input;
 use syn::spanned::Spanned;
 
-fn get_root() -> proc_macro2::TokenStream { quote!(concordium_base) }
+fn get_crate_root() -> syn::Result<proc_macro2::TokenStream> {
+    let found_crate = proc_macro_crate::crate_name("concordium_base").map_err(|err| {
+        syn::Error::new(
+            Span::call_site(),
+            format!("concordium_base not found in Cargo.toml: {}", err),
+        )
+    })?;
+
+    Ok(match found_crate {
+        FoundCrate::Itself => quote!(crate),
+        FoundCrate::Name(name) => {
+            let ident = Ident::new(&name, Span::call_site());
+            quote!( #ident )
+        }
+    })
+}
 
 /// Derive a [`serde::Serialize`](https://docs.rs/serde/latest/serde/trait.Serialize.html) and
 /// [`serde::Deserialize`](https://docs.rs/serde/latest/serde/trait.Deserialize.html) implementations for the type.
@@ -39,7 +55,7 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     let ident = format_ident!("GenericSerializerType", span = span);
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
-    let root = get_root();
+    let root = get_crate_root().expect("concordium_base root");
     let gen = quote! {
         #[automatically_derived]
         impl #serial_impl_generics #root::common::SerdeSerialize for #name #ty_generics #where_clauses {
@@ -80,7 +96,7 @@ pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenS
         .params
         .push(syn::GenericParam::Lifetime(lifetime.clone()));
     let (deserial_impl_generics, _, _) = deserial_generics.split_for_impl();
-    let root = get_root();
+    let root = get_crate_root().expect("concordium_base root");
     let ident = format_ident!("GenericSerializerType", span = span);
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
@@ -149,7 +165,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     let ident = format_ident!("GenericReaderType", span = span);
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
-    let root = get_root();
+    let root = get_crate_root().expect("concordium_base root");
 
     if let syn::Data::Struct(ref data) = ast.data {
         let mut tokens = proc_macro2::TokenStream::new();
@@ -258,7 +274,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
 
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
-    let root = get_root();
+    let root = get_crate_root().expect("concordium_base root");
 
     let out = format_ident!("out");
     if let syn::Data::Struct(ref data) = ast.data {
@@ -386,4 +402,22 @@ pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let mut tokens = impl_deserial(&ast);
     tokens.extend(impl_serial(&ast));
     tokens
+}
+
+/// Derive [`CborSerialize`] on the type.
+#[proc_macro_derive(CborSerialize, attributes(cbor))]
+pub fn cbor_serialize_derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input);
+    cbor::impl_cbor_serialize(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive [`CborDeserialize`] on the type.
+#[proc_macro_derive(CborDeserialize, attributes(cbor))]
+pub fn cbor_deserialize_derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input);
+    cbor::impl_cbor_deserialize(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }

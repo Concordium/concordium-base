@@ -44,7 +44,3 @@ pub mod ed25519 {
 #[cfg(feature = "ffi")]
 mod ffi_helpers;
 
-// This is here so that we can use the _derive crate inside this crate as well.
-// It allows the generated code to refer to concordium_base::
-#[doc(hidden)]
-extern crate self as concordium_base;
