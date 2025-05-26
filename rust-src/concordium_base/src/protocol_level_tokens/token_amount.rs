@@ -1,42 +1,59 @@
-use concordium_base_derive::{CborDeserialize, CborSerialize};
 use crate::common::cbor::{CborDecoder, CborDeserialize, CborEncoder, CborResult, CborSerialize};
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 const DECIMAL_FRACTION_TAG: u64 = 4;
 
 /// Protocol level token (PLT) amount representation.
-#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)] //  CborSerialize, CborDeserialize
+#[derive(
+    Debug, Clone, Copy, serde::Deserialize, serde::Serialize,
+)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
-// #[cbor(array, tag = DECIMAL_FRACTION_TAG)]
 pub struct TokenAmount {
-    /// The amount of tokens without decimal places.
-    value:    u64,
     /// The number of decimals in the token amount.
     decimals: u8,
+    /// The amount of tokens without decimal places.
+    value: u64,
 }
 
-
+/// [`TokenAmount`] representation that resembles CBOR structure, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-decimal-fractions-and-bigfl>
+#[derive(
+    Debug, Clone, Copy, CborSerialize, CborDeserialize,
+)]
+#[cbor(array, tag = DECIMAL_FRACTION_TAG)]
+struct TokenAmountCbor {
+    scale: u64,
+    value: u64,
+}
 
 impl TokenAmount {
     /// Construct a [`TokenAmount`] from a value without decimal places and the
     /// number of decimals, meaning the token amount is computed as `value *
     /// 10^(-decimals)`.
-    pub fn from_raw(value: u64, decimals: u8) -> Self { Self { value, decimals } }
+    pub fn from_raw(value: u64, decimals: u8) -> Self {
+        Self { value, decimals }
+    }
 
     /// Construct a [`TokenAmount`] representing an integer amount and zero
     /// decimals.
-    pub fn from_integer(value: u64) -> Self { Self { value, decimals: 0 } }
+    pub fn from_integer(value: u64) -> Self {
+        Self { value, decimals: 0 }
+    }
 
     /// The number of decimals in the token amount.
     ///
     /// Together with the `raw_value` the token amount can be represented as
     /// `raw_value * 10^(-decimals)`
-    pub fn decimals(&self) -> u8 { self.decimals }
+    pub fn decimals(&self) -> u8 {
+        self.decimals
+    }
 
     /// The amount of tokens without decimal places.
     ///
     /// Together with the `decimals` the token amount can be represented as
     /// `raw_value * 10^(-decimals)`
-    pub fn raw_value(&self) -> u64 { self.value }
+    pub fn raw_value(&self) -> u64 {
+        self.value
+    }
 }
 
 impl std::fmt::Display for TokenAmount {
@@ -92,7 +109,7 @@ impl std::str::FromStr for TokenAmount {
             Ok(Self { value, decimals })
         } else {
             Ok(Self {
-                value:    s
+                value: s
                     .parse()
                     .map_err(TokenAmountParseError::FailedParsingWholeNumber)?,
                 decimals: 0,
@@ -102,7 +119,9 @@ impl std::str::FromStr for TokenAmount {
 }
 
 impl PartialOrd for TokenAmount {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for TokenAmount {
@@ -155,7 +174,9 @@ impl Ord for TokenAmount {
 }
 
 impl PartialEq for TokenAmount {
-    fn eq(&self, other: &Self) -> bool { matches!(self.cmp(other), std::cmp::Ordering::Equal) }
+    fn eq(&self, other: &Self) -> bool {
+        matches!(self.cmp(other), std::cmp::Ordering::Equal)
+    }
 }
 impl Eq for TokenAmount {}
 
@@ -164,14 +185,14 @@ impl Eq for TokenAmount {}
 /// SDKs.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct TokenAmountJson {
-    value:    String,
+    value: String,
     decimals: u8,
 }
 
 impl From<TokenAmount> for TokenAmountJson {
     fn from(amount: TokenAmount) -> Self {
         Self {
-            value:    amount.value.to_string(),
+            value: amount.value.to_string(),
             decimals: amount.decimals,
         }
     }
@@ -182,7 +203,7 @@ impl TryFrom<TokenAmountJson> for TokenAmount {
 
     fn try_from(json: TokenAmountJson) -> Result<Self, Self::Error> {
         Ok(Self {
-            value:    json.value.parse()?,
+            value: json.value.parse()?,
             decimals: json.decimals,
         })
     }
@@ -191,11 +212,12 @@ impl TryFrom<TokenAmountJson> for TokenAmount {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::common::cbor;
 
     #[test]
     fn display_token_amount() {
         let amount = TokenAmount {
-            value:    123456,
+            value: 123456,
             decimals: 3,
         };
         assert_eq!(amount.to_string().as_str(), "123.456")
@@ -204,7 +226,7 @@ mod test {
     #[test]
     fn parse_token_amount() {
         let amount = TokenAmount {
-            value:    123456,
+            value: 123456,
             decimals: 3,
         };
         let parsed: TokenAmount = "123.456"
@@ -219,12 +241,12 @@ mod test {
         // Check using same decimals.
         {
             let first = TokenAmount {
-                value:    123,
+                value: 123,
                 decimals: 3,
             };
 
             let last = TokenAmount {
-                value:    456,
+                value: 456,
                 decimals: 3,
             };
             // Note that both directions are needed to cover both branches in the
@@ -237,12 +259,12 @@ mod test {
             // Check using different decimals.
             // 0.123
             let first = TokenAmount {
-                value:    123,
+                value: 123,
                 decimals: 3,
             };
             // 1.23
             let last = TokenAmount {
-                value:    123,
+                value: 123,
                 decimals: 2,
             };
             // Note that both directions are needed to cover both branches in the
@@ -255,12 +277,12 @@ mod test {
             // Check with matching max decimal
             // 0.123
             let first = TokenAmount {
-                value:    1,
+                value: 1,
                 decimals: u8::MAX,
             };
             // 1.23
             let last = TokenAmount {
-                value:    u64::MAX,
+                value: u64::MAX,
                 decimals: u8::MAX,
             };
             // Note that both directions are needed to cover both branches in the
@@ -273,12 +295,12 @@ mod test {
             // Check with large difference in decimals
             // 0.123
             let first = TokenAmount {
-                value:    u64::MAX,
+                value: u64::MAX,
                 decimals: u8::MAX,
             };
             // 1.23
             let last = TokenAmount {
-                value:    u64::MAX,
+                value: u64::MAX,
                 decimals: u8::MIN,
             };
             // Note that both directions are needed to cover both branches in the
@@ -291,12 +313,12 @@ mod test {
             // Check with large difference in decimals
             // 0.123
             let first = TokenAmount {
-                value:    10_000_000_000_000_000_000,
+                value: 10_000_000_000_000_000_000,
                 decimals: 19,
             };
             // 1.23
             let last = TokenAmount {
-                value:    2,
+                value: 2,
                 decimals: 0,
             };
             // Note that both directions are needed to cover both branches in the
@@ -312,12 +334,12 @@ mod test {
         {
             // 123.456
             let a = TokenAmount {
-                value:    123456,
+                value: 123456,
                 decimals: 3,
             };
             // 123.456
             let b = TokenAmount {
-                value:    123456,
+                value: 123456,
                 decimals: 3,
             };
             assert_eq!(a, b);
@@ -326,12 +348,12 @@ mod test {
         {
             // 5.0
             let a = TokenAmount {
-                value:    50,
+                value: 50,
                 decimals: 1,
             };
             // 5
             let b = TokenAmount {
-                value:    5,
+                value: 5,
                 decimals: 0,
             };
             // Note that both directions are needed to cover both branches in the
@@ -343,11 +365,14 @@ mod test {
 
     #[test]
     fn test_token_amount_cbor() {
-        // let token_amount = ;
-        // 
-        // let cbor = cbor::cbor_encode(&coin_info).unwrap();
+        let token_amount = TokenAmount {
+            value: 12300,
+            decimals: 3,
+        };
+
+        // let cbor = cbor::cbor_encode(&token_amount).unwrap();
         // assert_eq!(hex::encode(&cbor), "d99d71a101190397");
-        // let coin_info_decoded: CoinInfo = cbor::cbor_decode(&cbor).unwrap();
-        // assert_eq!(coin_info_decoded, coin_info);
+        // let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
+        // assert_eq!(token_amount_decoded, token_amount); // todo ar
     }
 }

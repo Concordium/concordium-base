@@ -80,7 +80,7 @@ pub enum CoinInfo {
     CCD,
 }
 
-/// [`CoinInfo`] representation that resembles CBOR structure
+/// [`CoinInfo`] representation that resembles CBOR structure, see <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md>
 #[derive(Debug, CborSerialize, CborDeserialize)]
 #[cbor(tag = COIN_INFO_TAG)]
 struct CoinInfoCbor {

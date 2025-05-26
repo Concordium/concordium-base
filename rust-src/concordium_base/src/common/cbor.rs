@@ -145,6 +145,10 @@ pub trait CborEncoder {
     /// Encodes positive integer data item with given value
     fn encode_positive(&mut self, positive: u64) -> CborResult<()>;
 
+    /// Encodes negative integer data item with given value. Notice that the
+    /// value of the data item is -(`negative` + 1)
+    fn encode_negative(&mut self, negative: u64) -> CborResult<()>;
+
     /// Encodes start of map with given size
     fn encode_map(&mut self, size: usize) -> CborResult<()>;
 
@@ -171,6 +175,10 @@ where
 
     fn encode_positive(&mut self, positive: u64) -> CborResult<()> {
         Ok(self.push(Header::Positive(positive))?)
+    }
+
+    fn encode_negative(&mut self, negative: u64) -> CborResult<()> {
+        Ok(self.push(Header::Negative(negative))?)
     }
 
     fn encode_map(&mut self, size: usize) -> CborResult<()> {
@@ -210,6 +218,11 @@ pub trait CborDecoder {
 
     /// Decode positive integer data item
     fn decode_positive(&mut self) -> CborResult<u64>;
+
+    /// Decode negative integer data item. Notice that the
+    /// value of the data item is -(`negative` + 1) where
+    /// `negative` is the returned value. 
+    fn decode_negative(&mut self) -> CborResult<u64>;
 
     /// Decode map start. Returns the map size
     fn decode_map(&mut self) -> CborResult<usize>;
@@ -260,6 +273,16 @@ where
             Header::Positive(positive) => Ok(positive),
             header => Err(CborError::expected_data_item(
                 DataItemType::Positive,
+                DataItemType::from_header(&header),
+            )),
+        }
+    }
+
+    fn decode_negative(&mut self) -> CborResult<u64> {
+        match self.pull()? {
+            Header::Negative(negative) => Ok(negative),
+            header => Err(CborError::expected_data_item(
+                DataItemType::Negative,
                 DataItemType::from_header(&header),
             )),
         }
@@ -396,6 +419,26 @@ impl<const N: usize> CborDeserialize for [u8; N] {
     }
 }
 
+// todo ar macro rules
+
+impl CborSerialize for u8 {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_positive((*self).try_into().context("convert from usize to u8")?)
+    }
+}
+
+impl CborDeserialize for u8 {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(decoder
+            .decode_positive()?
+            .try_into()
+            .context("convert u8 to usize")?)
+    }
+}
+
 impl CborSerialize for u64 {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         encoder.encode_positive(*self)
@@ -408,6 +451,32 @@ impl CborDeserialize for u64 {
         Self: Sized,
     {
         decoder.decode_positive()
+    }
+}
+
+impl CborSerialize for i64 {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        if let Ok(positive) = u64::try_from(*self) {
+            encoder.encode_positive(positive)
+        } else if let Some(negative) = self
+            .checked_add(1)
+            .and_then(|val| val.checked_neg())
+            .and_then(|val| u64::try_from(val).ok())
+        {
+            encoder.encode_negative(negative)
+        } else {
+            Err(CborError::invalid_data(format!("i64 cannot be encoded in CBOR: {}", self)))
+        }
+    }
+}
+
+impl CborDeserialize for i64 {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        // todo ar peek
+        todo!()
     }
 }
 
@@ -545,6 +614,74 @@ impl CborDeserialize for MapKey {
 mod test {
     use super::*;
     use concordium_base_derive::{CborDeserialize, CborSerialize};
+
+    #[test]
+    fn test_u64() {
+        let value = 0u64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "00");
+        let value_decoded: u64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = 1u64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "01");
+        let value_decoded: u64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+        
+        let value = 1230u64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "1904ce");
+        let value_decoded: u64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+
+    }
+
+    #[test]
+    fn test_i64() {
+        let value = 0i64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "00");
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = 1i64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "00");
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = 2i64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "00");
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = -1i64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "00");
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = -2i64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "00");
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = 1230i64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "1904ce");
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+        
+        let value = -1230i64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "00");
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
 
     #[test]
     fn test_bytes() {
