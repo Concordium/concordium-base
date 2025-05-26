@@ -1,5 +1,4 @@
 use crate::common;
-use std::fmt::Debug;
 
 /// CBOR encoded byte string.
 ///
