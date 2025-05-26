@@ -51,9 +51,16 @@ pub struct TokenModuleEvent {
     pub details:    RawCbor,
 }
 
-/// Maximum number of bytes allowed for an encoding of a token module event type
-/// and token module reject reason type.
-const TYPE_MAX_BYTE_LEN: usize = 255;
+/// An event emitted when a transfer of tokens from `from` to `to` is performed.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenTransferEvent {
+    /// The token holder from which the tokens are transferred.
+    pub from:   TokenHolder,
+    /// The token holder to which the tokens are transferred.
+    pub to:     TokenHolder,
+    /// The amount of tokens transferred.
+    pub amount: TokenAmount,
     /// An optional memo field that can be used to attach a message to the token
     /// transfer.
     pub memo:   Option<Memo>,
@@ -68,6 +75,11 @@ pub struct TokenSupplyUpdateEvent {
     pub target: TokenHolder,
     /// The balance difference to be applied to the target.
     pub amount: TokenAmount,
+}
+
+/// Maximum number of bytes allowed for an encoding of a token module event type
+/// and token module reject reason type.
+const TYPE_MAX_BYTE_LEN: usize = 255;
 
 /// String representing the type of token module event or token module reject
 /// reason type.
