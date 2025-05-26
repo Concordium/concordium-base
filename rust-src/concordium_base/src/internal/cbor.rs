@@ -555,6 +555,7 @@ mod test {
         let bytes: [u8; 5] = [1, 2, 3, 4, 5];
 
         let cbor = cbor_encode(&bytes).unwrap();
+        assert_eq!(hex::encode(&cbor), "450102030405");
         let bytes_decoded: [u8; 5] = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
     }
@@ -564,6 +565,7 @@ mod test {
         let text = "abcd";
 
         let cbor = cbor_encode(&text).unwrap();
+        assert_eq!(hex::encode(&cbor), "6461626364");
         let text_decoded: String = cbor_decode(&cbor).unwrap();
         assert_eq!(text_decoded, text);
     }
@@ -582,6 +584,7 @@ mod test {
         };
 
         let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a2666669656c643103666669656c64326461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -600,6 +603,7 @@ mod test {
         };
 
         let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a2666669656c643103666669656c64326461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
@@ -609,8 +613,35 @@ mod test {
         };
 
         let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1666669656c64326461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_map_derived_unknown_field() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+            field2: String,
+        }
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct2 {
+            field1: u64,
+        }
+
+        let value = TestStruct {
+            field1: 3,
+            field2: "abcd".to_string(),
+        };
+
+        let cbor = cbor_encode(&value).unwrap();
+        let err = cbor_decode::<TestStruct2>(&cbor)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown map key"), "err: {}", err);
+
     }
 
     #[test]
@@ -627,6 +658,7 @@ mod test {
         let value = TestStructWrapper(TestStruct { field1: 3 });
 
         let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1666669656c643103");
         let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -634,13 +666,13 @@ mod test {
     #[test]
     fn test_map_derived_tag() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        #[cbor(tag = 1)]
+        #[cbor(tag = 39999)]
         struct TestStruct {
             field1: u64,
         }
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        #[cbor(tag = 2)]
+        #[cbor(tag = 39998)]
         struct TestStruct2 {
             field1: u64,
         }
@@ -648,23 +680,24 @@ mod test {
         let value = TestStruct { field1: 3 };
 
         let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "d99c3fa1666669656c643103");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let err = cbor_decode::<TestStruct2>(&cbor)
             .unwrap_err()
             .to_string();
-        assert!(err.contains("expected tag 2"), "err: {}", err);
+        assert!(err.contains("expected tag 39998"), "err: {}", err);
     }
 
     #[test]
     fn test_map_derived_tag_transparent() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        #[cbor(transparent, tag = 1)]
+        #[cbor(transparent, tag = 39999)]
         struct TestStructWrapper(TestStruct);
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        #[cbor(transparent, tag = 2)]
+        #[cbor(transparent, tag = 39998)]
         struct TestStructWrapper2(TestStruct);
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -675,12 +708,13 @@ mod test {
         let value = TestStructWrapper(TestStruct { field1: 3 });
 
         let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "d99c3fa1666669656c643103");
         let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let err = cbor_decode::<TestStructWrapper2>(&cbor)
             .unwrap_err()
             .to_string();
-        assert!(err.contains("expected tag 2"), "err: {}", err);
+        assert!(err.contains("expected tag 39998"), "err: {}", err);
     }
 }

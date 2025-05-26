@@ -4,13 +4,12 @@ use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::{Data, DataStruct, Fields, LitStr};
 
-use darling::{FromDeriveInput, FromMeta};
+use darling::{FromDeriveInput, FromField, FromMeta};
 
-// #[derive(Debug, Default, FromMeta)]
-// #[darling(default)]
-// pub struct Cbor {
-//
-// }
+#[derive(Debug, Default, FromField)]
+pub struct CborFieldOpts {
+    key: Option<u64>,
+}
 
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(cbor))]
@@ -18,13 +17,7 @@ pub struct CborOpts {
     #[darling(default)]
     transparent: bool,
     tag: Option<u64>,
-    key: Option<u64>,
 }
-
-// /// A doc comment which will be available in `MyTraitOpts::attrs`.
-// #[derive(MyTrait)]
-// #[my_crate(lorem(dolor = "Hello", sit))]
-// pub struct ConsumingType;
 
 fn get_cbor_module() -> syn::Result<TokenStream> {
     let crate_root = get_crate_root()?;
@@ -52,6 +45,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
             struct Field {
                 ident: Ident,
+                opts: CborFieldOpts,
             }
 
             let fields = fields_named
@@ -63,7 +57,9 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
                         .clone()
                         .ok_or(syn::Error::new_spanned(field, "unnamed field"))?;
 
-                    Ok(Field { ident })
+                    let opts = CborFieldOpts::from_field(&field)?;
+
+                    Ok(Field { ident, opts })
                 })
                 .collect::<syn::Result<Vec<_>>>()?;
 
@@ -113,13 +109,13 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
                 ));
             }
 
-            if fields_unnamed.unnamed.len() != 1{
+            if fields_unnamed.unnamed.len() != 1 {
                 return Err(syn::Error::new(
                     Span::call_site(),
                     "tuple structs must exactly one element",
-                ));  
+                ));
             };
-            
+
             quote!(
                 Ok(Self(#cbor_module::CborDeserialize::deserialize(decoder)?))
             )
@@ -140,12 +136,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
         quote!()
     };
 
-    let strlit = LitStr::new(&format!("{:?}", opts), Span::call_site());
     Ok(quote! {
-        const _ : () = const {
-            const A:&str = #strlit;
-        };
-
         impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
             fn deserialize<C: #cbor_module::CborDecoder>(decoder: &mut C) -> #cbor_module::CborResult<Self> {
                 #decode_tag
@@ -176,6 +167,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
             struct Field {
                 ident: Ident,
+                opts: CborFieldOpts,
             }
 
             let fields = fields_named
@@ -187,7 +179,9 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                         .clone()
                         .ok_or(syn::Error::new_spanned(field, "unnamed field"))?;
 
-                    Ok(Field { ident })
+                    let opts = CborFieldOpts::from_field(&field)?;
+                    
+                    Ok(Field { ident, opts })
                 })
                 .collect::<syn::Result<Vec<_>>>()?;
 
@@ -213,9 +207,9 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             }
         }
         Data::Struct(DataStruct {
-                         fields: Fields::Unnamed(fields_unnamed),
-                         ..
-                     }) => {
+            fields: Fields::Unnamed(fields_unnamed),
+            ..
+        }) => {
             if !opts.transparent {
                 return Err(syn::Error::new(
                     Span::call_site(),
@@ -223,8 +217,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 ));
             }
 
-
-            if fields_unnamed.unnamed.len() != 1{
+            if fields_unnamed.unnamed.len() != 1 {
                 return Err(syn::Error::new(
                     Span::call_site(),
                     "tuple structs must exactly one element",
@@ -250,7 +243,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     } else {
         quote!()
     };
-    
+
     Ok(quote! {
         impl #impl_generics #cbor_module::CborSerialize for #name #ty_generics #where_clauses {
             fn serialize<C: #cbor_module::CborEncoder>(&self, encoder: &mut C) -> #cbor_module::CborResult<()> {
