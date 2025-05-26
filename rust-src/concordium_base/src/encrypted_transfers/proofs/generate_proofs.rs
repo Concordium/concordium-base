@@ -106,10 +106,10 @@ fn gen_enc_exp_info<C: Curve>(
 ///    independently
 /// 3. Instead of using the genAndComp, genEqComp and genLinRelCompEx to compose
 ///    the sigmaprotocol as in the paper, we immediately output
-///    `EncTrans{zeta_1, zeta_2, zeta_3, zeta_4}` and guarantee through the
-///    implementation of EncTrans the equality of the decryption key in the dlog
-///    and elg-dec protocol, and the linear relation between the chunks of `S'`,
-///    `S` and `A`.
+///    `EncTrans{zeta_1, zeta_2, zeta_3, zeta_4}`
+///    and guarantee through the implementation of EncTrans
+///    the equality of the decryption key in the dlog and elg-dec protocol, and
+///    the linear relation between the chunks of `S'`, `S` and `A`.
 ///
 /// See EncTrans for more detail
 pub fn gen_enc_trans_proof_info<C: Curve>(
@@ -518,8 +518,8 @@ pub enum VerificationError {
 ///
 /// 1. In the bluepaper, this function is responsible for checking that the
 ///    sender account has no aggregatable secret amount, however in the
-///    implementation this responsibility is handled by aggregating all amounts
-///    at indices less than the index of the transaction.
+///    implementation this responsibility is handled by aggregating all
+///    amounts at indices less than the index of the transaction.
 ///
 /// 2. In the bluepaper, this function is also responsible for checking the
 ///    signature of the transaction, however this is done elsewhere in the

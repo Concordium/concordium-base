@@ -521,11 +521,11 @@ mod hash_to_curve_tests {
             //    u[0]    = 03dbc2cce174e91ba93cbb08f26b917f98194a2ea08d1cce75b2b9
             //              cc9f21689d80bd79b594a613d0a68eb807dfdc1cf8
             //        + I * 05a2acec64114845711a54199ea339abd125ba38253b70a92c876d
-            //          f10598bd1986b739cad67961eb94f7076511b3b39a
+            //              f10598bd1986b739cad67961eb94f7076511b3b39a
             //    u[1]    = 02f99798e8a5acdeed60d7e18e9120521ba1f47ec090984662846b
             //              c825de191b5b7641148c0dbc237726a334473eee94
             //        + I * 145a81e418d4010cc027a68f14391b30074e89e60ee7a22f87217b
-            //          2f6eb0c4b94c9115b436e6fa4607e95a98de30a435
+            //              2f6eb0c4b94c9115b436e6fa4607e95a98de30a435
             let msg = b"";
             let (u0, u1) = hash_to_field_fq2(msg, dst);
             assert_eq!(
@@ -547,11 +547,11 @@ mod hash_to_curve_tests {
             // u[0]    = 15f7c0aa8f6b296ab5ff9c2c7581ade64f4ee6f1bf18f55179ff44
             //         a2cf355fa53dd2a2158c5ecb17d7c52f63e7195771
             //   + I * 01c8067bf4c0ba709aa8b9abc3d1cef589a4758e09ef53732d670f
-            //     d8739a7274e111ba2fcaa71b3d33df2a3a0c8529dd
+            //         d8739a7274e111ba2fcaa71b3d33df2a3a0c8529dd
             // u[1]    = 187111d5e088b6b9acfdfad078c4dacf72dcd17ca17c82be35e79f
             //         8c372a693f60a033b461d81b025864a0ad051a06e4
             //   + I * 08b852331c96ed983e497ebc6dee9b75e373d923b729194af8e72a
-            //     051ea586f3538a6ebb1e80881a082fa2b24df9f566
+            //         051ea586f3538a6ebb1e80881a082fa2b24df9f566
             let msg = b"abc";
             let (u0, u1) = hash_to_field_fq2(msg, dst);
             assert_eq!(
