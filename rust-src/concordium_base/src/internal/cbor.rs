@@ -591,11 +591,13 @@ mod test {
 
     #[test]
     fn test_map_derived_positive_keys() {
+        const KEY: u64 = 2;
+        
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             #[cbor(key = 1)]
             field1: u64,
-            #[cbor(key = 2)]
+            #[cbor(key = KEY)]
             field2: String,
         }
 
@@ -686,8 +688,10 @@ mod test {
 
     #[test]
     fn test_map_derived_tag() {
+        const TAG:u64  = 39999;
+        
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        #[cbor(tag = 39999)]
+        #[cbor(tag = TAG)]
         struct TestStruct {
             field1: u64,
         }

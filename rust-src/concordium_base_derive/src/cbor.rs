@@ -2,14 +2,14 @@ use crate::get_crate_root;
 use proc_macro2::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{Data, DataStruct, Fields, FieldsNamed, LitStr};
+use syn::{Data, DataStruct, Expr, Fields, FieldsNamed, LitStr};
 
 use darling::{FromDeriveInput, FromField, FromMeta};
 
 #[derive(Debug, Default, FromField)]
 #[darling(attributes(cbor))]
 pub struct CborFieldOpts {
-    key: Option<u64>,
+    key: Option<Expr>,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -17,7 +17,7 @@ pub struct CborFieldOpts {
 pub struct CborOpts {
     #[darling(default)]
     transparent: bool,
-    tag: Option<u64>,
+    tag: Option<Expr>,
 }
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl CborFields {
             .0
             .iter()
             .map(|field| {
-                if let Some(key) = field.opts.key {
+                if let Some(key) = field.opts.key.as_ref() {
                     quote!(#cbor_module::MapKeyRef::Positive(#key))
                 } else {
                     let lit = LitStr::new(&field.ident.to_string(), field.ident.span());

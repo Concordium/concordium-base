@@ -1,5 +1,9 @@
-use crate::internal::cbor::{CborDeserialize, CborDecoder, CborSerialize, CborEncoder, CborError, CborResult, MapKey, MapKeyRef};
+use crate::internal::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize, MapKey,
+    MapKeyRef,
+};
 
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 use std::fmt::Debug;
 
@@ -37,13 +41,25 @@ impl CborDeserialize for TokenHolder {
 }
 
 /// Account address that holds tokens
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Eq,
+    PartialEq,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
 #[serde(rename_all = "camelCase")]
+#[cbor(tag = ACCOUNT_HOLDER_TAG)]
 pub struct HolderAccount {
-    /// Concordium address
-    pub address: AccountAddress,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cbor(key = 1)]
     pub coin_info: Option<CoinInfo>,
+    /// Concordium address
+    #[cbor(key = 3)]
+    pub address: AccountAddress,
 }
 
 impl CborSerialize for AccountAddress {
@@ -61,85 +77,26 @@ impl CborDeserialize for AccountAddress {
     }
 }
 
-impl CborSerialize for HolderAccount {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.encode_tag(ACCOUNT_HOLDER_TAG)?;
-
-        encoder.encode_map(
-            if self.coin_info.is_null() { 0 } else { 1 }
-                + if self.address.is_null() { 0 } else { 1 },
-        )?;
-
-        if !self.coin_info.is_null() {
-            MapKeyRef::Positive(1).serialize(encoder)?;
-            self.coin_info.serialize(encoder)?;
-        }
-
-        if !self.address.is_null() {
-            MapKeyRef::Positive(3).serialize(encoder)?;
-            self.address.serialize(encoder)?;
-        }
-        Ok(())
-    }
-}
-
-impl CborDeserialize for HolderAccount {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
-    where
-        Self: Sized,
-    {
-        decoder.decode_tag_expect(ACCOUNT_HOLDER_TAG)?;
-
-        let mut coin_info = None;
-        let mut address = None;
-        let map_size = decoder.decode_map()?;
-        for _ in 0..map_size {
-            let map_key = MapKey::deserialize(decoder)?;
-            match map_key.as_ref() {
-                MapKeyRef::Positive(1) => {
-                    coin_info = Some(CborDeserialize::deserialize(decoder)?);
-                }
-                MapKeyRef::Positive(3) => {
-                    address = Some(CborDeserialize::deserialize(decoder)?);
-                }
-                key => return Err(CborError::unknown_map_key(key)),
-            }
-        }
-        let coin_info = match coin_info {
-            None => match CborDeserialize::null() {
-                None => return Err(CborError::map_value_missing(MapKeyRef::Positive(1))),
-                Some(null) => null,
-            },
-            Some(coin_info) => coin_info,
-        };
-
-        let address = match address {
-            None => match CborDeserialize::null() {
-                None => return Err(CborError::map_value_missing(MapKeyRef::Positive(3))),
-                Some(null) => null,
-            },
-            Some(address) => address,
-        };
-
-        Ok(Self { address, coin_info })
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CoinInfo {
     CCD,
 }
 
+#[derive(Debug, CborSerialize, CborDeserialize)]
+#[cbor(tag = COIN_INFO_TAG)]
+struct CoinInfoCbor {
+    #[cbor(key = 1)]
+    coin_info_code: u64,
+}
+
 impl CborSerialize for CoinInfo {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.encode_tag(COIN_INFO_TAG)?;
-        encoder.encode_map(1)?;
-        encoder.encode_positive(1)?;
-        match self {
-            Self::CCD => encoder.encode_positive(CONCORDIUM_SLIP_0044_CODE)?,
+        let coin_info_code = match self {
+            Self::CCD => CONCORDIUM_SLIP_0044_CODE,
         };
-        Ok(())
+
+        CoinInfoCbor { coin_info_code }.serialize(encoder)
     }
 }
 
@@ -148,14 +105,8 @@ impl CborDeserialize for CoinInfo {
     where
         Self: Sized,
     {
-        decoder.decode_tag_expect(COIN_INFO_TAG)?;
-        if decoder.decode_map()? != 1 {
-            return Err(CborError::invalid_data(
-                "coin info must have exactly one field",
-            ));
-        }
-        decoder.decode_positive_expect_key(1)?;
-        let coin_info = match decoder.decode_positive()? {
+        let cbor = CoinInfoCbor::deserialize(decoder)?;
+        let coin_info = match cbor.coin_info_code {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
             coin_info_code => {
                 return Err(CborError::invalid_data(format_args!(
@@ -164,6 +115,7 @@ impl CborDeserialize for CoinInfo {
                 )))
             }
         };
+
         Ok(coin_info)
     }
 }
