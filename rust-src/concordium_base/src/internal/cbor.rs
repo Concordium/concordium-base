@@ -590,6 +590,27 @@ mod test {
     }
 
     #[test]
+    fn test_map_derived_positive_keys() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            #[cbor(key = 1)]
+            field1: u64,
+            #[cbor(key = 2)]
+            field2: String,
+        }
+
+        let value = TestStruct {
+            field1: 3,
+            field2: "abcd".to_string(),
+        };
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a20103026461626364");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
     fn test_map_derived_optional_field() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {

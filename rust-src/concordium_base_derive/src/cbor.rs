@@ -2,11 +2,12 @@ use crate::get_crate_root;
 use proc_macro2::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{Data, DataStruct, Fields, LitStr};
+use syn::{Data, DataStruct, Fields, FieldsNamed, LitStr};
 
 use darling::{FromDeriveInput, FromField, FromMeta};
 
 #[derive(Debug, Default, FromField)]
+#[darling(attributes(cbor))]
 pub struct CborFieldOpts {
     key: Option<u64>,
 }
@@ -17,6 +18,59 @@ pub struct CborOpts {
     #[darling(default)]
     transparent: bool,
     tag: Option<u64>,
+}
+
+#[derive(Debug)]
+struct CborField {
+    ident: Ident,
+    opts: CborFieldOpts,
+}
+
+#[derive(Debug)]
+struct CborFields(Vec<CborField>);
+
+impl CborFields {
+    fn idents(&self) -> Vec<Ident> {
+        self.0.iter().map(|field| field.ident.clone()).collect()
+    }
+
+    fn cbor_map_keys(&self) -> syn::Result<Vec<TokenStream>> {
+        let cbor_module = get_cbor_module()?;
+
+        Ok(self
+            .0
+            .iter()
+            .map(|field| {
+                if let Some(key) = field.opts.key {
+                    quote!(#cbor_module::MapKeyRef::Positive(#key))
+                } else {
+                    let lit = LitStr::new(&field.ident.to_string(), field.ident.span());
+                    quote!(#cbor_module::MapKeyRef::Text(#lit))
+                }
+            })
+            .collect())
+    }
+}
+
+impl CborFields {
+    fn try_from_named_fields(fields: &FieldsNamed) -> syn::Result<Self> {
+        Ok(Self(
+            fields
+                .named
+                .iter()
+                .map(|field| {
+                    let ident = field
+                        .ident
+                        .clone()
+                        .ok_or(syn::Error::new_spanned(field, "unnamed field"))?;
+
+                    let opts = CborFieldOpts::from_field(&field)?;
+
+                    Ok(CborField { ident, opts })
+                })
+                .collect::<syn::Result<Vec<_>>>()?,
+        ))
+    }
 }
 
 fn get_cbor_module() -> syn::Result<TokenStream> {
@@ -48,26 +102,9 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
                 opts: CborFieldOpts,
             }
 
-            let fields = fields_named
-                .named
-                .iter()
-                .map(|field| {
-                    let ident = field
-                        .ident
-                        .clone()
-                        .ok_or(syn::Error::new_spanned(field, "unnamed field"))?;
-
-                    let opts = CborFieldOpts::from_field(&field)?;
-
-                    Ok(Field { ident, opts })
-                })
-                .collect::<syn::Result<Vec<_>>>()?;
-
-            let field_idents: Vec<_> = fields.iter().map(|field| &field.ident).collect();
-            let field_idents_literals: Vec<_> = fields
-                .iter()
-                .map(|field| LitStr::new(&field.ident.to_string(), field.ident.span()))
-                .collect();
+            let cbor_fields = CborFields::try_from_named_fields(fields_named)?;
+            let field_idents = cbor_fields.idents();
+            let field_map_keys = cbor_fields.cbor_map_keys()?;
 
             quote! {
                 #(let mut #field_idents = None;)*
@@ -77,7 +114,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
                     match map_key.as_ref() {
                         #(
-                            #cbor_module::MapKeyRef::Text(#field_idents_literals) => {
+                            #field_map_keys => {
                                 #field_idents = Some(#cbor_module::CborDeserialize::deserialize(decoder)?);
                             }
                         )*
@@ -88,7 +125,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
                 #(
                     let #field_idents = match #field_idents {
                         None => match #cbor_module::CborDeserialize::null() {
-                            None => return Err(#cbor_module::CborError::map_value_missing(#cbor_module::MapKeyRef::Text(#field_idents_literals))),
+                            None => return Err(#cbor_module::CborError::map_value_missing(#field_map_keys)),
                             Some(null_value) => null_value,
                         },
                         Some(#field_idents) => #field_idents,
@@ -165,31 +202,9 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 ));
             }
 
-            struct Field {
-                ident: Ident,
-                opts: CborFieldOpts,
-            }
-
-            let fields = fields_named
-                .named
-                .iter()
-                .map(|field| {
-                    let ident = field
-                        .ident
-                        .clone()
-                        .ok_or(syn::Error::new_spanned(field, "unnamed field"))?;
-
-                    let opts = CborFieldOpts::from_field(&field)?;
-                    
-                    Ok(Field { ident, opts })
-                })
-                .collect::<syn::Result<Vec<_>>>()?;
-
-            let field_idents: Vec<_> = fields.iter().map(|field| &field.ident).collect();
-            let field_idents_literals: Vec<_> = fields
-                .iter()
-                .map(|field| LitStr::new(&field.ident.to_string(), field.ident.span()))
-                .collect();
+            let cbor_fields = CborFields::try_from_named_fields(fields_named)?;
+            let field_idents = cbor_fields.idents();
+            let field_map_keys = cbor_fields.cbor_map_keys()?;
 
             quote! {
                 #cbor_module::CborEncoder::encode_map(encoder,
@@ -198,7 +213,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
                 #(
                     if !#cbor_module::CborSerialize::is_null(&self.#field_idents) {
-                        #cbor_module::CborSerialize::serialize(&#cbor_module::MapKeyRef::Text(#field_idents_literals), encoder)?;
+                        #cbor_module::CborSerialize::serialize(&#field_map_keys, encoder)?;
                         #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
                     }
                 )*
