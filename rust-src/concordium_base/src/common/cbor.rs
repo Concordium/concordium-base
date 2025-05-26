@@ -88,9 +88,7 @@ impl<T: CborSerialize> CborSerialize for Option<T> {
         }
     }
 
-    fn is_null(&self) -> bool {
-        self.is_none()
-    }
+    fn is_null(&self) -> bool { self.is_none() }
 }
 
 /// Type that can be deserialized from CBOR
@@ -187,8 +185,6 @@ pub trait CborDecoder {
 
     /// Decode positive integer data item
     fn decode_positive(&mut self) -> CborResult<u64>;
-
-
 
     /// Decode map start. Returns the map size
     fn decode_map(&mut self) -> CborResult<usize>;
@@ -507,7 +503,6 @@ impl CborDeserialize for MapKey {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -526,8 +521,8 @@ mod test {
         assert!(err.contains("expected 4 bytes"), "err: {}", err);
     }
 
-    /// Test where CBOR is not well-formed: Bytes length in header does not match actual
-    /// data. Test that we get an error and don't panic
+    /// Test where CBOR is not well-formed: Bytes length in header does not
+    /// match actual data. Test that we get an error and don't panic
     #[test]
     fn test_bytes_length_invalid() {
         let cbor = hex::decode("58ff0102030405").unwrap();
@@ -535,7 +530,6 @@ mod test {
 
         let cbor = hex::decode("410102030405").unwrap();
         cbor_decode::<[u8; 0x01]>(&cbor).expect_err("should give error");
-
     }
 
     #[test]
@@ -548,8 +542,8 @@ mod test {
         assert_eq!(text_decoded, text);
     }
 
-    /// Test where CBOR is not well-formed: Text length in header does not match actual
-    /// data. Test that we get an error and don't panic
+    /// Test where CBOR is not well-formed: Text length in header does not match
+    /// actual data. Test that we get an error and don't panic
     #[test]
     fn test_text_length_invalid() {
         let cbor = hex::decode("78ff61626364").unwrap();
@@ -557,7 +551,6 @@ mod test {
 
         let cbor = hex::decode("6161626364").unwrap();
         cbor_decode::<String>(&cbor).expect_err("should give error");
-
     }
 
     #[test]
