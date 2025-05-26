@@ -18,7 +18,7 @@ import Data.Word
 -- | The unique token identifier for a protocol-level token.
 --  This is given as a symbol unique across the whole chain.
 --  The byte string must be at most 255 bytes long and be a valid UTF-8 string.
-newtype TokenId = TokenId {tokenSymbol :: BSS.ShortByteString}
+newtype TokenId = TokenId {tokenId :: BSS.ShortByteString}
     deriving newtype (Eq, Ord)
 
 instance Show TokenId where
@@ -57,7 +57,7 @@ unsafeGetTokenId = do
 instance AE.ToJSON TokenId where
     -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenId
     -- should enforce valid UTF-8.
-    toJSON TokenId{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenSymbol
+    toJSON TokenId{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenId
 
 instance AE.FromJSON TokenId where
     parseJSON (AE.String text) = return $ TokenId $ BSS.toShort $ T.encodeUtf8 text

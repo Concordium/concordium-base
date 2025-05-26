@@ -351,14 +351,14 @@ genPayloadConfigureDelegation = do
 -- | Generate token holder transaction payloads.
 genPayloadTokenHolder :: Gen Payload
 genPayloadTokenHolder = do
-    thTokenSymbol <- genTokenId
+    thTokenId <- genTokenId
     thOperations <- genTokenParameter
     return TokenHolder{..}
 
 -- | Generate token governance transaction payloads.
 genPayloadTokenGovernance :: Gen Payload
 genPayloadTokenGovernance = do
-    tgTokenSymbol <- genTokenId
+    tgTokenId <- genTokenId
     tgOperations <- genTokenParameter
     return TokenGovernance{..}
 
@@ -1198,7 +1198,7 @@ genTokenEventDetails = do
 --   * Generated token parameter up to 1000 bytes long.
 genCreatePLT :: Gen CreatePLT
 genCreatePLT = do
-    _cpltTokenSymbol <- genTokenId
+    _cpltTokenId <- genTokenId
     _cpltTokenModule <- genTokenModuleRef
     _cpltGovernanceAccount <- genAccountAddress
     _cpltDecimals <- chooseBoundedIntegral (0, 255)

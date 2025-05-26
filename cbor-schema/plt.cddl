@@ -145,7 +145,7 @@ token-initialization-parameters = {
     ; The name of the token
     "name": text,
     ; A URL pointing to the token metadata
-    "metadata": text,
+    "metadata": metadata-url,
     ; Whether the token supports an allow list
     ? "allowList": bool .default false,
     ; Whether the token supports a deny list
@@ -156,6 +156,19 @@ token-initialization-parameters = {
     ? "mintable": bool .default false,
     ; Whether the token is burnable
     ? "burnable": bool .default false
+}
+
+; Type alias for a sha256 hash
+sha256-hash = bytes .size(32)
+
+; Type alias for metadata with a URL and checksum
+metadata-url = {
+    ; A string field representing the URL
+    "url": text,
+    ; An optional sha256 checksum value tied to the content of the URL
+    ? "checksumSha256": sha256-hash
+    ; Additional fields may be included for future extensibility, e.g. another hash algorithm.
+    * text => any
 }
 
 ; Token state
@@ -175,7 +188,7 @@ token-module-state = {
     ; The name of the token
     "name": text,
     ; A URL pointing to the token metadata
-    "metadata": text,
+    "metadata": metadata-url,
     ; Whether the token supports an allow list.
     ? "allowList": bool,
     ; Whether the token supports a deny list.

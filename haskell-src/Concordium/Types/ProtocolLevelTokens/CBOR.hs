@@ -530,6 +530,11 @@ data TaggableMemo
       CBORMemo {cborMemo :: !Memo}
     deriving (Eq, Show)
 
+-- | Unwrap the 'TaggableMemo' into the inner 'Memo'
+taggableMemoInner :: TaggableMemo -> Memo
+taggableMemoInner UntaggedMemo{..} = untaggedMemo
+taggableMemoInner CBORMemo{..} = cborMemo
+
 instance AE.ToJSON TaggableMemo where
     toJSON UntaggedMemo{..} = do
         AE.object $

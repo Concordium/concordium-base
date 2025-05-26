@@ -683,7 +683,7 @@ instance ToProto TokenModuleRef where
 instance ToProto TokenModuleRejectReason where
     type Output TokenModuleRejectReason = Proto.TokenModuleRejectReason
     toProto TokenModuleRejectReason{..} = Proto.make $ do
-        PLTFields.tokenSymbol .= toProto tmrrTokenSymbol
+        PLTFields.tokenId .= toProto tmrrTokenId
         PLTFields.type' .= toProto tmrrType
         PLTFields.maybe'details .= fmap toProto tmrrDetails
 
@@ -956,7 +956,7 @@ instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParameter
 instance ToProto CreatePLT where
     type Output CreatePLT = Proto.CreatePLT
     toProto CreatePLT{..} = Proto.make $ do
-        PLTFields.tokenSymbol .= toProto _cpltTokenSymbol
+        PLTFields.tokenId .= toProto _cpltTokenId
         PLTFields.tokenModule .= toProto _cpltTokenModule
         PLTFields.governanceAccount .= toProto _cpltGovernanceAccount
         PLTFields.decimals .= fromIntegral _cpltDecimals
@@ -2612,4 +2612,4 @@ instance ToProto AccountPending where
 instance ToProto TokenId where
     type Output TokenId = Proto.TokenId
     toProto (TokenId bss) = Proto.make $ do
-        PLTFields.symbol .= decodeUtf8 (BSS.fromShort bss)
+        PLTFields.value .= decodeUtf8 (BSS.fromShort bss)

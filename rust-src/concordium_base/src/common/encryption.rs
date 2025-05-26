@@ -192,7 +192,7 @@ mod tests {
             password: "hello".into(),
         };
         let mut rng = rand::thread_rng();
-        let plaintext = rng
+        let plaintext = (&mut rng)
             .sample_iter(rand::distributions::Uniform::new_inclusive(
                 u8::MIN,
                 u8::MAX,

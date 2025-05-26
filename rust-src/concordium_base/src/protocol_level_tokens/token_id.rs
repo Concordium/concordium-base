@@ -11,7 +11,7 @@ pub const TOKEN_ID_MAX_BYTE_LEN: usize = 255;
 #[repr(transparent)]
 pub struct TokenId {
     /// Unique symbol identifying the PLT on chain.
-    symbol: String,
+    value: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -24,7 +24,7 @@ pub struct TokenIdFromStringError {
 }
 
 impl AsRef<str> for TokenId {
-    fn as_ref(&self) -> &str { self.symbol.as_str() }
+    fn as_ref(&self) -> &str { self.value.as_str() }
 }
 
 impl std::str::FromStr for TokenId {
@@ -36,25 +36,25 @@ impl std::str::FromStr for TokenId {
 impl TryFrom<String> for TokenId {
     type Error = TokenIdFromStringError;
 
-    fn try_from(symbol: String) -> Result<Self, Self::Error> {
-        let symbol_byte_len = symbol.as_bytes().len();
-        if symbol_byte_len > TOKEN_ID_MAX_BYTE_LEN {
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let byte_len = value.as_bytes().len();
+        if byte_len > TOKEN_ID_MAX_BYTE_LEN {
             Err(TokenIdFromStringError {
-                actual_size: symbol_byte_len,
+                actual_size: byte_len,
             })
         } else {
-            Ok(Self { symbol })
+            Ok(Self { value })
         }
     }
 }
 
 impl From<TokenId> for String {
-    fn from(value: TokenId) -> Self { value.symbol }
+    fn from(token_id: TokenId) -> Self { token_id.value }
 }
 
 impl common::Serial for TokenId {
     fn serial<B: common::Buffer>(&self, out: &mut B) {
-        let bytes = self.symbol.as_bytes();
+        let bytes = self.value.as_bytes();
         u8::try_from(bytes.len())
             .expect("Invariant violation for byte length of TokenId")
             .serial(out);
@@ -68,7 +68,7 @@ impl common::Deserial for TokenId {
         let len = source.read_u8()?;
         let mut buf = vec![0u8; len as usize];
         source.read_exact(&mut buf)?;
-        let symbol = String::from_utf8(buf)?;
-        Ok(Self { symbol })
+        let value = String::from_utf8(buf)?;
+        Ok(Self { value })
     }
 }

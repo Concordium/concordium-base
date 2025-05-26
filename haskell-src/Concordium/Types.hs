@@ -192,7 +192,7 @@ module Concordium.Types (
     TokenModuleRejectReason (..),
     makeTokenModuleRejectReason,
     CreatePLT (..),
-    cpltTokenSymbol,
+    cpltTokenId,
     cpltTokenModule,
     cpltGovernanceAccount,
     cpltDecimals,
@@ -1199,7 +1199,7 @@ instance S.Serialize TokenEventType where
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason
     { -- | The token symbol.
-      tmrrTokenSymbol :: !TokenId,
+      tmrrTokenId :: !TokenId,
       -- | The type of the reject reason. At most 255 bytes.
       tmrrType :: !TokenEventType,
       -- | (Optional) CBOR-encoded details.
@@ -1209,11 +1209,11 @@ data TokenModuleRejectReason = TokenModuleRejectReason
 
 instance S.Serialize TokenModuleRejectReason where
     put TokenModuleRejectReason{..} = do
-        S.put tmrrTokenSymbol
+        S.put tmrrTokenId
         S.put tmrrType
         putMaybe S.put tmrrDetails
     get = do
-        tmrrTokenSymbol <- S.get
+        tmrrTokenId <- S.get
         tmrrType <- S.get
         tmrrDetails <- getMaybe S.get
         return TokenModuleRejectReason{..}
@@ -1221,14 +1221,14 @@ instance S.Serialize TokenModuleRejectReason where
 instance AE.ToJSON TokenModuleRejectReason where
     toJSON TokenModuleRejectReason{..} =
         AE.object $
-            [ "tokenSymbol" AE..= tmrrTokenSymbol,
+            [ "tokenId" AE..= tmrrTokenId,
               "type" AE..= tmrrType
             ]
                 ++ foldMap (\details -> ["details" AE..= details]) tmrrDetails
 
 instance AE.FromJSON TokenModuleRejectReason where
     parseJSON = AE.withObject "TokenModuleRejectReason" $ \o -> do
-        tmrrTokenSymbol <- o AE..: "tokenSymbol"
+        tmrrTokenId <- o AE..: "tokenId"
         tmrrType <- o AE..: "type"
         tmrrDetails <- o AE..:? "details"
         return TokenModuleRejectReason{..}
@@ -1238,7 +1238,7 @@ instance AE.FromJSON TokenModuleRejectReason where
 --  is UTF-8 encoded, and the truncation can also break UTF-8 validity (if it truncates in the
 --  middle of a multi-byte character).
 makeTokenModuleRejectReason :: TokenId -> CBOR.EncodedTokenRejectReason -> TokenModuleRejectReason
-makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
+makeTokenModuleRejectReason tmrrTokenId CBOR.EncodedTokenRejectReason{..} =
     TokenModuleRejectReason
         { tmrrType = TokenEventType (BSS.take 255 etrrType),
           tmrrDetails = TokenEventDetails <$> etrrDetails,
@@ -1277,7 +1277,7 @@ newtype TokenModuleRef = TokenModuleRef {theTokenModuleRef :: Hash.Hash}
 -- | Update payload for creating a new protocol-level token.
 data CreatePLT = CreatePLT
     { -- | The symbol of the token.
-      _cpltTokenSymbol :: !TokenId,
+      _cpltTokenId :: !TokenId,
       -- | A SHA256 hash that identifies the token module implementation.
       _cpltTokenModule :: !TokenModuleRef,
       -- | The address of the account that will govern the token.
@@ -1298,13 +1298,13 @@ instance (Monad m) => MHashableTo m Hash.Hash CreatePLT
 
 instance S.Serialize CreatePLT where
     put CreatePLT{..} = do
-        S.put _cpltTokenSymbol
+        S.put _cpltTokenId
         S.put _cpltTokenModule
         S.put _cpltGovernanceAccount
         S.put _cpltDecimals
         S.put _cpltInitializationParameters
     get = do
-        _cpltTokenSymbol <- S.get
+        _cpltTokenId <- S.get
         _cpltTokenModule <- S.get
         _cpltGovernanceAccount <- S.get
         _cpltDecimals <- S.get
@@ -1314,7 +1314,7 @@ instance S.Serialize CreatePLT where
 instance AE.ToJSON CreatePLT where
     toJSON CreatePLT{..} =
         AE.object
-            [ "tokenSymbol" AE..= _cpltTokenSymbol,
+            [ "tokenId" AE..= _cpltTokenId,
               "tokenModule" AE..= _cpltTokenModule,
               "governanceAccount" AE..= _cpltGovernanceAccount,
               "decimals" AE..= _cpltDecimals,
@@ -1324,7 +1324,7 @@ instance AE.ToJSON CreatePLT where
 
 instance AE.FromJSON CreatePLT where
     parseJSON = AE.withObject "CreatePLT" $ \o -> do
-        _cpltTokenSymbol <- o AE..: "tokenSymbol"
+        _cpltTokenId <- o AE..: "tokenId"
         _cpltTokenModule <- o AE..: "tokenModule"
         _cpltGovernanceAccount <- o AE..: "governanceAccount"
         _cpltDecimals <- o AE..: "decimals"
