@@ -1,23 +1,50 @@
-use super::{cbor::RawCbor, TokenId};
+use crate::transactions::Memo;
 
-/// Event produced from the effect of a token holder transaction.
+use super::{cbor::RawCbor, TokenAmount, TokenHolder, TokenId};
+
+/// Details provided by the token module in the event of rejecting a
+/// transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TokenHolderEvent {
+pub struct TokenModuleRejectReason {
     /// The unique symbol of the token, which produced this event.
     pub token_id:   TokenId,
     /// The type of event produced.
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
-    pub details:    RawCbor,
+    pub details:    Option<RawCbor>,
 }
 
-/// Event produced from the effect of a token governance transaction.
+/// An event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TokenGovernanceEvent {
+pub struct TokenEvent {
     /// The unique symbol of the token, which produced this event.
-    pub token_id:   TokenId,
+    pub token_id: TokenId,
+    /// The type of the event.
+    pub event:    TokenEventDetails,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+/// The type of the token event.
+pub enum TokenEventDetails {
+    /// An event emitted by the token module.
+    Module(TokenModuleEvent),
+    /// An event emitted when a transfer of tokens is performed.
+    Transfer(TokenTransferEvent),
+    /// An event emitted when the token supply is updated by minting tokens to a
+    /// token holder.
+    Mint(TokenSupplyUpdateEvent),
+    /// An event emitted when the token supply is updated by burning tokens from
+    /// the balance of a token holder.
+    Burn(TokenSupplyUpdateEvent),
+}
+
+/// Event produced from the effect of a token transaction.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenModuleEvent {
     /// The type of event produced.
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
@@ -27,6 +54,20 @@ pub struct TokenGovernanceEvent {
 /// Maximum number of bytes allowed for an encoding of a token module event type
 /// and token module reject reason type.
 const TYPE_MAX_BYTE_LEN: usize = 255;
+    /// An optional memo field that can be used to attach a message to the token
+    /// transfer.
+    pub memo:   Option<Memo>,
+}
+
+/// An event emitted when the token supply is updated, i.e. by minting/burning
+/// tokens to/from the balance of the `target`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenSupplyUpdateEvent {
+    /// The token holder the balance update is performed on.
+    pub target: TokenHolder,
+    /// The balance difference to be applied to the target.
+    pub amount: TokenAmount,
 
 /// String representing the type of token module event or token module reject
 /// reason type.

@@ -378,14 +378,14 @@ data Payload
     | -- | An update for a protocol level token.
       TokenHolder
         { -- | Identifier of the token type to which the transaction refers.
-          thTokenSymbol :: !TokenId,
+          thTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
           thOperations :: !TokenParameter
         }
     | -- | A governance update for a protocol level token.
       TokenGovernance
         { -- | Identifier of the token type to which the transaction refers.
-          tgTokenSymbol :: !TokenId,
+          tgTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
           tgOperations :: !TokenParameter
         }
@@ -577,13 +577,13 @@ instance AE.ToJSON Payload where
             ]
     toJSON TokenHolder{..} =
         AE.object
-            [ "tokenSymbol" AE..= thTokenSymbol,
-              "operations" AE..= thOperations,
+            [ "tokenId" AE..= thTokenId,
+              "operations" AE..= EncodedTokenOperations thOperations,
               "transactionType" AE..= AE.String "tokenHolder"
             ]
     toJSON TokenGovernance{..} =
         AE.object
-            [ "tokenSymbol" AE..= tgTokenSymbol,
+            [ "tokenId" AE..= tgTokenId,
               "operations" AE..= tgOperations,
               "transactionType" AE..= AE.String "tokenGovernance"
             ]
@@ -696,11 +696,11 @@ instance AE.FromJSON Payload where
                 cdDelegationTarget <- obj AE..: "delegationTarget"
                 return ConfigureDelegation{..}
             "tokenHolder" -> do
-                thTokenSymbol <- obj AE..: "tokenSymbol"
-                thOperations <- obj AE..: "operations"
+                thTokenId <- obj AE..: "tokenId"
+                (EncodedTokenOperations thOperations) <- obj AE..: "operations"
                 return TokenHolder{..}
             "tokenGovernance" -> do
-                tgTokenSymbol <- obj AE..: "tokenSymbol"
+                tgTokenId <- obj AE..: "tokenId"
                 tgOperations <- obj AE..: "operations"
                 return TokenGovernance{..}
             _ -> fail "Unrecognized 'TransactionType' tag"
@@ -844,11 +844,11 @@ putPayload ConfigureDelegation{..} = do
             .|. bitFor 2 cdDelegationTarget
 putPayload TokenHolder{..} = do
     S.putWord8 27
-    S.put thTokenSymbol
+    S.put thTokenId
     S.put thOperations
 putPayload TokenGovernance{..} = do
     S.putWord8 28
-    S.put tgTokenSymbol
+    S.put tgTokenId
     S.put tgOperations
 
 -- | Set the given bit if the value is a 'Just'.
@@ -1016,11 +1016,11 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cdDelegationTarget <- maybeGet 2
                 return ConfigureDelegation{..}
             27 | supportProtocolLevelTokens -> S.label "TokenHolder" $ do
-                thTokenSymbol <- S.get
+                thTokenId <- S.get
                 thOperations <- S.get
                 return TokenHolder{..}
             28 | supportProtocolLevelTokens -> S.label "TokenGovernance" $ do
-                tgTokenSymbol <- S.get
+                tgTokenId <- S.get
                 tgOperations <- S.get
                 return TokenGovernance{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
