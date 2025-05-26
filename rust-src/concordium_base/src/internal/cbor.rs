@@ -560,7 +560,7 @@ mod test {
     }
 
     #[test]
-    fn test_text_encode_decode() {
+    fn test_text() {
         let text = "abcd";
 
         let cbor = cbor_encode(&text).unwrap();
@@ -568,16 +568,18 @@ mod test {
         assert_eq!(text_decoded, text);
     }
 
-    
     #[test]
-    fn test_map_derived_serialize_deserialize() {
+    fn test_map_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: u64,
             field2: String,
         }
 
-        let value = TestStruct { field1: 3, field2: "abcd".to_string() };
+        let value = TestStruct {
+            field1: 3,
+            field2: "abcd".to_string(),
+        };
 
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
@@ -585,23 +587,50 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_serialize_deserialize_optional_field() {
+    fn test_map_derived_optional_field() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: Option<u64>,
             field2: String,
         }
 
-        let value = TestStruct { field1: Some(3), field2: "abcd".to_string() };
+        let value = TestStruct {
+            field1: Some(3),
+            field2: "abcd".to_string(),
+        };
 
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
-        let value = TestStruct { field1: None, field2: "abcd".to_string() };
+        let value = TestStruct {
+            field1: None,
+            field2: "abcd".to_string(),
+        };
 
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_map_derived_transparent() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(transparent)]
+        struct TestStructWrapper(TestStruct);
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+        }
+
+        let value = TestStructWrapper (
+             TestStruct { field1: 3 }
+        );
+
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStructWrapper = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+        
     }
 }

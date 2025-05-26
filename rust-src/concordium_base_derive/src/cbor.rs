@@ -4,6 +4,28 @@ use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::{Data, DataStruct, Fields, LitStr};
 
+use darling::{FromDeriveInput, FromMeta};
+
+// #[derive(Debug, Default, FromMeta)]
+// #[darling(default)]
+// pub struct Cbor {
+//
+// }
+
+#[derive(Debug, FromDeriveInput)]
+#[darling(attributes(cbor))]
+pub struct CborOpts {
+    #[darling(default)]
+    transparent: bool,
+    tag: Option<u64>,
+    key: Option<u64>,
+}
+
+// /// A doc comment which will be available in `MyTraitOpts::attrs`.
+// #[derive(MyTrait)]
+// #[my_crate(lorem(dolor = "Hello", sit))]
+// pub struct ConsumingType;
+
 fn get_cbor_module() -> syn::Result<TokenStream> {
     let crate_root = get_crate_root()?;
     Ok(quote!(#crate_root::internal::cbor))
@@ -12,6 +34,7 @@ fn get_cbor_module() -> syn::Result<TokenStream> {
 pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
+    let opts = CborOpts::from_derive_input(ast)?;
 
     let cbor_module = get_cbor_module()?;
 
@@ -20,6 +43,13 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
             fields: Fields::Named(fields_named),
             ..
         }) => {
+            if opts.transparent {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "cbor(transparent) attribute only valid for tuple structs",
+                ));
+            }
+
             struct Field {
                 ident: Ident,
             }
@@ -72,15 +102,42 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
                 Ok(Self { #(#field_idents),* })
             }
         }
+        Data::Struct(DataStruct {
+            fields: Fields::Unnamed(fields_unnamed),
+            ..
+        }) => {
+            if !opts.transparent {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "tuple structs must have attribute cbor(transparent)",
+                ));
+            }
+
+            if fields_unnamed.unnamed.len() != 1{
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "tuple structs must exactly one element",
+                ));  
+            };
+            
+            quote!(
+                Ok(Self(#cbor_module::CborDeserialize::deserialize(decoder)?))
+            )
+        }
         _ => {
             return Err(syn::Error::new(
                 Span::call_site(),
-                "CborDeserialize can only be applied to structs with named fields",
+                "CborSerialize cannot be applied to enums or unit structs",
             ))
         }
     };
 
+    let strlit = LitStr::new(&format!("{:?}", opts), Span::call_site());
     Ok(quote! {
+        const _ : () = const {
+            const A:&str = #strlit;
+        };
+
         impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
             fn deserialize<C: #cbor_module::CborDecoder>(decoder: &mut C) -> #cbor_module::CborResult<Self> {
                 #deserialize_body
@@ -92,6 +149,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
+    let opts = CborOpts::from_derive_input(ast)?;
 
     let cbor_module = get_cbor_module()?;
 
@@ -100,6 +158,13 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             fields: Fields::Named(fields_named),
             ..
         }) => {
+            if opts.transparent {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "cbor(transparent) attribute only valid for tuple structs",
+                ));
+            }
+
             struct Field {
                 ident: Ident,
             }
@@ -138,10 +203,33 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 Ok(())
             }
         }
+        Data::Struct(DataStruct {
+                         fields: Fields::Unnamed(fields_unnamed),
+                         ..
+                     }) => {
+            if !opts.transparent {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "tuple structs must have attribute cbor(transparent)",
+                ));
+            }
+
+
+            if fields_unnamed.unnamed.len() != 1{
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "tuple structs must exactly one element",
+                ));
+            };
+
+            quote!(
+                #cbor_module::CborSerialize::serialize(&self.0, encoder)
+            )
+        }
         _ => {
             return Err(syn::Error::new(
                 Span::call_site(),
-                "CborSerialize can only be applied to structs with named fields",
+                "CborSerialize cannot be applied to enums or unit structs",
             ))
         }
     };
