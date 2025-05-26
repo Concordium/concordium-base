@@ -36,6 +36,10 @@ impl CborError {
     pub fn map_value_missing(key: MapKeyRef) -> Self {
         anyhow!("map value for key {:?} not present and cannot be null", key).into()
     }
+
+    pub fn array_length(expected: usize, actual: usize) -> Self {
+        anyhow!("expected array length {}, was {}", expected, actual).into()
+    }
 }
 
 pub type CborResult<T> = Result<T, CborError>;
@@ -212,6 +216,15 @@ pub trait CborDecoder {
 
     /// Decode array start. Returns the array size
     fn decode_array(&mut self) -> CborResult<usize>;
+
+    /// Decode array start and check length equals `expected_length`
+    fn decode_array_expect_length(&mut self, expected_length: usize) -> CborResult<()> {
+        let length = self.decode_array()?;
+        if length != expected_length {
+            return Err(CborError::array_length(expected_length, length));
+        }
+        Ok(())
+    }
 
     /// Decode bytes into given `destination`. The length of the bytes data item
     /// must match the `destination` length, else an error is returned.
@@ -688,10 +701,7 @@ mod test {
         let value = TestStruct(3, "abcd".to_string());
 
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(
-            hex::encode(&cbor),
-            "a20003016461626364"
-        );
+        assert_eq!(hex::encode(&cbor), "a20003016461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -706,10 +716,41 @@ mod test {
         let value = TestStruct(3, "abcd".to_string());
 
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(
-            hex::encode(&cbor),
-            "a20103026461626364"
-        );
+        assert_eq!(hex::encode(&cbor), "a20103026461626364");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_array_derived() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(array)]
+        struct TestStruct(u64, String);
+
+        let value = TestStruct(3, "abcd".to_string());
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "82036461626364");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_array_derived_named_struct() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(array)]
+        struct TestStruct {
+            field1: u64,
+            field2: String,
+        }
+
+        let value = TestStruct {
+            field1: 3,
+            field2: "abcd".to_string(),
+        };
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "82036461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }

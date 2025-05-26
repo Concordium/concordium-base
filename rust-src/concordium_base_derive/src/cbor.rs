@@ -40,10 +40,12 @@ struct CborField {
 struct CborFields(Vec<CborField>);
 
 impl CborFields {
+    /// Get fields as struct `Member`s
     fn members(&self) -> Vec<Member> {
         self.0.iter().map(|field| field.member.clone()).collect()
     }
 
+    /// Get CBOR map keys for the fields
     fn cbor_map_keys(&self) -> syn::Result<Vec<TokenStream>> {
         let cbor_module = get_cbor_module()?;
 
@@ -118,6 +120,38 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
                     Member::Unnamed(_) => {
                         quote! {Ok(Self(#cbor_module::CborDeserialize::deserialize(decoder)?))}
                     }
+                }
+            } else if opts.array {
+                let field_count = field_idents.len();
+
+                let field_vars: Vec<_> = field_idents
+                    .iter()
+                    .map(|member| match member {
+                        Member::Named(ident) => ident.clone(),
+                        Member::Unnamed(index) => format_ident!("tmp{}", index),
+                    })
+                    .collect();
+
+                let self_construct = match fields {
+                    Fields::Named(_) => {
+                        quote!(Self { #(#field_idents),* })
+                    }
+                    Fields::Unnamed(_) => {
+                        quote!(Self( #(#field_vars),* ))
+                    }
+                    Fields::Unit => {
+                        quote!(Self)
+                    }
+                };
+                
+                quote! {
+                    let array_size = #cbor_module::CborDecoder::decode_array_expect_length(decoder, #field_count)?;
+                    
+                    #(
+                        let #field_vars = #cbor_module::CborDeserialize::deserialize(decoder)?;
+                    )*
+                    
+                    Ok(#self_construct)
                 }
             } else {
                 let field_map_keys = cbor_fields.cbor_map_keys()?;
@@ -220,6 +254,20 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 quote!(
                     #cbor_module::CborSerialize::serialize(&self.#field_ident, encoder)
                 )
+            } else if opts.array {
+                let field_count = field_idents.len();
+
+                quote! {
+                    #cbor_module::CborEncoder::encode_array(encoder,
+                        #field_count
+                    )?;
+
+                    #(
+                        #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
+                    )*
+
+                    Ok(())
+                }
             } else {
                 let field_map_keys = cbor_fields.cbor_map_keys()?;
 
