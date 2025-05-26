@@ -2,6 +2,9 @@ use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Decoder, Encoder, Header};
 use std::fmt::{Debug, Display};
+use concordium_base_derive::{CborDeserialize, CborSerialize};
+
+const DECIMAL_FRACTION_TAG: u64 = 4;
 
 /// Error for serializing or deserializing CBOR
 #[derive(thiserror::Error, Debug)]
@@ -221,7 +224,7 @@ pub trait CborDecoder {
 
     /// Decode negative integer data item. Notice that the
     /// value of the data item is -(`negative` + 1) where
-    /// `negative` is the returned value. 
+    /// `negative` is the returned value.
     fn decode_negative(&mut self) -> CborResult<u64>;
 
     /// Decode map start. Returns the map size
@@ -456,16 +459,15 @@ impl CborDeserialize for u64 {
 
 impl CborSerialize for i64 {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        if let Ok(positive) = u64::try_from(*self) {
-            encoder.encode_positive(positive)
-        } else if let Some(negative) = self
-            .checked_add(1)
-            .and_then(|val| val.checked_neg())
-            .and_then(|val| u64::try_from(val).ok())
-        {
-            encoder.encode_negative(negative)
+        if *self >= 0 {
+            encoder.encode_positive(u64::try_from(*self).context("convert i64 to positive")?)
         } else {
-            Err(CborError::invalid_data(format!("i64 cannot be encoded in CBOR: {}", self)))
+            encoder.encode_negative(
+                self.checked_add(1)
+                    .and_then(|val| val.checked_neg())
+                    .and_then(|val| u64::try_from(val).ok())
+                    .context("convert i64 to negative")?,
+            )
         }
     }
 }
@@ -475,8 +477,23 @@ impl CborDeserialize for i64 {
     where
         Self: Sized,
     {
-        // todo ar peek
-        todo!()
+        match decoder.peek_data_item_type()? {
+            DataItemType::Positive => {
+                Ok(i64::try_from(decoder.decode_positive()?).context("convert positive to i64")?)
+            }
+            DataItemType::Negative => Ok(i64::try_from(decoder.decode_negative()?)
+                .ok()
+                .and_then(|val| val.checked_add(1))
+                .and_then(|val| val.checked_neg())
+                .context("convert negative to i64")?),
+            data_item_type => Err(anyhow!(
+                "expected data item {:?} or {:?} as for i64, was {:?}",
+                DataItemType::Positive,
+                DataItemType::Negative,
+                data_item_type
+            )
+            .into()),
+        }
     }
 }
 
@@ -610,6 +627,10 @@ impl CborDeserialize for MapKey {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[cbor(array, tag = DECIMAL_FRACTION_TAG)] // todo ar array remove
+pub struct DecimalFraction(i64, i64);
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -628,14 +649,12 @@ mod test {
         assert_eq!(hex::encode(&cbor), "01");
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
-        
+
         let value = 1230u64;
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "1904ce");
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
-
-
     }
 
     #[test]
@@ -648,25 +667,25 @@ mod test {
 
         let value = 1i64;
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "00");
+        assert_eq!(hex::encode(&cbor), "01");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = 2i64;
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "00");
+        assert_eq!(hex::encode(&cbor), "02");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -1i64;
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "00");
+        assert_eq!(hex::encode(&cbor), "20");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = -2i64;
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "00");
+        assert_eq!(hex::encode(&cbor), "21");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
@@ -675,10 +694,10 @@ mod test {
         assert_eq!(hex::encode(&cbor), "1904ce");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
-        
+
         let value = -1230i64;
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "00");
+        assert_eq!(hex::encode(&cbor), "3904cd");
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -987,5 +1006,14 @@ mod test {
             .unwrap_err()
             .to_string();
         assert!(err.contains("expected tag 39998"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_decimal_fraction() {
+        let value = DecimalFraction(-3, 12345);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "8222193039");
+        let value_decoded: DecimalFraction = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 }
