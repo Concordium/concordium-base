@@ -3,6 +3,7 @@ use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Decoder, Encoder, Header};
 use std::fmt::{Debug, Display};
 
+/// Error for serializing or deserializing CBOR
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
 pub struct CborError(#[from] anyhow::Error);
@@ -187,16 +188,7 @@ pub trait CborDecoder {
     /// Decode positive integer data item
     fn decode_positive(&mut self) -> CborResult<u64>;
 
-    /// Decode positive integer data item and check that it equals
-    /// the given map key
-    // todo ar remove
-    fn decode_positive_expect_key(&mut self, expected_key: u64) -> CborResult<()> {
-        let positive = self.decode_positive()?;
-        if positive != expected_key {
-            return Err(CborError::expected_map_key(expected_key, positive));
-        }
-        Ok(())
-    }
+
 
     /// Decode map start. Returns the map size
     fn decode_map(&mut self) -> CborResult<usize>;
@@ -215,6 +207,7 @@ pub trait CborDecoder {
     /// Works only for definite length text.
     fn decode_str(&mut self) -> CborResult<Vec<u8>>;
 
+    /// Peeks type of next data item to be decoded.
     fn peek_data_item_type(&mut self) -> CborResult<DataItemType>;
 }
 
@@ -336,10 +329,10 @@ where
 ///
 /// This function works only for text data items of definite length (which means
 /// there is a single segment)
-fn decode_definite_length_text<'a, R: Read>(
+fn decode_definite_length_text<R: Read>(
     decoder: &mut Decoder<R>,
-    dest: &'a mut [u8],
-) -> CborResult<&'a str>
+    dest: &mut [u8],
+) -> CborResult<()>
 where
     R::Error: Display, {
     let mut segments = decoder.text(Some(dest.len()));
@@ -347,14 +340,14 @@ where
         return Err(anyhow!("must have at least one segment").into());
     };
 
-    let str = segment.pull(dest)?.context("no data in segment")?;
+    segment.pull(dest)?.context("no data in segment")?;
     if segment.left() != 0 {
         return Err(anyhow!("remaining data in segment").into());
     }
     if segments.pull()?.is_some() {
         return Err(anyhow!("expected to only one segment").into());
     }
-    Ok(str)
+    Ok(())
 }
 
 impl<const N: usize> CborSerialize for [u8; N] {
@@ -464,6 +457,7 @@ impl DataItemType {
     }
 }
 
+/// Key in a CBOR map
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum MapKey {
     Positive(u64),
@@ -479,6 +473,7 @@ impl MapKey {
     }
 }
 
+/// Key in a CBOR map
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum MapKeyRef<'a> {
     Positive(u64),
@@ -512,23 +507,35 @@ impl CborDeserialize for MapKey {
     }
 }
 
-// todo ar proc macro: map + transparent + tag
 
 #[cfg(test)]
 mod test {
     use super::*;
     use concordium_base_derive::{CborDeserialize, CborSerialize};
 
-    // todo ar test not well formed bytes and text (different length than specified)
-
     #[test]
-    fn test_bytes_exact_encode_decode() {
+    fn test_bytes() {
         let bytes: [u8; 5] = [1, 2, 3, 4, 5];
 
         let cbor = cbor_encode(&bytes).unwrap();
         assert_eq!(hex::encode(&cbor), "450102030405");
         let bytes_decoded: [u8; 5] = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
+
+        let err = cbor_decode::<[u8; 4]>(&cbor).unwrap_err().to_string();
+        assert!(err.contains("expected 4 bytes"), "err: {}", err);
+    }
+
+    /// Test where CBOR is not well-formed: Bytes length in header does not match actual
+    /// data. Test that we get an error and don't panic
+    #[test]
+    fn test_bytes_length_invalid() {
+        let cbor = hex::decode("58ff0102030405").unwrap();
+        cbor_decode::<[u8; 0xff]>(&cbor).expect_err("should give error");
+
+        let cbor = hex::decode("410102030405").unwrap();
+        cbor_decode::<[u8; 0x01]>(&cbor).expect_err("should give error");
+
     }
 
     #[test]
@@ -539,6 +546,18 @@ mod test {
         assert_eq!(hex::encode(&cbor), "6461626364");
         let text_decoded: String = cbor_decode(&cbor).unwrap();
         assert_eq!(text_decoded, text);
+    }
+
+    /// Test where CBOR is not well-formed: Text length in header does not match actual
+    /// data. Test that we get an error and don't panic
+    #[test]
+    fn test_text_length_invalid() {
+        let cbor = hex::decode("78ff61626364").unwrap();
+        cbor_decode::<String>(&cbor).expect_err("should give error");
+
+        let cbor = hex::decode("6161626364").unwrap();
+        cbor_decode::<String>(&cbor).expect_err("should give error");
+
     }
 
     #[test]
