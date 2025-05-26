@@ -22,13 +22,13 @@ pub struct TokenEvent {
     /// The unique symbol of the token, which produced this event.
     pub token_id: TokenId,
     /// The type of the event.
-    pub event:    Event,
+    pub event:    TokenEventDetails,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// The type of the token event.
-pub enum Event {
+pub enum TokenEventDetails {
     /// An event emitted by the token module.
     Module(TokenModuleEvent),
     /// An event emitted when a transfer of tokens is performed.
@@ -41,7 +41,7 @@ pub enum Event {
     Burn(TokenSupplyUpdateEvent),
 }
 
-/// Event produced from the effect of a token holder transaction.
+/// Event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenModuleEvent {
