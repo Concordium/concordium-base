@@ -1,4 +1,3 @@
-use concordium_base_derive::CborSerialize;
 use crate::internal::cbor::{
     CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize, MapKey,
     MapKeyRef,
@@ -6,6 +5,7 @@ use crate::internal::cbor::{
 use crate::protocol_level_tokens::{
     token_holder::TokenHolder, RawCbor, TokenAmount, TokenId, TokenModuleCborTypeDiscriminator,
 };
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// Details provided by the token module in the event of rejecting a
 /// transaction.
@@ -43,73 +43,22 @@ pub enum TokenModuleRejectReasonType {
 }
 
 /// A token holder address was not valid.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, CborSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index: usize,
     /// The address that could not be resolved.
     pub address: TokenHolder,
-}
-
-// impl CborSerialize for AddressNotFoundRejectReason {
-//     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-//         encoder.encode_map(
-//             if self.index.is_null() { 0 } else { 1 } + if self.address.is_null() { 0 } else { 1 },
-//         )?;
-// 
-//         if !self.index.is_null() {
-//             MapKeyRef::Text("index").serialize(encoder)?;
-//             self.index.serialize(encoder)?;
-//         }
-// 
-//         if !self.address.is_null() {
-//             MapKeyRef::Text("address").serialize(encoder)?;
-//             self.address.serialize(encoder)?;
-//         }
-//         Ok(())
-//     }
-// }
-
-impl CborDeserialize for AddressNotFoundRejectReason {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut index = None;
-        let mut address = None;
-        let map_size = decoder.decode_map()?;
-        for _ in 0..map_size {
-            let map_key = MapKey::deserialize(decoder)?;
-
-            match map_key.as_ref() {
-                MapKeyRef::Text("index") => {
-                    index = Some(CborDeserialize::deserialize(decoder)?);
-                }
-                MapKeyRef::Text("address") => {
-                    address = Some(CborDeserialize::deserialize(decoder)?);
-                }
-                key => return Err(CborError::unknown_map_key(key)),
-            }
-        }
-        let index = match index {
-            None => match CborDeserialize::null() {
-                None => return Err(CborError::map_value_missing(MapKeyRef::Text("index"))),
-                Some(null) => null,
-            },
-            Some(coin_info) => coin_info,
-        };
-
-        let address = match address {
-            None => match CborDeserialize::null() {
-                None => return Err(CborError::map_value_missing(MapKeyRef::Text("address"))),
-                Some(null) => null,
-            },
-            Some(address) => address,
-        };
-
-        Ok(Self { address, index })
-    }
 }
 
 /// The balance of tokens on the sender account is insufficient
