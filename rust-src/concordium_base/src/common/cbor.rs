@@ -3,7 +3,7 @@
 //! Types should implement [`CborSerialize`] and [`CborDeserialize`]
 //! to define the serialization structure. The interface to implement the serialization goes through
 //! [`CborEncoder`] and [`CborDecoder`] that implements the CBOR encoding format. The module implements
-//! serialization of primitive Rust types like integers and strings.
+//! serialization of primitive Rust types like integers, strings and byte arrays.
 //!
 //! ## Deriving `CborSerialize` and `CborDeserialize`
 //!
@@ -138,7 +138,7 @@ impl From<std::io::Error> for CborError {
 }
 
 /// Encodes the given value as CBOR
-pub fn cbor_encode<T: CborSerialize>(value: &T) -> CborResult<Vec<u8>> {
+pub fn cbor_encode<T: CborSerialize + ?Sized>(value: &T) -> CborResult<Vec<u8>> {
     let mut bytes = Vec::new();
     let mut encoder = Encoder::from(&mut bytes);
     value.serialize(&mut encoder)?;
@@ -238,6 +238,7 @@ pub trait CborEncoder {
 
     /// Encodes simple value null, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
     fn encode_null(&mut self) -> CborResult<()>;
+
 }
 
 impl<W: Write> CborEncoder for Encoder<W>
@@ -314,6 +315,11 @@ pub trait CborDecoder {
         Ok(())
     }
 
+    /// Decode bytes.
+    ///
+    /// Works only for definite length bytes.
+    fn decode_bytes(&mut self) -> CborResult<Vec<u8>>;
+    
     /// Decode bytes into given `destination`. The length of the bytes data item
     /// must match the `destination` length, else an error is returned.
     ///
@@ -402,6 +408,22 @@ where
         Ok(())
     }
 
+    fn decode_bytes(&mut self) -> CborResult<Vec<u8>> {
+        let size = match self.pull()? {
+            Header::Bytes(Some(size)) => size,
+            header => {
+                return Err(CborError::expected_data_item(
+                    DataItemType::Bytes,
+                    DataItemType::from_header(&header),
+                ))
+            }
+        };
+
+        let mut bytes = vec![0; size];
+        decode_definite_length_bytes(self, &mut bytes)?;
+        Ok(bytes)
+    }
+    
     fn decode_str(&mut self) -> CborResult<Vec<u8>> {
         let size = match self.pull()? {
             Header::Text(Some(size)) => size,
@@ -477,6 +499,18 @@ where
     Ok(())
 }
 
+impl<T: CborSerialize> CborSerialize for &T {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        CborSerialize::serialize(*self, encoder)
+    }
+}
+
+impl<T: CborSerialize> CborSerialize for &mut T {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        CborSerialize::serialize(*self, encoder)
+    }
+}
+
 impl<const N: usize> CborSerialize for [u8; N] {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         encoder.encode_bytes(self)
@@ -491,6 +525,27 @@ impl<const N: usize> CborDeserialize for [u8; N] {
         let mut dest = [0; N];
         decoder.decode_bytes_exact(&mut dest)?;
         Ok(dest)
+    }
+}
+
+impl CborSerialize for [u8] {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_bytes(self)
+    }
+}
+
+impl CborSerialize for Vec<u8> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_bytes(self)
+    }
+}
+
+impl CborDeserialize for Vec<u8> {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        decoder.decode_bytes()
     }
 }
 
@@ -792,6 +847,16 @@ mod test {
 
     #[test]
     fn test_bytes() {
+        let bytes :Vec<u8>= vec![1, 2, 3, 4, 5];
+
+        let cbor = cbor_encode(&bytes).unwrap();
+        assert_eq!(hex::encode(&cbor), "450102030405");
+        let bytes_decoded: Vec<u8> = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, bytes);
+    }
+
+    #[test]
+    fn test_bytes_exact_length() {
         let bytes: [u8; 5] = [1, 2, 3, 4, 5];
 
         let cbor = cbor_encode(&bytes).unwrap();

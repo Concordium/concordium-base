@@ -36,9 +36,11 @@ use rand::{CryptoRng, Rng};
 use sha2::Digest;
 use std::{collections::BTreeMap, marker::PhantomData};
 use thiserror::Error;
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, AsRef, Into)]
+#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Eq, PartialEq, AsRef, Into, CborSerialize, CborDeserialize)]
 #[serde(transparent)]
+#[cbor(transparent)]
 /// A data that was registered on the chain.
 pub struct Memo {
     #[serde(with = "crate::internal::byte_array_hex")]

@@ -1,7 +1,11 @@
+use crate::common::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize, DataItemType,
+};
 use crate::{
     protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
+use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 const CBOR_TAG: u64 = 24;
 
@@ -11,35 +15,160 @@ const CBOR_TAG: u64 = 24;
 /// operations. Operations includes governance operations, transfers etc.
 pub struct TokenOperationsPayload {
     /// Id of the token
-    pub token_id:   TokenId,
+    pub token_id: TokenId,
     /// Token operations in the transaction
     pub operations: RawCbor,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenOperation {
     Transfer(TokenTransfer),
-    Other,
+    Unknown,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+impl CborSerialize for TokenOperation {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        #[derive(Debug, CborSerialize)]
+        struct TokenOperationCbor<'a> {
+            transfer: Option<&'a TokenTransfer>,
+        }
+
+        match self {
+            TokenOperation::Transfer(transfer) => {
+                let cbor = TokenOperationCbor {
+                    transfer: Some(&transfer),
+                };
+
+                cbor.serialize(encoder)
+            }
+            TokenOperation::Unknown => {
+                Err(CborError::invalid_data("cannot serialize unknown variant"))
+            }
+        }
+    }
+}
+
+impl CborDeserialize for TokenOperation {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        #[derive(Debug, CborDeserialize)]
+        struct TokenOperationCbor {
+            transfer: Option<TokenTransfer>,
+        }
+
+        let cbor = TokenOperationCbor::deserialize(decoder)?;
+
+        Ok(if let Some(transfer) = cbor.transfer {
+            Self::Transfer(transfer)
+        } else {
+            Self::Unknown
+        })
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenTransfer {
     /// The amount of tokens to transfer.
-    pub amount:    TokenAmount,
+    pub amount: TokenAmount,
     /// The recipient account.
     pub recipient: TokenHolder,
     /// An optional memo.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub memo:      Option<CborMemo>,
+    pub memo: Option<CborMemo>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CborMemo {
     /// Memo that is not encoded as CBOR
     Raw(Memo),
     /// Memo encoded as CBOR
     Cbor(Memo),
+}
+
+impl CborSerialize for CborMemo {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        match self {
+            Self::Raw(memo) => memo.serialize(encoder),
+            Self::Cbor(memo) => {
+                encoder.encode_tag(CBOR_TAG)?;
+                memo.serialize(encoder)
+            }
+        }
+    }
+}
+
+impl CborDeserialize for CborMemo {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(match decoder.peek_data_item_type()? {
+            DataItemType::Tag => {
+                decoder.decode_tag_expect(CBOR_TAG)?;
+                Self::Cbor(Memo::deserialize(decoder)?)
+            }
+            _ => Self::Raw(Memo::deserialize(decoder)?),
+        })
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+    use crate::common::cbor;
+    use crate::protocol_level_tokens::HolderAccount;
+    use crate::protocol_level_tokens::token_holder::test::ADDRESS;
+
+    #[test]
+    fn test_cbor_memo_cbor() {
+        let memo = CborMemo::Raw(Memo::try_from(vec![0x01, 0x02, 0x03, 0x04]).unwrap());
+
+        let cbor = cbor::cbor_encode(&memo).unwrap();
+        assert_eq!(hex::encode(&cbor), "4401020304");
+        let memo_decoded: CborMemo = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(memo_decoded, memo);
+
+        let memo = CborMemo::Cbor(Memo::try_from(vec![0x01, 0x02, 0x03, 0x04]).unwrap());
+
+        let cbor = cbor::cbor_encode(&memo).unwrap();
+        assert_eq!(hex::encode(&cbor), "d8184401020304");
+        let memo_decoded: CborMemo = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(memo_decoded, memo);
+    }
+
+    #[test]
+    fn test_token_operation_transfer_cbor() {
+        let operation = TokenOperation::Transfer(TokenTransfer {
+            amount: TokenAmount::from_raw(
+                12300,
+                3,
+            ),
+            recipient: TokenHolder::HolderAccount(HolderAccount {
+                address:   ADDRESS,
+                coin_info: None,
+            }),
+            memo: None,
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+
+        
+    }
 }
