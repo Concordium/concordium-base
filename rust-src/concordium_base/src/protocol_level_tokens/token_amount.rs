@@ -19,7 +19,7 @@ pub struct TokenAmount {
 #[derive(
     Debug, Clone, Copy, CborSerialize, CborDeserialize,
 )]
-#[cbor(array, tag = DECIMAL_FRACTION_TAG)] // todo ar
+#[cbor(tag = DECIMAL_FRACTION_TAG)] // todo ar
 struct TokenAmountCbor {
     scale: u64,
     value: u64,

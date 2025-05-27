@@ -10,7 +10,7 @@ use syn::spanned::Spanned;
 #[darling(attributes(cbor))]
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
-    /// name is used as a string literal for structs with named fields, and the tuple index
+    /// name in camelCase is used as a string literal for structs with named fields, and the tuple index
     /// is used for struct tuples.
     key: Option<Expr>,
 }
@@ -22,12 +22,8 @@ pub struct CborOpts {
     /// of the single field.
     #[darling(default)]
     transparent: bool,
-    /// Add tag to data item.
+    /// Add CBOR tag to data item <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items>.
     tag: Option<Expr>,
-    /// If `true`, serialize struct as an array, one element for each field in the struct.
-    /// If `false`, struct is serialized as a map.
-    #[darling(default)]
-    array: bool,
 }
 
 #[derive(Debug)]
@@ -93,6 +89,111 @@ fn get_cbor_module() -> syn::Result<TokenStream> {
     Ok(quote!(#crate_root::common::cbor))
 }
 
+#[derive(Debug, Clone, Copy)]
+enum CborContainer {
+    Array,
+    Map,
+}
+
+fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<TokenStream> {
+    let cbor_module = get_cbor_module()?;
+
+    let cbor_fields = CborFields::try_from_fields(fields)?;
+    let field_idents = cbor_fields.members();
+
+    if opts.transparent {
+        let (Some(field_ident), None) = (field_idents.get(0), field_idents.get(1)) else {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(transparent) only valid for structs with a single field",
+            ));
+        };
+
+        return Ok(match field_ident {
+            Member::Named(field_ident) => {
+                quote! {Ok(Self{#field_ident: #cbor_module::CborDeserialize::deserialize(decoder)?})}
+            }
+            Member::Unnamed(_) => {
+                quote! {Ok(Self(#cbor_module::CborDeserialize::deserialize(decoder)?))}
+            }
+        });
+    }
+
+    let field_vars: Vec<_> = field_idents
+        .iter()
+        .map(|member| match member {
+            Member::Named(ident) => ident.clone(),
+            Member::Unnamed(index) => format_ident!("tmp{}", index),
+        })
+        .collect();
+
+    let self_construct = match fields {
+        Fields::Named(_) => {
+            quote!(Self { #(#field_idents),* })
+        }
+        Fields::Unnamed(_) => {
+            quote!(Self( #(#field_vars),* ))
+        }
+        Fields::Unit => {
+            quote!(Self)
+        }
+    };
+
+    let cbor_container = match fields {
+        Fields::Named(_) => CborContainer::Map,
+        Fields::Unnamed(_) => CborContainer::Array,
+        Fields::Unit => CborContainer::Map,
+    };
+
+    Ok(match cbor_container {
+        CborContainer::Array => {
+            let field_count = field_idents.len();
+
+            quote! {
+                let array_size = #cbor_module::CborDecoder::decode_array_expect_length(decoder, #field_count)?;
+
+                #(
+                    let #field_vars = #cbor_module::CborDeserialize::deserialize(decoder)?;
+                )*
+
+                Ok(#self_construct)
+            }
+        }
+        CborContainer::Map => {
+            let field_map_keys = cbor_fields.cbor_map_keys()?;
+
+            quote! {
+                #(let mut #field_vars = None;)*
+                let map_size = #cbor_module::CborDecoder::decode_map(decoder)?;
+                for _ in 0..map_size {
+                    let map_key: #cbor_module::MapKey = #cbor_module::CborDeserialize::deserialize(decoder)?;
+
+                    match map_key.as_ref() {
+                        #(
+                            #field_map_keys => {
+                                #field_vars = Some(#cbor_module::CborDeserialize::deserialize(decoder)?);
+                            }
+                        )*
+                        key => return Err(#cbor_module::CborError::unknown_map_key(key)),
+                    }
+                }
+
+                #(
+                    let #field_vars = match #field_vars {
+                        None => match #cbor_module::CborDeserialize::null() {
+                            None => return Err(#cbor_module::CborError::map_value_missing(#field_map_keys)),
+                            Some(null_value) => null_value,
+                        },
+                        Some(#field_vars) => #field_vars,
+                    };
+                )*
+
+                Ok(#self_construct)
+            }
+        }
+    })
+}
+
 pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
@@ -101,110 +202,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
     let cbor_module = get_cbor_module()?;
 
     let deserialize_body = match &ast.data {
-        Data::Struct(DataStruct { fields, .. }) => {
-            let cbor_fields = CborFields::try_from_fields(fields)?;
-            let field_idents = cbor_fields.members();
-
-            if opts.transparent {
-                let (Some(field_ident), None) = (field_idents.get(0), field_idents.get(1)) else {
-                    return Err(syn::Error::new(
-                        Span::call_site(),
-                        "cbor(transparent) only valid for structs with a single field",
-                    ));
-                };
-
-                match field_ident {
-                    Member::Named(field_ident) => {
-                        quote! {Ok(Self{#field_ident: #cbor_module::CborDeserialize::deserialize(decoder)?})}
-                    }
-                    Member::Unnamed(_) => {
-                        quote! {Ok(Self(#cbor_module::CborDeserialize::deserialize(decoder)?))}
-                    }
-                }
-            } else if opts.array {
-                let field_count = field_idents.len();
-
-                let field_vars: Vec<_> = field_idents
-                    .iter()
-                    .map(|member| match member {
-                        Member::Named(ident) => ident.clone(),
-                        Member::Unnamed(index) => format_ident!("tmp{}", index),
-                    })
-                    .collect();
-
-                let self_construct = match fields {
-                    Fields::Named(_) => {
-                        quote!(Self { #(#field_idents),* })
-                    }
-                    Fields::Unnamed(_) => {
-                        quote!(Self( #(#field_vars),* ))
-                    }
-                    Fields::Unit => {
-                        quote!(Self)
-                    }
-                };
-                
-                quote! {
-                    let array_size = #cbor_module::CborDecoder::decode_array_expect_length(decoder, #field_count)?;
-                    
-                    #(
-                        let #field_vars = #cbor_module::CborDeserialize::deserialize(decoder)?;
-                    )*
-                    
-                    Ok(#self_construct)
-                }
-            } else {
-                let field_map_keys = cbor_fields.cbor_map_keys()?;
-                let field_vars: Vec<_> = field_idents
-                    .iter()
-                    .map(|member| match member {
-                        Member::Named(ident) => ident.clone(),
-                        Member::Unnamed(index) => format_ident!("tmp{}", index),
-                    })
-                    .collect();
-
-                let self_construct = match fields {
-                    Fields::Named(_) => {
-                        quote!(Self { #(#field_idents),* })
-                    }
-                    Fields::Unnamed(_) => {
-                        quote!(Self( #(#field_vars),* ))
-                    }
-                    Fields::Unit => {
-                        quote!(Self)
-                    }
-                };
-
-                quote! {
-                    #(let mut #field_vars = None;)*
-                    let map_size = #cbor_module::CborDecoder::decode_map(decoder)?;
-                    for _ in 0..map_size {
-                        let map_key: #cbor_module::MapKey = #cbor_module::CborDeserialize::deserialize(decoder)?;
-
-                        match map_key.as_ref() {
-                            #(
-                                #field_map_keys => {
-                                    #field_vars = Some(#cbor_module::CborDeserialize::deserialize(decoder)?);
-                                }
-                            )*
-                            key => return Err(#cbor_module::CborError::unknown_map_key(key)),
-                        }
-                    }
-
-                    #(
-                        let #field_vars = match #field_vars {
-                            None => match #cbor_module::CborDeserialize::null() {
-                                None => return Err(#cbor_module::CborError::map_value_missing(#field_map_keys)),
-                                Some(null_value) => null_value,
-                            },
-                            Some(#field_vars) => #field_vars,
-                        };
-                    )*
-
-                    Ok(#self_construct)
-                }
-            }
-        }
+        Data::Struct(DataStruct { fields, .. }) => cbor_deserialize_struct_body(fields, &opts)?,
         _ => {
             return Err(syn::Error::new(
                 Span::call_site(),
@@ -231,6 +229,68 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
     })
 }
 
+fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<TokenStream> {
+    let cbor_module = get_cbor_module()?;
+
+    let cbor_fields = CborFields::try_from_fields(fields)?;
+    let field_idents = cbor_fields.members();
+
+    if opts.transparent {
+        let (Some(field_ident), None) = (field_idents.get(0), field_idents.get(1)) else {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(transparent) only valid for structs with a single field",
+            ));
+        };
+
+        return Ok(quote!(
+            #cbor_module::CborSerialize::serialize(&self.#field_ident, encoder)
+        ));
+    }
+
+    let cbor_container = match fields {
+        Fields::Named(_) => CborContainer::Map,
+        Fields::Unnamed(_) => CborContainer::Array,
+        Fields::Unit => CborContainer::Map,
+    };
+
+    Ok(match cbor_container {
+        CborContainer::Array => {
+            let field_count = field_idents.len();
+
+            quote! {
+                #cbor_module::CborEncoder::encode_array(encoder,
+                    #field_count
+                )?;
+
+                #(
+                    #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
+                )*
+
+                Ok(())
+            }
+        }
+        CborContainer::Map => {
+            let field_map_keys = cbor_fields.cbor_map_keys()?;
+
+            quote! {
+                #cbor_module::CborEncoder::encode_map(encoder,
+                    #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
+                )?;
+
+                #(
+                    if !#cbor_module::CborSerialize::is_null(&self.#field_idents) {
+                        #cbor_module::CborSerialize::serialize(&#field_map_keys, encoder)?;
+                        #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
+                    }
+                )*
+
+                Ok(())
+            }
+        }
+    })
+}
+
 pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
@@ -239,54 +299,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let cbor_module = get_cbor_module()?;
 
     let serialize_body = match &ast.data {
-        Data::Struct(DataStruct { fields, .. }) => {
-            let cbor_fields = CborFields::try_from_fields(fields)?;
-            let field_idents = cbor_fields.members();
-
-            if opts.transparent {
-                let (Some(field_ident), None) = (field_idents.get(0), field_idents.get(1)) else {
-                    return Err(syn::Error::new(
-                        Span::call_site(),
-                        "cbor(transparent) only valid for structs with a single field",
-                    ));
-                };
-
-                quote!(
-                    #cbor_module::CborSerialize::serialize(&self.#field_ident, encoder)
-                )
-            } else if opts.array {
-                let field_count = field_idents.len();
-
-                quote! {
-                    #cbor_module::CborEncoder::encode_array(encoder,
-                        #field_count
-                    )?;
-
-                    #(
-                        #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
-                    )*
-
-                    Ok(())
-                }
-            } else {
-                let field_map_keys = cbor_fields.cbor_map_keys()?;
-
-                quote! {
-                    #cbor_module::CborEncoder::encode_map(encoder,
-                        #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
-                    )?;
-
-                    #(
-                        if !#cbor_module::CborSerialize::is_null(&self.#field_idents) {
-                            #cbor_module::CborSerialize::serialize(&#field_map_keys, encoder)?;
-                            #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
-                        }
-                    )*
-
-                    Ok(())
-                }
-            }
-        }
+        Data::Struct(DataStruct { fields, .. }) => cbor_serialize_struct_body(fields, &opts)?,
         _ => {
             return Err(syn::Error::new(
                 Span::call_site(),

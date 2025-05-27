@@ -627,8 +627,11 @@ impl CborDeserialize for MapKey {
     }
 }
 
+
+/// Decimal fraction consisting of exponent `e` and mantissa `m`, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-decimal-fractions-and-bigfl>.
+/// It represents the value `m * 10^e`.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cbor(array, tag = DECIMAL_FRACTION_TAG)] // todo ar array remove
+#[cbor(tag = DECIMAL_FRACTION_TAG)]
 pub struct DecimalFraction(i64, i64);
 
 #[cfg(test)]
@@ -847,40 +850,11 @@ mod test {
         let err = cbor_decode::<TestStruct2>(&cbor).unwrap_err().to_string();
         assert!(err.contains("unknown map key"), "err: {}", err);
     }
-
-    /// Tuple encoded as map. Uses field indexes as keys.
-    #[test]
-    fn test_map_derived_tuple() {
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct TestStruct(u64, String);
-
-        let value = TestStruct(3, "abcd".to_string());
-
-        let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "a20003016461626364");
-        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, value);
-    }
-
-    #[test]
-    fn test_map_derived_tuple_explicit_keys() {
-        const KEY: u64 = 2;
-
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        struct TestStruct(#[cbor(key = 1)] u64, #[cbor(key = KEY)] String);
-
-        let value = TestStruct(3, "abcd".to_string());
-
-        let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "a20103026461626364");
-        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, value);
-    }
+    
 
     #[test]
     fn test_array_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        #[cbor(array)]
         struct TestStruct(u64, String);
 
         let value = TestStruct(3, "abcd".to_string());
@@ -890,26 +864,7 @@ mod test {
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
-
-    #[test]
-    fn test_array_derived_named_struct() {
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
-        #[cbor(array)]
-        struct TestStruct {
-            field1: u64,
-            field2: String,
-        }
-
-        let value = TestStruct {
-            field1: 3,
-            field2: "abcd".to_string(),
-        };
-
-        let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "82036461626364");
-        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, value);
-    }
+    
 
     #[test]
     fn test_derived_transparent_tuple() {
@@ -1012,7 +967,7 @@ mod test {
     fn test_decimal_fraction() {
         let value = DecimalFraction(-3, 12345);
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "8222193039");
+        assert_eq!(hex::encode(&cbor), "c48222193039");
         let value_decoded: DecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
