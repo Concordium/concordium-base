@@ -20,6 +20,13 @@ pub struct TokenOperationsPayload {
     pub operations: RawCbor,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, CborSerialize, CborDeserialize)]
+#[serde(rename_all = "camelCase")]
+#[cbor(transparent)]
+pub struct TokenOperations {
+    pub operations: Vec<TokenOperation>,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenOperation {
@@ -151,8 +158,8 @@ pub mod test {
     }
 
     #[test]
-    fn test_token_operation_transfer_cbor() {
-        let operation = TokenOperation::Transfer(TokenTransfer {
+    fn test_token_operations_transfer_cbor() {
+        let operations =  TokenOperations { operations: vec![TokenOperation::Transfer(TokenTransfer {
             amount: TokenAmount::from_raw(
                 12300,
                 3,
@@ -162,12 +169,12 @@ pub mod test {
                 coin_info: None,
             }),
             memo: None,
-        });
+        })]};
 
-        let cbor = cbor::cbor_encode(&operation).unwrap();
-        assert_eq!(hex::encode(&cbor), "a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
-        assert_eq!(operation_decoded, operation);
+        let cbor = cbor::cbor_encode(&operations).unwrap();
+        assert_eq!(hex::encode(&cbor), "81a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperations = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operations);
 
         
     }

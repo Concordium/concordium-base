@@ -201,8 +201,13 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
     where
         Self: Sized,
     {
-        // todo ar
-        Ok(Some(T::deserialize(decoder)?))
+        Ok(match decoder.peek_header()? {
+            Header::Simple(simple::NULL) => {
+                debug_assert_eq!(decoder.decode_simple()?, simple::NULL);
+                None
+            },
+            _ => Some(T::deserialize(decoder)?),
+        })
     }
 
     fn null() -> Option<Self>
@@ -335,7 +340,12 @@ pub trait CborDecoder {
     fn decode_simple(&mut self) -> CborResult<u8>;
 
     /// Peeks type of next data item to be decoded.
-    fn peek_data_item_type(&mut self) -> CborResult<DataItemType>;
+    fn peek_data_item_type(&mut self) -> CborResult<DataItemType> {
+        Ok(DataItemType::from_header(&self.peek_header()?))
+    }
+
+    /// Peeks next header to be decoded.
+    fn peek_header(&mut self) -> CborResult<Header>;
 }
 
 impl<R: Read> CborDecoder for Decoder<R>
@@ -453,11 +463,10 @@ where
         }
     }
 
-    fn peek_data_item_type(&mut self) -> CborResult<DataItemType> {
+    fn peek_header(&mut self) -> CborResult<Header> {
         let header = self.pull()?;
-        let data_item_type = DataItemType::from_header(&header);
         self.push(header);
-        Ok(data_item_type)
+        Ok(header)
     }
 }
 
@@ -547,18 +556,22 @@ impl CborSerialize for [u8] {
     }
 }
 
-impl CborSerialize for Vec<u8> {
+/// CBOR bytes
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Bytes(pub Vec<u8>);
+
+impl CborSerialize for Bytes {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.encode_bytes(self)
+        encoder.encode_bytes(&self.0)
     }
 }
 
-impl CborDeserialize for Vec<u8> {
+impl CborDeserialize for Bytes {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
     where
         Self: Sized,
     {
-        decoder.decode_bytes()
+        Ok(Bytes(decoder.decode_bytes()?))
     }
 }
 
@@ -810,6 +823,41 @@ impl DecimalFraction {
     }
 }
 
+impl<T: CborSerialize> CborSerialize for Vec<T> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_array(self.len())?;
+        for item in self {
+            item.serialize(encoder)?
+        }
+        Ok(())
+    }
+}
+
+impl<T: CborSerialize> CborSerialize for &[T] {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_array(self.len())?;
+        for item in self.iter() {
+            item.serialize(encoder)?
+        }
+        Ok(())
+    }
+}
+
+impl<T: CborDeserialize> CborDeserialize for Vec<T> {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        let size = decoder.decode_array()?;
+        let mut vec = Vec::with_capacity(size);
+        for _ in 0..size {
+            vec.push(T::deserialize(decoder)?);
+        }
+
+        Ok(vec)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -898,11 +946,11 @@ mod test {
 
     #[test]
     fn test_bytes() {
-        let bytes: Vec<u8> = vec![1, 2, 3, 4, 5];
+        let bytes = Bytes(vec![1, 2, 3, 4, 5]);
 
         let cbor = cbor_encode(&bytes).unwrap();
         assert_eq!(hex::encode(&cbor), "450102030405");
-        let bytes_decoded: Vec<u8> = cbor_decode(&cbor).unwrap();
+        let bytes_decoded: Bytes = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, bytes);
     }
 
@@ -1190,6 +1238,31 @@ mod test {
             .unwrap_err()
             .to_string();
         assert!(err.contains("expected tag 39998"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_vec() {
+        let vec = vec![1, 2, 3, 4, 5];
+
+        let cbor = cbor_encode(&vec).unwrap();
+        assert_eq!(hex::encode(&cbor), "850102030405");
+        let bytes_decoded: Vec<u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, vec);
+    }
+
+    #[test]
+    fn test_option() {
+        let value = Some(3u64);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "03");
+        let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = None;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "f6");
+        let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 
     #[test]
