@@ -555,7 +555,10 @@ impl CborSerialize for [u8] {
     }
 }
 
-/// CBOR bytes
+/// CBOR bytes data item.
+/// 
+/// Notice that this serializes different from a plain `Vec<u8>` which serializes
+/// to an array data item.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Bytes(pub Vec<u8>);
 
