@@ -1,6 +1,4 @@
-use crate::protocol_level_tokens::{
-    RawCbor, TokenId, TokenModuleCborTypeDiscriminator,
-};
+use crate::protocol_level_tokens::{RawCbor, TokenId, TokenModuleCborTypeDiscriminator};
 
 /// Details provided by the token module in the event of rejecting a
 /// transaction.
@@ -14,4 +12,3 @@ pub struct TokenModuleRejectReason {
     /// (Optional) CBOR-encoded details.
     pub details: Option<RawCbor>,
 }
-

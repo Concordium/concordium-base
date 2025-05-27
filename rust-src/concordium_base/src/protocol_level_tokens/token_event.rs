@@ -2,19 +2,6 @@ use crate::transactions::Memo;
 
 use super::{cbor::RawCbor, TokenAmount, TokenHolder, TokenId};
 
-/// Details provided by the token module in the event of rejecting a
-/// transaction.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TokenModuleRejectReason {
-    /// The unique symbol of the token, which produced this event.
-    pub token_id:   TokenId,
-    /// The type of event produced.
-    pub event_type: TokenModuleCborTypeDiscriminator,
-    /// The details of the event produced, in the raw byte encoded form.
-    pub details:    Option<RawCbor>,
-}
-
 /// An event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
