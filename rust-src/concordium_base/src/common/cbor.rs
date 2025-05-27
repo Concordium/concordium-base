@@ -73,6 +73,7 @@ use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Decoder, Encoder, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use libc::mach_msg_type_number_t;
 use std::fmt::{Debug, Display};
 
 const DECIMAL_FRACTION_TAG: u64 = 4;
@@ -704,6 +705,20 @@ impl CborDeserialize for MapKey {
 #[cbor(tag = DECIMAL_FRACTION_TAG)]
 pub struct DecimalFraction(i64, i64);
 
+impl DecimalFraction {
+    pub fn new(exponent: i64, mantissa: i64) -> Self {
+        Self(exponent, mantissa)
+    }
+
+    pub fn exponent(self) -> i64 {
+        self.0
+    }
+
+    pub fn mantissa(self) -> i64 {
+        self.1
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -853,10 +868,7 @@ mod test {
         let value = TestStruct { fieldName: 3 };
 
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(
-            hex::encode(&cbor),
-            "a1696669656c644e616d6503"
-        );
+        assert_eq!(hex::encode(&cbor), "a1696669656c644e616d6503");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }

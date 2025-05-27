@@ -1,12 +1,13 @@
-use crate::common::cbor::{CborDecoder, CborDeserialize, CborEncoder, CborResult, CborSerialize};
-use concordium_base_derive::{CborDeserialize, CborSerialize};
+use crate::common::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborResult, CborSerialize, DecimalFraction,
+};
+use anyhow::Context;
+
 
 const DECIMAL_FRACTION_TAG: u64 = 4;
 
 /// Protocol level token (PLT) amount representation.
-#[derive(
-    Debug, Clone, Copy, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
 pub struct TokenAmount {
     /// The number of decimals in the token amount.
@@ -15,14 +16,37 @@ pub struct TokenAmount {
     value: u64,
 }
 
-/// [`TokenAmount`] representation that resembles CBOR structure, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-decimal-fractions-and-bigfl>
-#[derive(
-    Debug, Clone, Copy, CborSerialize, CborDeserialize,
-)]
-#[cbor(tag = DECIMAL_FRACTION_TAG)] // todo ar
-struct TokenAmountCbor {
-    scale: u64,
-    value: u64,
+impl CborSerialize for TokenAmount {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        let decimal_fraction = DecimalFraction::new(
+            i64::try_from(self.decimals)
+                .ok()
+                .and_then(|val| val.checked_neg())
+                .context("convert decimals to exponent")?,
+            i64::try_from(self.value).context("convert value to mantissa")?,
+        );
+
+        decimal_fraction.serialize(encoder)
+    }
+}
+
+impl CborDeserialize for TokenAmount {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        let decimal_fraction = DecimalFraction::deserialize(decoder)?;
+
+        let decimals = decimal_fraction
+            .exponent()
+            .checked_neg()
+            .and_then(|val| u8::try_from(val).ok())
+            .context("convert exponent to decimals")?;
+        let value =
+            u64::try_from(decimal_fraction.mantissa()).context("convert mantissa to value")?;
+
+        Ok(Self { decimals, value })
+    }
 }
 
 impl TokenAmount {
@@ -370,9 +394,9 @@ mod test {
             decimals: 3,
         };
 
-        // let cbor = cbor::cbor_encode(&token_amount).unwrap();
-        // assert_eq!(hex::encode(&cbor), "d99d71a101190397");
-        // let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
-        // assert_eq!(token_amount_decoded, token_amount); // todo ar
+        let cbor = cbor::cbor_encode(&token_amount).unwrap();
+        assert_eq!(hex::encode(&cbor), "c4822219300c");
+        let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(token_amount_decoded, token_amount);
     }
 }
