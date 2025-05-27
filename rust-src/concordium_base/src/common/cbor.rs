@@ -574,8 +574,6 @@ impl CborDeserialize for Bytes {
     }
 }
 
-// todo ar macro rules
-
 impl CborSerialize for bool {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         encoder.encode_simple(if *self { simple::TRUE } else { simple::FALSE })
@@ -599,96 +597,86 @@ impl CborDeserialize for bool {
     }
 }
 
-impl CborSerialize for u8 {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.encode_positive((*self).try_into().context("convert from usize to u8")?)
-    }
-}
-
-impl CborDeserialize for u8 {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(decoder
-            .decode_positive()?
-            .try_into()
-            .context("convert u8 to usize")?)
-    }
-}
-
-impl CborSerialize for u64 {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.encode_positive(*self)
-    }
-}
-
-impl CborDeserialize for u64 {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
-    where
-        Self: Sized,
-    {
-        decoder.decode_positive()
-    }
-}
-
-impl CborSerialize for i64 {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        if *self >= 0 {
-            encoder.encode_positive(u64::try_from(*self).context("convert i64 to positive")?)
-        } else {
-            encoder.encode_negative(
-                self.checked_add(1)
-                    .and_then(|val| val.checked_neg())
-                    .and_then(|val| u64::try_from(val).ok())
-                    .context("convert i64 to negative")?,
-            )
-        }
-    }
-}
-
-impl CborDeserialize for i64 {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
-    where
-        Self: Sized,
-    {
-        match decoder.peek_data_item_type()? {
-            DataItemType::Positive => {
-                Ok(i64::try_from(decoder.decode_positive()?).context("convert positive to i64")?)
+macro_rules! serialize_deserialize_unsigned_integer {
+    ($t:ty) => {
+        impl CborSerialize for $t {
+            fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+                encoder.encode_positive((*self).try_into().context(concat!("convert from usize to ", stringify!($t)))?)
             }
-            DataItemType::Negative => Ok(i64::try_from(decoder.decode_negative()?)
-                .ok()
-                .and_then(|val| val.checked_add(1))
-                .and_then(|val| val.checked_neg())
-                .context("convert negative to i64")?),
-            data_item_type => Err(anyhow!(
-                "expected data item {:?} or {:?} as for i64, was {:?}",
-                DataItemType::Positive,
-                DataItemType::Negative,
-                data_item_type
-            )
-            .into()),
         }
-    }
+
+        impl CborDeserialize for $t {
+            fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+            where
+                Self: Sized,
+            {
+                Ok(decoder
+                    .decode_positive()?
+                    .try_into()
+                    .context(concat!("convert ", stringify!($t), " to usize"))?)
+            }
+        }
+
+    };
 }
 
-impl CborSerialize for usize {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
-        encoder.encode_positive((*self).try_into().context("convert from usize to u64")?)
-    }
+serialize_deserialize_unsigned_integer!(u8);
+serialize_deserialize_unsigned_integer!(u16);
+serialize_deserialize_unsigned_integer!(u32);
+serialize_deserialize_unsigned_integer!(u64);
+serialize_deserialize_unsigned_integer!(usize);
+
+
+macro_rules! serialize_deserialize_signed_integer {
+    ($t:ty) => {
+        impl CborSerialize for $t {
+            fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+                if *self >= 0 {
+                    encoder.encode_positive(u64::try_from(*self).context(concat!("convert ", stringify!($t), " to positive"))?)
+                } else {
+                    encoder.encode_negative(
+                        self.checked_add(1)
+                            .and_then(|val| val.checked_neg())
+                            .and_then(|val| u64::try_from(val).ok())
+                            .context(concat!("convert ", stringify!($t), " to negative"))?,
+                    )
+                }
+            }
+        }
+
+        impl CborDeserialize for $t {
+            fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+            where
+                Self: Sized,
+            {
+                match decoder.peek_data_item_type()? {
+                    DataItemType::Positive => {
+                        Ok(<$t>::try_from(decoder.decode_positive()?).context(concat!("convert positive to ", stringify!($t)))?)
+                    }
+                    DataItemType::Negative => Ok(<$t>::try_from(decoder.decode_negative()?)
+                        .ok()
+                        .and_then(|val| val.checked_add(1))
+                        .and_then(|val| val.checked_neg())
+                        .context(concat!("convert negative to ", stringify!($t)))?),
+                    data_item_type => Err(anyhow!(
+                        "expected data item {:?} or {:?} as for {}, was {:?}",
+                        DataItemType::Positive,
+                        DataItemType::Negative,
+                        stringify!($t),
+                        data_item_type
+                    )
+                    .into()),
+                }
+            }
+        }
+    };
 }
 
-impl CborDeserialize for usize {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(decoder
-            .decode_positive()?
-            .try_into()
-            .context("convert u64 to usize")?)
-    }
-}
+serialize_deserialize_signed_integer!(i8);
+serialize_deserialize_signed_integer!(i16);
+serialize_deserialize_signed_integer!(i32);
+serialize_deserialize_signed_integer!(i64);
+serialize_deserialize_signed_integer!(isize);
 
 impl CborSerialize for str {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
