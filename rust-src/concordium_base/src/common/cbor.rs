@@ -1,5 +1,5 @@
 //! # CBOR serialization
-//! This module implementations generic CBOR serialization based on data models defined via Rust types. 
+//! This module implementations generic CBOR serialization based on data models defined via Rust types.
 //! Types should implement [`CborSerialize`] and [`CborDeserialize`]
 //! to define the serialization structure. The interface to implement the serialization goes through
 //! [`CborEncoder`] and [`CborDecoder`] that implements the CBOR encoding format. The module implements
@@ -21,11 +21,11 @@
 //! #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
 //! struct TestTuple(u64, String);
 //! ```
-//! Structs with named fields are serialized as CBOR maps using camel cased field names as keys (of data item type text) 
+//! Structs with named fields are serialized as CBOR maps using camel cased field names as keys (of data item type text)
 //! and tuples are serialized as CBOR arrays.
 //!
 //! ### Supported attributes
-//! 
+//!
 //! #### `cbor(key)`
 //! For CBOR maps, set map key explicit to positive (integer) data item:
 //! ```
@@ -38,7 +38,7 @@
 //! }
 //! ```
 //! In this example, the field is encoded with a key that is the positive (integer) data item `1`.
-//! 
+//!
 //! #### `cbor(tag)`
 //! Adds tag <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items> to encoded
 //! data item:
@@ -52,7 +52,7 @@
 //! }
 //! ```
 //! In this example the tag 39999 is prefixed the encoding of `TestStruct` in the CBOR.
-//! 
+//!
 //! #### `cbor(transparent)`
 //! Serializes the type as the (single) field in the struct.
 //! ```
@@ -61,8 +61,8 @@
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     field1: u64,
-//! } 
-//! 
+//! }
+//!
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(transparent)]
 //! struct TestStructWrapper(TestStruct);
@@ -72,8 +72,8 @@
 use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Decoder, Encoder, Header};
-use std::fmt::{Debug, Display};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use std::fmt::{Debug, Display};
 
 const DECIMAL_FRACTION_TAG: u64 = 4;
 
@@ -698,7 +698,6 @@ impl CborDeserialize for MapKey {
     }
 }
 
-
 /// Decimal fraction consisting of exponent `e` and mantissa `m`, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-decimal-fractions-and-bigfl>.
 /// It represents the value `m * 10^e`.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -845,6 +844,24 @@ mod test {
     }
 
     #[test]
+    fn test_map_derived_camel_case() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            fieldName: u64,
+        }
+
+        let value = TestStruct { fieldName: 3 };
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(
+            hex::encode(&cbor),
+            "a1696669656c644e616d6503"
+        );
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
     fn test_map_derived_explicit_keys() {
         const KEY: u64 = 2;
 
@@ -921,7 +938,6 @@ mod test {
         let err = cbor_decode::<TestStruct2>(&cbor).unwrap_err().to_string();
         assert!(err.contains("unknown map key"), "err: {}", err);
     }
-    
 
     #[test]
     fn test_array_derived() {
@@ -935,7 +951,6 @@ mod test {
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
-    
 
     #[test]
     fn test_derived_transparent_tuple() {

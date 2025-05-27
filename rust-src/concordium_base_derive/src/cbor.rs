@@ -1,9 +1,8 @@
-
-
+use convert_case::{Case, Casing};
 use crate::get_crate_root;
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Data, DataStruct, Expr, Fields, FieldsNamed, LitStr, Member};
+use syn::{Data, DataStruct, Expr, Fields, LitStr, Member};
 
 use darling::{FromDeriveInput, FromField};
 use syn::spanned::Spanned;
@@ -56,7 +55,7 @@ impl CborFields {
                 } else {
                     match &field.member {
                         Member::Named(ident) => {
-                            let lit = LitStr::new(&ident.to_string(), field.member.span());
+                            let lit = LitStr::new(&ident.to_string().to_case(Case::Camel), field.member.span());
                             quote!(#cbor_module::MapKeyRef::Text(#lit))
                         }
                         Member::Unnamed(index) => {
