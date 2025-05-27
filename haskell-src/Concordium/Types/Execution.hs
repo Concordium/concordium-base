@@ -1440,6 +1440,11 @@ data Event' (supplemented :: Bool)
           -- | The amount burned.
           etbAmount :: !TokenAmount
         }
+    | -- | A protocol-level token was created.
+      TokenCreated
+        { -- | The update payload used to create the token.
+          etcPayload :: !CreatePLT
+        }
     deriving (Show, Generic, Eq)
 
 -- | A contract event, without supplemental data. This is what is stored in the database and
@@ -1502,6 +1507,7 @@ addInitializeParameter _ (TokenModuleEvent{..}) = pure TokenModuleEvent{..}
 addInitializeParameter _ TokenTransfer{..} = pure TokenTransfer{..}
 addInitializeParameter _ TokenMint{..} = pure TokenMint{..}
 addInitializeParameter _ TokenBurn{..} = pure TokenBurn{..}
+addInitializeParameter _ TokenCreated{..} = pure TokenCreated{..}
 
 putEvent :: S.Putter Event
 putEvent = \case
@@ -1715,6 +1721,9 @@ putEvent = \case
             <> S.put etbTokenId
             <> S.put etbTarget
             <> S.put etbAmount
+    TokenCreated{..} ->
+        S.putWord8 42
+            <> S.put etcPayload
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1930,6 +1939,9 @@ getEvent spv =
             etbTarget <- S.get
             etbAmount <- S.get
             return TokenBurn{..}
+        42 | supportPlt -> do
+            etcPayload <- S.get
+            return TokenCreated{..}
         n -> fail $ "Unrecognized event tag: " ++ show n
   where
     supportMemo = supportsMemo spv
@@ -2232,6 +2244,11 @@ instance AE.ToJSON (Event' supplemented) where
                   "target" .= etbTarget,
                   "amount" .= etbAmount
                 ]
+        TokenCreated{..} ->
+            AE.object
+                [ "tag" .= AE.String "TokenCreated",
+                  "payload" .= etcPayload
+                ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
     parseJSON = AE.withObject "Event" $ \obj -> do
@@ -2444,6 +2461,9 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 etbTarget <- obj .: "target"
                 etbAmount <- obj .: "amount"
                 return TokenBurn{..}
+            "TokenCreated" -> do
+                etcPayload <- obj .: "payload"
+                return TokenCreated{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with

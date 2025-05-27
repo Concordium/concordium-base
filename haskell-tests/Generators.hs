@@ -844,7 +844,8 @@ genEvent spv =
                 <*> genTokenAmount
                 <*> liftArbitrary genMemo,
               TokenMint <$> genTokenId <*> genAccountAddress <*> genTokenAmount,
-              TokenBurn <$> genTokenId <*> genAccountAddress <*> genTokenAmount
+              TokenBurn <$> genTokenId <*> genAccountAddress <*> genTokenAmount,
+              TokenCreated <$> genCreatePLT
             ]
         | otherwise = []
 
