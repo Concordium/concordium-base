@@ -1,3 +1,74 @@
+//! # CBOR serialization
+//! This module implementations generic CBOR serialization based on data models defined via Rust types. 
+//! Types should implement [`CborSerialize`] and [`CborDeserialize`]
+//! to define the serialization structure. The interface to implement the serialization goes through
+//! [`CborEncoder`] and [`CborDecoder`] that implements the CBOR encoding format. The module implements
+//! serialization of primitive Rust types like integers and strings.
+//!
+//! ## Deriving `CborSerialize` and `CborDeserialize`
+//!
+//! [`CborSerialize`] and [`CborDeserialize`] can be derived on structs with named
+//! fields and tuples:
+//! ```
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//!
+//! #[derive(CborSerialize, CborDeserialize)]
+//! struct TestStruct {
+//!     field1: u64,
+//!     field2: String,
+//! }
+//!
+//! #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+//! struct TestTuple(u64, String);
+//! ```
+//! Structs with named fields are serialized as CBOR maps using camel cased field names as keys (of data item type text) 
+//! and tuples are serialized as CBOR arrays.
+//!
+//! ### Supported attributes
+//! 
+//! #### `cbor(key)`
+//! For CBOR maps, set map key explicit to positive (integer) data item:
+//! ```
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//!  
+//! #[derive(CborSerialize, CborDeserialize)]
+//! struct TestStruct {
+//!     #[cbor(key = 1)]
+//!     field1: u64,
+//! }
+//! ```
+//! In this example, the field is encoded with a key that is the positive (integer) data item `1`.
+//! 
+//! #### `cbor(tag)`
+//! Adds tag <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items> to encoded
+//! data item:
+//! ```
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//!
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(tag = 39999)]
+//! struct TestStruct {
+//!     field1: u64,
+//! }
+//! ```
+//! In this example the tag 39999 is prefixed the encoding of `TestStruct` in the CBOR.
+//! 
+//! #### `cbor(transparent)`
+//! Serializes the type as the (single) field in the struct.
+//! ```
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//!
+//! #[derive(CborSerialize, CborDeserialize)]
+//! struct TestStruct {
+//!     field1: u64,
+//! } 
+//! 
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(transparent)]
+//! struct TestStructWrapper(TestStruct);
+//! ```
+//! In this example `TestStructWrapper` is serialized as `TestStruct`.
+
 use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Decoder, Encoder, Header};
