@@ -2079,6 +2079,7 @@ pub mod cost {
 /// for transaction.
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
+    use crate::protocol_level_tokens::{RawCbor, TokenAmount, TokenId};
     use super::*;
 
     /// A transaction that is prepared to be signed.
@@ -2196,7 +2197,7 @@ pub mod construct {
         }
     }
 
-    /// Construct a transfer transaction.
+    /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2221,7 +2222,7 @@ pub mod construct {
         )
     }
 
-    /// Construct a transfer transaction with a memo.
+    /// Construct a native coin (CCD) transfer transaction with a memo.
     pub fn transfer_with_memo(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2235,6 +2236,44 @@ pub mod construct {
             to_address: receiver,
             memo,
             amount,
+        };
+        make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add {
+                num_sigs,
+                energy: cost::SIMPLE_TRANSFER,
+            },
+            payload,
+        )
+    }
+
+    /// Construct a tokens transfer transaction.
+    pub fn transfer_tokens(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        receiver: AccountAddress,
+        token_id: TokenId,
+        amount: TokenAmount,
+    ) -> PreAccountTransaction {
+        // let operations = ;
+        todo!() // todo ar
+    }
+
+    /// Construct a token transaction consisting of the operations encoded in the given CBOR.
+    pub fn token_operations(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: RawCbor,
+    ) -> PreAccountTransaction {
+        let payload = Payload::TokenHolder {
+            payload: TokenOperationsPayload { token_id, operations},
         };
         make_transaction(
             sender,
@@ -2842,9 +2881,10 @@ pub mod construct {
 /// These wrappers handle encoding, setting energy costs when those are fixed
 /// for transaction.
 pub mod send {
+    use crate::protocol_level_tokens::{TokenAmount, TokenId};
     use super::*;
 
-    /// Construct a transfer transaction.
+    /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2856,7 +2896,7 @@ pub mod send {
         construct::transfer(signer.num_keys(), sender, nonce, expiry, receiver, amount).sign(signer)
     }
 
-    /// Construct a transfer transaction with a memo.
+    /// Construct a native coin (CCD) transfer transaction with a memo.
     pub fn transfer_with_memo(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2876,6 +2916,19 @@ pub mod send {
             memo,
         )
         .sign(signer)
+    }
+
+    /// Construct a tokens transfer transaction.
+    pub fn transfer_tokens(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        receiver: AccountAddress,
+        token_id: TokenId,
+        amount: TokenAmount,
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::transfer_tokens(signer.num_keys(), sender, nonce, expiry, receiver, token_id, amount).sign(signer)
     }
 
     /// Make an encrypted transfer. The payload can be constructed using

@@ -170,7 +170,7 @@ pub trait CborSerialize {
 impl<T: CborSerialize> CborSerialize for Option<T> {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
         match self {
-            None => encoder.encode_null(),
+            None => encoder.encode_simple(simple::NULL),
             Some(value) => value.serialize(encoder),
         }
     }
@@ -201,6 +201,7 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
     where
         Self: Sized,
     {
+        // todo ar
         Ok(Some(T::deserialize(decoder)?))
     }
 
@@ -236,9 +237,8 @@ pub trait CborEncoder {
     /// Encodes text data item
     fn encode_text(&mut self, text: &str) -> CborResult<()>;
 
-    /// Encodes simple value null, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
-    fn encode_null(&mut self) -> CborResult<()>;
-
+    /// Encodes simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
+    fn encode_simple(&mut self, simple: u8) -> CborResult<()>;
 }
 
 impl<W: Write> CborEncoder for Encoder<W>
@@ -273,8 +273,8 @@ where
         Ok(self.text(text, None)?)
     }
 
-    fn encode_null(&mut self) -> CborResult<()> {
-        Ok(self.push(Header::Simple(simple::NULL))?)
+    fn encode_simple(&mut self, value: u8) -> CborResult<()> {
+        Ok(self.push(Header::Simple(value))?)
     }
 }
 
@@ -319,7 +319,7 @@ pub trait CborDecoder {
     ///
     /// Works only for definite length bytes.
     fn decode_bytes(&mut self) -> CborResult<Vec<u8>>;
-    
+
     /// Decode bytes into given `destination`. The length of the bytes data item
     /// must match the `destination` length, else an error is returned.
     ///
@@ -330,6 +330,9 @@ pub trait CborDecoder {
     ///
     /// Works only for definite length text.
     fn decode_str(&mut self) -> CborResult<Vec<u8>>;
+
+    /// Decode simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
+    fn decode_simple(&mut self) -> CborResult<u8>;
 
     /// Peeks type of next data item to be decoded.
     fn peek_data_item_type(&mut self) -> CborResult<DataItemType>;
@@ -423,7 +426,7 @@ where
         decode_definite_length_bytes(self, &mut bytes)?;
         Ok(bytes)
     }
-    
+
     fn decode_str(&mut self) -> CborResult<Vec<u8>> {
         let size = match self.pull()? {
             Header::Text(Some(size)) => size,
@@ -438,6 +441,16 @@ where
         let mut bytes = vec![0; size];
         decode_definite_length_text(self, &mut bytes)?;
         Ok(bytes)
+    }
+
+    fn decode_simple(&mut self) -> CborResult<u8> {
+        match self.pull()? {
+            Header::Simple(value) => Ok(value),
+            header => Err(CborError::expected_data_item(
+                DataItemType::Simple,
+                DataItemType::from_header(&header),
+            )),
+        }
     }
 
     fn peek_data_item_type(&mut self) -> CborResult<DataItemType> {
@@ -550,6 +563,29 @@ impl CborDeserialize for Vec<u8> {
 }
 
 // todo ar macro rules
+
+impl CborSerialize for bool {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+        encoder.encode_simple(if *self { simple::TRUE } else { simple::FALSE })
+    }
+}
+
+impl CborDeserialize for bool {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    where
+        Self: Sized,
+    {
+        let value = decoder.decode_simple()?;
+        match value {
+            simple::TRUE => Ok(true),
+            simple::FALSE => Ok(false),
+            value => Err(CborError::invalid_data(format!(
+                "simple value not a valid bool: {}",
+                value
+            ))),
+        }
+    }
+}
 
 impl CborSerialize for u8 {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
@@ -846,8 +882,23 @@ mod test {
     }
 
     #[test]
+    fn test_bool() {
+        let value = false;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "f4");
+        let value_decoded: bool = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = true;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "f5");
+        let value_decoded: bool = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
     fn test_bytes() {
-        let bytes :Vec<u8>= vec![1, 2, 3, 4, 5];
+        let bytes: Vec<u8> = vec![1, 2, 3, 4, 5];
 
         let cbor = cbor_encode(&bytes).unwrap();
         assert_eq!(hex::encode(&cbor), "450102030405");
@@ -1027,6 +1078,21 @@ mod test {
         assert_eq!(hex::encode(&cbor), "82036461626364");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_array_derived_wrong_length() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct(u64, String);
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct2(u64);
+
+        let value = TestStruct(3, "abcd".to_string());
+
+        let cbor = cbor_encode(&value).unwrap();
+        let err = cbor_decode::<TestStruct2>(&cbor).unwrap_err().to_string();
+        assert!(err.contains("expected array length 1"), "err: {}", err);
     }
 
     #[test]
