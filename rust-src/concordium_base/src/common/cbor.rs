@@ -73,7 +73,6 @@ use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Decoder, Encoder, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-use libc::mach_msg_type_number_t;
 use std::fmt::{Debug, Display};
 
 const DECIMAL_FRACTION_TAG: u64 = 4;

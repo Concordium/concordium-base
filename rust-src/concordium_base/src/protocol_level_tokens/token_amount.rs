@@ -3,9 +3,6 @@ use crate::common::cbor::{
 };
 use anyhow::Context;
 
-
-const DECIMAL_FRACTION_TAG: u64 = 4;
-
 /// Protocol level token (PLT) amount representation.
 #[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
