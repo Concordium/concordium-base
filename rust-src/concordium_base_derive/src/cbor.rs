@@ -1,5 +1,5 @@
-use convert_case::{Case, Casing};
 use crate::get_crate_root;
+use convert_case::{Case, Casing};
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Data, DataStruct, Expr, Fields, LitStr, Member};
@@ -11,26 +11,26 @@ use syn::spanned::Spanned;
 #[darling(attributes(cbor))]
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
-    /// name in camelCase is used as a string literal for structs with named fields, and the tuple index
-    /// is used for struct tuples.
+    /// name in camelCase is used as a string literal for structs with named
+    /// fields, and the tuple index is used for struct tuples.
     key: Option<Expr>,
 }
 
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(cbor))]
 pub struct CborOpts {
-    /// For structs with a single field, if `true` the struct is serialized as the value
-    /// of the single field.
+    /// For structs with a single field, if `true` the struct is serialized as
+    /// the value of the single field.
     #[darling(default)]
     transparent: bool,
     /// Add CBOR tag to data item <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items>.
-    tag: Option<Expr>,
+    tag:         Option<Expr>,
 }
 
 #[derive(Debug)]
 struct CborField {
     member: Member,
-    opts: CborFieldOpts,
+    opts:   CborFieldOpts,
 }
 
 #[derive(Debug)]
@@ -38,9 +38,7 @@ struct CborFields(Vec<CborField>);
 
 impl CborFields {
     /// Get fields as struct `Member`s
-    fn members(&self) -> Vec<Member> {
-        self.0.iter().map(|field| field.member.clone()).collect()
-    }
+    fn members(&self) -> Vec<Member> { self.0.iter().map(|field| field.member.clone()).collect() }
 
     /// Get CBOR map keys for the fields
     fn cbor_map_keys(&self) -> syn::Result<Vec<TokenStream>> {
@@ -55,7 +53,10 @@ impl CborFields {
                 } else {
                     match &field.member {
                         Member::Named(ident) => {
-                            let lit = LitStr::new(&ident.to_string().to_case(Case::Camel), field.member.span());
+                            let lit = LitStr::new(
+                                &ident.to_string().to_case(Case::Camel),
+                                field.member.span(),
+                            );
                             quote!(#cbor_module::MapKeyRef::Text(#lit))
                         }
                         Member::Unnamed(index) => {

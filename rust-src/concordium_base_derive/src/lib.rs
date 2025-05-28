@@ -412,7 +412,8 @@ pub fn cbor_serialize_derive(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive [`CborDeserialize`] on the type. See [`concordium_base::common::cbor`]
+/// Derive [`CborDeserialize`] on the type. See
+/// [`concordium_base::common::cbor`]
 #[proc_macro_derive(CborDeserialize, attributes(cbor))]
 pub fn cbor_deserialize_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input);
