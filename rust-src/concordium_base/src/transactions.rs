@@ -2279,7 +2279,7 @@ pub mod construct {
         receiver: AccountAddress,
         token_id: TokenId,
         amount: TokenAmount,
-    ) -> PreAccountTransaction {
+    ) -> CborResult<PreAccountTransaction> {
         transfer_tokens_impl(
             num_sigs, sender, nonce, expiry, receiver, token_id, amount, None,
         )
@@ -2295,7 +2295,7 @@ pub mod construct {
         token_id: TokenId,
         amount: TokenAmount,
         memo: CborMemo,
-    ) -> PreAccountTransaction {
+    ) -> CborResult<PreAccountTransaction> {
         transfer_tokens_impl(
             num_sigs,
             sender,
@@ -2318,7 +2318,7 @@ pub mod construct {
         token_id: TokenId,
         amount: TokenAmount,
         memo: Option<CborMemo>,
-    ) -> PreAccountTransaction {
+    ) -> CborResult<PreAccountTransaction> {
         let operation = TokenOperation::Transfer(TokenTransfer {
             amount,
             recipient: TokenHolder::HolderAccount(HolderAccount {
@@ -2327,13 +2327,17 @@ pub mod construct {
             }),
             memo,
         });
-        let operations_cbor = RawCbor::from(
-            cbor::cbor_encode(&TokenOperations {
-                operations: vec![operation],
-            })
-            .unwrap(),
-        ); // todo ar
-        token_operations(num_sigs, sender, nonce, expiry, token_id, operations_cbor)
+        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
+            operations: vec![operation],
+        })?);
+        Ok(token_operations(
+            num_sigs,
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations_cbor,
+        ))
     }
 
     /// Construct a token transaction consisting of the operations encoded in
@@ -3004,8 +3008,8 @@ pub mod send {
         receiver: AccountAddress,
         token_id: TokenId,
         amount: TokenAmount,
-    ) -> AccountTransaction<EncodedPayload> {
-        construct::transfer_tokens(
+    ) -> CborResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::transfer_tokens(
             signer.num_keys(),
             sender,
             nonce,
@@ -3013,8 +3017,8 @@ pub mod send {
             receiver,
             token_id,
             amount,
-        )
-        .sign(signer)
+        )?
+        .sign(signer))
     }
 
     /// Construct a tokens transfer transaction.
@@ -3027,8 +3031,8 @@ pub mod send {
         token_id: TokenId,
         amount: TokenAmount,
         memo: CborMemo,
-    ) -> AccountTransaction<EncodedPayload> {
-        construct::transfer_tokens_with_memo(
+    ) -> CborResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::transfer_tokens_with_memo(
             signer.num_keys(),
             sender,
             nonce,
@@ -3037,8 +3041,8 @@ pub mod send {
             token_id,
             amount,
             memo,
-        )
-        .sign(signer)
+        )?
+        .sign(signer))
     }
 
     /// Construct a token transaction consisting of the operations encoded in
