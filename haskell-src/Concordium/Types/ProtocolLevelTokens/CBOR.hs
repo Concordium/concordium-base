@@ -14,9 +14,9 @@ import qualified Codec.CBOR.Write as CBOR
 import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Short as BSS
-import qualified Data.ByteString.Base16 as Base16
 import Data.Foldable
 import Data.Function
 import qualified Data.Map.Lazy as Map
@@ -29,14 +29,14 @@ import qualified Data.Text.Lazy as LazyText
 import Data.Word
 import Lens.Micro.Platform
 
+import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.ID.Types
 import Concordium.Types.Memo
 import Concordium.Types.Tokens
-import qualified Data.FixedByteString as FBS
-import qualified Concordium.Crypto.SHA256 as SHA256
 import qualified Data.Aeson.Key as AE.Key
-import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Aeson.KeyMap as KeyMap
+import qualified Data.FixedByteString as FBS
+import qualified Data.Text.Encoding as TextEncoding
 
 -- * Decoder helpers
 
@@ -216,7 +216,6 @@ encodeSequence encodeItem s =
     encodeListLen (fromIntegral $ Seq.length s)
         <> foldMap encodeItem s
 
-
 convertSha256Hash :: CBOR.Term -> Maybe SHA256.Hash
 convertSha256Hash (CBOR.TBytes bs)
     | BS.length bs == SHA256.digestSize = Just $ SHA256.Hash (FBS.fromByteString bs)
@@ -231,20 +230,19 @@ encodeSha256Hash (SHA256.Hash h) =
 cborTermToHex :: CBOR.Term -> Text
 cborTermToHex term =
     let bs = CBOR.toStrictByteString $ CBOR.encodeTerm term
-     in TextEncoding.decodeUtf8 (Base16.encode bs)
+    in  TextEncoding.decodeUtf8 (Base16.encode bs)
 
 -- | Convert a hex-encoded string to a CBOR.Term.
 hexToCborTerm :: Text -> Either String CBOR.Term
 hexToCborTerm hexText = do
     bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
     decodeTerm bs
-  where 
-    decodeTerm bs = 
+  where
+    decodeTerm bs =
         case CBOR.deserialiseFromBytes CBOR.decodeTerm (LBS.fromStrict bs) of
             Left err -> Left $ "Failed to decode CBOR term: " ++ show err
             Right ("", term) -> Right term
             Right (remaining, _) -> Left $ "Extra bytes after decoding CBOR term: " ++ show (LBS.length remaining)
-
 
 -- | A token metadata URL and an optional checksum. The checksum is a SHA256 hash of the metadata at the location of the URL.
 data TokenMetadataUrl = TokenMetadataUrl
@@ -260,12 +258,12 @@ data TokenMetadataUrl = TokenMetadataUrl
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenMetadataUrl where
-    toJSON TokenMetadataUrl {..} =
+    toJSON TokenMetadataUrl{..} =
         AE.object $
             [ "url" AE..= tmUrl,
               "checksumSha256" AE..= tmChecksumSha256
             ]
-            ++ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList tmAdditional)
+                ++ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList tmAdditional)
 
 instance AE.FromJSON TokenMetadataUrl where
     parseJSON = AE.withObject "TokenMetadataUrl" $ \v -> do
@@ -277,7 +275,7 @@ instance AE.FromJSON TokenMetadataUrl where
         let additionalKeys = filter (`notElem` standardKeys) (KeyMap.keys v)
         tmAdditional <- Map.fromList <$> traverse (parseAdditional v) additionalKeys
 
-        return TokenMetadataUrl {..}
+        return TokenMetadataUrl{..}
       where
         -- Helper function to parse the additional fields into the tmAdditional Map
         parseAdditional v key = do
@@ -286,7 +284,6 @@ instance AE.FromJSON TokenMetadataUrl where
                 Left err -> fail $ "Error decoding CBOR term for key " ++ AE.Key.toString key ++ ": " ++ err
                 Right term -> return term
             return (AE.Key.toText key, cborTerm)
-
 
 -- | Decode a CBOR-encoded 'TokenMetadataUrl'.
 decodeTokenMetadataUrl :: Decoder s TokenMetadataUrl
@@ -313,7 +310,7 @@ decodeTokenMetadataUrl = decodeMap decodeVal build Map.empty
 
 -- | Encode a 'TokenMetadataUrl' as CBOR.
 encodeTokenMetadataUrl :: TokenMetadataUrl -> Encoding
-encodeTokenMetadataUrl TokenMetadataUrl {..} =
+encodeTokenMetadataUrl TokenMetadataUrl{..} =
     encodeMapDeterministic $
         additionalMap
             & k "url" ?~ encodeString tmUrl
