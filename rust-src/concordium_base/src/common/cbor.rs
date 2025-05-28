@@ -13,7 +13,7 @@
 //! named fields and tuples:
 //! ```
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//!
+//! #
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     field1: u64,
@@ -33,7 +33,7 @@
 //! For CBOR maps, set map key explicit to positive (integer) data item:
 //! ```
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//!
+//! #
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     #[cbor(key = 1)]
@@ -48,7 +48,7 @@
 //! data item:
 //! ```
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//!
+//! #
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(tag = 39999)]
 //! struct TestStruct {
@@ -62,7 +62,7 @@
 //! Serializes the type as the (single) field in the struct.
 //! ```
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//!
+//! #
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     field1: u64,
@@ -92,6 +92,7 @@ pub enum UnknownMapKeys {
     Fail,
 }
 
+/// Options applied when serializing and deserializing
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
 pub struct SerializationOptions {
     pub unknown_map_keys: UnknownMapKeys,
@@ -141,6 +142,7 @@ impl CborSerializationError {
     }
 }
 
+/// Result of serialization or deserialization
 pub type CborSerializationResult<T> = Result<T, CborSerializationError>;
 
 impl<T> From<ciborium_ll::Error<T>> for CborSerializationError
@@ -187,6 +189,7 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
     Ok(value)
 }
 
+/// CBOR decoder implementation
 pub struct Decoder<R: Read> {
     inner:   ciborium_ll::Decoder<R>,
     options: SerializationOptions,
@@ -200,6 +203,7 @@ impl<R: Read> Decoder<R> {
     }
 }
 
+/// CBOR encoder implementation
 pub struct Encoder<W: Write> {
     inner: ciborium_ll::Encoder<W>,
 }
@@ -810,6 +814,7 @@ impl CborDeserialize for String {
     }
 }
 
+/// CBOR data item type. Corresponds roughly to CBOR major types.
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub enum DataItemType {
     Positive,

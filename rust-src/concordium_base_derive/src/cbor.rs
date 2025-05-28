@@ -104,6 +104,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
     let field_idents = cbor_fields.members();
 
     if opts.transparent {
+        #[allow(clippy::get_first)]
         let (Some(field_ident), None) = (field_idents.get(0), field_idents.get(1)) else {
             return Err(syn::Error::new(
                 Span::call_site(),
@@ -244,6 +245,7 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
     let field_idents = cbor_fields.members();
 
     if opts.transparent {
+        #[allow(clippy::get_first)]
         let (Some(field_ident), None) = (field_idents.get(0), field_idents.get(1)) else {
             return Err(syn::Error::new(
                 Span::call_site(),
