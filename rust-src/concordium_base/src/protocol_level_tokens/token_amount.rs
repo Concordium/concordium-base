@@ -1,5 +1,6 @@
 use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize, DecimalFraction,
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
+    DecimalFraction,
 };
 use anyhow::Context;
 
@@ -7,10 +8,10 @@ use anyhow::Context;
 #[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
 pub struct TokenAmount {
-    /// The number of decimals in the token amount.
-    decimals: u8,
     /// The amount of tokens without decimal places.
     value:    u64,
+    /// The number of decimals in the token amount.
+    decimals: u8,
 }
 
 impl CborSerialize for TokenAmount {
