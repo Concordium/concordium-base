@@ -75,8 +75,8 @@ impl std::fmt::Display for TokenAmount {
             self.value.fmt(f)
         } else {
             let mut value = format!(
-                "{value:0.*}",
-                self.decimals as usize + 1,
+                "{value:0width$}",
+                width = self.decimals as usize + 1,
                 value = self.value
             );
             value.insert(value.len() - self.decimals() as usize, '.');
@@ -229,7 +229,13 @@ mod test {
             value:    123456,
             decimals: 3,
         };
-        assert_eq!(amount.to_string().as_str(), "123.456")
+        assert_eq!(amount.to_string().as_str(), "123.456");
+
+        let amount = TokenAmount {
+            value:    10,
+            decimals: 5,
+        };
+        assert_eq!(amount.to_string().as_str(), "0.00010");
     }
 
     #[test]
