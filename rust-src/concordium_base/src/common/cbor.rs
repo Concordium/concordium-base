@@ -74,7 +74,7 @@
 //! ```
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
 
-use crate::common::Serialize;
+
 use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Header};
@@ -1101,10 +1101,10 @@ mod test {
     fn test_map_derived_camel_case() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
-            fieldName: u64,
+            field_name: u64,
         }
 
-        let value = TestStruct { fieldName: 3 };
+        let value = TestStruct { field_name: 3 };
 
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "a1696669656c644e616d6503");
@@ -1256,7 +1256,7 @@ mod test {
         #[cbor(transparent)]
         struct TestStructWrapper {
             field1: TestStruct,
-        };
+        }
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {

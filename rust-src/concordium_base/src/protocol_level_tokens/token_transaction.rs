@@ -1,7 +1,11 @@
 use crate::{
-    common::cbor::{
-        CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult, CborSerialize,
-        DataItemType,
+    common::{
+        cbor,
+        cbor::{
+            CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
+            CborSerializationResult, CborSerialize, DataItemType
+            ,
+        },
     },
     protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
@@ -21,6 +25,12 @@ pub struct TokenOperationsPayload {
     pub operations: RawCbor,
 }
 
+impl TokenOperationsPayload {
+    pub fn deserialize_operations(&self) -> CborSerializationResult<TokenOperations> {
+        TokenOperations::try_from_cbor(&self.operations)
+    }
+}
+
 #[derive(
     Debug,
     Clone,
@@ -35,6 +45,16 @@ pub struct TokenOperationsPayload {
 #[cbor(transparent)]
 pub struct TokenOperations {
     pub operations: Vec<TokenOperation>,
+}
+
+impl TokenOperations {
+    pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
+        cbor::cbor_decode(cbor.as_ref())
+    }
+
+    pub fn to_cbor(&self) -> CborSerializationResult<RawCbor> {
+        Ok(RawCbor::from(cbor::cbor_encode(&self)?))
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -59,9 +79,9 @@ impl CborSerialize for TokenOperation {
 
                 cbor.serialize(encoder)
             }
-            TokenOperation::Unknown => {
-                Err(CborSerializationError::invalid_data("cannot serialize unknown variant"))
-            }
+            TokenOperation::Unknown => Err(CborSerializationError::invalid_data(
+                "cannot serialize unknown variant",
+            )),
         }
     }
 }
@@ -146,7 +166,7 @@ pub mod test {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{token_holder::test::ADDRESS, HolderAccount},
+        protocol_level_tokens::{token_holder::test_fixtures::ADDRESS, HolderAccount},
     };
 
     #[test]

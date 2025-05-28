@@ -1,11 +1,11 @@
 use crate::{
     common::{
         cbor,
-        cbor::{Bytes, CborEncoder, CborSerializationResult, SerializationOptions, UnknownMapKeys},
+        cbor::{Bytes,  CborSerializationResult, SerializationOptions, UnknownMapKeys},
     },
     protocol_level_tokens::RawCbor,
 };
-use anyhow::Context;
+
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// Protocol level token (PLT) module state
@@ -40,6 +40,10 @@ impl TokenModuleState {
             cbor.as_ref(),
             SerializationOptions::default().unknown_map_keys(UnknownMapKeys::Ignore),
         )
+    }
+
+    pub fn to_cbor(&self) -> CborSerializationResult<RawCbor> {
+        Ok(RawCbor::from(cbor::cbor_encode(&self)?))
     }
 }
 
