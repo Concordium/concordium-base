@@ -1,4 +1,10 @@
-use crate::common::cbor::{Bytes, CborEncoder};
+use crate::{
+    common::{
+        cbor,
+        cbor::{Bytes, CborEncoder, CborSerializationResult, SerializationOptions, UnknownMapKeys},
+    },
+    protocol_level_tokens::RawCbor,
+};
 use anyhow::Context;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
@@ -27,6 +33,15 @@ pub struct MetadataUrl {
     checksum_sha_256: Option<Bytes>,
 }
 
+impl TokenModuleState {
+    pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
+        cbor::cbor_decode_with_options(
+            cbor.as_ref(),
+            SerializationOptions::default().unknown_map_keys(UnknownMapKeys::Ignore),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -38,7 +53,7 @@ mod test {
             name:       "TK1".to_string(),
             metadata:   MetadataUrl {
                 url:              Some("https://tokenurl1".to_string()),
-                checksum_sha_256: Some(Bytes(vec![ 0x01; 32])),
+                checksum_sha_256: Some(Bytes(vec![0x01; 32])),
             },
             allow_list: Some(true),
             deny_list:  None,

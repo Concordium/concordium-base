@@ -1,6 +1,6 @@
 use crate::{
     common::cbor::{
-        CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize,
+        CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult, CborSerialize,
         DataItemType,
     },
     protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
@@ -45,7 +45,7 @@ pub enum TokenOperation {
 }
 
 impl CborSerialize for TokenOperation {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         #[derive(Debug, CborSerialize)]
         struct TokenOperationCbor<'a> {
             transfer: Option<&'a TokenTransfer>,
@@ -60,14 +60,14 @@ impl CborSerialize for TokenOperation {
                 cbor.serialize(encoder)
             }
             TokenOperation::Unknown => {
-                Err(CborError::invalid_data("cannot serialize unknown variant"))
+                Err(CborSerializationError::invalid_data("cannot serialize unknown variant"))
             }
         }
     }
 }
 
 impl CborDeserialize for TokenOperation {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         #[derive(Debug, CborDeserialize)]
@@ -116,7 +116,7 @@ pub enum CborMemo {
 }
 
 impl CborSerialize for CborMemo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         match self {
             Self::Raw(memo) => memo.serialize(encoder),
             Self::Cbor(memo) => {
@@ -128,7 +128,7 @@ impl CborSerialize for CborMemo {
 }
 
 impl CborDeserialize for CborMemo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(match decoder.peek_data_item_type()? {

@@ -1,5 +1,5 @@
 use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize,
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult, CborSerialize,
 };
 
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -20,7 +20,7 @@ pub enum TokenHolder {
 }
 
 impl CborSerialize for TokenHolder {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         match self {
             TokenHolder::HolderAccount(account) => {
                 account.serialize(encoder)?;
@@ -31,7 +31,7 @@ impl CborSerialize for TokenHolder {
 }
 
 impl CborDeserialize for TokenHolder {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self::HolderAccount(HolderAccount::deserialize(decoder)?))
@@ -61,13 +61,13 @@ pub struct HolderAccount {
 }
 
 impl CborSerialize for AccountAddress {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         self.0.serialize(encoder)
     }
 }
 
 impl CborDeserialize for AccountAddress {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self(CborDeserialize::deserialize(decoder)?))
@@ -89,7 +89,7 @@ struct CoinInfoCbor {
 }
 
 impl CborSerialize for CoinInfo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         let coin_info_code = match self {
             Self::CCD => CONCORDIUM_SLIP_0044_CODE,
         };
@@ -99,14 +99,14 @@ impl CborSerialize for CoinInfo {
 }
 
 impl CborDeserialize for CoinInfo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let cbor = CoinInfoCbor::deserialize(decoder)?;
         let coin_info = match cbor.coin_info_code {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
             coin_info_code => {
-                return Err(CborError::invalid_data(format_args!(
+                return Err(CborSerializationError::invalid_data(format_args!(
                     "coin info code must be {}, was {}",
                     CONCORDIUM_SLIP_0044_CODE, coin_info_code
                 )))

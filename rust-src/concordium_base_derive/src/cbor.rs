@@ -178,7 +178,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                         )*
                         key => {
                             match decoder.options().unknown_map_keys {
-                                #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborError::unknown_map_key(key)),
+                                #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborSerializationError::unknown_map_key(key)),
                                 #cbor_module::UnknownMapKeys::Ignore => decoder.skip_data_item()?,
                             }
 
@@ -189,7 +189,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                 #(
                     let #field_vars = match #field_vars {
                         None => match #cbor_module::CborDeserialize::null() {
-                            None => return Err(#cbor_module::CborError::map_value_missing(#field_map_keys)),
+                            None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
                             Some(null_value) => null_value,
                         },
                         Some(#field_vars) => #field_vars,
@@ -229,7 +229,7 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
     Ok(quote! {
         impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
-            fn deserialize<C: #cbor_module::CborDecoder>(decoder: &mut C) -> #cbor_module::CborResult<Self> {
+            fn deserialize<C: #cbor_module::CborDecoder>(decoder: &mut C) -> #cbor_module::CborSerializationResult<Self> {
                 #decode_tag
                 #deserialize_body
             }
@@ -326,7 +326,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
     Ok(quote! {
         impl #impl_generics #cbor_module::CborSerialize for #name #ty_generics #where_clauses {
-            fn serialize<C: #cbor_module::CborEncoder>(&self, encoder: &mut C) -> #cbor_module::CborResult<()> {
+            fn serialize<C: #cbor_module::CborEncoder>(&self, encoder: &mut C) -> #cbor_module::CborSerializationResult<()> {
                 #encode_tag
                 #serialize_body
             }

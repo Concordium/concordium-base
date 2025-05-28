@@ -14,7 +14,7 @@ use crate::{
     },
     common::{
         self,
-        cbor::{CborDecoder, CborDeserialize, CborEncoder, CborResult, CborSerialize},
+        cbor::{CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize},
         types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial, Serialize,
@@ -48,13 +48,13 @@ pub struct Memo {
 }
 
 impl CborSerialize for Memo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         encoder.encode_bytes(&self.bytes)
     }
 }
 
 impl CborDeserialize for Memo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let bytes = decoder.decode_bytes()?;
@@ -2279,7 +2279,7 @@ pub mod construct {
         receiver: AccountAddress,
         token_id: TokenId,
         amount: TokenAmount,
-    ) -> CborResult<PreAccountTransaction> {
+    ) -> CborSerializationResult<PreAccountTransaction> {
         transfer_tokens_impl(
             num_sigs, sender, nonce, expiry, receiver, token_id, amount, None,
         )
@@ -2295,7 +2295,7 @@ pub mod construct {
         token_id: TokenId,
         amount: TokenAmount,
         memo: CborMemo,
-    ) -> CborResult<PreAccountTransaction> {
+    ) -> CborSerializationResult<PreAccountTransaction> {
         transfer_tokens_impl(
             num_sigs,
             sender,
@@ -2318,7 +2318,7 @@ pub mod construct {
         token_id: TokenId,
         amount: TokenAmount,
         memo: Option<CborMemo>,
-    ) -> CborResult<PreAccountTransaction> {
+    ) -> CborSerializationResult<PreAccountTransaction> {
         let operation = TokenOperation::Transfer(TokenTransfer {
             amount,
             recipient: TokenHolder::HolderAccount(HolderAccount {
@@ -3008,7 +3008,7 @@ pub mod send {
         receiver: AccountAddress,
         token_id: TokenId,
         amount: TokenAmount,
-    ) -> CborResult<AccountTransaction<EncodedPayload>> {
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
         Ok(construct::transfer_tokens(
             signer.num_keys(),
             sender,
@@ -3031,7 +3031,7 @@ pub mod send {
         token_id: TokenId,
         amount: TokenAmount,
         memo: CborMemo,
-    ) -> CborResult<AccountTransaction<EncodedPayload>> {
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
         Ok(construct::transfer_tokens_with_memo(
             signer.num_keys(),
             sender,

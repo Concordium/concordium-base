@@ -1,5 +1,5 @@
 use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborResult, CborSerialize, DecimalFraction,
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize, DecimalFraction,
 };
 use anyhow::Context;
 
@@ -14,7 +14,7 @@ pub struct TokenAmount {
 }
 
 impl CborSerialize for TokenAmount {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         let decimal_fraction = DecimalFraction::new(
             i64::try_from(self.decimals)
                 .ok()
@@ -28,7 +28,7 @@ impl CborSerialize for TokenAmount {
 }
 
 impl CborDeserialize for TokenAmount {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let decimal_fraction = DecimalFraction::deserialize(decoder)?;
