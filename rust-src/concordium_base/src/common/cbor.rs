@@ -74,7 +74,6 @@
 //! ```
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
 
-
 use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Header};
@@ -300,7 +299,9 @@ impl<W: Write> CborEncoder for Encoder<W>
 where
     CborSerializationError: From<W::Error>,
 {
-    fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()> { Ok(self.inner.push(Header::Tag(tag))?) }
+    fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()> {
+        Ok(self.inner.push(Header::Tag(tag))?)
+    }
 
     fn encode_positive(&mut self, positive: u64) -> CborSerializationResult<()> {
         Ok(self.inner.push(Header::Positive(positive))?)
@@ -322,7 +323,9 @@ where
         Ok(self.inner.bytes(bytes, None)?)
     }
 
-    fn encode_text(&mut self, text: &str) -> CborSerializationResult<()> { Ok(self.inner.text(text, None)?) }
+    fn encode_text(&mut self, text: &str) -> CborSerializationResult<()> {
+        Ok(self.inner.text(text, None)?)
+    }
 
     fn encode_simple(&mut self, value: u8) -> CborSerializationResult<()> {
         Ok(self.inner.push(Header::Simple(value))?)
@@ -358,10 +361,16 @@ pub trait CborDecoder {
     fn decode_array_header(&mut self) -> CborSerializationResult<usize>;
 
     /// Decode array start and check length equals `expected_length`
-    fn decode_array_header_expect_length(&mut self, expected_length: usize) -> CborSerializationResult<()> {
+    fn decode_array_header_expect_length(
+        &mut self,
+        expected_length: usize,
+    ) -> CborSerializationResult<()> {
         let length = self.decode_array_header()?;
         if length != expected_length {
-            return Err(CborSerializationError::array_length(expected_length, length));
+            return Err(CborSerializationError::array_length(
+                expected_length,
+                length,
+            ));
         }
         Ok(())
     }

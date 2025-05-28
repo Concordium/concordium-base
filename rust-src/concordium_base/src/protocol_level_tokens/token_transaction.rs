@@ -3,8 +3,7 @@ use crate::{
         cbor,
         cbor::{
             CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
-            CborSerializationResult, CborSerialize, DataItemType
-            ,
+            CborSerializationResult, CborSerialize, DataItemType,
         },
     },
     protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
