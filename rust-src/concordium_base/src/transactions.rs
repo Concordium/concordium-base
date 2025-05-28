@@ -1202,6 +1202,7 @@ impl Serial for Payload {
                 }
             }
             Payload::TokenHolder { payload } => {
+                out.put(&27u8);
                 out.put(&payload.token_id);
                 out.put(&payload.operations);
             }
