@@ -1,9 +1,10 @@
+use crate::common::cbor::DataItemHeader;
 use crate::{
     common::{
         cbor,
         cbor::{
             CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
-            CborSerializationResult, CborSerialize, DataItemType,
+            CborSerializationResult, CborSerialize,
         },
     },
     protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
@@ -150,8 +151,8 @@ impl CborDeserialize for CborMemo {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        Ok(match decoder.peek_data_item_type()? {
-            DataItemType::Tag => {
+        Ok(match decoder.peek_data_item_header()? {
+            DataItemHeader::Tag(CBOR_TAG) => {
                 decoder.decode_tag_expect(CBOR_TAG)?;
                 Self::Cbor(Memo::deserialize(decoder)?)
             }

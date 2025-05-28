@@ -255,8 +255,8 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        Ok(match decoder.peek_header()? {
-            Header::Simple(simple::NULL) => {
+        Ok(match decoder.peek_data_item_header()? {
+            DataItemHeader::Simple(simple::NULL) => {
                 debug_assert_eq!(decoder.decode_simple()?, simple::NULL);
                 None
             }
@@ -398,13 +398,8 @@ pub trait CborDecoder {
     /// Decode simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
     fn decode_simple(&mut self) -> CborSerializationResult<u8>;
 
-    /// Peeks type of next data item to be decoded.
-    fn peek_data_item_type(&mut self) -> CborSerializationResult<DataItemType> {
-        Ok(DataItemType::from_header(&self.peek_header()?))
-    }
-
-    /// Peeks next header to be decoded.
-    fn peek_header(&mut self) -> CborSerializationResult<Header>;
+    /// Peeks header of next data item to be decoded.
+    fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader>;
 
     /// Skips next header and potential content for the data item
     fn skip_data_item(&mut self) -> CborSerializationResult<()>;
@@ -422,7 +417,7 @@ where
             Header::Tag(tag) => Ok(tag),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Tag,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -432,7 +427,7 @@ where
             Header::Positive(positive) => Ok(positive),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Positive,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -442,7 +437,7 @@ where
             Header::Negative(negative) => Ok(negative),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Negative,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -452,7 +447,7 @@ where
             Header::Map(Some(size)) => Ok(size),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Map,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -462,7 +457,7 @@ where
             Header::Array(Some(size)) => Ok(size),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Array,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -477,7 +472,7 @@ where
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Bytes,
-                    DataItemType::from_header(&header),
+                    DataItemType::from_header(header),
                 ))
             }
         };
@@ -492,7 +487,7 @@ where
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Bytes,
-                    DataItemType::from_header(&header),
+                    DataItemType::from_header(header),
                 ))
             }
         };
@@ -508,7 +503,7 @@ where
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Text,
-                    DataItemType::from_header(&header),
+                    DataItemType::from_header(header),
                 ))
             }
         };
@@ -523,19 +518,20 @@ where
             Header::Simple(value) => Ok(value),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Simple,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
 
-    fn peek_header(&mut self) -> CborSerializationResult<Header> {
+    fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
         let header = self.inner.pull()?;
+        let data_item_header = DataItemHeader::from_header(header);
         self.inner.push(header);
-        Ok(header)
+        Ok(data_item_header)
     }
 
     fn skip_data_item(&mut self) -> CborSerializationResult<()> {
-        match self.peek_data_item_type()? {
+        match self.peek_data_item_header()?.to_type() {
             DataItemType::Positive
             | DataItemType::Negative
             | DataItemType::Tag
@@ -571,6 +567,9 @@ where
     }
 
     fn options(&self) -> SerializationOptions { self.options }
+
+
+
 }
 
 /// Decodes bytes data item into given destination. Length of bytes data item
@@ -759,7 +758,7 @@ macro_rules! serialize_deserialize_signed_integer {
             fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
             where
                 Self: Sized, {
-                match decoder.peek_data_item_type()? {
+                match decoder.peek_data_item_header()?.to_type() {
                     DataItemType::Positive => Ok(<$t>::try_from(decoder.decode_positive()?)
                         .context(concat!("convert positive to ", stringify!($t)))?),
                     DataItemType::Negative => Ok(<$t>::try_from(decoder.decode_negative()?)
@@ -830,7 +829,7 @@ pub enum DataItemType {
 }
 
 impl DataItemType {
-    pub fn from_header(header: &Header) -> Self {
+    pub fn from_header(header: Header) -> Self {
         use DataItemType::*;
 
         match header {
@@ -844,6 +843,57 @@ impl DataItemType {
             Header::Text(_) => Text,
             Header::Array(_) => Array,
             Header::Map(_) => Map,
+        }
+    }
+}
+
+/// CBOR data item header.
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum DataItemHeader {
+    Positive(u64),
+    Negative(u64),
+    Bytes(Option<usize>),
+    Text(Option<usize>),
+    Array(Option<usize>),
+    Map(Option<usize>),
+    Tag(u64),
+    Simple(u8),
+    Float(f64),
+    Break,
+}
+
+impl DataItemHeader {
+    pub fn to_type(self)-> DataItemType {
+        use DataItemType::*;
+
+        match self {
+            DataItemHeader::Positive(_) => Positive,
+            DataItemHeader::Negative(_) => Negative,
+            DataItemHeader::Bytes(_) => Bytes,
+            DataItemHeader::Text(_) => Text,
+            DataItemHeader::Array(_) => Array,
+            DataItemHeader::Map(_) => Map,
+            DataItemHeader::Tag(_) => Tag,
+            DataItemHeader::Simple(_) => Simple,
+            DataItemHeader::Float(_) => Float,
+            DataItemHeader::Break => Break,
+        }
+    }
+
+    pub fn from_header(header: Header) -> Self {
+        use DataItemHeader::*;
+
+        match header {
+            Header::Positive(value) => Positive(value),
+            Header::Negative(value) => Negative(value),
+            Header::Float(value) => Float(value),
+            Header::Simple(value) => Simple(value),
+            Header::Tag(tag) => Tag(tag),
+            Header::Break => Break,
+            Header::Bytes(length) => Bytes(length),
+            Header::Text(length) => Text(length),
+            Header::Array(length) => Array(length),
+            Header::Map(length) => Map(length),
         }
     }
 }
@@ -884,7 +934,7 @@ impl CborDeserialize for MapKey {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        match decoder.peek_data_item_type()? {
+        match decoder.peek_data_item_header()?.to_type() {
             DataItemType::Positive => Ok(Self::Positive(u64::deserialize(decoder)?)),
             DataItemType::Text => Ok(Self::Text(String::deserialize(decoder)?)),
             data_item_type => Err(anyhow!(
