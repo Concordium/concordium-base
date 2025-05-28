@@ -152,7 +152,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
             let field_count = field_idents.len();
 
             quote! {
-                let array_size = #cbor_module::CborDecoder::decode_array_expect_length(decoder, #field_count)?;
+                let array_size = #cbor_module::CborDecoder::decode_array_header_expect_length(decoder, #field_count)?;
 
                 #(
                     let #field_vars = #cbor_module::CborDeserialize::deserialize(decoder)?;
@@ -166,7 +166,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
 
             quote! {
                 #(let mut #field_vars = None;)*
-                let map_size = #cbor_module::CborDecoder::decode_map(decoder)?;
+                let map_size = #cbor_module::CborDecoder::decode_map_header(decoder)?;
                 for _ in 0..map_size {
                     let map_key: #cbor_module::MapKey = #cbor_module::CborDeserialize::deserialize(decoder)?;
 
@@ -176,7 +176,13 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                                 #field_vars = Some(#cbor_module::CborDeserialize::deserialize(decoder)?);
                             }
                         )*
-                        key => return Err(#cbor_module::CborError::unknown_map_key(key)),
+                        key => {
+                            match decoder.options().unknown_map_keys {
+                                #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborError::unknown_map_key(key)),
+                                #cbor_module::UnknownMapKeys::Ignore => decoder.skip_data_item()?,
+                            }
+
+                        }
                     }
                 }
 
@@ -261,7 +267,7 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
             let field_count = field_idents.len();
 
             quote! {
-                #cbor_module::CborEncoder::encode_array(encoder,
+                #cbor_module::CborEncoder::encode_array_header(encoder,
                     #field_count
                 )?;
 
@@ -276,7 +282,7 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
             let field_map_keys = cbor_fields.cbor_map_keys()?;
 
             quote! {
-                #cbor_module::CborEncoder::encode_map(encoder,
+                #cbor_module::CborEncoder::encode_map_header(encoder,
                     #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
                 )?;
 

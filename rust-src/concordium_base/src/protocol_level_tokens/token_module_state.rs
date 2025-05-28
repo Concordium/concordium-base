@@ -1,4 +1,4 @@
-use crate::common::cbor::{Bytes, CborEncoder, CborResult, DecimalFraction};
+use crate::common::cbor::{Bytes, CborEncoder};
 use anyhow::Context;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
