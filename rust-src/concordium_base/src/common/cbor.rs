@@ -137,8 +137,12 @@ impl CborSerializationError {
         anyhow!("map value for key {:?} not present and cannot be null", key).into()
     }
 
-    pub fn array_length(expected: usize, actual: usize) -> Self {
+    pub fn array_size(expected: usize, actual: usize) -> Self {
         anyhow!("expected array length {}, was {}", expected, actual).into()
+    }
+
+    pub fn map_size(expected: usize, actual: usize) -> Self {
+        anyhow!("expected map size {}, was {}", expected, actual).into()
     }
 }
 
@@ -361,20 +365,29 @@ pub trait CborDecoder {
     /// Decode map start. Returns the map size
     fn decode_map_header(&mut self) -> CborSerializationResult<usize>;
 
+    /// Decode map start and check size equals `expected_length`
+    fn decode_map_header_expect_size(
+        &mut self,
+        expected_size: usize,
+    ) -> CborSerializationResult<()> {
+        let size = self.decode_map_header()?;
+        if size != expected_size {
+            return Err(CborSerializationError::map_size(expected_size, size));
+        }
+        Ok(())
+    }
+
     /// Decode array start. Returns the array size
     fn decode_array_header(&mut self) -> CborSerializationResult<usize>;
 
-    /// Decode array start and check length equals `expected_length`
-    fn decode_array_header_expect_length(
+    /// Decode array start and check size equals `expected_length`
+    fn decode_array_header_expect_size(
         &mut self,
-        expected_length: usize,
+        expected_size: usize,
     ) -> CborSerializationResult<()> {
-        let length = self.decode_array_header()?;
-        if length != expected_length {
-            return Err(CborSerializationError::array_length(
-                expected_length,
-                length,
-            ));
+        let size = self.decode_array_header()?;
+        if size != expected_size {
+            return Err(CborSerializationError::array_size(expected_size, size));
         }
         Ok(())
     }
@@ -567,9 +580,6 @@ where
     }
 
     fn options(&self) -> SerializationOptions { self.options }
-
-
-
 }
 
 /// Decodes bytes data item into given destination. Length of bytes data item
@@ -863,7 +873,7 @@ pub enum DataItemHeader {
 }
 
 impl DataItemHeader {
-    pub fn to_type(self)-> DataItemType {
+    pub fn to_type(self) -> DataItemType {
         use DataItemType::*;
 
         match self {
@@ -1140,7 +1150,7 @@ mod test {
     /// Struct with named fields encoded as map. Uses field name string literals
     /// as keys.
     #[test]
-    fn test_map_derived() {
+    fn test_struct_as_map_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: u64,
@@ -1162,7 +1172,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_camel_case() {
+    fn test_struct_as_map_derived_camel_case() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field_name: u64,
@@ -1177,7 +1187,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_explicit_keys() {
+    fn test_struct_as_map_derived_explicit_keys() {
         const KEY: u64 = 2;
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -1200,7 +1210,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_optional_field() {
+    fn test_struct_as_map_derived_optional_field() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: Option<u64>,
@@ -1232,7 +1242,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_unknown_field() {
+    fn test_struct_as_map_derived_unknown_field() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: u64,
@@ -1268,7 +1278,7 @@ mod test {
     }
 
     #[test]
-    fn test_array_derived() {
+    fn test_struct_as_array_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct(u64, String);
 
@@ -1281,7 +1291,7 @@ mod test {
     }
 
     #[test]
-    fn test_array_derived_wrong_length() {
+    fn test_struct_as_array_derived_wrong_length() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct(u64, String);
 
@@ -1296,7 +1306,7 @@ mod test {
     }
 
     #[test]
-    fn test_derived_transparent_tuple() {
+    fn test_struct_derived_transparent_tuple() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent)]
         struct TestStructWrapper(TestStruct);
@@ -1315,7 +1325,7 @@ mod test {
     }
 
     #[test]
-    fn test_derived_transparent_named() {
+    fn test_struct_derived_transparent_named() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent)]
         struct TestStructWrapper {
@@ -1338,7 +1348,7 @@ mod test {
     }
 
     #[test]
-    fn test_tag_derived_map() {
+    fn test_struct_tag_derived_map() {
         const TAG: u64 = 39999;
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -1365,7 +1375,7 @@ mod test {
     }
 
     #[test]
-    fn test_tag_derived_transparent() {
+    fn test_struct_tag_derived_transparent() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent, tag = 39999)]
         struct TestStructWrapper(TestStruct);
@@ -1390,6 +1400,49 @@ mod test {
             .unwrap_err()
             .to_string();
         assert!(err.contains("expected tag 39998"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        let value = TestEnum::Var1(3);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1647661723103");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a164766172326461626364");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived_unknown_key() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum2 {
+            Var1(u64),
+        }
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
+        assert!(err.contains("unknown map key"), "err: {}", err);
     }
 
     #[test]

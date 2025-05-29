@@ -1,18 +1,17 @@
 use crate::get_crate_root;
 use convert_case::{Case, Casing};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Data, DataStruct, Expr, Fields, LitStr, Member};
+use syn::{Data, DataEnum, DataStruct, Expr, Fields, LitStr, Member, Variant};
 
 use darling::{FromDeriveInput, FromField};
-use syn::spanned::Spanned;
+use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 
 #[derive(Debug, Default, FromField)]
 #[darling(attributes(cbor))]
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
-    /// name in camelCase is used as a string literal for structs with named
-    /// fields, and the tuple index is used for struct tuples.
+    /// name in camel case is used as key as a text data item.
     key: Option<Expr>,
 }
 
@@ -25,6 +24,14 @@ pub struct CborOpts {
     transparent: bool,
     /// Add CBOR tag to data item <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items>.
     tag:         Option<Expr>,
+    /// Serialize enum as a map with a single entry. The variant
+    /// name in camel case is used as the key as a text data item.
+    #[darling(default)]
+    map:         bool,
+    /// Serialize enum as the type enclosed in the variant but with a tag
+    /// prefixed.
+    #[darling(default)]
+    tagged:      bool,
 }
 
 #[derive(Debug)]
@@ -86,6 +93,48 @@ impl CborFields {
     }
 }
 
+#[derive(Debug)]
+struct CborVariant {
+    ident: Ident,
+}
+
+#[derive(Debug)]
+struct CborVariants(Vec<CborVariant>);
+
+impl CborVariants {
+    /// Get identifiers for variants in enum
+    fn variant_idents(&self) -> Vec<Ident> {
+        self.0.iter().map(|field| field.ident.clone()).collect()
+    }
+
+    /// Get CBOR map keys for the variants
+    fn cbor_map_keys(&self) -> Vec<LitStr> {
+
+        self
+            .0
+            .iter()
+            .map(|field| {
+                LitStr::new(&field.ident.to_string().to_case(Case::Camel), field.ident.span())
+            })
+            .collect()
+    }
+}
+
+impl CborVariants {
+    fn try_from_variants(variants: &Punctuated<Variant, Comma>) -> syn::Result<Self> {
+        Ok(Self(
+            variants
+                .iter()
+                .map(|variant| {
+                    Ok(CborVariant {
+                        ident: variant.ident.clone(),
+                    })
+                })
+                .collect::<syn::Result<Vec<_>>>()?,
+        ))
+    }
+}
+
 fn get_cbor_module() -> syn::Result<TokenStream> {
     let crate_root = get_crate_root()?;
     Ok(quote!(#crate_root::common::cbor))
@@ -98,6 +147,19 @@ enum CborContainer {
 }
 
 fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<TokenStream> {
+    if opts.map {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(map)] only valid for enums",
+        ));
+    }
+    if opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tagged)] only valid for enums",
+        ));
+    }
+
     let cbor_module = get_cbor_module()?;
 
     let cbor_fields = CborFields::try_from_fields(fields)?;
@@ -153,7 +215,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
             let field_count = field_idents.len();
 
             quote! {
-                let array_size = #cbor_module::CborDecoder::decode_array_header_expect_length(decoder, #field_count)?;
+                let array_size = #cbor_module::CborDecoder::decode_array_header_expect_size(decoder, #field_count)?;
 
                 #(
                     let #field_vars = #cbor_module::CborDeserialize::deserialize(decoder)?;
@@ -203,6 +265,57 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
     })
 }
 
+fn cbor_deserialize_enum_body(
+    variants: &Punctuated<Variant, Comma>,
+    opts: &CborOpts,
+) -> syn::Result<TokenStream> {
+    if opts.transparent {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(transparent)] only valid for structs",
+        ));
+    }
+
+    if opts.map && opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
+        ));
+    }
+
+    Ok(if opts.map {
+        let cbor_module = get_cbor_module()?;
+
+        let cbor_variants = CborVariants::try_from_variants(variants)?;
+        let variant_idents = cbor_variants.variant_idents();
+        let variant_map_keys = cbor_variants.cbor_map_keys();
+
+        quote! {
+            decoder.decode_map_header_expect_size(1)?;
+            let key =
+                    String::from_utf8(decoder.decode_text()?).context("map key not valid UTF8")?;
+            Ok(match key.as_str() {
+                #(
+                    #variant_map_keys => {
+                        Self::#variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?)
+                    }
+                )*
+                key => {
+                    return Err(#cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(key)));
+                }
+            })
+        }
+    } else if opts.tagged {
+        todo!()
+    } else {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
+        ));
+    })
+}
+
+
 pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
@@ -212,10 +325,11 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
     let deserialize_body = match &ast.data {
         Data::Struct(DataStruct { fields, .. }) => cbor_deserialize_struct_body(fields, &opts)?,
+        Data::Enum(DataEnum { variants, .. }) => cbor_deserialize_enum_body(variants, &opts)?,
         _ => {
             return Err(syn::Error::new(
                 Span::call_site(),
-                "CborSerialize cannot be applied to enums",
+                "CborDeserialize cannot be applied to unions",
             ))
         }
     };
@@ -239,6 +353,19 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 }
 
 fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<TokenStream> {
+    if opts.map {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(map)] only valid for enums",
+        ));
+    }
+    if opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tagged)] only valid for enums",
+        ));
+    }
+
     let cbor_module = get_cbor_module()?;
 
     let cbor_fields = CborFields::try_from_fields(fields)?;
@@ -249,7 +376,7 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         let (Some(field_ident), None) = (field_idents.get(0), field_idents.get(1)) else {
             return Err(syn::Error::new(
                 Span::call_site(),
-                "cbor(transparent) only valid for structs with a single field",
+                "#[cbor(transparent)] only valid for structs with a single field",
             ));
         };
 
@@ -301,6 +428,52 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
     })
 }
 
+fn cbor_serialize_enum_body(
+    variants: &Punctuated<Variant, Comma>,
+    opts: &CborOpts,
+) -> syn::Result<TokenStream> {
+    if opts.transparent {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(transparent)] only valid for structs",
+        ));
+    }
+
+    if opts.map && opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
+        ));
+    }
+
+    Ok(if opts.map {
+        let cbor_module = get_cbor_module()?;
+
+        let cbor_variants = CborVariants::try_from_variants(variants)?;
+        let variant_idents = cbor_variants.variant_idents();
+        let variant_map_keys = cbor_variants.cbor_map_keys();
+
+        quote! {
+            encoder.encode_map_header(1)?;
+            match self {
+                #(
+                    Self::#variant_idents(value) => {
+                        encoder.encode_text(#variant_map_keys)?;
+                        #cbor_module::CborSerialize::serialize(value, encoder)
+                    }
+                )*
+            }
+        }
+    } else if opts.tagged {
+        todo!()
+    } else {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
+        ));
+    })
+}
+
 pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
@@ -310,10 +483,11 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
     let serialize_body = match &ast.data {
         Data::Struct(DataStruct { fields, .. }) => cbor_serialize_struct_body(fields, &opts)?,
+        Data::Enum(DataEnum { variants, .. }) => cbor_serialize_enum_body(variants, &opts)?,
         _ => {
             return Err(syn::Error::new(
                 Span::call_site(),
-                "CborSerialize cannot be applied to enums or unit structs",
+                "CborSerialize cannot be applied to unions",
             ))
         }
     };
