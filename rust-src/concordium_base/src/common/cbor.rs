@@ -9,8 +9,10 @@
 //!
 //! ## Deriving `CborSerialize` and `CborDeserialize`
 //!
+//! ### Structs
+//!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on structs with
-//! named fields and tuples:
+//! named fields and struct tuples:
 //! ```
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
 //! #
@@ -26,6 +28,25 @@
 //! Structs with named fields are serialized as CBOR maps using camel cased
 //! field names as keys (of data item type text) and tuples are serialized as
 //! CBOR arrays.
+//!
+//! ### Enums
+//!
+//! [`CborSerialize`] and [`CborDeserialize`] can be derived on enums using
+//! `map` or `tagged` representation:
+//! ```
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//! #
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(map)]
+//! enum TestEnum {
+//!     Var1(u64),
+//!     Var2(String),
+//! }
+//! ```
+//! All enum variants must be single element tuples.
+//!
+//! Using `#[cbor(map)]` represents the enum as a map with a single key
+//! that is the variant name camel cased (the key is a text data item).
 //!
 //! ### Supported attributes
 //!
