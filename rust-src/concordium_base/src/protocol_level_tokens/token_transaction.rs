@@ -1,10 +1,9 @@
-use crate::common::cbor::DataItemHeader;
 use crate::{
     common::{
         cbor,
         cbor::{
             CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
-            CborSerializationResult, CborSerialize,
+            CborSerializationResult, CborSerialize, DataItemHeader,
         },
     },
     protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
@@ -203,5 +202,12 @@ pub mod test {
         assert_eq!(hex::encode(&cbor), "81a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let operation_decoded: TokenOperations = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operations);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_unknown_variant() {
+        let cbor = hex::decode("a172736f6d65556e6b6e6f776e56617269616e74a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap();
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, TokenOperation::Unknown);
     }
 }

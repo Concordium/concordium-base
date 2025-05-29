@@ -32,7 +32,7 @@
 //! ### Enums
 //!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on enums using
-//! `map` or `tagged` representation:
+//! `map` representation:
 //! ```
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
 //! #
@@ -142,7 +142,7 @@ impl CborSerializationError {
         anyhow!("expected data item {:?}, was {:?}", expected, actual).into()
     }
 
-    pub fn remaining_data() -> Self { anyhow!("data remaining after parse").into() }
+    pub fn remaining_data(offset: usize) -> Self { anyhow!("data remaining after parse at offset {}", offset).into() }
 
     pub fn expected_map_key(expected: u64, actual: u64) -> Self {
         anyhow!("expected map key {}, was {}", expected, actual).into()
@@ -209,7 +209,7 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
     let mut decoder = Decoder::new(cbor, options);
     let value = T::deserialize(&mut decoder)?;
     if decoder.inner.offset() != cbor.len() {
-        return Err(CborSerializationError::remaining_data());
+        return Err(CborSerializationError::remaining_data(decoder.inner.offset()));
     }
     Ok(value)
 }

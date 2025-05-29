@@ -28,10 +28,6 @@ pub struct CborOpts {
     /// name in camel case is used as the key as a text data item.
     #[darling(default)]
     map:         bool,
-    /// Serialize enum as the type enclosed in the variant but with a tag
-    /// prefixed.
-    #[darling(default)]
-    tagged:      bool,
 }
 
 #[derive(Debug)]
@@ -109,12 +105,13 @@ impl CborVariants {
 
     /// Get CBOR map keys for the variants
     fn cbor_map_keys(&self) -> Vec<LitStr> {
-
-        self
-            .0
+        self.0
             .iter()
             .map(|field| {
-                LitStr::new(&field.ident.to_string().to_case(Case::Camel), field.ident.span())
+                LitStr::new(
+                    &field.ident.to_string().to_case(Case::Camel),
+                    field.ident.span(),
+                )
             })
             .collect()
     }
@@ -151,12 +148,6 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(map)] only valid for enums",
-        ));
-    }
-    if opts.tagged {
-        return Err(syn::Error::new(
-            Span::call_site(),
-            "#[cbor(tagged)] only valid for enums",
         ));
     }
 
@@ -276,13 +267,6 @@ fn cbor_deserialize_enum_body(
         ));
     }
 
-    if opts.map && opts.tagged {
-        return Err(syn::Error::new(
-            Span::call_site(),
-            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
-        ));
-    }
-
     Ok(if opts.map {
         let cbor_module = get_cbor_module()?;
 
@@ -305,16 +289,13 @@ fn cbor_deserialize_enum_body(
                 }
             })
         }
-    } else if opts.tagged {
-        todo!()
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
-            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
+            "#[cbor(map)] must be specified for enums",
         ));
     })
 }
-
 
 pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let name = &ast.ident;
@@ -357,12 +338,6 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(map)] only valid for enums",
-        ));
-    }
-    if opts.tagged {
-        return Err(syn::Error::new(
-            Span::call_site(),
-            "#[cbor(tagged)] only valid for enums",
         ));
     }
 
@@ -439,13 +414,6 @@ fn cbor_serialize_enum_body(
         ));
     }
 
-    if opts.map && opts.tagged {
-        return Err(syn::Error::new(
-            Span::call_site(),
-            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
-        ));
-    }
-
     Ok(if opts.map {
         let cbor_module = get_cbor_module()?;
 
@@ -464,12 +432,10 @@ fn cbor_serialize_enum_body(
                 )*
             }
         }
-    } else if opts.tagged {
-        todo!()
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
-            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
+            "#[cbor(map)] must be specified for enums",
         ));
     })
 }
