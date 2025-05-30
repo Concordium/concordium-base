@@ -323,6 +323,22 @@ encodeTokenMetadataUrl TokenMetadataUrl{..} =
             ]
     k = at . makeMapKeyEncoding . encodeString
 
+-- | Parse a 'TokenMetadataUrl' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenMetadataUrlFromBytes :: LBS.ByteString -> Either String TokenMetadataUrl
+tokenMetadataUrlFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenMetadataUrl lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining)
+                    ++ " bytes remaining after parsing token metadata URL"
+
+-- | CBOR-encode a 'TokenMetadataUrl to a (strict) 'BS.ByteString'.
+tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
+tokenMetadataUrlToBytes = CBOR.toStrictByteString . encodeTokenMetadataUrl
+
 -- * Initialization parameters
 
 -- | The parsed token-initialization-parameters. These parameters are passed to the token module
