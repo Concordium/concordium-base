@@ -982,11 +982,17 @@ pub enum Payload {
         #[serde(flatten)]
         data: ConfigureDelegationPayload,
     },
-    /// Update a smart contract instance by invoking a specific function.
+    /// Token holder operations
     TokenHolder {
         #[serde(flatten)]
         payload: TokenOperationsPayload,
     },
+    /// Token governance operations
+    TokenGovernance {
+        #[serde(flatten)]
+        payload: TokenOperationsPayload,
+    },
+
 }
 
 impl Payload {
@@ -1022,6 +1028,7 @@ impl Payload {
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
             Payload::TokenHolder { .. } => TransactionType::TokenHolder,
+            Payload::TokenGovernance { .. } => TransactionType::TokenGovernance,
         }
     }
 }
@@ -1203,6 +1210,11 @@ impl Serial for Payload {
             }
             Payload::TokenHolder { payload } => {
                 out.put(&27u8);
+                out.put(&payload.token_id);
+                out.put(&payload.operations);
+            }
+            Payload::TokenGovernance { payload } => {
+                out.put(&28u8);
                 out.put(&payload.token_id);
                 out.put(&payload.operations);
             }
@@ -1413,6 +1425,15 @@ impl Deserial for Payload {
                     operations,
                 };
                 Ok(Payload::TokenHolder { payload })
+            }
+            28 => {
+                let token_id = source.get()?;
+                let operations = source.get()?;
+                let payload = TokenOperationsPayload {
+                    token_id,
+                    operations,
+                };
+                Ok(Payload::TokenGovernance { payload })
             }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
