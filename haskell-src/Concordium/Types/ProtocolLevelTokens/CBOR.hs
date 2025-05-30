@@ -739,9 +739,9 @@ tokenHolderTransactionToBytes = CBOR.toStrictByteString . encodeTokenHolderTrans
 -- | A token-module generated event as part of executing a transaction.
 data EncodedTokenEvent = EncodedTokenEvent
     { -- | The type of the event. At most 255 bytes.
-      eteType :: !BSS.ShortByteString,
-      -- | (Optional) CBOR-encoded details.
-      eteDetails :: !(Maybe BSS.ShortByteString)
+      eteType :: !TokenEventType,
+      -- | CBOR-encoded details.
+      eteDetails :: !TokenEventDetails
     }
     deriving (Eq, Show)
 
@@ -760,16 +760,28 @@ data TokenEvent
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
 encodeTokenEvent = \case
     AddAllowListEvent target ->
-        EncodedTokenEvent{eteType = "addAllowList", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent
+            { eteType = TokenEventType "addAllowList",
+              eteDetails = tokenHolderDetails target
+            }
     RemoveAllowListEvent target ->
-        EncodedTokenEvent{eteType = "removeAllowList", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent
+            { eteType = TokenEventType "removeAllowList",
+              eteDetails = tokenHolderDetails target
+            }
     AddDenyListEvent target ->
-        EncodedTokenEvent{eteType = "addDenyList", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent
+            { eteType = TokenEventType "addDenyList",
+              eteDetails = tokenHolderDetails target
+            }
     RemoveDenyListEvent target ->
-        EncodedTokenEvent{eteType = "removeDenyList", eteDetails = tokenHolderDetails target}
+        EncodedTokenEvent
+            { eteType = TokenEventType "removeDenyList",
+              eteDetails = tokenHolderDetails target
+            }
   where
     tokenHolderDetails target =
-        Just . BSS.toShort . CBOR.toStrictByteString $
+        TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
             encodeMapLen 1
                 <> encodeString "target"
                 <> encodeTokenHolder target
@@ -796,25 +808,23 @@ decodeTokenEventTarget = do
 
 -- | Decode a 'TokenEvent' from an 'EncodedTokenEvent'.
 decodeTokenEvent :: EncodedTokenEvent -> Either String TokenEvent
-decodeTokenEvent EncodedTokenEvent{..} = case eteType of
+decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     "addAllowList" -> AddAllowListEvent <$> decodeTarget
     "removeAllowList" -> RemoveAllowListEvent <$> decodeTarget
     "addDenyList" -> AddDenyListEvent <$> decodeTarget
     "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
-    decodeTarget = case eteDetails of
-        Nothing -> Left $ "token-event: missing event details for event type " ++ show eteType
-        Just details -> do
-            let detailsLBS = LBS.fromStrict $ BSS.fromShort details
-            case CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS of
-                Left e -> Left $ "token-event: failed to decode event details: " ++ show e
-                Right ("", target) -> Right target
-                Right (remaining, _) ->
-                    Left $
-                        "token-event: "
-                            ++ show (LBS.length remaining)
-                            ++ " bytes remaining after parsing event details"
+    decodeTarget = do
+        let detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
+        case CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS of
+            Left e -> Left $ "token-event: failed to decode event details: " ++ show e
+            Right ("", target) -> Right target
+            Right (remaining, _) ->
+                Left $
+                    "token-event: "
+                        ++ show (LBS.length remaining)
+                        ++ " bytes remaining after parsing event details"
 
 -- * Reject reasons
 

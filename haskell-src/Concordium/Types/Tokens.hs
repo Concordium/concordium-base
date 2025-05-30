@@ -141,3 +141,43 @@ instance S.Serialize TokenAmount where
         taValue <- S.get
         taDecimals <- S.getWord8
         return $ TokenAmount{..}
+
+-- | Token event type string.
+--  MUST be at most 255 bytes and SHOULD BE a valid UTF-8 string.
+--
+--  Serialization does not require or check for UTF-8 validity.
+--  Converting to JSON will replace invalid UTF-8 bytes with the unicode replacement character,
+--  which means that converting to JSON and back is only the identity for valid UTF-8.
+newtype TokenEventType = TokenEventType {tokenEventTypeBytes :: BSS.ShortByteString}
+    deriving newtype (Eq, Show)
+
+instance AE.ToJSON TokenEventType where
+    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenEventType
+    -- should enforce valid UTF-8.
+    toJSON TokenEventType{..} = AE.String $ T.decodeUtf8Lenient $ BSS.fromShort tokenEventTypeBytes
+
+instance AE.FromJSON TokenEventType where
+    parseJSON (AE.String text) = case makeTokenEventType $ BSS.toShort $ T.encodeUtf8 text of
+        Right eventType -> return eventType
+        Left err -> fail err
+    parseJSON invalid = AE.prependFailure "parsing TokenEventType failed" (AE.typeMismatch "String" invalid)
+
+-- | Try to construct a valid 'TokenEventType' from a 'BSS.ShortByteString'.
+--  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
+--  In the event of a failure @Left err@ is returned, where @err@ describes the failure.
+makeTokenEventType :: BSS.ShortByteString -> Either String TokenEventType
+makeTokenEventType sbs
+    | BSS.length sbs > 255 =
+        Left $ "TokenEventType length (" ++ show (BSS.length sbs) ++ ") out of bounds."
+    | Left decodeErr <- T.decodeUtf8' (BSS.fromShort sbs) =
+        Left $ "TokenEventType is not valid UTF-8: " ++ show decodeErr
+    | otherwise = Right $ TokenEventType sbs
+
+instance S.Serialize TokenEventType where
+    put (TokenEventType eventTypeString) = do
+        S.putWord8 $ fromIntegral $ BSS.length eventTypeString
+        S.putShortByteString eventTypeString
+    get = do
+        len <- S.getWord8
+        sbs <- S.getShortByteString (fromIntegral len)
+        return $ TokenEventType sbs
