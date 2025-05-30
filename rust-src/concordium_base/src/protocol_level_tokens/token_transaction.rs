@@ -56,53 +56,15 @@ impl TokenOperations {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, CborSerialize, CborDeserialize)]
 #[serde(rename_all = "camelCase")]
+#[cbor(map)]
 pub enum TokenOperation {
     Transfer(TokenTransfer),
+    #[cbor(other)]
     Unknown,
 }
 
-impl CborSerialize for TokenOperation {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        #[derive(Debug, CborSerialize)]
-        struct TokenOperationCbor<'a> {
-            transfer: Option<&'a TokenTransfer>,
-        }
-
-        match self {
-            TokenOperation::Transfer(transfer) => {
-                let cbor = TokenOperationCbor {
-                    transfer: Some(&transfer),
-                };
-
-                cbor.serialize(encoder)
-            }
-            TokenOperation::Unknown => Err(CborSerializationError::invalid_data(
-                "cannot serialize unknown variant",
-            )),
-        }
-    }
-}
-
-impl CborDeserialize for TokenOperation {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        #[derive(Debug, CborDeserialize)]
-        struct TokenOperationCbor {
-            transfer: Option<TokenTransfer>,
-        }
-
-        let cbor = TokenOperationCbor::deserialize(decoder)?;
-
-        Ok(if let Some(transfer) = cbor.transfer {
-            Self::Transfer(transfer)
-        } else {
-            Self::Unknown
-        })
-    }
-}
 
 #[derive(
     Debug,

@@ -94,12 +94,35 @@
 //! struct TestStructWrapper(TestStruct);
 //! ```
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
+//!
+//! #### `cbor(other)`
+//! Deserializes "unknown" content to this enum variant.
+//! ```
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//! #
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(map)]
+//! enum TestEnum {
+//!     Var1(u64),
+//!     Var2(String),
+//!     #[cbor(other)]
+//!     Unknown,
+//! }
+//! ```
+//! In this example variants in the CBOR that is not represented in the enum are deserialized as `Unknown`.
+//! Serializing `Unknown` will always fail.
+
 
 use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::fmt::{Debug, Display};
+
+#[doc(hidden)]
+pub mod __private {
+    pub use anyhow;
+}
 
 const DECIMAL_FRACTION_TAG: u64 = 4;
 
@@ -1467,6 +1490,32 @@ mod test {
         let cbor = cbor_encode(&value).unwrap();
         let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
         assert!(err.contains("unknown map key"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived_other_variant() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum2 {
+            Var1(u64),
+            #[cbor(other)]
+            Unknown,
+        }
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestEnum2 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, TestEnum2::Unknown);
+
+        let err = cbor_encode(&TestEnum2::Unknown).unwrap_err().to_string();
+        assert!(err.contains("cannot serialize variant marked with #[cbor(other)]"), "err: {}", err);
     }
 
     #[test]

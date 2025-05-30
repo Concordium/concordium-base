@@ -4,7 +4,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Data, DataEnum, DataStruct, Expr, Fields, LitStr, Member, Variant};
 
-use darling::{FromDeriveInput, FromField};
+use darling::{FromDeriveInput, FromField, FromVariant};
 use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 
 #[derive(Debug, Default, FromField)]
@@ -13,6 +13,15 @@ pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
     /// name in camel case is used as key as a text data item.
     key: Option<Expr>,
+}
+
+#[derive(Debug, Default, FromVariant)]
+#[darling(attributes(cbor))]
+pub struct CborVariantOpts {
+    /// Serialize unknown variants in CBOR to the enum with this
+    /// attribute. Serialization of the variant always fails
+    #[darling(default)]
+    other: bool,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -26,6 +35,9 @@ pub struct CborOpts {
     tag:         Option<Expr>,
     /// Serialize enum as a map with a single entry. The variant
     /// name in camel case is used as the key as a text data item.
+    ///
+    /// This option is here because we want to extend with tagged enum encodings
+    /// also at some point. So you can use either `map` or `tagged`.
     #[darling(default)]
     map:         bool,
 }
@@ -92,6 +104,7 @@ impl CborFields {
 #[derive(Debug)]
 struct CborVariant {
     ident: Ident,
+    opts:  CborVariantOpts,
 }
 
 #[derive(Debug)]
@@ -100,13 +113,27 @@ struct CborVariants(Vec<CborVariant>);
 impl CborVariants {
     /// Get identifiers for variants in enum
     fn variant_idents(&self) -> Vec<Ident> {
-        self.0.iter().map(|field| field.ident.clone()).collect()
+        self.0
+            .iter()
+            .filter(|field| !field.opts.other)
+            .map(|field| field.ident.clone())
+            .collect()
+    }
+
+    /// Identifier for "other" variant
+    fn other_ident(&self) -> Option<Ident> {
+        self.0
+            .iter()
+            .filter(|field| field.opts.other)
+            .map(|field| field.ident.clone())
+            .next()
     }
 
     /// Get CBOR map keys for the variants
     fn cbor_map_keys(&self) -> Vec<LitStr> {
         self.0
             .iter()
+            .filter(|field| !field.opts.other)
             .map(|field| {
                 LitStr::new(
                     &field.ident.to_string().to_case(Case::Camel),
@@ -123,8 +150,11 @@ impl CborVariants {
             variants
                 .iter()
                 .map(|variant| {
+                    let opts = CborVariantOpts::from_variant(variant)?;
+
                     Ok(CborVariant {
                         ident: variant.ident.clone(),
+                        opts,
                     })
                 })
                 .collect::<syn::Result<Vec<_>>>()?,
@@ -274,10 +304,21 @@ fn cbor_deserialize_enum_body(
         let variant_idents = cbor_variants.variant_idents();
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
+        let unknown_variant = if let Some(other_ident) = cbor_variants.other_ident() {
+            quote! {
+                decoder.skip_data_item()?;
+                Self::#other_ident
+            }
+        } else {
+            quote! {
+                return Err(#cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(key)));
+            }
+        };
+
         quote! {
             decoder.decode_map_header_expect_size(1)?;
             let key =
-                    String::from_utf8(decoder.decode_text()?).context("map key not valid UTF8")?;
+                    #cbor_module::__private::anyhow::Context::context(String::from_utf8(decoder.decode_text()?), "map key not valid UTF8")?;
             Ok(match key.as_str() {
                 #(
                     #variant_map_keys => {
@@ -285,7 +326,7 @@ fn cbor_deserialize_enum_body(
                     }
                 )*
                 key => {
-                    return Err(#cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(key)));
+                    #unknown_variant
                 }
             })
         }
@@ -421,6 +462,16 @@ fn cbor_serialize_enum_body(
         let variant_idents = cbor_variants.variant_idents();
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
+        let other_variant = if let Some(other_ident) = cbor_variants.other_ident() {
+            quote! {
+                Self::#other_ident => {
+                    Err(#cbor_module::__private::anyhow::anyhow!("cannot serialize variant marked with #[cbor(other)]").into())
+                }
+            }
+        } else {
+            quote! {}
+        };
+
         quote! {
             encoder.encode_map_header(1)?;
             match self {
@@ -430,6 +481,7 @@ fn cbor_serialize_enum_body(
                         #cbor_module::CborSerialize::serialize(value, encoder)
                     }
                 )*
+                #other_variant
             }
         }
     } else {
