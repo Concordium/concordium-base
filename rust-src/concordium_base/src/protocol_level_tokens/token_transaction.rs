@@ -56,15 +56,59 @@ impl TokenOperations {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, CborSerialize, CborDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
 #[serde(rename_all = "camelCase")]
 #[cbor(map)]
 pub enum TokenOperation {
     Transfer(TokenTransfer),
+    Mint(TokenSupplyUpdateDetails),
+    Burn(TokenSupplyUpdateDetails),
+    AddAllowList(TokenListUpdateDetails),
+    RemoveAllowList(TokenListUpdateDetails),
+    AddDenyList(TokenListUpdateDetails),
+    RemoveDenyList(TokenListUpdateDetails),
     #[cbor(other)]
     Unknown,
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenSupplyUpdateDetails {
+    pub amount: TokenAmount,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenListUpdateDetails {
+    pub target: TokenHolder,
+}
 
 #[derive(
     Debug,
@@ -148,7 +192,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_token_operations_transfer_cbor() {
+    fn test_token_operations_cbor() {
         let operations = TokenOperations {
             operations: vec![TokenOperation::Transfer(TokenTransfer {
                 amount:    TokenAmount::from_raw(12300, 3),
@@ -162,8 +206,109 @@ pub mod test {
 
         let cbor = cbor::cbor_encode(&operations).unwrap();
         assert_eq!(hex::encode(&cbor), "81a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let operation_decoded: TokenOperations = cbor::cbor_decode(&cbor).unwrap();
-        assert_eq!(operation_decoded, operations);
+        let operations_decoded: TokenOperations = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operations_decoded, operations);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_transfer() {
+        let operation = TokenOperation::Transfer(TokenTransfer {
+            amount:    TokenAmount::from_raw(12300, 3),
+            recipient: TokenHolder::HolderAccount(HolderAccount {
+                address:   ADDRESS,
+                coin_info: None,
+            }),
+            memo:      None,
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1687472616e73666572a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_mint() {
+        let operation = TokenOperation::Mint(TokenSupplyUpdateDetails {
+            amount:    TokenAmount::from_raw(12300, 3),
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1646d696e74a166616d6f756e74c4822219300c");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_burn() {
+        let operation = TokenOperation::Burn(TokenSupplyUpdateDetails {
+            amount:    TokenAmount::from_raw(12300, 3),
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1646275726ea166616d6f756e74c4822219300c");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_add_allow_list() {
+        let operation = TokenOperation::AddAllowList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                address:   ADDRESS,
+                coin_info: None,
+            }),
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a16c616464416c6c6f774c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_remove_allow_list() {
+        let operation = TokenOperation::RemoveAllowList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                address:   ADDRESS,
+                coin_info: None,
+            }),
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a16f72656d6f7665416c6c6f774c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_add_deny_list() {
+        let operation = TokenOperation::AddDenyList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                address:   ADDRESS,
+                coin_info: None,
+            }),
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a16b61646444656e794c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_remove_deny_list() {
+        let operation = TokenOperation::RemoveDenyList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                address:   ADDRESS,
+                coin_info: None,
+            }),
+        });
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a16e72656d6f766544656e794c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
     }
 
     #[test]
