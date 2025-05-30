@@ -568,10 +568,13 @@ where
         match self.peek_data_item_header()?.to_type() {
             DataItemType::Positive
             | DataItemType::Negative
-            | DataItemType::Tag
             | DataItemType::Simple
             | DataItemType::Float => {
                 self.inner.pull()?;
+            }
+            DataItemType::Tag => {
+                self.inner.pull()?;
+                self.skip_data_item()?;
             }
             DataItemType::Bytes => {
                 self.decode_bytes()?;
@@ -1505,7 +1508,10 @@ mod test {
         test_skip_data_item_impl(|encoder| encoder.encode_simple(simple::TRUE).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_positive(2).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_negative(2).unwrap());
-        test_skip_data_item_impl(|encoder| encoder.encode_tag(2).unwrap());
+        test_skip_data_item_impl(|encoder| {
+            encoder.encode_tag(2).unwrap();
+            encoder.encode_positive(2).unwrap();
+        });
         test_skip_data_item_impl(|encoder| encoder.encode_bytes(&[0x01; 30]).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
         test_skip_data_item_impl(|encoder| {
