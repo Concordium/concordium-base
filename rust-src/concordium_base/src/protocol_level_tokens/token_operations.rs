@@ -6,10 +6,95 @@ use crate::{
             DataItemHeader,
         },
     },
-    protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
+    protocol_level_tokens::{
+        token_holder::TokenHolder, CoinInfo, HolderAccount, RawCbor, TokenAmount, TokenId,
+    },
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_contracts_common::AccountAddress;
+
+pub mod operations {
+    use super::*;
+
+    /// Construct a tokens transfer operation.
+    pub fn transfer_tokens(receiver: AccountAddress, amount: TokenAmount) -> TokenOperation {
+        TokenOperation::Transfer(TokenTransfer {
+            amount,
+            recipient: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   receiver,
+            }),
+            memo: None,
+        })
+    }
+
+    /// Construct a tokens transfer operation with memo.
+    pub fn transfer_tokens_with_memo(
+        receiver: AccountAddress,
+        amount: TokenAmount,
+        memo: CborMemo,
+    ) -> TokenOperation {
+        TokenOperation::Transfer(TokenTransfer {
+            amount,
+            recipient: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   receiver,
+            }),
+            memo: Some(memo),
+        })
+    }
+
+    /// Construct a token mint operation.
+    pub fn mint_tokens(amount: TokenAmount) -> TokenOperation {
+        TokenOperation::Mint(TokenSupplyUpdateDetails { amount })
+    }
+
+    /// Construct a token burn operation.
+    pub fn burn_tokens(amount: TokenAmount) -> TokenOperation {
+        TokenOperation::Burn(TokenSupplyUpdateDetails { amount })
+    }
+
+    /// Construct operation to add target to token allow list.
+    pub fn add_token_allow_list(target: AccountAddress) -> TokenOperation {
+        TokenOperation::AddAllowList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
+        })
+    }
+
+    /// Construct operation to remove target from token allow.
+    pub fn remove_token_allow_list(target: AccountAddress) -> TokenOperation {
+        TokenOperation::RemoveAllowList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
+        })
+    }
+
+    /// Construct operation to add target to token deny list.
+    pub fn add_token_deny_list(target: AccountAddress) -> TokenOperation {
+        TokenOperation::AddDenyList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
+        })
+    }
+
+    /// Construct transaction to remove target from token deny list.
+    pub fn remove_token_deny_list(target: AccountAddress) -> TokenOperation {
+        TokenOperation::RemoveDenyList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
+        })
+    }
+}
 
 const CBOR_TAG: u64 = 24;
 
@@ -46,7 +131,17 @@ pub struct TokenOperations {
     pub operations: Vec<TokenOperation>,
 }
 
+impl FromIterator<TokenOperation> for TokenOperations {
+    fn from_iter<T: IntoIterator<Item = TokenOperation>>(iter: T) -> Self {
+        Self {
+            operations: iter.into_iter().collect(),
+        }
+    }
+}
+
 impl TokenOperations {
+    pub fn new(operations: Vec<TokenOperation>) -> Self { Self { operations } }
+
     pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
         cbor::cbor_decode(cbor.as_ref())
     }
