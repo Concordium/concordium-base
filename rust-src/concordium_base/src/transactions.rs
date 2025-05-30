@@ -2352,7 +2352,7 @@ pub mod construct {
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
         })?);
-        Ok(token_operations(
+        Ok(token_holder_operations(
             num_sigs,
             sender,
             nonce,
@@ -2375,7 +2375,7 @@ pub mod construct {
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
         })?);
-        Ok(token_operations(
+        Ok(token_governance_operations(
             num_sigs,
             sender,
             nonce,
@@ -2398,7 +2398,7 @@ pub mod construct {
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
         })?);
-        Ok(token_operations(
+        Ok(token_governance_operations(
             num_sigs,
             sender,
             nonce,
@@ -2426,7 +2426,7 @@ pub mod construct {
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
         })?);
-        Ok(token_operations(
+        Ok(token_governance_operations(
             num_sigs,
             sender,
             nonce,
@@ -2454,7 +2454,7 @@ pub mod construct {
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
         })?);
-        Ok(token_operations(
+        Ok(token_governance_operations(
             num_sigs,
             sender,
             nonce,
@@ -2482,7 +2482,7 @@ pub mod construct {
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
         })?);
-        Ok(token_operations(
+        Ok(token_governance_operations(
             num_sigs,
             sender,
             nonce,
@@ -2510,7 +2510,7 @@ pub mod construct {
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
         })?);
-        Ok(token_operations(
+        Ok(token_governance_operations(
             num_sigs,
             sender,
             nonce,
@@ -2520,9 +2520,9 @@ pub mod construct {
         ))
     }
 
-    /// Construct a token transaction consisting of the operations encoded in
-    /// the given CBOR.
-    pub fn token_operations(
+    /// Construct a token holder transaction consisting of the token holder
+    /// operations encoded in the given CBOR.
+    pub fn token_holder_operations(
         num_sigs: u32,
         sender: AccountAddress,
         nonce: Nonce,
@@ -2531,6 +2531,34 @@ pub mod construct {
         operations: RawCbor,
     ) -> PreAccountTransaction {
         let payload = Payload::TokenHolder {
+            payload: TokenOperationsPayload {
+                token_id,
+                operations,
+            },
+        };
+        make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add {
+                num_sigs,
+                energy: cost::SIMPLE_TRANSFER,
+            },
+            payload,
+        )
+    }
+
+    /// Construct a token governance transaction consisting of the token
+    /// governance operations encoded in the given CBOR.
+    pub fn token_governance_operations(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: RawCbor,
+    ) -> PreAccountTransaction {
+        let payload = Payload::TokenGovernance {
             payload: TokenOperationsPayload {
                 token_id,
                 operations,
@@ -3225,6 +3253,36 @@ pub mod send {
         .sign(signer))
     }
 
+    /// Construct a token mint transaction.
+    pub fn mint_tokens(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        amount: TokenAmount,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(
+            construct::mint_tokens(signer.num_keys(), sender, nonce, expiry, token_id, amount)?
+                .sign(signer),
+        )
+    }
+
+    /// Construct a token burn transaction.
+    pub fn burn_tokens(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        amount: TokenAmount,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(
+            construct::burn_tokens(signer.num_keys(), sender, nonce, expiry, token_id, amount)?
+                .sign(signer),
+        )
+    }
+
     /// Construct a transaction to add account to token allow list.
     pub fn add_token_allow_list(
         signer: &impl ExactSizeTransactionSigner,
@@ -3305,9 +3363,9 @@ pub mod send {
         .sign(signer))
     }
 
-    /// Construct a token transaction consisting of the operations encoded in
-    /// the given CBOR.
-    pub fn token_operations(
+    /// Construct a token holder transaction consisting of the token holder
+    /// operations encoded in the given CBOR.
+    pub fn token_holder_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
         nonce: Nonce,
@@ -3315,7 +3373,28 @@ pub mod send {
         token_id: TokenId,
         operations: RawCbor,
     ) -> AccountTransaction<EncodedPayload> {
-        construct::token_operations(
+        construct::token_holder_operations(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations,
+        )
+        .sign(signer)
+    }
+
+    /// Construct a token governance transaction consisting of the token
+    /// governance operations encoded in the given CBOR.
+    pub fn token_governance_operations(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: RawCbor,
+    ) -> AccountTransaction<EncodedPayload> {
+        construct::token_governance_operations(
             signer.num_keys(),
             sender,
             nonce,
