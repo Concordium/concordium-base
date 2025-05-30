@@ -756,35 +756,38 @@ data TokenEvent
       RemoveDenyListEvent !TokenHolder
     deriving (Eq, Show)
 
+-- | CBOR-encode the details for the list update events in the form:
+--  > {"target": <TokenHolder>}
+encodeTargetDetails :: TokenHolder -> TokenEventDetails
+encodeTargetDetails target =
+    TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+        encodeMapLen 1
+            <> encodeString "target"
+            <> encodeTokenHolder target
+
 -- | Encode a 'TokenEvent' as an 'EncodedTokenEvent'.
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
 encodeTokenEvent = \case
     AddAllowListEvent target ->
         EncodedTokenEvent
             { eteType = TokenEventType "addAllowList",
-              eteDetails = tokenHolderDetails target
+              eteDetails = encodeTargetDetails target
             }
     RemoveAllowListEvent target ->
         EncodedTokenEvent
             { eteType = TokenEventType "removeAllowList",
-              eteDetails = tokenHolderDetails target
+              eteDetails = encodeTargetDetails target
             }
     AddDenyListEvent target ->
         EncodedTokenEvent
             { eteType = TokenEventType "addDenyList",
-              eteDetails = tokenHolderDetails target
+              eteDetails = encodeTargetDetails target
             }
     RemoveDenyListEvent target ->
         EncodedTokenEvent
             { eteType = TokenEventType "removeDenyList",
-              eteDetails = tokenHolderDetails target
+              eteDetails = encodeTargetDetails target
             }
-  where
-    tokenHolderDetails target =
-        TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
-            encodeMapLen 1
-                <> encodeString "target"
-                <> encodeTokenHolder target
 
 -- | Decoder for the event details of the list update events.
 --  This is the "token-list-update-details" type in the CDDL schema.
