@@ -109,9 +109,8 @@
 //!     Unknown,
 //! }
 //! ```
-//! In this example variants in the CBOR that is not represented in the enum are deserialized as `Unknown`.
-//! Serializing `Unknown` will always fail.
-
+//! In this example variants in the CBOR that is not represented in the enum are
+//! deserialized as `Unknown`. Serializing `Unknown` will always fail.
 
 use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
@@ -165,7 +164,9 @@ impl CborSerializationError {
         anyhow!("expected data item {:?}, was {:?}", expected, actual).into()
     }
 
-    pub fn remaining_data(offset: usize) -> Self { anyhow!("data remaining after parse at offset {}", offset).into() }
+    pub fn remaining_data(offset: usize) -> Self {
+        anyhow!("data remaining after parse at offset {}", offset).into()
+    }
 
     pub fn expected_map_key(expected: u64, actual: u64) -> Self {
         anyhow!("expected map key {}, was {}", expected, actual).into()
@@ -232,7 +233,9 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
     let mut decoder = Decoder::new(cbor, options);
     let value = T::deserialize(&mut decoder)?;
     if decoder.inner.offset() != cbor.len() {
-        return Err(CborSerializationError::remaining_data(decoder.inner.offset()));
+        return Err(CborSerializationError::remaining_data(
+            decoder.inner.offset(),
+        ));
     }
     Ok(value)
 }
@@ -1515,7 +1518,11 @@ mod test {
         assert_eq!(value_decoded, TestEnum2::Unknown);
 
         let err = cbor_encode(&TestEnum2::Unknown).unwrap_err().to_string();
-        assert!(err.contains("cannot serialize variant marked with #[cbor(other)]"), "err: {}", err);
+        assert!(
+            err.contains("cannot serialize variant marked with #[cbor(other)]"),
+            "err: {}",
+            err
+        );
     }
 
     #[test]

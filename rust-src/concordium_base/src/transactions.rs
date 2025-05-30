@@ -992,7 +992,6 @@ pub enum Payload {
         #[serde(flatten)]
         payload: TokenOperationsPayload,
     },
-
 }
 
 impl Payload {
@@ -2121,7 +2120,8 @@ pub mod construct {
         common::cbor,
         protocol_level_tokens::{
             CborMemo, CoinInfo, HolderAccount, RawCbor, TokenAmount, TokenHolder, TokenId,
-            TokenOperation, TokenOperations, TokenTransfer,
+            TokenListUpdateDetails, TokenOperation, TokenOperations, TokenSupplyUpdateDetails,
+            TokenTransfer,
         },
     };
 
@@ -2348,6 +2348,164 @@ pub mod construct {
                 address:   receiver,
             }),
             memo,
+        });
+        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
+            operations: vec![operation],
+        })?);
+        Ok(token_operations(
+            num_sigs,
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations_cbor,
+        ))
+    }
+
+    /// Construct a token mint transaction.
+    pub fn mint_tokens(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        amount: TokenAmount,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let operation = TokenOperation::Mint(TokenSupplyUpdateDetails { amount });
+        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
+            operations: vec![operation],
+        })?);
+        Ok(token_operations(
+            num_sigs,
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations_cbor,
+        ))
+    }
+
+    /// Construct a token burn transaction.
+    pub fn burn_tokens(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        amount: TokenAmount,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let operation = TokenOperation::Burn(TokenSupplyUpdateDetails { amount });
+        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
+            operations: vec![operation],
+        })?);
+        Ok(token_operations(
+            num_sigs,
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations_cbor,
+        ))
+    }
+
+    /// Construct a transaction to add account to token allow list.
+    pub fn add_token_allow_list(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let operation = TokenOperation::AddAllowList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
+        });
+        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
+            operations: vec![operation],
+        })?);
+        Ok(token_operations(
+            num_sigs,
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations_cbor,
+        ))
+    }
+
+    /// Construct a transaction to remove account from token allow list.
+    pub fn remove_token_allow_list(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let operation = TokenOperation::RemoveAllowList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
+        });
+        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
+            operations: vec![operation],
+        })?);
+        Ok(token_operations(
+            num_sigs,
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations_cbor,
+        ))
+    }
+
+    /// Construct a transaction to add account to token deny list.
+    pub fn add_token_deny_list(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let operation = TokenOperation::AddDenyList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
+        });
+        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
+            operations: vec![operation],
+        })?);
+        Ok(token_operations(
+            num_sigs,
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations_cbor,
+        ))
+    }
+
+    /// Construct a transaction to remove account from token deny list.
+    pub fn remove_token_deny_list(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let operation = TokenOperation::RemoveDenyList(TokenListUpdateDetails {
+            target: TokenHolder::HolderAccount(HolderAccount {
+                coin_info: Some(CoinInfo::CCD),
+                address:   target,
+            }),
         });
         let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
             operations: vec![operation],
@@ -3063,6 +3221,86 @@ pub mod send {
             token_id,
             amount,
             memo,
+        )?
+        .sign(signer))
+    }
+
+    /// Construct a transaction to add account to token allow list.
+    pub fn add_token_allow_list(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::add_token_allow_list(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            target,
+        )?
+        .sign(signer))
+    }
+
+    /// Construct a transaction to remove account from token allow list.
+    pub fn remove_token_allow_list(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::remove_token_allow_list(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            target,
+        )?
+        .sign(signer))
+    }
+
+    /// Construct a transaction to add account to token deny list.
+    pub fn add_token_deny_list(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::add_token_deny_list(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            target,
+        )?
+        .sign(signer))
+    }
+
+    /// Construct a transaction to remove account from token deny list.
+    pub fn remove_token_deny_list(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        target: AccountAddress,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::remove_token_deny_list(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            target,
         )?
         .sign(signer))
     }

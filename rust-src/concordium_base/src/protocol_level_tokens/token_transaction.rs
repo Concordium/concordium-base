@@ -2,8 +2,8 @@ use crate::{
     common::{
         cbor,
         cbor::{
-            CborDecoder, CborDeserialize, CborEncoder, CborSerializationError,
-            CborSerializationResult, CborSerialize, DataItemHeader,
+            CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
+            DataItemHeader,
         },
     },
     protocol_level_tokens::{token_holder::TokenHolder, RawCbor, TokenAmount, TokenId},
@@ -230,11 +230,14 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_mint() {
         let operation = TokenOperation::Mint(TokenSupplyUpdateDetails {
-            amount:    TokenAmount::from_raw(12300, 3),
+            amount: TokenAmount::from_raw(12300, 3),
         });
 
         let cbor = cbor::cbor_encode(&operation).unwrap();
-        assert_eq!(hex::encode(&cbor), "a1646d696e74a166616d6f756e74c4822219300c");
+        assert_eq!(
+            hex::encode(&cbor),
+            "a1646d696e74a166616d6f756e74c4822219300c"
+        );
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
     }
@@ -242,11 +245,14 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_burn() {
         let operation = TokenOperation::Burn(TokenSupplyUpdateDetails {
-            amount:    TokenAmount::from_raw(12300, 3),
+            amount: TokenAmount::from_raw(12300, 3),
         });
 
         let cbor = cbor::cbor_encode(&operation).unwrap();
-        assert_eq!(hex::encode(&cbor), "a1646275726ea166616d6f756e74c4822219300c");
+        assert_eq!(
+            hex::encode(&cbor),
+            "a1646275726ea166616d6f756e74c4822219300c"
+        );
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
     }
