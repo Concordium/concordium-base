@@ -118,6 +118,7 @@ use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::fmt::{Debug, Display};
 
+/// Reexports for derive macros
 #[doc(hidden)]
 pub mod __private {
     pub use anyhow;
