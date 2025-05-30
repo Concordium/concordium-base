@@ -1141,20 +1141,6 @@ instance S.Serialize TokenParameter where
         S.putWord32be (fromIntegral (BSS.length parameter))
         S.putShortByteString parameter
 
--- | The token events details produced by a token module.
--- Represented as some arbitrary CBOR encoding.
-newtype TokenEventDetails = TokenEventDetails {tokenEventDetailsBytes :: BSS.ShortByteString}
-    deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
-
-instance S.Serialize TokenEventDetails where
-    get = do
-        len <- S.getWord32be
-        TokenEventDetails <$> S.getShortByteString (fromIntegral len)
-    put (TokenEventDetails parameter) = do
-        S.putWord32be (fromIntegral (BSS.length parameter))
-        S.putShortByteString parameter
-
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason
     { -- | The token symbol.

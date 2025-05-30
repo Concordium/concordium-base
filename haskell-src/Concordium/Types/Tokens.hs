@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Types associated with protocol-level tokens.
@@ -14,6 +15,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Read as T
 import Data.Word
+
+import qualified Concordium.Crypto.ByteStringHelpers as BSH
 
 -- | The unique token identifier for a protocol-level token.
 --  This is given as a symbol unique across the whole chain.
@@ -181,3 +184,17 @@ instance S.Serialize TokenEventType where
         len <- S.getWord8
         sbs <- S.getShortByteString (fromIntegral len)
         return $ TokenEventType sbs
+
+-- | The token events details produced by a token module.
+-- Represented as some arbitrary CBOR encoding.
+newtype TokenEventDetails = TokenEventDetails {tokenEventDetailsBytes :: BSS.ShortByteString}
+    deriving (Eq)
+    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
+
+instance S.Serialize TokenEventDetails where
+    get = do
+        len <- S.getWord32be
+        TokenEventDetails <$> S.getShortByteString (fromIntegral len)
+    put (TokenEventDetails parameter) = do
+        S.putWord32be (fromIntegral (BSS.length parameter))
+        S.putShortByteString parameter
