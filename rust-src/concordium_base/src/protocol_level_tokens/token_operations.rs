@@ -110,7 +110,7 @@ pub struct TokenOperationsPayload {
 }
 
 impl TokenOperationsPayload {
-    pub fn deserialize_operations(&self) -> CborSerializationResult<TokenOperations> {
+    pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
         TokenOperations::try_from_cbor(&self.operations)
     }
 }
