@@ -100,10 +100,7 @@ pub struct SerializationOptions {
 
 impl SerializationOptions {
     pub fn unknown_map_keys(self, unknown_map_keys: UnknownMapKeys) -> Self {
-        Self {
-            unknown_map_keys,
-            ..self
-        }
+        Self { unknown_map_keys }
     }
 }
 

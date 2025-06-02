@@ -73,7 +73,7 @@ impl CborSerialize for TokenOperation {
         match self {
             TokenOperation::Transfer(transfer) => {
                 let cbor = TokenOperationCbor {
-                    transfer: Some(&transfer),
+                    transfer: Some(transfer),
                 };
 
                 cbor.serialize(encoder)

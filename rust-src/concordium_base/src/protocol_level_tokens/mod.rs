@@ -5,6 +5,7 @@ mod token_amount;
 mod token_event;
 mod token_holder;
 mod token_id;
+mod token_metadata_url;
 mod token_module_ref;
 mod token_module_state;
 mod token_reject_reason;

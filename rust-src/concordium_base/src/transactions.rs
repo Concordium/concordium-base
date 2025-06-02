@@ -2287,6 +2287,7 @@ pub mod construct {
     }
 
     /// Construct a tokens transfer transaction with a memo.
+    #[allow(clippy::too_many_arguments)]
     pub fn transfer_tokens_with_memo(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2310,6 +2311,7 @@ pub mod construct {
     }
 
     /// Construct a tokens transfer transaction.
+    #[allow(clippy::too_many_arguments)]
     fn transfer_tokens_impl(
         num_sigs: u32,
         sender: AccountAddress,
@@ -3023,6 +3025,7 @@ pub mod send {
     }
 
     /// Construct a tokens transfer transaction.
+    #[allow(clippy::too_many_arguments)]
     pub fn transfer_tokens_with_memo(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
