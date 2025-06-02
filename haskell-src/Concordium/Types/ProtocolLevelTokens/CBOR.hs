@@ -257,6 +257,14 @@ data TokenMetadataUrl = TokenMetadataUrl
     }
     deriving (Eq, Show)
 
+-- | Create a 'TokenMetadataUrl' with the given URL and no checksum.
+createTokenMetadataUrl :: Text -> TokenMetadataUrl
+createTokenMetadataUrl url = TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = Nothing, tmAdditional = Map.empty}
+
+-- | Create a 'TokenMetadataUrl' the given URL and associated SHA256 checksum.
+createTokenMetadataUrlWithSha256 :: Text -> SHA256.Hash -> TokenMetadataUrl
+createTokenMetadataUrlWithSha256 url checksum = TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = Just checksum, tmAdditional = Map.empty}
+
 instance AE.ToJSON TokenMetadataUrl where
     toJSON TokenMetadataUrl{..} =
         AE.object $
