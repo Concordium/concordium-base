@@ -1984,6 +1984,9 @@ pub mod cost {
     /// Additional cost of a normal, account to account, transfer.
     pub const SIMPLE_TRANSFER: Energy = Energy { energy: 300 };
 
+    /// Additional cost of a transaction consisting of token operations
+    pub const TOKEN_OPERATIONS: Energy = Energy { energy: 300 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2365,7 +2368,7 @@ pub mod construct {
             expiry,
             GivenEnergy::Add {
                 num_sigs,
-                energy: cost::SIMPLE_TRANSFER,
+                energy: cost::TOKEN_OPERATIONS,
             },
             payload,
         )
