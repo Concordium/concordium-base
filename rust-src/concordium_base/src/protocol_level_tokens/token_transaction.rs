@@ -11,6 +11,7 @@ use crate::{
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
+/// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 const CBOR_TAG: u64 = 24;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]

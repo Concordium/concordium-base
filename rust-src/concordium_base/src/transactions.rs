@@ -982,7 +982,7 @@ pub enum Payload {
         #[serde(flatten)]
         data: ConfigureDelegationPayload,
     },
-    /// Update a smart contract instance by invoking a specific function.
+    /// Token holder operations.
     TokenHolder {
         #[serde(flatten)]
         payload: TokenOperationsPayload,

@@ -80,6 +80,7 @@ use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::fmt::{Debug, Display};
 
+/// Decimal fraction, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 const DECIMAL_FRACTION_TAG: u64 = 4;
 
 /// How to handle unknown keys in decoded CBOR maps.
