@@ -60,10 +60,10 @@ impl TokenModuleEvent {
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenModuleEventType {
-    AddAllowList(TokenListUpdateDetails),
-    RemoveAllowList(TokenListUpdateDetails),
-    AddDenyList(TokenListUpdateDetails),
-    RemoveDenyList(TokenListUpdateDetails),
+    AddAllowList(TokenListEventDetails),
+    RemoveAllowList(TokenListEventDetails),
+    AddDenyList(TokenListEventDetails),
+    RemoveDenyList(TokenListEventDetails),
     /// Represents unknown token module event type
     Other,
 }
@@ -79,7 +79,7 @@ pub enum TokenModuleEventType {
     CborDeserialize,
 )]
 #[serde(rename_all = "camelCase")]
-pub struct TokenListUpdateDetails {
+pub struct TokenListEventDetails {
     pub target: TokenHolder,
 }
 
@@ -174,7 +174,7 @@ mod test {
 
     #[test]
     fn test_decode_add_allow_list_event_cbor() {
-        let variant = TokenListUpdateDetails {
+        let variant = TokenListEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
@@ -196,7 +196,7 @@ mod test {
 
     #[test]
     fn test_decode_remove_allow_list_event_cbor() {
-        let variant = TokenListUpdateDetails {
+        let variant = TokenListEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
@@ -218,7 +218,7 @@ mod test {
 
     #[test]
     fn test_decode_add_deny_list_event_cbor() {
-        let variant = TokenListUpdateDetails {
+        let variant = TokenListEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
@@ -240,7 +240,7 @@ mod test {
 
     #[test]
     fn test_decode_remove_deny_list_event_cbor() {
-        let variant = TokenListUpdateDetails {
+        let variant = TokenListEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
