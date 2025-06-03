@@ -1,6 +1,7 @@
 use crate::common::cbor::Bytes;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
+/// Metadata for a specific protocol level token
 #[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
 pub struct MetadataUrl {
     /// A string field representing the URL

@@ -16,8 +16,10 @@ const CBOR_TAG: u64 = 24;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Payload for token transaction. The transaction is a list of token
-/// operations. Operations includes governance operations, transfers etc.
+/// Payload for protocol level transaction. The transaction is a list of token
+/// operations that can be decoded from CBOR using
+/// [`TokenOperationsPayload::decode_operations`]. Operations includes
+/// governance operations, transfers etc.
 pub struct TokenOperationsPayload {
     /// Id of the token
     pub token_id:   TokenId,
@@ -26,11 +28,15 @@ pub struct TokenOperationsPayload {
 }
 
 impl TokenOperationsPayload {
-    pub fn deserialize_operations(&self) -> CborSerializationResult<TokenOperations> {
+    /// Decode token operations from CBOR
+    pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
         TokenOperations::try_from_cbor(&self.operations)
     }
 }
 
+/// A list of protocol level token operations. Can be composed to a protocol
+/// level token transaction via [`TokenOperationsPayload`]. The operations are
+/// CBOR encoded in the transaction payload.
 #[derive(
     Debug,
     Clone,
@@ -44,23 +50,33 @@ impl TokenOperationsPayload {
 #[serde(rename_all = "camelCase")]
 #[cbor(transparent)]
 pub struct TokenOperations {
+    /// List of protocol level token operations
     pub operations: Vec<TokenOperation>,
 }
 
 impl TokenOperations {
+    /// Decode token operations from CBOR
     pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
         cbor::cbor_decode(cbor.as_ref())
     }
 
+    /// Encode token operations to CBOR
     pub fn to_cbor(&self) -> CborSerializationResult<RawCbor> {
         Ok(RawCbor::from(cbor::cbor_encode(&self)?))
     }
 }
 
+/// Protocol level token operation. An operation can be composed to a protocol
+/// level token transaction via [`TokenOperations`] and
+/// [`TokenOperationsPayload`]. The operation is CBOR encoded in the transaction
+/// payload.
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenOperation {
+    /// Protocol level token transfer operation
     Transfer(TokenTransfer),
+    /// Unknow operation. If new types of operations are added that are unknown
+    /// to this enum, they will be decoded to this variant.
     Unknown,
 }
 
@@ -105,6 +121,7 @@ impl CborDeserialize for TokenOperation {
     }
 }
 
+/// Protocol level token transfer
 #[derive(
     Debug,
     Clone,
@@ -126,6 +143,7 @@ pub struct TokenTransfer {
     pub memo:      Option<CborMemo>,
 }
 
+/// Memo attached to a protocol level token transfer
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CborMemo {
