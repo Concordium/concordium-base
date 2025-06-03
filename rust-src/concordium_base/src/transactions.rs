@@ -2346,8 +2346,8 @@ pub mod construct {
         ))
     }
 
-    /// Construct a token transaction consisting of the operations encoded in
-    /// the given CBOR.
+    /// Construct a protocol level token transaction consisting of the
+    /// operations encoded in the given CBOR.
     pub fn token_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -3005,7 +3005,7 @@ pub mod send {
         .sign(signer)
     }
 
-    /// Construct a tokens transfer transaction.
+    /// Construct and sign a protocol level tokens transfer transaction.
     pub fn transfer_tokens(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -3027,7 +3027,8 @@ pub mod send {
         .sign(signer))
     }
 
-    /// Construct a tokens transfer transaction.
+    /// Construct and sign a protocol level tokens transfer transaction with
+    /// memo.
     #[allow(clippy::too_many_arguments)]
     pub fn transfer_tokens_with_memo(
         signer: &impl ExactSizeTransactionSigner,
@@ -3052,8 +3053,8 @@ pub mod send {
         .sign(signer))
     }
 
-    /// Construct a token transaction consisting of the operations encoded in
-    /// the given CBOR.
+    /// Construct and sign a protocol level token transaction consisting of the
+    /// operations encoded in the given CBOR.
     pub fn token_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
