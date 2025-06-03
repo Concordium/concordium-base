@@ -13,9 +13,7 @@
 //!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on structs with
 //! named fields and struct tuples:
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     field1: u64,
@@ -52,9 +50,7 @@
 //!
 //! #### `cbor(key)`
 //! For CBOR maps, set map key explicit to positive (integer) data item:
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     #[cbor(key = 1)]
@@ -67,9 +63,7 @@
 //! #### `cbor(tag)`
 //! Adds tag <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items> to encoded
 //! data item:
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(tag = 39999)]
 //! struct TestStruct {
@@ -81,9 +75,7 @@
 //!
 //! #### `cbor(transparent)`
 //! Serializes the type as the (single) field in the struct.
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     field1: u64,
@@ -124,6 +116,7 @@ pub mod __private {
     pub use anyhow;
 }
 
+/// Decimal fraction, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 const DECIMAL_FRACTION_TAG: u64 = 4;
 
 /// How to handle unknown keys in decoded CBOR maps.
@@ -144,10 +137,7 @@ pub struct SerializationOptions {
 
 impl SerializationOptions {
     pub fn unknown_map_keys(self, unknown_map_keys: UnknownMapKeys) -> Self {
-        Self {
-            unknown_map_keys,
-            ..self
-        }
+        Self { unknown_map_keys }
     }
 }
 
@@ -309,7 +299,8 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
         Self: Sized, {
         Ok(match decoder.peek_data_item_header()? {
             DataItemHeader::Simple(simple::NULL) => {
-                debug_assert_eq!(decoder.decode_simple()?, simple::NULL);
+                let value = decoder.decode_simple()?;
+                debug_assert_eq!(value, simple::NULL);
                 None
             }
             _ => Some(T::deserialize(decoder)?),

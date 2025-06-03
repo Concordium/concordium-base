@@ -12,7 +12,7 @@ const COIN_INFO_TAG: u64 = 40305;
 /// Concordiums listing in https://github.com/satoshilabs/slips/blob/master/slip-0044.md
 const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 
-/// A destination that can receive and hold tokens.
+/// A destination that can receive and hold protocol level tokens.
 /// Currently, this can only be a Concordium account address.
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,7 +39,7 @@ impl CborDeserialize for TokenHolder {
     }
 }
 
-/// Account address that holds tokens
+/// Account address that holds protocol level tokens
 #[derive(
     Debug,
     Eq,
