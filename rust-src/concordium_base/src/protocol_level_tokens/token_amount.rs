@@ -17,9 +17,8 @@ pub struct TokenAmount {
 impl CborSerialize for TokenAmount {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         let decimal_fraction = DecimalFraction::new(
-            i64::try_from(self.decimals)
-                .ok()
-                .and_then(|val| val.checked_neg())
+            i64::from(self.decimals)
+                .checked_neg()
                 .context("convert decimals to exponent")?,
             i64::try_from(self.value).context("convert value to mantissa")?,
         );
