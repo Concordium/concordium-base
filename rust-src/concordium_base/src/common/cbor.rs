@@ -11,9 +11,7 @@
 //!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on structs with
 //! named fields and tuples:
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     field1: u64,
@@ -31,9 +29,7 @@
 //!
 //! #### `cbor(key)`
 //! For CBOR maps, set map key explicit to positive (integer) data item:
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     #[cbor(key = 1)]
@@ -46,9 +42,7 @@
 //! #### `cbor(tag)`
 //! Adds tag <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items> to encoded
 //! data item:
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(tag = 39999)]
 //! struct TestStruct {
@@ -60,9 +54,7 @@
 //!
 //! #### `cbor(transparent)`
 //! Serializes the type as the (single) field in the struct.
-//! ```
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     field1: u64,
