@@ -176,7 +176,9 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
     let mut decoder = Decoder::new(cbor, options);
     let value = T::deserialize(&mut decoder)?;
     if decoder.inner.offset() != cbor.len() {
-        return Err(CborSerializationError::remaining_data(decoder.inner.offset()));
+        return Err(CborSerializationError::remaining_data(
+            decoder.inner.offset(),
+        ));
     }
     Ok(value)
 }
