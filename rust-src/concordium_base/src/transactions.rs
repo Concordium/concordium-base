@@ -2274,7 +2274,7 @@ pub mod construct {
         )
     }
 
-    /// Construct a tokens transfer transaction.
+    /// Construct a protocol level token transfer transaction.
     pub fn transfer_tokens(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2289,7 +2289,7 @@ pub mod construct {
         )
     }
 
-    /// Construct a tokens transfer transaction with a memo.
+    /// Construct a protocol level token transfer transaction with a memo.
     #[allow(clippy::too_many_arguments)]
     pub fn transfer_tokens_with_memo(
         num_sigs: u32,
@@ -2313,7 +2313,7 @@ pub mod construct {
         )
     }
 
-    /// Construct a tokens transfer transaction.
+    /// Construct a protocol level tokens transfer transaction.
     #[allow(clippy::too_many_arguments)]
     fn transfer_tokens_impl(
         num_sigs: u32,
