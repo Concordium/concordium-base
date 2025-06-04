@@ -20,7 +20,7 @@ pub use concordium_contracts_common::{
     AccountThreshold, Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
     ZeroSignatureThreshold,
 };
-use derive_more::{Add, Display, From, FromStr, Into, Sub};
+use derive_more::{Add, Display, From, FromStr, Into, Sub, Sum};
 use ed25519_dalek::Signer;
 use rand::{CryptoRng, Rng};
 use std::{
@@ -548,7 +548,21 @@ pub struct AccountIndex {
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add, Sub,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Default,
+    FromStr,
+    Display,
+    From,
+    Into,
+    Add,
+    Sub,
+    Sum,
 )]
 pub struct Energy {
     pub energy: u64,
