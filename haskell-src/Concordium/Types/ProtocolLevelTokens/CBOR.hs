@@ -193,8 +193,8 @@ decodeTokenAmount = do
     unless (base10Exponent sci >= -255) $ fail "Token amount exponent is too small"
     return
         TokenAmount
-            { digits = fromIntegral (coefficient sci),
-              nrDecimals = fromIntegral (negate (base10Exponent sci))
+            { taValue = fromIntegral (coefficient sci),
+              taDecimals = fromIntegral (negate (base10Exponent sci))
             }
 
 -- | Encode a 'TokenAmount' as CBOR.
@@ -202,8 +202,8 @@ encodeTokenAmount :: TokenAmount -> Encoding
 encodeTokenAmount TokenAmount{..} =
     encodeTag 4
         <> encodeListLen 2
-        <> encodeInteger (-fromIntegral nrDecimals)
-        <> encodeWord64 digits
+        <> encodeInteger (-fromIntegral taDecimals)
+        <> encodeWord64 (theTokenRawAmount taValue)
 
 -- | Helper function to encode a sequence.
 encodeSequence :: (a -> Encoding) -> Seq.Seq a -> Encoding
@@ -733,6 +733,101 @@ encodeTokenHolderTransaction = encodeSequence encodeTokenHolderOperation . token
 -- | CBOR-encode a 'TokenHolderTransaction' to a (strict) 'BS.ByteString'.
 tokenHolderTransactionToBytes :: TokenHolderTransaction -> BS.ByteString
 tokenHolderTransactionToBytes = CBOR.toStrictByteString . encodeTokenHolderTransaction
+
+-- * Token module events
+
+-- | A token-module generated event as part of executing a transaction.
+data EncodedTokenEvent = EncodedTokenEvent
+    { -- | The type of the event. At most 255 bytes.
+      eteType :: !TokenEventType,
+      -- | CBOR-encoded details.
+      eteDetails :: !TokenEventDetails
+    }
+    deriving (Eq, Show)
+
+data TokenEvent
+    = -- | An account was added to the allow list.
+      AddAllowListEvent !TokenHolder
+    | -- | An account was removed from the allow list.
+      RemoveAllowListEvent !TokenHolder
+    | -- | An account was added to the deny list.
+      AddDenyListEvent !TokenHolder
+    | -- | An account was removed from the deny list.
+      RemoveDenyListEvent !TokenHolder
+    deriving (Eq, Show)
+
+-- | CBOR-encode the details for the list update events in the form:
+--  > {"target": <TokenHolder>}
+encodeTargetDetails :: TokenHolder -> TokenEventDetails
+encodeTargetDetails target =
+    TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+        encodeMapLen 1
+            <> encodeString "target"
+            <> encodeTokenHolder target
+
+-- | Encode a 'TokenEvent' as an 'EncodedTokenEvent'.
+encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
+encodeTokenEvent = \case
+    AddAllowListEvent target ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "addAllowList",
+              eteDetails = encodeTargetDetails target
+            }
+    RemoveAllowListEvent target ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "removeAllowList",
+              eteDetails = encodeTargetDetails target
+            }
+    AddDenyListEvent target ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "addDenyList",
+              eteDetails = encodeTargetDetails target
+            }
+    RemoveDenyListEvent target ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "removeDenyList",
+              eteDetails = encodeTargetDetails target
+            }
+
+-- | Decoder for the event details of the list update events.
+--  This is the "token-list-update-details" type in the CDDL schema.
+decodeTokenEventTarget :: Decoder s TokenHolder
+decodeTokenEventTarget = do
+    maybeMapLen <- decodeMapLenOrIndef
+    forM_ maybeMapLen $ \mapLen ->
+        unless (mapLen == 1) $
+            fail $
+                "token-event: expected a map of size 1, but saw " ++ show mapLen
+    label <- decodeString
+    unless (label == "target") $
+        fail $
+            "token-event: expected \"target\" key, but saw "
+                ++ show label
+    target <- decodeTokenHolder
+    when (isNothing maybeMapLen) $ do
+        isEnd <- decodeBreakOr
+        unless isEnd $ fail "token-event: expected end of map"
+    return target
+
+-- | Decode a 'TokenEvent' from an 'EncodedTokenEvent'.
+decodeTokenEvent :: EncodedTokenEvent -> Either String TokenEvent
+decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
+    "addAllowList" -> AddAllowListEvent <$> decodeTarget
+    "removeAllowList" -> RemoveAllowListEvent <$> decodeTarget
+    "addDenyList" -> AddDenyListEvent <$> decodeTarget
+    "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
+    unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
+  where
+    decodeTarget = do
+        let detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
+        case CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS of
+            Left e -> Left $ "token-event: failed to decode event details: " ++ show e
+            Right ("", target) -> Right target
+            Right (remaining, _) ->
+                Left $
+                    "token-event: "
+                        ++ show (LBS.length remaining)
+                        ++ " bytes remaining after parsing event details"
 
 -- * Reject reasons
 

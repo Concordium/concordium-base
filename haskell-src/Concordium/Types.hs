@@ -188,10 +188,6 @@ module Concordium.Types (
     TokenModuleRef (..),
     TokenEventDetails (..),
     TokenEventType (..),
-    TokenEvent (..),
-    teTokenId,
-    teType,
-    teDetails,
     makeTokenEventType,
     TokenModuleRejectReason (..),
     makeTokenModuleRejectReason,
@@ -246,7 +242,6 @@ import Data.Word
 
 import Data.Aeson as AE
 import Data.Aeson.TH
-import Data.Aeson.Types as AE
 
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -1145,103 +1140,6 @@ instance S.Serialize TokenParameter where
     put (TokenParameter parameter) = do
         S.putWord32be (fromIntegral (BSS.length parameter))
         S.putShortByteString parameter
-
--- | The token events details produced by a token module.
--- Represented as some arbitrary CBOR encoding.
-newtype TokenEventDetails = TokenEventDetails {tokenEventDetailsBytes :: BSS.ShortByteString}
-    deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
-
-instance S.Serialize TokenEventDetails where
-    get = do
-        len <- S.getWord32be
-        TokenEventDetails <$> S.getShortByteString (fromIntegral len)
-    put (TokenEventDetails parameter) = do
-        S.putWord32be (fromIntegral (BSS.length parameter))
-        S.putShortByteString parameter
-
--- | Token event type string.
---  MUST be at most 255 bytes and SHOULD BE a valid UTF-8 string.
---
---  Serialization does not require or check for UTF-8 validity.
---  Converting to JSON will replace invalid UTF-8 bytes with the unicode replacement character,
---  which means that converting to JSON and back is only the identity for valid UTF-8.
-newtype TokenEventType = TokenEventType {tokenEventTypeBytes :: BSS.ShortByteString}
-    deriving newtype (Eq, Show)
-
-instance AE.ToJSON TokenEventType where
-    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenEventType
-    -- should enforce valid UTF-8.
-    toJSON TokenEventType{..} = AE.String $ T.decodeUtf8Lenient $ BSS.fromShort tokenEventTypeBytes
-
-instance AE.FromJSON TokenEventType where
-    parseJSON (AE.String text) = return $ TokenEventType $ BSS.toShort $ T.encodeUtf8 text
-    parseJSON invalid = AE.prependFailure "parsing TokenEventType failed" (AE.typeMismatch "String" invalid)
-
--- | Try to construct a valid 'TokenEventType' from a 'BSS.ShortByteString'.
---  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
---  In the event of a failure @Left err@ is returned, where @err@ describes the failure.
-makeTokenEventType :: BSS.ShortByteString -> Either String TokenEventType
-makeTokenEventType sbs
-    | BSS.length sbs > 255 =
-        Left $ "TokenEventType length (" ++ show (BSS.length sbs) ++ ") out of bounds."
-    | Left decodeErr <- T.decodeUtf8' (BSS.fromShort sbs) =
-        Left $ "TokenEventType is not valid UTF-8: " ++ show decodeErr
-    | otherwise = Right $ TokenEventType sbs
-
-instance S.Serialize TokenEventType where
-    put (TokenEventType eventTypeString) = do
-        S.putWord8 $ fromIntegral $ BSS.length eventTypeString
-        S.putShortByteString eventTypeString
-    get = do
-        len <- S.getWord8
-        sbs <- S.getShortByteString (fromIntegral len)
-        return $ TokenEventType sbs
-
--- | Event produced from a token module
--- This is used for both token holder transactions and for token governance transactions.
-data TokenEvent = TokenEvent
-    { -- | The unique token symbol identifier.
-      _teTokenId :: TokenId,
-      -- | Type of the event.
-      _teType :: TokenEventType,
-      -- | The details of the event
-      _teDetails :: TokenEventDetails
-    }
-    deriving (Eq, Show)
-
-makeLenses ''TokenEvent
-
-instance HashableTo Hash.Hash TokenEvent where
-    getHash = Hash.hash . S.encode
-
-instance (Monad m) => MHashableTo m Hash.Hash TokenEvent
-
-instance S.Serialize TokenEvent where
-    put TokenEvent{..} = do
-        S.put _teTokenId
-        S.put _teType
-        S.put _teDetails
-    get = do
-        _teTokenId <- S.get
-        _teType <- S.get
-        _teDetails <- S.get
-        return TokenEvent{..}
-
-instance AE.ToJSON TokenEvent where
-    toJSON TokenEvent{..} =
-        AE.object
-            [ "tokenId" AE..= _teTokenId,
-              "type" AE..= _teType,
-              "details" AE..= _teDetails
-            ]
-
-instance AE.FromJSON TokenEvent where
-    parseJSON = AE.withObject "TokenEvent" $ \o -> do
-        _teTokenId <- o AE..: "tokenId"
-        _teType <- o AE..: "type"
-        _teDetails <- o AE..: "details"
-        return TokenEvent{..}
 
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason

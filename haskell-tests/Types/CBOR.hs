@@ -28,9 +28,6 @@ import Generators
 genText :: Gen Text.Text
 genText = sized $ \s -> Text.decodeUtf8 . BS.pack <$> genUtf8String s
 
-genTokenAmount :: Gen TokenAmount
-genTokenAmount = TokenAmount <$> arbitrary <*> chooseBoundedIntegral (0, 255)
-
 genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- genText
@@ -118,6 +115,15 @@ genTokenModuleStateWithAdditional = do
                 ]
         return ("_" <> key, val)
 
+genTokenEvent :: Gen TokenEvent
+genTokenEvent =
+    oneof
+        [ AddAllowListEvent <$> genTokenHolder,
+          RemoveAllowListEvent <$> genTokenHolder,
+          AddDenyListEvent <$> genTokenHolder,
+          RemoveDenyListEvent <$> genTokenHolder
+        ]
+
 -- | Generator for 'TokenRejectReason'.
 genTokenRejectReason :: Gen TokenRejectReason
 genTokenRejectReason =
@@ -137,7 +143,7 @@ tip1 =
         { tipName = "ABC token",
           tipMetadata = "https://abc.token/meta",
           tipAllowList = False,
-          tipInitialSupply = Just (TokenAmount{digits = 10000, nrDecimals = 5}),
+          tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = False,
           tipMintable = False,
           tipBurnable = False
@@ -194,7 +200,7 @@ tip2 :: TokenInitializationParameters
 tip2 =
     tip1
         { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
-          tipInitialSupply = Just (TokenAmount{digits = 12345, nrDecimals = 5})
+          tipInitialSupply = Just (TokenAmount{taValue = 12345, taDecimals = 5})
         }
 
 -- | Encoded 'TokenInitializationParameters' that can be successfully CBOR decoded
@@ -244,7 +250,7 @@ tops1 =
             [ TokenHolderTransfer
                 TokenTransferBody
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
-                      ttAmount = TokenAmount{digits = 12345, nrDecimals = 5},
+                      ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
                       ttRecipient =
                         HolderAccount
                             { holderAccountAddress = AccountAddress $ FBS.pack [0x1, 0x1],
@@ -336,5 +342,7 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenModuleState
                     (toLazyByteString $ encodeTokenModuleState tt)
                 )
+    it "Encode and decode TokenEvent" $ withMaxSuccess 1000 $ forAll genTokenEvent $ \tt ->
+        Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
         Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)
