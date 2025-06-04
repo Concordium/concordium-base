@@ -2004,6 +2004,10 @@ pub mod cost {
     /// Additional cost of a normal, account to account, transfer.
     pub const SIMPLE_TRANSFER: Energy = Energy { energy: 300 };
 
+    /// Additional cost of a transaction consisting of protocol level token
+    /// operations
+    pub const TOKEN_OPERATIONS: Energy = Energy { energy: 300 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2288,8 +2292,8 @@ pub mod construct {
         )
     }
 
-    /// Construct a token holder transaction consisting of the token holder
-    /// operations encoded in the given CBOR.
+    /// Construct a protocol level token holder transaction consisting of the
+    /// token holder operations encoded in the given CBOR.
     pub fn token_holder_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2312,14 +2316,14 @@ pub mod construct {
             expiry,
             GivenEnergy::Add {
                 num_sigs,
-                energy: cost::SIMPLE_TRANSFER,
+                energy: cost::TOKEN_OPERATIONS,
             },
             payload,
         ))
     }
 
-    /// Construct a token governance transaction consisting of the token
-    /// governance operations encoded in the given CBOR.
+    /// Construct a protocol level token governance transaction consisting of
+    /// the token governance operations encoded in the given CBOR.
     pub fn token_governance_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2342,7 +2346,7 @@ pub mod construct {
             expiry,
             GivenEnergy::Add {
                 num_sigs,
-                energy: cost::SIMPLE_TRANSFER,
+                energy: cost::TOKEN_OPERATIONS,
             },
             payload,
         ))
@@ -2979,8 +2983,8 @@ pub mod send {
         .sign(signer)
     }
 
-    /// Construct a token holder transaction consisting of the token holder
-    /// operations encoded in the given CBOR.
+    /// Construct and sign a protocol level token holder transaction consisting
+    /// of the token holder operations encoded in the given CBOR.
     pub fn token_holder_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -3000,8 +3004,9 @@ pub mod send {
         .sign(signer))
     }
 
-    /// Construct a token governance transaction consisting of the token
-    /// governance operations encoded in the given CBOR.
+    /// Construct and sign a protocol level token governance transaction
+    /// consisting of the token governance operations encoded in the given
+    /// CBOR.
     pub fn token_governance_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,

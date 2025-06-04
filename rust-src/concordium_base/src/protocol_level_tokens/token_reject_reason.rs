@@ -21,6 +21,7 @@ pub struct TokenModuleRejectReason {
 }
 
 impl TokenModuleRejectReason {
+    /// Decode reject reason from CBOR
     pub fn decode_reject_reason_type(
         &self,
     ) -> CborSerializationResult<TokenModuleRejectReasonType> {
@@ -45,7 +46,7 @@ impl TokenModuleRejectReason {
             "mintWouldOverflow" => MintWouldOverflow(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
             )?),
-            _ => Other,
+            _ => Unknow,
         })
     }
 }
@@ -54,14 +55,22 @@ impl TokenModuleRejectReason {
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenModuleRejectReasonType {
+    /// Address not found
     AddressNotFound(AddressNotFoundRejectReason),
+    /// Token balance is insufficient
     TokenBalanceInsufficient(TokenBalanceInsufficientRejectReason),
+    /// The transaction could not be deserialized
     DeserializationFailure(DeserializationFailureRejectReason),
+    /// The operation is not supported by the token module
     UnsupportedOperation(UnsupportedOperationRejectReason),
+    /// Operation authorization check failed
     OperationNotPermitted(OperationNotPermittedRejectReason),
+    /// Minting the requested amount would overflow the representable token
+    /// amount.
     MintWouldOverflow(MintWouldOverflowRejectReason),
-    /// Represents unknown reject reason type
-    Other,
+    /// Unknow reject reason type. If new reject reasons are added that are
+    /// unknown to this enum, they will be decoded to this variant.
+    Unknow,
 }
 
 /// A token holder address was not valid.
@@ -123,6 +132,7 @@ pub struct DeserializationFailureRejectReason {
 }
 
 /// The operation is not supported by the token module.
+///
 /// This may be because the operation is not implemented by the module, or
 /// because the token is not configured to support the operation. If the
 /// operation is not authorized (i.e. the particular participants do not have

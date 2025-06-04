@@ -1,7 +1,7 @@
 use crate::{
     common::{
         cbor,
-        cbor::{Bytes, CborSerializationResult, SerializationOptions, UnknownMapKeys},
+        cbor::{CborSerializationResult, SerializationOptions, UnknownMapKeys},
     },
     protocol_level_tokens::RawCbor,
 };
@@ -24,14 +24,6 @@ pub struct TokenModuleState {
     pub mintable:   Option<bool>,
     /// Whether the token is burnable.
     pub burnable:   Option<bool>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
-pub struct MetadataUrl {
-    /// A string field representing the URL
-    pub url:              Option<String>,
-    /// An optional sha256 checksum value tied to the content of the URL
-    pub checksum_sha_256: Option<Bytes>,
 }
 
 impl TokenModuleState {

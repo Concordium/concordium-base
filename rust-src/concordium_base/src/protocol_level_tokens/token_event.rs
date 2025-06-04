@@ -16,9 +16,9 @@ pub struct TokenEvent {
     pub event:    TokenEventDetails,
 }
 
+/// The type of the token event.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-/// The type of the token event.
 pub enum TokenEventDetails {
     /// An event emitted by the token module.
     Module(TokenModuleEvent),
@@ -51,7 +51,7 @@ impl TokenModuleEvent {
             "removeAllowList" => RemoveAllowList(cbor::cbor_decode(self.details.as_ref())?),
             "addDenyList" => AddDenyList(cbor::cbor_decode(self.details.as_ref())?),
             "removeDenyList" => RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?),
-            _ => Other,
+            _ => Unknow,
         })
     }
 }
@@ -60,14 +60,21 @@ impl TokenModuleEvent {
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenModuleEventType {
-    AddAllowList(TokenListEventDetails),
-    RemoveAllowList(TokenListEventDetails),
-    AddDenyList(TokenListEventDetails),
-    RemoveDenyList(TokenListEventDetails),
-    /// Represents unknown token module event type
-    Other,
+    /// An account was added to the allow list of a protocol level token
+    AddAllowList(TokenListUpdateEventDetails),
+    /// An account was removed from the allow list of a protocol level token
+    RemoveAllowList(TokenListUpdateEventDetails),
+    /// An account was added to the deny list of a protocol level token
+    AddDenyList(TokenListUpdateEventDetails),
+    /// An account was removed from the deny list of a protocol level token
+    RemoveDenyList(TokenListUpdateEventDetails),
+    /// Unknow token module event type. If new events types are added that are
+    /// unknown to this enum, they will be decoded to this variant.
+    Unknow,
 }
 
+/// Details of an event updating the allow or deny list of a protocol level
+/// token
 #[derive(
     Debug,
     Clone,
@@ -79,7 +86,8 @@ pub enum TokenModuleEventType {
     CborDeserialize,
 )]
 #[serde(rename_all = "camelCase")]
-pub struct TokenListEventDetails {
+pub struct TokenListUpdateEventDetails {
+    /// The account that was added or removed from an allow or deny list
     pub target: TokenHolder,
 }
 
@@ -174,7 +182,7 @@ mod test {
 
     #[test]
     fn test_decode_add_allow_list_event_cbor() {
-        let variant = TokenListEventDetails {
+        let variant = TokenListUpdateEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
@@ -196,7 +204,7 @@ mod test {
 
     #[test]
     fn test_decode_remove_allow_list_event_cbor() {
-        let variant = TokenListEventDetails {
+        let variant = TokenListUpdateEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
@@ -218,7 +226,7 @@ mod test {
 
     #[test]
     fn test_decode_add_deny_list_event_cbor() {
-        let variant = TokenListEventDetails {
+        let variant = TokenListUpdateEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
@@ -240,7 +248,7 @@ mod test {
 
     #[test]
     fn test_decode_remove_deny_list_event_cbor() {
-        let variant = TokenListEventDetails {
+        let variant = TokenListUpdateEventDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
