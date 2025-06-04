@@ -31,7 +31,7 @@
 //!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on enums using
 //! `map` representation:
-//! ```
+//! ```ignore
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
 //! #
 //! #[derive(CborSerialize, CborDeserialize)]
@@ -89,7 +89,7 @@
 //!
 //! #### `cbor(other)`
 //! Deserializes "unknown" content to this enum variant.
-//! ```
+//! ```ignore
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
 //! #
 //! #[derive(CborSerialize, CborDeserialize)]
