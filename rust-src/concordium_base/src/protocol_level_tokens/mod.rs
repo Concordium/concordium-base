@@ -8,8 +8,8 @@ mod token_id;
 mod token_metadata_url;
 mod token_module_ref;
 mod token_module_state;
+mod token_operations;
 mod token_reject_reason;
-mod token_transaction;
 
 pub use cbor::*;
 pub use token_amount::*;
@@ -18,5 +18,5 @@ pub use token_holder::*;
 pub use token_id::*;
 pub use token_module_ref::*;
 pub use token_module_state::*;
+pub use token_operations::*;
 pub use token_reject_reason::*;
-pub use token_transaction::*;

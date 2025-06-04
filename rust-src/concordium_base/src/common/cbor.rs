@@ -9,8 +9,10 @@
 //!
 //! ## Deriving `CborSerialize` and `CborDeserialize`
 //!
+//! ### Structs
+//!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on structs with
-//! named fields and tuples:
+//! named fields and struct tuples:
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
@@ -24,6 +26,25 @@
 //! Structs with named fields are serialized as CBOR maps using camel cased
 //! field names as keys (of data item type text) and tuples are serialized as
 //! CBOR arrays.
+//!
+//! ### Enums
+//!
+//! [`CborSerialize`] and [`CborDeserialize`] can be derived on enums using
+//! `map` representation:
+//! ```ignore
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//! #
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(map)]
+//! enum TestEnum {
+//!     Var1(u64),
+//!     Var2(String),
+//! }
+//! ```
+//! All enum variants must be single element tuples.
+//!
+//! Using `#[cbor(map)]` represents the enum as a map with a single key
+//! that is the variant name camel cased (the key is a text data item).
 //!
 //! ### Supported attributes
 //!
@@ -65,12 +86,35 @@
 //! struct TestStructWrapper(TestStruct);
 //! ```
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
+//!
+//! #### `cbor(other)`
+//! Deserializes "unknown" content to this enum variant.
+//! ```ignore
+//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
+//! #
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(map)]
+//! enum TestEnum {
+//!     Var1(u64),
+//!     Var2(String),
+//!     #[cbor(other)]
+//!     Unknown,
+//! }
+//! ```
+//! In this example variants in the CBOR that is not represented in the enum are
+//! deserialized as `Unknown`. Serializing `Unknown` will always fail.
 
 use anyhow::{anyhow, Context};
 use ciborium_io::{Read, Write};
 use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::fmt::{Debug, Display};
+
+/// Reexports for derive macros
+#[doc(hidden)]
+pub mod __private {
+    pub use anyhow;
+}
 
 /// Decimal fraction, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 const DECIMAL_FRACTION_TAG: u64 = 4;
@@ -129,8 +173,12 @@ impl CborSerializationError {
         anyhow!("map value for key {:?} not present and cannot be null", key).into()
     }
 
-    pub fn array_length(expected: usize, actual: usize) -> Self {
+    pub fn array_size(expected: usize, actual: usize) -> Self {
         anyhow!("expected array length {}, was {}", expected, actual).into()
+    }
+
+    pub fn map_size(expected: usize, actual: usize) -> Self {
+        anyhow!("expected map size {}, was {}", expected, actual).into()
     }
 }
 
@@ -249,8 +297,8 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        Ok(match decoder.peek_header()? {
-            Header::Simple(simple::NULL) => {
+        Ok(match decoder.peek_data_item_header()? {
+            DataItemHeader::Simple(simple::NULL) => {
                 let value = decoder.decode_simple()?;
                 debug_assert_eq!(value, simple::NULL);
                 None
@@ -356,20 +404,29 @@ pub trait CborDecoder {
     /// Decode map start. Returns the map size
     fn decode_map_header(&mut self) -> CborSerializationResult<usize>;
 
+    /// Decode map start and check size equals `expected_length`
+    fn decode_map_header_expect_size(
+        &mut self,
+        expected_size: usize,
+    ) -> CborSerializationResult<()> {
+        let size = self.decode_map_header()?;
+        if size != expected_size {
+            return Err(CborSerializationError::map_size(expected_size, size));
+        }
+        Ok(())
+    }
+
     /// Decode array start. Returns the array size
     fn decode_array_header(&mut self) -> CborSerializationResult<usize>;
 
-    /// Decode array start and check length equals `expected_length`
-    fn decode_array_header_expect_length(
+    /// Decode array start and check size equals `expected_length`
+    fn decode_array_header_expect_size(
         &mut self,
-        expected_length: usize,
+        expected_size: usize,
     ) -> CborSerializationResult<()> {
-        let length = self.decode_array_header()?;
-        if length != expected_length {
-            return Err(CborSerializationError::array_length(
-                expected_length,
-                length,
-            ));
+        let size = self.decode_array_header()?;
+        if size != expected_size {
+            return Err(CborSerializationError::array_size(expected_size, size));
         }
         Ok(())
     }
@@ -393,13 +450,8 @@ pub trait CborDecoder {
     /// Decode simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
     fn decode_simple(&mut self) -> CborSerializationResult<u8>;
 
-    /// Peeks type of next data item to be decoded.
-    fn peek_data_item_type(&mut self) -> CborSerializationResult<DataItemType> {
-        Ok(DataItemType::from_header(&self.peek_header()?))
-    }
-
-    /// Peeks next header to be decoded.
-    fn peek_header(&mut self) -> CborSerializationResult<Header>;
+    /// Peeks header of next data item to be decoded.
+    fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader>;
 
     /// Skips next header and potential content for the data item
     fn skip_data_item(&mut self) -> CborSerializationResult<()>;
@@ -417,7 +469,7 @@ where
             Header::Tag(tag) => Ok(tag),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Tag,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -427,7 +479,7 @@ where
             Header::Positive(positive) => Ok(positive),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Positive,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -437,7 +489,7 @@ where
             Header::Negative(negative) => Ok(negative),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Negative,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -447,7 +499,7 @@ where
             Header::Map(Some(size)) => Ok(size),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Map,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -457,7 +509,7 @@ where
             Header::Array(Some(size)) => Ok(size),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Array,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
@@ -472,7 +524,7 @@ where
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Bytes,
-                    DataItemType::from_header(&header),
+                    DataItemType::from_header(header),
                 ))
             }
         };
@@ -487,7 +539,7 @@ where
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Bytes,
-                    DataItemType::from_header(&header),
+                    DataItemType::from_header(header),
                 ))
             }
         };
@@ -503,7 +555,7 @@ where
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Text,
-                    DataItemType::from_header(&header),
+                    DataItemType::from_header(header),
                 ))
             }
         };
@@ -518,25 +570,29 @@ where
             Header::Simple(value) => Ok(value),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Simple,
-                DataItemType::from_header(&header),
+                DataItemType::from_header(header),
             )),
         }
     }
 
-    fn peek_header(&mut self) -> CborSerializationResult<Header> {
+    fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
         let header = self.inner.pull()?;
+        let data_item_header = DataItemHeader::from_header(header);
         self.inner.push(header);
-        Ok(header)
+        Ok(data_item_header)
     }
 
     fn skip_data_item(&mut self) -> CborSerializationResult<()> {
-        match self.peek_data_item_type()? {
+        match self.peek_data_item_header()?.to_type() {
             DataItemType::Positive
             | DataItemType::Negative
-            | DataItemType::Tag
             | DataItemType::Simple
             | DataItemType::Float => {
                 self.inner.pull()?;
+            }
+            DataItemType::Tag => {
+                self.inner.pull()?;
+                self.skip_data_item()?;
             }
             DataItemType::Bytes => {
                 self.decode_bytes()?;
@@ -754,7 +810,7 @@ macro_rules! serialize_deserialize_signed_integer {
             fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
             where
                 Self: Sized, {
-                match decoder.peek_data_item_type()? {
+                match decoder.peek_data_item_header()?.to_type() {
                     DataItemType::Positive => Ok(<$t>::try_from(decoder.decode_positive()?)
                         .context(concat!("convert positive to ", stringify!($t)))?),
                     DataItemType::Negative => Ok(<$t>::try_from(decoder.decode_negative()?)
@@ -825,7 +881,7 @@ pub enum DataItemType {
 }
 
 impl DataItemType {
-    pub fn from_header(header: &Header) -> Self {
+    pub fn from_header(header: Header) -> Self {
         use DataItemType::*;
 
         match header {
@@ -839,6 +895,57 @@ impl DataItemType {
             Header::Text(_) => Text,
             Header::Array(_) => Array,
             Header::Map(_) => Map,
+        }
+    }
+}
+
+/// CBOR data item header.
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum DataItemHeader {
+    Positive(u64),
+    Negative(u64),
+    Bytes(Option<usize>),
+    Text(Option<usize>),
+    Array(Option<usize>),
+    Map(Option<usize>),
+    Tag(u64),
+    Simple(u8),
+    Float(f64),
+    Break,
+}
+
+impl DataItemHeader {
+    pub fn to_type(self) -> DataItemType {
+        use DataItemType::*;
+
+        match self {
+            DataItemHeader::Positive(_) => Positive,
+            DataItemHeader::Negative(_) => Negative,
+            DataItemHeader::Bytes(_) => Bytes,
+            DataItemHeader::Text(_) => Text,
+            DataItemHeader::Array(_) => Array,
+            DataItemHeader::Map(_) => Map,
+            DataItemHeader::Tag(_) => Tag,
+            DataItemHeader::Simple(_) => Simple,
+            DataItemHeader::Float(_) => Float,
+            DataItemHeader::Break => Break,
+        }
+    }
+
+    pub fn from_header(header: Header) -> Self {
+        use DataItemHeader::*;
+
+        match header {
+            Header::Positive(value) => Positive(value),
+            Header::Negative(value) => Negative(value),
+            Header::Float(value) => Float(value),
+            Header::Simple(value) => Simple(value),
+            Header::Tag(tag) => Tag(tag),
+            Header::Break => Break,
+            Header::Bytes(length) => Bytes(length),
+            Header::Text(length) => Text(length),
+            Header::Array(length) => Array(length),
+            Header::Map(length) => Map(length),
         }
     }
 }
@@ -879,7 +986,7 @@ impl CborDeserialize for MapKey {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        match decoder.peek_data_item_type()? {
+        match decoder.peek_data_item_header()?.to_type() {
             DataItemType::Positive => Ok(Self::Positive(u64::deserialize(decoder)?)),
             DataItemType::Text => Ok(Self::Text(String::deserialize(decoder)?)),
             data_item_type => Err(anyhow!(
@@ -1085,7 +1192,7 @@ mod test {
     /// Struct with named fields encoded as map. Uses field name string literals
     /// as keys.
     #[test]
-    fn test_map_derived() {
+    fn test_struct_as_map_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: u64,
@@ -1107,7 +1214,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_camel_case() {
+    fn test_struct_as_map_derived_camel_case() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field_name: u64,
@@ -1122,7 +1229,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_explicit_keys() {
+    fn test_struct_as_map_derived_explicit_keys() {
         const KEY: u64 = 2;
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -1145,7 +1252,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_optional_field() {
+    fn test_struct_as_map_derived_optional_field() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: Option<u64>,
@@ -1177,7 +1284,7 @@ mod test {
     }
 
     #[test]
-    fn test_map_derived_unknown_field() {
+    fn test_struct_as_map_derived_unknown_field() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {
             field1: u64,
@@ -1213,7 +1320,7 @@ mod test {
     }
 
     #[test]
-    fn test_array_derived() {
+    fn test_struct_as_array_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct(u64, String);
 
@@ -1226,7 +1333,7 @@ mod test {
     }
 
     #[test]
-    fn test_array_derived_wrong_length() {
+    fn test_struct_as_array_derived_wrong_length() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct(u64, String);
 
@@ -1241,7 +1348,7 @@ mod test {
     }
 
     #[test]
-    fn test_derived_transparent_tuple() {
+    fn test_struct_derived_transparent_tuple() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent)]
         struct TestStructWrapper(TestStruct);
@@ -1260,7 +1367,7 @@ mod test {
     }
 
     #[test]
-    fn test_derived_transparent_named() {
+    fn test_struct_derived_transparent_named() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent)]
         struct TestStructWrapper {
@@ -1283,7 +1390,7 @@ mod test {
     }
 
     #[test]
-    fn test_tag_derived_map() {
+    fn test_struct_tag_derived_map() {
         const TAG: u64 = 39999;
 
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -1310,7 +1417,7 @@ mod test {
     }
 
     #[test]
-    fn test_tag_derived_transparent() {
+    fn test_struct_tag_derived_transparent() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(transparent, tag = 39999)]
         struct TestStructWrapper(TestStruct);
@@ -1335,6 +1442,79 @@ mod test {
             .unwrap_err()
             .to_string();
         assert!(err.contains("expected tag 39998"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        let value = TestEnum::Var1(3);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1647661723103");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a164766172326461626364");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived_unknown_key() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum2 {
+            Var1(u64),
+        }
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
+        assert!(err.contains("unknown map key"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived_other_variant() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum2 {
+            Var1(u64),
+            #[cbor(other)]
+            Unknown,
+        }
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestEnum2 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, TestEnum2::Unknown);
+
+        let err = cbor_encode(&TestEnum2::Unknown).unwrap_err().to_string();
+        assert!(
+            err.contains("cannot serialize variant marked with #[cbor(other)]"),
+            "err: {}",
+            err
+        );
     }
 
     #[test]
@@ -1376,7 +1556,10 @@ mod test {
         test_skip_data_item_impl(|encoder| encoder.encode_simple(simple::TRUE).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_positive(2).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_negative(2).unwrap());
-        test_skip_data_item_impl(|encoder| encoder.encode_tag(2).unwrap());
+        test_skip_data_item_impl(|encoder| {
+            encoder.encode_tag(2).unwrap();
+            encoder.encode_positive(2).unwrap();
+        });
         test_skip_data_item_impl(|encoder| encoder.encode_bytes(&[0x01; 30]).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
         test_skip_data_item_impl(|encoder| {

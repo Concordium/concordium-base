@@ -982,8 +982,13 @@ pub enum Payload {
         #[serde(flatten)]
         data: ConfigureDelegationPayload,
     },
-    /// Token holder operations.
+    /// Token holder operations
     TokenHolder {
+        #[serde(flatten)]
+        payload: TokenOperationsPayload,
+    },
+    /// Token governance operations
+    TokenGovernance {
         #[serde(flatten)]
         payload: TokenOperationsPayload,
     },
@@ -1022,6 +1027,7 @@ impl Payload {
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
             Payload::TokenHolder { .. } => TransactionType::TokenHolder,
+            Payload::TokenGovernance { .. } => TransactionType::TokenGovernance,
         }
     }
 }
@@ -1203,6 +1209,11 @@ impl Serial for Payload {
             }
             Payload::TokenHolder { payload } => {
                 out.put(&27u8);
+                out.put(&payload.token_id);
+                out.put(&payload.operations);
+            }
+            Payload::TokenGovernance { payload } => {
+                out.put(&28u8);
                 out.put(&payload.token_id);
                 out.put(&payload.operations);
             }
@@ -1413,6 +1424,15 @@ impl Deserial for Payload {
                     operations,
                 };
                 Ok(Payload::TokenHolder { payload })
+            }
+            28 => {
+                let token_id = source.get()?;
+                let operations = source.get()?;
+                let payload = TokenOperationsPayload {
+                    token_id,
+                    operations,
+                };
+                Ok(Payload::TokenGovernance { payload })
             }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
@@ -1984,7 +2004,8 @@ pub mod cost {
     /// Additional cost of a normal, account to account, transfer.
     pub const SIMPLE_TRANSFER: Energy = Energy { energy: 300 };
 
-    /// Additional cost of a transaction consisting of token operations
+    /// Additional cost of a transaction consisting of protocol level token
+    /// operations
     pub const TOKEN_OPERATIONS: Energy = Energy { energy: 300 };
 
     /// Additional cost of an encrypted transfer.
@@ -2101,10 +2122,7 @@ pub mod construct {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{
-            CborMemo, CoinInfo, HolderAccount, RawCbor, TokenAmount, TokenHolder, TokenId,
-            TokenOperation, TokenOperations, TokenTransfer,
-        },
+        protocol_level_tokens::{RawCbor, TokenId, TokenOperations},
     };
 
     /// A transaction that is prepared to be signed.
@@ -2274,95 +2292,25 @@ pub mod construct {
         )
     }
 
-    /// Construct a protocol level token transfer transaction.
-    pub fn transfer_tokens(
+    /// Construct a protocol level token holder transaction consisting of the
+    /// token holder operations encoded in the given CBOR.
+    pub fn token_holder_operations(
         num_sigs: u32,
         sender: AccountAddress,
         nonce: Nonce,
         expiry: TransactionTime,
-        receiver: AccountAddress,
         token_id: TokenId,
-        amount: TokenAmount,
+        operations: TokenOperations,
     ) -> CborSerializationResult<PreAccountTransaction> {
-        transfer_tokens_impl(
-            num_sigs, sender, nonce, expiry, receiver, token_id, amount, None,
-        )
-    }
+        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
 
-    /// Construct a protocol level token transfer transaction with a memo.
-    #[allow(clippy::too_many_arguments)]
-    pub fn transfer_tokens_with_memo(
-        num_sigs: u32,
-        sender: AccountAddress,
-        nonce: Nonce,
-        expiry: TransactionTime,
-        receiver: AccountAddress,
-        token_id: TokenId,
-        amount: TokenAmount,
-        memo: CborMemo,
-    ) -> CborSerializationResult<PreAccountTransaction> {
-        transfer_tokens_impl(
-            num_sigs,
-            sender,
-            nonce,
-            expiry,
-            receiver,
-            token_id,
-            amount,
-            Some(memo),
-        )
-    }
-
-    /// Construct a protocol level tokens transfer transaction.
-    #[allow(clippy::too_many_arguments)]
-    fn transfer_tokens_impl(
-        num_sigs: u32,
-        sender: AccountAddress,
-        nonce: Nonce,
-        expiry: TransactionTime,
-        receiver: AccountAddress,
-        token_id: TokenId,
-        amount: TokenAmount,
-        memo: Option<CborMemo>,
-    ) -> CborSerializationResult<PreAccountTransaction> {
-        let operation = TokenOperation::Transfer(TokenTransfer {
-            amount,
-            recipient: TokenHolder::HolderAccount(HolderAccount {
-                coin_info: Some(CoinInfo::CCD),
-                address:   receiver,
-            }),
-            memo,
-        });
-        let operations_cbor = RawCbor::from(cbor::cbor_encode(&TokenOperations {
-            operations: vec![operation],
-        })?);
-        Ok(token_operations(
-            num_sigs,
-            sender,
-            nonce,
-            expiry,
-            token_id,
-            operations_cbor,
-        ))
-    }
-
-    /// Construct a protocol level token transaction consisting of the
-    /// operations encoded in the given CBOR.
-    pub fn token_operations(
-        num_sigs: u32,
-        sender: AccountAddress,
-        nonce: Nonce,
-        expiry: TransactionTime,
-        token_id: TokenId,
-        operations: RawCbor,
-    ) -> PreAccountTransaction {
         let payload = Payload::TokenHolder {
             payload: TokenOperationsPayload {
                 token_id,
                 operations,
             },
         };
-        make_transaction(
+        Ok(make_transaction(
             sender,
             nonce,
             expiry,
@@ -2371,7 +2319,37 @@ pub mod construct {
                 energy: cost::TOKEN_OPERATIONS,
             },
             payload,
-        )
+        ))
+    }
+
+    /// Construct a protocol level token governance transaction consisting of
+    /// the token governance operations encoded in the given CBOR.
+    pub fn token_governance_operations(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: TokenOperations,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
+
+        let payload = Payload::TokenGovernance {
+            payload: TokenOperationsPayload {
+                token_id,
+                operations,
+            },
+        };
+        Ok(make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add {
+                num_sigs,
+                energy: cost::TOKEN_OPERATIONS,
+            },
+            payload,
+        ))
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
@@ -2969,7 +2947,7 @@ pub mod construct {
 /// for transaction.
 pub mod send {
     use super::*;
-    use crate::protocol_level_tokens::{CborMemo, RawCbor, TokenAmount, TokenId};
+    use crate::protocol_level_tokens::{TokenId, TokenOperations};
 
     /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
@@ -3005,73 +2983,47 @@ pub mod send {
         .sign(signer)
     }
 
-    /// Construct and sign a protocol level tokens transfer transaction.
-    pub fn transfer_tokens(
+    /// Construct and sign a protocol level token holder transaction consisting
+    /// of the token holder operations encoded in the given CBOR.
+    pub fn token_holder_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
         nonce: Nonce,
         expiry: TransactionTime,
-        receiver: AccountAddress,
         token_id: TokenId,
-        amount: TokenAmount,
+        operations: TokenOperations,
     ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::transfer_tokens(
-            signer.num_keys(),
-            sender,
-            nonce,
-            expiry,
-            receiver,
-            token_id,
-            amount,
-        )?
-        .sign(signer))
-    }
-
-    /// Construct and sign a protocol level tokens transfer transaction with
-    /// memo.
-    #[allow(clippy::too_many_arguments)]
-    pub fn transfer_tokens_with_memo(
-        signer: &impl ExactSizeTransactionSigner,
-        sender: AccountAddress,
-        nonce: Nonce,
-        expiry: TransactionTime,
-        receiver: AccountAddress,
-        token_id: TokenId,
-        amount: TokenAmount,
-        memo: CborMemo,
-    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::transfer_tokens_with_memo(
-            signer.num_keys(),
-            sender,
-            nonce,
-            expiry,
-            receiver,
-            token_id,
-            amount,
-            memo,
-        )?
-        .sign(signer))
-    }
-
-    /// Construct and sign a protocol level token transaction consisting of the
-    /// operations encoded in the given CBOR.
-    pub fn token_operations(
-        signer: &impl ExactSizeTransactionSigner,
-        sender: AccountAddress,
-        nonce: Nonce,
-        expiry: TransactionTime,
-        token_id: TokenId,
-        operations: RawCbor,
-    ) -> AccountTransaction<EncodedPayload> {
-        construct::token_operations(
+        Ok(construct::token_holder_operations(
             signer.num_keys(),
             sender,
             nonce,
             expiry,
             token_id,
             operations,
-        )
-        .sign(signer)
+        )?
+        .sign(signer))
+    }
+
+    /// Construct and sign a protocol level token governance transaction
+    /// consisting of the token governance operations encoded in the given
+    /// CBOR.
+    pub fn token_governance_operations(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: TokenOperations,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::token_governance_operations(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations,
+        )?
+        .sign(signer))
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
