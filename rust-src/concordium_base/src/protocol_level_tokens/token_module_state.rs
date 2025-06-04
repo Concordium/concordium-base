@@ -27,7 +27,6 @@ pub struct TokenModuleState {
 }
 
 impl TokenModuleState {
-    /// Decode module state from CBOR
     pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
         cbor::cbor_decode_with_options(
             cbor.as_ref(),
@@ -35,8 +34,7 @@ impl TokenModuleState {
         )
     }
 
-    /// Encode module state to CBOR
-    pub fn try_to_cbor(&self) -> CborSerializationResult<RawCbor> {
+    pub fn to_cbor(&self) -> CborSerializationResult<RawCbor> {
         Ok(RawCbor::from(cbor::cbor_encode(&self)?))
     }
 }
