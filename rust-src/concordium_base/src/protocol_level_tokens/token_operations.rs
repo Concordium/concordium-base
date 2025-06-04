@@ -86,7 +86,7 @@ pub mod operations {
         })
     }
 
-    /// Construct transaction to remove target from protocol level token deny
+    /// Construct operation to remove target from protocol level token deny
     /// list.
     pub fn remove_token_deny_list(target: AccountAddress) -> TokenOperation {
         TokenOperation::RemoveDenyList(TokenListUpdateDetails {
@@ -101,12 +101,12 @@ pub mod operations {
 /// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 const CBOR_TAG: u64 = 24;
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
 /// Payload for protocol level transaction. The transaction is a list of token
 /// operations that can be decoded from CBOR using
 /// [`TokenOperationsPayload::decode_operations`]. Operations includes
 /// governance operations, transfers etc.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenOperationsPayload {
     /// Id of the token
     pub token_id:   TokenId,

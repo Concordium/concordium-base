@@ -16,6 +16,7 @@ pub use token_amount::*;
 pub use token_event::*;
 pub use token_holder::*;
 pub use token_id::*;
+pub use token_metadata_url::*;
 pub use token_module_ref::*;
 pub use token_module_state::*;
 pub use token_operations::*;
