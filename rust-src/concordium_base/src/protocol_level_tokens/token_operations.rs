@@ -14,10 +14,11 @@ use crate::{
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 
+/// Module that implements easy construction of protocol level token operations
 pub mod operations {
     use super::*;
 
-    /// Construct a tokens transfer operation.
+    /// Construct a protocol level tokens transfer operation.
     pub fn transfer_tokens(receiver: AccountAddress, amount: TokenAmount) -> TokenOperation {
         TokenOperation::Transfer(TokenTransfer {
             amount,
@@ -29,7 +30,7 @@ pub mod operations {
         })
     }
 
-    /// Construct a tokens transfer operation with memo.
+    /// Construct a protocol level tokens transfer operation with memo.
     pub fn transfer_tokens_with_memo(
         receiver: AccountAddress,
         amount: TokenAmount,
@@ -45,17 +46,17 @@ pub mod operations {
         })
     }
 
-    /// Construct a token mint operation.
+    /// Construct a protocol level token mint operation.
     pub fn mint_tokens(amount: TokenAmount) -> TokenOperation {
         TokenOperation::Mint(TokenSupplyUpdateDetails { amount })
     }
 
-    /// Construct a token burn operation.
+    /// Construct a protocol level token burn operation.
     pub fn burn_tokens(amount: TokenAmount) -> TokenOperation {
         TokenOperation::Burn(TokenSupplyUpdateDetails { amount })
     }
 
-    /// Construct operation to add target to token allow list.
+    /// Construct operation to add target to protocol level token allow list.
     pub fn add_token_allow_list(target: AccountAddress) -> TokenOperation {
         TokenOperation::AddAllowList(TokenListUpdateDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
@@ -65,7 +66,7 @@ pub mod operations {
         })
     }
 
-    /// Construct operation to remove target from token allow.
+    /// Construct operation to remove target from protocol level token allow.
     pub fn remove_token_allow_list(target: AccountAddress) -> TokenOperation {
         TokenOperation::RemoveAllowList(TokenListUpdateDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
@@ -75,7 +76,7 @@ pub mod operations {
         })
     }
 
-    /// Construct operation to add target to token deny list.
+    /// Construct operation to add target to protocol level token deny list.
     pub fn add_token_deny_list(target: AccountAddress) -> TokenOperation {
         TokenOperation::AddDenyList(TokenListUpdateDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
@@ -85,7 +86,8 @@ pub mod operations {
         })
     }
 
-    /// Construct transaction to remove target from token deny list.
+    /// Construct transaction to remove target from protocol level token deny
+    /// list.
     pub fn remove_token_deny_list(target: AccountAddress) -> TokenOperation {
         TokenOperation::RemoveDenyList(TokenListUpdateDetails {
             target: TokenHolder::HolderAccount(HolderAccount {
@@ -96,12 +98,15 @@ pub mod operations {
     }
 }
 
+/// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 const CBOR_TAG: u64 = 24;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Payload for token transaction. The transaction is a list of token
-/// operations. Operations includes governance operations, transfers etc.
+/// Payload for protocol level transaction. The transaction is a list of token
+/// operations that can be decoded from CBOR using
+/// [`TokenOperationsPayload::decode_operations`]. Operations includes
+/// governance operations, transfers etc.
 pub struct TokenOperationsPayload {
     /// Id of the token
     pub token_id:   TokenId,
@@ -110,11 +115,15 @@ pub struct TokenOperationsPayload {
 }
 
 impl TokenOperationsPayload {
-    pub fn deserialize_operations(&self) -> CborSerializationResult<TokenOperations> {
+    /// Decode token operations from CBOR
+    pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
         TokenOperations::try_from_cbor(&self.operations)
     }
 }
 
+/// A list of protocol level token operations. Can be composed to a protocol
+/// level token transaction via [`TokenOperationsPayload`]. The operations are
+/// CBOR encoded in the transaction payload.
 #[derive(
     Debug,
     Clone,
@@ -128,6 +137,7 @@ impl TokenOperationsPayload {
 #[serde(rename_all = "camelCase")]
 #[cbor(transparent)]
 pub struct TokenOperations {
+    /// List of protocol level token operations
     pub operations: Vec<TokenOperation>,
 }
 
@@ -142,15 +152,21 @@ impl FromIterator<TokenOperation> for TokenOperations {
 impl TokenOperations {
     pub fn new(operations: Vec<TokenOperation>) -> Self { Self { operations } }
 
+    /// Decode token operations from CBOR
     pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
         cbor::cbor_decode(cbor.as_ref())
     }
 
-    pub fn to_cbor(&self) -> CborSerializationResult<RawCbor> {
+    /// Encode token operations to CBOR
+    pub fn try_to_cbor(&self) -> CborSerializationResult<RawCbor> {
         Ok(RawCbor::from(cbor::cbor_encode(&self)?))
     }
 }
 
+/// Protocol level token operation. An operation can be composed to a protocol
+/// level token transaction via [`TokenOperations`] and
+/// [`TokenOperationsPayload`]. The operation is CBOR encoded in the transaction
+/// payload.
 #[derive(
     Debug,
     Clone,
@@ -164,17 +180,31 @@ impl TokenOperations {
 #[serde(rename_all = "camelCase")]
 #[cbor(map)]
 pub enum TokenOperation {
+    /// Protocol level token transfer operation
     Transfer(TokenTransfer),
+    /// Protocol level token mint operation
     Mint(TokenSupplyUpdateDetails),
+    /// Protocol level token burn operation
     Burn(TokenSupplyUpdateDetails),
+    /// Operation that adds an account to the allow list of a protocol level
+    /// token
     AddAllowList(TokenListUpdateDetails),
+    /// Operation that removes an account from the allow list of a protocol
+    /// level token
     RemoveAllowList(TokenListUpdateDetails),
+    /// Operation that adds an account to the deny list of a protocol level
+    /// token
     AddDenyList(TokenListUpdateDetails),
+    /// Operation that removes an account from the deny list of a protocol level
+    /// token
     RemoveDenyList(TokenListUpdateDetails),
+    /// Unknow operation. If new types of operations are added that are unknown
+    /// to this enum, they will be decoded to this variant.
     #[cbor(other)]
     Unknown,
 }
 
+/// Details of an operation that changes a protocol level token supply.
 #[derive(
     Debug,
     Clone,
@@ -187,9 +217,14 @@ pub enum TokenOperation {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct TokenSupplyUpdateDetails {
+    /// Change in supply of the token. Must be interpreted as an increment or
+    /// decrement depending on whether the operation is a mint or burn.
+    /// // todo allan test
     pub amount: TokenAmount,
 }
 
+/// Details of an operation that adds or removes an account from
+/// an allow or deny list.
 #[derive(
     Debug,
     Clone,
@@ -202,9 +237,11 @@ pub struct TokenSupplyUpdateDetails {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct TokenListUpdateDetails {
+    /// Account that is added to or removed from a list
     pub target: TokenHolder,
 }
 
+/// Protocol level token transfer
 #[derive(
     Debug,
     Clone,
@@ -226,6 +263,7 @@ pub struct TokenTransfer {
     pub memo:      Option<CborMemo>,
 }
 
+/// Memo attached to a protocol level token transfer
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CborMemo {
