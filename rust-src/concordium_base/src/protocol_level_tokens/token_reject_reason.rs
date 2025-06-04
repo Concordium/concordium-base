@@ -137,7 +137,7 @@ pub struct DeserializationFailureRejectReason {
 /// because the token is not configured to support the operation. If the
 /// operation is not authorized (i.e. the particular participants do not have
 /// the authority to perform the operation) then the reject reason is
-/// [`Self::operationNotPermitted`] instead.
+/// [`OperationNotPermittedRejectReason`] instead.
 #[derive(
     Debug,
     Clone,
