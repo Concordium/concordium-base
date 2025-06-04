@@ -219,7 +219,6 @@ pub enum TokenOperation {
 pub struct TokenSupplyUpdateDetails {
     /// Change in supply of the token. Must be interpreted as an increment or
     /// decrement depending on whether the operation is a mint or burn.
-    /// // todo allan test
     pub amount: TokenAmount,
 }
 
