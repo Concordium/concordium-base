@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+
+members=[
+   "rust-src/sha_2",
+   "rust-src/keygen_bls",
+   "rust-src/ed25519_hd_key_derivation",
+   "rust-src/key_derivation",
+   "rust-src/concordium_base",
+   "rust-src/concordium_base_derive",
+   "rust-src/wallet_library",
+   "rust-bins",
+   "identity-provider-service",
+]
