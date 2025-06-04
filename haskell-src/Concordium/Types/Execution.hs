@@ -49,6 +49,7 @@ import qualified Concordium.ID.Types as IDTypes
 import Concordium.Types
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution.TH
+import Concordium.Types.Tokens
 import Concordium.Types.Updates
 import Concordium.Utils
 import qualified Concordium.Wasm as Wasm
@@ -1399,8 +1400,51 @@ data Event' (supplemented :: Bool)
         { ebrBakerId :: !BakerId,
           ebrAccount :: !AccountAddress
         }
-    | -- | Token module emitted some event
-      TokenModuleEvent TokenEvent
+    | -- | An event emitted by the token module.
+      TokenModuleEvent
+        { -- | The unique token identifier.
+          etmeTokenId :: !TokenId,
+          -- | The type of the event.
+          etmeType :: !TokenEventType,
+          -- | The (CBOR-encoded) event details.
+          etmeDetails :: !TokenEventDetails
+        }
+    | -- | A token transfer event.
+      TokenTransfer
+        { -- | The unique token identifier.
+          ettTokenId :: !TokenId,
+          -- | The source of the transfer.
+          ettFrom :: !AccountAddress,
+          -- | The target of the transfer.
+          ettTo :: !AccountAddress,
+          -- | The amount transferred.
+          ettAmount :: !TokenAmount,
+          -- | An optional memo for the transfer.
+          ettMemo :: !(Maybe Memo)
+        }
+    | -- | A token mint event.
+      TokenMint
+        { -- | The unique token identifier.
+          etmTokenId :: !TokenId,
+          -- | The account receiving the minted tokens.
+          etmTarget :: !AccountAddress,
+          -- | The amount minted.
+          etmAmount :: !TokenAmount
+        }
+    | -- | A token burn event.
+      TokenBurn
+        { -- | The unique token identifier.
+          etbTokenId :: !TokenId,
+          -- | The account from which the tokens are burned.
+          etbTarget :: !AccountAddress,
+          -- | The amount burned.
+          etbAmount :: !TokenAmount
+        }
+    | -- | A protocol-level token was created.
+      TokenCreated
+        { -- | The update payload used to create the token.
+          etcPayload :: !CreatePLT
+        }
     deriving (Show, Generic, Eq)
 
 -- | A contract event, without supplemental data. This is what is stored in the database and
@@ -1459,7 +1503,11 @@ addInitializeParameter _ DelegationRemoved{..} = pure DelegationRemoved{..}
 addInitializeParameter _ Upgraded{..} = pure Upgraded{..}
 addInitializeParameter _ BakerSuspended{..} = pure BakerSuspended{..}
 addInitializeParameter _ BakerResumed{..} = pure BakerResumed{..}
-addInitializeParameter _ (TokenModuleEvent event) = pure (TokenModuleEvent event)
+addInitializeParameter _ (TokenModuleEvent{..}) = pure TokenModuleEvent{..}
+addInitializeParameter _ TokenTransfer{..} = pure TokenTransfer{..}
+addInitializeParameter _ TokenMint{..} = pure TokenMint{..}
+addInitializeParameter _ TokenBurn{..} = pure TokenBurn{..}
+addInitializeParameter _ TokenCreated{..} = pure TokenCreated{..}
 
 putEvent :: S.Putter Event
 putEvent = \case
@@ -1651,9 +1699,31 @@ putEvent = \case
         S.putWord8 37
             <> S.put ebrBakerId
             <> S.put ebrAccount
-    TokenModuleEvent event ->
+    TokenModuleEvent{..} ->
         S.putWord8 38
-            <> S.put event
+            <> S.put etmeTokenId
+            <> S.put etmeType
+            <> S.put etmeDetails
+    TokenTransfer{..} ->
+        S.putWord8 39
+            <> S.put ettTokenId
+            <> S.put ettFrom
+            <> S.put ettTo
+            <> S.put ettAmount
+            <> putMaybe S.put ettMemo
+    TokenMint{..} ->
+        S.putWord8 40
+            <> S.put etmTokenId
+            <> S.put etmTarget
+            <> S.put etmAmount
+    TokenBurn{..} ->
+        S.putWord8 41
+            <> S.put etbTokenId
+            <> S.put etbTarget
+            <> S.put etbAmount
+    TokenCreated{..} ->
+        S.putWord8 42
+            <> S.put etcPayload
 
 getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
@@ -1847,9 +1917,31 @@ getEvent spv =
             ebrBakerId <- S.get
             ebrAccount <- S.get
             return BakerResumed{..}
-        38
-            | supportPlt ->
-                TokenModuleEvent <$> S.get
+        38 | supportPlt -> do
+            etmeTokenId <- S.get
+            etmeType <- S.get
+            etmeDetails <- S.get
+            return TokenModuleEvent{..}
+        39 | supportPlt -> do
+            ettTokenId <- S.get
+            ettFrom <- S.get
+            ettTo <- S.get
+            ettAmount <- S.get
+            ettMemo <- getMaybe S.get
+            return TokenTransfer{..}
+        40 | supportPlt -> do
+            etmTokenId <- S.get
+            etmTarget <- S.get
+            etmAmount <- S.get
+            return TokenMint{..}
+        41 | supportPlt -> do
+            etbTokenId <- S.get
+            etbTarget <- S.get
+            etbAmount <- S.get
+            return TokenBurn{..}
+        42 | supportPlt -> do
+            etcPayload <- S.get
+            return TokenCreated{..}
         n -> fail $ "Unrecognized event tag: " ++ show n
   where
     supportMemo = supportsMemo spv
@@ -2122,10 +2214,40 @@ instance AE.ToJSON (Event' supplemented) where
                   "bakerId" .= ebrBakerId,
                   "account" .= ebrAccount
                 ]
-        TokenModuleEvent event ->
+        TokenModuleEvent{..} ->
             AE.object
                 [ "tag" .= AE.String "TokenModuleEvent",
-                  "event" .= AE.toJSON event
+                  "tokenId" .= etmeTokenId,
+                  "type" .= etmeType,
+                  "details" .= etmeDetails
+                ]
+        TokenTransfer{..} ->
+            AE.object $
+                [ "tag" .= AE.String "TokenTransfer",
+                  "tokenId" .= ettTokenId,
+                  "from" .= ettFrom,
+                  "to" .= ettTo,
+                  "amount" .= ettAmount
+                ]
+                    ++ foldMap (\memo -> ["memo" .= memo]) ettMemo
+        TokenMint{..} ->
+            AE.object
+                [ "tag" .= AE.String "TokenMint",
+                  "tokenId" .= etmTokenId,
+                  "target" .= etmTarget,
+                  "amount" .= etmAmount
+                ]
+        TokenBurn{..} ->
+            AE.object
+                [ "tag" .= AE.String "TokenBurn",
+                  "tokenId" .= etbTokenId,
+                  "target" .= etbTarget,
+                  "amount" .= etbAmount
+                ]
+        TokenCreated{..} ->
+            AE.object
+                [ "tag" .= AE.String "TokenCreated",
+                  "payload" .= etcPayload
                 ]
 
 instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
@@ -2317,8 +2439,31 @@ instance (SingI supplemented) => AE.FromJSON (Event' supplemented) where
                 ebrBakerId <- obj .: "bakerId"
                 ebrAccount <- obj .: "account"
                 return BakerResumed{..}
-            "TokenModuleEvent" ->
-                TokenModuleEvent <$> obj .: "event"
+            "TokenModuleEvent" -> do
+                etmeTokenId <- obj .: "tokenId"
+                etmeType <- obj .: "type"
+                etmeDetails <- obj .: "details"
+                return TokenModuleEvent{..}
+            "TokenTransfer" -> do
+                ettTokenId <- obj .: "tokenId"
+                ettFrom <- obj .: "from"
+                ettTo <- obj .: "to"
+                ettAmount <- obj .: "amount"
+                ettMemo <- obj AE..:? "memo"
+                return TokenTransfer{..}
+            "TokenMint" -> do
+                etmTokenId <- obj .: "tokenId"
+                etmTarget <- obj .: "target"
+                etmAmount <- obj .: "amount"
+                return TokenMint{..}
+            "TokenBurn" -> do
+                etbTokenId <- obj .: "tokenId"
+                etbTarget <- obj .: "target"
+                etbAmount <- obj .: "amount"
+                return TokenBurn{..}
+            "TokenCreated" -> do
+                etcPayload <- obj .: "payload"
+                return TokenCreated{..}
             tag -> fail $ "Unrecognized 'Event' tag " ++ Text.unpack tag
 
 -- | 'SupplementEvents' provides a traversal that can be used to replace 'Event's with

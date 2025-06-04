@@ -86,7 +86,7 @@ pub mod operations {
         })
     }
 
-    /// Construct transaction to remove target from protocol level token deny
+    /// Construct operation to remove target from protocol level token deny
     /// list.
     pub fn remove_token_deny_list(target: AccountAddress) -> TokenOperation {
         TokenOperation::RemoveDenyList(TokenListUpdateDetails {

@@ -44,7 +44,7 @@ pub struct TokenModuleEvent {
 
 impl TokenModuleEvent {
     /// Decode token module event from CBOR
-    pub fn decode_token_module_event_type(&self) -> CborSerializationResult<TokenModuleEventType> {
+    pub fn decode_token_module_event(&self) -> CborSerializationResult<TokenModuleEventType> {
         use TokenModuleEventType::*;
 
         Ok(match self.event_type.as_ref() {
@@ -196,7 +196,7 @@ mod test {
             details:    cbor.into(),
         };
 
-        let module_event_type = module_event.decode_token_module_event_type().unwrap();
+        let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
             TokenModuleEventType::AddAllowList(variant)
@@ -218,7 +218,7 @@ mod test {
             details:    cbor.into(),
         };
 
-        let module_event_type = module_event.decode_token_module_event_type().unwrap();
+        let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
             TokenModuleEventType::RemoveAllowList(variant)
@@ -240,7 +240,7 @@ mod test {
             details:    cbor.into(),
         };
 
-        let module_event_type = module_event.decode_token_module_event_type().unwrap();
+        let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
             TokenModuleEventType::AddDenyList(variant)
@@ -262,7 +262,7 @@ mod test {
             details:    cbor.into(),
         };
 
-        let module_event_type = module_event.decode_token_module_event_type().unwrap();
+        let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(
             module_event_type,
             TokenModuleEventType::RemoveDenyList(variant)
