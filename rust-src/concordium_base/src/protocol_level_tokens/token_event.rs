@@ -43,6 +43,7 @@ pub struct TokenModuleEvent {
 }
 
 impl TokenModuleEvent {
+    /// Decode token module event from CBOR
     pub fn decode_token_module_event_type(&self) -> CborSerializationResult<TokenModuleEventType> {
         use TokenModuleEventType::*;
 
