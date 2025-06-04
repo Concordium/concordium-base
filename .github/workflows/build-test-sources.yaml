@@ -21,32 +21,9 @@ name: Check format, docs, build and run tests for Haskell and Rust sources
 
 on:
   pull_request:
-    branches:
-        - main
-        - plt
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-    - '.github/workflows/build-test-sources.yaml'
-    - '**.hs'
-    - 'fourmolu.yaml'
-    - 'stack*.yaml'
-    - 'package.yaml'
-    - 'base.cabal'
-    - '**.rs'
-    - 'testdata/**'
   push:
-    branches:
-        - main
-        - plt
-    paths:
-    - '.github/workflows/build-test-sources.yaml'
-    - '**.hs'
-    - 'fourmolu.yaml'
-    - 'stack*.yaml'
-    - 'package.yaml'
-    - 'base.cabal'
-    - '**.rs'
-    - 'testdata/**'
+    branches: main
   workflow_dispatch: # allow manual trigger
 
 env:
@@ -59,17 +36,6 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
 
-    strategy:
-      matrix:
-        plan:
-        - rust: "nightly-2023-04-01-x86_64-unknown-linux-gnu"
-        crates:
-        - rust-src
-        - rust-bins
-        - idiss
-        - mobile_wallet
-        - identity-provider-service
-
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -77,26 +43,14 @@ jobs:
         submodules: recursive
 
     - name: Run rustfmt
-      run: |
-        rustup default ${{ matrix.plan.rust }}
-        rustup component add rustfmt
-        cargo fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
+      run: | 
+        rustup +nightly-2023-04-01 component add rustfmt
+        cargo +nightly-2023-04-01 fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
 
   rustdoc:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
       
-    strategy:
-      matrix:
-        plan:
-        - rust: 1.82
-        crates:
-        - rust-src
-        - rust-bins
-        - idiss
-        - mobile_wallet
-        - identity-provider-service
-
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -104,9 +58,7 @@ jobs:
         submodules: recursive
 
     - name: Run cargo doc
-      working-directory: ${{ matrix.crates }}
       run: |
-        rustup default ${{ matrix.plan.rust }}
         rustup component add rust-docs
         RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
@@ -139,22 +91,15 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
 
-    strategy:
-      matrix:
-        plan:
-        - rust: 1.73 # Should be MSRV
-
     steps:
     - name: Checkout
       uses: actions/checkout@v2
       with:
         submodules: recursive
-    # RUST #
 
-    - name: Check that concordium base compiles with older Rust version.
+    - name: Check that concordium base compiles with MSRV.
       run: |
-        rustup default ${{ matrix.plan.rust }}
-        cargo check --manifest-path rust-src/concordium_base/Cargo.toml
+        cargo +1.73 check --manifest-path rust-src/concordium_base/Cargo.toml
 
   build-test:
     needs: [fourmolu, rustfmt]
@@ -173,7 +118,7 @@ jobs:
       with:
         submodules: recursive
     # RUST #
-
+# todo ar caches
     # Set up Rust and restore dependencies and targets from cache.
     # This must be done before checking the Rust sources.
     - name: Cache cargo dependencies and targets
@@ -193,37 +138,25 @@ jobs:
           ${{ runner.os }}-{{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}
     - name: Install Rust
       run: |
-        rustup default ${{ matrix.plan.rust }}
-        rustup component add clippy rust-docs
+        rustup component add clippy 
         rustup target add aarch64-linux-android
 
     # Lightweight check that Rust code compiles.
     # Catching failure here avoids restoring of Haskell caches.
     - name: Check that all Rust targets build
       run: |
-        export RUSTFLAGS="-D warnings"
-        cargo check --locked --manifest-path rust-src/Cargo.toml --workspace
-        cargo check --locked --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl
-        cargo check --locked --manifest-path idiss/Cargo.toml --workspace --features csharp
-        cargo check --locked --manifest-path mobile_wallet/Cargo.toml --workspace
-        cargo check --locked --manifest-path mobile_wallet/Cargo.toml --target aarch64-linux-android
-        cargo check --locked --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl
+        cargo check --locked --all-features --all-targets
+        cargo check --locked --all-features --all-targets -p mobile_wallet --target aarch64-linux-android
+
     # Rust code linting.
-    # Could be run in parallel in a separate job
-    # (the step is probably too fast for that to make sense though).
     - name: Run cargo clippy on all targets
       run: |
-        cargo clippy --manifest-path rust-src/Cargo.toml --workspace -- -Dclippy::all
-        cargo clippy --manifest-path rust-src/Cargo.toml --features concordium_base/encryption --workspace -- -Dclippy::all
-        cargo clippy --manifest-path rust-src/Cargo.toml --features concordium_base/ffi --workspace -- -Dclippy::all
-        cargo clippy --manifest-path rust-bins/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
-        cargo clippy --manifest-path idiss/Cargo.toml --all-features -- -Dclippy::all
-        cargo clippy --manifest-path mobile_wallet/Cargo.toml -- -Dclippy::all
-        cargo clippy --manifest-path identity-provider-service/Cargo.toml --workspace --features=vendored-ssl -- -Dclippy::all
+        cargo clippy --all-targets --all-features -- -D warnings
 
-    - name: Check concordium base documentation
+    # Run tests.
+    - name: Test Rust crates
       run: |
-          RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path rust-src/concordium_base/Cargo.toml --no-deps --all-features
+        cargo test --locked --all-features --release
 
     # HASKELL #
 
@@ -282,11 +215,3 @@ jobs:
     - name: Test haskell
       run: |
         stack build --test --bench --ghc-options=-split-sections --no-run-benchmarks
-
-    # Test rust sources after to avoid rebuilding Rust sources in the haskell
-    # test job.
-    - name: Test Rust crates
-      run: |
-        cargo test --manifest-path rust-src/Cargo.toml --all --verbose --release
-        cargo test --manifest-path identity-provider-service/Cargo.toml --features=vendored-ssl --all --verbose --release
-        cargo bench --manifest-path rust-src/Cargo.toml --features concordium_base/internal-test-helpers --no-run

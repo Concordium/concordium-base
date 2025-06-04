@@ -11,4 +11,6 @@ members=[
    "rust-src/wallet_library",
    "rust-bins",
    "identity-provider-service",
+   "idiss",
+   "mobile_wallet",
 ]
