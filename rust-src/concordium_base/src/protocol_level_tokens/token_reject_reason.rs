@@ -22,9 +22,7 @@ pub struct TokenModuleRejectReason {
 
 impl TokenModuleRejectReason {
     /// Decode reject reason from CBOR
-    pub fn decode_reject_reason_type(
-        &self,
-    ) -> CborSerializationResult<TokenModuleRejectReasonType> {
+    pub fn decode_reject_reason(&self) -> CborSerializationResult<TokenModuleRejectReasonType> {
         use TokenModuleRejectReasonType::*;
 
         Ok(match self.reason_type.as_ref() {
@@ -230,7 +228,7 @@ mod test {
             details:     Some(cbor.into()),
         };
 
-        let reject_reason_type = reject_reason.decode_reject_reason_type().unwrap();
+        let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
             TokenModuleRejectReasonType::AddressNotFound(variant)
@@ -252,7 +250,7 @@ mod test {
             details:     Some(cbor.into()),
         };
 
-        let reject_reason_type = reject_reason.decode_reject_reason_type().unwrap();
+        let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
             TokenModuleRejectReasonType::TokenBalanceInsufficient(variant)
@@ -272,7 +270,7 @@ mod test {
             details:     Some(cbor.into()),
         };
 
-        let reject_reason_type = reject_reason.decode_reject_reason_type().unwrap();
+        let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
             TokenModuleRejectReasonType::DeserializationFailure(variant)
@@ -294,7 +292,7 @@ mod test {
             details:     Some(cbor.into()),
         };
 
-        let reject_reason_type = reject_reason.decode_reject_reason_type().unwrap();
+        let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
             TokenModuleRejectReasonType::UnsupportedOperation(variant)
@@ -319,7 +317,7 @@ mod test {
             details:     Some(cbor.into()),
         };
 
-        let reject_reason_type = reject_reason.decode_reject_reason_type().unwrap();
+        let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
             TokenModuleRejectReasonType::OperationNotPermitted(variant)
@@ -342,7 +340,7 @@ mod test {
             details:     Some(cbor.into()),
         };
 
-        let reject_reason_type = reject_reason.decode_reject_reason_type().unwrap();
+        let reject_reason_type = reject_reason.decode_reject_reason().unwrap();
         assert_eq!(
             reject_reason_type,
             TokenModuleRejectReasonType::MintWouldOverflow(variant)
