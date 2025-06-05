@@ -104,10 +104,12 @@
 //! In this example variants in the CBOR that is not represented in the enum are
 //! deserialized as `Unknown`. Serializing `Unknown` will always fail.
 
+mod composites;
 mod decoder;
 mod encoder;
 mod primitives;
 
+pub use composites::*;
 pub use decoder::*;
 pub use encoder::*;
 pub use primitives::*;
@@ -237,14 +239,14 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
 /// Type that can be CBOR serialized
 pub trait CborSerialize {
     /// Serialize value to CBOR
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()>;
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()>;
 
     /// Whether the value corresponds to `null`
     fn is_null(&self) -> bool { false }
 }
 
 impl<T: CborSerialize> CborSerialize for Option<T> {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         match self {
             None => encoder.encode_simple(simple::NULL),
             Some(value) => value.serialize(encoder),
@@ -292,30 +294,65 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
 
 /// Encoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborEncoder {
+    type MapEncoder: CborMapEncoder;
+    type ArrayEncoder: CborArrayEncoder;
+
     /// Encodes tag data item with given value
     fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()>;
 
     /// Encodes positive integer data item with given value
-    fn encode_positive(&mut self, positive: u64) -> CborSerializationResult<()>;
+    fn encode_positive(self, positive: u64) -> CborSerializationResult<()>;
 
     /// Encodes negative integer data item with given value. Notice that the
     /// value of the data item is -(`negative` + 1)
-    fn encode_negative(&mut self, negative: u64) -> CborSerializationResult<()>;
+    fn encode_negative(self, negative: u64) -> CborSerializationResult<()>;
 
     /// Encodes start of map with given size
-    fn encode_map_header(&mut self, size: usize) -> CborSerializationResult<()>;
+    fn encode_map(self, size: usize) -> CborSerializationResult<Self::MapEncoder>;
 
     /// Encodes start of array with given size
-    fn encode_array_header(&mut self, size: usize) -> CborSerializationResult<()>;
+    fn encode_array(self, size: usize) -> CborSerializationResult<Self::ArrayEncoder>;
 
     /// Encodes bytes data item
-    fn encode_bytes(&mut self, bytes: &[u8]) -> CborSerializationResult<()>;
+    fn encode_bytes(self, bytes: &[u8]) -> CborSerializationResult<()>;
 
     /// Encodes text data item
-    fn encode_text(&mut self, text: &str) -> CborSerializationResult<()>;
+    fn encode_text(self, text: &str) -> CborSerializationResult<()>;
 
     /// Encodes simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
-    fn encode_simple(&mut self, simple: u8) -> CborSerializationResult<()>;
+    fn encode_simple(self, simple: u8) -> CborSerializationResult<()>;
+}
+
+/// Encoder of CBOR map
+pub trait CborMapEncoder {
+    /// Serialize an entry consisting of a `key` and `value` and add it to the
+    /// map (appended to current list of entries). The number of entries
+    /// added to the map must equal the size given to
+    /// [`CborEncoder::encode_map`] When all entries have been serialized,
+    /// [`Self::end`] must be called.
+    fn serialize_entry<K: CborSerialize + ?Sized, V: CborSerialize + ?Sized>(
+        &mut self,
+        key: &K,
+        value: &V,
+    ) -> CborSerializationResult<()>;
+
+    /// End map serialization.
+    fn end(self) -> CborSerializationResult<()>;
+}
+
+/// Encoder of CBOR array
+pub trait CborArrayEncoder {
+    /// Serialize an `element` and add it to the array (appended to the current
+    /// elements in the array). The number of elements added to the array
+    /// must equal the size given to [`CborEncoder::encode_array`]
+    /// When all elements have been serialized, [`Self::end`] must be called.
+    fn serialize_element<T: CborSerialize + ?Sized>(
+        &mut self,
+        element: &T,
+    ) -> CborSerializationResult<()>;
+
+    /// End array serialization.
+    fn end(self) -> CborSerializationResult<()>;
 }
 
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
@@ -400,13 +437,13 @@ pub trait CborDecoder {
 }
 
 impl<T: CborSerialize> CborSerialize for &T {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         CborSerialize::serialize(*self, encoder)
     }
 }
 
 impl<T: CborSerialize> CborSerialize for &mut T {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         CborSerialize::serialize(*self, encoder)
     }
 }
@@ -497,21 +534,23 @@ impl DataItemHeader {
 }
 
 impl<T: CborSerialize> CborSerialize for Vec<T> {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_array_header(self.len())?;
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        let mut array_encoder = encoder.encode_array(self.len())?;
         for item in self {
-            item.serialize(encoder)?
+            array_encoder.serialize_element(item)?
         }
+        array_encoder.end()?;
         Ok(())
     }
 }
 
 impl<T: CborSerialize> CborSerialize for &[T] {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_array_header(self.len())?;
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        let mut array_encoder = encoder.encode_array(self.len())?;
         for item in self.iter() {
-            item.serialize(encoder)?
+            array_encoder.serialize_element(item)?
         }
+        array_encoder.end()?;
         Ok(())
     }
 }
@@ -1038,19 +1077,19 @@ mod test {
         test_skip_data_item_impl(|encoder| encoder.encode_simple(simple::TRUE).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_positive(2).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_negative(2).unwrap());
-        test_skip_data_item_impl(|encoder| {
+        test_skip_data_item_impl(|mut encoder| {
             encoder.encode_tag(2).unwrap();
             encoder.encode_positive(2).unwrap();
         });
         test_skip_data_item_impl(|encoder| encoder.encode_bytes(&[0x01; 30]).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
         test_skip_data_item_impl(|encoder| {
-            encoder.encode_array_header(2).unwrap();
+            encoder.encode_array(2).unwrap();
             encoder.encode_positive(2).unwrap();
             encoder.encode_positive(2).unwrap();
         });
         test_skip_data_item_impl(|encoder| {
-            encoder.encode_map_header(2).unwrap();
+            encoder.encode_map(2).unwrap();
             encoder.encode_positive(2).unwrap();
             encoder.encode_positive(2).unwrap();
             encoder.encode_positive(2).unwrap();

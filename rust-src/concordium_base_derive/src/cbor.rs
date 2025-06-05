@@ -412,13 +412,15 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
             let field_count = field_idents.len();
 
             quote! {
-                #cbor_module::CborEncoder::encode_array_header(encoder,
+                let mut array_encoder = #cbor_module::CborEncoder::encode_array(encoder,
                     #field_count
                 )?;
 
                 #(
-                    #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
+                    #cbor_module::CborArrayEncoder::serialize_element(&mut array_encoder, &self.#field_idents)?;
                 )*
+
+                #cbor_module::CborArrayEncoder::end(array_encoder)?;
 
                 Ok(())
             }
@@ -427,16 +429,17 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
             let field_map_keys = cbor_fields.cbor_map_keys()?;
 
             quote! {
-                #cbor_module::CborEncoder::encode_map_header(encoder,
+                let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder,
                     #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
                 )?;
 
                 #(
                     if !#cbor_module::CborSerialize::is_null(&self.#field_idents) {
-                        #cbor_module::CborSerialize::serialize(&#field_map_keys, encoder)?;
-                        #cbor_module::CborSerialize::serialize(&self.#field_idents, encoder)?;
+                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, &#field_map_keys, &self.#field_idents)?;
                     }
                 )*
+
+                #cbor_module::CborMapEncoder::end(map_encoder)?;
 
                 Ok(())
             }
@@ -465,7 +468,7 @@ fn cbor_serialize_enum_body(
         let other_variant = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
                 Self::#other_ident => {
-                    Err(#cbor_module::__private::anyhow::anyhow!("cannot serialize variant marked with #[cbor(other)]").into())
+                    return Err(#cbor_module::__private::anyhow::anyhow!("cannot serialize variant marked with #[cbor(other)]").into());
                 }
             }
         } else {
@@ -473,16 +476,16 @@ fn cbor_serialize_enum_body(
         };
 
         quote! {
-            encoder.encode_map_header(1)?;
+            let mut map_encoder = encoder.encode_map(1)?;
             match self {
                 #(
                     Self::#variant_idents(value) => {
-                        encoder.encode_text(#variant_map_keys)?;
-                        #cbor_module::CborSerialize::serialize(value, encoder)
+                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, #variant_map_keys, value)?;
                     }
                 )*
                 #other_variant
             }
+            #cbor_module::CborMapEncoder::end(map_encoder)
         }
     } else {
         return Err(syn::Error::new(
@@ -512,7 +515,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
     let encode_tag = if let Some(tag) = opts.tag {
         quote!(
-            #cbor_module::CborEncoder::encode_tag(encoder, #tag)?;
+            #cbor_module::CborEncoder::encode_tag(&mut encoder, #tag)?;
         )
     } else {
         quote!()
@@ -520,7 +523,7 @@ pub fn impl_cbor_serialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
     Ok(quote! {
         impl #impl_generics #cbor_module::CborSerialize for #name #ty_generics #where_clauses {
-            fn serialize<C: #cbor_module::CborEncoder>(&self, encoder: &mut C) -> #cbor_module::CborSerializationResult<()> {
+            fn serialize<C: #cbor_module::CborEncoder>(&self, mut encoder: C) -> #cbor_module::CborSerializationResult<()> {
                 #encode_tag
                 #serialize_body
             }

@@ -5,11 +5,8 @@ use crate::common::cbor::{
 use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
 
-/// Decimal fraction, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
-const DECIMAL_FRACTION_TAG: u64 = 4;
-
 impl<const N: usize> CborSerialize for [u8; N] {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_bytes(self)
     }
 }
@@ -25,7 +22,7 @@ impl<const N: usize> CborDeserialize for [u8; N] {
 }
 
 impl CborSerialize for [u8] {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
         encoder.encode_bytes(self)
     }
 }
@@ -38,7 +35,7 @@ impl CborSerialize for [u8] {
 pub struct Bytes(pub Vec<u8>);
 
 impl CborSerialize for Bytes {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
         encoder.encode_bytes(&self.0)
     }
 }
@@ -52,7 +49,7 @@ impl CborDeserialize for Bytes {
 }
 
 impl CborSerialize for bool {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
         encoder.encode_simple(if *self { simple::TRUE } else { simple::FALSE })
     }
 }
@@ -76,7 +73,7 @@ impl CborDeserialize for bool {
 macro_rules! serialize_deserialize_unsigned_integer {
     ($t:ty) => {
         impl CborSerialize for $t {
-            fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+            fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
                 encoder.encode_positive(
                     (*self)
                         .try_into()
@@ -108,7 +105,7 @@ serialize_deserialize_unsigned_integer!(usize);
 macro_rules! serialize_deserialize_signed_integer {
     ($t:ty) => {
         impl CborSerialize for $t {
-            fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+            fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
                 if *self >= 0 {
                     encoder.encode_positive(u64::try_from(*self).context(concat!(
                         "convert ",
@@ -159,19 +156,19 @@ serialize_deserialize_signed_integer!(i64);
 serialize_deserialize_signed_integer!(isize);
 
 impl CborSerialize for str {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
         encoder.encode_text(self)
     }
 }
 
 impl CborSerialize for &str {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
         encoder.encode_text(self)
     }
 }
 
 impl CborSerialize for String {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
         encoder.encode_text(self)
     }
 }
@@ -209,7 +206,7 @@ pub enum MapKeyRef<'a> {
 }
 
 impl CborSerialize for MapKeyRef<'_> {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
         match self {
             MapKeyRef::Positive(positive) => encoder.encode_positive(*positive),
             MapKeyRef::Text(text) => encoder.encode_text(text),
@@ -233,18 +230,4 @@ impl CborDeserialize for MapKey {
             .into()),
         }
     }
-}
-
-/// Decimal fraction consisting of exponent `e` and mantissa `m`, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-decimal-fractions-and-bigfl>.
-/// It represents the value `m * 10^e`.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cbor(tag = DECIMAL_FRACTION_TAG)]
-pub struct DecimalFraction(i64, i64);
-
-impl DecimalFraction {
-    pub fn new(exponent: i64, mantissa: i64) -> Self { Self(exponent, mantissa) }
-
-    pub fn exponent(self) -> i64 { self.0 }
-
-    pub fn mantissa(self) -> i64 { self.1 }
 }

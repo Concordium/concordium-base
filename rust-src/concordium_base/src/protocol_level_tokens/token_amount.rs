@@ -15,7 +15,7 @@ pub struct TokenAmount {
 }
 
 impl CborSerialize for TokenAmount {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         let decimal_fraction = DecimalFraction::new(
             i64::from(self.decimals)
                 .checked_neg()
