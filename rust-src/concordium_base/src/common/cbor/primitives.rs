@@ -8,7 +8,6 @@ use ciborium_ll::simple;
 /// Decimal fraction, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
 const DECIMAL_FRACTION_TAG: u64 = 4;
 
-
 impl<const N: usize> CborSerialize for [u8; N] {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         encoder.encode_bytes(self)

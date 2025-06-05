@@ -1,6 +1,6 @@
+use crate::common::cbor::{CborEncoder, CborSerializationError, CborSerializationResult};
 use ciborium_io::Write;
 use ciborium_ll::Header;
-use crate::common::cbor::{CborEncoder, CborSerializationError, CborSerializationResult};
 
 /// CBOR encoder implementation
 pub struct Encoder<W: Write> {
@@ -14,8 +14,6 @@ impl<W: Write> Encoder<W> {
         Self { inner }
     }
 }
-
-
 
 impl<W: Write> CborEncoder for Encoder<W>
 where

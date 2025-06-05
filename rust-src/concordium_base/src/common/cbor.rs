@@ -104,15 +104,15 @@
 //! In this example variants in the CBOR that is not represented in the enum are
 //! deserialized as `Unknown`. Serializing `Unknown` will always fail.
 
-mod primitives;
 mod decoder;
 mod encoder;
+mod primitives;
 
-pub use primitives::*;
 pub use decoder::*;
 pub use encoder::*;
+pub use primitives::*;
 
-use anyhow::{anyhow, };
+use anyhow::anyhow;
 
 use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -123,7 +123,6 @@ use std::fmt::{Debug, Display};
 pub mod __private {
     pub use anyhow;
 }
-
 
 /// How to handle unknown keys in decoded CBOR maps.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
@@ -230,14 +229,10 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
     let mut decoder = Decoder::new(cbor, options);
     let value = T::deserialize(&mut decoder)?;
     if decoder.offset() != cbor.len() {
-        return Err(CborSerializationError::remaining_data(
-            decoder.offset(),
-        ));
+        return Err(CborSerializationError::remaining_data(decoder.offset()));
     }
     Ok(value)
 }
-
-
 
 /// Type that can be CBOR serialized
 pub trait CborSerialize {
@@ -323,7 +318,6 @@ pub trait CborEncoder {
     fn encode_simple(&mut self, simple: u8) -> CborSerializationResult<()>;
 }
 
-
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborDecoder {
     /// Decode tag data item
@@ -405,7 +399,6 @@ pub trait CborDecoder {
     fn options(&self) -> SerializationOptions;
 }
 
-
 impl<T: CborSerialize> CborSerialize for &T {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         CborSerialize::serialize(*self, encoder)
@@ -417,7 +410,6 @@ impl<T: CborSerialize> CborSerialize for &mut T {
         CborSerialize::serialize(*self, encoder)
     }
 }
-
 
 /// CBOR data item type. Corresponds roughly to CBOR major types.
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
@@ -503,7 +495,6 @@ impl DataItemHeader {
         }
     }
 }
-
 
 impl<T: CborSerialize> CborSerialize for Vec<T> {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {

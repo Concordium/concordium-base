@@ -1,8 +1,11 @@
-use std::fmt::Display;
+use crate::common::cbor::{
+    CborDecoder, CborSerializationError, CborSerializationResult, DataItemHeader, DataItemType,
+    SerializationOptions,
+};
 use anyhow::{anyhow, Context};
 use ciborium_io::Read;
 use ciborium_ll::Header;
-use crate::common::cbor::{CborDecoder, CborSerializationError, CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions};
+use std::fmt::Display;
 
 /// CBOR decoder implementation
 pub struct Decoder<R: Read> {
@@ -119,7 +122,7 @@ where
         };
 
         let mut bytes = vec![0; size];
-        self.decode_definite_length_text( &mut bytes)?;
+        self.decode_definite_length_text(&mut bytes)?;
         Ok(bytes)
     }
 
@@ -182,20 +185,15 @@ where
     fn options(&self) -> SerializationOptions { self.options }
 }
 
-impl<R:Read> Decoder<R> {
-    pub fn offset(&mut self) -> usize{
-        self.inner.offset()
-    }
+impl<R: Read> Decoder<R> {
+    pub fn offset(&mut self) -> usize { self.inner.offset() }
 
-    /// Decodes bytes data item into given destination. Length of bytes data item
-    /// must match the destination length.
+    /// Decodes bytes data item into given destination. Length of bytes data
+    /// item must match the destination length.
     ///
     /// This function works only for bytes data items of definite length (which
     /// means there is a single segment)
-    fn decode_definite_length_bytes(
-        &mut self,
-        dest: &mut [u8],
-    ) -> CborSerializationResult<()>
+    fn decode_definite_length_bytes(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
     where
         R::Error: Display, {
         let mut segments = self.inner.bytes(Some(dest.len()));
@@ -216,12 +214,9 @@ impl<R:Read> Decoder<R> {
     /// Decodes text data item into given destination. Length of text data item
     /// must match the destination length.
     ///
-    /// This function works only for text data items of definite length (which means
-    /// there is a single segment)
-    fn decode_definite_length_text(
-        &mut self,
-        dest: &mut [u8],
-    ) -> CborSerializationResult<()>
+    /// This function works only for text data items of definite length (which
+    /// means there is a single segment)
+    fn decode_definite_length_text(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
     where
         R::Error: Display, {
         let mut segments = self.inner.text(Some(dest.len()));
@@ -238,6 +233,4 @@ impl<R:Read> Decoder<R> {
         }
         Ok(())
     }
-
 }
-
