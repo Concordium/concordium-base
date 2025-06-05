@@ -104,8 +104,16 @@
 //! In this example variants in the CBOR that is not represented in the enum are
 //! deserialized as `Unknown`. Serializing `Unknown` will always fail.
 
-use anyhow::{anyhow, Context};
-use ciborium_io::{Read, Write};
+mod primitives;
+mod decoder;
+mod encoder;
+
+pub use primitives::*;
+pub use decoder::*;
+pub use encoder::*;
+
+use anyhow::{anyhow, };
+
 use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use std::fmt::{Debug, Display};
@@ -116,8 +124,6 @@ pub mod __private {
     pub use anyhow;
 }
 
-/// Decimal fraction, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
-const DECIMAL_FRACTION_TAG: u64 = 4;
 
 /// How to handle unknown keys in decoded CBOR maps.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
@@ -223,40 +229,15 @@ pub fn cbor_decode_with_options<T: CborDeserialize>(
 ) -> CborSerializationResult<T> {
     let mut decoder = Decoder::new(cbor, options);
     let value = T::deserialize(&mut decoder)?;
-    if decoder.inner.offset() != cbor.len() {
+    if decoder.offset() != cbor.len() {
         return Err(CborSerializationError::remaining_data(
-            decoder.inner.offset(),
+            decoder.offset(),
         ));
     }
     Ok(value)
 }
 
-/// CBOR decoder implementation
-pub struct Decoder<R: Read> {
-    inner:   ciborium_ll::Decoder<R>,
-    options: SerializationOptions,
-}
 
-impl<R: Read> Decoder<R> {
-    fn new(read: R, options: SerializationOptions) -> Self {
-        let inner = ciborium_ll::Decoder::from(read);
-
-        Self { inner, options }
-    }
-}
-
-/// CBOR encoder implementation
-pub struct Encoder<W: Write> {
-    inner: ciborium_ll::Encoder<W>,
-}
-
-impl<W: Write> Encoder<W> {
-    fn new(write: W) -> Self {
-        let inner = ciborium_ll::Encoder::from(write);
-
-        Self { inner }
-    }
-}
 
 /// Type that can be CBOR serialized
 pub trait CborSerialize {
@@ -342,42 +323,6 @@ pub trait CborEncoder {
     fn encode_simple(&mut self, simple: u8) -> CborSerializationResult<()>;
 }
 
-impl<W: Write> CborEncoder for Encoder<W>
-where
-    CborSerializationError: From<W::Error>,
-{
-    fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Tag(tag))?)
-    }
-
-    fn encode_positive(&mut self, positive: u64) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Positive(positive))?)
-    }
-
-    fn encode_negative(&mut self, negative: u64) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Negative(negative))?)
-    }
-
-    fn encode_map_header(&mut self, size: usize) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Map(Some(size)))?)
-    }
-
-    fn encode_array_header(&mut self, size: usize) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Array(Some(size)))?)
-    }
-
-    fn encode_bytes(&mut self, bytes: &[u8]) -> CborSerializationResult<()> {
-        Ok(self.inner.bytes(bytes, None)?)
-    }
-
-    fn encode_text(&mut self, text: &str) -> CborSerializationResult<()> {
-        Ok(self.inner.text(text, None)?)
-    }
-
-    fn encode_simple(&mut self, value: u8) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Simple(value))?)
-    }
-}
 
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborDecoder {
@@ -460,221 +405,6 @@ pub trait CborDecoder {
     fn options(&self) -> SerializationOptions;
 }
 
-impl<R: Read> CborDecoder for Decoder<R>
-where
-    R::Error: Display,
-{
-    fn decode_tag(&mut self) -> CborSerializationResult<u64> {
-        match self.inner.pull()? {
-            Header::Tag(tag) => Ok(tag),
-            header => Err(CborSerializationError::expected_data_item(
-                DataItemType::Tag,
-                DataItemType::from_header(header),
-            )),
-        }
-    }
-
-    fn decode_positive(&mut self) -> CborSerializationResult<u64> {
-        match self.inner.pull()? {
-            Header::Positive(positive) => Ok(positive),
-            header => Err(CborSerializationError::expected_data_item(
-                DataItemType::Positive,
-                DataItemType::from_header(header),
-            )),
-        }
-    }
-
-    fn decode_negative(&mut self) -> CborSerializationResult<u64> {
-        match self.inner.pull()? {
-            Header::Negative(negative) => Ok(negative),
-            header => Err(CborSerializationError::expected_data_item(
-                DataItemType::Negative,
-                DataItemType::from_header(header),
-            )),
-        }
-    }
-
-    fn decode_map_header(&mut self) -> CborSerializationResult<usize> {
-        match self.inner.pull()? {
-            Header::Map(Some(size)) => Ok(size),
-            header => Err(CborSerializationError::expected_data_item(
-                DataItemType::Map,
-                DataItemType::from_header(header),
-            )),
-        }
-    }
-
-    fn decode_array_header(&mut self) -> CborSerializationResult<usize> {
-        match self.inner.pull()? {
-            Header::Array(Some(size)) => Ok(size),
-            header => Err(CborSerializationError::expected_data_item(
-                DataItemType::Array,
-                DataItemType::from_header(header),
-            )),
-        }
-    }
-
-    fn decode_bytes_exact(&mut self, dest: &mut [u8]) -> CborSerializationResult<()> {
-        match self.inner.pull()? {
-            Header::Bytes(Some(size)) => {
-                if size != dest.len() {
-                    return Err(anyhow!("expected {} bytes, was {}", dest.len(), size).into());
-                }
-            }
-            header => {
-                return Err(CborSerializationError::expected_data_item(
-                    DataItemType::Bytes,
-                    DataItemType::from_header(header),
-                ))
-            }
-        };
-
-        decode_definite_length_bytes(self, dest)?;
-        Ok(())
-    }
-
-    fn decode_bytes(&mut self) -> CborSerializationResult<Vec<u8>> {
-        let size = match self.inner.pull()? {
-            Header::Bytes(Some(size)) => size,
-            header => {
-                return Err(CborSerializationError::expected_data_item(
-                    DataItemType::Bytes,
-                    DataItemType::from_header(header),
-                ))
-            }
-        };
-
-        let mut bytes = vec![0; size];
-        decode_definite_length_bytes(self, &mut bytes)?;
-        Ok(bytes)
-    }
-
-    fn decode_text(&mut self) -> CborSerializationResult<Vec<u8>> {
-        let size = match self.inner.pull()? {
-            Header::Text(Some(size)) => size,
-            header => {
-                return Err(CborSerializationError::expected_data_item(
-                    DataItemType::Text,
-                    DataItemType::from_header(header),
-                ))
-            }
-        };
-
-        let mut bytes = vec![0; size];
-        decode_definite_length_text(self, &mut bytes)?;
-        Ok(bytes)
-    }
-
-    fn decode_simple(&mut self) -> CborSerializationResult<u8> {
-        match self.inner.pull()? {
-            Header::Simple(value) => Ok(value),
-            header => Err(CborSerializationError::expected_data_item(
-                DataItemType::Simple,
-                DataItemType::from_header(header),
-            )),
-        }
-    }
-
-    fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
-        let header = self.inner.pull()?;
-        let data_item_header = DataItemHeader::from_header(header);
-        self.inner.push(header);
-        Ok(data_item_header)
-    }
-
-    fn skip_data_item(&mut self) -> CborSerializationResult<()> {
-        match self.peek_data_item_header()?.to_type() {
-            DataItemType::Positive
-            | DataItemType::Negative
-            | DataItemType::Simple
-            | DataItemType::Float => {
-                self.inner.pull()?;
-            }
-            DataItemType::Tag => {
-                self.inner.pull()?;
-                self.skip_data_item()?;
-            }
-            DataItemType::Bytes => {
-                self.decode_bytes()?;
-            }
-            DataItemType::Text => {
-                self.decode_text()?;
-            }
-            DataItemType::Array => {
-                let size = self.decode_array_header()?;
-                for _ in 0..size {
-                    self.skip_data_item()?;
-                }
-            }
-            DataItemType::Map => {
-                let size = self.decode_map_header()?;
-                for _ in 0..size {
-                    self.skip_data_item()?;
-                    self.skip_data_item()?;
-                }
-            }
-            DataItemType::Break => {
-                return Err(anyhow!("break is not a valid data item").into());
-            }
-        }
-
-        Ok(())
-    }
-
-    fn options(&self) -> SerializationOptions { self.options }
-}
-
-/// Decodes bytes data item into given destination. Length of bytes data item
-/// must match the destination length.
-///
-/// This function works only for bytes data items of definite length (which
-/// means there is a single segment)
-fn decode_definite_length_bytes<R: Read>(
-    decoder: &mut Decoder<R>,
-    dest: &mut [u8],
-) -> CborSerializationResult<()>
-where
-    R::Error: Display, {
-    let mut segments = decoder.inner.bytes(Some(dest.len()));
-    let Some(mut segment) = segments.pull()? else {
-        return Err(anyhow!("must have at least one segment").into());
-    };
-
-    segment.pull(dest)?;
-    if segment.left() != 0 {
-        return Err(anyhow!("remaining data in segment").into());
-    }
-    if segments.pull()?.is_some() {
-        return Err(anyhow!("expected to only one segment").into());
-    }
-    Ok(())
-}
-
-/// Decodes text data item into given destination. Length of text data item
-/// must match the destination length.
-///
-/// This function works only for text data items of definite length (which means
-/// there is a single segment)
-fn decode_definite_length_text<R: Read>(
-    decoder: &mut Decoder<R>,
-    dest: &mut [u8],
-) -> CborSerializationResult<()>
-where
-    R::Error: Display, {
-    let mut segments = decoder.inner.text(Some(dest.len()));
-    let Some(mut segment) = segments.pull()? else {
-        return Err(anyhow!("must have at least one segment").into());
-    };
-
-    segment.pull(dest)?.context("no data in segment")?;
-    if segment.left() != 0 {
-        return Err(anyhow!("remaining data in segment").into());
-    }
-    if segments.pull()?.is_some() {
-        return Err(anyhow!("expected to only one segment").into());
-    }
-    Ok(())
-}
 
 impl<T: CborSerialize> CborSerialize for &T {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
@@ -688,182 +418,6 @@ impl<T: CborSerialize> CborSerialize for &mut T {
     }
 }
 
-impl<const N: usize> CborSerialize for [u8; N] {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_bytes(self)
-    }
-}
-
-impl<const N: usize> CborDeserialize for [u8; N] {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        let mut dest = [0; N];
-        decoder.decode_bytes_exact(&mut dest)?;
-        Ok(dest)
-    }
-}
-
-impl CborSerialize for [u8] {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_bytes(self)
-    }
-}
-
-/// CBOR bytes data item.
-///
-/// Notice that this serializes different from a plain `Vec<u8>` which
-/// serializes to an array data item.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Bytes(pub Vec<u8>);
-
-impl CborSerialize for Bytes {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_bytes(&self.0)
-    }
-}
-
-impl CborDeserialize for Bytes {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        Ok(Bytes(decoder.decode_bytes()?))
-    }
-}
-
-impl CborSerialize for bool {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_simple(if *self { simple::TRUE } else { simple::FALSE })
-    }
-}
-
-impl CborDeserialize for bool {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        let value = decoder.decode_simple()?;
-        match value {
-            simple::TRUE => Ok(true),
-            simple::FALSE => Ok(false),
-            value => Err(CborSerializationError::invalid_data(format!(
-                "simple value not a valid bool: {}",
-                value
-            ))),
-        }
-    }
-}
-
-macro_rules! serialize_deserialize_unsigned_integer {
-    ($t:ty) => {
-        impl CborSerialize for $t {
-            fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-                encoder.encode_positive(
-                    (*self)
-                        .try_into()
-                        .context(concat!("convert from usize to ", stringify!($t)))?,
-                )
-            }
-        }
-
-        impl CborDeserialize for $t {
-            fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-            where
-                Self: Sized, {
-                Ok(decoder.decode_positive()?.try_into().context(concat!(
-                    "convert ",
-                    stringify!($t),
-                    " to usize"
-                ))?)
-            }
-        }
-    };
-}
-
-serialize_deserialize_unsigned_integer!(u8);
-serialize_deserialize_unsigned_integer!(u16);
-serialize_deserialize_unsigned_integer!(u32);
-serialize_deserialize_unsigned_integer!(u64);
-serialize_deserialize_unsigned_integer!(usize);
-
-macro_rules! serialize_deserialize_signed_integer {
-    ($t:ty) => {
-        impl CborSerialize for $t {
-            fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-                if *self >= 0 {
-                    encoder.encode_positive(u64::try_from(*self).context(concat!(
-                        "convert ",
-                        stringify!($t),
-                        " to positive"
-                    ))?)
-                } else {
-                    encoder.encode_negative(
-                        self.checked_add(1)
-                            .and_then(|val| val.checked_neg())
-                            .and_then(|val| u64::try_from(val).ok())
-                            .context(concat!("convert ", stringify!($t), " to negative"))?,
-                    )
-                }
-            }
-        }
-
-        impl CborDeserialize for $t {
-            fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-            where
-                Self: Sized, {
-                match decoder.peek_data_item_header()?.to_type() {
-                    DataItemType::Positive => Ok(<$t>::try_from(decoder.decode_positive()?)
-                        .context(concat!("convert positive to ", stringify!($t)))?),
-                    DataItemType::Negative => Ok(<$t>::try_from(decoder.decode_negative()?)
-                        .ok()
-                        .and_then(|val| val.checked_add(1))
-                        .and_then(|val| val.checked_neg())
-                        .context(concat!("convert negative to ", stringify!($t)))?),
-                    data_item_type => Err(anyhow!(
-                        "expected data item {:?} or {:?} as for {}, was {:?}",
-                        DataItemType::Positive,
-                        DataItemType::Negative,
-                        stringify!($t),
-                        data_item_type
-                    )
-                    .into()),
-                }
-            }
-        }
-    };
-}
-
-serialize_deserialize_signed_integer!(i8);
-serialize_deserialize_signed_integer!(i16);
-serialize_deserialize_signed_integer!(i32);
-serialize_deserialize_signed_integer!(i64);
-serialize_deserialize_signed_integer!(isize);
-
-impl CborSerialize for str {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_text(self)
-    }
-}
-
-impl CborSerialize for &str {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_text(self)
-    }
-}
-
-impl CborSerialize for String {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        encoder.encode_text(self)
-    }
-}
-
-impl CborDeserialize for String {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        Ok(String::from_utf8(decoder.decode_text()?)
-            .context("text data item not valid UTF8 encoding")?)
-    }
-}
 
 /// CBOR data item type. Corresponds roughly to CBOR major types.
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
@@ -950,69 +504,6 @@ impl DataItemHeader {
     }
 }
 
-/// Key in a CBOR map
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub enum MapKey {
-    Positive(u64),
-    Text(String),
-}
-
-impl MapKey {
-    pub fn as_ref(&self) -> MapKeyRef {
-        match self {
-            MapKey::Positive(positive) => MapKeyRef::Positive(*positive),
-            MapKey::Text(text) => MapKeyRef::Text(text),
-        }
-    }
-}
-
-/// Key in a CBOR map
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub enum MapKeyRef<'a> {
-    Positive(u64),
-    Text(&'a str),
-}
-
-impl CborSerialize for MapKeyRef<'_> {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        match self {
-            MapKeyRef::Positive(positive) => encoder.encode_positive(*positive),
-            MapKeyRef::Text(text) => encoder.encode_text(text),
-        }
-    }
-}
-
-impl CborDeserialize for MapKey {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        match decoder.peek_data_item_header()?.to_type() {
-            DataItemType::Positive => Ok(Self::Positive(u64::deserialize(decoder)?)),
-            DataItemType::Text => Ok(Self::Text(String::deserialize(decoder)?)),
-            data_item_type => Err(anyhow!(
-                "expected data item {:?} or {:?} as map key, was {:?}",
-                DataItemType::Positive,
-                DataItemType::Text,
-                data_item_type
-            )
-            .into()),
-        }
-    }
-}
-
-/// Decimal fraction consisting of exponent `e` and mantissa `m`, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-decimal-fractions-and-bigfl>.
-/// It represents the value `m * 10^e`.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, CborSerialize, CborDeserialize)]
-#[cbor(tag = DECIMAL_FRACTION_TAG)]
-pub struct DecimalFraction(i64, i64);
-
-impl DecimalFraction {
-    pub fn new(exponent: i64, mantissa: i64) -> Self { Self(exponent, mantissa) }
-
-    pub fn exponent(self) -> i64 { self.0 }
-
-    pub fn mantissa(self) -> i64 { self.1 }
-}
 
 impl<T: CborSerialize> CborSerialize for Vec<T> {
     fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
@@ -1544,7 +1035,7 @@ mod test {
 
     #[test]
     fn test_decimal_fraction() {
-        let value = DecimalFraction(-3, 12345);
+        let value = DecimalFraction::new(-3, 12345);
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "c48222193039");
         let value_decoded: DecimalFraction = cbor_decode(&cbor).unwrap();

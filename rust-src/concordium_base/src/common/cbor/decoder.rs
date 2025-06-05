@@ -1,0 +1,243 @@
+use std::fmt::Display;
+use anyhow::{anyhow, Context};
+use ciborium_io::Read;
+use ciborium_ll::Header;
+use crate::common::cbor::{CborDecoder, CborSerializationError, CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions};
+
+/// CBOR decoder implementation
+pub struct Decoder<R: Read> {
+    inner:   ciborium_ll::Decoder<R>,
+    options: SerializationOptions,
+}
+
+impl<R: Read> Decoder<R> {
+    pub fn new(read: R, options: SerializationOptions) -> Self {
+        let inner = ciborium_ll::Decoder::from(read);
+
+        Self { inner, options }
+    }
+}
+
+impl<R: Read> CborDecoder for Decoder<R>
+where
+    R::Error: Display,
+{
+    fn decode_tag(&mut self) -> CborSerializationResult<u64> {
+        match self.inner.pull()? {
+            Header::Tag(tag) => Ok(tag),
+            header => Err(CborSerializationError::expected_data_item(
+                DataItemType::Tag,
+                DataItemType::from_header(header),
+            )),
+        }
+    }
+
+    fn decode_positive(&mut self) -> CborSerializationResult<u64> {
+        match self.inner.pull()? {
+            Header::Positive(positive) => Ok(positive),
+            header => Err(CborSerializationError::expected_data_item(
+                DataItemType::Positive,
+                DataItemType::from_header(header),
+            )),
+        }
+    }
+
+    fn decode_negative(&mut self) -> CborSerializationResult<u64> {
+        match self.inner.pull()? {
+            Header::Negative(negative) => Ok(negative),
+            header => Err(CborSerializationError::expected_data_item(
+                DataItemType::Negative,
+                DataItemType::from_header(header),
+            )),
+        }
+    }
+
+    fn decode_map_header(&mut self) -> CborSerializationResult<usize> {
+        match self.inner.pull()? {
+            Header::Map(Some(size)) => Ok(size),
+            header => Err(CborSerializationError::expected_data_item(
+                DataItemType::Map,
+                DataItemType::from_header(header),
+            )),
+        }
+    }
+
+    fn decode_array_header(&mut self) -> CborSerializationResult<usize> {
+        match self.inner.pull()? {
+            Header::Array(Some(size)) => Ok(size),
+            header => Err(CborSerializationError::expected_data_item(
+                DataItemType::Array,
+                DataItemType::from_header(header),
+            )),
+        }
+    }
+
+    fn decode_bytes_exact(&mut self, dest: &mut [u8]) -> CborSerializationResult<()> {
+        match self.inner.pull()? {
+            Header::Bytes(Some(size)) => {
+                if size != dest.len() {
+                    return Err(anyhow!("expected {} bytes, was {}", dest.len(), size).into());
+                }
+            }
+            header => {
+                return Err(CborSerializationError::expected_data_item(
+                    DataItemType::Bytes,
+                    DataItemType::from_header(header),
+                ))
+            }
+        };
+
+        self.decode_definite_length_bytes(dest)?;
+        Ok(())
+    }
+
+    fn decode_bytes(&mut self) -> CborSerializationResult<Vec<u8>> {
+        let size = match self.inner.pull()? {
+            Header::Bytes(Some(size)) => size,
+            header => {
+                return Err(CborSerializationError::expected_data_item(
+                    DataItemType::Bytes,
+                    DataItemType::from_header(header),
+                ))
+            }
+        };
+
+        let mut bytes = vec![0; size];
+        self.decode_definite_length_bytes(&mut bytes)?;
+        Ok(bytes)
+    }
+
+    fn decode_text(&mut self) -> CborSerializationResult<Vec<u8>> {
+        let size = match self.inner.pull()? {
+            Header::Text(Some(size)) => size,
+            header => {
+                return Err(CborSerializationError::expected_data_item(
+                    DataItemType::Text,
+                    DataItemType::from_header(header),
+                ))
+            }
+        };
+
+        let mut bytes = vec![0; size];
+        self.decode_definite_length_text( &mut bytes)?;
+        Ok(bytes)
+    }
+
+    fn decode_simple(&mut self) -> CborSerializationResult<u8> {
+        match self.inner.pull()? {
+            Header::Simple(value) => Ok(value),
+            header => Err(CborSerializationError::expected_data_item(
+                DataItemType::Simple,
+                DataItemType::from_header(header),
+            )),
+        }
+    }
+
+    fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
+        let header = self.inner.pull()?;
+        let data_item_header = DataItemHeader::from_header(header);
+        self.inner.push(header);
+        Ok(data_item_header)
+    }
+
+    fn skip_data_item(&mut self) -> CborSerializationResult<()> {
+        match self.peek_data_item_header()?.to_type() {
+            DataItemType::Positive
+            | DataItemType::Negative
+            | DataItemType::Simple
+            | DataItemType::Float => {
+                self.inner.pull()?;
+            }
+            DataItemType::Tag => {
+                self.inner.pull()?;
+                self.skip_data_item()?;
+            }
+            DataItemType::Bytes => {
+                self.decode_bytes()?;
+            }
+            DataItemType::Text => {
+                self.decode_text()?;
+            }
+            DataItemType::Array => {
+                let size = self.decode_array_header()?;
+                for _ in 0..size {
+                    self.skip_data_item()?;
+                }
+            }
+            DataItemType::Map => {
+                let size = self.decode_map_header()?;
+                for _ in 0..size {
+                    self.skip_data_item()?;
+                    self.skip_data_item()?;
+                }
+            }
+            DataItemType::Break => {
+                return Err(anyhow!("break is not a valid data item").into());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn options(&self) -> SerializationOptions { self.options }
+}
+
+impl<R:Read> Decoder<R> {
+    pub fn offset(&mut self) -> usize{
+        self.inner.offset()
+    }
+
+    /// Decodes bytes data item into given destination. Length of bytes data item
+    /// must match the destination length.
+    ///
+    /// This function works only for bytes data items of definite length (which
+    /// means there is a single segment)
+    fn decode_definite_length_bytes(
+        &mut self,
+        dest: &mut [u8],
+    ) -> CborSerializationResult<()>
+    where
+        R::Error: Display, {
+        let mut segments = self.inner.bytes(Some(dest.len()));
+        let Some(mut segment) = segments.pull()? else {
+            return Err(anyhow!("must have at least one segment").into());
+        };
+
+        segment.pull(dest)?;
+        if segment.left() != 0 {
+            return Err(anyhow!("remaining data in segment").into());
+        }
+        if segments.pull()?.is_some() {
+            return Err(anyhow!("expected to only one segment").into());
+        }
+        Ok(())
+    }
+
+    /// Decodes text data item into given destination. Length of text data item
+    /// must match the destination length.
+    ///
+    /// This function works only for text data items of definite length (which means
+    /// there is a single segment)
+    fn decode_definite_length_text(
+        &mut self,
+        dest: &mut [u8],
+    ) -> CborSerializationResult<()>
+    where
+        R::Error: Display, {
+        let mut segments = self.inner.text(Some(dest.len()));
+        let Some(mut segment) = segments.pull()? else {
+            return Err(anyhow!("must have at least one segment").into());
+        };
+
+        segment.pull(dest)?.context("no data in segment")?;
+        if segment.left() != 0 {
+            return Err(anyhow!("remaining data in segment").into());
+        }
+        if segments.pull()?.is_some() {
+            return Err(anyhow!("expected to only one segment").into());
+        }
+        Ok(())
+    }
+
+}
+
