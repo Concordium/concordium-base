@@ -2006,7 +2006,19 @@ pub mod cost {
 
     /// Additional cost of a transaction consisting of protocol level token
     /// operations
-    pub const TOKEN_OPERATIONS: Energy = Energy { energy: 300 };
+    pub const PLT_OPERATIONS_TRANSACTIONS: Energy = Energy { energy: 300 };
+
+    /// Additional cost of a PLT transfer
+    pub const PLT_TRANSFER: Energy = Energy { energy: 100 };
+
+    /// Additional cost of a PLT mint
+    pub const PLT_MINT: Energy = Energy { energy: 100 };
+
+    /// Additional cost of a PLT burn
+    pub const PLT_BURN: Energy = Energy { energy: 100 };
+
+    /// Additional cost of a PLT allow or deny list update
+    pub const PLT_LIST_UPDATE: Energy = Energy { energy: 50 };
 
     /// Additional cost of an encrypted transfer.
     #[deprecated(
@@ -2122,7 +2134,7 @@ pub mod construct {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{RawCbor, TokenId, TokenOperations},
+        protocol_level_tokens::{RawCbor, TokenId, TokenOperation, TokenOperations},
     };
 
     /// A transaction that is prepared to be signed.
@@ -2292,6 +2304,25 @@ pub mod construct {
         )
     }
 
+    /// Additional cost of token operations transaction
+    fn token_operations_txn_energy(operations: &TokenOperations) -> Energy {
+        cost::PLT_OPERATIONS_TRANSACTIONS
+            + operations
+                .operations
+                .iter()
+                .map(|op| match op {
+                    TokenOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    TokenOperation::Mint(_) => cost::PLT_MINT,
+                    TokenOperation::Burn(_) => cost::PLT_BURN,
+                    TokenOperation::AddAllowList(_)
+                    | TokenOperation::RemoveAllowList(_)
+                    | TokenOperation::AddDenyList(_)
+                    | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    TokenOperation::Unknown => Default::default(),
+                })
+                .sum()
+    }
+
     /// Construct a protocol level token holder transaction consisting of the
     /// token holder operations encoded in the given CBOR.
     pub fn token_holder_operations(
@@ -2302,6 +2333,7 @@ pub mod construct {
         token_id: TokenId,
         operations: TokenOperations,
     ) -> CborSerializationResult<PreAccountTransaction> {
+        let energy = token_operations_txn_energy(&operations);
         let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
 
         let payload = Payload::TokenHolder {
@@ -2314,10 +2346,7 @@ pub mod construct {
             sender,
             nonce,
             expiry,
-            GivenEnergy::Add {
-                num_sigs,
-                energy: cost::TOKEN_OPERATIONS,
-            },
+            GivenEnergy::Add { num_sigs, energy },
             payload,
         ))
     }
@@ -2332,6 +2361,7 @@ pub mod construct {
         token_id: TokenId,
         operations: TokenOperations,
     ) -> CborSerializationResult<PreAccountTransaction> {
+        let energy = token_operations_txn_energy(&operations);
         let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
 
         let payload = Payload::TokenGovernance {
@@ -2344,10 +2374,7 @@ pub mod construct {
             sender,
             nonce,
             expiry,
-            GivenEnergy::Add {
-                num_sigs,
-                energy: cost::TOKEN_OPERATIONS,
-            },
+            GivenEnergy::Add { num_sigs, energy },
             payload,
         ))
     }
