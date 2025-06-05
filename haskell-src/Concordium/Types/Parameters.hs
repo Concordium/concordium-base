@@ -377,6 +377,9 @@ module Concordium.Types.Parameters (
     SupportsTimeParameters,
     -- | Whether time parameters are supported for an 'AuthorizationsVersion' (singletons).
     sSupportsTimeParameters,
+    SupportsCreatePLT,
+    supportsCreatePLT,
+    sSupportsCreatePLT,
 
     -- * Consensus version
     IsConsensusV0,

@@ -1129,11 +1129,17 @@ instance (IsAuthorizationsVersion auv) => ToProto (Updates.Authorizations auv) w
                     ProtoFields.v0 .= v0
                     ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                SAuthorizationsVersion2 -> Proto.make $ do
+                    ProtoFields.v0 .= v0
+                    ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.createPlt .= toProto (Updates.asCreatePLT auth ^. Parameters.unconditionally)
 
 -- | Defines a type family that is used in the ToProto instance for Updates.Authorizations.
 type family AuthorizationsFamily auv where
     AuthorizationsFamily 'AuthorizationsVersion0 = Proto.AuthorizationsV0
     AuthorizationsFamily 'AuthorizationsVersion1 = Proto.AuthorizationsV1
+    AuthorizationsFamily 'AuthorizationsVersion2 = Proto.AuthorizationsV1
 
 instance ToProto Updates.AccessStructure where
     type Output Updates.AccessStructure = Proto.AccessStructure
@@ -2198,7 +2204,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                 )
-            (SChainParametersV1, SAuthorizationsVersion0) ->
+            (SChainParametersV1, SAuthorizationsVersion1) ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v1
@@ -2217,9 +2223,9 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.poolParameters .= toProto _cpPoolParameters
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
-                                    ProtoFields.level2Keys .= undefined -- toProto (Updates.level2Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                 )
-            (SChainParametersV2, SAuthorizationsVersion0) ->
+            (SChainParametersV2, SAuthorizationsVersion1) ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v2
@@ -2238,10 +2244,10 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.poolParameters .= toProto _cpPoolParameters
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
-                                    ProtoFields.level2Keys .= undefined -- toProto (Updates.level2Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
-            (SChainParametersV3, SAuthorizationsVersion0) ->
+            (SChainParametersV3, SAuthorizationsVersion1) ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v3
@@ -2260,7 +2266,30 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.poolParameters .= toProto _cpPoolParameters
                                     ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
-                                    ProtoFields.level2Keys .= undefined -- toProto (Updates.level2Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
+                                )
+            (SChainParametersV3, SAuthorizationsVersion2) ->
+                let Parameters.ChainParameters{..} = params
+                in  Proto.make $
+                        ProtoFields.v3
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
+                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
+                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
+                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
+                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
+                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
+                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
+                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
+                                    ProtoFields.foundationAccount .= toProto foundationAddr
+                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
+                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
+                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                     ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
                                 )

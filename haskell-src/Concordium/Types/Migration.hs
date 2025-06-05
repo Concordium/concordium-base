@@ -48,6 +48,7 @@ migrateAuthorizations
         Authorizations
             { asCooldownParameters = CTrue cp,
               asTimeParameters = CTrue tp,
+              asCreatePLT = CTrue tp, -- FIXME: Do this via migration!
               ..
             }
 

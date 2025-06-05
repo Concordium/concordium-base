@@ -187,7 +187,9 @@ data Authorizations (auv :: AuthorizationsVersion) = Authorizations
       -- | Parameter keys: Cooldown periods for pool owners and delegators
       asCooldownParameters :: !(Conditionally (SupportsCooldownParametersAccessStructure auv) AccessStructure),
       -- | Parameter keys: Length of reward period / payday
-      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure)
+      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure),
+      -- | Authorization keys: CreatePLT transaction
+      asCreatePLT :: !(Conditionally (SupportsCreatePLT auv) AccessStructure)
     }
 
 deriving instance Eq (Authorizations auv)
@@ -211,6 +213,7 @@ putAuthorizations Authorizations{..} = do
     put asAddIdentityProvider
     mapM_ put asCooldownParameters
     mapM_ put asTimeParameters
+    mapM_ put asCreatePLT
 
 getAuthorizations :: forall auv. (IsAuthorizationsVersion auv) => Get (Authorizations auv)
 getAuthorizations = label "deserialization update authorizations" $ do
@@ -237,6 +240,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asAddIdentityProvider <- getChecked
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) getChecked
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) getChecked
+    asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) getChecked
     return Authorizations{..}
 
 instance (IsAuthorizationsVersion auv) => Serialize (Authorizations auv) where
@@ -281,6 +285,7 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     let auv = sing @auv
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure auv) $ parseAS "cooldownParameters"
     asTimeParameters <- conditionallyA (sSupportsTimeParameters auv) $ parseAS "timeParameters"
+    asCreatePLT <- conditionallyA (sSupportsCreatePLT auv) $ parseAS "createPLT"
     return Authorizations{..}
 
 instance (IsAuthorizationsVersion auv) => AE.FromJSON (Authorizations auv) where
@@ -306,6 +311,7 @@ instance (IsAuthorizationsVersion auv) => AE.ToJSON (Authorizations auv) where
               ]
                 ++ cooldownParameters
                 ++ timeParameters'
+                ++ createPLT
             )
       where
         t AccessStructure{..} =
@@ -315,6 +321,7 @@ instance (IsAuthorizationsVersion auv) => AE.ToJSON (Authorizations auv) where
                 ]
         cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
         timeParameters' = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
+        createPLT = foldMap (\as -> ["createPLT" AE..= t as]) asCreatePLT
 
 -----------------
 
