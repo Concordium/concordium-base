@@ -38,7 +38,18 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
 migrateAuthorizations StateMigrationParametersP6ToP7{} auths = auths
 migrateAuthorizations StateMigrationParametersP7ToP8{} auths = auths
-migrateAuthorizations StateMigrationParametersP8ToP9{} auths = auths
+migrateAuthorizations
+    StateMigrationParametersP8ToP9{}
+    Authorizations
+        { asCooldownParameters = CTrue cp,
+          asTimeParameters = CTrue tp,
+          ..
+        } =
+        Authorizations
+            { asCooldownParameters = CTrue cp,
+              asTimeParameters = CTrue tp,
+              ..
+            }
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --

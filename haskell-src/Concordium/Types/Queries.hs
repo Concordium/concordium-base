@@ -30,8 +30,6 @@ import Concordium.Types.Block
 import Concordium.Types.Execution (SupplementedTransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
-    AuthorizationsVersion (..),
-    AuthorizationsVersionFor,
     ChainParameters',
     CooldownParameters,
     FinalizationCommitteeParameters,
@@ -754,11 +752,11 @@ data BlockFinalizationSummary
     | Summary !FinalizationSummary
 
 -- | An existentially qualified pair of chain parameters and update keys currently in effect.
-data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion).
-      (IsChainParametersVersion cpv) =>
+data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion).
+      (IsChainParametersVersion cpv, IsAuthorizationsVersion auv, IsCompatibleAuthorizationsVersion cpv auv ~ 'True) =>
     EChainParametersAndKeys
     { ecpParams :: !(ChainParameters' cpv),
-      ecpKeys :: !(U.UpdateKeysCollection (AuthorizationsVersionFor cpv))
+      ecpKeys :: !(U.UpdateKeysCollection auv)
     }
 
 instance ToJSON EChainParametersAndKeys where

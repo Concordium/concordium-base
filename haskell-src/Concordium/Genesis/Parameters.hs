@@ -405,7 +405,7 @@ data GenesisParametersV2 pv = GenesisParametersV2
       -- | Maximum total energy that can be consumed by the transactions in a block
       gpMaxBlockEnergy :: Energy,
       -- | The collection of update keys for performing updates
-      gpUpdateKeys :: UpdateKeysCollection (AuthorizationsVersionFor (ChainParametersVersionFor pv)),
+      gpUpdateKeys :: UpdateKeysCollection (AuthorizationsVersionForPV pv),
       -- | The initial (updatable) chain parameters
       gpChainParameters :: GenesisChainParameters pv
     }

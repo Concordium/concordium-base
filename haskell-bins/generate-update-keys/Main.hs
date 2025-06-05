@@ -22,6 +22,7 @@ import System.FilePath
 
 import Concordium.Crypto.SignatureScheme
 import Concordium.Types.Parameters
+import Concordium.Types.ProtocolVersion
 import Concordium.Types.Updates
 
 data AuthDetails = AuthDetails

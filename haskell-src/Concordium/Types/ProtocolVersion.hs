@@ -95,6 +95,32 @@ module Concordium.Types.ProtocolVersion (
     -- | Defunctionalisation symbol for 'ChainParametersVersionFor'.
     ChainParametersVersionForSym0,
 
+    -- * Authorizations version
+
+    -- | Version of the authorizations structure.
+    --
+    --  * 'AuthorizationsVersion0' ('ChainParametersV0').
+    --  * 'AuthorizationsVersion1' ('ChainParametersV1', 'ChainParametersV2'): add access structures
+    --    for cooldown parameters and time parameters
+    AuthorizationsVersion (..),
+    -- | Singleton type associated with 'AuthorizationsVersion'.
+    SAuthorizationsVersion (..),
+    -- | The authorizations version associated with a chain parameters version.
+    authorizationsVersionFor,
+    authorizationsVersion,
+    -- | The authorizations version associated with a chain parameters version (types).
+    AuthorizationsVersionFor,
+    -- | The authorizations version associated with a chain parameters version (singletons).
+    sAuthorizationsVersionFor,
+    -- | The authorizations version associated with a protocol version.
+    authorizationsVersionForPV,
+    -- | The authorizations version associated with a protocol version (types).
+    AuthorizationsVersionForPV,
+    -- | The authorizations version associated with a protocol version (singletons).
+    sAuthorizationsVersionForPV,
+    IsAuthorizationsVersion,
+    IsCompatibleAuthorizationsVersion,
+
     -- * Account version
 
     -- | A data kind used for parametrising account-related types.
@@ -332,6 +358,28 @@ $( singletons
         accountVersionFor P8 = AccountV4
         accountVersionFor P9 = AccountV5
 
+        -- \|Authorizations version.
+        data AuthorizationsVersion
+            = AuthorizationsVersion0 -- \^Initial set of authorizations
+            | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
+            | AuthorizationsVersion2 -- \^Adds authorization for the CreatePLT chain update
+
+        -- \|The authorizations version associated with a chain parameters version.
+        authorizationsVersionFor :: ProtocolVersion -> AuthorizationsVersion
+        authorizationsVersionFor P1 = AuthorizationsVersion0
+        authorizationsVersionFor P2 = AuthorizationsVersion0
+        authorizationsVersionFor P3 = AuthorizationsVersion0
+        authorizationsVersionFor P4 = AuthorizationsVersion1
+        authorizationsVersionFor P5 = AuthorizationsVersion1
+        authorizationsVersionFor P6 = AuthorizationsVersion1
+        authorizationsVersionFor P7 = AuthorizationsVersion1
+        authorizationsVersionFor P8 = AuthorizationsVersion1
+        authorizationsVersionFor P9 = AuthorizationsVersion2
+
+        -- \|The authorizations version associated with a protocol version.
+        authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
+        authorizationsVersionForPV pv = authorizationsVersionFor pv
+
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
         -- to the hashing scheme.
@@ -498,6 +546,10 @@ type IsAccountVersion (av :: AccountVersion) = SingI av
 --  'SChainParametersVersion' (see 'chainParametersVersion'). (An alias for 'SingI'.)
 type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv
 
+-- | Constraint on a type level 'AuthorizationsVersion' that can be used to get a corresponding
+--  'SAuthorizationsVersion'.
+type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
+
 -- | Constraint on a type level 'TransactionOutcomesVersion' that can be used to get a corresponding
 --  'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). (An alias for 'SingI'.)
 type IsTransactionOutcomesVersion (tov :: TransactionOutcomesVersion) = SingI tov
@@ -518,6 +570,8 @@ type IsBlockHashVersion (bhv :: BlockHashVersion) = SingI bhv
 class
     ( SingI pv,
       IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAuthorizationsVersion (AuthorizationsVersionFor pv),
+      IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
       IsBlockHashVersion (BlockHashVersionFor pv)
@@ -527,6 +581,8 @@ class
 instance
     ( SingI pv,
       IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAuthorizationsVersion (AuthorizationsVersionFor pv),
+      IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
       IsBlockHashVersion (BlockHashVersionFor pv)
@@ -561,6 +617,10 @@ accountVersion = sing
 chainParametersVersion :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv
 chainParametersVersion = sing
 
+-- | Produce the singleton 'SAuthorizationsVersion' from an 'IsAuthorizationsVersion' constraint.
+authorizationsVersion :: (IsAuthorizationsVersion auv) => SAuthorizationsVersion auv
+authorizationsVersion = sing
+
 -- | Produce the singleton 'STransactionOutcomesVersion' from an 'IsTransactionOutcomesVersion' constraint.
 transactionOutcomesVersion :: (IsTransactionOutcomesVersion tov) => STransactionOutcomesVersion tov
 transactionOutcomesVersion = sing
@@ -572,6 +632,15 @@ demoteChainParameterVersion = fromSing
 -- | Produce the singleton 'SBlockHashVersion' from an 'IsBlockHashVersion' constraint.
 blockHashVersion :: (IsBlockHashVersion bhv) => SBlockHashVersion bhv
 blockHashVersion = sing
+
+type family IsCompatibleAuthorizationsVersion cpv auv where
+    IsCompatibleAuthorizationsVersion ChainParametersV0 AuthorizationsVersion0 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV1 AuthorizationsVersion1 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV2 AuthorizationsVersion1 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion1 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion2 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV4 AuthorizationsVersion2 = True
+    IsCompatibleAuthorizationsVersion _ _ = False
 
 -- | Constraint that an account version supports delegation.
 type AVSupportsDelegation (av :: AccountVersion) =

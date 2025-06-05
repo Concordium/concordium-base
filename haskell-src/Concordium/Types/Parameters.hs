@@ -363,31 +363,7 @@ module Concordium.Types.Parameters (
     -- * Validator score parameters
     ValidatorScoreParameters (..),
     vspMaxMissedRounds,
-
-    -- * Authorizations version
-
-    -- | Version of the authorizations structure.
-    --
-    --  * 'AuthorizationsVersion0' ('ChainParametersV0').
-    --  * 'AuthorizationsVersion1' ('ChainParametersV1', 'ChainParametersV2'): add access structures
-    --    for cooldown parameters and time parameters
-    AuthorizationsVersion (..),
-    -- | Singleton type associated with 'AuthorizationsVersion'.
-    SAuthorizationsVersion (..),
-    -- | The authorizations version associated with a chain parameters version.
-    authorizationsVersionFor,
-    -- | The authorizations version associated with a chain parameters version (types).
-    AuthorizationsVersionFor,
-    -- | The authorizations version associated with a chain parameters version (singletons).
-    sAuthorizationsVersionFor,
-    -- | The authorizations version associated with a protocol version.
-    authorizationsVersionForPV,
-    -- | The authorizations version associated with a protocol version (types).
-    AuthorizationsVersionForPV,
-    -- | The authorizations version associated with a protocol version (singletons).
-    sAuthorizationsVersionForPV,
-    IsAuthorizationsVersion,
-    withIsAuthorizationsVersionFor,
+    -- withIsAuthorizationsVersionFor,
     withIsAuthorizationsVersionForPV,
     -- | Whether cooldown parameters are updatable for an 'AuthorizationsVersion'.
     supportsCooldownParametersAccessStructure,
@@ -588,32 +564,51 @@ $( singletons
         consensusParametersVersionFor ChainParametersV3 = ConsensusParametersVersion1
         consensusParametersVersionFor ChainParametersV4 = ConsensusParametersVersion1
 
-        -- \|Authorizations version.
-        data AuthorizationsVersion
-            = AuthorizationsVersion0 -- \^Initial set of authorizations
-            | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
+        -- isCompatibleAuthorizationsVersion :: ChainParametersVersion -> AuthorizationsVersion -> Bool
+        -- isCompatibleAuthorizationsVersion ChainParametersV0 AuthorizationsVersion0 = True
+        -- isCompatibleAuthorizationsVersion ChainParametersV1 AuthorizationsVersion1 = True
+        -- isCompatibleAuthorizationsVersion ChainParametersV2 AuthorizationsVersion1 = True
+        -- isCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion1 = True
+        -- isCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion2 = True
+        -- isCompatibleAuthorizationsVersion _ _ = False
 
-        -- \|The authorizations version associated with a chain parameters version.
-        authorizationsVersionFor :: ChainParametersVersion -> AuthorizationsVersion
-        authorizationsVersionFor ChainParametersV0 = AuthorizationsVersion0
-        authorizationsVersionFor ChainParametersV1 = AuthorizationsVersion1
-        authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion1
-        authorizationsVersionFor ChainParametersV3 = AuthorizationsVersion1
-        authorizationsVersionFor ChainParametersV4 = AuthorizationsVersion1
+        -- authorizationsVersionFor :: ChainParametersVersion -> AuthorizationsVersion
+        -- authorizationsVersionFor ChainParametersV0 = AuthorizationsVersion0
+        -- authorizationsVersionFor ChainParametersV1 = AuthorizationsVersion1
+        -- authorizationsVersionFor ChainParametersV2 = AuthorizationsVersion1
+        -- authorizationsVersionFor ChainParametersV3 = AuthorizationsVersion1
+        -- authorizationsVersionFor ChainParametersV4 = AuthorizationsVersion2
 
-        -- \|The authorizations version associated with a protocol version.
-        authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
-        authorizationsVersionForPV pv = authorizationsVersionFor (chainParametersVersionFor pv)
+        --         chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
+        -- chainParametersVersionFor P1 = ChainParametersV0
+        -- chainParametersVersionFor P2 = ChainParametersV0
+        -- chainParametersVersionFor P3 = ChainParametersV0
+        -- chainParametersVersionFor P4 = ChainParametersV1
+        -- chainParametersVersionFor P5 = ChainParametersV1
+        -- chainParametersVersionFor P6 = ChainParametersV2
+        -- chainParametersVersionFor P7 = ChainParametersV2
+        -- chainParametersVersionFor P8 = ChainParametersV3
+        -- chainParametersVersionFor P9 = ChainParametersV4
+
+        -- authorizationsVersionForPV pv = authorizationsVersionFor (chainParametersVersionFor pv)
 
         -- \|Whether cooldown parameters are updatable for an 'AuthorizationsVersion'.
         supportsCooldownParametersAccessStructure :: AuthorizationsVersion -> Bool
         supportsCooldownParametersAccessStructure AuthorizationsVersion0 = False
         supportsCooldownParametersAccessStructure AuthorizationsVersion1 = True
+        supportsCooldownParametersAccessStructure AuthorizationsVersion2 = True
 
         -- \|Whether time parameters are supported for an 'AuthorizationsVersion'.
         supportsTimeParameters :: AuthorizationsVersion -> Bool
         supportsTimeParameters AuthorizationsVersion0 = False
         supportsTimeParameters AuthorizationsVersion1 = True
+        supportsTimeParameters AuthorizationsVersion2 = True
+
+        -- \|Whether time parameters are supported for an 'AuthorizationsVersion'.
+        supportsCreatePLT :: AuthorizationsVersion -> Bool
+        supportsCreatePLT AuthorizationsVersion0 = False
+        supportsCreatePLT AuthorizationsVersion1 = False
+        supportsCreatePLT AuthorizationsVersion2 = True
 
         -- \|Parameter types that are conditionally supported at different 'ChainParametersVersion's.
         data ParameterType
@@ -645,7 +640,12 @@ $( singletons
         isSupported PTElectionDifficulty cpv = case consensusParametersVersionFor cpv of
             ConsensusParametersVersion0 -> True
             ConsensusParametersVersion1 -> False
-        isSupported PTTimeParameters cpv = supportsTimeParameters (authorizationsVersionFor cpv)
+        -- isSupported PTTimeParameters cpv = supportsTimeParameters (authorizationsVersionFor cpv)
+        isSupported PTTimeParameters ChainParametersV0 = False
+        isSupported PTTimeParameters ChainParametersV1 = True
+        isSupported PTTimeParameters ChainParametersV2 = True
+        isSupported PTTimeParameters ChainParametersV3 = True
+        isSupported PTTimeParameters ChainParametersV4 = True
         isSupported PTMintPerSlot cpv = supportsMintPerSlot (mintDistributionVersionFor cpv)
         isSupported PTTimeoutParameters cpv = case consensusParametersVersionFor cpv of
             ConsensusParametersVersion0 -> False
@@ -656,7 +656,12 @@ $( singletons
         isSupported PTBlockEnergyLimit cpv = case consensusParametersVersionFor cpv of
             ConsensusParametersVersion0 -> False
             ConsensusParametersVersion1 -> True
-        isSupported PTCooldownParametersAccessStructure cpv = supportsCooldownParametersAccessStructure (authorizationsVersionFor cpv)
+        -- isSupported PTCooldownParametersAccessStructure cpv = supportsCooldownParametersAccessStructure (authorizationsVersionFor cpv)
+        isSupported PTCooldownParametersAccessStructure ChainParametersV0 = False
+        isSupported PTCooldownParametersAccessStructure ChainParametersV1 = True
+        isSupported PTCooldownParametersAccessStructure ChainParametersV2 = True
+        isSupported PTCooldownParametersAccessStructure ChainParametersV3 = True
+        isSupported PTCooldownParametersAccessStructure ChainParametersV4 = True
         isSupported PTFinalizationProof ChainParametersV0 = True
         isSupported PTFinalizationProof ChainParametersV1 = True
         isSupported PTFinalizationProof ChainParametersV2 = False
@@ -684,15 +689,11 @@ $( singletons
 --  'SParameterType'.
 type IsParameterType (pt :: ParameterType) = SingI pt
 
--- | Constraint on a type level 'AuthorizationsVersion' that can be used to get a corresponding
---  'SAuthorizationsVersion'.
-type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
-
 -- | Witness an 'IsAuthorizationsVersion' constraint using a 'SChainParametersVersion'.
 --  Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionFor cpv)' via the
 --  supplied 'ChainParametersVersion'.
-withIsAuthorizationsVersionFor :: SChainParametersVersion cpv -> ((IsAuthorizationsVersion (AuthorizationsVersionFor cpv)) => a) -> a
-withIsAuthorizationsVersionFor scpv = withSingI (sAuthorizationsVersionFor scpv)
+-- withIsAuthorizationsVersionFor :: SChainParametersVersion cpv -> ((IsAuthorizationsVersion (AuthorizationsVersionFor cpv)) => a) -> a
+-- withIsAuthorizationsVersionFor scpv = withSingI (sAuthorizationsVersionFor scpv)
 
 -- | Witness an 'IsAuthorizationsVersion' constraint using a 'SProtocolVersion'.
 --  Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionForPV pv)' via the
@@ -1793,8 +1794,7 @@ instance (IsConsensusParametersVersion cpv) => Serialize (ConsensusParameters' c
 --  @IsMintDistributionVersion@ and @IsPoolParametersVersion@.
 withCPVConstraints ::
     SChainParametersVersion cpv ->
-    ( ( IsAuthorizationsVersion (AuthorizationsVersionFor cpv),
-        IsConsensusParametersVersion (ConsensusParametersVersionFor cpv),
+    ( ( IsConsensusParametersVersion (ConsensusParametersVersionFor cpv),
         IsCooldownParametersVersion (CooldownParametersVersionFor cpv),
         IsGASRewardsVersion (GasRewardsVersionFor cpv),
         IsMintDistributionVersion (MintDistributionVersionFor cpv),
@@ -1804,12 +1804,11 @@ withCPVConstraints ::
     ) ->
     a
 withCPVConstraints scpv a =
-    withIsAuthorizationsVersionFor scpv $
-        withIsConsensusParametersVersionFor scpv $
-            withIsCooldownParametersVersionFor scpv $
-                withIsGASRewardsVersionFor scpv $
-                    withIsMintDistributionVersionFor scpv $
-                        withIsPoolParametersVersionFor scpv a
+    withIsConsensusParametersVersionFor scpv $
+        withIsCooldownParametersVersionFor scpv $
+            withIsGASRewardsVersionFor scpv $
+                withIsMintDistributionVersionFor scpv $
+                    withIsPoolParametersVersionFor scpv a
 
 -- | Updatable chain parameters.  This type is parametrised by a 'ChainParametersVersion' that
 --  reflects changes to the chain parameters across different protocol versions.

@@ -844,7 +844,7 @@ data UpdatePayload
       FinalizationCommitteeParametersUpdatePayload !FinalizationCommitteeParameters
     | -- | Update the validator score parameters (chain parameters version 3)
       ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
-    | -- | Issue a new Protocol Level Token (PLT) (Support starting from protocol version 9)
+    | -- | Issue a new Protocol Level Token (PLT) (Support starting from chain parameters version 4)
       CreatePLTUpdatePayload !CreatePLT
     deriving (Eq, Show)
 
@@ -892,8 +892,8 @@ getUpdatePayload spv =
         9
             | PoolParametersVersion0 <- poolParametersVersionFor cpv ->
                 BakerStakeThresholdUpdatePayload <$> getPoolParameters SPoolParametersVersion0
-        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionFor scpv)
-        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionFor scpv)
+        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionForPV spv)
+        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionForPV spv)
         12 -> AddAnonymityRevokerUpdatePayload <$> get
         13 -> AddIdentityProviderUpdatePayload <$> get
         14
