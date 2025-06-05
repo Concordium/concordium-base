@@ -1,4 +1,7 @@
-use crate::common::cbor::{CborArrayEncoder, CborEncoder, CborMapEncoder, CborSerializationError, CborSerializationResult, CborSerialize};
+use crate::common::cbor::{
+    CborArrayEncoder, CborEncoder, CborMapEncoder, CborSerializationError, CborSerializationResult,
+    CborSerialize,
+};
 use ciborium_io::Write;
 use ciborium_ll::Header;
 
@@ -19,8 +22,8 @@ impl<'a, W: Write> CborEncoder for &'a mut Encoder<W>
 where
     CborSerializationError: From<W::Error>,
 {
-    type MapEncoder = MapEncoder<'a, W>;
     type ArrayEncoder = ArrayEncoder<'a, W>;
+    type MapEncoder = MapEncoder<'a, W>;
 
     fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()> {
         Ok(self.inner.push(Header::Tag(tag))?)
@@ -57,11 +60,10 @@ where
     }
 }
 
-
 pub struct MapEncoder<'a, W: Write> {
     declared_size: usize,
-    current_size: usize,
-    encoder: &'a mut Encoder<W>,
+    current_size:  usize,
+    encoder:       &'a mut Encoder<W>,
 }
 
 impl<'a, W: Write> MapEncoder<'a, W> {
@@ -75,12 +77,17 @@ impl<'a, W: Write> MapEncoder<'a, W> {
 }
 
 impl<'a, W: Write> CborMapEncoder for MapEncoder<'a, W>
-    where
-    CborSerializationError: From<W::Error> {
-    fn serialize_entry<K: CborSerialize + ?Sized, V: CborSerialize + ?Sized>(&mut self, key: &K, value: &V) -> CborSerializationResult<()> {
+where
+    CborSerializationError: From<W::Error>,
+{
+    fn serialize_entry<K: CborSerialize + ?Sized, V: CborSerialize + ?Sized>(
+        &mut self,
+        key: &K,
+        value: &V,
+    ) -> CborSerializationResult<()> {
         self.current_size += 1;
-        key.serialize(self.encoder)?;
-        value.serialize(self.encoder)?;
+        key.serialize(&mut *self.encoder)?;
+        value.serialize(&mut *self.encoder)?;
         Ok(())
     }
 
@@ -88,16 +95,18 @@ impl<'a, W: Write> CborMapEncoder for MapEncoder<'a, W>
         if self.declared_size == self.current_size {
             Ok(())
         } else {
-            Err(CborSerializationError::map_size(self.declared_size, self.current_size))
+            Err(CborSerializationError::map_size(
+                self.declared_size,
+                self.current_size,
+            ))
         }
     }
 }
 
-
 pub struct ArrayEncoder<'a, W: Write> {
     declared_size: usize,
-    current_size: usize,
-    encoder: &'a mut Encoder<W>,
+    current_size:  usize,
+    encoder:       &'a mut Encoder<W>,
 }
 
 impl<'a, W: Write> ArrayEncoder<'a, W> {
@@ -110,11 +119,16 @@ impl<'a, W: Write> ArrayEncoder<'a, W> {
     }
 }
 
-impl<'a, W: Write> CborArrayEncoder for ArrayEncoder<'a, W> where
-    CborSerializationError: From<W::Error>,{
-    fn serialize_element<T: CborSerialize + ?Sized>(&mut self, element: &T) -> CborSerializationResult<()> {
+impl<'a, W: Write> CborArrayEncoder for ArrayEncoder<'a, W>
+where
+    CborSerializationError: From<W::Error>,
+{
+    fn serialize_element<T: CborSerialize + ?Sized>(
+        &mut self,
+        element: &T,
+    ) -> CborSerializationResult<()> {
         self.current_size += 1;
-        element.serialize(self.encoder)?;
+        element.serialize(&mut *self.encoder)?;
         Ok(())
     }
 
@@ -122,8 +136,10 @@ impl<'a, W: Write> CborArrayEncoder for ArrayEncoder<'a, W> where
         if self.declared_size == self.current_size {
             Ok(())
         } else {
-            Err(CborSerializationError::array_size(self.declared_size, self.current_size))
+            Err(CborSerializationError::array_size(
+                self.declared_size,
+                self.current_size,
+            ))
         }
-
     }
 }

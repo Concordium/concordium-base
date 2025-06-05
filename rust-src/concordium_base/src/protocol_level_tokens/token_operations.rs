@@ -273,7 +273,7 @@ pub enum CborMemo {
 }
 
 impl CborSerialize for CborMemo {
-    fn serialize<C: CborEncoder>(&self, mut encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> CborSerializationResult<()> {
         match self {
             Self::Raw(memo) => memo.serialize(encoder),
             Self::Cbor(memo) => {

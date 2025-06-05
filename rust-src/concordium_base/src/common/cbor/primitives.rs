@@ -22,7 +22,7 @@ impl<const N: usize> CborDeserialize for [u8; N] {
 }
 
 impl CborSerialize for [u8] {
-    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_bytes(self)
     }
 }
@@ -35,7 +35,7 @@ impl CborSerialize for [u8] {
 pub struct Bytes(pub Vec<u8>);
 
 impl CborSerialize for Bytes {
-    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_bytes(&self.0)
     }
 }
@@ -49,7 +49,7 @@ impl CborDeserialize for Bytes {
 }
 
 impl CborSerialize for bool {
-    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_simple(if *self { simple::TRUE } else { simple::FALSE })
     }
 }
@@ -156,19 +156,19 @@ serialize_deserialize_signed_integer!(i64);
 serialize_deserialize_signed_integer!(isize);
 
 impl CborSerialize for str {
-    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_text(self)
     }
 }
 
 impl CborSerialize for &str {
-    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_text(self)
     }
 }
 
 impl CborSerialize for String {
-    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_text(self)
     }
 }
@@ -206,7 +206,7 @@ pub enum MapKeyRef<'a> {
 }
 
 impl CborSerialize for MapKeyRef<'_> {
-    fn serialize<C: CborEncoder>(&self, encoder:  C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         match self {
             MapKeyRef::Positive(positive) => encoder.encode_positive(*positive),
             MapKeyRef::Text(text) => encoder.encode_text(text),
