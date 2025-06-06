@@ -13,7 +13,6 @@ hex = "0.4"
 
 [dependencies.concordium_base]
 path = "../concordium_base"
-version = "*"
 
 [lib]
 name = "keygen_bls"
