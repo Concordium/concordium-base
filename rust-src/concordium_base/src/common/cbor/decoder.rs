@@ -262,7 +262,7 @@ impl<'a, R: Read> MapDecoder<'a, R> {
     }
 }
 
-impl<'a, R: Read> CborMapDecoder for MapDecoder<'a, R>
+impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
     R::Error: Display,
 {
@@ -333,7 +333,7 @@ impl<'a, R: Read> ArrayDecoder<'a, R> {
     }
 }
 
-impl<'a, R: Read> CborArrayDecoder for ArrayDecoder<'a, R>
+impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
     R::Error: Display,
 {
