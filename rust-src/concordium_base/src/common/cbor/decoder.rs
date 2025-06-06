@@ -255,7 +255,7 @@ impl<'a, R: Read> MapDecoder<'a, R> {
     fn new(size: usize, decoder: &'a mut Decoder<R>) -> Self {
         Self {
             declared_size: size,
-            remaining_entries: 0,
+            remaining_entries: size,
             decoder,
             state: MapDecoderStateEnum::ExpectKey,
         }
@@ -327,7 +327,7 @@ impl<'a, R: Read> ArrayDecoder<'a, R> {
     fn new(size: usize, decoder: &'a mut Decoder<R>) -> Self {
         Self {
             declared_size: size,
-            remaining_elements: 0,
+            remaining_elements: size,
             decoder,
         }
     }
