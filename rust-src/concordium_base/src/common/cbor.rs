@@ -259,7 +259,7 @@ impl<T: CborSerialize> CborSerialize for Option<T> {
 /// Type that can be deserialized from CBOR
 pub trait CborDeserialize {
     /// Deserialize value from the given decoder
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized;
 
@@ -272,7 +272,7 @@ pub trait CborDeserialize {
 }
 
 impl<T: CborDeserialize> CborDeserialize for Option<T> {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(match decoder.peek_data_item_header()? {
@@ -294,7 +294,9 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
 
 /// Encoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborEncoder {
+    /// Associated map encoder
     type MapEncoder: CborMapEncoder;
+    /// Associated array encoder
     type ArrayEncoder: CborArrayEncoder;
 
     /// Encodes tag data item with given value
@@ -307,10 +309,12 @@ pub trait CborEncoder {
     /// value of the data item is -(`negative` + 1)
     fn encode_negative(self, negative: u64) -> CborSerializationResult<()>;
 
-    /// Encodes start of map with given size
+    /// Encodes map with given number of entries (key-value pairs). Returns a
+    /// map encoder that must be used to encode the map.
     fn encode_map(self, size: usize) -> CborSerializationResult<Self::MapEncoder>;
 
-    /// Encodes start of array with given size
+    /// Encodes array with given number of elements. Returns an array encoder
+    /// that must be used to encode the array.
     fn encode_array(self, size: usize) -> CborSerializationResult<Self::ArrayEncoder>;
 
     /// Encodes bytes data item
@@ -357,6 +361,11 @@ pub trait CborArrayEncoder {
 
 /// Decoder of CBOR. See <https://www.rfc-editor.org/rfc/rfc8949.html#section-3>
 pub trait CborDecoder {
+    /// Associated map decoder
+    type MapDecoder: CborMapDecoder;
+    /// Associated array decoder
+    type ArrayDecoder: CborArrayDecoder;
+
     /// Decode tag data item
     fn decode_tag(&mut self) -> CborSerializationResult<u64>;
 
@@ -370,70 +379,109 @@ pub trait CborDecoder {
     }
 
     /// Decode positive integer data item
-    fn decode_positive(&mut self) -> CborSerializationResult<u64>;
+    fn decode_positive(self) -> CborSerializationResult<u64>;
 
     /// Decode negative integer data item. Notice that the
     /// value of the data item is -(`negative` + 1) where
     /// `negative` is the returned value.
-    fn decode_negative(&mut self) -> CborSerializationResult<u64>;
+    fn decode_negative(self) -> CborSerializationResult<u64>;
 
-    /// Decode map start. Returns the map size
-    fn decode_map_header(&mut self) -> CborSerializationResult<usize>;
+    /// Decode map. Returns a map decoder that must be used to decode the map.
+    fn decode_map(self) -> CborSerializationResult<Self::MapDecoder>;
 
-    /// Decode map start and check size equals `expected_length`
-    fn decode_map_header_expect_size(
-        &mut self,
+    /// Decode map and check number of entries equals `expected_size`
+    fn decode_map_expect_size(
+        self,
         expected_size: usize,
-    ) -> CborSerializationResult<()> {
-        let size = self.decode_map_header()?;
-        if size != expected_size {
-            return Err(CborSerializationError::map_size(expected_size, size));
+    ) -> CborSerializationResult<Self::MapDecoder>
+    where
+        Self: Sized, {
+        let map_decoder = self.decode_map()?;
+        if map_decoder.size() != expected_size {
+            return Err(CborSerializationError::map_size(
+                expected_size,
+                map_decoder.size(),
+            ));
         }
-        Ok(())
+        Ok(map_decoder)
     }
 
-    /// Decode array start. Returns the array size
-    fn decode_array_header(&mut self) -> CborSerializationResult<usize>;
+    /// Decode array. Returns an array decoder that must be used to decode the
+    /// array.
+    fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder>;
 
-    /// Decode array start and check size equals `expected_length`
-    fn decode_array_header_expect_size(
-        &mut self,
+    /// Decode array and check number of elements equals `expected_size`
+    fn decode_array_expect_size(
+        self,
         expected_size: usize,
-    ) -> CborSerializationResult<()> {
-        let size = self.decode_array_header()?;
-        if size != expected_size {
-            return Err(CborSerializationError::array_size(expected_size, size));
+    ) -> CborSerializationResult<Self::ArrayDecoder>
+    where
+        Self: Sized, {
+        let array_decoder = self.decode_array()?;
+        if array_decoder.size() != expected_size {
+            return Err(CborSerializationError::array_size(
+                expected_size,
+                array_decoder.size(),
+            ));
         }
-        Ok(())
+        Ok(array_decoder)
     }
 
     /// Decode bytes.
     ///
     /// Works only for definite length bytes.
-    fn decode_bytes(&mut self) -> CborSerializationResult<Vec<u8>>;
+    fn decode_bytes(self) -> CborSerializationResult<Vec<u8>>;
 
     /// Decode bytes into given `destination`. The length of the bytes data item
     /// must match the `destination` length, else an error is returned.
     ///
     /// Works only for definite length bytes.
-    fn decode_bytes_exact(&mut self, destination: &mut [u8]) -> CborSerializationResult<()>;
+    fn decode_bytes_exact(self, destination: &mut [u8]) -> CborSerializationResult<()>;
 
     /// Decode text and return UTF8 encoding.
     ///
     /// Works only for definite length text.
-    fn decode_text(&mut self) -> CborSerializationResult<Vec<u8>>;
+    fn decode_text(self) -> CborSerializationResult<Vec<u8>>;
 
     /// Decode simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
-    fn decode_simple(&mut self) -> CborSerializationResult<u8>;
+    fn decode_simple(self) -> CborSerializationResult<u8>;
 
     /// Peeks header of next data item to be decoded.
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader>;
 
     /// Skips next header and potential content for the data item
-    fn skip_data_item(&mut self) -> CborSerializationResult<()>;
+    fn skip_data_item(self) -> CborSerializationResult<()>;
 
     /// Serialization options in current context
     fn options(&self) -> SerializationOptions;
+}
+
+/// Decoder of CBOR map
+pub trait CborMapDecoder {
+    /// Number of entries of the map being decoded (total number of entries, not
+    /// remaining)
+    fn size(&self) -> usize;
+
+    /// Deserialize an entry consisting of a key and value. Returns `None` if
+    /// all entries in the map has been deserialized.
+    /// The total number of entries that can be deserialized is equal
+    /// to [`Self::size`].
+    fn deserialize_entry<K: CborDeserialize, V: CborDeserialize>(
+        &mut self,
+    ) -> CborSerializationResult<Option<(K, V)>>;
+}
+
+/// Decoder of CBOR array
+pub trait CborArrayDecoder {
+    /// Number of elements in the array being decoded (total number of elements,
+    /// not remaining)
+    fn size(&self) -> usize;
+
+    /// Deserialize an array element. Returns `None` if all
+    /// elements in the array has been deserialized.
+    /// The total number of elements that can be deserialized is equal
+    /// to [`Self::size`].
+    fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>>;
 }
 
 impl<T: CborSerialize> CborSerialize for &T {
@@ -556,13 +604,13 @@ impl<T: CborSerialize> CborSerialize for &[T] {
 }
 
 impl<T: CborDeserialize> CborDeserialize for Vec<T> {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        let size = decoder.decode_array_header()?;
-        let mut vec = Vec::with_capacity(size);
-        for _ in 0..size {
-            vec.push(T::deserialize(decoder)?);
+        let mut array_decoder = decoder.decode_array()?;
+        let mut vec = Vec::with_capacity(array_decoder.size());
+        while let Some(element) = array_decoder.deserialize_element()? {
+            vec.push(element);
         }
 
         Ok(vec)

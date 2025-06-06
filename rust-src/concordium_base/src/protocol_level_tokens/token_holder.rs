@@ -32,7 +32,7 @@ impl CborSerialize for TokenHolder {
 }
 
 impl CborDeserialize for TokenHolder {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self::HolderAccount(HolderAccount::deserialize(decoder)?))
@@ -68,7 +68,7 @@ impl CborSerialize for AccountAddress {
 }
 
 impl CborDeserialize for AccountAddress {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self(CborDeserialize::deserialize(decoder)?))
@@ -100,7 +100,7 @@ impl CborSerialize for CoinInfo {
 }
 
 impl CborDeserialize for CoinInfo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let cbor = CoinInfoCbor::deserialize(decoder)?;

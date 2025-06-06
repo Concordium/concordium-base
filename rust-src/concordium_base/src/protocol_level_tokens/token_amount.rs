@@ -28,7 +28,7 @@ impl CborSerialize for TokenAmount {
 }
 
 impl CborDeserialize for TokenAmount {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let decimal_fraction = DecimalFraction::deserialize(decoder)?;

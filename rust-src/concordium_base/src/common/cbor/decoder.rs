@@ -1,6 +1,6 @@
 use crate::common::cbor::{
-    CborDecoder, CborSerializationError, CborSerializationResult, DataItemHeader, DataItemType,
-    SerializationOptions,
+    CborArrayDecoder, CborDecoder, CborDeserialize, CborMapDecoder, CborSerializationError,
+    CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions,
 };
 use anyhow::{anyhow, Context};
 use ciborium_io::Read;
@@ -21,10 +21,13 @@ impl<R: Read> Decoder<R> {
     }
 }
 
-impl<R: Read> CborDecoder for Decoder<R>
+impl<'a, R: Read> CborDecoder for &'a mut Decoder<R>
 where
     R::Error: Display,
 {
+    type ArrayDecoder = ArrayDecoder<'a, R>;
+    type MapDecoder = MapDecoder<'a, R>;
+
     fn decode_tag(&mut self) -> CborSerializationResult<u64> {
         match self.inner.pull()? {
             Header::Tag(tag) => Ok(tag),
@@ -35,7 +38,7 @@ where
         }
     }
 
-    fn decode_positive(&mut self) -> CborSerializationResult<u64> {
+    fn decode_positive(self) -> CborSerializationResult<u64> {
         match self.inner.pull()? {
             Header::Positive(positive) => Ok(positive),
             header => Err(CborSerializationError::expected_data_item(
@@ -45,7 +48,7 @@ where
         }
     }
 
-    fn decode_negative(&mut self) -> CborSerializationResult<u64> {
+    fn decode_negative(self) -> CborSerializationResult<u64> {
         match self.inner.pull()? {
             Header::Negative(negative) => Ok(negative),
             header => Err(CborSerializationError::expected_data_item(
@@ -55,9 +58,9 @@ where
         }
     }
 
-    fn decode_map_header(&mut self) -> CborSerializationResult<usize> {
+    fn decode_map(self) -> CborSerializationResult<Self::MapDecoder> {
         match self.inner.pull()? {
-            Header::Map(Some(size)) => Ok(size),
+            Header::Map(Some(size)) => Ok(MapDecoder::new(size, self)),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Map,
                 DataItemType::from_header(header),
@@ -65,9 +68,9 @@ where
         }
     }
 
-    fn decode_array_header(&mut self) -> CborSerializationResult<usize> {
+    fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder> {
         match self.inner.pull()? {
-            Header::Array(Some(size)) => Ok(size),
+            Header::Array(Some(size)) => Ok(ArrayDecoder::new(size, self)),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Array,
                 DataItemType::from_header(header),
@@ -75,7 +78,7 @@ where
         }
     }
 
-    fn decode_bytes_exact(&mut self, dest: &mut [u8]) -> CborSerializationResult<()> {
+    fn decode_bytes_exact(self, dest: &mut [u8]) -> CborSerializationResult<()> {
         match self.inner.pull()? {
             Header::Bytes(Some(size)) => {
                 if size != dest.len() {
@@ -94,7 +97,7 @@ where
         Ok(())
     }
 
-    fn decode_bytes(&mut self) -> CborSerializationResult<Vec<u8>> {
+    fn decode_bytes(self) -> CborSerializationResult<Vec<u8>> {
         let size = match self.inner.pull()? {
             Header::Bytes(Some(size)) => size,
             header => {
@@ -110,7 +113,7 @@ where
         Ok(bytes)
     }
 
-    fn decode_text(&mut self) -> CborSerializationResult<Vec<u8>> {
+    fn decode_text(self) -> CborSerializationResult<Vec<u8>> {
         let size = match self.inner.pull()? {
             Header::Text(Some(size)) => size,
             header => {
@@ -126,7 +129,7 @@ where
         Ok(bytes)
     }
 
-    fn decode_simple(&mut self) -> CborSerializationResult<u8> {
+    fn decode_simple(self) -> CborSerializationResult<u8> {
         match self.inner.pull()? {
             Header::Simple(value) => Ok(value),
             header => Err(CborSerializationError::expected_data_item(
@@ -143,7 +146,7 @@ where
         Ok(data_item_header)
     }
 
-    fn skip_data_item(&mut self) -> CborSerializationResult<()> {
+    fn skip_data_item(mut self) -> CborSerializationResult<()> {
         match self.peek_data_item_header()?.to_type() {
             DataItemType::Positive
             | DataItemType::Negative
@@ -162,16 +165,16 @@ where
                 self.decode_text()?;
             }
             DataItemType::Array => {
-                let size = self.decode_array_header()?;
-                for _ in 0..size {
-                    self.skip_data_item()?;
+                let array_decoder = self.decode_array()?;
+                for _ in 0..array_decoder.declared_size {
+                    array_decoder.decoder.skip_data_item()?;
                 }
             }
             DataItemType::Map => {
-                let size = self.decode_map_header()?;
-                for _ in 0..size {
-                    self.skip_data_item()?;
-                    self.skip_data_item()?;
+                let map_decocer = self.decode_map()?;
+                for _ in 0..map_decocer.declared_size {
+                    map_decocer.decoder.skip_data_item()?;
+                    map_decocer.decoder.skip_data_item()?;
                 }
             }
             DataItemType::Break => {
@@ -232,5 +235,76 @@ impl<R: Read> Decoder<R> {
             return Err(anyhow!("expected to only one segment").into());
         }
         Ok(())
+    }
+}
+
+pub struct MapDecoder<'a, R: Read> {
+    declared_size:     usize,
+    remaining_entries: usize,
+    decoder:           &'a mut Decoder<R>,
+}
+
+impl<'a, R: Read> MapDecoder<'a, R> {
+    fn new(size: usize, decoder: &'a mut Decoder<R>) -> Self {
+        Self {
+            declared_size: size,
+            remaining_entries: 0,
+            decoder,
+        }
+    }
+}
+
+impl<'a, R: Read> CborMapDecoder for MapDecoder<'a, R>
+where
+    R::Error: Display,
+{
+    fn size(&self) -> usize { self.declared_size }
+
+    fn deserialize_entry<K: CborDeserialize, V: CborDeserialize>(
+        &mut self,
+    ) -> CborSerializationResult<Option<(K, V)>> {
+        if self.remaining_entries == 0 {
+            return Ok(None);
+        }
+
+        self.remaining_entries -= 1;
+
+        Ok(Some((
+            K::deserialize(&mut *self.decoder)?,
+            V::deserialize(&mut *self.decoder)?,
+        )))
+    }
+}
+
+pub struct ArrayDecoder<'a, R: Read> {
+    declared_size:      usize,
+    remaining_elements: usize,
+    decoder:            &'a mut Decoder<R>,
+}
+
+impl<'a, R: Read> ArrayDecoder<'a, R> {
+    fn new(size: usize, decoder: &'a mut Decoder<R>) -> Self {
+        Self {
+            declared_size: size,
+            remaining_elements: 0,
+            decoder,
+        }
+    }
+}
+
+impl<'a, R: Read> CborArrayDecoder for ArrayDecoder<'a, R>
+where
+    R::Error: Display,
+{
+    fn size(&self) -> usize { self.declared_size }
+
+    fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>> {
+        if self.remaining_elements == 0 {
+            return Ok(None);
+        }
+
+        self.remaining_elements -= 1;
+
+        Ok(Some(T::deserialize(&mut *self.decoder)?))
     }
 }

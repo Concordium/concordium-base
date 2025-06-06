@@ -12,7 +12,7 @@ impl<const N: usize> CborSerialize for [u8; N] {
 }
 
 impl<const N: usize> CborDeserialize for [u8; N] {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let mut dest = [0; N];
@@ -41,7 +41,7 @@ impl CborSerialize for Bytes {
 }
 
 impl CborDeserialize for Bytes {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Bytes(decoder.decode_bytes()?))
@@ -55,7 +55,7 @@ impl CborSerialize for bool {
 }
 
 impl CborDeserialize for bool {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let value = decoder.decode_simple()?;
@@ -83,7 +83,7 @@ macro_rules! serialize_deserialize_unsigned_integer {
         }
 
         impl CborDeserialize for $t {
-            fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+            fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
             where
                 Self: Sized, {
                 Ok(decoder.decode_positive()?.try_into().context(concat!(
@@ -124,7 +124,7 @@ macro_rules! serialize_deserialize_signed_integer {
         }
 
         impl CborDeserialize for $t {
-            fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+            fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
             where
                 Self: Sized, {
                 match decoder.peek_data_item_header()?.to_type() {
@@ -174,7 +174,7 @@ impl CborSerialize for String {
 }
 
 impl CborDeserialize for String {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(String::from_utf8(decoder.decode_text()?)
@@ -215,7 +215,7 @@ impl CborSerialize for MapKeyRef<'_> {
 }
 
 impl CborDeserialize for MapKey {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         match decoder.peek_data_item_header()?.to_type() {

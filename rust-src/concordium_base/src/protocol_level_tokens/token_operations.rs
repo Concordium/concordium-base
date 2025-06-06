@@ -285,7 +285,7 @@ impl CborSerialize for CborMemo {
 }
 
 impl CborDeserialize for CborMemo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(match decoder.peek_data_item_header()? {

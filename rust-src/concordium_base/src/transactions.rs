@@ -54,7 +54,7 @@ impl CborSerialize for Memo {
 }
 
 impl CborDeserialize for Memo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let bytes = decoder.decode_bytes()?;
