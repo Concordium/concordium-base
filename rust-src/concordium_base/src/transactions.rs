@@ -2325,6 +2325,9 @@ pub mod construct {
 
     /// Construct a protocol level token holder transaction consisting of the
     /// token holder operations encoded in the given CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_holder_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2353,6 +2356,9 @@ pub mod construct {
 
     /// Construct a protocol level token governance transaction consisting of
     /// the token governance operations encoded in the given CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_governance_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -3012,6 +3018,9 @@ pub mod send {
 
     /// Construct and sign a protocol level token holder transaction consisting
     /// of the token holder operations encoded in the given CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_holder_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -3034,6 +3043,9 @@ pub mod send {
     /// Construct and sign a protocol level token governance transaction
     /// consisting of the token governance operations encoded in the given
     /// CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_governance_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
