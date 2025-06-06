@@ -240,7 +240,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
 
                 #(
                     let Some(#field_vars) = #cbor_module::CborArrayDecoder::deserialize_element(&mut array_decoder)? else {
-                        return Err(#cbor_module::__private::anyhow::anyhow!("expected array element since size has already been checked").into())
+                        return Err(#cbor_module::__private::anyhow::anyhow!("expected array element since size has already been checked to match field count").into());
                     };
                 )*
 
@@ -251,39 +251,38 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
             let field_map_keys = cbor_fields.cbor_map_keys()?;
 
             quote! {
+                let options = decoder.options();
                 #(let mut #field_vars = None;)*
                 let mut map_decoder = #cbor_module::CborDecoder::decode_map(decoder)?;
-                todo!() // todo ar
-                // for _ in 0..map_size {
-                //     let map_key: #cbor_module::MapKey = #cbor_module::CborDeserialize::deserialize(decoder)?;
-                //
-                //     match map_key.as_ref() {
-                //         #(
-                //             #field_map_keys => {
-                //                 #field_vars = Some(#cbor_module::CborDeserialize::deserialize(decoder)?);
-                //             }
-                //         )*
-                //         key => {
-                //             match decoder.options().unknown_map_keys {
-                //                 #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborSerializationError::unknown_map_key(key)),
-                //                 #cbor_module::UnknownMapKeys::Ignore => decoder.skip_data_item()?,
-                //             }
-                //
-                //         }
-                //     }
-                // }
 
-                // #(
-                //     let #field_vars = match #field_vars {
-                //         None => match #cbor_module::CborDeserialize::null() {
-                //             None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
-                //             Some(null_value) => null_value,
-                //         },
-                //         Some(#field_vars) => #field_vars,
-                //     };
-                // )*
-                //
-                // Ok(#self_construct)
+                while let Some(map_key) = #cbor_module::CborMapDecoder::deserialize_key::<#cbor_module::MapKey>(&mut map_decoder)? {
+                    match map_key.as_ref() {
+                        #(
+                            #field_map_keys => {
+                                #field_vars = Some(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?);
+                            }
+                        )*
+                        key => {
+                            match options.unknown_map_keys {
+                                #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborSerializationError::unknown_map_key(key)),
+                                #cbor_module::UnknownMapKeys::Ignore => #cbor_module::CborMapDecoder::skip_value(&mut map_decoder)?,
+                            }
+
+                        }
+                    }
+                }
+
+                #(
+                    let #field_vars = match #field_vars {
+                        None => match #cbor_module::CborDeserialize::null() {
+                            None => return Err(#cbor_module::CborSerializationError::map_value_missing(#field_map_keys)),
+                            Some(null_value) => null_value,
+                        },
+                        Some(#field_vars) => #field_vars,
+                    };
+                )*
+
+                Ok(#self_construct)
             }
         }
     })
@@ -309,7 +308,7 @@ fn cbor_deserialize_enum_body(
 
         let unknown_variant = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
-                decoder.skip_data_item()?;
+                #cbor_module::CborMapDecoder::skip_value(&mut map_decoder)?;
                 Self::#other_ident
             }
         } else {
@@ -320,19 +319,21 @@ fn cbor_deserialize_enum_body(
 
         quote! {
             let mut map_decoder = decoder.decode_map_expect_size(1)?;
-            todo!() // todo ar
-            // let key =
-            //         #cbor_module::__private::anyhow::Context::context(String::from_utf8(decoder.decode_text()?), "map key not valid UTF8")?;
-            // Ok(match key.as_str() {
-            //     #(
-            //         #variant_map_keys => {
-            //             Self::#variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?)
-            //         }
-            //     )*
-            //     key => {
-            //         #unknown_variant
-            //     }
-            // })
+
+            let Some(key): Option<String> = #cbor_module::CborMapDecoder::deserialize_key(&mut map_decoder)? else {
+                return Err(#cbor_module::__private::anyhow::anyhow!("expected an array element since size has already been checked to be 1").into());
+            };
+
+            Ok(match key.as_str() {
+                #(
+                    #variant_map_keys => {
+                        Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)
+                    }
+                )*
+                key => {
+                    #unknown_variant
+                }
+            })
         }
     } else {
         return Err(syn::Error::new(

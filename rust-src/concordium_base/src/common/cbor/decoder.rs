@@ -238,10 +238,17 @@ impl<R: Read> Decoder<R> {
     }
 }
 
+#[derive(Debug)]
+enum MapDecoderStateEnum {
+    ExpectKey,
+    ExpectValue,
+}
+
 pub struct MapDecoder<'a, R: Read> {
     declared_size:     usize,
     remaining_entries: usize,
     decoder:           &'a mut Decoder<R>,
+    state:             MapDecoderStateEnum,
 }
 
 impl<'a, R: Read> MapDecoder<'a, R> {
@@ -250,6 +257,7 @@ impl<'a, R: Read> MapDecoder<'a, R> {
             declared_size: size,
             remaining_entries: 0,
             decoder,
+            state: MapDecoderStateEnum::ExpectKey,
         }
     }
 }
@@ -260,19 +268,52 @@ where
 {
     fn size(&self) -> usize { self.declared_size }
 
-    fn deserialize_entry<K: CborDeserialize, V: CborDeserialize>(
-        &mut self,
-    ) -> CborSerializationResult<Option<(K, V)>> {
+    fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>> {
+        self.state = match self.state {
+            MapDecoderStateEnum::ExpectKey => MapDecoderStateEnum::ExpectValue,
+            MapDecoderStateEnum::ExpectValue => {
+                return Err(anyhow!(
+                    "map decoder expected to decode entry value since entry key was decoded last"
+                )
+                .into());
+            }
+        };
+
         if self.remaining_entries == 0 {
             return Ok(None);
         }
 
         self.remaining_entries -= 1;
 
-        Ok(Some((
-            K::deserialize(&mut *self.decoder)?,
-            V::deserialize(&mut *self.decoder)?,
-        )))
+        Ok(Some(K::deserialize(&mut *self.decoder)?))
+    }
+
+    fn deserialize_value<V: CborDeserialize>(&mut self) -> CborSerializationResult<V> {
+        self.state = match self.state {
+            MapDecoderStateEnum::ExpectKey => {
+                return Err(anyhow!(
+                    "map decoder expected to decode entry key since entry value was decoded last"
+                )
+                .into());
+            }
+            MapDecoderStateEnum::ExpectValue => MapDecoderStateEnum::ExpectKey,
+        };
+
+        V::deserialize(&mut *self.decoder)
+    }
+
+    fn skip_value(&mut self) -> CborSerializationResult<()> {
+        self.state = match self.state {
+            MapDecoderStateEnum::ExpectKey => {
+                return Err(anyhow!(
+                    "map decoder expected to decode entry key since entry value was decoded last"
+                )
+                .into());
+            }
+            MapDecoderStateEnum::ExpectValue => MapDecoderStateEnum::ExpectKey,
+        };
+
+        self.decoder.skip_data_item()
     }
 }
 

@@ -468,7 +468,22 @@ pub trait CborMapDecoder {
     /// to [`Self::size`].
     fn deserialize_entry<K: CborDeserialize, V: CborDeserialize>(
         &mut self,
-    ) -> CborSerializationResult<Option<(K, V)>>;
+    ) -> CborSerializationResult<Option<(K, V)>> {
+        let Some(key) = self.deserialize_key()? else {
+            return Ok(None);
+        };
+        Ok(Some((key, self.deserialize_value()?)))
+    }
+
+    /// Deserialize an entry key. Returns `None` if
+    /// all entries in the map has been deserialized.
+    fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>>;
+
+    /// Deserialize an entry value.
+    fn deserialize_value<V: CborDeserialize>(&mut self) -> CborSerializationResult<V>;
+
+    /// Skips entry value
+    fn skip_value(&mut self) -> CborSerializationResult<()>;
 }
 
 /// Decoder of CBOR array
