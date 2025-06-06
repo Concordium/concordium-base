@@ -19,6 +19,7 @@ import Test.HUnit
 import Test.Hspec
 import Test.QuickCheck
 
+import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Types
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
@@ -301,11 +302,231 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                     invalidEncTops1
             )
 
+emptyStringHash :: Hash.Hash
+emptyStringHash = Hash.Hash (FBS.pack [0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55])
+
+testTokenModuleStateSimpleJSON :: Spec
+testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization without additional state" $ do
+    let object =
+            TokenModuleState
+                { tmsMetadata = "https://example.com/token-metadata",
+                  tmsName = "bla bla",
+                  tmsAllowList = Just True,
+                  tmsDenyList = Just True,
+                  tmsMintable = Just True,
+                  tmsBurnable = Just False,
+                  tmsAdditional = Map.empty
+                }
+
+    it "Serialize/Deserialize roundtrip success" $
+        assertEqual
+            "Deserialized"
+            (Just object)
+            ( AE.decode $
+                AE.encode
+                    object
+            )
+
+    it "toJSON/fromJSON roundtrip success" $ do
+        let
+            val = AE.toJSON object
+            result :: AE.Result TokenModuleState
+            result = AE.fromJSON val
+
+            parsed :: Maybe TokenModuleState
+            parsed = case result of
+                AE.Success x -> Just x
+                AE.Error _ -> Nothing
+
+        assertEqual
+            "JSON roundtrip"
+            (Just object)
+            parsed
+
+    it "Serializes to expected JSON object" $
+        case AE.toJSON object of
+            AE.Object o -> do
+                assertBool "Does not contain field metadata" $ AE.member "metadata" o
+                assertBool "Does not contain field name" $ AE.member "name" o
+                assertBool "Does not contain field allowList" $ AE.member "allowList" o
+                assertBool "Does not contain field denyList" $ AE.member "denyList" o
+                assertBool "Does not contain field mintable" $ AE.member "mintable" o
+                assertBool "Does not contain field burnable" $ AE.member "burnable" o
+            _ -> assertFailure "Does not encode to JSON object"
+
+testTokenModuleStateJSON :: Spec
+testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with additional state" $ do
+    let object =
+            TokenModuleState
+                { tmsMetadata = "https://example.com/token-metadata",
+                  tmsName = "bla bla",
+                  tmsAllowList = Just True,
+                  tmsDenyList = Just True,
+                  tmsMintable = Just True,
+                  tmsBurnable = Just False,
+                  tmsAdditional = Map.fromList [("otherField" :: Text.Text, CBOR.TBool True)]
+                }
+
+    it "Serialize/Deserialize roundtrip success" $
+        assertEqual
+            "Deserialized"
+            (Just object)
+            ( AE.decode $
+                AE.encode
+                    object
+            )
+
+    it "toJSON/fromJSON roundtrip success" $ do
+        let
+            val = AE.toJSON object
+            result :: AE.Result TokenModuleState
+            result = AE.fromJSON val
+
+            parsed :: Maybe TokenModuleState
+            parsed = case result of
+                AE.Success x -> Just x
+                AE.Error _ -> Nothing
+
+        assertEqual
+            "JSON roundtrip"
+            (Just object)
+            parsed
+
+    it "Serializes to expected JSON object" $
+        case AE.toJSON object of
+            AE.Object o -> do
+                assertBool "Does not contain field metadata" $ AE.member "metadata" o
+                assertBool "Does not contain field name" $ AE.member "name" o
+                assertBool "Does not contain field allowList" $ AE.member "allowList" o
+                assertBool "Does not contain field denyList" $ AE.member "denyList" o
+                assertBool "Does not contain field mintable" $ AE.member "mintable" o
+                assertBool "Does not contain field burnable" $ AE.member "burnable" o
+                assertBool "Does not contain field _additional" $ AE.member "_additional" o
+            _ -> assertFailure "Does not encode to JSON object"
+
+testTokenStateSimpleJSON :: Spec
+testTokenStateSimpleJSON = describe "TokenState JSON serialization without additional state" $ do
+    let tokenModuleState =
+            TokenModuleState
+                { tmsMetadata = "https://example.com/token-metadata",
+                  tmsName = "bla bla",
+                  tmsAllowList = Just True,
+                  tmsDenyList = Just True,
+                  tmsMintable = Just True,
+                  tmsBurnable = Just False,
+                  tmsAdditional = Map.empty
+                }
+    let tokenModuleRef = TokenModuleRef{theTokenModuleRef = emptyStringHash}
+    let object =
+            TokenState
+                { tsTokenModuleRef = tokenModuleRef,
+                  tsIssuer = AccountAddress $ FBS.pack [0x1, 0x1],
+                  tsTotalSupply = TokenAmount{taValue = 10000, taDecimals = 2},
+                  tsDecimals = 2,
+                  tsModuleState = tokenModuleStateToBytes tokenModuleState
+                }
+
+    it "Serialize/Deserialize roundtrip success" $
+        assertEqual
+            "Deserialized"
+            (Just object)
+            ( AE.decode $
+                AE.encode
+                    object
+            )
+
+    it "toJSON/fromJSON roundtrip success" $ do
+        let
+            val = AE.toJSON object
+            result :: AE.Result TokenState
+            result = AE.fromJSON val
+
+            parsed :: Maybe TokenState
+            parsed = case result of
+                AE.Success x -> Just x
+                AE.Error _ -> Nothing
+
+        assertEqual
+            "JSON roundtrip"
+            (Just object)
+            parsed
+
+    it "Serializes to expected JSON object" $
+        case AE.toJSON object of
+            AE.Object o -> do
+                assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
+                assertBool "Does not contain field issuer" $ AE.member "issuer" o
+                assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
+                assertBool "Does not contain field decimals" $ AE.member "decimals" o
+                assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
+            _ -> assertFailure "Does not encode to JSON object"
+
+testTokenStateJSON :: Spec
+testTokenStateJSON = describe "TokenState JSON serialization with additional state" $ do
+    let tokenModuleState =
+            TokenModuleState
+                { tmsMetadata = "https://example.com/token-metadata",
+                  tmsName = "bla bla",
+                  tmsAllowList = Just True,
+                  tmsDenyList = Just True,
+                  tmsMintable = Just True,
+                  tmsBurnable = Just False,
+                  tmsAdditional = Map.fromList [("otherField1" :: Text.Text, CBOR.TString "abc"), ("otherField2" :: Text.Text, CBOR.TInt 3), ("otherField3" :: Text.Text, CBOR.TBool True), ("otherField4" :: Text.Text, CBOR.TNull)]
+                }
+    let tokenModuleRef = TokenModuleRef{theTokenModuleRef = emptyStringHash}
+    let object =
+            TokenState
+                { tsTokenModuleRef = tokenModuleRef,
+                  tsIssuer = AccountAddress $ FBS.pack [0x1, 0x1],
+                  tsTotalSupply = TokenAmount{taValue = 10000, taDecimals = 2},
+                  tsDecimals = 2,
+                  tsModuleState = tokenModuleStateToBytes tokenModuleState
+                }
+
+    it "Serialize/Deserialize roundtrip success" $
+        assertEqual
+            "Deserialized"
+            (Just object)
+            ( AE.decode $
+                AE.encode
+                    object
+            )
+
+    it "toJSON/fromJSON roundtrip success" $ do
+        let
+            val = AE.toJSON object
+            result :: AE.Result TokenState
+            result = AE.fromJSON val
+
+            parsed :: Maybe TokenState
+            parsed = case result of
+                AE.Success x -> Just x
+                AE.Error _ -> Nothing
+
+        assertEqual
+            "JSON roundtrip"
+            (Just object)
+            parsed
+
+    it "Serializes to expected JSON object" $
+        case AE.toJSON object of
+            AE.Object o -> do
+                assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
+                assertBool "Does not contain field issuer" $ AE.member "issuer" o
+                assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
+                assertBool "Does not contain field decimals" $ AE.member "decimals" o
+                assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
+            _ -> assertFailure "Does not encode to JSON object"
+
 tests :: Spec
 tests = parallel $ describe "CBOR" $ do
     testInitializationParameters
     testEncodedInitializationParameters
     testEncodedTokenOperations
+    testTokenModuleStateSimpleJSON
+    testTokenModuleStateJSON
+    testTokenStateSimpleJSON
+    testTokenStateJSON
     it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
         (Right ("", tt))
             === ( deserialiseFromBytes

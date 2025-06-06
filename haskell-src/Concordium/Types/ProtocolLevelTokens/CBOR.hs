@@ -13,7 +13,10 @@ import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import Control.Monad
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Key as AE.Key
+import Data.Aeson.Types ((.!=))
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable
@@ -24,6 +27,7 @@ import Data.Scientific
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.Lazy as LazyText
 import Data.Word
 import Lens.Micro.Platform
@@ -1323,6 +1327,76 @@ data TokenModuleState = TokenModuleState
       tmsAdditional :: !(Map.Map Text CBOR.Term)
     }
     deriving (Eq, Show)
+
+-- | Function should be already available after merging "https://github.com/Concordium/concordium-base/pull/657"
+-- | Convert CBOR.Term to a hex-encoded string
+cborTermToHex :: CBOR.Term -> Text
+cborTermToHex term =
+    let bs = CBOR.toStrictByteString $ CBOR.encodeTerm term
+    in  TextEncoding.decodeUtf8 (Base16.encode bs)
+
+-- | Function should be already available after merging "https://github.com/Concordium/concordium-base/pull/657"
+-- | Convert a hex-encoded string to a CBOR.Term.
+hexToCborTerm :: Text -> Either String CBOR.Term
+hexToCborTerm hexText = do
+    bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
+    decodeTerm bs
+  where
+    decodeTerm bs =
+        case CBOR.deserialiseFromBytes CBOR.decodeTerm (LBS.fromStrict bs) of
+            Left err -> Left $ "Failed to decode CBOR term: " ++ show err
+            Right ("", term) -> Right term
+            Right (remaining, _) -> Left $ "Extra bytes after decoding CBOR term: " ++ show (LBS.length remaining)
+
+instance AE.ToJSON TokenModuleState where
+    toJSON TokenModuleState{..} =
+        AE.object
+            ( [ "name" AE..= tmsName,
+                "metadata" AE..= tmsMetadata,
+                "allowList" AE..= tmsAllowList,
+                "denyList" AE..= tmsDenyList,
+                "mintable" AE..= tmsMintable,
+                "burnable" AE..= tmsBurnable
+              ]
+                ++ maybe
+                    []
+                    ( \pairs ->
+                        ["_additional" AE..= AE.object pairs]
+                    )
+                    additional
+            )
+      where
+        additional
+            | null tmsAdditional = Nothing
+            | otherwise =
+                Just
+                    [ AE.Key.fromText k AE..= cborTermToHex v
+                      | (k, v) <- Map.toList tmsAdditional
+                    ]
+
+instance AE.FromJSON TokenModuleState where
+    parseJSON = AE.withObject "TokenModuleState" $ \v -> do
+        tmsName <- v AE..: "name"
+        tmsMetadata <- v AE..: "metadata"
+        tmsAllowList <- v AE..: "allowList"
+        tmsDenyList <- v AE..: "denyList"
+        tmsMintable <- v AE..: "mintable"
+        tmsBurnable <- v AE..: "burnable"
+        tmsAdditionalTemp <- v AE..:? "_additional" .!= Map.empty
+
+        -- Decode each hex string into a CBOR.Term
+        tmsAdditional <-
+            Map.traverseWithKey
+                ( \k hexTxt ->
+                    case hexToCborTerm hexTxt of
+                        Left err ->
+                            fail $
+                                "Failed to decode CBOR for key “" ++ show k ++ "”: " ++ err
+                        Right term -> return term
+                )
+                tmsAdditionalTemp
+
+        return TokenModuleState{..}
 
 -- | Encode a 'TokenModuleState' as CBOR. Any keys in 'tmsAdditional' that overlap with
 --  standardized keys (e.g. "name", "metadata", "allowList", etc.) will be ignored.
