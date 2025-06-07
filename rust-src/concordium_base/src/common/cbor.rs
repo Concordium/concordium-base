@@ -952,25 +952,26 @@ mod test {
             Var2(String),
         }
 
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(map)]
         enum TestEnum2 {
             Var1(u64),
             #[cbor(other)]
-            Unknown,
+            Unknown(MapKey, value::Value),
         }
 
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: TestEnum2 = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, TestEnum2::Unknown);
-
-        let err = cbor_encode(&TestEnum2::Unknown).unwrap_err().to_string();
-        assert!(
-            err.contains("cannot serialize variant marked with #[cbor(other)]"),
-            "err: {}",
-            err
+        let value_unknown = TestEnum2::Unknown(
+            MapKey::Text("var2".to_string()),
+            value::Value::Text("abcd".to_string()),
         );
+        assert_eq!(value_decoded, value_unknown);
+
+        let cbor = cbor_encode(&value_unknown).unwrap();
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 
     #[test]

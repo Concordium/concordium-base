@@ -9,6 +9,7 @@ use ciborium_ll::simple;
 /// any data item type.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    // todo ar integer?
     /// Positive integer (major type 0)
     Positive(u64),
     /// Negative integer (major type 1)

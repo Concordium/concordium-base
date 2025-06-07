@@ -207,6 +207,36 @@ pub enum MapKey {
     Text(String),
 }
 
+impl From<String> for MapKey {
+    fn from(value: String) -> Self { Self::Text(value) }
+}
+
+impl From<u64> for MapKey {
+    fn from(value: u64) -> Self { Self::Positive(value) }
+}
+
+impl TryFrom<MapKey> for String {
+    type Error = CborSerializationError;
+
+    fn try_from(value: MapKey) -> Result<Self, Self::Error> {
+        match value {
+            MapKey::Positive(_) => Err(anyhow!("MapKey not a of type Text").into()),
+            MapKey::Text(value) => Ok(value),
+        }
+    }
+}
+
+impl TryFrom<MapKey> for u64 {
+    type Error = CborSerializationError;
+
+    fn try_from(value: MapKey) -> Result<Self, Self::Error> {
+        match value {
+            MapKey::Positive(value) => Ok(value),
+            MapKey::Text(_) => Err(anyhow!("MapKey not a of type Positive").into()),
+        }
+    }
+}
+
 impl MapKey {
     pub fn as_ref(&self) -> MapKeyRef {
         match self {
@@ -226,8 +256,8 @@ pub enum MapKeyRef<'a> {
 impl CborSerialize for MapKeyRef<'_> {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         match self {
-            MapKeyRef::Positive(positive) => encoder.encode_positive(*positive),
-            MapKeyRef::Text(text) => encoder.encode_text(text),
+            Self::Positive(positive) => encoder.encode_positive(*positive),
+            Self::Text(text) => encoder.encode_text(text),
         }
     }
 }
@@ -246,6 +276,15 @@ impl CborDeserialize for MapKey {
                 data_item_type
             )
             .into()),
+        }
+    }
+}
+
+impl CborSerialize for MapKey {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        match self {
+            Self::Positive(positive) => encoder.encode_positive(*positive),
+            Self::Text(text) => encoder.encode_text(text),
         }
     }
 }

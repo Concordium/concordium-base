@@ -308,12 +308,11 @@ fn cbor_deserialize_enum_body(
 
         let unknown_variant = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
-                #cbor_module::CborMapDecoder::skip_value(&mut map_decoder)?;
-                Self::#other_ident
+                Self::#other_ident(key.into(), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)
             }
         } else {
             quote! {
-                return Err(#cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(key)));
+                return Err(#cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(&key)));
             }
         };
 
@@ -330,7 +329,7 @@ fn cbor_deserialize_enum_body(
                         Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)
                     }
                 )*
-                key => {
+                _ => {
                     #unknown_variant
                 }
             })
@@ -472,8 +471,8 @@ fn cbor_serialize_enum_body(
 
         let other_variant = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
-                Self::#other_ident => {
-                    return Err(#cbor_module::__private::anyhow::anyhow!("cannot serialize variant marked with #[cbor(other)]").into());
+                Self::#other_ident(key, value) => {
+                    #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, key, value)?;
                 }
             }
         } else {
