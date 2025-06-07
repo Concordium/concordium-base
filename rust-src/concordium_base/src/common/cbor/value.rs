@@ -1,6 +1,6 @@
 use crate::common::cbor::{
     Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-    CborSerializationResult, CborSerialize, DataItemHeader,
+    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
 };
 use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
@@ -47,8 +47,12 @@ impl CborSerialize for Value {
                 }
                 array_encoder.end()
             }
-            Value::Map(_) => {
-                todo!()
+            Value::Map(value) => {
+                let mut map_encoder = encoder.encode_map(value.len())?;
+                for entry in value {
+                    map_encoder.serialize_entry(&entry.0, &entry.1)?;
+                }
+                map_encoder.end()
             }
             Value::Tag(tag, value) => {
                 encoder.encode_tag(*tag)?;
@@ -91,7 +95,12 @@ impl CborDeserialize for Value {
                 Value::Array(vec)
             }
             DataItemHeader::Map(_) => {
-                todo!()
+                let mut map_decoder = decoder.decode_map()?;
+                let mut vec = Vec::with_capacity(map_decoder.size());
+                while let Some(entry) = map_decoder.deserialize_entry()? {
+                    vec.push(entry);
+                }
+                Value::Map(vec)
             }
             DataItemHeader::Tag(_) => {
                 let tag = decoder.decode_tag()?;
@@ -233,6 +242,19 @@ mod test {
 
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "820103");
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_map() {
+        let value = Value::Map(vec![
+            (Value::Positive(1), Value::Positive(3)),
+            (Value::Positive(2), Value::Positive(4)),
+        ]);
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a201030204");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
