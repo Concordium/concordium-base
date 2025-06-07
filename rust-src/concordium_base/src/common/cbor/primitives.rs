@@ -34,6 +34,12 @@ impl CborSerialize for [u8] {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Bytes(pub Vec<u8>);
 
+impl AsRef<[u8]> for Bytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl CborSerialize for Bytes {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_bytes(&self.0)

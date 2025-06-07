@@ -108,6 +108,8 @@ mod composites;
 mod decoder;
 mod encoder;
 mod primitives;
+/// Dynamic data model for generic CBOR
+pub mod value;
 
 pub use composites::*;
 pub use decoder::*;
