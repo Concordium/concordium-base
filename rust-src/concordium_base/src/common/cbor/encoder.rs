@@ -58,6 +58,10 @@ where
     fn encode_simple(self, value: u8) -> CborSerializationResult<()> {
         Ok(self.inner.push(Header::Simple(value))?)
     }
+
+    fn encode_float(self, float: f64) -> CborSerializationResult<()> {
+        Ok(self.inner.push(Header::Float(float))?)
+    }
 }
 
 pub struct MapEncoder<'a, W: Write> {

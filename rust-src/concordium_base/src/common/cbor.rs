@@ -327,6 +327,9 @@ pub trait CborEncoder {
 
     /// Encodes simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
     fn encode_simple(self, simple: u8) -> CborSerializationResult<()>;
+
+    /// Encodes float value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
+    fn encode_float(self, float: f64) -> CborSerializationResult<()>;
 }
 
 /// Encoder of CBOR map
@@ -447,6 +450,9 @@ pub trait CborDecoder {
 
     /// Decode simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
     fn decode_simple(self) -> CborSerializationResult<u8>;
+
+    /// Decode float, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
+    fn decode_float(self) -> CborSerializationResult<f64>;
 
     /// Peeks header of next data item to be decoded.
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader>;

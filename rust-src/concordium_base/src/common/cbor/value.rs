@@ -2,23 +2,35 @@ use crate::common::cbor::{
     Bytes, CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
     DataItemHeader,
 };
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
 
 /// Generic CBOR data item that can represent
 /// any data item type.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    /// Positive integer (major type 0)
     Positive(u64),
+    /// Negative integer (major type 1)
     Negative(u64),
+    /// Bytes (major type 2)
     Bytes(Bytes),
-    Float(f64),
+    /// Text (major type 3)
     Text(String),
-    Bool(bool),
-    Null,
-    Tag(u64, Box<Value>),
+    /// Array (major type 4)
     Array(Vec<Value>),
+    /// Map (major type 5)
     Map(Vec<(Value, Value)>),
+    /// Tagged data item (major type 6)
+    Tag(u64, Box<Value>),
+    /// Simple value FALSE and TRUE (major type 7)
+    Bool(bool),
+    /// Simple value NULL (major type 7)
+    Null,
+    /// Other simple values (major type 7)
+    Simple(u8),
+    /// Float (major type 7)
+    Float(f64),
 }
 
 impl CborSerialize for Value {
@@ -27,10 +39,17 @@ impl CborSerialize for Value {
             Value::Positive(value) => encoder.encode_positive(*value),
             Value::Negative(value) => encoder.encode_negative(*value),
             Value::Bytes(value) => encoder.encode_bytes(&value.0),
-            Value::Float(_) => {
+            Value::Text(value) => encoder.encode_text(value),
+            Value::Array(_) => {
                 todo!()
             }
-            Value::Text(value) => encoder.encode_text(value),
+            Value::Map(_) => {
+                todo!()
+            }
+            Value::Tag(tag, value) => {
+                encoder.encode_tag(*tag)?;
+                value.serialize(encoder)
+            }
             Value::Bool(value) => {
                 if *value {
                     encoder.encode_simple(simple::TRUE)
@@ -38,25 +57,13 @@ impl CborSerialize for Value {
                     encoder.encode_simple(simple::FALSE)
                 }
             }
-            Value::Null => {
-                todo!()
-            }
-            Value::Tag(tag, value) => {
-                encoder.encode_tag(*tag)?;
-                value.serialize(encoder)
-            }
-            Value::Array(_) => {
-                todo!()
-            }
-            Value::Map(_) => {
-                todo!()
-            }
+            Value::Null => encoder.encode_simple(simple::NULL),
+            Value::Simple(value) => encoder.encode_simple(*value),
+            Value::Float(value) => encoder.encode_float(*value),
         }
     }
 
-    fn is_null(&self) -> bool {
-        false // todo ar
-    }
+    fn is_null(&self) -> bool { matches!(self, Value::Null) }
 }
 
 impl CborDeserialize for Value {
@@ -85,15 +92,12 @@ impl CborDeserialize for Value {
             DataItemHeader::Simple(_) => match decoder.decode_simple()? {
                 simple::TRUE => Value::Bool(true),
                 simple::FALSE => Value::Bool(false),
-                _ => {
-                    todo!()
-                }
+                simple::NULL => Value::Null,
+                value => Value::Simple(value),
             },
-            DataItemHeader::Float(_) => {
-                todo!()
-            }
+            DataItemHeader::Float(_) => Value::Float(decoder.decode_float()?),
             DataItemHeader::Break => {
-                todo!()
+                return Err(anyhow!("break is not a valid data item").into());
             }
         })
     }
@@ -101,7 +105,7 @@ impl CborDeserialize for Value {
     fn null() -> Option<Self>
     where
         Self: Sized, {
-        None // todo ar
+        Some(Value::Null)
     }
 }
 
@@ -173,6 +177,43 @@ mod test {
 
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "d87b03");
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_null() {
+        let value = Value::Null;
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "f6");
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_simple() {
+        let value = Value::Simple(15);
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "ef");
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = Value::Simple(65);
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "f841");
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_float() {
+        let value = Value::Float(1.123);
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "fb3ff1f7ced916872b");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }

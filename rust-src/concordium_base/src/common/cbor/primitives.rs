@@ -35,9 +35,7 @@ impl CborSerialize for [u8] {
 pub struct Bytes(pub Vec<u8>);
 
 impl AsRef<[u8]> for Bytes {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
+    fn as_ref(&self) -> &[u8] { &self.0 }
 }
 
 impl CborSerialize for Bytes {
@@ -160,6 +158,20 @@ serialize_deserialize_signed_integer!(i16);
 serialize_deserialize_signed_integer!(i32);
 serialize_deserialize_signed_integer!(i64);
 serialize_deserialize_signed_integer!(isize);
+
+impl CborSerialize for f64 {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        encoder.encode_float(*self)
+    }
+}
+
+impl CborDeserialize for f64 {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        decoder.decode_float()
+    }
+}
 
 impl CborSerialize for str {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
@@ -321,6 +333,15 @@ mod test {
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "f5");
         let value_decoded: bool = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_f64() {
+        let value = 1.123f64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "fb3ff1f7ced916872b");
+        let value_decoded: f64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
 
