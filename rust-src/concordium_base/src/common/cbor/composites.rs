@@ -16,3 +16,18 @@ impl DecimalFraction {
 
     pub fn mantissa(self) -> i64 { self.1 }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::common::cbor::{cbor_decode, cbor_encode};
+
+    #[test]
+    fn test_decimal_fraction() {
+        let value = DecimalFraction::new(-3, 12345);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "c48222193039");
+        let value_decoded: DecimalFraction = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+}
