@@ -88,8 +88,8 @@
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
 //!
 //! #### `cbor(other)`
-//! Deserializes "unknown" content to this enum variant.
-//! ```ignore
+//! For enums represented as CBOR maps, "unknown" map entries are deserialized
+//! to this enum variant. ```ignore
 //! # use concordium_base_derive::{CborDeserialize, CborSerialize};
 //! #
 //! #[derive(CborSerialize, CborDeserialize)]
@@ -98,11 +98,12 @@
 //!     Var1(u64),
 //!     Var2(String),
 //!     #[cbor(other)]
-//!     Unknown,
+//!     Unknown(String, value::Value),
 //! }
 //! ```
-//! In this example variants in the CBOR that is not represented in the enum are
-//! deserialized as `Unknown`. Serializing `Unknown` will always fail.
+//! In this example entries in the CBOR map that is not present in the enum are
+//! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
+//! the map key and the map value.
 
 mod composites;
 mod decoder;
