@@ -1,6 +1,6 @@
 use crate::common::cbor::{
-    Bytes, CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
-    DataItemHeader,
+    Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
+    CborSerializationResult, CborSerialize, DataItemHeader,
 };
 use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
@@ -40,8 +40,12 @@ impl CborSerialize for Value {
             Value::Negative(value) => encoder.encode_negative(*value),
             Value::Bytes(value) => encoder.encode_bytes(&value.0),
             Value::Text(value) => encoder.encode_text(value),
-            Value::Array(_) => {
-                todo!()
+            Value::Array(value) => {
+                let mut array_encoder = encoder.encode_array(value.len())?;
+                for element in value {
+                    array_encoder.serialize_element(element)?;
+                }
+                array_encoder.end()
             }
             Value::Map(_) => {
                 todo!()
@@ -79,7 +83,12 @@ impl CborDeserialize for Value {
                     .context("text data item not valid UTF8 encoding")?,
             ),
             DataItemHeader::Array(_) => {
-                todo!()
+                let mut array_decoder = decoder.decode_array()?;
+                let mut vec = Vec::with_capacity(array_decoder.size());
+                while let Some(element) = array_decoder.deserialize_element()? {
+                    vec.push(element);
+                }
+                Value::Array(vec)
             }
             DataItemHeader::Map(_) => {
                 todo!()
@@ -214,6 +223,16 @@ mod test {
 
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "fb3ff1f7ced916872b");
+        let value_decoded: Value = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_array() {
+        let value = Value::Array(vec![Value::Positive(1), Value::Positive(3)]);
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "820103");
         let value_decoded: Value = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
