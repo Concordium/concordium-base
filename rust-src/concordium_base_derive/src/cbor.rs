@@ -26,6 +26,8 @@ pub struct CborVariantOpts {
     /// attribute.
     #[darling(default)]
     other: bool,
+    /// CBOR tag to add to data item in the variant.
+    tag:   Option<Expr>,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -39,11 +41,12 @@ pub struct CborOpts {
     tag:         Option<Expr>,
     /// Serialize enum as a map with a single entry. The variant
     /// name in camel case is used as the key as a text data item.
-    ///
-    /// This option is here because we want to extend with tagged enum encodings
-    /// also at some point. So you can use either `map` or `tagged`.
     #[darling(default)]
     map:         bool,
+    /// Serialize enum as a tagged data item. Each variant but have a `tag`
+    /// attribute - except for at most one variant which can be untagged.
+    #[darling(default)]
+    tagged:      bool,
 }
 
 #[derive(Debug)]
@@ -108,7 +111,7 @@ impl CborFields {
 
 impl CborFields {
     fn try_from_fields(fields: &Fields) -> syn::Result<Self> {
-        Ok(Self(
+        let this = Self(
             fields
                 .iter()
                 .zip(fields.members())
@@ -119,7 +122,15 @@ impl CborFields {
                     Ok(CborField { member, opts, ty })
                 })
                 .collect::<syn::Result<Vec<_>>>()?,
-        ))
+        );
+        if this.0.iter().filter(|field| field.opts.other).count() > 1 {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(other) can only be specified on a at most a single field",
+            ));
+        }
+
+        Ok(this)
     }
 }
 
@@ -167,8 +178,11 @@ impl CborVariants {
 }
 
 impl CborVariants {
-    fn try_from_variants(variants: &Punctuated<Variant, Comma>) -> syn::Result<Self> {
-        Ok(Self(
+    fn try_from_variants(
+        opts: &CborOpts,
+        variants: &Punctuated<Variant, Comma>,
+    ) -> syn::Result<Self> {
+        let this = Self(
             variants
                 .iter()
                 .map(|variant| {
@@ -180,7 +194,27 @@ impl CborVariants {
                     })
                 })
                 .collect::<syn::Result<Vec<_>>>()?,
-        ))
+        );
+        if this.0.iter().filter(|variant| variant.opts.other).count() > 1 {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(other) can only be specified on a at most a single variant",
+            ));
+        }
+        if opts.tagged && this
+            .0
+            .iter()
+            .filter(|variant| variant.opts.tag.is_some())
+            .count()
+            + 1
+            < this.0.len()
+        {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(tag) must be specified on all except at most one variant",
+            ));
+        }
+        Ok(this)
     }
 }
 
@@ -200,6 +234,12 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(map)] only valid for enums",
+        ));
+    }
+    if opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tagged)] only valid for enums",
         ));
     }
 
@@ -349,10 +389,17 @@ fn cbor_deserialize_enum_body(
         ));
     }
 
+    if opts.map && opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
+        ));
+    }
+
     Ok(if opts.map {
         let cbor_module = get_cbor_module()?;
 
-        let cbor_variants = CborVariants::try_from_variants(variants)?;
+        let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
         let variant_idents = cbor_variants.variant_idents();
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
@@ -387,7 +434,7 @@ fn cbor_deserialize_enum_body(
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
-            "#[cbor(map)] must be specified for enums",
+            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
         ));
     })
 }
@@ -433,6 +480,12 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(map)] only valid for enums",
+        ));
+    }
+    if opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tagged)] only valid for enums",
         ));
     }
 
@@ -533,10 +586,17 @@ fn cbor_serialize_enum_body(
         ));
     }
 
+    if opts.map && opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
+        ));
+    }
+
     Ok(if opts.map {
         let cbor_module = get_cbor_module()?;
 
-        let cbor_variants = CborVariants::try_from_variants(variants)?;
+        let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
         let variant_idents = cbor_variants.variant_idents();
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
@@ -565,7 +625,7 @@ fn cbor_serialize_enum_body(
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
-            "#[cbor(map)] must be specified for enums",
+            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
         ));
     })
 }
