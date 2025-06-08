@@ -86,8 +86,9 @@
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
 //!
 //! #### `cbor(other)`
-//! For enums represented as CBOR maps, "unknown" map entries are deserialized
-//! to this enum variant.
+//! This attribute can be applied to a variant in an enum for a field in a
+//! struct. When applied to a variant in an enum represented as a CBOR map,
+//! "unknown" map entries are deserialized to this variant.
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(map)]
@@ -98,11 +99,22 @@
 //!     Unknown(String, value::Value),
 //! }
 //! ```
-//! In this example entries in the CBOR map that is not present in the enum are
+//! In this example, entries in the CBOR map that is not present in the enum are
 //! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
 //! the map key and the map value.
-
-// todo ar doc other for struct
+//!
+//! When applied to a field in a struct with named fields, "unknown" map entries
+//! are deserialized into this field.
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! struct TestStruct {
+//!     field1:  u64,
+//!     #[cbor(other)]
+//!     unknown: HashMap<MapKey, value::Value>,
+//! }
+//! ```
+//! In this example, entries in the CBOR map that are not present in the struct
+//! are each deserialized into an entry in the map in the field `unknown`.
 
 mod composites;
 mod decoder;
