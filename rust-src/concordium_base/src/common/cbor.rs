@@ -102,6 +102,8 @@
 //! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
 //! the map key and the map value.
 
+// todo ar doc other and apply to model at relevant places
+
 mod composites;
 mod decoder;
 mod encoder;
@@ -642,6 +644,7 @@ impl<T: CborDeserialize> CborDeserialize for Vec<T> {
 mod test {
     use super::*;
     use concordium_base_derive::{CborDeserialize, CborSerialize};
+    use std::collections::HashMap;
 
     /// Struct with named fields encoded as map. Uses field name string literals
     /// as keys.
@@ -771,6 +774,49 @@ mod test {
         .unwrap_err()
         .to_string();
         assert!(err.contains("unknown map key"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_struct_as_map_derived_other_field() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+            field2: String,
+            #[cbor(key = 3)]
+            field3: u64,
+        }
+
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct2 {
+            field1:  u64,
+            #[cbor(other)]
+            unknown: HashMap<MapKey, value::Value>,
+        }
+
+        let value = TestStruct {
+            field1: 3,
+            field2: "abcd".to_string(),
+            field3: 5,
+        };
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStruct2 = cbor_decode(&cbor).unwrap();
+        let value_unknown = TestStruct2 {
+            field1:  3,
+            unknown: [
+                (
+                    MapKey::Text("field2".to_string()),
+                    value::Value::Text("abcd".to_string()),
+                ),
+                (MapKey::Positive(3), value::Value::Positive(5)),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        assert_eq!(value_decoded, value_unknown);
+
+        let cbor = cbor_encode(&value_unknown).unwrap();
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 
     #[test]

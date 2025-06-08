@@ -2,7 +2,7 @@ use crate::get_crate_root;
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Data, DataEnum, DataStruct, Expr, Fields, LitStr, Member, Variant};
+use syn::{Data, DataEnum, DataStruct, Expr, Fields, LitStr, Member, Type, Variant};
 
 use darling::{FromDeriveInput, FromField, FromVariant};
 use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
@@ -12,14 +12,18 @@ use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
     /// name in camel case is used as key as a text data item.
-    key: Option<Expr>,
+    key:   Option<Expr>,
+    /// Deserialize fields in CBOR map that is not present in the struct
+    /// to the field with this attribute.
+    #[darling(default)]
+    other: bool,
 }
 
 #[derive(Debug, Default, FromVariant)]
 #[darling(attributes(cbor))]
 pub struct CborVariantOpts {
-    /// Serialize unknown variants in CBOR to the enum with this
-    /// attribute. Serialization of the variant always fails
+    /// Deserialize unknown variants in CBOR to the variant with this
+    /// attribute.
     #[darling(default)]
     other: bool,
 }
@@ -45,6 +49,7 @@ pub struct CborOpts {
 #[derive(Debug)]
 struct CborField {
     member: Member,
+    ty:     Type,
     opts:   CborFieldOpts,
 }
 
@@ -53,7 +58,22 @@ struct CborFields(Vec<CborField>);
 
 impl CborFields {
     /// Get fields as struct `Member`s
-    fn members(&self) -> Vec<Member> { self.0.iter().map(|field| field.member.clone()).collect() }
+    fn members(&self) -> Vec<Member> {
+        self.0
+            .iter()
+            .filter(|field| !field.opts.other)
+            .map(|field| field.member.clone())
+            .collect()
+    }
+
+    /// Identifier for "other" variant
+    fn other_member(&self) -> Option<(Type, Member)> {
+        self.0
+            .iter()
+            .filter(|field| field.opts.other)
+            .map(|field| (field.ty.clone(), field.member.clone()))
+            .next()
+    }
 
     /// Get CBOR map keys for the fields
     fn cbor_map_keys(&self) -> syn::Result<Vec<TokenStream>> {
@@ -62,6 +82,7 @@ impl CborFields {
         Ok(self
             .0
             .iter()
+            .filter(|field| !field.opts.other)
             .map(|field| {
                 if let Some(key) = field.opts.key.as_ref() {
                     quote!(#cbor_module::MapKeyRef::Positive(#key))
@@ -93,8 +114,9 @@ impl CborFields {
                 .zip(fields.members())
                 .map(|(field, member)| {
                     let opts = CborFieldOpts::from_field(field)?;
+                    let ty = field.ty.clone();
 
-                    Ok(CborField { member, opts })
+                    Ok(CborField { member, opts, ty })
                 })
                 .collect::<syn::Result<Vec<_>>>()?,
         ))
@@ -215,7 +237,12 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
 
     let self_construct = match fields {
         Fields::Named(_) => {
-            quote!(Self { #(#field_idents),* })
+            let mut field_idents_with_other = field_idents.clone();
+            if let Some((_, other_ident)) = cbor_fields.other_member() {
+                field_idents_with_other.push(other_ident);
+            }
+
+            quote!(Self { #(#field_idents_with_other),* })
         }
         Fields::Unnamed(_) => {
             quote!(Self( #(#field_vars),* ))
@@ -250,10 +277,37 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
         CborContainer::Map => {
             let field_map_keys = cbor_fields.cbor_map_keys()?;
 
+            let other_field_declare = if let Some((ty, other_ident)) = cbor_fields.other_member() {
+                quote! {
+                    let mut #other_ident = <#ty>::default();
+                }
+            } else {
+                quote! {}
+            };
+
+            let unknown_key_deserialize = if let Some((_, other_ident)) = cbor_fields.other_member()
+            {
+                quote! {
+                    #other_ident.extend(Some((
+                        #cbor_module::__private::anyhow::Context::context(map_key.try_into(), "cannot convert MapKey to declared key")?,
+                        #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?
+                    )));
+                }
+            } else {
+                quote! {
+                    match options.unknown_map_keys {
+                        #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborSerializationError::unknown_map_key(map_key.as_ref())),
+                        #cbor_module::UnknownMapKeys::Ignore => #cbor_module::CborMapDecoder::skip_value(&mut map_decoder)?,
+                    }
+                }
+            };
+
             quote! {
                 let options = decoder.options();
                 #(let mut #field_vars = None;)*
                 let mut map_decoder = #cbor_module::CborDecoder::decode_map(decoder)?;
+
+                #other_field_declare
 
                 while let Some(map_key) = #cbor_module::CborMapDecoder::deserialize_key::<#cbor_module::MapKey>(&mut map_decoder)? {
                     match map_key.as_ref() {
@@ -262,12 +316,8 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
                                 #field_vars = Some(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?);
                             }
                         )*
-                        key => {
-                            match options.unknown_map_keys {
-                                #cbor_module::UnknownMapKeys::Fail => return Err(#cbor_module::CborSerializationError::unknown_map_key(key)),
-                                #cbor_module::UnknownMapKeys::Ignore => #cbor_module::CborMapDecoder::skip_value(&mut map_decoder)?,
-                            }
-
+                        _ => {
+                            #unknown_key_deserialize
                         }
                     }
                 }
@@ -432,9 +482,28 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         CborContainer::Map => {
             let field_map_keys = cbor_fields.cbor_map_keys()?;
 
+            let other_field_serialize = if let Some((_, other_ident)) = cbor_fields.other_member() {
+                quote! {
+                    for (key, value) in self.#other_ident.iter() {
+                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, key, value)?;
+                    }
+                }
+            } else {
+                quote! {}
+            };
+
+            let other_field_size = if let Some((_, other_ident)) = cbor_fields.other_member() {
+                quote! {
+                    self.#other_ident.len()
+                }
+            } else {
+                quote! { 0 }
+            };
+
             quote! {
                 let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder,
                     #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
+                      + #other_field_size
                 )?;
 
                 #(
@@ -442,6 +511,8 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
                         #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, &#field_map_keys, &self.#field_idents)?;
                     }
                 )*
+
+                #other_field_serialize
 
                 #cbor_module::CborMapEncoder::end(map_encoder)?;
 
