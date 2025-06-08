@@ -5,11 +5,13 @@ use crate::{
     },
     protocol_level_tokens::RawCbor,
 };
+use std::collections::HashMap;
 
+use crate::common::cbor::value;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 /// Protocol level token (PLT) module state
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct TokenModuleState {
     /// The name of the token
     pub name:       String,
@@ -24,6 +26,10 @@ pub struct TokenModuleState {
     pub mintable:   Option<bool>,
     /// Whether the token is burnable.
     pub burnable:   Option<bool>,
+    /// Additional state information may be provided under further text keys,
+    /// the meaning of which are not defined in the present specification.
+    #[cbor(other)]
+    pub other:      HashMap<String, value::Value>,
 }
 
 impl TokenModuleState {
@@ -57,6 +63,9 @@ mod test {
             deny_list:  None,
             mintable:   Some(true),
             burnable:   None,
+            other:      vec![("other1".to_string(), value::Value::Positive(2))]
+                .into_iter()
+                .collect(),
         };
 
         let cbor = cbor::cbor_encode(&token_module_state).unwrap();
@@ -65,7 +74,7 @@ mod test {
         // );
         assert_eq!(
             hex::encode(&cbor),
-            "a3646e616d6563544b3169616c6c6f774c697374f5686d696e7461626c65f5"
+            "a4646e616d6563544b3169616c6c6f774c697374f5686d696e7461626c65f5666f746865723102"
         );
         let token_module_state_decoded: TokenModuleState = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_module_state_decoded, token_module_state);

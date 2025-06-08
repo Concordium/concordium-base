@@ -254,6 +254,7 @@ enum MapDecoderStateEnum {
     ExpectValue,
 }
 
+#[must_use]
 pub struct MapDecoder<'a, R: Read> {
     declared_size:     usize,
     remaining_entries: usize,
@@ -327,6 +328,7 @@ where
     }
 }
 
+#[must_use]
 pub struct ArrayDecoder<'a, R: Read> {
     declared_size:      usize,
     remaining_elements: usize,

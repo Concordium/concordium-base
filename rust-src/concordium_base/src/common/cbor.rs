@@ -102,7 +102,7 @@
 //! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
 //! the map key and the map value.
 
-// todo ar doc other and apply to model at relevant places
+// todo ar doc other for struct
 
 mod composites;
 mod decoder;
@@ -1055,16 +1055,16 @@ mod test {
         test_skip_data_item_impl(|encoder| encoder.encode_bytes(&[0x01; 30]).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
         test_skip_data_item_impl(|encoder| {
-            encoder.encode_array(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
+            let mut array_encoder = encoder.encode_array(2).unwrap();
+            array_encoder.serialize_element(&2).unwrap();
+            array_encoder.serialize_element(&2).unwrap();
+            array_encoder.end().unwrap();
         });
         test_skip_data_item_impl(|encoder| {
-            encoder.encode_map(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
+            let mut map_encoder = encoder.encode_map(2).unwrap();
+            map_encoder.serialize_entry(&2, &2).unwrap();
+            map_encoder.serialize_entry(&2, &2).unwrap();
+            map_encoder.end().unwrap();
         });
     }
 
