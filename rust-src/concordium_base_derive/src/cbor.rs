@@ -542,15 +542,7 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         CborContainer::Map => {
             let field_map_keys = cbor_fields.cbor_map_keys()?;
 
-            let other_field_serialize = if let Some((_, other_ident)) = cbor_fields.other_member() {
-                quote! {
-                    for (key, value) in self.#other_ident.iter() {
-                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, key, value)?;
-                    }
-                }
-            } else {
-                quote! {}
-            };
+            let other_ident = cbor_fields.other_member().into_iter().map(|other| other.1);
 
             let other_field_size = if let Some((_, other_ident)) = cbor_fields.other_member() {
                 quote! {
@@ -572,7 +564,11 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
                     }
                 )*
 
-                #other_field_serialize
+                #(
+                    for (key, value) in self.#other_ident.iter() {
+                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, key, value)?;
+                    }
+                )*
 
                 #cbor_module::CborMapEncoder::end(map_encoder)?;
 
@@ -607,15 +603,7 @@ fn cbor_serialize_enum_body(
         let variant_idents = cbor_variants.variant_idents();
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
-        let other_variant = if let Some(other_ident) = cbor_variants.other_ident() {
-            quote! {
-                Self::#other_ident(key, value) => {
-                    #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, key, value)?;
-                }
-            }
-        } else {
-            quote! {}
-        };
+        let other_ident = cbor_variants.other_ident().into_iter();
 
         quote! {
             let mut map_encoder = encoder.encode_map(1)?;
@@ -625,7 +613,11 @@ fn cbor_serialize_enum_body(
                         #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, #variant_map_keys, value)?;
                     }
                 )*
-                #other_variant
+                #(
+                    Self::#other_ident(key, value) => {
+                        #cbor_module::CborMapEncoder::serialize_entry(&mut map_encoder, key, value)?;
+                    }
+                )*
             }
             #cbor_module::CborMapEncoder::end(map_encoder)
         }
