@@ -1031,7 +1031,6 @@ mod test {
     }
 
     // todo ar peek_tag
-    // todo ar untagged variant
     // todo ar other variant
 
     #[test]
@@ -1054,6 +1053,29 @@ mod test {
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "d99c386461626364");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_tagged_derived_untagged_variant() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            Var2(String),
+        }
+
+        let value = TestEnum::Var1(3);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "d99c3703");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "6461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
