@@ -577,7 +577,6 @@ pub enum DataItemHeader {
     Tag(u64),
     Simple(u8),
     Float(f64),
-    Break,
 }
 
 impl DataItemHeader {
@@ -594,25 +593,26 @@ impl DataItemHeader {
             DataItemHeader::Tag(_) => Tag,
             DataItemHeader::Simple(_) => Simple,
             DataItemHeader::Float(_) => Float,
-            DataItemHeader::Break => Break,
         }
     }
 
-    pub fn from_header(header: Header) -> Self {
+    pub fn try_from_header(header: Header) -> CborSerializationResult<Self> {
         use DataItemHeader::*;
 
-        match header {
+        Ok(match header {
             Header::Positive(value) => Positive(value),
             Header::Negative(value) => Negative(value),
             Header::Float(value) => Float(value),
             Header::Simple(value) => Simple(value),
             Header::Tag(tag) => Tag(tag),
-            Header::Break => Break,
             Header::Bytes(length) => Bytes(length),
             Header::Text(length) => Text(length),
             Header::Array(length) => Array(length),
             Header::Map(length) => Map(length),
-        }
+            Header::Break => {
+                return Err(anyhow!("Break is not a valid data item header").into());
+            }
+        })
     }
 }
 
@@ -1039,21 +1039,21 @@ mod test {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(tagged)]
         enum TestEnum {
-            #[cbor(tag = 1)]
+            #[cbor(tag = 39991)]
             Var1(u64),
-            #[cbor(tag = 2)]
+            #[cbor(tag = 39992)]
             Var2(String),
         }
 
         let value = TestEnum::Var1(3);
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "a1647661723103");
+        assert_eq!(hex::encode(&cbor), "d99c3703");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
 
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
-        assert_eq!(hex::encode(&cbor), "a164766172326461626364");
+        assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }

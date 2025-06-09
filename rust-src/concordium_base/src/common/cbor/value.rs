@@ -2,7 +2,7 @@ use crate::common::cbor::{
     Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
     CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
 };
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use ciborium_ll::simple;
 
 /// Generic CBOR data item that can represent
@@ -114,9 +114,6 @@ impl CborDeserialize for Value {
                 value => Value::Simple(value),
             },
             DataItemHeader::Float(_) => Value::Float(decoder.decode_float()?),
-            DataItemHeader::Break => {
-                return Err(anyhow!("break is not a valid data item").into());
-            }
         })
     }
 

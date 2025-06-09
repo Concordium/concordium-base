@@ -182,12 +182,21 @@ impl CborVariants {
             .collect()
     }
 
-    /// Get CBOR tags for the variants
+    /// Get CBOR tags serialized for each variant
     fn cbor_tags(&self) -> Vec<Option<Expr>> {
         self.0
             .iter()
             .filter(|field| !field.opts.other)
             .map(|field| field.opts.tag.clone())
+            .collect()
+    }
+
+    /// Get CBOR tags used for selecting variants during deserialization
+    fn cbor_selector_tags(&self) -> Vec<Option<Expr>> {
+        self.0
+            .iter()
+            .filter(|field| !field.opts.other)
+            .map(|field| field.opts.tag.clone().or(field.opts.peek_tag.clone()))
             .collect()
     }
 }
@@ -210,6 +219,14 @@ impl CborVariants {
                 })
                 .collect::<syn::Result<Vec<_>>>()?,
         );
+        for variant in &this.0 {
+            if variant.opts.tag.is_some() && variant.opts.peek_tag.is_some() {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "Cannot specify both cbor(tag) and cbor(peek_tag)",
+                ));
+            }
+        }
         if this.0.iter().filter(|variant| variant.opts.other).count() > 1 {
             return Err(syn::Error::new(
                 Span::call_site(),
@@ -448,8 +465,35 @@ fn cbor_deserialize_enum_body(
             })
         }
     } else if opts.tagged {
+        let deserialize_variant_tags = cbor_variants.cbor_tags().into_iter().map(|tag| {
+            let tag = tag.into_iter();
+            quote! {
+                #(
+                    #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, #tag)?;
+                )*
+            }
+        });
+
+        let peek_variant_tags = cbor_variants
+            .cbor_selector_tags()
+            .into_iter()
+            .map(|tag| tag.unwrap());
+
         quote! {
-            todo!()
+            Ok(match #cbor_module::CborDecoder::peek_data_item_header(&mut decoder)? {
+                #(
+                    #cbor_module::DataItemHeader::Tag(#peek_variant_tags) => {
+                        #deserialize_variant_tags;
+                        Self::#variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?)
+                    }
+                )*
+                #cbor_module::DataItemHeader::Tag(tag) => {
+                    return Err(anyhow!("Tag {} not among declared variants", tag).into());
+                }
+                _ => {
+                    todo!()
+                }
+            })
         }
     } else {
         return Err(syn::Error::new(
@@ -635,7 +679,7 @@ fn cbor_serialize_enum_body(
             #cbor_module::CborMapEncoder::end(map_encoder)
         }
     } else if opts.tagged {
-        let serialize_variant_tag = cbor_variants.cbor_tags().into_iter().map(|tag| {
+        let serialize_variant_tags = cbor_variants.cbor_tags().into_iter().map(|tag| {
             let tag = tag.into_iter();
             quote! {
                 #(
@@ -648,7 +692,7 @@ fn cbor_serialize_enum_body(
             match self {
                 #(
                     Self::#variant_idents(value) => {
-                        #serialize_variant_tag
+                        #serialize_variant_tags
                         #cbor_module::CborSerialize::serialize(value, encoder)?;
                     }
                 )*
