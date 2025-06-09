@@ -252,39 +252,24 @@ pub struct TokenTransfer {
 }
 
 /// Memo attached to a protocol level token transfer
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
 #[serde(rename_all = "camelCase")]
+#[cbor(tagged)]
 pub enum CborMemo {
     /// Memo that is not encoded as CBOR
     Raw(Memo),
     /// Memo encoded as CBOR
+    #[cbor(tag = CBOR_TAG)]
     Cbor(Memo),
-}
-
-impl CborSerialize for CborMemo {
-    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> CborSerializationResult<()> {
-        match self {
-            Self::Raw(memo) => memo.serialize(encoder),
-            Self::Cbor(memo) => {
-                encoder.encode_tag(CBOR_TAG)?;
-                memo.serialize(encoder)
-            }
-        }
-    }
-}
-
-impl CborDeserialize for CborMemo {
-    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        Ok(match decoder.peek_data_item_header()? {
-            DataItemHeader::Tag(CBOR_TAG) => {
-                decoder.decode_tag_expect(CBOR_TAG)?;
-                Self::Cbor(Memo::deserialize(decoder)?)
-            }
-            _ => Self::Raw(Memo::deserialize(decoder)?),
-        })
-    }
 }
 
 #[cfg(test)]

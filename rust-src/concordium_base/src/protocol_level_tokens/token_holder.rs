@@ -14,29 +14,21 @@ const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 
 /// A destination that can receive and hold protocol level tokens.
 /// Currently, this can only be a Concordium account address.
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Eq,
+    PartialEq,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
 #[serde(rename_all = "camelCase")]
+#[cbor(tagged)]
 pub enum TokenHolder {
+    #[cbor(peek_tag = ACCOUNT_HOLDER_TAG)]
     HolderAccount(HolderAccount),
-}
-
-impl CborSerialize for TokenHolder {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        match self {
-            TokenHolder::HolderAccount(account) => {
-                account.serialize(encoder)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl CborDeserialize for TokenHolder {
-    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        Ok(Self::HolderAccount(HolderAccount::deserialize(decoder)?))
-    }
 }
 
 /// Account address that holds protocol level tokens

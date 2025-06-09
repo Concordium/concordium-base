@@ -30,7 +30,10 @@
 //! ### Enums
 //!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on enums using
-//! `map` representation:
+//! `map` or `tagged` representation.
+//!
+//! Using `#[cbor(map)]` represents the enum as a map with a single key
+//! that is the variant name camel cased (the key is a text data item).
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(map)]
@@ -39,16 +42,29 @@
 //!     Var2(String),
 //! }
 //! ```
-//! All enum variants must be single element tuples.
+//! Using `#[cbor(tagged)]` represents the enum as a tagged data item.
+//! At most one of the variants can be untagged:
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(tagged)]
+//! enum TestEnum {
+//!     #[cbor(tag = 39991)]
+//!     Var1(u64),
+//!     #[cbor(tag = 39992)]
+//!     Var2(bool),
+//!     Var3(String),
+//! }
+//! ```
+//! Each varaint is serialized prefixed with the declared tag (except for the
+//! untagged variant).
 //!
-//! Using `#[cbor(map)]` represents the enum as a map with a single key
-//! that is the variant name camel cased (the key is a text data item).
+//! All enum variants must be single element tuples.
 //!
 //! ### Supported attributes
 //!
 //! #### `cbor(key)`
-//! For CBOR maps, set map key explicit to positive (integer) data item:
-//! ```ignore
+//! For structs with named fields, set map key explicit to positive (integer)
+//! data item: ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     #[cbor(key = 1)]
@@ -56,7 +72,7 @@
 //! }
 //! ```
 //! In this example, the field is encoded with a key that is the positive
-//! (integer) data item `1`.
+//! (integer) data item `1`, instead of using the field name.
 //!
 //! #### `cbor(tag)`
 //! Adds tag <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items> to encoded
@@ -70,6 +86,28 @@
 //! ```
 //! In this example the tag 39999 is prefixed the encoding of `TestStruct` in
 //! the CBOR.
+//!
+//! The attribute is also needed on enum variants when using `tagged`
+//! representations, see example above.
+//!
+//! #### `cbor(peek_tag)`
+//! For enums using `tagged` representation, marks the enum variant
+//! as being prefixed with this tag, without serializing/deserializing the tag:
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! enum TestEnum {
+//!     #[cbor(tag = 39991)]
+//!     Var1(u64),
+//!     #[cbor(peek_tag = 39992)]
+//!     Var2(TaggedStruct),
+//! }
+//!
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(tag = 39992)]
+//! struct TaggedStruct(String);
+//! ```
+//! In this example, the tag `39992` is serialized as part of `TaggedStruct`,
+//! not as part of serializing the enum `TestEnum`.
 //!
 //! #### `cbor(transparent)`
 //! Serializes the type as the (single) field in the struct.
@@ -1030,7 +1068,6 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
-    // todo ar peek_tag
     // todo ar other variant
 
     #[test]
@@ -1076,6 +1113,35 @@ mod test {
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "6461626364");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_tagged_derived_peek_tag() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            #[cbor(peek_tag = 39992)]
+            Var2(TaggedStruct),
+            Var3(String),
+        }
+
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(transparent, tag = 39992)]
+        struct TaggedStruct(String);
+
+        let value = TestEnum::Var1(3);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "d99c3703");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = TestEnum::Var2(TaggedStruct("abcd".to_string()));
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
