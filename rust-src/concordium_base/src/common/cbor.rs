@@ -1030,6 +1030,34 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
+    // todo ar peek_tag
+    // todo ar untagged variant
+    // todo ar other variant
+
+    #[test]
+    fn test_enum_as_tagged_derived() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum {
+            #[cbor(tag = 1)]
+            Var1(u64),
+            #[cbor(tag = 2)]
+            Var2(String),
+        }
+
+        let value = TestEnum::Var1(3);
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1647661723103");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a164766172326461626364");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
     #[test]
     fn test_vec() {
         let vec = vec![1, 2, 3, 4, 5];

@@ -181,6 +181,15 @@ impl CborVariants {
             })
             .collect()
     }
+
+    /// Get CBOR tags for the variants
+    fn cbor_tags(&self) -> Vec<Option<Expr>> {
+        self.0
+            .iter()
+            .filter(|field| !field.opts.other)
+            .map(|field| field.opts.tag.clone())
+            .collect()
+    }
 }
 
 impl CborVariants {
@@ -403,11 +412,11 @@ fn cbor_deserialize_enum_body(
         ));
     }
 
-    Ok(if opts.map {
-        let cbor_module = get_cbor_module()?;
+    let cbor_module = get_cbor_module()?;
+    let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
+    let variant_idents = cbor_variants.variant_idents();
 
-        let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
-        let variant_idents = cbor_variants.variant_idents();
+    Ok(if opts.map {
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
         let unknown_variant = if let Some(other_ident) = cbor_variants.other_ident() {
@@ -437,6 +446,10 @@ fn cbor_deserialize_enum_body(
                     #unknown_variant
                 }
             })
+        }
+    } else if opts.tagged {
+        quote! {
+            todo!()
         }
     } else {
         return Err(syn::Error::new(
@@ -596,11 +609,11 @@ fn cbor_serialize_enum_body(
         ));
     }
 
-    Ok(if opts.map {
-        let cbor_module = get_cbor_module()?;
+    let cbor_module = get_cbor_module()?;
+    let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
+    let variant_idents = cbor_variants.variant_idents();
 
-        let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
-        let variant_idents = cbor_variants.variant_idents();
+    Ok(if opts.map {
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
         let other_ident = cbor_variants.other_ident().into_iter();
@@ -620,6 +633,27 @@ fn cbor_serialize_enum_body(
                 )*
             }
             #cbor_module::CborMapEncoder::end(map_encoder)
+        }
+    } else if opts.tagged {
+        let serialize_variant_tag = cbor_variants.cbor_tags().into_iter().map(|tag| {
+            let tag = tag.into_iter();
+            quote! {
+                #(
+                    #cbor_module::CborEncoder::encode_tag(&mut encoder, #tag)?;
+                )*
+            }
+        });
+
+        quote! {
+            match self {
+                #(
+                    Self::#variant_idents(value) => {
+                        #serialize_variant_tag
+                        #cbor_module::CborSerialize::serialize(value, encoder)?;
+                    }
+                )*
+            }
+            Ok(())
         }
     } else {
         return Err(syn::Error::new(
