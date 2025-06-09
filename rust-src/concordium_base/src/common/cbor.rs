@@ -13,6 +13,7 @@
 //!
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on structs with
 //! named fields and struct tuples:
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
@@ -23,6 +24,7 @@
 //! #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
 //! struct TestTuple(u64, String);
 //! ```
+//!
 //! Structs with named fields are serialized as CBOR maps using camel cased
 //! field names as keys (of data item type text) and tuples are serialized as
 //! CBOR arrays.
@@ -34,6 +36,7 @@
 //!
 //! Using `#[cbor(map)]` represents the enum as a map with a single key
 //! that is the variant name camel cased (the key is a text data item).
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(map)]
@@ -42,8 +45,10 @@
 //!     Var2(String),
 //! }
 //! ```
+//!
 //! Using `#[cbor(tagged)]` represents the enum as a tagged data item.
 //! At most one of the variants can be untagged:
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(tagged)]
@@ -55,6 +60,7 @@
 //!     Var3(String),
 //! }
 //! ```
+//!
 //! Each varaint is serialized prefixed with the declared tag (except for the
 //! untagged variant).
 //!
@@ -64,19 +70,23 @@
 //!
 //! #### `cbor(key)`
 //! For structs with named fields, set map key explicit to positive (integer)
-//! data item: ```ignore
+//! data item:
+//!
+//! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
 //!     #[cbor(key = 1)]
 //!     field1: u64,
 //! }
 //! ```
+//!
 //! In this example, the field is encoded with a key that is the positive
 //! (integer) data item `1`, instead of using the field name.
 //!
 //! #### `cbor(tag)`
 //! Adds tag <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items> to encoded
 //! data item:
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(tag = 39999)]
@@ -84,6 +94,7 @@
 //!     field1: u64,
 //! }
 //! ```
+//!
 //! In this example the tag 39999 is prefixed the encoding of `TestStruct` in
 //! the CBOR.
 //!
@@ -93,6 +104,7 @@
 //! #### `cbor(peek_tag)`
 //! For enums using `tagged` representation, marks the enum variant
 //! as being prefixed with this tag, without serializing/deserializing the tag:
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! enum TestEnum {
@@ -106,11 +118,13 @@
 //! #[cbor(tag = 39992)]
 //! struct TaggedStruct(String);
 //! ```
+//!
 //! In this example, the tag `39992` is serialized as part of `TaggedStruct`,
 //! not as part of serializing the enum `TestEnum`.
 //!
 //! #### `cbor(transparent)`
 //! Serializes the type as the (single) field in the struct.
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
@@ -121,12 +135,14 @@
 //! #[cbor(transparent)]
 //! struct TestStructWrapper(TestStruct);
 //! ```
+//!
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
 //!
 //! #### `cbor(other)`
 //! This attribute can be applied to a variant in an enum for a field in a
 //! struct. When applied to a variant in an enum represented as a CBOR map,
 //! "unknown" map entries are deserialized to this variant.
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(map)]
@@ -137,12 +153,34 @@
 //!     Unknown(String, value::Value),
 //! }
 //! ```
+//!
+//! In this example, entries in the CBOR map that is not present in the enum are
+//! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
+//! the map key and the map value.
+//!
+//! When applied to a variant in an enum represented with tags,
+//! tags not declared in the enum are deserialized to this variant.
+//!
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! #[cbor(tagged)]
+//! enum TestEnum {
+//!     #[cbor(tag = 39991)]
+//!     Var1(u64),
+//!     #[cbor(tag = 39991)]
+//!     Var2(String),
+//!     #[cbor(other)]
+//!     Unknown(u64, value::Value),
+//! }
+//! ```
+//!
 //! In this example, entries in the CBOR map that is not present in the enum are
 //! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
 //! the map key and the map value.
 //!
 //! When applied to a field in a struct with named fields, "unknown" map entries
 //! are deserialized into this field.
+//!
 //! ```ignore
 //! #[derive(CborSerialize, CborDeserialize)]
 //! struct TestStruct {
@@ -151,6 +189,7 @@
 //!     unknown: HashMap<MapKey, value::Value>,
 //! }
 //! ```
+//!
 //! In this example, entries in the CBOR map that are not present in the struct
 //! are each deserialized into an entry in the map in the field `unknown`.
 
@@ -1068,8 +1107,6 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
-    // todo ar other variant
-
     #[test]
     fn test_enum_as_tagged_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
@@ -1113,6 +1150,37 @@ mod test {
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "6461626364");
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_tagged_derived_other_variant() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            #[cbor(tag = 39992)]
+            Var2(String),
+        }
+
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum2 {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            #[cbor(other)]
+            Unknown(u64, value::Value),
+        }
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestEnum2 = cbor_decode(&cbor).unwrap();
+        let value_unknown = TestEnum2::Unknown(39992, value::Value::Text("abcd".to_string()));
+        assert_eq!(value_decoded, value_unknown);
+
+        let cbor = cbor_encode(&value_unknown).unwrap();
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
