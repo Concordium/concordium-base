@@ -25,9 +25,14 @@ pub struct CborVariantOpts {
     /// Deserialize unknown variants in CBOR to the variant with this
     /// attribute.
     #[darling(default)]
-    other: bool,
+    other:    bool,
     /// CBOR tag to add to data item in the variant.
-    tag:   Option<Expr>,
+    tag:      Option<Expr>,
+    /// CBOR tag to use to decided which variant to deserialize to.
+    /// The difference between specifying `cbor(tag)` and this attribute
+    /// is that the tag is not serialized as part of serializing the variant
+    /// but is expected be serialized by the variant value.
+    peek_tag: Option<Expr>,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -43,8 +48,9 @@ pub struct CborOpts {
     /// name in camel case is used as the key as a text data item.
     #[darling(default)]
     map:         bool,
-    /// Serialize enum as a tagged data item. Each variant but have a `tag`
-    /// attribute - except for at most one variant which can be untagged.
+    /// Serialize enum as a tagged data item. Each variant but have a
+    /// `cbor(tag)` attribute - except for at most one variant which can be
+    /// untagged.
     #[darling(default)]
     tagged:      bool,
 }
@@ -201,13 +207,14 @@ impl CborVariants {
                 "cbor(other) can only be specified on a at most a single variant",
             ));
         }
-        if opts.tagged && this
-            .0
-            .iter()
-            .filter(|variant| variant.opts.tag.is_some())
-            .count()
-            + 1
-            < this.0.len()
+        if opts.tagged
+            && this
+                .0
+                .iter()
+                .filter(|variant| variant.opts.tag.is_some() || variant.opts.peek_tag.is_some())
+                .count()
+                + 1
+                < this.0.len()
         {
             return Err(syn::Error::new(
                 Span::call_site(),
