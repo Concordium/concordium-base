@@ -1,5 +1,15 @@
-## Unreleased changes
+## 8.0.0-alpha (2025-06-06)
 
+- Protocol level token events and reject reasons are now defined in `concordium_base::protocol_level_tokens`.
+  Event and reject reasons CBOR can be decoded with `TokenModuleEvent::decode_token_module_event_type` or
+  `TokenModuleRejectReason::decode_reject_reason_type`.
+- Transaction `Payload` now supports `TokenGovernance` payloads.
+  Operations can be created using functions in `concordium_base::protocol_level_tokens::operations`
+  and composed to transactions with `send::token_governance_operations` and `construct::token_governance_operations`.
+- Transaction `Payload` now supports `TokenHolder` payloads.
+  Operations can be created using functions in `concordium_base::protocol_level_tokens::operations`
+  and composed to transactions with `send::token_holder_operations` and `construct::token_holder_operations`.
+  The underlying model for protocol level tokens is defined in `concordium_base::protocol_level_tokens`.
 - Publish `get_canonical_address` on `AccountAddress`
 - Introduce protocol version 9 `ProtocolVersion::P9`
 - Introduce basic types related to protocol level tokens (PLT)

@@ -188,19 +188,17 @@ module Concordium.Types (
     TokenModuleRef (..),
     TokenEventDetails (..),
     TokenEventType (..),
-    TokenEvent (..),
-    teSymbol,
-    teType,
-    teDetails,
     makeTokenEventType,
     TokenModuleRejectReason (..),
     makeTokenModuleRejectReason,
     CreatePLT (..),
-    cpltTokenSymbol,
+    cpltTokenId,
     cpltTokenModule,
     cpltGovernanceAccount,
     cpltDecimals,
     cpltInitializationParameters,
+    EncodedTokenOperations (..),
+    EncodedTokenInitializationParameters (..),
 ) where
 
 import Data.Data (Data, Typeable)
@@ -244,7 +242,6 @@ import Data.Word
 
 import Data.Aeson as AE
 import Data.Aeson.TH
-import Data.Aeson.Types as AE
 
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -1144,107 +1141,10 @@ instance S.Serialize TokenParameter where
         S.putWord32be (fromIntegral (BSS.length parameter))
         S.putShortByteString parameter
 
--- | The token events details produced by a token module.
--- Represented as some arbitrary CBOR encoding.
-newtype TokenEventDetails = TokenEventDetails {tokenEventDetailsBytes :: BSS.ShortByteString}
-    deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
-
-instance S.Serialize TokenEventDetails where
-    get = do
-        len <- S.getWord32be
-        TokenEventDetails <$> S.getShortByteString (fromIntegral len)
-    put (TokenEventDetails parameter) = do
-        S.putWord32be (fromIntegral (BSS.length parameter))
-        S.putShortByteString parameter
-
--- | Token event type string.
---  MUST be at most 255 bytes and SHOULD BE a valid UTF-8 string.
---
---  Serialization does not require or check for UTF-8 validity.
---  Converting to JSON will replace invalid UTF-8 bytes with the unicode replacement character,
---  which means that converting to JSON and back is only the identity for valid UTF-8.
-newtype TokenEventType = TokenEventType {tokenEventTypeBytes :: BSS.ShortByteString}
-    deriving newtype (Eq, Show)
-
-instance AE.ToJSON TokenEventType where
-    -- decodeUtf8 will throw an exception if it fails, but we should be safe since the TokenEventType
-    -- should enforce valid UTF-8.
-    toJSON TokenEventType{..} = AE.String $ T.decodeUtf8Lenient $ BSS.fromShort tokenEventTypeBytes
-
-instance AE.FromJSON TokenEventType where
-    parseJSON (AE.String text) = return $ TokenEventType $ BSS.toShort $ T.encodeUtf8 text
-    parseJSON invalid = AE.prependFailure "parsing TokenEventType failed" (AE.typeMismatch "String" invalid)
-
--- | Try to construct a valid 'TokenEventType' from a 'BSS.ShortByteString'.
---  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
---  In the event of a failure @Left err@ is returned, where @err@ describes the failure.
-makeTokenEventType :: BSS.ShortByteString -> Either String TokenEventType
-makeTokenEventType sbs
-    | BSS.length sbs > 255 =
-        Left $ "TokenEventType length (" ++ show (BSS.length sbs) ++ ") out of bounds."
-    | Left decodeErr <- T.decodeUtf8' (BSS.fromShort sbs) =
-        Left $ "TokenEventType is not valid UTF-8: " ++ show decodeErr
-    | otherwise = Right $ TokenEventType sbs
-
-instance S.Serialize TokenEventType where
-    put (TokenEventType eventTypeString) = do
-        S.putWord8 $ fromIntegral $ BSS.length eventTypeString
-        S.putShortByteString eventTypeString
-    get = do
-        len <- S.getWord8
-        sbs <- S.getShortByteString (fromIntegral len)
-        return $ TokenEventType sbs
-
--- | Event produced from a token module
--- This is used for both token holder transactions and for token governance transactions.
-data TokenEvent = TokenEvent
-    { -- | The unique token symbol identifier.
-      _teSymbol :: TokenId,
-      -- | Type of the event.
-      _teType :: TokenEventType,
-      -- | The details of the event
-      _teDetails :: TokenEventDetails
-    }
-    deriving (Eq, Show)
-
-makeLenses ''TokenEvent
-
-instance HashableTo Hash.Hash TokenEvent where
-    getHash = Hash.hash . S.encode
-
-instance (Monad m) => MHashableTo m Hash.Hash TokenEvent
-
-instance S.Serialize TokenEvent where
-    put TokenEvent{..} = do
-        S.put _teSymbol
-        S.put _teType
-        S.put _teDetails
-    get = do
-        _teSymbol <- S.get
-        _teType <- S.get
-        _teDetails <- S.get
-        return TokenEvent{..}
-
-instance AE.ToJSON TokenEvent where
-    toJSON TokenEvent{..} =
-        AE.object
-            [ "tokenSymbol" AE..= _teSymbol,
-              "type" AE..= _teType,
-              "details" AE..= _teDetails
-            ]
-
-instance AE.FromJSON TokenEvent where
-    parseJSON = AE.withObject "TokenEvent" $ \o -> do
-        _teSymbol <- o AE..: "tokenSymbol"
-        _teType <- o AE..: "type"
-        _teDetails <- o AE..: "details"
-        return TokenEvent{..}
-
 -- | Details provided by the token module in the event of rejecting a transaction.
 data TokenModuleRejectReason = TokenModuleRejectReason
     { -- | The token symbol.
-      tmrrTokenSymbol :: !TokenId,
+      tmrrTokenId :: !TokenId,
       -- | The type of the reject reason. At most 255 bytes.
       tmrrType :: !TokenEventType,
       -- | (Optional) CBOR-encoded details.
@@ -1254,11 +1154,11 @@ data TokenModuleRejectReason = TokenModuleRejectReason
 
 instance S.Serialize TokenModuleRejectReason where
     put TokenModuleRejectReason{..} = do
-        S.put tmrrTokenSymbol
+        S.put tmrrTokenId
         S.put tmrrType
         putMaybe S.put tmrrDetails
     get = do
-        tmrrTokenSymbol <- S.get
+        tmrrTokenId <- S.get
         tmrrType <- S.get
         tmrrDetails <- getMaybe S.get
         return TokenModuleRejectReason{..}
@@ -1266,14 +1166,14 @@ instance S.Serialize TokenModuleRejectReason where
 instance AE.ToJSON TokenModuleRejectReason where
     toJSON TokenModuleRejectReason{..} =
         AE.object $
-            [ "tokenSymbol" AE..= tmrrTokenSymbol,
+            [ "tokenId" AE..= tmrrTokenId,
               "type" AE..= tmrrType
             ]
                 ++ foldMap (\details -> ["details" AE..= details]) tmrrDetails
 
 instance AE.FromJSON TokenModuleRejectReason where
     parseJSON = AE.withObject "TokenModuleRejectReason" $ \o -> do
-        tmrrTokenSymbol <- o AE..: "tokenSymbol"
+        tmrrTokenId <- o AE..: "tokenId"
         tmrrType <- o AE..: "type"
         tmrrDetails <- o AE..:? "details"
         return TokenModuleRejectReason{..}
@@ -1283,7 +1183,7 @@ instance AE.FromJSON TokenModuleRejectReason where
 --  is UTF-8 encoded, and the truncation can also break UTF-8 validity (if it truncates in the
 --  middle of a multi-byte character).
 makeTokenModuleRejectReason :: TokenId -> CBOR.EncodedTokenRejectReason -> TokenModuleRejectReason
-makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
+makeTokenModuleRejectReason tmrrTokenId CBOR.EncodedTokenRejectReason{..} =
     TokenModuleRejectReason
         { tmrrType = TokenEventType (BSS.take 255 etrrType),
           tmrrDetails = TokenEventDetails <$> etrrDetails,
@@ -1296,6 +1196,7 @@ makeTokenModuleRejectReason tmrrTokenSymbol CBOR.EncodedTokenRejectReason{..} =
 --  it will render as a JSON object if the contents can be decoded to a
 -- 'TokenInitializationParameters', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenInitializationParameters = EncodedTokenInitializationParameters TokenParameter
+    deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenInitializationParameters where
     toJSON (EncodedTokenInitializationParameters tp@(TokenParameter sbs)) =
@@ -1321,7 +1222,7 @@ newtype TokenModuleRef = TokenModuleRef {theTokenModuleRef :: Hash.Hash}
 -- | Update payload for creating a new protocol-level token.
 data CreatePLT = CreatePLT
     { -- | The symbol of the token.
-      _cpltTokenSymbol :: !TokenId,
+      _cpltTokenId :: !TokenId,
       -- | A SHA256 hash that identifies the token module implementation.
       _cpltTokenModule :: !TokenModuleRef,
       -- | The address of the account that will govern the token.
@@ -1342,13 +1243,13 @@ instance (Monad m) => MHashableTo m Hash.Hash CreatePLT
 
 instance S.Serialize CreatePLT where
     put CreatePLT{..} = do
-        S.put _cpltTokenSymbol
+        S.put _cpltTokenId
         S.put _cpltTokenModule
         S.put _cpltGovernanceAccount
         S.put _cpltDecimals
         S.put _cpltInitializationParameters
     get = do
-        _cpltTokenSymbol <- S.get
+        _cpltTokenId <- S.get
         _cpltTokenModule <- S.get
         _cpltGovernanceAccount <- S.get
         _cpltDecimals <- S.get
@@ -1358,7 +1259,7 @@ instance S.Serialize CreatePLT where
 instance AE.ToJSON CreatePLT where
     toJSON CreatePLT{..} =
         AE.object
-            [ "tokenSymbol" AE..= _cpltTokenSymbol,
+            [ "tokenId" AE..= _cpltTokenId,
               "tokenModule" AE..= _cpltTokenModule,
               "governanceAccount" AE..= _cpltGovernanceAccount,
               "decimals" AE..= _cpltDecimals,
@@ -1368,13 +1269,39 @@ instance AE.ToJSON CreatePLT where
 
 instance AE.FromJSON CreatePLT where
     parseJSON = AE.withObject "CreatePLT" $ \o -> do
-        _cpltTokenSymbol <- o AE..: "tokenSymbol"
+        _cpltTokenId <- o AE..: "tokenId"
         _cpltTokenModule <- o AE..: "tokenModule"
         _cpltGovernanceAccount <- o AE..: "governanceAccount"
         _cpltDecimals <- o AE..: "decimals"
         (EncodedTokenInitializationParameters _cpltInitializationParameters) <-
             o AE..: "initializationParameters"
         return CreatePLT{..}
+
+-- | A wrapper type for (de)-serializing an CBOR-encoded token operations to/from JSON.
+--  This can parse either an JSON object representation of 'TokenHolderTransaction'
+--  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
+--  it will render as a JSON object if the contents can be decoded to a
+-- 'TokenHolderTransaction', or otherwise as the hex-encoded byte string.
+newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
+    deriving newtype (Eq, Show)
+
+instance AE.ToJSON EncodedTokenOperations where
+    toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
+        case CBOR.tokenHolderTransactionFromBytes
+            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
+            Left _ -> AE.toJSON tp
+            Right v -> AE.toJSON v
+
+instance AE.FromJSON EncodedTokenOperations where
+    parseJSON v@(AE.Array _) = do
+        tip <- AE.parseJSON v
+        return $
+            EncodedTokenOperations $
+                TokenParameter $
+                    BSS.toShort $
+                        CBOR.tokenHolderTransactionToBytes tip
+    parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
+    parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)

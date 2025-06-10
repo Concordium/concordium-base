@@ -129,6 +129,22 @@ tokenHolderBaseCost = 300
 tokenGovernanceBaseCost :: Energy
 tokenGovernanceBaseCost = 300
 
+-- | Cost for the execution of a token transfer.
+tokenTransferCost :: Energy
+tokenTransferCost = 100
+
+-- | Cost to mint a token.
+tokenMintCost :: Energy
+tokenMintCost = 100
+
+-- | Cost to burn a token.
+tokenBurnCost :: Energy
+tokenBurnCost = 100
+
+-- | Cost to carry out a list operation (add/remove from allow/deny list).
+tokenListOperationCost :: Energy
+tokenListOperationCost = 50
+
 -- | C_t for updating account credentials
 updateCredentialsCost ::
     -- | The number of credentials on the account before the update.

@@ -5,25 +5,28 @@ module Types.CBOR where
 import Codec.CBOR.Read
 import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Write
+import qualified Codec.CBOR.Write as CBOR
+import qualified Data.Aeson as AE
+import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as BSS
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
+import qualified Data.Vector as V
 import Test.HUnit
 import Test.Hspec
 import Test.QuickCheck
 
+import Concordium.Types
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
-
+import qualified Data.FixedByteString as FBS
 import Generators
 
 genText :: Gen Text.Text
 genText = sized $ \s -> Text.decodeUtf8 . BS.pack <$> genUtf8String s
-
-genTokenAmount :: Gen TokenAmount
-genTokenAmount = TokenAmount <$> arbitrary <*> chooseBoundedIntegral (0, 255)
 
 genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
@@ -112,6 +115,15 @@ genTokenModuleStateWithAdditional = do
                 ]
         return ("_" <> key, val)
 
+genTokenEvent :: Gen TokenEvent
+genTokenEvent =
+    oneof
+        [ AddAllowListEvent <$> genTokenHolder,
+          RemoveAllowListEvent <$> genTokenHolder,
+          AddDenyListEvent <$> genTokenHolder,
+          RemoveDenyListEvent <$> genTokenHolder
+        ]
+
 -- | Generator for 'TokenRejectReason'.
 genTokenRejectReason :: Gen TokenRejectReason
 genTokenRejectReason =
@@ -131,7 +143,7 @@ tip1 =
         { tipName = "ABC token",
           tipMetadata = "https://abc.token/meta",
           tipAllowList = False,
-          tipInitialSupply = Just (TokenAmount{digits = 10000, nrDecimals = 5}),
+          tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = False,
           tipMintable = False,
           tipBurnable = False
@@ -183,9 +195,117 @@ testInitializationParameters = describe "token-initialization-parameters decodin
                     (toLazyByteString $ encodeTokenInitializationParametersWithDefaults tip)
                 )
 
+-- | A test value for 'TokenInitializationParameters'.
+tip2 :: TokenInitializationParameters
+tip2 =
+    tip1
+        { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
+          tipInitialSupply = Just (TokenAmount{taValue = 12345, taDecimals = 5})
+        }
+
+-- | Encoded 'TokenInitializationParameters' that can be successfully CBOR decoded
+encTip1 :: EncodedTokenInitializationParameters
+encTip1 =
+    EncodedTokenInitializationParameters $
+        TokenParameter $
+            BSS.toShort $
+                CBOR.toStrictByteString $
+                    encodeTokenInitializationParametersWithDefaults tip2
+
+-- | Encoded 'TokenInitializationParameters' that cannot be successfully CBOR decoded
+invalidEncTip1 :: EncodedTokenInitializationParameters
+invalidEncTip1 =
+    EncodedTokenInitializationParameters $
+        TokenParameter $
+            BSS.pack [0x1, 0x2, 0x3, 0x4]
+
+testEncodedInitializationParameters :: Spec
+testEncodedInitializationParameters = describe "TokenInitializationParameters JSON serialization" $ do
+    it "Serialize/Deserialize roundtrip success" $
+        assertEqual
+            "Deserialized"
+            (Just encTip1)
+            ( AE.decode $
+                AE.encode
+                    encTip1
+            )
+    it "Serializes to expected JSON object" $
+        case AE.toJSON encTip1 of
+            AE.Object o -> assertBool "Does not contain field name" $ AE.member "name" o
+            _ -> assertFailure "Does not encode to JSON object"
+    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenInitializationParameters" $
+        assertEqual
+            "Deserialized"
+            (Just invalidEncTip1)
+            ( AE.decode $
+                AE.encode
+                    invalidEncTip1
+            )
+
+-- | A test value for 'TokenHolderTransaction'.
+tops1 :: TokenHolderTransaction
+tops1 =
+    TokenHolderTransaction $
+        Seq.fromList
+            [ TokenHolderTransfer
+                TokenTransferBody
+                    { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
+                      ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
+                      ttRecipient =
+                        HolderAccount
+                            { holderAccountAddress = AccountAddress $ FBS.pack [0x1, 0x1],
+                              holderAccountCoinInfo = Just CoinInfoConcordium
+                            },
+                      ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
+                    }
+            ]
+
+-- | Encoded 'TokenHolderTransaction' that can be successfully CBOR decoded
+encTops1 :: EncodedTokenOperations
+encTops1 =
+    EncodedTokenOperations $
+        TokenParameter $
+            BSS.toShort $
+                CBOR.toStrictByteString $
+                    encodeTokenHolderTransaction tops1
+
+-- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
+invalidEncTops1 :: EncodedTokenOperations
+invalidEncTops1 =
+    EncodedTokenOperations $
+        TokenParameter $
+            BSS.pack [0x1, 0x2, 0x3, 0x4]
+
+testEncodedTokenOperations :: Spec
+testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization" $ do
+    it "Serialize/Deserialize roundtrip success" $
+        assertEqual
+            "Deserialized"
+            (Just encTops1)
+            ( AE.decode $
+                AE.encode
+                    encTops1
+            )
+    it "Serializes to expected JSON object" $
+        case AE.toJSON encTops1 of
+            AE.Array v -> case V.head v of
+                AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
+                _ -> assertFailure "Does not encode to JSON object"
+            _ -> assertFailure "Does not encode to JSON array"
+    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenHolderTransaction" $
+        assertEqual
+            "Deserialized"
+            (Just invalidEncTops1)
+            ( AE.decode $
+                AE.encode
+                    invalidEncTops1
+            )
+
 tests :: Spec
 tests = parallel $ describe "CBOR" $ do
     testInitializationParameters
+    testEncodedInitializationParameters
+    testEncodedTokenOperations
     it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
         (Right ("", tt))
             === ( deserialiseFromBytes
@@ -222,5 +342,7 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenModuleState
                     (toLazyByteString $ encodeTokenModuleState tt)
                 )
+    it "Encode and decode TokenEvent" $ withMaxSuccess 1000 $ forAll genTokenEvent $ \tt ->
+        Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
         Right tt === decodeTokenRejectReason (encodeTokenRejectReason tt)

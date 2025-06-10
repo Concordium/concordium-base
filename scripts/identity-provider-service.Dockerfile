@@ -6,7 +6,7 @@ WORKDIR /build/identity-provider-service
 RUN cargo build --release
 
 # Collect build artifacts in fresh image.
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 RUN apt-get update && \
     apt-get -y install \
       libssl-dev \

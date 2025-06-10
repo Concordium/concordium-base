@@ -24,19 +24,15 @@ base64 = "0.21"
 
 [dependencies.key_derivation]
 path = "../rust-src/key_derivation"
-version = "2.0.0"
 
 [dependencies.ed25519_hd_key_derivation]
 path = "../rust-src/ed25519_hd_key_derivation"
-version = "1.0.0"
 
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "*"
 
 [build-dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "*"
 
 # this dependency is only needed for Android.
 [target.'cfg(target_os = "android")'.dependencies]

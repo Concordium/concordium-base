@@ -1,6 +1,6 @@
 [package]
 name = "concordium_base_derive"
-version = "1.0.0"
+version = "1.1.0-alpha"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2021"
 license-file = "../../LICENSE"
@@ -16,3 +16,6 @@ proc-macro=true
 syn = { version = "2.0", features = [ "extra-traits" ] }
 quote = "1.0"
 proc-macro2 = "1.0"
+proc-macro-crate = "3.3.0"
+darling = "0.20.11"
+convert_case = "0.8.0"

@@ -44,6 +44,7 @@ import Concordium.Types
 import Concordium.Types.Conditionally
 import Concordium.Types.Execution
 import Concordium.Types.Parameters
+import Concordium.Types.Tokens
 import Concordium.Types.Transactions
 import Concordium.Types.Updates
 import qualified Concordium.Wasm as Wasm
@@ -350,14 +351,14 @@ genPayloadConfigureDelegation = do
 -- | Generate token holder transaction payloads.
 genPayloadTokenHolder :: Gen Payload
 genPayloadTokenHolder = do
-    thTokenSymbol <- genTokenId
+    thTokenId <- genTokenId
     thOperations <- genTokenParameter
     return TokenHolder{..}
 
 -- | Generate token governance transaction payloads.
 genPayloadTokenGovernance :: Gen Payload
 genPayloadTokenGovernance = do
-    tgTokenSymbol <- genTokenId
+    tgTokenId <- genTokenId
     tgOperations <- genTokenParameter
     return TokenGovernance{..}
 
@@ -771,6 +772,7 @@ genEvent spv =
             ++ maybeDelegationEvents
             ++ maybeUpgrade
             ++ maybeSuspendEvents
+            ++ maybeTokenEvents
         )
   where
     maybeUpgrade = if supportsUpgradableContracts spv then [Upgraded <$> genCAddress <*> genModuleRef <*> genModuleRef] else []
@@ -832,6 +834,20 @@ genEvent spv =
         cuRemovedCredIds <- listOf genCredentialId
         cuNewThreshold <- AccountThreshold <$> chooseBoundedIntegral (1, maxBound)
         return CredentialsUpdated{..}
+    maybeTokenEvents
+        | protocolSupportsPLT spv =
+            [ TokenModuleEvent <$> genTokenId <*> genTokenEventType <*> genTokenEventDetails,
+              TokenTransfer
+                <$> genTokenId
+                <*> genAccountAddress
+                <*> genAccountAddress
+                <*> genTokenAmount
+                <*> liftArbitrary genMemo,
+              TokenMint <$> genTokenId <*> genAccountAddress <*> genTokenAmount,
+              TokenBurn <$> genTokenId <*> genAccountAddress <*> genTokenAmount,
+              TokenCreated <$> genCreatePLT
+            ]
+        | otherwise = []
 
 instance Arbitrary RejectReason where
     arbitrary =
@@ -1155,6 +1171,26 @@ genTokenId = do
     len <- chooseBoundedIntegral (0, 255)
     TokenId . BSS.pack <$> genUtf8String len
 
+genTokenEventType :: Gen TokenEventType
+genTokenEventType = do
+    len <- chooseBoundedIntegral (0, 255)
+    TokenEventType . BSS.pack <$> genUtf8String len
+
+-- | Generate an arbitrary 'TokenRawAmount'.
+genTokenRawAmount :: Gen TokenRawAmount
+genTokenRawAmount = TokenRawAmount <$> arbitrary
+
+-- | Generate an arbitrary 'TokenAmount' across all representable values.
+genTokenAmount :: Gen TokenAmount
+genTokenAmount = TokenAmount <$> genTokenRawAmount <*> arbitrary
+
+-- | Generate an arbitrary 'TokenEventDetails', consisting of up to 1000 bytes.
+--  This is not guaranteed to be valid CBOR.
+genTokenEventDetails :: Gen TokenEventDetails
+genTokenEventDetails = do
+    len <- chooseBoundedIntegral (0, 1000)
+    TokenEventDetails . BSS.pack <$> genUtf8String len
+
 -- | Generate an arbitrary 'CreatePLT' chain update, consisting of:
 --   * Random token symbol up to 255 bytes valid UTF-8.
 --   * Token module reference from arbitrary bytes.
@@ -1163,7 +1199,7 @@ genTokenId = do
 --   * Generated token parameter up to 1000 bytes long.
 genCreatePLT :: Gen CreatePLT
 genCreatePLT = do
-    _cpltTokenSymbol <- genTokenId
+    _cpltTokenId <- genTokenId
     _cpltTokenModule <- genTokenModuleRef
     _cpltGovernanceAccount <- genAccountAddress
     _cpltDecimals <- chooseBoundedIntegral (0, 255)

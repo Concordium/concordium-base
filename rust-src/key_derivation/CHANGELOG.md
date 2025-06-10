@@ -1,5 +1,9 @@
 # Changelog 
 
+## [2.1.1]
+
+- Bump `pbkdf2` to version 0.11 to ensure compatibility with `concordium-rust-sdk`
+
 ## [2.1.0]
 
 ### Added
