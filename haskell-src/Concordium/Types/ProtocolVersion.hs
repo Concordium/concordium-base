@@ -313,7 +313,6 @@ $( singletons
             | ChainParametersV1
             | ChainParametersV2
             | ChainParametersV3
-            | ChainParametersV4
             deriving (Eq, Ord)
 
         chainParametersVersionFor :: ProtocolVersion -> ChainParametersVersion
@@ -325,7 +324,7 @@ $( singletons
         chainParametersVersionFor P6 = ChainParametersV2
         chainParametersVersionFor P7 = ChainParametersV2
         chainParametersVersionFor P8 = ChainParametersV3
-        chainParametersVersionFor P9 = ChainParametersV4
+        chainParametersVersionFor P9 = ChainParametersV3
 
         -- \* Account versions
 
@@ -503,7 +502,6 @@ chainParameterVersionToWord64 ChainParametersV0 = 0
 chainParameterVersionToWord64 ChainParametersV1 = 1
 chainParameterVersionToWord64 ChainParametersV2 = 2
 chainParameterVersionToWord64 ChainParametersV3 = 3
-chainParameterVersionToWord64 ChainParametersV4 = 4
 
 instance Serialize ProtocolVersion where
     put = putWord64be . protocolVersionToWord64
@@ -639,7 +637,6 @@ type family IsCompatibleAuthorizationsVersion cpv auv where
     IsCompatibleAuthorizationsVersion ChainParametersV2 AuthorizationsVersion1 = True
     IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion1 = True
     IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion2 = True
-    IsCompatibleAuthorizationsVersion ChainParametersV4 AuthorizationsVersion2 = True
     IsCompatibleAuthorizationsVersion _ _ = False
 
 -- | Constraint that an account version supports delegation.
