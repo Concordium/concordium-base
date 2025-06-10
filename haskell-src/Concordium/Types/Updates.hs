@@ -878,7 +878,7 @@ data UpdatePayload
       FinalizationCommitteeParametersUpdatePayload !FinalizationCommitteeParameters
     | -- | Update the validator score parameters (chain parameters version 3)
       ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
-    | -- | Issue a new Protocol Level Token (PLT) (Support starting from chain parameters version 4)
+    | -- | Issue a new Protocol Level Token (PLT) (Support starting from protocol version 9)
       CreatePLTUpdatePayload !CreatePLT
     deriving (Eq, Show)
 
