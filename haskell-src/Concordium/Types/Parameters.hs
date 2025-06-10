@@ -573,7 +573,7 @@ $( singletons
         supportsTimeParameters AuthorizationsVersion1 = True
         supportsTimeParameters AuthorizationsVersion2 = True
 
-        -- \|Whether time parameters are supported for an 'AuthorizationsVersion'.
+        -- \|Whether `CreatePLT` access structure is supported for an 'AuthorizationsVersion'.
         supportsCreatePLT :: AuthorizationsVersion -> Bool
         supportsCreatePLT AuthorizationsVersion0 = False
         supportsCreatePLT AuthorizationsVersion1 = False
