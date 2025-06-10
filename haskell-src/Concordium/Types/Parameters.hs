@@ -363,7 +363,6 @@ module Concordium.Types.Parameters (
     -- * Validator score parameters
     ValidatorScoreParameters (..),
     vspMaxMissedRounds,
-    -- withIsAuthorizationsVersionFor,
     withIsAuthorizationsVersionForPV,
     -- | Whether cooldown parameters are updatable for an 'AuthorizationsVersion'.
     supportsCooldownParametersAccessStructure,
@@ -645,12 +644,6 @@ $( singletons
 -- | Constraint on a type level 'ParameterType' that can be used to get a corresponding
 --  'SParameterType'.
 type IsParameterType (pt :: ParameterType) = SingI pt
-
--- | Witness an 'IsAuthorizationsVersion' constraint using a 'SChainParametersVersion'.
---  Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionFor cpv)' via the
---  supplied 'ChainParametersVersion'.
--- withIsAuthorizationsVersionFor :: SChainParametersVersion cpv -> ((IsAuthorizationsVersion (AuthorizationsVersionFor cpv)) => a) -> a
--- withIsAuthorizationsVersionFor scpv = withSingI (sAuthorizationsVersionFor scpv)
 
 -- | Witness an 'IsAuthorizationsVersion' constraint using a 'SProtocolVersion'.
 --  Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionForPV pv)' via the

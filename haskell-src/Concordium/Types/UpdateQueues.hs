@@ -466,7 +466,7 @@ makeLenses ''Updates'
 
 type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv) (AuthorizationsVersionForPV pv)
 
-instance (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => HashableTo H.Hash (Updates' cpv auv) where
+instance (IsChainParametersVersion cpv) => HashableTo H.Hash (Updates' cpv auv) where
     getHash Updates{..} =
         H.hash $
             hsh _currentKeyCollection
