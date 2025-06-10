@@ -397,6 +397,10 @@ data RootUpdate
       Level2KeysRootUpdateV1
         { l2kruAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
+    | -- | Update the level 2 keys in authorizations version 2
+      Level2KeysRootUpdateV2
+        { l2kruAuthorizationsV2 :: !(Authorizations 'AuthorizationsVersion2)
+        }
     deriving (Eq, Show)
 
 putRootUpdate :: Putter RootUpdate
@@ -412,6 +416,9 @@ putRootUpdate Level2KeysRootUpdate{..} = do
 putRootUpdate Level2KeysRootUpdateV1{..} = do
     putWord8 3
     putAuthorizations l2kruAuthorizationsV1
+putRootUpdate Level2KeysRootUpdateV2{..} = do
+    putWord8 4
+    putAuthorizations l2kruAuthorizationsV2
 
 getRootUpdate :: SAuthorizationsVersion auv -> Get RootUpdate
 getRootUpdate sauv = label "RootUpdate" $ do
@@ -421,6 +428,7 @@ getRootUpdate sauv = label "RootUpdate" $ do
         1 -> Level1KeysRootUpdate <$> get
         2 | SAuthorizationsVersion0 <- sauv -> Level2KeysRootUpdate <$> getAuthorizations
         3 | SAuthorizationsVersion1 <- sauv -> Level2KeysRootUpdateV1 <$> getAuthorizations
+        4 | SAuthorizationsVersion2 <- sauv -> Level2KeysRootUpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.FromJSON RootUpdate where
@@ -431,6 +439,7 @@ instance AE.FromJSON RootUpdate where
             "level1KeysUpdate" -> Level1KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysRootUpdateV1 <$> o .: "updatePayload"
+            "level2KeysUpdateV2" -> Level2KeysRootUpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON RootUpdate where
@@ -454,6 +463,11 @@ instance AE.ToJSON RootUpdate where
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kruAuthorizationsV1
             ]
+    toJSON Level2KeysRootUpdateV2{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
+              "updatePayload" AE..= l2kruAuthorizationsV2
+            ]
 
 --------------------
 
@@ -473,6 +487,9 @@ data Level1Update
     | Level2KeysLevel1UpdateV1
         { l2kl1uAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
+    | Level2KeysLevel1UpdateV2
+        { l2kl1uAuthorizationsV2 :: !(Authorizations 'AuthorizationsVersion2)
+        }
 
 deriving instance Eq Level1Update
 deriving instance Show Level1Update
@@ -487,6 +504,9 @@ putLevel1Update Level2KeysLevel1Update{..} = do
 putLevel1Update Level2KeysLevel1UpdateV1{..} = do
     putWord8 2
     putAuthorizations l2kl1uAuthorizationsV1
+putLevel1Update Level2KeysLevel1UpdateV2{..} = do
+    putWord8 3
+    putAuthorizations l2kl1uAuthorizationsV2
 
 getLevel1Update :: SAuthorizationsVersion auv -> Get Level1Update
 getLevel1Update sauv = label "Level1Update" $ do
@@ -495,6 +515,7 @@ getLevel1Update sauv = label "Level1Update" $ do
         0 -> Level1KeysLevel1Update <$> get
         1 | SAuthorizationsVersion0 <- sauv -> Level2KeysLevel1Update <$> getAuthorizations
         2 | SAuthorizationsVersion1 <- sauv -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
+        3 | SAuthorizationsVersion2 <- sauv -> Level2KeysLevel1UpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.FromJSON Level1Update where
@@ -504,6 +525,7 @@ instance AE.FromJSON Level1Update where
             "level1KeysUpdate" -> Level1KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysLevel1UpdateV1 <$> o .: "updatePayload"
+            "level2KeysUpdateV2" -> Level2KeysLevel1UpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON Level1Update where
@@ -521,6 +543,11 @@ instance AE.ToJSON Level1Update where
         AE.object
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kl1uAuthorizationsV1
+            ]
+    toJSON Level2KeysLevel1UpdateV2{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
+              "updatePayload" AE..= l2kl1uAuthorizationsV2
             ]
 
 ----------------------
@@ -959,9 +986,11 @@ updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
 updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
+updateType (RootUpdatePayload Level2KeysRootUpdateV2{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level2KeysLevel1UpdateV2{}) = UpdateLevel2Keys
 updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit

@@ -981,9 +981,11 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateLevel1Keys, Updates.RootUpdatePayload ru@(Updates.Level1KeysRootUpdate{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdate{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdateV1{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
+    (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdateV2{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel1Keys, Updates.Level1UpdatePayload u@(Updates.Level1KeysLevel1Update{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1Update{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1UpdateV1{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
+    (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1UpdateV2{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateAddAnonymityRevoker, Updates.AddAnonymityRevokerUpdatePayload ai) -> Right . Proto.make $ ProtoFields.addAnonymityRevokerUpdate .= toProto ai
     (Updates.UpdateAddIdentityProvider, Updates.AddIdentityProviderUpdatePayload ip) -> Right . Proto.make $ ProtoFields.addIdentityProviderUpdate .= toProto ip
     (Updates.UpdateCooldownParameters, Updates.CooldownParametersCPV1UpdatePayload cp) -> Right $ Proto.make $ ProtoFields.cooldownParametersCpv1Update .= toProto cp
@@ -1088,6 +1090,7 @@ instance ToProto Updates.Level1Update where
     toProto Updates.Level1KeysLevel1Update{..} = Proto.make $ ProtoFields.level1KeysUpdate .= toProto l1kl1uKeys
     toProto Updates.Level2KeysLevel1Update{..} = Proto.make $ ProtoFields.level2KeysUpdateV0 .= toProto l2kl1uAuthorizations
     toProto Updates.Level2KeysLevel1UpdateV1{..} = Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kl1uAuthorizationsV1
+    toProto Updates.Level2KeysLevel1UpdateV2{..} = Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kl1uAuthorizationsV2
 
 instance ToProto Updates.RootUpdate where
     type Output Updates.RootUpdate = Proto.RootUpdate
@@ -1096,6 +1099,7 @@ instance ToProto Updates.RootUpdate where
         Updates.Level1KeysRootUpdate{..} -> Proto.make $ ProtoFields.level1KeysUpdate .= toProto l1kruKeys
         Updates.Level2KeysRootUpdate{..} -> Proto.make $ ProtoFields.level2KeysUpdateV0 .= toProto l2kruAuthorizations
         Updates.Level2KeysRootUpdateV1{..} -> Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kruAuthorizationsV1
+        Updates.Level2KeysRootUpdateV2{..} -> Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kruAuthorizationsV2
 
 instance ToProto (Updates.HigherLevelKeys kind) where
     type Output (Updates.HigherLevelKeys kind) = Proto.HigherLevelKeys
@@ -2115,6 +2119,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUELevel1Keys keys -> ProtoFields.level1Keys .= toProto keys
             QueryTypes.PUELevel2KeysV0 auth -> ProtoFields.level2KeysCpv0 .= toProto auth
             QueryTypes.PUELevel2KeysV1 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
+            QueryTypes.PUELevel2KeysV2 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
             QueryTypes.PUEProtocol protocolUpdate -> ProtoFields.protocol .= toProto protocolUpdate
             QueryTypes.PUEElectionDifficulty electionDifficulty -> ProtoFields.electionDifficulty .= toProto electionDifficulty
             QueryTypes.PUEEuroPerEnergy euroPerEnergy -> ProtoFields.euroPerEnergy .= toProto euroPerEnergy
