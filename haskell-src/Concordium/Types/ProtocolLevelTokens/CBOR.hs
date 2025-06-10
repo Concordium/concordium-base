@@ -13,6 +13,9 @@ import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import Control.Monad
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Types as AE
+import qualified Data.Aeson.Key as AE.Key
+import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Lazy as LBS
@@ -25,6 +28,7 @@ import Data.Scientific
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.Lazy as LazyText
 import Data.Word
 import Lens.Micro.Platform
@@ -33,10 +37,7 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.ID.Types
 import Concordium.Types.Memo
 import Concordium.Types.Tokens
-import qualified Data.Aeson.Key as AE.Key
-import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.FixedByteString as FBS
-import qualified Data.Text.Encoding as TextEncoding
 
 -- * Decoder helpers
 
@@ -216,16 +217,6 @@ encodeSequence encodeItem s =
     encodeListLen (fromIntegral $ Seq.length s)
         <> foldMap encodeItem s
 
-convertSha256Hash :: CBOR.Term -> Maybe SHA256.Hash
-convertSha256Hash (CBOR.TBytes bs)
-    | BS.length bs == SHA256.digestSize = Just $ SHA256.Hash (FBS.fromByteString bs)
-    | otherwise = Nothing
-convertSha256Hash _ = Nothing
-
-encodeSha256Hash :: SHA256.Hash -> Encoding
-encodeSha256Hash (SHA256.Hash h) =
-    encodeBytes (FBS.toByteString h)
-
 -- | Convert CBOR.Term to a hex-encoded string
 cborTermToHex :: CBOR.Term -> Text
 cborTermToHex term =
@@ -250,7 +241,7 @@ data TokenMetadataUrl = TokenMetadataUrl
       tmUrl :: !Text,
       -- | The sha256 hash of the token metadata.
       tmChecksumSha256 :: !(Maybe SHA256.Hash),
-      -- | Any additional values associated with the metadata url, e.g. checksums produces by alternative hash functions.
+      -- | Any additional values associated with the metadata url, e.g. checksums produced by alternative hash functions.
       --  Keys in this map SHOULD NOT overlap those used for the other (standardised) fields in this structure as that will
       --  break the invertability of the CBOR encoding.
       tmAdditional :: !(Map.Map Text CBOR.Term)
@@ -267,37 +258,45 @@ createTokenMetadataUrlWithSha256 url checksum = TokenMetadataUrl{tmUrl = url, tm
 
 instance AE.ToJSON TokenMetadataUrl where
     toJSON TokenMetadataUrl{..} =
-        AE.object $
-            [ "url" AE..= tmUrl,
-              "checksumSha256" AE..= tmChecksumSha256
+        AE.object . catMaybes $
+            [ Just ("url" AE..= tmUrl),
+              ("checksumSha256" AE..=) <$> tmChecksumSha256,
+              ("_additional" AE..=) <$> additional
             ]
-                ++ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList tmAdditional)
+      where
+        additional :: Maybe AE.Value
+        additional
+            | null tmAdditional = Nothing
+            | otherwise = Just $ AE.object $ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList tmAdditional)
 
 instance AE.FromJSON TokenMetadataUrl where
     parseJSON = AE.withObject "TokenMetadataUrl" $ \v -> do
-        tmUrl <- v AE..: "url"
-        tmChecksumSha256 <- v AE..:? "checksumSha256"
-
-        -- Parse any additional fields that are not "url" or "checksumSha256"
-        let standardKeys = ["url", "checksumSha256"]
-        let additionalKeys = filter (`notElem` standardKeys) (KeyMap.keys v)
-        tmAdditional <- Map.fromList <$> traverse (parseAdditional v) additionalKeys
-
+        tmUrl <- v AE..: "url"  -- Mandatory field
+        tmChecksumSha256 <- v AE..:? "checksumSha256"  -- Optional field
+        tmAdditional <- v AE..:? "_additional" >>= parseAdditional
         return TokenMetadataUrl{..}
       where
-        -- Helper function to parse the additional fields into the tmAdditional Map
-        parseAdditional v key = do
-            value <- v AE..: key
-            cborTerm <- case hexToCborTerm value of
-                Left err -> fail $ "Error decoding CBOR term for key " ++ AE.Key.toString key ++ ": " ++ err
-                Right term -> return term
-            return (AE.Key.toText key, cborTerm)
+        parseAdditional :: Maybe (KeyMap.KeyMap Text) -> AE.Parser (Map.Map Text CBOR.Term)
+        parseAdditional Nothing = return Map.empty
+        parseAdditional (Just additional)
+            | KeyMap.null additional = return Map.empty
+            | otherwise = do
+                fmap Map.fromList $ forM (KeyMap.toList additional) $ \(k, v) -> do
+                    term <- either (fail . ("Failed to parse hex as CBOR: " ++)) return $ hexToCborTerm v
+                    return (AE.Key.toText k, term)
 
--- | Decode a CBOR-encoded 'TokenMetadataUrl'.
-decodeTokenMetadataUrl :: Decoder s TokenMetadataUrl
-decodeTokenMetadataUrl = decodeMap decodeVal build Map.empty
+decodeTokenMetadataUrlHelper :: CBOR.Term -> Either String TokenMetadataUrl
+decodeTokenMetadataUrlHelper rootTerm = do
+    keyValues <- case rootTerm of
+        CBOR.TMap kvs -> return kvs
+        CBOR.TMapI kvs -> return kvs
+        _ -> Left $ "Expected a map"
+    keyValueList <- forM keyValues $ \(k, v) -> case k of
+        CBOR.TString t -> return (t, v)
+        CBOR.TStringI t -> return (LazyText.toStrict t, v)
+        _ -> Left $ "Expected a string key"
+    build (Map.fromList keyValueList)
   where
-    decodeVal key = Just $ mapValueDecoder key CBOR.decodeTerm (at key)
     build :: Map.Map Text CBOR.Term -> Either String TokenMetadataUrl
     build m0 = do
         (tmUrl, m1) <- getAndClear "url" convertText m0
@@ -316,6 +315,18 @@ decodeTokenMetadataUrl = decodeMap decodeVal build Map.empty
     convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
     convertText _ = Nothing
 
+    convertSha256Hash :: CBOR.Term -> Maybe SHA256.Hash
+    convertSha256Hash (CBOR.TBytes bs)
+        | BS.length bs == SHA256.digestSize = Just $ SHA256.Hash (FBS.fromByteString bs)
+        | otherwise = Nothing
+    convertSha256Hash _ = Nothing
+
+-- | Decode a CBOR-encoded 'TokenMetadataUrl'.
+decodeTokenMetadataUrl :: Decoder s TokenMetadataUrl
+decodeTokenMetadataUrl = do
+    term <- CBOR.decodeTerm
+    either fail return $ decodeTokenMetadataUrlHelper term
+
 -- | Encode a 'TokenMetadataUrl' as CBOR.
 encodeTokenMetadataUrl :: TokenMetadataUrl -> Encoding
 encodeTokenMetadataUrl TokenMetadataUrl{..} =
@@ -330,6 +341,7 @@ encodeTokenMetadataUrl TokenMetadataUrl{..} =
               | (key, val) <- Map.toList tmAdditional
             ]
     k = at . makeMapKeyEncoding . encodeString
+    encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
 
 -- | Parse a 'TokenMetadataUrl' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
@@ -1422,11 +1434,7 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
 
     -- Convert CBOR to TokenMetadataUrl
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
-    convertTokenMetadataUrl term =
-        -- TODO: Would be nice not to have to re-encode the term to bytes...
-        case CBOR.deserialiseFromBytes decodeTokenMetadataUrl (CBOR.toLazyByteString $ CBOR.encodeTerm term) of
-            Left _ -> Nothing
-            Right (_, tokenMetadataUrl) -> Just tokenMetadataUrl
+    convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
 
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.

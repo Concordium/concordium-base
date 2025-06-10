@@ -10,7 +10,6 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.Types
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
-import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
@@ -34,19 +33,36 @@ genTokenAmount = TokenAmount <$> arbitrary <*> chooseBoundedIntegral (0, 255)
 
 genSha256Hash :: Gen SHA256.Hash
 genSha256Hash = do
-    randomBytes <- BS.pack <$> replicateM SHA256.digestSize (choose (0, 255)) -- Generate 32 random bytes
+    randomBytes <- BS.pack <$> vector SHA256.digestSize -- Generate 32 random bytes
     return (SHA256.hash randomBytes)
 
-genTokenMetadataUrl :: Gen TokenMetadataUrl
-genTokenMetadataUrl = do
+genTokenMetadataUrlSimple :: Gen TokenMetadataUrl
+genTokenMetadataUrlSimple = do
     url <- genText
     checksumSha256 <- Just <$> genSha256Hash
     return TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = checksumSha256, tmAdditional = Map.empty}
 
+genTokenMetadataUrlAdditional :: Gen TokenMetadataUrl
+genTokenMetadataUrlAdditional = do
+    tmu <- genTokenMetadataUrlSimple
+    additional <- listOf1 genKV
+    return tmu{tmAdditional = Map.fromList additional}
+  where
+    genKV = do
+        key <- genText
+        val <-
+            oneof
+                [ CBOR.TInt <$> arbitrary,
+                  CBOR.TString <$> genText,
+                  CBOR.TBool <$> arbitrary,
+                  pure CBOR.TNull
+                ]
+        return ("_" <> key, val)
+
 genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- genText
-    tipMetadata <- genTokenMetadataUrl
+    tipMetadata <- genTokenMetadataUrlSimple
     tipAllowList <- arbitrary
     tipDenyList <- arbitrary
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
@@ -105,7 +121,7 @@ genTokenGovernanceTransaction =
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
     tmsName <- genText
-    tmsMetadata <- genTokenMetadataUrl
+    tmsMetadata <- genTokenMetadataUrlSimple
     tmsAllowList <- arbitrary
     tmsDenyList <- arbitrary
     tmsMintable <- arbitrary
@@ -402,12 +418,20 @@ tests = parallel $ describe "CBOR" $ do
                     decodeTokenTransfer
                     (toLazyByteString $ encodeTokenTransfer tt)
                 )
-    it "Encode and decode TokenMetadataUrl" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrl $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
+    it "CBOR Encode and decode TokenMetadataUrl (simple)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlSimple $ \tmu ->
+        Right ("", tmu)
+            === deserialiseFromBytes
                     decodeTokenMetadataUrl
-                    (toLazyByteString $ encodeTokenMetadataUrl tt)
-                )
+                    (toLazyByteString $ encodeTokenMetadataUrl tmu)
+    it "CBOR Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
+        Right ("", tmu)
+            === deserialiseFromBytes
+                    decodeTokenMetadataUrl
+                    (toLazyByteString $ encodeTokenMetadataUrl tmu)
+    it "JSON Encode and decode TokenMetadataUrl (with simple)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlSimple $ \tmu ->
+        Just tmu === AE.decode (AE.encode tmu)
+    it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
+        Just tmu === AE.decode (AE.encode tmu)
     it "Encode and decode TokenHolderTransaction" $ withMaxSuccess 1000 $ forAll genTokenHolderTransaction $ \tt ->
         (Right ("", tt))
             === ( deserialiseFromBytes
