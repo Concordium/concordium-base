@@ -734,7 +734,7 @@ genEvent spv =
             EncryptedAmountsRemoved <$> genAccountAddress <*> genEncryptedAmount <*> genEncryptedAmount <*> (EncryptedAmountAggIndex <$> arbitrary),
             AmountAddedByDecryption <$> genAccountAddress <*> genAmount,
             EncryptedSelfAmountAdded <$> genAccountAddress <*> genEncryptedAmount <*> genAmount,
-            UpdateEnqueued <$> genTransactionTime <*> genUpdatePayload (sChainParametersVersionFor spv),
+            UpdateEnqueued <$> genTransactionTime <*> genUpdatePayload spv,
             genTransferredWithSchedule,
             genCredentialsUpdated,
             DataRegistered <$> genRegisteredData
@@ -1018,6 +1018,7 @@ genAuthorizations = do
     asAddIdentityProvider <- genAccessStructure
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
+    asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) genAccessStructure
     return Authorizations{..}
 
 genProtocolUpdate :: Gen ProtocolUpdate
@@ -1186,27 +1187,25 @@ genHigherLevelKeys = do
     hlkThreshold <- UpdateKeysThreshold <$> chooseBoundedIntegral (1, fromIntegral nKeys)
     return HigherLevelKeys{..}
 
-genRootUpdate :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen RootUpdate
-genRootUpdate scpv =
+genRootUpdate :: (IsAuthorizationsVersion auv) => SAuthorizationsVersion auv -> Gen RootUpdate
+genRootUpdate sauv =
     oneof
         [ RootKeysRootUpdate <$> genHigherLevelKeys,
           Level1KeysRootUpdate <$> genHigherLevelKeys,
-          case scpv of
-            SChainParametersV0 -> Level2KeysRootUpdate <$> genAuthorizations
-            SChainParametersV1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
-            SChainParametersV2 -> Level2KeysRootUpdateV1 <$> genAuthorizations
-            SChainParametersV3 -> Level2KeysRootUpdateV1 <$> genAuthorizations
+          case sauv of
+            SAuthorizationsVersion0 -> Level2KeysRootUpdate <$> genAuthorizations
+            SAuthorizationsVersion1 -> Level2KeysRootUpdateV1 <$> genAuthorizations
+            SAuthorizationsVersion2 -> Level2KeysRootUpdateV2 <$> genAuthorizations
         ]
 
-genLevel1Update :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen Level1Update
-genLevel1Update scpv =
+genLevel1Update :: (IsAuthorizationsVersion auv) => SAuthorizationsVersion auv -> Gen Level1Update
+genLevel1Update sauv =
     oneof
         [ Level1KeysLevel1Update <$> genHigherLevelKeys,
-          case scpv of
-            SChainParametersV0 -> Level2KeysLevel1Update <$> genAuthorizations
-            SChainParametersV1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
-            SChainParametersV2 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
-            SChainParametersV3 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
+          case sauv of
+            SAuthorizationsVersion0 -> Level2KeysLevel1Update <$> genAuthorizations
+            SAuthorizationsVersion1 -> Level2KeysLevel1UpdateV1 <$> genAuthorizations
+            SAuthorizationsVersion2 -> Level2KeysLevel1UpdateV2 <$> genAuthorizations
         ]
 
 genLevel2UpdatePayload :: SChainParametersVersion cpv -> Gen UpdatePayload
@@ -1271,20 +1270,20 @@ genLevel2UpdatePayload scpv =
                   GASRewardsCPV2UpdatePayload <$> genGASRewards
                 ]
 
-genUpdatePayload :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen UpdatePayload
-genUpdatePayload scpv =
+genUpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen UpdatePayload
+genUpdatePayload spv =
     oneof
-        [ genLevel2UpdatePayload scpv,
-          RootUpdatePayload <$> genRootUpdate scpv,
-          Level1UpdatePayload <$> genLevel1Update scpv
+        [ genLevel2UpdatePayload $ sChainParametersVersionFor spv,
+          RootUpdatePayload <$> genRootUpdate (sAuthorizationsVersionForPV spv),
+          Level1UpdatePayload <$> genLevel1Update (sAuthorizationsVersionForPV spv)
         ]
 
-genRawUpdateInstruction :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Gen RawUpdateInstruction
-genRawUpdateInstruction scpv = do
+genRawUpdateInstruction :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen RawUpdateInstruction
+genRawUpdateInstruction spv = do
     ruiSeqNumber <- Nonce <$> arbitrary
     ruiEffectiveTime <- oneof [return 0, TransactionTime <$> arbitrary]
     ruiTimeout <- TransactionTime <$> arbitrary
-    ruiPayload <- genUpdatePayload scpv
+    ruiPayload <- genUpdatePayload spv
     return RawUpdateInstruction{..}
 
 genLevel2RawUpdateInstruction :: SChainParametersVersion cpv -> Gen RawUpdateInstruction
@@ -1307,6 +1306,7 @@ genAuthorizationsAndKeys thr = do
     let nKeys = case sing @auv of
             SAuthorizationsVersion0 -> fromIntegral thr * 12
             SAuthorizationsVersion1 -> fromIntegral thr * 14
+            SAuthorizationsVersion2 -> fromIntegral thr * 15
     kps <- vectorOf nKeys genSigSchemeKeyPair
     let asKeys = Vec.fromList $ correspondingVerifyKey <$> kps
     let genAccessStructure = do
@@ -1327,6 +1327,7 @@ genAuthorizationsAndKeys thr = do
     asAddIdentityProvider <- genAccessStructure
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) genAccessStructure
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) genAccessStructure
+    asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) genAccessStructure
     return (Authorizations{..}, kps)
 
 genLevel1Keys ::
