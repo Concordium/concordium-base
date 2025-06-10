@@ -921,11 +921,13 @@ getUpdatePayload spv =
         21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
         22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
         23 | isSupported PTValidatorScoreParameters cpv -> ValidatorScoreParametersUpdatePayload <$> get
-        24 | isSupported PTProtocolLevelTokensParameters cpv -> CreatePLTUpdatePayload <$> get
+        24 | supportsCreatePLT auv -> CreatePLTUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv
     cpv = demoteChainParameterVersion scpv
+    sauv = sAuthorizationsVersionForPV spv
+    auv = fromSing sauv
 
 $( deriveJSON
     defaultOptions

@@ -15,6 +15,7 @@ module Concordium.Types.UpdateQueues where
 import Control.Monad
 import Data.Aeson as AE
 import Data.Aeson.Types as AE
+import Data.Bool.Singletons
 import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.Serialize
@@ -513,7 +514,7 @@ data Updates' (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion) = U
       -- | Pending updates.
       _pendingUpdates :: !(PendingUpdates cpv auv),
       -- | Sequence number for updates to the protocol level tokens (PLT).
-      _pltUpdateSequenceNumber :: !(OParam 'PTProtocolLevelTokensParameters cpv UpdateSequenceNumber)
+      _pltUpdateSequenceNumber :: !(Conditionally (SupportsCreatePLT auv) UpdateSequenceNumber)
     }
     deriving (Show, Eq)
 
@@ -542,12 +543,9 @@ instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion 
               "updateQueues" AE..= _pendingUpdates
             ]
                 <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
-                <> case chainParametersVersion @cpv of
-                    SChainParametersV0 -> []
-                    SChainParametersV1 -> []
-                    SChainParametersV2 -> []
-                    SChainParametersV3 -> []
-                    SChainParametersV4 -> ["pltUpdateSequenceNumber" AE..= unOParam _pltUpdateSequenceNumber]
+                <> case _pltUpdateSequenceNumber of
+                    CFalse -> []
+                    CTrue usn -> ["pltUpdateSequenceNumber" AE..= usn]
 
 instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => FromJSON (Updates' cpv auv) where
     parseJSON = withObject "Updates" $ \o -> do
@@ -555,17 +553,16 @@ instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion 
         _currentProtocolUpdate <- o AE..:? "protocolUpdate"
         _currentParameters <- o AE..: "chainParameters"
         _pendingUpdates <- o AE..: "updateQueues"
-        _pltUpdateSequenceNumber <- case chainParametersVersion @cpv of
-            SChainParametersV0 -> return NoParam
-            SChainParametersV1 -> return NoParam
-            SChainParametersV2 -> return NoParam
-            SChainParametersV3 -> return NoParam
-            SChainParametersV4 -> SomeParam <$> o AE..: "pltUpdateSequenceNumber"
+        _pltUpdateSequenceNumber <-
+            conditionallyA
+                (sSupportsCreatePLT (authorizationsVersion @auv))
+                $ o AE..: "pltUpdateSequenceNumber"
         return Updates{..}
 
 -- | An initial 'Updates' with the given initial 'Authorizations'
 --  and 'ChainParameters'.
 initialUpdates ::
+    forall cpv auv.
     (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) =>
     UpdateKeysCollection auv ->
     ChainParameters' cpv ->
@@ -575,7 +572,7 @@ initialUpdates initialKeyCollection _currentParameters =
         { _currentKeyCollection = makeHashed initialKeyCollection,
           _currentProtocolUpdate = Nothing,
           _pendingUpdates = emptyPendingUpdates,
-          _pltUpdateSequenceNumber = whenSupported minUpdateSequenceNumber,
+          _pltUpdateSequenceNumber = conditionally (sSupportsCreatePLT (authorizationsVersion @auv)) minUpdateSequenceNumber,
           ..
         }
 

@@ -398,7 +398,6 @@ module Concordium.Types.Parameters (
     PTFinalizationProofSym0,
     PTFinalizationCommitteeParametersSym0,
     PTValidatorScoreParametersSym0,
-    PTProtocolLevelTokensParametersSym0,
 ) where
 
 import Control.Monad
@@ -635,8 +634,6 @@ $( singletons
               PTFinalizationCommitteeParameters
             | -- Maximal score a validator can reach before it gets suspended
               PTValidatorScoreParameters
-            | -- \|Parameters for protocol level tokens
-              PTProtocolLevelTokensParameters
 
         -- \|Whether a particular parameter is supported at a particular 'ChainParametersVersion'.
         isSupported :: ParameterType -> ChainParametersVersion -> Bool
@@ -680,11 +677,6 @@ $( singletons
         isSupported PTValidatorScoreParameters ChainParametersV2 = False
         isSupported PTValidatorScoreParameters ChainParametersV3 = True
         isSupported PTValidatorScoreParameters ChainParametersV4 = True
-        isSupported PTProtocolLevelTokensParameters ChainParametersV0 = False
-        isSupported PTProtocolLevelTokensParameters ChainParametersV1 = False
-        isSupported PTProtocolLevelTokensParameters ChainParametersV2 = False
-        isSupported PTProtocolLevelTokensParameters ChainParametersV3 = False
-        isSupported PTProtocolLevelTokensParameters ChainParametersV4 = True
         |]
  )
 
