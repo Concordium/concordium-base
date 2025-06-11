@@ -10,6 +10,7 @@ module Concordium.Types.Queries.Tokens (
 ) where
 
 import qualified Data.ByteString as BS
+import Data.Maybe (catMaybes)
 import Data.Word
 
 import Concordium.Crypto.ByteStringHelpers
@@ -44,31 +45,25 @@ instance FromJSON Token where
 data TokenAccountState = TokenAccountState
     { -- | The available token balance.
       balance :: !TokenAmount,
-      -- | Whether the account is a member of the allow list of the token.
-      -- If present, tokens can be transferred only, if both sender and receiver are
-      -- members of the allow list of the token.
-      memberAllowList :: !(Maybe Bool),
-      -- | Whether the account is a member of the deny list of the token.
-      -- If present, tokens can be transferred only, if neither sender or receiver
-      -- are members of the deny list.
-      memberDenyList :: !(Maybe Bool)
+      -- | The token-module specific state for the account.
+      --  This is CBOR-encoded.
+      moduleAccountState :: !(Maybe BS.ByteString)
     }
     deriving (Eq, Show)
 
 -- | JSON instances for TokenAccountState
 instance ToJSON TokenAccountState where
-    toJSON (TokenAccountState balance inAllowList inDenyList) =
-        object
-            [ "balance" .= balance,
-              "inAllowList" .= inAllowList,
-              "inDenyList" .= inDenyList
-            ]
+    toJSON (TokenAccountState balance moduleAccountState) =
+        object $
+            catMaybes
+                [ Just ("balance" .= balance),
+                  ("state" .=) . ByteStringHex <$> moduleAccountState
+                ]
 
 instance FromJSON TokenAccountState where
     parseJSON = withObject "TokenAccountState" $ \o -> do
         balance <- o .: "balance"
-        memberAllowList <- o .: "inAllowList"
-        memberDenyList <- o .: "inDenyList"
+        moduleAccountState <- fmap hex <$> o .:? "state"
         return TokenAccountState{..}
 
 -- | The global token state.
