@@ -176,7 +176,7 @@
 //!
 //! In this example, entries in the CBOR map that is not present in the enum are
 //! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
-//! the map key and the map value.
+//! the tag and tagged data item.
 //!
 //! When applied to a field in a struct with named fields, "unknown" map entries
 //! are deserialized into this field.
