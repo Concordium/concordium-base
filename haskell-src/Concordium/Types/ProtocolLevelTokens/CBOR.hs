@@ -13,7 +13,9 @@ import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import Control.Monad
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Key as AE.Key
 import qualified Data.ByteString as BS
+import Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable
@@ -24,6 +26,7 @@ import Data.Scientific
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.Lazy as LazyText
 import Data.Word
 import Lens.Micro.Platform
@@ -1400,6 +1403,57 @@ data TokenModuleAccountState = TokenModuleAccountState
       tmasAdditional :: !(Map.Map Text CBOR.Term)
     }
     deriving (Eq, Show)
+
+-- | Function should be already available after merging "https://github.com/Concordium/concordium-base/pull/657"
+-- | Convert CBOR.Term to a hex-encoded string
+cborTermToHex :: CBOR.Term -> Text
+cborTermToHex term =
+    let bs = CBOR.toStrictByteString $ CBOR.encodeTerm term
+    in  TextEncoding.decodeUtf8 (Base16.encode bs)
+
+-- | Function should be already available after merging "https://github.com/Concordium/concordium-base/pull/657"
+-- | Convert a hex-encoded string to a CBOR.Term.
+hexToCborTerm :: Text -> Either String CBOR.Term
+hexToCborTerm hexText = do
+    bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
+    decodeTerm bs
+  where
+    decodeTerm bs =
+        case CBOR.deserialiseFromBytes CBOR.decodeTerm (LBS.fromStrict bs) of
+            Left err -> Left $ "Failed to decode CBOR term: " ++ show err
+            Right ("", term) -> Right term
+            Right (remaining, _) -> Left $ "Extra bytes after decoding CBOR term: " ++ show (LBS.length remaining)
+
+instance AE.ToJSON TokenModuleAccountState where
+    toJSON TokenModuleAccountState{..} =
+        AE.object . catMaybes $
+            [ ("allowList" AE..=) <$> tmasAllowList,
+              ("denyList" AE..=) <$> tmasDenyList,
+              ("additional" AE..=) <$> additional
+            ]
+      where
+        additional
+            | null tmasAdditional = Nothing
+            | otherwise =
+                Just $
+                    AE.object
+                        [ AE.Key.fromText k AE..= cborTermToHex v
+                          | (k, v) <- Map.toList tmasAdditional
+                        ]
+
+instance AE.FromJSON TokenModuleAccountState where
+    parseJSON = AE.withObject "TokenModuleAccountState" $ \v -> do
+        tmasAllowList <- v AE..:? "allowList"
+        tmasDenyList <- v AE..:? "denyList"
+        additional <- v AE..:? "additional" AE..!= Map.empty
+        tmasAdditional <-
+            Map.traverseWithKey
+                ( \k hexVal -> case hexToCborTerm hexVal of
+                    Left err -> fail $ "Failed to decode CBOR key " ++ show k ++ ": " ++ err
+                    Right term -> return term
+                )
+                additional
+        return TokenModuleAccountState{..}
 
 -- | Encode a 'TokenModuleAccountState' as CBOR. Any keys in 'tmasAdditional' that overlap with
 --  standardized keys (e.g. "allowList", "denyList", etc.) will be ignored.

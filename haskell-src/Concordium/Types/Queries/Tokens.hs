@@ -15,6 +15,7 @@ import Data.Word
 
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Types
+import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.Tokens
 import Data.Aeson
 
@@ -51,19 +52,42 @@ data TokenAccountState = TokenAccountState
     }
     deriving (Eq, Show)
 
+-- | A wrapper type for (de)-serializing a CBOR-encoded 'TokenModuleAccountState'
+--  to/from JSON. This can parse either a JSON object representation of 'TokenModuleAccountState'
+--  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
+--  it will render as a JSON object if the contents can be decded to a 'TokenModuleAccountState', or
+--  otherwise as the hex-encoded byte string.
+newtype EncodedTokenModuleAccountState = EncodedTokenModuleAccountState
+    { encodedTokenModuleAccountState :: BS.ByteString
+    }
+
+instance ToJSON EncodedTokenModuleAccountState where
+    toJSON (EncodedTokenModuleAccountState bs) =
+        case CBOR.tokenModuleAccountStateFromBytes (BS.fromStrict bs) of
+            Right state -> toJSON state
+            Left _ -> toJSON (ByteStringHex bs)
+
+instance FromJSON EncodedTokenModuleAccountState where
+    parseJSON o@(Object _) = do
+        state <- parseJSON o
+        return $ EncodedTokenModuleAccountState $ CBOR.tokenModuleAccountStateToBytes state
+    parseJSON val = do
+        ByteStringHex bs <- parseJSON val
+        return $ EncodedTokenModuleAccountState bs
+
 -- | JSON instances for TokenAccountState
 instance ToJSON TokenAccountState where
     toJSON (TokenAccountState balance moduleAccountState) =
         object $
             catMaybes
                 [ Just ("balance" .= balance),
-                  ("state" .=) . ByteStringHex <$> moduleAccountState
+                  ("state" .=) . EncodedTokenModuleAccountState <$> moduleAccountState
                 ]
 
 instance FromJSON TokenAccountState where
     parseJSON = withObject "TokenAccountState" $ \o -> do
         balance <- o .: "balance"
-        moduleAccountState <- fmap hex <$> o .:? "state"
+        moduleAccountState <- fmap encodedTokenModuleAccountState <$> o .:? "state"
         return TokenAccountState{..}
 
 -- | The global token state.
