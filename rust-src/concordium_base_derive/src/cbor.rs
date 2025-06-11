@@ -207,15 +207,6 @@ impl CborVariants {
             })
             .collect()
     }
-
-    /// Get CBOR tags serialized for each variant
-    fn cbor_tags(&self) -> Vec<Option<Expr>> {
-        self.0
-            .iter()
-            .filter(|field| !field.opts.other)
-            .map(|field| field.opts.tag.clone())
-            .collect()
-    }
 }
 
 impl CborVariants {
@@ -457,7 +448,7 @@ fn cbor_deserialize_enum_body(
     }
 
     let cbor_module = get_cbor_module()?;
-    let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
+    let cbor_variants = CborVariants::try_from_variants(opts, variants)?;
 
     Ok(if opts.map {
         let variant_idents = cbor_variants.variant_idents();
@@ -546,6 +537,7 @@ fn cbor_deserialize_enum_body(
                     }
                 )*
                 #cbor_module::DataItemHeader::Tag(tag) => {
+                    #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, tag)?;
                     #deserialize_unknown
                 }
                 _ => {
@@ -712,7 +704,7 @@ fn cbor_serialize_enum_body(
     }
 
     let cbor_module = get_cbor_module()?;
-    let cbor_variants = CborVariants::try_from_variants(&opts, variants)?;
+    let cbor_variants = CborVariants::try_from_variants(opts, variants)?;
     let variant_idents = cbor_variants.variant_idents();
 
     Ok(if opts.map {
@@ -737,21 +729,44 @@ fn cbor_serialize_enum_body(
             #cbor_module::CborMapEncoder::end(map_encoder)
         }
     } else if opts.tagged {
-        // todo ar
-        let serialize_variant_tags = cbor_variants.cbor_tags().into_iter().map(|tag| {
-            let tag = tag.into_iter();
-            quote! {
-                #(
-                    #cbor_module::CborEncoder::encode_tag(&mut encoder, #tag)?;
-                )*
-            }
-        });
+        let tagged_variant_idents = cbor_variants
+            .cbor_tagged_variants()
+            .into_iter()
+            .map(|(_, ident, _)| ident)
+            .collect::<Vec<_>>();
+
+        let serialize_variant_tags = cbor_variants
+            .cbor_tagged_variants()
+            .into_iter()
+            .map(|(_, _, tag)| {
+                let tag = tag.into_iter();
+                quote! {
+                    #(
+                        #cbor_module::CborEncoder::encode_tag(&mut encoder, #tag)?;
+                    )*
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let untagged_ident = cbor_variants.untagged_ident().clone().into_iter();
+        let other_ident = cbor_variants.other_ident().clone().into_iter();
 
         quote! {
             match self {
                 #(
-                    Self::#variant_idents(value) => {
+                    Self::#tagged_variant_idents(value) => {
                         #serialize_variant_tags
+                        #cbor_module::CborSerialize::serialize(value, encoder)?;
+                    }
+                )*
+                #(
+                    Self::#other_ident(tag, value) => {
+                        #cbor_module::CborEncoder::encode_tag(&mut encoder, *tag)?;
+                        #cbor_module::CborSerialize::serialize(value, encoder)?;
+                    }
+                )*
+                #(
+                    Self::#untagged_ident(value) => {
                         #cbor_module::CborSerialize::serialize(value, encoder)?;
                     }
                 )*

@@ -1163,6 +1163,7 @@ mod test {
             Var1(u64),
             #[cbor(tag = 39992)]
             Var2(String),
+            Var3(String),
         }
 
         #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
@@ -1172,6 +1173,7 @@ mod test {
             Var1(u64),
             #[cbor(other)]
             Unknown(u64, value::Value),
+            Var3(String),
         }
 
         let value = TestEnum::Var2("abcd".to_string());
