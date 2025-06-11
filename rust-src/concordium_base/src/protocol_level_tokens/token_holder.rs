@@ -1,5 +1,6 @@
 use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborError, CborResult, CborSerialize,
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
+    CborSerialize,
 };
 
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -11,7 +12,7 @@ const COIN_INFO_TAG: u64 = 40305;
 /// Concordiums listing in https://github.com/satoshilabs/slips/blob/master/slip-0044.md
 const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 
-/// A destination that can receive and hold tokens.
+/// A destination that can receive and hold protocol level tokens.
 /// Currently, this can only be a Concordium account address.
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,7 +21,7 @@ pub enum TokenHolder {
 }
 
 impl CborSerialize for TokenHolder {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         match self {
             TokenHolder::HolderAccount(account) => {
                 account.serialize(encoder)?;
@@ -31,14 +32,14 @@ impl CborSerialize for TokenHolder {
 }
 
 impl CborDeserialize for TokenHolder {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self::HolderAccount(HolderAccount::deserialize(decoder)?))
     }
 }
 
-/// Account address that holds tokens
+/// Account address that holds protocol level tokens
 #[derive(
     Debug,
     Eq,
@@ -61,13 +62,13 @@ pub struct HolderAccount {
 }
 
 impl CborSerialize for AccountAddress {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         self.0.serialize(encoder)
     }
 }
 
 impl CborDeserialize for AccountAddress {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self(CborDeserialize::deserialize(decoder)?))
@@ -80,7 +81,7 @@ pub enum CoinInfo {
     CCD,
 }
 
-/// [`CoinInfo`] representation that resembles CBOR structure
+/// [`CoinInfo`] representation that resembles CBOR structure, see <https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md>
 #[derive(Debug, CborSerialize, CborDeserialize)]
 #[cbor(tag = COIN_INFO_TAG)]
 struct CoinInfoCbor {
@@ -89,7 +90,7 @@ struct CoinInfoCbor {
 }
 
 impl CborSerialize for CoinInfo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
         let coin_info_code = match self {
             Self::CCD => CONCORDIUM_SLIP_0044_CODE,
         };
@@ -99,14 +100,14 @@ impl CborSerialize for CoinInfo {
 }
 
 impl CborDeserialize for CoinInfo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let cbor = CoinInfoCbor::deserialize(decoder)?;
         let coin_info = match cbor.coin_info_code {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
             coin_info_code => {
-                return Err(CborError::invalid_data(format_args!(
+                return Err(CborSerializationError::invalid_data(format_args!(
                     "coin info code must be {}, was {}",
                     CONCORDIUM_SLIP_0044_CODE, coin_info_code
                 )))
@@ -118,15 +119,20 @@ impl CborDeserialize for CoinInfo {
 }
 
 #[cfg(test)]
-pub mod test {
+pub mod test_fixtures {
     use super::*;
-    use crate::common::cbor;
 
     pub const ADDRESS: AccountAddress = AccountAddress([
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
         0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E,
         0x1F, 0x20,
     ]);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{common::cbor, protocol_level_tokens::test_fixtures::ADDRESS};
 
     #[test]
     fn test_coin_info_cbor() {

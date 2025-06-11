@@ -21,32 +21,11 @@ name: Check format, docs, build and run tests for Haskell and Rust sources
 
 on:
   pull_request:
-    branches:
-        - main
-        - plt
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-    - '.github/workflows/build-test-sources.yaml'
-    - '**.hs'
-    - 'fourmolu.yaml'
-    - 'stack*.yaml'
-    - 'package.yaml'
-    - 'base.cabal'
-    - '**.rs'
-    - 'testdata/**'
   push:
     branches:
         - main
         - plt
-    paths:
-    - '.github/workflows/build-test-sources.yaml'
-    - '**.hs'
-    - 'fourmolu.yaml'
-    - 'stack*.yaml'
-    - 'package.yaml'
-    - 'base.cabal'
-    - '**.rs'
-    - 'testdata/**'
   workflow_dispatch: # allow manual trigger
 
 env:

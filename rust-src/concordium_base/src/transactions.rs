@@ -14,6 +14,7 @@ use crate::{
     },
     common::{
         self,
+        cbor::{CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize},
         types::{Amount, KeyIndex, KeyPair, Timestamp, TransactionSignature, TransactionTime, *},
         Buffer, Deserial, Get, ParseResult, Put, ReadBytesExt, SerdeDeserialize, SerdeSerialize,
         Serial, Serialize,
@@ -25,6 +26,7 @@ use crate::{
         AccountAddress, AccountCredentialMessage, AccountKeys, CredentialDeploymentInfo,
         CredentialPublicKeys, VerifyKey,
     },
+    protocol_level_tokens::TokenOperationsPayload,
     random_oracle::RandomOracle,
     smart_contracts, updates,
 };
@@ -36,13 +38,29 @@ use sha2::Digest;
 use std::{collections::BTreeMap, marker::PhantomData};
 use thiserror::Error;
 
-#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, AsRef, Into)]
+#[derive(SerdeSerialize, SerdeDeserialize, Serial, Debug, Clone, Eq, PartialEq, AsRef, Into)]
 #[serde(transparent)]
 /// A data that was registered on the chain.
 pub struct Memo {
     #[serde(with = "crate::internal::byte_array_hex")]
     #[size_length = 2]
     bytes: Vec<u8>,
+}
+
+impl CborSerialize for Memo {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+        encoder.encode_bytes(&self.bytes)
+    }
+}
+
+impl CborDeserialize for Memo {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        let bytes = decoder.decode_bytes()?;
+
+        Ok(Self { bytes })
+    }
 }
 
 /// An error used to signal that an object was too big to be converted.
@@ -964,6 +982,16 @@ pub enum Payload {
         #[serde(flatten)]
         data: ConfigureDelegationPayload,
     },
+    /// Token holder operations
+    TokenHolder {
+        #[serde(flatten)]
+        payload: TokenOperationsPayload,
+    },
+    /// Token governance operations
+    TokenGovernance {
+        #[serde(flatten)]
+        payload: TokenOperationsPayload,
+    },
 }
 
 impl Payload {
@@ -998,6 +1026,8 @@ impl Payload {
             }
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
+            Payload::TokenHolder { .. } => TransactionType::TokenHolder,
+            Payload::TokenGovernance { .. } => TransactionType::TokenGovernance,
         }
     }
 }
@@ -1176,6 +1206,16 @@ impl Serial for Payload {
                 if let Some(delegation_target) = delegation_target {
                     out.put(delegation_target);
                 }
+            }
+            Payload::TokenHolder { payload } => {
+                out.put(&27u8);
+                out.put(&payload.token_id);
+                out.put(&payload.operations);
+            }
+            Payload::TokenGovernance { payload } => {
+                out.put(&28u8);
+                out.put(&payload.token_id);
+                out.put(&payload.operations);
             }
         }
     }
@@ -1375,6 +1415,24 @@ impl Deserial for Payload {
                     data.delegation_target = Some(source.get()?);
                 }
                 Ok(Payload::ConfigureDelegation { data })
+            }
+            27 => {
+                let token_id = source.get()?;
+                let operations = source.get()?;
+                let payload = TokenOperationsPayload {
+                    token_id,
+                    operations,
+                };
+                Ok(Payload::TokenHolder { payload })
+            }
+            28 => {
+                let token_id = source.get()?;
+                let operations = source.get()?;
+                let payload = TokenOperationsPayload {
+                    token_id,
+                    operations,
+                };
+                Ok(Payload::TokenGovernance { payload })
             }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
@@ -1946,6 +2004,22 @@ pub mod cost {
     /// Additional cost of a normal, account to account, transfer.
     pub const SIMPLE_TRANSFER: Energy = Energy { energy: 300 };
 
+    /// Additional cost of a transaction consisting of protocol level token
+    /// operations
+    pub const PLT_OPERATIONS_TRANSACTIONS: Energy = Energy { energy: 300 };
+
+    /// Additional cost of a PLT transfer
+    pub const PLT_TRANSFER: Energy = Energy { energy: 100 };
+
+    /// Additional cost of a PLT mint
+    pub const PLT_MINT: Energy = Energy { energy: 100 };
+
+    /// Additional cost of a PLT burn
+    pub const PLT_BURN: Energy = Energy { energy: 100 };
+
+    /// Additional cost of a PLT allow or deny list update
+    pub const PLT_LIST_UPDATE: Energy = Energy { energy: 50 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2058,6 +2132,10 @@ pub mod cost {
 /// See also the [send] module above which combines construction with signing.
 pub mod construct {
     use super::*;
+    use crate::{
+        common::cbor,
+        protocol_level_tokens::{RawCbor, TokenId, TokenOperation, TokenOperations},
+    };
 
     /// A transaction that is prepared to be signed.
     /// The serde instance serializes the structured payload and skips
@@ -2174,7 +2252,7 @@ pub mod construct {
         }
     }
 
-    /// Construct a transfer transaction.
+    /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2199,7 +2277,7 @@ pub mod construct {
         )
     }
 
-    /// Construct a transfer transaction with a memo.
+    /// Construct a native coin (CCD) transfer transaction with a memo.
     pub fn transfer_with_memo(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2224,6 +2302,81 @@ pub mod construct {
             },
             payload,
         )
+    }
+
+    /// Additional cost of token operations transaction
+    fn token_operations_txn_energy(operations: &TokenOperations) -> Energy {
+        cost::PLT_OPERATIONS_TRANSACTIONS
+            + operations
+                .operations
+                .iter()
+                .map(|op| match op {
+                    TokenOperation::Transfer(_) => cost::PLT_TRANSFER,
+                    TokenOperation::Mint(_) => cost::PLT_MINT,
+                    TokenOperation::Burn(_) => cost::PLT_BURN,
+                    TokenOperation::AddAllowList(_)
+                    | TokenOperation::RemoveAllowList(_)
+                    | TokenOperation::AddDenyList(_)
+                    | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    TokenOperation::Unknown => Default::default(),
+                })
+                .sum()
+    }
+
+    /// Construct a protocol level token holder transaction consisting of the
+    /// token holder operations encoded in the given CBOR.
+    pub fn token_holder_operations(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: TokenOperations,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let energy = token_operations_txn_energy(&operations);
+        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
+
+        let payload = Payload::TokenHolder {
+            payload: TokenOperationsPayload {
+                token_id,
+                operations,
+            },
+        };
+        Ok(make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add { num_sigs, energy },
+            payload,
+        ))
+    }
+
+    /// Construct a protocol level token governance transaction consisting of
+    /// the token governance operations encoded in the given CBOR.
+    pub fn token_governance_operations(
+        num_sigs: u32,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: TokenOperations,
+    ) -> CborSerializationResult<PreAccountTransaction> {
+        let energy = token_operations_txn_energy(&operations);
+        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
+
+        let payload = Payload::TokenGovernance {
+            payload: TokenOperationsPayload {
+                token_id,
+                operations,
+            },
+        };
+        Ok(make_transaction(
+            sender,
+            nonce,
+            expiry,
+            GivenEnergy::Add { num_sigs, energy },
+            payload,
+        ))
     }
 
     /// Make an encrypted transfer. The payload can be constructed using
@@ -2821,8 +2974,9 @@ pub mod construct {
 /// for transaction.
 pub mod send {
     use super::*;
+    use crate::protocol_level_tokens::{TokenId, TokenOperations};
 
-    /// Construct a transfer transaction.
+    /// Construct a native coin (CCD) transfer transaction.
     pub fn transfer(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2834,7 +2988,7 @@ pub mod send {
         construct::transfer(signer.num_keys(), sender, nonce, expiry, receiver, amount).sign(signer)
     }
 
-    /// Construct a transfer transaction with a memo.
+    /// Construct a native coin (CCD) transfer transaction with a memo.
     pub fn transfer_with_memo(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -2854,6 +3008,49 @@ pub mod send {
             memo,
         )
         .sign(signer)
+    }
+
+    /// Construct and sign a protocol level token holder transaction consisting
+    /// of the token holder operations encoded in the given CBOR.
+    pub fn token_holder_operations(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: TokenOperations,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::token_holder_operations(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations,
+        )?
+        .sign(signer))
+    }
+
+    /// Construct and sign a protocol level token governance transaction
+    /// consisting of the token governance operations encoded in the given
+    /// CBOR.
+    pub fn token_governance_operations(
+        signer: &impl ExactSizeTransactionSigner,
+        sender: AccountAddress,
+        nonce: Nonce,
+        expiry: TransactionTime,
+        token_id: TokenId,
+        operations: TokenOperations,
+    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
+        Ok(construct::token_governance_operations(
+            signer.num_keys(),
+            sender,
+            nonce,
+            expiry,
+            token_id,
+            operations,
+        )?
+        .sign(signer))
     }
 
     /// Make an encrypted transfer. The payload can be constructed using

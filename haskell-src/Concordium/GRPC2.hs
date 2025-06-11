@@ -22,6 +22,7 @@ module Concordium.GRPC2 (
 )
 where
 
+import Control.Arrow
 import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
@@ -71,6 +72,7 @@ import qualified Concordium.Types.InvokeContract as InvokeContract
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
 import Concordium.Types.Queries.Tokens
+import Concordium.Types.Tokens (TokenRawAmount (..))
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
 
@@ -623,8 +625,8 @@ instance ToProto Cooldown where
 instance ToProto TokenAmount where
     type Output TokenAmount = Proto.TokenAmount
     toProto TokenAmount{..} = Proto.make $ do
-        PLTFields.digits .= digits
-        PLTFields.nrOfDecimals .= fromIntegral nrDecimals
+        PLTFields.value .= theTokenRawAmount taValue
+        PLTFields.decimals .= fromIntegral taDecimals
 
 instance ToProto TokenAccountState where
     type Output TokenAccountState = Proto.TokenAccountState
@@ -661,7 +663,7 @@ instance ToProto TokenState where
     toProto TokenState{..} = Proto.make $ do
         PLTFields.tokenModuleRef .= toProto tsTokenModuleRef
         PLTFields.issuer .= toProto tsIssuer
-        PLTFields.nrOfDecimals .= fromIntegral tsDecimals
+        PLTFields.decimals .= fromIntegral tsDecimals
         PLTFields.totalSupply .= toProto tsTotalSupply
         PLTFields.moduleState .= Proto.make (PLTFields.value .= tsModuleState)
 
@@ -848,7 +850,60 @@ instance ToProto SupplementedTransactionSummary where
                         ProtoFields.energyCost .= toProto tsEnergyCost
                         ProtoFields.hash .= toProto tsHash
                         ProtoFields.update .= details
+                (TokenCreated createPLT : initEvents) -> do
+                    protoEvents <-
+                        left (const CEInvalidUpdateResult) $
+                            mapM tokenHolderEventToProto initEvents
+                    Right . Proto.make $ do
+                        ProtoFields.index .= mkWord64 tsIndex
+                        ProtoFields.energyCost .= toProto tsEnergyCost
+                        ProtoFields.hash .= toProto tsHash
+                        ProtoFields.tokenCreation
+                            .= Proto.make
+                                ( do
+                                    PLTFields.createPlt .= toProto createPLT
+                                    PLTFields.events .= protoEvents
+                                )
                 _ -> Left CEInvalidUpdateResult
+
+-- | Convert an event to a 'Proto.TokenEvent'. Returns @Left ()@ if the event type is not
+--  one of the token event types.
+tokenHolderEventToProto :: Event' s -> Either () Proto.TokenEvent
+tokenHolderEventToProto TokenModuleEvent{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto etmeTokenId
+    PLTFields.moduleEvent
+        .= Proto.make
+            ( do
+                PLTFields.type' .= toProto etmeType
+                PLTFields.details .= toProto etmeDetails
+            )
+tokenHolderEventToProto TokenTransfer{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto ettTokenId
+    PLTFields.transferEvent
+        .= Proto.make
+            ( do
+                PLTFields.from .= Proto.make (PLTFields.account .= toProto ettFrom)
+                PLTFields.to .= Proto.make (PLTFields.account .= toProto ettTo)
+                PLTFields.amount .= toProto ettAmount
+                PLTFields.maybe'memo .= fmap toProto ettMemo
+            )
+tokenHolderEventToProto TokenMint{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto etmTokenId
+    PLTFields.mintEvent
+        .= Proto.make
+            ( do
+                PLTFields.target .= Proto.make (PLTFields.account .= toProto etmTarget)
+                PLTFields.amount .= toProto etmAmount
+            )
+tokenHolderEventToProto TokenBurn{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto etbTokenId
+    PLTFields.burnEvent
+        .= Proto.make
+            ( do
+                PLTFields.target .= Proto.make (PLTFields.account .= toProto etbTarget)
+                PLTFields.amount .= toProto etbAmount
+            )
+tokenHolderEventToProto _ = Left ()
 
 instance ToProto Updates.ProtocolUpdate where
     type Output Updates.ProtocolUpdate = Proto.ProtocolUpdate
@@ -1611,28 +1666,18 @@ convertAccountTransaction ty cost sender result = case ty of
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v
             TTTokenHolder ->
                 mkSuccess <$> do
-                    -- TODO: Generate and handle events: https://linear.app/concordium/issue/COR-705/event-logging
-                    -- let eventToProto :: Event' s -> Either ConversionError Proto.TokenHolderEvent
-                    --     eventToProto = \case
-                    --         TokenModuleEvent (TokenEvent{..}) -> Right . Proto.make $ do
-                    --             PLTFields.tokenSymbol .= toProto _teSymbol
-                    --             PLTFields.type' .= toProto _teType
-                    --             PLTFields.details .= toProto _teDetails
-                    --         _ -> Left CEInvalidTransactionResult
-                    -- v <- mapM eventToProto events
-                    Right . Proto.make $ ProtoFields.tokenHolderEffect . ProtoFields.events .= []
+                    protoEvents <-
+                        left (const CEInvalidTransactionResult) $
+                            mapM tokenHolderEventToProto events
+                    Right . Proto.make $
+                        ProtoFields.tokenHolderEffect . ProtoFields.events .= protoEvents
             TTTokenGovernance ->
                 mkSuccess <$> do
-                    -- TODO: Generate and handle events: https://linear.app/concordium/issue/COR-705/event-logging
-                    -- let eventToProto :: Event' s -> Either ConversionError Proto.TokenGovernanceEvent
-                    --     eventToProto = \case
-                    --         TokenModuleEvent (TokenEvent{..}) -> Right . Proto.make $ do
-                    --             PLTFields.tokenSymbol .= toProto _teSymbol
-                    --             PLTFields.type' .= toProto _teType
-                    --             PLTFields.details .= toProto _teDetails
-                    --         _ -> Left CEInvalidTransactionResult
-                    -- v <- mapM eventToProto events
-                    Right . Proto.make $ ProtoFields.tokenGovernanceEffect . ProtoFields.events .= []
+                    protoEvents <-
+                        left (const CEInvalidTransactionResult) $
+                            mapM tokenHolderEventToProto events
+                    Right . Proto.make $
+                        ProtoFields.tokenGovernanceEffect . ProtoFields.events .= protoEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do

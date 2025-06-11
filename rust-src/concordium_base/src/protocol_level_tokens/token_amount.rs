@@ -1,3 +1,9 @@
+use crate::common::cbor::{
+    CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
+    DecimalFraction,
+};
+use anyhow::Context;
+
 /// Protocol level token (PLT) amount representation.
 #[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
@@ -6,6 +12,37 @@ pub struct TokenAmount {
     value:    u64,
     /// The number of decimals in the token amount.
     decimals: u8,
+}
+
+impl CborSerialize for TokenAmount {
+    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+        let decimal_fraction = DecimalFraction::new(
+            i64::from(self.decimals)
+                .checked_neg()
+                .context("convert decimals to exponent")?,
+            i64::try_from(self.value).context("convert value to mantissa")?,
+        );
+
+        decimal_fraction.serialize(encoder)
+    }
+}
+
+impl CborDeserialize for TokenAmount {
+    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        let decimal_fraction = DecimalFraction::deserialize(decoder)?;
+
+        let decimals = decimal_fraction
+            .exponent()
+            .checked_neg()
+            .and_then(|val| u8::try_from(val).ok())
+            .context("convert exponent to decimals")?;
+        let value =
+            u64::try_from(decimal_fraction.mantissa()).context("convert mantissa to value")?;
+
+        Ok(Self { decimals, value })
+    }
 }
 
 impl TokenAmount {
@@ -37,8 +74,8 @@ impl std::fmt::Display for TokenAmount {
             self.value.fmt(f)
         } else {
             let mut value = format!(
-                "{value:0.*}",
-                self.decimals as usize + 1,
+                "{value:0width$}",
+                width = self.decimals as usize + 1,
                 value = self.value
             );
             value.insert(value.len() - self.decimals() as usize, '.');
@@ -183,6 +220,7 @@ impl TryFrom<TokenAmountJson> for TokenAmount {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::common::cbor;
 
     #[test]
     fn display_token_amount() {
@@ -190,7 +228,13 @@ mod test {
             value:    123456,
             decimals: 3,
         };
-        assert_eq!(amount.to_string().as_str(), "123.456")
+        assert_eq!(amount.to_string().as_str(), "123.456");
+
+        let amount = TokenAmount {
+            value:    10,
+            decimals: 5,
+        };
+        assert_eq!(amount.to_string().as_str(), "0.00010");
     }
 
     #[test]
@@ -331,5 +375,18 @@ mod test {
             assert_eq!(a, b);
             assert_eq!(b, a);
         }
+    }
+
+    #[test]
+    fn test_token_amount_cbor() {
+        let token_amount = TokenAmount {
+            value:    12300,
+            decimals: 3,
+        };
+
+        let cbor = cbor::cbor_encode(&token_amount).unwrap();
+        assert_eq!(hex::encode(&cbor), "c4822219300c");
+        let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(token_amount_decoded, token_amount);
     }
 }
