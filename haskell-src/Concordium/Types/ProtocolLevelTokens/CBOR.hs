@@ -808,80 +808,138 @@ encodeTokenTransfer TokenTransferBody{..} =
   where
     k = at . makeMapKeyEncoding . encodeString
 
--- | A token-holder operation.
-newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
+
+-- * Token Operations
+
+-- | A token operation. This can be a transfer, mint, burn or update to the allow or deny list.
+data TokenOperation
+    = TokenTransfer TokenTransferBody
+    | -- | Mint a specified token amount to the token governance account.
+      TokenMint {tgoMintAmount :: !TokenAmount}
+    | -- | Burn a specified token amount from the token governance account.
+      TokenBurn {tgoBurnAmount :: !TokenAmount}
+    | -- | Add the specified account to the allow list.
+      TokenAddAllowList {tgoTarget :: !TokenHolder}
+    | -- | Remove the specified account from the allow list.
+      TokenRemoveAllowList {tgoTarget :: !TokenHolder}
+    | -- | Add the specified account to the deny list.
+      TokenAddDenyList {tgoTarget :: !TokenHolder}
+    | -- | Remove the specified account from the deny list.
+      TokenRemoveDenyList {tgoTarget :: !TokenHolder}
     deriving (Eq, Show)
 
-instance AE.ToJSON TokenHolderOperation where
-    toJSON (TokenHolderTransfer body) = do
+instance AE.ToJSON TokenOperation where
+    toJSON (TokenTransfer body) = do
         AE.object
             [ "transfer" AE..= AE.toJSON body
             ]
 
-instance AE.FromJSON TokenHolderOperation where
+instance AE.FromJSON TokenOperation where
     parseJSON = AE.withObject "TokenHolderOperation" $ \o -> do
         transferBody <- o AE..: "transfer"
-        pure $ TokenHolderTransfer transferBody
+        pure $ TokenTransfer transferBody
 
--- | Decode a CBOR-encoded 'TokenHolderOperation'.
-decodeTokenHolderOperation :: Decoder s TokenHolderOperation
-decodeTokenHolderOperation = do
+-- | Decode a CBOR-encoded 'TokenOperation'.
+decodeTokenOperation :: Decoder s TokenOperation
+decodeTokenOperation = do
     maybeMapLen <- decodeMapLenOrIndef
     forM_ maybeMapLen $ \mapLen ->
         unless (mapLen == 1) $
             fail $
-                "token-holder-operation: expected a map of size 1, but saw " ++ show mapLen
+                "token-operation: expected a map of size 1, but saw " ++ show mapLen
     opType <- decodeString
     res <- case opType of
-        "transfer" -> TokenHolderTransfer <$> decodeTokenTransfer
-        _ -> fail $ "token-holder-operation: unsupported operation type: " ++ show opType
+        "transfer" -> TokenTransfer <$> decodeTokenTransfer
+        "mint" -> TokenMint <$> decodeSupplyUpdate opType
+        "burn" -> TokenBurn <$> decodeSupplyUpdate opType
+        "addAllowList" -> TokenAddAllowList <$> decodeListTarget opType
+        "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
+        "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
+        "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
+        _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
-        unless isEnd $ fail "token-holder-operation: expected end of map"
+        unless isEnd $ fail "token-operation: expected end of map"
     return res
+  where
+    decodeSupplyUpdate opType = do
+        let valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-operation (" ++ Text.unpack opType ++ "): missing amount"
+        decodeMap valDecoder build Nothing
+    decodeListTarget opType = do
+        let valDecoder k@"target" = Just (mapValueDecoder k decodeTokenHolder id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing target"
+        decodeMap valDecoder build Nothing
 
--- | Encode a 'TokenHolderOperation' as CBOR.
-encodeTokenHolderOperation :: TokenHolderOperation -> Encoding
-encodeTokenHolderOperation (TokenHolderTransfer ttb) =
-    encodeMapLen 1
+-- | Encode a 'TokenOperation' as CBOR.
+encodeTokenOperation :: TokenOperation -> Encoding
+encodeTokenOperation = \case
+    TokenTransfer ttb -> encodeMapLen 1
         <> encodeString "transfer"
         <> encodeTokenTransfer ttb
+    TokenMint amount -> encodeSupplyUpdate "mint" amount
+    TokenBurn amount -> encodeSupplyUpdate "burn" amount
+    TokenAddAllowList target -> encodeListTarget "addAllowList" target
+    TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
+    TokenAddDenyList target -> encodeListTarget "addDenyList" target
+    TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
+  where
+    encodeSupplyUpdate opType amount =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "amount"
+            <> encodeTokenAmount amount
+    encodeListTarget opType target =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "target"
+            <> encodeTokenHolder target
 
--- | A token-holder transaction consists of a sequence of token-holder operations.
-newtype TokenHolderTransaction = TokenHolderTransaction
-    { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
+-- | A token transaction consists of a sequence of token operations.
+newtype TokenTransaction = TokenTransaction
+    { tokenOperations :: Seq.Seq TokenOperation
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON TokenHolderTransaction where
-    toJSON = AE.toJSON . tokenHolderTransactions
+instance AE.ToJSON TokenTransaction where
+    toJSON = AE.toJSON . tokenOperations
 
-instance AE.FromJSON TokenHolderTransaction where
-    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON
+instance AE.FromJSON TokenTransaction where
+    parseJSON = (TokenTransaction <$>) . AE.parseJSON
 
--- | Decode a CBOR-encoded 'TokenHolderTransaction'.
-decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
-decodeTokenHolderTransaction = TokenHolderTransaction <$> decodeSequence decodeTokenHolderOperation
+-- | Decode a CBOR-encoded 'TokenTransaction'.
+decodeTokenTransaction :: Decoder s TokenTransaction
+decodeTokenTransaction = TokenTransaction <$> decodeSequence decodeTokenOperation
 
--- | Parse a 'TokenHolderTransaction' from a 'LBS.ByteString'. The entire bytestring must
---  be consumed in the parsing.
-tokenHolderTransactionFromBytes :: LBS.ByteString -> Either String TokenHolderTransaction
-tokenHolderTransactionFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenHolderTransaction lbs of
+-- | Parse a 'TokenTransaction' from a 'LBS.ByteString'. The entire bytestring
+--  must be consumed in the parsing.
+tokenTransactionFromBytes :: LBS.ByteString -> Either String TokenTransaction
+tokenTransactionFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenTransaction lbs of
         Left e -> Left (show e)
         Right ("", res) -> return res
         Right (remaining, _) ->
             Left $
                 show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token-holder transaction"
+                    ++ " bytes remaining after parsing token transaction"
 
--- | Encode a 'TokenHolderTransaction' as CBOR.
-encodeTokenHolderTransaction :: TokenHolderTransaction -> Encoding
-encodeTokenHolderTransaction = encodeSequence encodeTokenHolderOperation . tokenHolderTransactions
+-- | Encode a 'TokenTransaction' as CBOR.
+encodeTokenTransaction :: TokenTransaction -> Encoding
+encodeTokenTransaction = encodeSequence encodeTokenOperation . tokenOperations
 
--- | CBOR-encode a 'TokenHolderTransaction' to a (strict) 'BS.ByteString'.
-tokenHolderTransactionToBytes :: TokenHolderTransaction -> BS.ByteString
-tokenHolderTransactionToBytes = CBOR.toStrictByteString . encodeTokenHolderTransaction
+-- | CBOR-encode a 'TokenTransaction' to a (strict) 'BS.ByteString'.
+tokenTransactionToBytes :: TokenTransaction -> BS.ByteString
+tokenTransactionToBytes = CBOR.toStrictByteString . encodeTokenTransaction
 
 -- * Token module events
 
@@ -1334,119 +1392,6 @@ decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
                 Left $
                     show (LBS.length remaining)
                         ++ " bytes remaining after parsing token reject reason details"
-
--- * Token Governance
-
--- | A token governance operation. This can be a mint, burn or update to the allow or deny list.
-data TokenGovernanceOperation
-    = -- | Mint a specified token amount to the token governance account.
-      TokenMint {tgoMintAmount :: !TokenAmount}
-    | -- | Burn a specified token amount from the token governance account.
-      TokenBurn {tgoBurnAmount :: !TokenAmount}
-    | -- | Add the specified account to the allow list.
-      TokenAddAllowList {tgoTarget :: !TokenHolder}
-    | -- | Remove the specified account from the allow list.
-      TokenRemoveAllowList {tgoTarget :: !TokenHolder}
-    | -- | Add the specified account to the deny list.
-      TokenAddDenyList {tgoTarget :: !TokenHolder}
-    | -- | Remove the specified account from the deny list.
-      TokenRemoveDenyList {tgoTarget :: !TokenHolder}
-    deriving (Eq, Show)
-
--- | Decode a CBOR-encoded 'TokenGovernanceOperation'.
-decodeTokenGovernanceOperation :: Decoder s TokenGovernanceOperation
-decodeTokenGovernanceOperation = do
-    maybeMapLen <- decodeMapLenOrIndef
-    forM_ maybeMapLen $ \mapLen ->
-        unless (mapLen == 1) $
-            fail $
-                "token-governance-operation: expected a map of size 1, but saw " ++ show mapLen
-    opType <- decodeString
-    res <- case opType of
-        "mint" -> TokenMint <$> decodeSupplyUpdate opType
-        "burn" -> TokenBurn <$> decodeSupplyUpdate opType
-        "addAllowList" -> TokenAddAllowList <$> decodeListTarget opType
-        "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
-        "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
-        "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
-        _ -> fail $ "token-governance-operation: unsupported operation type: " ++ show opType
-    when (isNothing maybeMapLen) $ do
-        isEnd <- decodeBreakOr
-        unless isEnd $ fail "token-governance-operation: expected end of map"
-    return res
-  where
-    decodeSupplyUpdate opType = do
-        let valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount id)
-            valDecoder _ = Nothing
-            build (Just v) = Right v
-            build Nothing =
-                Left $
-                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing amount"
-        decodeMap valDecoder build Nothing
-    decodeListTarget opType = do
-        let valDecoder k@"target" = Just (mapValueDecoder k decodeTokenHolder id)
-            valDecoder _ = Nothing
-            build (Just v) = Right v
-            build Nothing =
-                Left $
-                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing target"
-        decodeMap valDecoder build Nothing
-
--- | Encode a 'TokenGovernanceOperation' as CBOR.
-encodeTokenGovernanceOperation :: TokenGovernanceOperation -> Encoding
-encodeTokenGovernanceOperation = \case
-    TokenMint amount -> encodeSupplyUpdate "mint" amount
-    TokenBurn amount -> encodeSupplyUpdate "burn" amount
-    TokenAddAllowList target -> encodeListTarget "addAllowList" target
-    TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
-    TokenAddDenyList target -> encodeListTarget "addDenyList" target
-    TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
-  where
-    encodeSupplyUpdate opType amount =
-        encodeMapLen 1
-            <> encodeString opType
-            <> encodeMapLen 1
-            <> encodeString "amount"
-            <> encodeTokenAmount amount
-    encodeListTarget opType target =
-        encodeMapLen 1
-            <> encodeString opType
-            <> encodeMapLen 1
-            <> encodeString "target"
-            <> encodeTokenHolder target
-
--- | A token governance transaction consists of a sequence of token governance operations.
-newtype TokenGovernanceTransaction = TokenGovernanceTransaction
-    { tokenGovernanceOperations :: Seq.Seq TokenGovernanceOperation
-    }
-    deriving (Eq, Show)
-
--- | Decode a CBOR-encoded 'TokenGovernanceTransaction'.
-decodeTokenGovernanceTransaction :: Decoder s TokenGovernanceTransaction
-decodeTokenGovernanceTransaction =
-    TokenGovernanceTransaction <$> decodeSequence decodeTokenGovernanceOperation
-
--- | Parse a 'TokenGovernanceTransaction' from a 'LBS.ByteString'. The entire bytestring must
---  be consumed in the parsing.
-tokenGovernanceTransactionFromBytes :: LBS.ByteString -> Either String TokenGovernanceTransaction
-tokenGovernanceTransactionFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenGovernanceTransaction lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token-governance transaction"
-
--- | Encode a 'TokenGovernanceTransaction' as CBOR.
-encodeTokenGovernanceTransaction :: TokenGovernanceTransaction -> Encoding
-encodeTokenGovernanceTransaction =
-    encodeSequence encodeTokenGovernanceOperation . tokenGovernanceOperations
-
--- | CBOR-encode a 'TokenGovernanceTransaction' to a (strict) 'BS.ByteString'.
-tokenGovernanceTransactionToBytes :: TokenGovernanceTransaction -> BS.ByteString
-tokenGovernanceTransactionToBytes =
-    CBOR.toStrictByteString . encodeTokenGovernanceTransaction
 
 -- * Token Module state
 
