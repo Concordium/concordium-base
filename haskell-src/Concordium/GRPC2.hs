@@ -777,6 +777,7 @@ instance ToProto RejectReason where
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
         NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
         TokenTransactionFailed reason -> Proto.make $ ProtoFields.tokenHolderTransactionFailed .= toProto reason
+
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
 --   For example the case of an account transfer resulting in a smart contract update, which is a
