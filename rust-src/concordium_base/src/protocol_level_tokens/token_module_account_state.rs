@@ -8,7 +8,7 @@ use crate::{
 
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
-#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Default)]
 pub struct TokenModuleAccountState {
     /// Whether the account is on the allow list.
     /// If `None`, the token does not support an allow list.
