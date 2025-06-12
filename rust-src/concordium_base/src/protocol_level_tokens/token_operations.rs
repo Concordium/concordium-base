@@ -14,7 +14,16 @@ use crate::{
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 
-/// Module that implements easy construction of protocol level token operations
+/// Module that implements easy construction of protocol level token operations.
+///
+/// The operations are composed to transactions via
+/// [`construct::token_holder_operations`](crate::transactions::construct::token_holder_operations)
+/// and
+/// [`construct::token_governance_operations`](crate::transactions::construct::token_governance_operations).
+/// To construct and sign transactions, use
+/// [`send::token_holder_operations`](crate::transactions::send::token_holder_operations)
+/// and
+/// [`send::token_governance_operations`](crate::transactions::send::token_governance_operations).///
 pub mod operations {
     use super::*;
 
@@ -273,7 +282,7 @@ pub enum CborMemo {
 }
 
 impl CborSerialize for CborMemo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, mut encoder: C) -> CborSerializationResult<()> {
         match self {
             Self::Raw(memo) => memo.serialize(encoder),
             Self::Cbor(memo) => {
@@ -285,7 +294,7 @@ impl CborSerialize for CborMemo {
 }
 
 impl CborDeserialize for CborMemo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(match decoder.peek_data_item_header()? {

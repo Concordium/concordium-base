@@ -21,7 +21,7 @@ pub enum TokenHolder {
 }
 
 impl CborSerialize for TokenHolder {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         match self {
             TokenHolder::HolderAccount(account) => {
                 account.serialize(encoder)?;
@@ -32,7 +32,7 @@ impl CborSerialize for TokenHolder {
 }
 
 impl CborDeserialize for TokenHolder {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self::HolderAccount(HolderAccount::deserialize(decoder)?))
@@ -62,13 +62,13 @@ pub struct HolderAccount {
 }
 
 impl CborSerialize for AccountAddress {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         self.0.serialize(encoder)
     }
 }
 
 impl CborDeserialize for AccountAddress {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         Ok(Self(CborDeserialize::deserialize(decoder)?))
@@ -90,7 +90,7 @@ struct CoinInfoCbor {
 }
 
 impl CborSerialize for CoinInfo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         let coin_info_code = match self {
             Self::CCD => CONCORDIUM_SLIP_0044_CODE,
         };
@@ -100,7 +100,7 @@ impl CborSerialize for CoinInfo {
 }
 
 impl CborDeserialize for CoinInfo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let cbor = CoinInfoCbor::deserialize(decoder)?;
