@@ -4,19 +4,21 @@ use crate::common::cbor::{
 };
 use anyhow::{bail, Context};
 
-/// Protocol level token (PLT) amount representation. The numerical amount represented is
-/// `value * 10^(-decimals)`.
-/// The number of decimals in the token amount should always match the number of decimals
-/// for the token it represents an amount for. As such, `TokenAmount` can be considered a fixed point decimal.
+/// Protocol level token (PLT) amount representation. The numerical amount
+/// represented is `value * 10^(-decimals)`.
+/// The number of decimals in the token amount should always match the number of
+/// decimals for the token it represents an amount for. As such, `TokenAmount`
+/// can be considered a fixed point decimal.
 ///
-/// Notice that the `decimal` part could hence be left out of the representation without loss of information,
-/// but it is there to make `TokenAmount` self-contained with regard to the numerical value represented.
-/// This enables additional validation, both programmatic and at user level.
+/// Notice that the `decimal` part could hence be left out of the representation
+/// without loss of information, but it is there to make `TokenAmount`
+/// self-contained with regard to the numerical value represented. This enables
+/// additional validation, both programmatic and at user level.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
 pub struct TokenAmount {
     /// The amount of tokens as an unscaled integer value.
-    value: u64,
+    value:    u64,
     /// The number of decimals in the token amount.
     decimals: u8,
 }
@@ -37,8 +39,7 @@ impl CborSerialize for TokenAmount {
 impl CborDeserialize for TokenAmount {
     fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         let decimal_fraction = DecimalFraction::deserialize(decoder)?;
 
         let decimals = decimal_fraction
@@ -57,33 +58,29 @@ impl TokenAmount {
     /// Construct a [`TokenAmount`] from a value without decimal places and the
     /// number of decimals, meaning the token amount is computed as `value *
     /// 10^(-decimals)`.
-    pub fn from_raw(value: u64, decimals: u8) -> Self {
-        Self { value, decimals }
-    }
+    pub fn from_raw(value: u64, decimals: u8) -> Self { Self { value, decimals } }
 
     /// The number of decimals in the token amount.
     ///
     /// The numerical amount represented by the `TokenAmount`
     /// is `value * 10^(-decimals)`
-    pub fn decimals(&self) -> u8 {
-        self.decimals
-    }
+    pub fn decimals(&self) -> u8 { self.decimals }
 
     /// The amount of tokens as an unscaled integer value.
     ///
     /// The numerical amount represented by the `TokenAmount`
     /// is `value * 10^(-decimals)`
-    pub fn value(&self) -> u64 {
-        self.value
-    }
+    pub fn value(&self) -> u64 { self.value }
 
-    /// Converts [`rust_decimal::Decimal`] to a token amount of the same numerical value but represented
-    /// with the given number of `decimals`. This may require rescaling but no rounding will be performed.
-    /// If rounding is required to represent the numeric value with the given number of `decimals`, an
-    /// error is returned.
+    /// Converts [`rust_decimal::Decimal`] to a token amount of the same
+    /// numerical value but represented with the given number of `decimals`.
+    /// This may require rescaling but no rounding will be performed.
+    /// If rounding is required to represent the numeric value with the given
+    /// number of `decimals`, an error is returned.
     ///
     /// The given number of `decimals` should
-    /// be equal to tbe number of decimals for the token it represents an amount for.
+    /// be equal to tbe number of decimals for the token it represents an amount
+    /// for.
     pub fn try_from_rust_decimal(
         decimal: rust_decimal::Decimal,
         decimals: u8,
@@ -110,20 +107,22 @@ impl TokenAmount {
         Ok(this)
     }
 
-    /// Converts the token amount to a [`rust_decimal::Decimal`] of the same scale.
+    /// Converts the token amount to a [`rust_decimal::Decimal`] of the same
+    /// scale.
     pub fn try_to_rust_decimal(&self) -> anyhow::Result<rust_decimal::Decimal> {
         rust_decimal::Decimal::try_from_i128_with_scale(self.value as i128, self.decimals as u32)
             .context("token amount cannot be represented as rust_decimal::Decimal")
     }
 
-    /// Interprets the given string as a decimal number (decimal separator must be "." if specified) and
-    /// parses it into a token amount of the same numerical value
-    /// represented with the given number of `decimals`.     
-    /// If rounding is required to represent the numeric value with the given number of `decimals`, an
-    /// error is returned.
+    /// Interprets the given string as a decimal number (decimal separator must
+    /// be "." if specified) and parses it into a token amount of the same
+    /// numerical value represented with the given number of `decimals`.
+    /// If rounding is required to represent the numeric value with the
+    /// given number of `decimals`, an error is returned.
     ///
     /// The given number of `decimals` should
-    /// be equal to tbe number of decimals for the token it represents an amount for.
+    /// be equal to tbe number of decimals for the token it represents an amount
+    /// for.
     pub fn try_from_str(decimal_str: &str, decimals: u8) -> anyhow::Result<Self> {
         let decimal = rust_decimal::Decimal::from_str_exact(decimal_str)
             .context("cannot convert string to rust_decimal::Decimal")?;
@@ -158,14 +157,14 @@ impl PartialOrd for TokenAmount {
 /// SDKs.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct TokenAmountJson {
-    value: String,
+    value:    String,
     decimals: u8,
 }
 
 impl From<TokenAmount> for TokenAmountJson {
     fn from(amount: TokenAmount) -> Self {
         Self {
-            value: amount.value.to_string(),
+            value:    amount.value.to_string(),
             decimals: amount.decimals,
         }
     }
@@ -176,7 +175,7 @@ impl TryFrom<TokenAmountJson> for TokenAmount {
 
     fn try_from(json: TokenAmountJson) -> Result<Self, Self::Error> {
         Ok(Self {
-            value: json.value.parse()?,
+            value:    json.value.parse()?,
             decimals: json.decimals,
         })
     }
@@ -191,13 +190,13 @@ mod test {
     #[test]
     fn test_display() {
         let amount = TokenAmount {
-            value: 123450,
+            value:    123450,
             decimals: 3,
         };
         assert_eq!(amount.to_string().as_str(), "123.450");
 
         let amount = TokenAmount {
-            value: 10,
+            value:    10,
             decimals: 5,
         };
         assert_eq!(amount.to_string().as_str(), "0.00010");
@@ -206,7 +205,7 @@ mod test {
     #[test]
     fn test_try_from_str() {
         let str = "123.450";
-        
+
         let token_amount = TokenAmount::try_from_str(str, 3).unwrap();
         assert_eq!(token_amount, TokenAmount::from_raw(123450, 3));
         let token_amount = TokenAmount::try_from_str(str, 2).unwrap();
@@ -214,15 +213,12 @@ mod test {
         let token_amount = TokenAmount::try_from_str(str, 5).unwrap();
         assert_eq!(token_amount, TokenAmount::from_raw(12345000, 5));
 
-        let err = TokenAmount::try_from_str(str, 1)
-            .unwrap_err()
-            .to_string();
+        let err = TokenAmount::try_from_str(str, 1).unwrap_err().to_string();
         assert!(
             err.contains("rescaling results in rounding"),
             "error: {}",
             err
         );
-        
     }
 
     #[test]
