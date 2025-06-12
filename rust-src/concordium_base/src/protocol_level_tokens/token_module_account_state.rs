@@ -44,10 +44,7 @@ mod test {
         };
 
         let cbor = token_module_account_state.to_cbor().unwrap();
-        assert_eq!(
-            hex::encode(&cbor),
-            "a169616c6c6f774c697374f5"
-        );
+        assert_eq!(hex::encode(&cbor), "a169616c6c6f774c697374f5");
         let decoded = TokenModuleAccountState::try_from_cbor(&cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
     }
