@@ -46,8 +46,12 @@ impl TokenModuleState {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
-    use crate::common::{cbor, cbor::Bytes};
+    use concordium_contracts_common::hashes::Hash;
+    use crate::common::cbor;
+
+    const TEST_HASH: [u8; 32] = [1;32];
 
     #[test]
     fn test_token_module_state_cbor() {
@@ -55,7 +59,7 @@ mod test {
             name:       "TK1".to_string(),
             metadata:   MetadataUrl {
                 url:              "https://tokenurl1".to_string(),
-                checksum_sha_256: Some(Bytes(vec![0x01; 32])),
+                checksum_sha_256: Some(Hash::from(TEST_HASH)),
                 other:            Default::default(),
             },
             allow_list: Some(true),

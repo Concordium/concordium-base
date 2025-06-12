@@ -1,5 +1,6 @@
-use crate::common::cbor::{cbor_decode, cbor_encode, value, Bytes};
+use crate::common::cbor::{cbor_decode, cbor_encode, value};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_contracts_common::hashes::Hash;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use hex::{FromHex, ToHex};
@@ -17,7 +18,7 @@ pub struct MetadataUrl {
         deserialize_with = "deserialize_hex_bytes",
         skip_serializing_if = "Option::is_none"
     )]
-    pub checksum_sha_256: Option<Bytes>,
+    pub checksum_sha_256: Option<Hash>,
 
     /// Additional fields may be included for future extensibility, e.g. another hash algorithm.
     #[cbor(other)]
@@ -32,7 +33,7 @@ pub struct MetadataUrl {
 }
 
 /// Serialize `Bytes` as a hex string.
-fn serialize_hex_bytes<S>(bytes: &Option<Bytes>, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_hex_bytes<S>(bytes: &Option<Hash>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -44,14 +45,15 @@ where
 }
 
 /// Deserialize `Bytes` from a hex string.
-fn deserialize_hex_bytes<'de, D>(deserializer: D) -> Result<Option<Bytes>, D::Error>
+fn deserialize_hex_bytes<'de, D>(deserializer: D) -> Result<Option<Hash>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let opt: Option<String> = Option::deserialize(deserializer)?;
     if let Some(hex_str) = opt {
         let bytes = Vec::from_hex(&hex_str).map_err(serde::de::Error::custom)?;
-        Ok(Some(Bytes(bytes)))
+        let hash = Hash::try_from(bytes.as_slice()).map_err(serde::de::Error::custom)?;
+        Ok(Some(hash))
     } else {
         Ok(None)
     }
@@ -97,26 +99,28 @@ mod tests {
     use hex::FromHex;
     use std::collections::HashMap;
 
+    const TEST_HASH: [u8; 32] = [1;32];
+
     #[test]
     fn test_metadata_url_json() {
-        let checksum: Bytes = Bytes(Vec::from_hex("4d2c6df2364db5cc9e5c1f5b8dd7ccab").unwrap());
+        let checksum  = Hash::from(TEST_HASH);
         let mut additional = HashMap::new();
-        additional.insert("key1".to_string(), value::Value::Text("value".to_string()));
-        additional.insert("key2".to_string(), value::Value::Positive(40));
+        additional.insert("key".to_string(), value::Value::Text("value".to_string()));
+        additional.insert("another".to_string(), value::Value::Positive(40));
 
         let metadata_url = MetadataUrl {
-            url: "https://example.com/metadata".to_string(),
-            checksum_sha_256: Some(checksum.clone()),
+            url: "https://example.com".to_string(),
+            checksum_sha_256: Some(checksum),
             other: additional,
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
         let expected_json = r#"{
-            "url": "https://example.com/metadata",
-            "checksumSha256": "4d2c6df2364db5cc9e5c1f5b8dd7ccab",
+            "url": "https://example.com",
+            "checksumSha256": "0101010101010101010101010101010101010101010101010101010101010101",
             "_additional": {
-                "key1": "6576616c7565",
-                "key2": "1828"
+                "key": "6576616c7565",
+                "another": "1828"
             }
         }"#;
 
@@ -125,14 +129,14 @@ mod tests {
         assert_eq!(actual, expected);
 
         let metadata_url = MetadataUrl {
-            url: "https://example.com/metadata".to_string(),
+            url: "https://example.com".to_string(),
             checksum_sha_256: None,
             other: HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
         let expected_json = r#"{
-            "url": "https://example.com/metadata"
+            "url": "https://example.com"
         }"#;
 
         let expected: serde_json::Value = serde_json::from_str(expected_json).unwrap();
@@ -140,19 +144,41 @@ mod tests {
         assert_eq!(actual, expected);
 
         let metadata_url = MetadataUrl {
-            url: "https://example.com/metadata".to_string(),
+            url: "https://example.com".to_string(),
             checksum_sha_256: Some(checksum),
             other: HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
         let expected_json = r#"{
-            "url": "https://example.com/metadata",
-            "checksumSha256": "4d2c6df2364db5cc9e5c1f5b8dd7ccab"
+            "url": "https://example.com",
+            "checksumSha256": "0101010101010101010101010101010101010101010101010101010101010101"
         }"#;
 
         let expected: serde_json::Value = serde_json::from_str(expected_json).unwrap();
         let actual: serde_json::Value = serde_json::from_str(&serialized).unwrap();
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_cbor_serialize_metadata_url() {
+        let checksum  = Hash::from(TEST_HASH);
+        let mut additional = HashMap::new();
+        additional.insert("key".to_string(), value::Value::Text("value".to_string()));
+        additional.insert("another".to_string(), value::Value::Positive(40));
+
+        let metadata_url = MetadataUrl {
+            url: "https://example.com".to_string(),
+            checksum_sha_256: Some(checksum),
+            other: additional,
+        };
+
+        let cbor_encoded = cbor_encode(&metadata_url).unwrap();
+
+        let expected_cbor = Vec::from_hex("a4636b65796576616c75656375726c7368747470733a2f2f6578616d706c652e636f6d67616e6f7468657218286e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101").unwrap();
+        let expected: MetadataUrl = cbor_decode(&expected_cbor).unwrap();
+
+        let cbor_redecoded: MetadataUrl = cbor_decode(&cbor_encoded).unwrap();
+        assert_eq!(expected, cbor_redecoded);
     }
 }

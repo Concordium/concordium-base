@@ -4,6 +4,7 @@ use crate::common::cbor::{
 };
 use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
+use concordium_contracts_common::hashes::Hash;
 
 impl<const N: usize> CborSerialize for [u8; N] {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
@@ -49,6 +50,23 @@ impl CborDeserialize for Bytes {
     where
         Self: Sized, {
         Ok(Bytes(decoder.decode_bytes()?))
+    }
+}
+
+impl CborSerialize for Hash {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        encoder.encode_bytes(self.as_ref())
+    }
+}
+
+impl CborDeserialize for Hash {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        let bytes = decoder.decode_bytes()?;
+        let hash = Hash::try_from(bytes.as_slice())
+            .context("CBOR data item not a valid hash")?;
+        Ok(hash)
     }
 }
 
