@@ -64,6 +64,7 @@ where
     }
 }
 
+/// CBOR map encoder
 #[must_use]
 pub struct MapEncoder<'a, W: Write> {
     declared_size: usize,
@@ -108,6 +109,7 @@ where
     }
 }
 
+/// CBOR array encoder
 #[must_use]
 pub struct ArrayEncoder<'a, W: Write> {
     declared_size: usize,

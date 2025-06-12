@@ -199,6 +199,7 @@ where
 }
 
 impl<R: Read> Decoder<R> {
+    /// Current byte offset for the decoding
     pub fn offset(&mut self) -> usize { self.inner.offset() }
 
     /// Decodes bytes data item into given destination. Length of bytes data
@@ -254,6 +255,7 @@ enum MapDecoderStateEnum {
     ExpectValue,
 }
 
+/// Decoder of CBOR map
 #[must_use]
 pub struct MapDecoder<'a, R: Read> {
     declared_size:     usize,
@@ -328,6 +330,7 @@ where
     }
 }
 
+/// Decoder of CBOR array
 #[must_use]
 pub struct ArrayDecoder<'a, R: Read> {
     declared_size:      usize,
