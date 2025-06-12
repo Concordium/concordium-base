@@ -1358,21 +1358,14 @@ instance AE.ToJSON TokenModuleState where
                 "mintable" AE..= tmsMintable,
                 "burnable" AE..= tmsBurnable
               ]
-                ++ maybe
-                    []
-                    ( \pairs ->
-                        ["_additional" AE..= AE.object pairs]
-                    )
-                    additional
+                ++ [ "_additional"
+                        AE..= AE.object
+                            [ AE.Key.fromText k AE..= cborTermToHex v
+                              | (k, v) <- Map.toList tmsAdditional
+                            ]
+                     | not (null tmsAdditional)
+                   ]
             )
-      where
-        additional
-            | null tmsAdditional = Nothing
-            | otherwise =
-                Just
-                    [ AE.Key.fromText k AE..= cborTermToHex v
-                      | (k, v) <- Map.toList tmsAdditional
-                    ]
 
 instance AE.FromJSON TokenModuleState where
     parseJSON = AE.withObject "TokenModuleState" $ \v -> do
@@ -1382,19 +1375,16 @@ instance AE.FromJSON TokenModuleState where
         tmsDenyList <- v AE..: "denyList"
         tmsMintable <- v AE..: "mintable"
         tmsBurnable <- v AE..: "burnable"
-        tmsAdditionalTemp <- v AE..:? "_additional" .!= Map.empty
-
         -- Decode each hex string into a CBOR.Term
         tmsAdditional <-
-            Map.traverseWithKey
-                ( \k hexTxt ->
-                    case hexToCborTerm hexTxt of
-                        Left err ->
-                            fail $
-                                "Failed to decode CBOR for key " ++ show k ++ ": " ++ err
-                        Right term -> return term
-                )
-                tmsAdditionalTemp
+            (v AE..:? "_additional" .!= Map.empty)
+                >>= Map.traverseWithKey
+                    ( \k hexTxt ->
+                        case hexToCborTerm hexTxt of
+                            Left err ->
+                                fail $ "Failed to decode CBOR for key " ++ show k ++ ": " ++ err
+                            Right term -> return term
+                    )
 
         return TokenModuleState{..}
 

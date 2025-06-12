@@ -6,10 +6,6 @@ import Codec.CBOR.Read
 import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Write
 import qualified Codec.CBOR.Write as CBOR
-import qualified Concordium.Crypto.SHA256 as Hash
-import Concordium.Types
-import Concordium.Types.ProtocolLevelTokens.CBOR
-import Concordium.Types.Queries.Tokens
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
@@ -25,6 +21,11 @@ import Generators
 import Test.HUnit
 import Test.Hspec
 import Test.QuickCheck
+
+import qualified Concordium.Crypto.SHA256 as Hash
+import Concordium.Types
+import Concordium.Types.ProtocolLevelTokens.CBOR
+import Concordium.Types.Queries.Tokens
 
 genText :: Gen Text.Text
 genText = sized $ \s -> Text.decodeUtf8 . BS.pack <$> genUtf8String s
