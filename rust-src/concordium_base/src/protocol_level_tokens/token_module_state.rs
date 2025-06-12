@@ -48,10 +48,10 @@ impl TokenModuleState {
 mod test {
 
     use super::*;
-    use concordium_contracts_common::hashes::Hash;
     use crate::common::cbor;
+    use concordium_contracts_common::hashes::Hash;
 
-    const TEST_HASH: [u8; 32] = [1;32];
+    const TEST_HASH: [u8; 32] = [1; 32];
 
     #[test]
     fn test_token_module_state_cbor() {

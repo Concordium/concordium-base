@@ -64,8 +64,7 @@ impl CborDeserialize for Hash {
     where
         Self: Sized, {
         let bytes = decoder.decode_bytes()?;
-        let hash = Hash::try_from(bytes.as_slice())
-            .context("CBOR data item not a valid hash")?;
+        let hash = Hash::try_from(bytes.as_slice()).context("CBOR data item not a valid hash")?;
         Ok(hash)
     }
 }
