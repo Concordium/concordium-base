@@ -369,6 +369,8 @@ data TokenInitializationParameters = TokenInitializationParameters
       tipName :: !Text,
       -- | A URL pointing to the token metadata.
       tipMetadata :: !TokenMetadataUrl,
+      -- | The governance account of this token.
+      tipGovernanceAccount :: AccountAddress,
       -- | Whether the token supports an allow list.
       tipAllowList :: !Bool,
       -- | Whether the token supports a deny list.
@@ -386,6 +388,7 @@ data TokenInitializationParameters = TokenInitializationParameters
 data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
     { _tipbName :: Maybe Text,
       _tipbMetadata :: Maybe TokenMetadataUrl,
+      _tipbGovernanceAccount :: Maybe AccountAddress,
       _tipbAllowList :: Maybe Bool,
       _tipbDenyList :: Maybe Bool,
       _tipbInitialSupply :: Maybe TokenAmount,
@@ -398,7 +401,7 @@ makeLenses ''TokenInitializationParametersBuilder
 -- | A 'TokenInitializationParametersBuilder' with no fields initialized.
 emptyTokenInitializationParametersBuilder :: TokenInitializationParametersBuilder
 emptyTokenInitializationParametersBuilder =
-    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
 
 -- | Construct a 'TokenInitializationParameters' from a 'TokenInitializationParametersBuilder'.
 --  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
@@ -408,6 +411,7 @@ buildTokenInitializationParameters ::
 buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
     tipName <- _tipbName `orFail` "Missing \"name\""
     tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
+    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governance account\""
     let tipAllowList = _tipbAllowList `orDefault` False
     let tipDenyList = _tipbDenyList `orDefault` False
     let tipInitialSupply = _tipbInitialSupply
@@ -420,6 +424,7 @@ instance AE.ToJSON TokenInitializationParameters where
         AE.object $
             [ "name" AE..= tipName,
               "metadata" AE..= tipMetadata,
+              "governanceAccount" AE..= tipGovernanceAccount,
               "allowList" AE..= tipAllowList,
               "denyList" AE..= tipDenyList,
               "mintable" AE..= tipMintable,
@@ -431,6 +436,7 @@ instance AE.FromJSON TokenInitializationParameters where
     parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
         _tipbName <- o AE..:? "name"
         _tipbMetadata <- o AE..:? "metadata"
+        _tipbGovernanceAccount <- o AE..:? "governanceAccount"
         _tipbAllowList <- o AE..:? "allowList"
         _tipbDenyList <- o AE..:? "denyList"
         _tipbInitialSupply <- o AE..:? "initialSupply"
@@ -453,6 +459,7 @@ decodeTokenInitializationParameters =
   where
     valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
     valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
+    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeAccountAddress tipbGovernanceAccount
     valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
     valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
     valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
@@ -478,6 +485,7 @@ encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} 
         Map.empty
             & k "name" ?~ encodeString tipName
             & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
+            & k "governanceAccount" ?~ encodeAccountAddress tipGovernanceAccount
             & k "allowList" ?~ encodeBool tipAllowList
             & k "denyList" ?~ encodeBool tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
@@ -494,6 +502,7 @@ encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..
         Map.empty
             & k "name" ?~ encodeString tipName
             & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
+            & k "governanceAccount" ?~ encodeAccountAddress tipGovernanceAccount
             & setIfTrue "allowList" tipAllowList
             & setIfTrue "denyList" tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
@@ -808,7 +817,6 @@ encodeTokenTransfer TokenTransferBody{..} =
   where
     k = at . makeMapKeyEncoding . encodeString
 
-
 -- * Token Operations
 
 -- | A token operation. This can be a transfer, mint, burn or update to the allow or deny list.
@@ -833,9 +841,33 @@ instance AE.ToJSON TokenOperation where
         AE.object
             [ "transfer" AE..= AE.toJSON body
             ]
+    toJSON (TokenMint body) = do
+        AE.object
+            [ "mint" AE..= AE.toJSON body
+            ]
+    toJSON (TokenBurn body) = do
+        AE.object
+            [ "burn" AE..= AE.toJSON body
+            ]
+    toJSON (TokenAddAllowList body) = do
+        AE.object
+            [ "addAllowList" AE..= AE.toJSON body
+            ]
+    toJSON (TokenAddDenyList body) = do
+        AE.object
+            [ "addDenyList" AE..= AE.toJSON body
+            ]
+    toJSON (TokenRemoveAllowList body) = do
+        AE.object
+            [ "removeAllowList" AE..= AE.toJSON body
+            ]
+    toJSON (TokenRemoveDenyList body) = do
+        AE.object
+            [ "removeDenyList" AE..= AE.toJSON body
+            ]
 
 instance AE.FromJSON TokenOperation where
-    parseJSON = AE.withObject "TokenHolderOperation" $ \o -> do
+    parseJSON = AE.withObject "TokenOperation" $ \o -> do
         transferBody <- o AE..: "transfer"
         pure $ TokenTransfer transferBody
 
@@ -882,9 +914,10 @@ decodeTokenOperation = do
 -- | Encode a 'TokenOperation' as CBOR.
 encodeTokenOperation :: TokenOperation -> Encoding
 encodeTokenOperation = \case
-    TokenTransfer ttb -> encodeMapLen 1
-        <> encodeString "transfer"
-        <> encodeTokenTransfer ttb
+    TokenTransfer ttb ->
+        encodeMapLen 1
+            <> encodeString "transfer"
+            <> encodeTokenTransfer ttb
     TokenMint amount -> encodeSupplyUpdate "mint" amount
     TokenBurn amount -> encodeSupplyUpdate "burn" amount
     TokenAddAllowList target -> encodeListTarget "addAllowList" target
