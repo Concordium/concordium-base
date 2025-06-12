@@ -78,8 +78,6 @@ instance FromJSON TokenAccountState where
 data TokenState = TokenState
     { -- | The reference of the module implementing the token.
       tsTokenModuleRef :: !TokenModuleRef,
-      -- | The governance account for the token.
-      tsIssuer :: !AccountAddress,
       -- | The number of decimals in the token representation.
       tsDecimals :: !Word8,
       -- | The total available token supply.
@@ -116,10 +114,9 @@ instance AE.FromJSON EncodedTokenModuleState where
 
 -- | JSON instances for TokenState
 instance ToJSON TokenState where
-    toJSON (TokenState tsTokenModuleRef tsIssuer tsDecimals tsTotalSupply tsModuleState) =
+    toJSON (TokenState tsTokenModuleRef tsDecimals tsTotalSupply tsModuleState) =
         object
             [ "tokenModuleRef" .= tsTokenModuleRef,
-              "issuer" .= tsIssuer,
               "decimals" .= tsDecimals,
               "totalSupply" .= tsTotalSupply,
               "moduleState" AE..= EncodedTokenModuleState tsModuleState
@@ -128,7 +125,6 @@ instance ToJSON TokenState where
 instance FromJSON TokenState where
     parseJSON = withObject "TokenState" $ \o -> do
         tsTokenModuleRef <- o .: "tokenModuleRef"
-        tsIssuer <- o .: "issuer"
         tsDecimals <- o .: "decimals"
         tsTotalSupply <- o .: "totalSupply"
         (EncodedTokenModuleState tsModuleState) <- o AE..: "moduleState"
