@@ -662,7 +662,6 @@ instance ToProto TokenState where
     type Output TokenState = Proto.TokenState
     toProto TokenState{..} = Proto.make $ do
         PLTFields.tokenModuleRef .= toProto tsTokenModuleRef
-        PLTFields.issuer .= toProto tsIssuer
         PLTFields.decimals .= fromIntegral tsDecimals
         PLTFields.totalSupply .= toProto tsTotalSupply
         PLTFields.moduleState .= Proto.make (PLTFields.value .= tsModuleState)
