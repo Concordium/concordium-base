@@ -775,7 +775,7 @@ instance ToProto RejectReason where
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
         NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
-        TokenTransactionFailed reason -> Proto.make $ ProtoFields.tokenHolderTransactionFailed .= toProto reason
+        TokenTransactionFailed reason -> Proto.make $ ProtoFields.tokenTransactionFailed .= toProto reason
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
@@ -1009,7 +1009,6 @@ instance ToProto CreatePLT where
     toProto CreatePLT{..} = Proto.make $ do
         PLTFields.tokenId .= toProto _cpltTokenId
         PLTFields.tokenModule .= toProto _cpltTokenModule
-        PLTFields.governanceAccount .= toProto _cpltGovernanceAccount
         PLTFields.decimals .= fromIntegral _cpltDecimals
         PLTFields.initializationParameters .= toProto _cpltInitializationParameters
 
@@ -1763,7 +1762,7 @@ instance ToProto TransactionType where
     toProto TTTransferWithScheduleAndMemo = Proto.TRANSFER_WITH_SCHEDULE_AND_MEMO
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
-    toProto TTTokenUpdate = Proto.TOKEN_UPDATE
+    toProto TTTokenUpdate = Proto.TOKEN
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy
