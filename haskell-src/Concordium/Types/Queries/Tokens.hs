@@ -13,7 +13,6 @@ module Concordium.Types.Queries.Tokens (
 
 import Data.Aeson as AE
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Builder as BSBuilder
 import Data.Word
 
 import Concordium.Crypto.ByteStringHelpers
@@ -90,8 +89,8 @@ data TokenState = TokenState
     }
     deriving (Eq, Show)
 
--- | A wrapper type for (de)-serializing an CBOR-encoded token module state to/from JSON.
---  This can parse either an JSON object representation of 'TokenModuleState'
+-- | A wrapper type for (de)-serializing a CBOR-encoded token module state to/from JSON.
+--  This can parse either a JSON object representation of 'TokenModuleState'
 --  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
 --  it will render as a JSON object if the contents can be decoded to a
 -- 'TokenModuleState', or otherwise as the hex-encoded byte string.
@@ -101,7 +100,7 @@ newtype EncodedTokenModuleState = EncodedTokenModuleState BS.ByteString
 instance AE.ToJSON EncodedTokenModuleState where
     toJSON (EncodedTokenModuleState bytes) =
         case CBOR.tokenModuleStateFromBytes
-            (BSBuilder.toLazyByteString $ BSBuilder.byteString bytes) of
+            (BS.fromStrict bytes) of
             Left _ -> AE.toJSON (ByteStringHex bytes)
             Right v -> AE.toJSON v
 

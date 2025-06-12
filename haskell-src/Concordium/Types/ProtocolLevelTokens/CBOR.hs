@@ -1391,7 +1391,7 @@ instance AE.FromJSON TokenModuleState where
                     case hexToCborTerm hexTxt of
                         Left err ->
                             fail $
-                                "Failed to decode CBOR for key “" ++ show k ++ "”: " ++ err
+                                "Failed to decode CBOR for key " ++ show k ++ ": " ++ err
                         Right term -> return term
                 )
                 tmsAdditionalTemp

@@ -6,25 +6,25 @@ import Codec.CBOR.Read
 import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Write
 import qualified Codec.CBOR.Write as CBOR
+import qualified Concordium.Crypto.SHA256 as Hash
+import Concordium.Types
+import Concordium.Types.ProtocolLevelTokens.CBOR
+import Concordium.Types.Queries.Tokens
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy.Char8 as B8
 import qualified Data.ByteString.Short as BSS
+import qualified Data.FixedByteString as FBS
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Vector as V
+import Generators
 import Test.HUnit
 import Test.Hspec
 import Test.QuickCheck
-
-import qualified Concordium.Crypto.SHA256 as Hash
-import Concordium.Types
-import Concordium.Types.ProtocolLevelTokens.CBOR
-import Concordium.Types.Queries.Tokens
-import qualified Data.FixedByteString as FBS
-import Generators
 
 genText :: Gen Text.Text
 genText = sized $ \s -> Text.decodeUtf8 . BS.pack <$> genUtf8String s
@@ -116,6 +116,26 @@ genTokenModuleStateWithAdditional = do
                 ]
         return ("_" <> key, val)
 
+genTokenStateSimple :: Gen TokenState
+genTokenStateSimple = do
+    tsTokenModuleRef <- genTokenModuleRef
+    tsIssuer <- genAccountAddress
+    tsTotalSupply <- genTokenAmount
+    tsDecimals <- arbitrary
+    tms <- genTokenModuleStateSimple
+    let tsModuleState = tokenModuleStateToBytes tms
+    return TokenState{..}
+
+genTokenStateWithAdditional :: Gen TokenState
+genTokenStateWithAdditional = do
+    tsTokenModuleRef <- genTokenModuleRef
+    tsIssuer <- genAccountAddress
+    tsTotalSupply <- genTokenAmount
+    tsDecimals <- arbitrary
+    tms <- genTokenModuleStateWithAdditional
+    let tsModuleState = tokenModuleStateToBytes tms
+    return TokenState{..}
+
 genTokenEvent :: Gen TokenEvent
 genTokenEvent =
     oneof
@@ -184,17 +204,15 @@ testInitializationParameters = describe "token-initialization-parameters decodin
                 \\x64name\x65token"
             )
     it "Encode and decode (no defaults)" $ withMaxSuccess 10000 $ forAll genTokenInitializationParameters $ \tip ->
-        (Right ("", tip))
-            === ( deserialiseFromBytes
-                    decodeTokenInitializationParameters
-                    (toLazyByteString $ encodeTokenInitializationParametersNoDefaults tip)
-                )
+        Right ("", tip)
+            === deserialiseFromBytes
+                decodeTokenInitializationParameters
+                (toLazyByteString $ encodeTokenInitializationParametersNoDefaults tip)
     it "Encode and decode (with defaults)" $ withMaxSuccess 10000 $ forAll genTokenInitializationParameters $ \tip ->
-        (Right ("", tip))
-            === ( deserialiseFromBytes
-                    decodeTokenInitializationParameters
-                    (toLazyByteString $ encodeTokenInitializationParametersWithDefaults tip)
-                )
+        Right ("", tip)
+            === deserialiseFromBytes
+                decodeTokenInitializationParameters
+                (toLazyByteString $ encodeTokenInitializationParametersWithDefaults tip)
 
 -- | A test value for 'TokenInitializationParameters'.
 tip2 :: TokenInitializationParameters
@@ -327,21 +345,11 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
                     object
             )
 
-    it "toJSON/fromJSON roundtrip success" $ do
-        let
-            val = AE.toJSON object
-            result :: AE.Result TokenModuleState
-            result = AE.fromJSON val
-
-            parsed :: Maybe TokenModuleState
-            parsed = case result of
-                AE.Success x -> Just x
-                AE.Error _ -> Nothing
-
-        assertEqual
-            "JSON roundtrip"
-            (Just object)
-            parsed
+    it "Compare JSON object" $ do
+        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}"
+            expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
+            actualValue = Just (AE.toJSON object)
+        assertEqual "Comparing JSON object failed" expectedValue actualValue
 
     it "Serializes to expected JSON object" $
         case AE.toJSON object of
@@ -376,22 +384,11 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                     object
             )
 
-    it "toJSON/fromJSON roundtrip success" $ do
-        let
-            val = AE.toJSON object
-            result :: AE.Result TokenModuleState
-            result = AE.fromJSON val
-
-            parsed :: Maybe TokenModuleState
-            parsed = case result of
-                AE.Success x -> Just x
-                AE.Error _ -> Nothing
-
-        assertEqual
-            "JSON roundtrip"
-            (Just object)
-            parsed
-
+    it "Compare JSON object" $ do
+        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}"
+            expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
+            actualValue = Just (AE.toJSON object)
+        assertEqual "Comparing JSON object failed" expectedValue actualValue
     it "Serializes to expected JSON object" $
         case AE.toJSON object of
             AE.Object o -> do
@@ -435,21 +432,11 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
                     object
             )
 
-    it "toJSON/fromJSON roundtrip success" $ do
-        let
-            val = AE.toJSON object
-            result :: AE.Result TokenState
-            result = AE.fromJSON val
-
-            parsed :: Maybe TokenState
-            parsed = case result of
-                AE.Success x -> Just x
-                AE.Error _ -> Nothing
-
-        assertEqual
-            "JSON roundtrip"
-            (Just object)
-            parsed
+    it "Compare JSON object" $ do
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}}"
+            expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
+            actualValue = Just (AE.toJSON object)
+        assertEqual "Comparing JSON object failed" expectedValue actualValue
 
     it "Serializes to expected JSON object" $
         case AE.toJSON object of
@@ -492,21 +479,11 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
                     object
             )
 
-    it "toJSON/fromJSON roundtrip success" $ do
-        let
-            val = AE.toJSON object
-            result :: AE.Result TokenState
-            result = AE.fromJSON val
-
-            parsed :: Maybe TokenState
-            parsed = case result of
-                AE.Success x -> Just x
-                AE.Error _ -> Nothing
-
-        assertEqual
-            "JSON roundtrip"
-            (Just object)
-            parsed
+    it "Compare JSON object" $ do
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}}"
+            expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
+            actualValue = Just (AE.toJSON object)
+        assertEqual "Comparing JSON object failed" expectedValue actualValue
 
     it "Serializes to expected JSON object" $
         case AE.toJSON object of
@@ -527,42 +504,68 @@ tests = parallel $ describe "CBOR" $ do
     testTokenModuleStateJSON
     testTokenStateSimpleJSON
     testTokenStateJSON
+    it "JSON (de-)serialization roundtrip for TokenState (simple)" $ withMaxSuccess 1000 $ forAll genTokenStateSimple $ \tt ->
+        assertEqual
+            "JSON (de-)serialization roundtrip failed for TokenState (simple)"
+            (Just tt)
+            ( AE.decode $
+                AE.encode
+                    tt
+            )
+    it "JSON (de-)serialization roundtrip for TokenState (complex)" $ withMaxSuccess 1000 $ forAll genTokenStateWithAdditional $ \tt ->
+        assertEqual
+            "JSON (de-)serialization roundtrip failed for TokenState (complex)"
+            (Just tt)
+            ( AE.decode $
+                AE.encode
+                    tt
+            )
+    it "JSON (de-)serialization roundtrip for TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
+        assertEqual
+            "JSON (de-)serialization roundtrip failed for TokenModuleState (simple)"
+            (Just tt)
+            ( AE.decode $
+                AE.encode
+                    tt
+            )
+    it "JSON (de-)serialization roundtrip for TokenModuleState (complex)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateWithAdditional $ \tt ->
+        assertEqual
+            "JSON (de-)serialization roundtrip failed for TokenModuleState (complex)"
+            (Just tt)
+            ( AE.decode $
+                AE.encode
+                    tt
+            )
     it "Encode and decode TokenTransfer" $ withMaxSuccess 1000 $ forAll genTokenTransfer $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenTransfer
-                    (toLazyByteString $ encodeTokenTransfer tt)
-                )
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenTransfer
+                (toLazyByteString $ encodeTokenTransfer tt)
     it "Encode and decode TokenHolderTransaction" $ withMaxSuccess 1000 $ forAll genTokenHolderTransaction $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenHolderTransaction
-                    (toLazyByteString $ encodeTokenHolderTransaction tt)
-                )
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenHolderTransaction
+                (toLazyByteString $ encodeTokenHolderTransaction tt)
     it "Encode and decode TokenGovernanceOperation" $ withMaxSuccess 1000 $ forAll genTokenGovernanceOperation $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenGovernanceOperation
-                    (toLazyByteString $ encodeTokenGovernanceOperation tt)
-                )
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenGovernanceOperation
+                (toLazyByteString $ encodeTokenGovernanceOperation tt)
     it "Encode and decode TokenGovernanceTransaction" $ withMaxSuccess 1000 $ forAll genTokenGovernanceTransaction $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenGovernanceTransaction
-                    (toLazyByteString $ encodeTokenGovernanceTransaction tt)
-                )
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenGovernanceTransaction
+                (toLazyByteString $ encodeTokenGovernanceTransaction tt)
     it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenModuleState
-                    (toLazyByteString $ encodeTokenModuleState tt)
-                )
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenModuleState
+                (toLazyByteString $ encodeTokenModuleState tt)
     it "Encode and decode TokenModuleState (with additional)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateWithAdditional $ \tt ->
-        (Right ("", tt))
-            === ( deserialiseFromBytes
-                    decodeTokenModuleState
-                    (toLazyByteString $ encodeTokenModuleState tt)
-                )
+        Right ("", tt)
+            === deserialiseFromBytes
+                decodeTokenModuleState
+                (toLazyByteString $ encodeTokenModuleState tt)
     it "Encode and decode TokenEvent" $ withMaxSuccess 1000 $ forAll genTokenEvent $ \tt ->
         Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->
