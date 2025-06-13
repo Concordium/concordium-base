@@ -2,7 +2,7 @@ use crate::common::cbor::{
     CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
     DecimalFraction,
 };
-use anyhow::{bail, Context};
+use anyhow::Context;
 
 /// Protocol level token (PLT) amount representation. The numerical amount
 /// represented is `value * 10^(-decimals)`.
@@ -84,34 +84,39 @@ impl TokenAmount {
     pub fn try_from_rust_decimal(
         decimal: rust_decimal::Decimal,
         decimals: u8,
-    ) -> anyhow::Result<Self> {
-        let decimals = decimals as u32;
-        let original_scale = decimal.scale();
+    ) -> TokenAmountConversionResult<Self> {
+        let decimals_u32 = decimals as u32;
         let mut decimal_scaled = decimal;
-        decimal_scaled.rescale(decimals);
-        if decimal_scaled.scale() != decimals {
-            bail!("rust_decimal::Decimal cannot be rescaled to match token amount");
+        decimal_scaled.rescale(decimals_u32);
+        if decimals_u32 > rust_decimal::Decimal::MAX_SCALE {
+            return Err(TokenAmountConversionError::RustDecimal(
+                rust_decimal::Error::ScaleExceedsMaximumPrecision(decimals_u32),
+            ));
+        }
+        if decimal_scaled.scale() != decimals_u32 {
+            return Err(TokenAmountConversionError::ValueOverflow);
         }
         let this = Self::from_raw(
-            decimal_scaled.mantissa().try_into().context(
-                "rust_decimal::Decimal mantissa cannot be converted to token amount value",
-            )?,
-            decimal_scaled.scale().try_into().context(
-                "rust_decimal::Decimal scale cannot be converted to token amount decimals",
-            )?,
+            decimal_scaled
+                .mantissa()
+                .try_into()
+                .map_err(|_| TokenAmountConversionError::ValueOverflow)?,
+            decimals,
         );
         decimal_scaled.rescale(decimal.scale());
         if decimal_scaled.mantissa() != decimal.mantissa() {
-            bail!("rust_decimal::Decimal rescaling results in rounding");
+            return Err(TokenAmountConversionError::LossOfPrecision);
         }
         Ok(this)
     }
 
     /// Converts the token amount to a [`rust_decimal::Decimal`] of the same
     /// scale.
-    pub fn try_to_rust_decimal(&self) -> anyhow::Result<rust_decimal::Decimal> {
-        rust_decimal::Decimal::try_from_i128_with_scale(self.value as i128, self.decimals as u32)
-            .context("token amount cannot be represented as rust_decimal::Decimal")
+    pub fn try_to_rust_decimal(&self) -> TokenAmountConversionResult<rust_decimal::Decimal> {
+        Ok(rust_decimal::Decimal::try_from_i128_with_scale(
+            self.value as i128,
+            self.decimals as u32,
+        )?)
     }
 
     /// Interprets the given string as a decimal number (decimal separator must
@@ -123,11 +128,26 @@ impl TokenAmount {
     /// The given number of `decimals` should
     /// be equal to tbe number of decimals for the token it represents an amount
     /// for.
-    pub fn try_from_str(decimal_str: &str, decimals: u8) -> anyhow::Result<Self> {
-        let decimal = rust_decimal::Decimal::from_str_exact(decimal_str)
-            .context("cannot convert string to rust_decimal::Decimal")?;
+    pub fn try_from_str(decimal_str: &str, decimals: u8) -> TokenAmountConversionResult<Self> {
+        let decimal = rust_decimal::Decimal::from_str_exact(decimal_str)?;
         Self::try_from_rust_decimal(decimal, decimals)
     }
+}
+
+/// Result of converting to or from [`TokenAmount`].
+pub type TokenAmountConversionResult<T> = Result<T, TokenAmountConversionError>;
+
+/// Error converting to or from [`TokenAmount`].
+#[derive(Debug, thiserror::Error)]
+pub enum TokenAmountConversionError {
+    /// Error converting from [`TokenAmount`] or string to
+    /// [`rust_decimal::Decimal`]
+    #[error("error converting into rust_decimal::Decimal")]
+    RustDecimal(#[from] rust_decimal::Error),
+    #[error("precision lost due to rounding")]
+    LossOfPrecision,
+    #[error("value overflow")]
+    ValueOverflow,
 }
 
 impl std::fmt::Display for TokenAmount {
@@ -185,6 +205,7 @@ impl TryFrom<TokenAmountJson> for TokenAmount {
 mod test {
     use super::*;
     use crate::common::cbor;
+    use assert_matches::assert_matches;
     use std::cmp::Ordering;
 
     #[test]
@@ -213,12 +234,12 @@ mod test {
         let token_amount = TokenAmount::try_from_str(str, 5).unwrap();
         assert_eq!(token_amount, TokenAmount::from_raw(12345000, 5));
 
-        let err = TokenAmount::try_from_str(str, 1).unwrap_err().to_string();
-        assert!(
-            err.contains("rescaling results in rounding"),
-            "error: {}",
-            err
-        );
+        let res = TokenAmount::try_from_str(str, 1);
+        assert_matches!(res, Err(TokenAmountConversionError::LossOfPrecision));
+
+        let str = "0.000000000000000000000000000000000000001";
+        let res = TokenAmount::try_from_str(str, 1);
+        assert_matches!(res, Err(TokenAmountConversionError::RustDecimal(rust_decimal::Error::Underflow)));
     }
 
     #[test]
@@ -251,19 +272,15 @@ mod test {
         let token_amount = TokenAmount::try_from_rust_decimal(decimal, 6).unwrap();
         assert_eq!(token_amount, TokenAmount::from_raw(1260000, 6));
 
-        let err = TokenAmount::try_from_rust_decimal(decimal, 30)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("cannot be rescaled"), "error: {}", err);
+        let res = TokenAmount::try_from_rust_decimal(decimal, 30);
+        assert_matches!(res, Err(TokenAmountConversionError::RustDecimal(rust_decimal::Error::ScaleExceedsMaximumPrecision(_))));
+        
+        let res = TokenAmount::try_from_rust_decimal(decimal, 1);
+        assert_matches!(res, Err(TokenAmountConversionError::LossOfPrecision));
 
-        let err = TokenAmount::try_from_rust_decimal(decimal, 1)
-            .unwrap_err()
-            .to_string();
-        assert!(
-            err.contains("rescaling results in rounding"),
-            "error: {}",
-            err
-        );
+        let decimal = rust_decimal::Decimal::new(i64::MAX, 0);
+        let res = TokenAmount::try_from_rust_decimal(decimal, 28);
+        assert_matches!(res, Err(TokenAmountConversionError::ValueOverflow));
     }
 
     #[test]
