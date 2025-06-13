@@ -151,7 +151,7 @@ tests = parallel $ do
     versionedTests SP6
     versionedTests SP7
     versionedTests SP8
-    describe "P9 tests" $ versionedTests SP9
+    versionedTests SP9
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv
