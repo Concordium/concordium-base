@@ -239,7 +239,12 @@ mod test {
 
         let str = "0.000000000000000000000000000000000000001";
         let res = TokenAmount::try_from_str(str, 1);
-        assert_matches!(res, Err(TokenAmountConversionError::RustDecimal(rust_decimal::Error::Underflow)));
+        assert_matches!(
+            res,
+            Err(TokenAmountConversionError::RustDecimal(
+                rust_decimal::Error::Underflow
+            ))
+        );
     }
 
     #[test]
@@ -273,8 +278,13 @@ mod test {
         assert_eq!(token_amount, TokenAmount::from_raw(1260000, 6));
 
         let res = TokenAmount::try_from_rust_decimal(decimal, 30);
-        assert_matches!(res, Err(TokenAmountConversionError::RustDecimal(rust_decimal::Error::ScaleExceedsMaximumPrecision(_))));
-        
+        assert_matches!(
+            res,
+            Err(TokenAmountConversionError::RustDecimal(
+                rust_decimal::Error::ScaleExceedsMaximumPrecision(_)
+            ))
+        );
+
         let res = TokenAmount::try_from_rust_decimal(decimal, 1);
         assert_matches!(res, Err(TokenAmountConversionError::LossOfPrecision));
 
