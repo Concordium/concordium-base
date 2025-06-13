@@ -123,7 +123,7 @@ impl ValidationState {
     /// instruction is reachable.
     pub fn reachability(&self) -> Reachability {
         let Some(idx) = self.unreachable_section else {
-            return Reachability::Reachable
+            return Reachability::Reachable;
         };
         if idx + 1 < self.ctrls.stack.len() {
             Reachability::UnreachableFrame

@@ -997,7 +997,8 @@ impl TryFrom<&syn::Meta> for ForwardAttribute {
         let syn::Meta::NameValue(name_value) = meta else {
             abort!(
                 meta.span(),
-                "'forward' attribute value must be provided as 'forward = x' or forward = [x, y, z].",
+                "'forward' attribute value must be provided as 'forward = x' or forward = [x, y, \
+                 z].",
             );
         };
         let mut values = Vec::new();
