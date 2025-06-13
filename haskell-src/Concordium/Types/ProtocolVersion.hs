@@ -105,12 +105,12 @@ module Concordium.Types.ProtocolVersion (
     AuthorizationsVersion (..),
     -- | Singleton type associated with 'AuthorizationsVersion'.
     SAuthorizationsVersion (..),
-    -- | The authorizations version associated with a chain parameters version.
+    -- | The authorizations version associated with a protocol version.
     authorizationsVersionFor,
     authorizationsVersion,
-    -- | The authorizations version associated with a chain parameters version (types).
+    -- | The authorizations version associated with a protocol version (types).
     AuthorizationsVersionFor,
-    -- | The authorizations version associated with a chain parameters version (singletons).
+    -- | The authorizations version associated with a protocol version (singletons).
     sAuthorizationsVersionFor,
     -- | The authorizations version associated with a protocol version.
     authorizationsVersionForPV,
