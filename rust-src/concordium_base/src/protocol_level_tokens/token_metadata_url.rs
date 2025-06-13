@@ -39,8 +39,7 @@ pub struct MetadataUrl {
 /// Serialize `Bytes` as a hex string.
 fn serialize_hex_bytes<S>(bytes: &Option<Hash>, serializer: S) -> Result<S::Ok, S::Error>
 where
-    S: Serializer,
-{
+    S: Serializer, {
     if let Some(bytes) = bytes {
         serializer.serialize_str(&bytes.encode_hex::<String>())
     } else {
@@ -51,8 +50,7 @@ where
 /// Deserialize `Bytes` from a hex string.
 fn deserialize_hex_bytes<'de, D>(deserializer: D) -> Result<Option<Hash>, D::Error>
 where
-    D: Deserializer<'de>,
-{
+    D: Deserializer<'de>, {
     let opt: Option<String> = Option::deserialize(deserializer)?;
     if let Some(hex_str) = opt {
         let bytes = Vec::from_hex(&hex_str).map_err(serde::de::Error::custom)?;
@@ -102,9 +100,9 @@ mod tests {
         assert_eq!(actual, expected);
 
         let metadata_url = MetadataUrl {
-            url: "https://example.com".to_string(),
+            url:              "https://example.com".to_string(),
             checksum_sha_256: None,
-            additional: HashMap::new(),
+            additional:       HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
@@ -117,9 +115,9 @@ mod tests {
         assert_eq!(actual, expected);
 
         let metadata_url = MetadataUrl {
-            url: "https://example.com".to_string(),
+            url:              "https://example.com".to_string(),
             checksum_sha_256: Some(checksum),
-            additional: HashMap::new(),
+            additional:       HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();

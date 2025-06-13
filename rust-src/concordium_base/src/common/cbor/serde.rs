@@ -1,5 +1,6 @@
-/// This module provides serialization and deserialization functions for hash maps with string keys
-/// and CBOR values, where the values are represented as hex strings of the CBOR encoding.
+/// This module provides serialization and deserialization functions for hash
+/// maps with string keys and CBOR values, where the values are represented as
+/// hex strings of the CBOR encoding.
 pub mod map_hex_cbor_values {
     use std::collections::HashMap;
 
@@ -14,8 +15,7 @@ pub mod map_hex_cbor_values {
         serializer: S,
     ) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         let mut hex_map = HashMap::new();
         for (key, value) in map {
             let cbor_bytes = cbor_encode(value).map_err(serde::ser::Error::custom)?;
@@ -25,12 +25,9 @@ pub mod map_hex_cbor_values {
     }
 
     /// Deserialize a `HashMap<String, value::Value>` from hex-encoded CBOR.
-    pub fn deserialize<'de, D>(
-        deserializer: D,
-    ) -> Result<HashMap<String, value::Value>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<String, value::Value>, D::Error>
     where
-        D: Deserializer<'de>,
-    {
+        D: Deserializer<'de>, {
         let hex_map: HashMap<String, String> = HashMap::deserialize(deserializer)?;
         let mut map = HashMap::new();
         for (key, hex_str) in hex_map {
