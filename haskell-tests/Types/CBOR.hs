@@ -25,8 +25,8 @@ import Test.QuickCheck
 
 import qualified Concordium.Crypto.SHA256 as Hash
 import Concordium.Types
-import Concordium.Types.Queries.Tokens
 import Concordium.Types.ProtocolLevelTokens.CBOR
+import Concordium.Types.Queries.Tokens
 
 genText :: Gen Text.Text
 genText = sized $ fmap (Text.decodeUtf8 . BS.pack) . genUtf8String
@@ -361,9 +361,15 @@ emptyStringHash = Hash.Hash (FBS.pack [0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c,
 
 testTokenModuleStateSimpleJSON :: Spec
 testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization without additional state" $ do
+    let tokenMetadataURL =
+            TokenMetadataUrl
+                { tmUrl = "https://example.com/token-metadata",
+                  tmChecksumSha256 = Nothing,
+                  tmAdditional = Map.empty
+                }
     let object =
             TokenModuleState
-                { tmsMetadata = "https://example.com/token-metadata",
+                { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -382,7 +388,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}"
+        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -400,9 +406,15 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
 
 testTokenModuleStateJSON :: Spec
 testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with additional state" $ do
+    let tokenMetadataURL =
+            TokenMetadataUrl
+                { tmUrl = "https://example.com/token-metadata",
+                  tmChecksumSha256 = Nothing,
+                  tmAdditional = Map.empty
+                }
     let object =
             TokenModuleState
-                { tmsMetadata = "https://example.com/token-metadata",
+                { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -421,7 +433,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}"
+        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -439,9 +451,15 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
 
 testTokenStateSimpleJSON :: Spec
 testTokenStateSimpleJSON = describe "TokenState JSON serialization without additional state" $ do
+    let tokenMetadataURL =
+            TokenMetadataUrl
+                { tmUrl = "https://example.com/token-metadata",
+                  tmChecksumSha256 = Nothing,
+                  tmAdditional = Map.empty
+                }
     let tokenModuleState =
             TokenModuleState
-                { tmsMetadata = "https://example.com/token-metadata",
+                { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -469,7 +487,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -486,9 +504,15 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
 
 testTokenStateJSON :: Spec
 testTokenStateJSON = describe "TokenState JSON serialization with additional state" $ do
+    let tokenMetadataURL =
+            TokenMetadataUrl
+                { tmUrl = "https://example.com/token-metadata",
+                  tmChecksumSha256 = Nothing,
+                  tmAdditional = Map.empty
+                }
     let tokenModuleState =
             TokenModuleState
-                { tmsMetadata = "https://example.com/token-metadata",
+                { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
@@ -516,7 +540,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":\"https://example.com/token-metadata\",\"name\":\"bla bla\"}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
