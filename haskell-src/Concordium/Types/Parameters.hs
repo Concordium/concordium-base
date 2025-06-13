@@ -260,7 +260,7 @@ module Concordium.Types.Parameters (
     poolParametersVersionFor,
     -- | The pool parameters version associated with a chain parameters version (types).
     PoolParametersVersionFor,
-    -- | The pool parameters version associated with a chain parameters version (singletons).
+    -- | The pool parameters version associated w   ith a chain parameters version (singletons).
     sPoolParametersVersionFor,
     PoolParameters' (..),
     PoolParameters,
@@ -363,7 +363,7 @@ module Concordium.Types.Parameters (
     -- * Validator score parameters
     ValidatorScoreParameters (..),
     vspMaxMissedRounds,
-    withIsAuthorizationsVersionForPV,
+    withIsAuthorizationsVersionFor,
     -- | Whether cooldown parameters are updatable for an 'AuthorizationsVersion'.
     supportsCooldownParametersAccessStructure,
     -- | Whether cooldown parameters are updatable for an 'AuthorizationsVersion' (types).
@@ -645,10 +645,10 @@ $( singletons
 type IsParameterType (pt :: ParameterType) = SingI pt
 
 -- | Witness an 'IsAuthorizationsVersion' constraint using a 'SProtocolVersion'.
---  Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionForPV pv)' via the
+--  Concretely this provices the action @a@ with the context 'IsAuthorizationsVersion (AuthorizationsVersionFor pv)' via the
 --  supplied 'ProtocolVersion'.
-withIsAuthorizationsVersionForPV :: SProtocolVersion pv -> ((IsAuthorizationsVersion (AuthorizationsVersionForPV pv)) => a) -> a
-withIsAuthorizationsVersionForPV spv = withSingI (sAuthorizationsVersionForPV spv)
+withIsAuthorizationsVersionFor :: SProtocolVersion pv -> ((IsAuthorizationsVersion (AuthorizationsVersionFor pv)) => a) -> a
+withIsAuthorizationsVersionFor spv = withSingI (sAuthorizationsVersionFor spv)
 
 -- | An @OParam pt cpv a@ is an @a@ if the parameter type @pt@ is supported at @cpv@, and @()@
 --  otherwise.

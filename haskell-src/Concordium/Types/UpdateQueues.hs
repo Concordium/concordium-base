@@ -464,7 +464,7 @@ data Updates' (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion) = U
 
 makeLenses ''Updates'
 
-type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv) (AuthorizationsVersionForPV pv)
+type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv)
 
 instance (IsChainParametersVersion cpv) => HashableTo H.Hash (Updates' cpv auv) where
     getHash Updates{..} =
@@ -487,7 +487,9 @@ instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion 
               "updateQueues" AE..= _pendingUpdates
             ]
                 <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
-                <> ["pltUpdateSequenceNumber" AE..= usn | CTrue usn <- _pltUpdateSequenceNumber]
+                <> case _pltUpdateSequenceNumber of
+                    CFalse -> []
+                    CTrue usn -> ["pltUpdateSequenceNumber" AE..= usn]
 
 instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => FromJSON (Updates' cpv auv) where
     parseJSON = withObject "Updates" $ \o -> do

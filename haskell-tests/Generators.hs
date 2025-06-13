@@ -1274,8 +1274,8 @@ genUpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen UpdateP
 genUpdatePayload spv =
     oneof
         [ genLevel2UpdatePayload $ sChainParametersVersionFor spv,
-          RootUpdatePayload <$> genRootUpdate (sAuthorizationsVersionForPV spv),
-          Level1UpdatePayload <$> genLevel1Update (sAuthorizationsVersionForPV spv)
+          RootUpdatePayload <$> genRootUpdate (sAuthorizationsVersionFor spv),
+          Level1UpdatePayload <$> genLevel1Update (sAuthorizationsVersionFor spv)
         ]
 
 genRawUpdateInstruction :: (IsProtocolVersion pv) => SProtocolVersion pv -> Gen RawUpdateInstruction

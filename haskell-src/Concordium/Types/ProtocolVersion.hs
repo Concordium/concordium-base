@@ -112,12 +112,6 @@ module Concordium.Types.ProtocolVersion (
     AuthorizationsVersionFor,
     -- | The authorizations version associated with a protocol version (singletons).
     sAuthorizationsVersionFor,
-    -- | The authorizations version associated with a protocol version.
-    authorizationsVersionForPV,
-    -- | The authorizations version associated with a protocol version (types).
-    AuthorizationsVersionForPV,
-    -- | The authorizations version associated with a protocol version (singletons).
-    sAuthorizationsVersionForPV,
     IsAuthorizationsVersion,
     IsCompatibleAuthorizationsVersion,
 
@@ -374,10 +368,6 @@ $( singletons
         authorizationsVersionFor P7 = AuthorizationsVersion1
         authorizationsVersionFor P8 = AuthorizationsVersion1
         authorizationsVersionFor P9 = AuthorizationsVersion2
-
-        -- \|The authorizations version associated with a protocol version.
-        authorizationsVersionForPV :: ProtocolVersion -> AuthorizationsVersion
-        authorizationsVersionForPV pv = authorizationsVersionFor pv
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related

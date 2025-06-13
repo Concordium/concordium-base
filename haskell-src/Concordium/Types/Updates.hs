@@ -926,8 +926,8 @@ getUpdatePayload spv =
         9
             | PoolParametersVersion0 <- poolParametersVersionFor cpv ->
                 BakerStakeThresholdUpdatePayload <$> getPoolParameters SPoolParametersVersion0
-        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionForPV spv)
-        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionForPV spv)
+        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionFor spv)
+        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionFor spv)
         12 -> AddAnonymityRevokerUpdatePayload <$> get
         13 -> AddIdentityProviderUpdatePayload <$> get
         14
@@ -953,7 +953,7 @@ getUpdatePayload spv =
   where
     scpv = sChainParametersVersionFor spv
     cpv = demoteChainParameterVersion scpv
-    sauv = sAuthorizationsVersionForPV spv
+    sauv = sAuthorizationsVersionFor spv
     auv = fromSing sauv
 
 $( deriveJSON

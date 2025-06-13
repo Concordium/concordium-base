@@ -62,7 +62,7 @@ type SignKeyGen =
 --  The second argument indicates whether the signature should be valid.
 testUpdateInstruction :: forall pv. (IsProtocolVersion pv) => SProtocolVersion pv -> SignKeyGen -> Bool -> Property
 testUpdateInstruction spv keyGen isValid =
-    forAll (withIsAuthorizationsVersionForPV (protocolVersion @pv) $ genKeyCollection @(AuthorizationsVersionForPV pv) 3) $ \(kc, rootK, level1K, level2K) ->
+    forAll (withIsAuthorizationsVersionFor (protocolVersion @pv) $ genKeyCollection @(AuthorizationsVersionFor pv) 3) $ \(kc, rootK, level1K, level2K) ->
         forAll (genRawUpdateInstruction spv) $ \rui -> do
             let p = ruiPayload rui
             keysToSign <- case p of

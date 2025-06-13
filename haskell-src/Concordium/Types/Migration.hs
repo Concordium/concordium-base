@@ -19,8 +19,8 @@ import Concordium.Types.Updates
 migrateAuthorizations ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    Authorizations (AuthorizationsVersionForPV oldpv) ->
-    Authorizations (AuthorizationsVersionForPV pv)
+    Authorizations (AuthorizationsVersionFor oldpv) ->
+    Authorizations (AuthorizationsVersionFor pv)
 migrateAuthorizations StateMigrationParametersTrivial auths = auths
 migrateAuthorizations StateMigrationParametersP1P2 auths = auths
 migrateAuthorizations StateMigrationParametersP2P3 auths = auths
@@ -58,8 +58,8 @@ migrateAuthorizations
 migrateUpdateKeysCollection ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    UpdateKeysCollection (AuthorizationsVersionForPV oldpv) ->
-    UpdateKeysCollection (AuthorizationsVersionForPV pv)
+    UpdateKeysCollection (AuthorizationsVersionFor oldpv) ->
+    UpdateKeysCollection (AuthorizationsVersionFor pv)
 migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
     UpdateKeysCollection{level2Keys = migrateAuthorizations migration level2Keys, ..}
 
