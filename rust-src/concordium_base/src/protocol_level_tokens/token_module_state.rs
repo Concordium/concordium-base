@@ -28,7 +28,7 @@ pub struct TokenModuleState {
     /// Additional state information may be provided under further text keys,
     /// the meaning of which are not defined in the present specification.
     #[cbor(other)]
-    pub other:      HashMap<String, value::Value>,
+    pub additional: HashMap<String, value::Value>,
 }
 
 impl TokenModuleState {
@@ -62,7 +62,7 @@ mod test {
             deny_list:  None,
             mintable:   Some(true),
             burnable:   None,
-            other:      vec![("other1".to_string(), value::Value::Positive(2))]
+            additional: vec![("other1".to_string(), value::Value::Positive(2))]
                 .into_iter()
                 .collect(),
         };

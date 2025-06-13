@@ -12,5 +12,5 @@ pub struct MetadataUrl {
     /// Additional fields may be included for future extensibility, e.g. another
     /// hash algorithm.
     #[cbor(other)]
-    pub other:            HashMap<String, value::Value>,
+    pub additional:       HashMap<String, value::Value>,
 }

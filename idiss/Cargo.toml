@@ -40,7 +40,6 @@ optional = true
 
 [dependencies.concordium_base]
 path = "../rust-src/concordium_base"
-version = "*"
 features = ["ffi"]
 
 [build-dependencies]
