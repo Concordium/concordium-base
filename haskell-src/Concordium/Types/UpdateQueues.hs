@@ -487,9 +487,7 @@ instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion 
               "updateQueues" AE..= _pendingUpdates
             ]
                 <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
-                <> case _pltUpdateSequenceNumber of
-                    CFalse -> []
-                    CTrue usn -> ["pltUpdateSequenceNumber" AE..= usn]
+                <> ["pltUpdateSequenceNumber" AE..= usn | CTrue usn <- _pltUpdateSequenceNumber]
 
 instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => FromJSON (Updates' cpv auv) where
     parseJSON = withObject "Updates" $ \o -> do
