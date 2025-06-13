@@ -32,7 +32,7 @@ pub struct MetadataUrl {
         skip_serializing_if = "HashMap::is_empty"
     )]
     #[serde(rename = "_additional")]
-    pub other: HashMap<String, value::Value>,
+    pub additional: HashMap<String, value::Value>,
 }
 
 /// Serialize `Bytes` as a hex string.
@@ -108,9 +108,9 @@ mod tests {
         additional.insert("another".to_string(), value::Value::Positive(40));
 
         let metadata_url = MetadataUrl {
-            url:              "https://example.com".to_string(),
+            url: "https://example.com".to_string(),
             checksum_sha_256: Some(checksum),
-            other:            additional,
+            additional,
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
@@ -130,7 +130,7 @@ mod tests {
         let metadata_url = MetadataUrl {
             url:              "https://example.com".to_string(),
             checksum_sha_256: None,
-            other:            HashMap::new(),
+            additional:       HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
@@ -145,7 +145,7 @@ mod tests {
         let metadata_url = MetadataUrl {
             url:              "https://example.com".to_string(),
             checksum_sha_256: Some(checksum),
-            other:            HashMap::new(),
+            additional:       HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
@@ -167,9 +167,9 @@ mod tests {
         additional.insert("another".to_string(), value::Value::Positive(40));
 
         let metadata_url = MetadataUrl {
-            url:              "https://example.com".to_string(),
+            url: "https://example.com".to_string(),
             checksum_sha_256: Some(checksum),
-            other:            additional,
+            additional,
         };
 
         let cbor_encoded = cbor_encode(&metadata_url).unwrap();
