@@ -12,17 +12,17 @@ use crate::common::{
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct TokenModuleState {
     /// The name of the token
-    pub name: String,
+    pub name:       String,
     // /// A URL pointing to the token metadata
-    pub metadata: MetadataUrl,
+    pub metadata:   MetadataUrl,
     /// Whether the token supports an allow list.
     pub allow_list: Option<bool>,
     /// Whether the token supports a deny list.
-    pub deny_list: Option<bool>,
+    pub deny_list:  Option<bool>,
     /// Whether the token is mintable.
-    pub mintable: Option<bool>,
+    pub mintable:   Option<bool>,
     /// Whether the token is burnable.
-    pub burnable: Option<bool>,
+    pub burnable:   Option<bool>,
     /// Additional state information may be provided under further text keys,
     /// the meaning of which are not defined in the present specification.
     #[cbor(other)]
@@ -54,21 +54,19 @@ mod test {
     #[test]
     fn test_token_module_state_cbor() {
         let mut token_module_state = TokenModuleState {
-            name: "TK1".to_string(),
-            metadata: MetadataUrl {
-                url: "https://tokenurl1".to_string(),
+            name:       "TK1".to_string(),
+            metadata:   MetadataUrl {
+                url:              "https://tokenurl1".to_string(),
                 checksum_sha_256: Some(Hash::from(TEST_HASH)),
-                additional: Default::default(),
+                additional:       Default::default(),
             },
             allow_list: Some(true),
-            deny_list: Some(true),
-            mintable: Some(true),
-            burnable: Some(true),
-            additional: vec![
-                ("other1".to_string(), value::Value::Positive(2)),
-            ]
-            .into_iter()
-            .collect(),
+            deny_list:  Some(true),
+            mintable:   Some(true),
+            burnable:   Some(true),
+            additional: vec![("other1".to_string(), value::Value::Positive(2))]
+                .into_iter()
+                .collect(),
         };
 
         let cbor = cbor::cbor_encode(&token_module_state).unwrap();

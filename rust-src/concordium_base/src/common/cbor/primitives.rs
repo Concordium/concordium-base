@@ -1,6 +1,9 @@
-use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
-    CborSerialize, DataItemType,
+use crate::{
+    common::cbor::{
+        CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
+        CborSerialize, DataItemType,
+    },
+    constants::SHA256,
 };
 use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
@@ -55,7 +58,7 @@ impl CborDeserialize for Bytes {
 
 impl CborSerialize for Hash {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        encoder.encode_bytes(self.as_ref())
+        self.as_ref().serialize(encoder)
     }
 }
 
@@ -63,9 +66,8 @@ impl CborDeserialize for Hash {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        let bytes = decoder.decode_bytes()?;
-        let hash = Hash::try_from(bytes.as_slice()).context("CBOR data item not a valid hash")?;
-        Ok(hash)
+        let bytes = <[u8; SHA256]>::deserialize(decoder)?;
+        Ok(Hash::from(bytes))
     }
 }
 

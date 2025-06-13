@@ -1,9 +1,11 @@
-use crate::common::cbor::{cbor_decode, cbor_encode, value};
+use std::collections::HashMap;
+
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::Hash;
 use hex::{FromHex, ToHex};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
+
+use crate::common::cbor::{cbor_decode, cbor_encode, value};
 
 /// Metadata for a specific protocol level token
 #[derive(
