@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::hashes::Hash;
 use hex::{FromHex, ToHex};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serializer};
 
-use crate::common::cbor::{cbor_decode, cbor_encode, value};
+use crate::common::cbor::{serde::map_hex_cbor_values, value};
 
 /// Metadata for a specific protocol level token
 #[derive(
@@ -28,8 +28,7 @@ pub struct MetadataUrl {
     /// hash algorithm.
     #[cbor(other)]
     #[serde(
-        serialize_with = "serialize_hex_cbor_map",
-        deserialize_with = "deserialize_hex_cbor_map",
+        with = "map_hex_cbor_values",
         default,
         skip_serializing_if = "HashMap::is_empty"
     )]
@@ -40,7 +39,8 @@ pub struct MetadataUrl {
 /// Serialize `Bytes` as a hex string.
 fn serialize_hex_bytes<S>(bytes: &Option<Hash>, serializer: S) -> Result<S::Ok, S::Error>
 where
-    S: Serializer, {
+    S: Serializer,
+{
     if let Some(bytes) = bytes {
         serializer.serialize_str(&bytes.encode_hex::<String>())
     } else {
@@ -51,7 +51,8 @@ where
 /// Deserialize `Bytes` from a hex string.
 fn deserialize_hex_bytes<'de, D>(deserializer: D) -> Result<Option<Hash>, D::Error>
 where
-    D: Deserializer<'de>, {
+    D: Deserializer<'de>,
+{
     let opt: Option<String> = Option::deserialize(deserializer)?;
     if let Some(hex_str) = opt {
         let bytes = Vec::from_hex(&hex_str).map_err(serde::de::Error::custom)?;
@@ -62,39 +63,10 @@ where
     }
 }
 
-/// Serialize a `HashMap<String, value::Value>` as hex-encoded CBOR.
-fn serialize_hex_cbor_map<S>(
-    map: &HashMap<String, value::Value>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer, {
-    let mut hex_map = HashMap::new();
-    for (key, value) in map {
-        let cbor_bytes = cbor_encode(value).map_err(serde::ser::Error::custom)?;
-        hex_map.insert(key, cbor_bytes.encode_hex::<String>());
-    }
-    hex_map.serialize(serializer)
-}
-
-/// Deserialize a `HashMap<String, value::Value>` from hex-encoded CBOR.
-fn deserialize_hex_cbor_map<'de, D>(
-    deserializer: D,
-) -> Result<HashMap<String, value::Value>, D::Error>
-where
-    D: Deserializer<'de>, {
-    let hex_map: HashMap<String, String> = HashMap::deserialize(deserializer)?;
-    let mut map = HashMap::new();
-    for (key, hex_str) in hex_map {
-        let cbor_bytes = Vec::from_hex(&hex_str).map_err(serde::de::Error::custom)?;
-        let value = cbor_decode(&cbor_bytes).map_err(serde::de::Error::custom)?;
-        map.insert(key, value);
-    }
-    Ok(map)
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::common::cbor::{cbor_decode, cbor_encode};
+
     use super::*;
     use hex::FromHex;
     use serde_json;
@@ -130,9 +102,9 @@ mod tests {
         assert_eq!(actual, expected);
 
         let metadata_url = MetadataUrl {
-            url:              "https://example.com".to_string(),
+            url: "https://example.com".to_string(),
             checksum_sha_256: None,
-            additional:       HashMap::new(),
+            additional: HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
@@ -145,9 +117,9 @@ mod tests {
         assert_eq!(actual, expected);
 
         let metadata_url = MetadataUrl {
-            url:              "https://example.com".to_string(),
+            url: "https://example.com".to_string(),
             checksum_sha_256: Some(checksum),
-            additional:       HashMap::new(),
+            additional: HashMap::new(),
         };
 
         let serialized = serde_json::to_string(&metadata_url).unwrap();
