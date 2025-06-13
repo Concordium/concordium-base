@@ -1,9 +1,13 @@
-use crate::common::cbor::{
-    CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
-    CborSerialize, DataItemType,
+use crate::{
+    common::cbor::{
+        CborDecoder, CborDeserialize, CborEncoder, CborSerializationError, CborSerializationResult,
+        CborSerialize, DataItemType,
+    },
+    constants::SHA256,
 };
 use anyhow::{anyhow, Context};
 use ciborium_ll::simple;
+use concordium_contracts_common::hashes::Hash;
 
 impl<const N: usize> CborSerialize for [u8; N] {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
@@ -49,6 +53,21 @@ impl CborDeserialize for Bytes {
     where
         Self: Sized, {
         Ok(Bytes(decoder.decode_bytes()?))
+    }
+}
+
+impl CborSerialize for Hash {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        self.as_ref().serialize(encoder)
+    }
+}
+
+impl CborDeserialize for Hash {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        let bytes = <[u8; SHA256]>::deserialize(decoder)?;
+        Ok(Hash::from(bytes))
     }
 }
 

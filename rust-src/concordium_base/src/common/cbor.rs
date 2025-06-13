@@ -197,6 +197,7 @@ mod composites;
 mod decoder;
 mod encoder;
 mod primitives;
+pub(crate) mod serde;
 /// Dynamic data model for generic CBOR
 pub mod value;
 
