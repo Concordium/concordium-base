@@ -56,7 +56,7 @@ mod test {
             metadata:   MetadataUrl {
                 url:              "https://tokenurl1".to_string(),
                 checksum_sha_256: Some(Bytes(vec![0x01; 32])),
-                other:            Default::default(),
+                additional:       Default::default(),
             },
             allow_list: Some(true),
             deny_list:  None,
