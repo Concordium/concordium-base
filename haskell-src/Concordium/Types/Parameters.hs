@@ -621,7 +621,6 @@ $( singletons
         isSupported PTBlockEnergyLimit cpv = case consensusParametersVersionFor cpv of
             ConsensusParametersVersion0 -> False
             ConsensusParametersVersion1 -> True
-        -- isSupported PTCooldownParametersAccessStructure cpv = supportsCooldownParametersAccessStructure (authorizationsVersionFor cpv)
         isSupported PTCooldownParametersAccessStructure ChainParametersV0 = False
         isSupported PTCooldownParametersAccessStructure ChainParametersV1 = True
         isSupported PTCooldownParametersAccessStructure ChainParametersV2 = True
