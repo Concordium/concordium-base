@@ -426,6 +426,8 @@ pub struct AuthorizationsV1 {
     pub cooldown_parameters: AccessStructure,
     /// Keys for changing the lenghts of the reward period.
     pub time_parameters:     AccessStructure,
+    /// Keys for creating a protocol level token.
+    pub create_plt:          Option<AccessStructure>,
 }
 
 impl AuthorizationsV1 {
