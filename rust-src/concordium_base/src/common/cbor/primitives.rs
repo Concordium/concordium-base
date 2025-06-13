@@ -34,6 +34,10 @@ impl CborSerialize for [u8] {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Bytes(pub Vec<u8>);
 
+impl AsRef<[u8]> for Bytes {
+    fn as_ref(&self) -> &[u8] { &self.0 }
+}
+
 impl CborSerialize for Bytes {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_bytes(&self.0)
@@ -155,6 +159,20 @@ serialize_deserialize_signed_integer!(i32);
 serialize_deserialize_signed_integer!(i64);
 serialize_deserialize_signed_integer!(isize);
 
+impl CborSerialize for f64 {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        encoder.encode_float(*self)
+    }
+}
+
+impl CborDeserialize for f64 {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        decoder.decode_float()
+    }
+}
+
 impl CborSerialize for str {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_text(self)
@@ -189,6 +207,36 @@ pub enum MapKey {
     Text(String),
 }
 
+impl From<String> for MapKey {
+    fn from(value: String) -> Self { Self::Text(value) }
+}
+
+impl From<u64> for MapKey {
+    fn from(value: u64) -> Self { Self::Positive(value) }
+}
+
+impl TryFrom<MapKey> for String {
+    type Error = CborSerializationError;
+
+    fn try_from(value: MapKey) -> Result<Self, Self::Error> {
+        match value {
+            MapKey::Positive(_) => Err(anyhow!("MapKey not a of type Text").into()),
+            MapKey::Text(value) => Ok(value),
+        }
+    }
+}
+
+impl TryFrom<MapKey> for u64 {
+    type Error = CborSerializationError;
+
+    fn try_from(value: MapKey) -> Result<Self, Self::Error> {
+        match value {
+            MapKey::Positive(value) => Ok(value),
+            MapKey::Text(_) => Err(anyhow!("MapKey not a of type Positive").into()),
+        }
+    }
+}
+
 impl MapKey {
     pub fn as_ref(&self) -> MapKeyRef {
         match self {
@@ -208,8 +256,8 @@ pub enum MapKeyRef<'a> {
 impl CborSerialize for MapKeyRef<'_> {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         match self {
-            MapKeyRef::Positive(positive) => encoder.encode_positive(*positive),
-            MapKeyRef::Text(text) => encoder.encode_text(text),
+            Self::Positive(positive) => encoder.encode_positive(*positive),
+            Self::Text(text) => encoder.encode_text(text),
         }
     }
 }
@@ -228,6 +276,15 @@ impl CborDeserialize for MapKey {
                 data_item_type
             )
             .into()),
+        }
+    }
+}
+
+impl CborSerialize for MapKey {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        match self {
+            Self::Positive(positive) => encoder.encode_positive(*positive),
+            Self::Text(text) => encoder.encode_text(text),
         }
     }
 }
@@ -315,6 +372,15 @@ mod test {
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "f5");
         let value_decoded: bool = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_f64() {
+        let value = 1.123f64;
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "fb3ff1f7ced916872b");
+        let value_decoded: f64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
 

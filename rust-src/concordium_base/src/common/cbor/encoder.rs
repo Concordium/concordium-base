@@ -58,9 +58,14 @@ where
     fn encode_simple(self, value: u8) -> CborSerializationResult<()> {
         Ok(self.inner.push(Header::Simple(value))?)
     }
+
+    fn encode_float(self, float: f64) -> CborSerializationResult<()> {
+        Ok(self.inner.push(Header::Float(float))?)
+    }
 }
 
 /// CBOR map encoder
+#[must_use]
 pub struct MapEncoder<'a, W: Write> {
     declared_size: usize,
     current_size:  usize,
@@ -105,6 +110,7 @@ where
 }
 
 /// CBOR array encoder
+#[must_use]
 pub struct ArrayEncoder<'a, W: Write> {
     declared_size: usize,
     current_size:  usize,

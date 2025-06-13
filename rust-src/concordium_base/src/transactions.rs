@@ -2318,7 +2318,7 @@ pub mod construct {
                     | TokenOperation::RemoveAllowList(_)
                     | TokenOperation::AddDenyList(_)
                     | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
-                    TokenOperation::Unknown => Default::default(),
+                    TokenOperation::Unknown(_, _) => Default::default(),
                 })
                 .sum()
     }

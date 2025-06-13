@@ -139,6 +139,16 @@ where
         }
     }
 
+    fn decode_float(self) -> CborSerializationResult<f64> {
+        match self.inner.pull()? {
+            Header::Float(value) => Ok(value),
+            header => Err(CborSerializationError::expected_data_item(
+                DataItemType::Float,
+                DataItemType::from_header(header),
+            )),
+        }
+    }
+
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
         let header = self.inner.pull()?;
         let data_item_header = DataItemHeader::from_header(header);
@@ -246,6 +256,7 @@ enum MapDecoderStateEnum {
 }
 
 /// Decoder of CBOR map
+#[must_use]
 pub struct MapDecoder<'a, R: Read> {
     declared_size:     usize,
     remaining_entries: usize,
@@ -320,6 +331,7 @@ where
 }
 
 /// Decoder of CBOR array
+#[must_use]
 pub struct ArrayDecoder<'a, R: Read> {
     declared_size:      usize,
     remaining_elements: usize,

@@ -32,8 +32,6 @@
 //! [`CborSerialize`] and [`CborDeserialize`] can be derived on enums using
 //! `map` representation:
 //! ```ignore
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(map)]
 //! enum TestEnum {
@@ -88,26 +86,42 @@
 //! In this example `TestStructWrapper` is serialized as `TestStruct`.
 //!
 //! #### `cbor(other)`
-//! Deserializes "unknown" content to this enum variant.
+//! This attribute can be applied to a variant in an enum for a field in a
+//! struct. When applied to a variant in an enum represented as a CBOR map,
+//! "unknown" map entries are deserialized to this variant.
 //! ```ignore
-//! # use concordium_base_derive::{CborDeserialize, CborSerialize};
-//! #
 //! #[derive(CborSerialize, CborDeserialize)]
 //! #[cbor(map)]
 //! enum TestEnum {
 //!     Var1(u64),
 //!     Var2(String),
 //!     #[cbor(other)]
-//!     Unknown,
+//!     Unknown(String, value::Value),
 //! }
 //! ```
-//! In this example variants in the CBOR that is not represented in the enum are
-//! deserialized as `Unknown`. Serializing `Unknown` will always fail.
+//! In this example, entries in the CBOR map that is not present in the enum are
+//! deserialized as `Unknown`. The `#[cbor(other)]` variant is a tuple of
+//! the map key and the map value.
+//!
+//! When applied to a field in a struct with named fields, "unknown" map entries
+//! are deserialized into this field.
+//! ```ignore
+//! #[derive(CborSerialize, CborDeserialize)]
+//! struct TestStruct {
+//!     field1:  u64,
+//!     #[cbor(other)]
+//!     unknown: HashMap<MapKey, value::Value>,
+//! }
+//! ```
+//! In this example, entries in the CBOR map that are not present in the struct
+//! are each deserialized into an entry in the map in the field `unknown`.
 
 mod composites;
 mod decoder;
 mod encoder;
 mod primitives;
+/// Dynamic data model for generic CBOR
+pub mod value;
 
 pub use composites::*;
 pub use decoder::*;
@@ -325,6 +339,9 @@ pub trait CborEncoder {
 
     /// Encodes simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
     fn encode_simple(self, simple: u8) -> CborSerializationResult<()>;
+
+    /// Encodes float value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
+    fn encode_float(self, float: f64) -> CborSerializationResult<()>;
 }
 
 /// Encoder of CBOR map
@@ -445,6 +462,9 @@ pub trait CborDecoder {
 
     /// Decode simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
     fn decode_simple(self) -> CborSerializationResult<u8>;
+
+    /// Decode float, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
+    fn decode_float(self) -> CborSerializationResult<f64>;
 
     /// Peeks header of next data item to be decoded.
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader>;
@@ -636,6 +656,7 @@ impl<T: CborDeserialize> CborDeserialize for Vec<T> {
 mod test {
     use super::*;
     use concordium_base_derive::{CborDeserialize, CborSerialize};
+    use std::collections::HashMap;
 
     /// Struct with named fields encoded as map. Uses field name string literals
     /// as keys.
@@ -765,6 +786,49 @@ mod test {
         .unwrap_err()
         .to_string();
         assert!(err.contains("unknown map key"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_struct_as_map_derived_other_field() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {
+            field1: u64,
+            field2: String,
+            #[cbor(key = 3)]
+            field3: u64,
+        }
+
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct2 {
+            field1:  u64,
+            #[cbor(other)]
+            unknown: HashMap<MapKey, value::Value>,
+        }
+
+        let value = TestStruct {
+            field1: 3,
+            field2: "abcd".to_string(),
+            field3: 5,
+        };
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: TestStruct2 = cbor_decode(&cbor).unwrap();
+        let value_unknown = TestStruct2 {
+            field1:  3,
+            unknown: [
+                (
+                    MapKey::Text("field2".to_string()),
+                    value::Value::Text("abcd".to_string()),
+                ),
+                (MapKey::Positive(3), value::Value::Positive(5)),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        assert_eq!(value_decoded, value_unknown);
+
+        let cbor = cbor_encode(&value_unknown).unwrap();
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 
     #[test]
@@ -944,25 +1008,26 @@ mod test {
             Var2(String),
         }
 
-        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
         #[cbor(map)]
         enum TestEnum2 {
             Var1(u64),
             #[cbor(other)]
-            Unknown,
+            Unknown(MapKey, value::Value),
         }
 
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: TestEnum2 = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, TestEnum2::Unknown);
-
-        let err = cbor_encode(&TestEnum2::Unknown).unwrap_err().to_string();
-        assert!(
-            err.contains("cannot serialize variant marked with #[cbor(other)]"),
-            "err: {}",
-            err
+        let value_unknown = TestEnum2::Unknown(
+            MapKey::Text("var2".to_string()),
+            value::Value::Text("abcd".to_string()),
         );
+        assert_eq!(value_decoded, value_unknown);
+
+        let cbor = cbor_encode(&value_unknown).unwrap();
+        let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
     }
 
     #[test]
@@ -1002,16 +1067,16 @@ mod test {
         test_skip_data_item_impl(|encoder| encoder.encode_bytes(&[0x01; 30]).unwrap());
         test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
         test_skip_data_item_impl(|encoder| {
-            encoder.encode_array(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
+            let mut array_encoder = encoder.encode_array(2).unwrap();
+            array_encoder.serialize_element(&2).unwrap();
+            array_encoder.serialize_element(&2).unwrap();
+            array_encoder.end().unwrap();
         });
         test_skip_data_item_impl(|encoder| {
-            encoder.encode_map(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-            encoder.encode_positive(2).unwrap();
+            let mut map_encoder = encoder.encode_map(2).unwrap();
+            map_encoder.serialize_entry(&2, &2).unwrap();
+            map_encoder.serialize_entry(&2, &2).unwrap();
+            map_encoder.end().unwrap();
         });
     }
 
