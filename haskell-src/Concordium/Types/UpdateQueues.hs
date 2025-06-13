@@ -475,9 +475,14 @@ instance (IsChainParametersVersion cpv) => HashableTo H.Hash (Updates' cpv auv) 
                     Just cpu -> "\x01" <> hsh cpu
                 <> hsh _currentParameters
                 <> hsh _pendingUpdates
+                <> hshPLT
       where
         hsh :: (HashableTo H.Hash a) => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
+        hshPLT = case _pltUpdateSequenceNumber of
+            CFalse -> mempty
+            CTrue usn -> H.hashToByteString $ H.hash $ runPut $ do
+                put usn
 
 instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => ToJSON (Updates' cpv auv) where
     toJSON Updates{..} =

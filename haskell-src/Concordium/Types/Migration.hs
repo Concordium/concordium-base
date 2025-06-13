@@ -8,6 +8,7 @@ import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P4 as P4
 import qualified Concordium.Genesis.Data.P6 as P6
 import qualified Concordium.Genesis.Data.P8 as P8
+import qualified Concordium.Genesis.Data.P9 as P9
 import Concordium.Types
 import Concordium.Types.Accounts
 import Concordium.Types.Parameters
@@ -38,19 +39,13 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
 migrateAuthorizations StateMigrationParametersP6ToP7{} auths = auths
 migrateAuthorizations StateMigrationParametersP7ToP8{} auths = auths
-migrateAuthorizations
-    StateMigrationParametersP8ToP9{}
+migrateAuthorizations (StateMigrationParametersP8ToP9 migration) Authorizations{..} =
     Authorizations
-        { asCooldownParameters = CTrue cp,
-          asTimeParameters = CTrue tp,
+        { asCreatePLT = CTrue updateCreatePLTAccessStructure,
           ..
-        } =
-        Authorizations
-            { asCooldownParameters = CTrue cp,
-              asTimeParameters = CTrue tp,
-              asCreatePLT = CTrue tp, -- FIXME: Do this via migration!
-              ..
-            }
+        }
+  where
+    P9.ProtocolUpdateData{..} = P9.migrationProtocolUpdateData migration
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
