@@ -363,7 +363,7 @@ $( singletons
             | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
             | AuthorizationsVersion2 -- \^Adds authorization for the CreatePLT chain update
 
-        -- \|The authorizations version associated with a chain parameters version.
+        -- \|The authorizations version associated with a protocol version.
         authorizationsVersionFor :: ProtocolVersion -> AuthorizationsVersion
         authorizationsVersionFor P1 = AuthorizationsVersion0
         authorizationsVersionFor P2 = AuthorizationsVersion0
