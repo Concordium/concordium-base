@@ -1,10 +1,7 @@
 use crate::{
     common::{
         cbor,
-        cbor::{
-            CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
-            DataItemHeader,
-        },
+        cbor::{value, CborSerializationResult},
     },
     protocol_level_tokens::{
         token_holder::TokenHolder, CoinInfo, HolderAccount, RawCbor, TokenAmount, TokenId,
@@ -14,7 +11,16 @@ use crate::{
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 
-/// Module that implements easy construction of protocol level token operations
+/// Module that implements easy construction of protocol level token operations.
+///
+/// The operations are composed to transactions via
+/// [`construct::token_holder_operations`](crate::transactions::construct::token_holder_operations)
+/// and
+/// [`construct::token_governance_operations`](crate::transactions::construct::token_governance_operations).
+/// To construct and sign transactions, use
+/// [`send::token_holder_operations`](crate::transactions::send::token_holder_operations)
+/// and
+/// [`send::token_governance_operations`](crate::transactions::send::token_governance_operations).///
 pub mod operations {
     use super::*;
 
@@ -124,17 +130,7 @@ impl TokenOperationsPayload {
 /// A list of protocol level token operations. Can be composed to a protocol
 /// level token transaction via [`TokenOperationsPayload`]. The operations are
 /// CBOR encoded in the transaction payload.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
-)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(transparent)]
 pub struct TokenOperations {
     /// List of protocol level token operations
@@ -167,17 +163,7 @@ impl TokenOperations {
 /// level token transaction via [`TokenOperations`] and
 /// [`TokenOperationsPayload`]. The operation is CBOR encoded in the transaction
 /// payload.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
-)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 #[cbor(map)]
 pub enum TokenOperation {
     /// Protocol level token transfer operation
@@ -201,7 +187,7 @@ pub enum TokenOperation {
     /// Unknow operation. If new types of operations are added that are unknown
     /// to this enum, they will be decoded to this variant.
     #[cbor(other)]
-    Unknown,
+    Unknown(String, value::Value),
 }
 
 /// Details of an operation that changes a protocol level token supply.
@@ -263,39 +249,24 @@ pub struct TokenTransfer {
 }
 
 /// Memo attached to a protocol level token transfer
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
 #[serde(rename_all = "camelCase")]
+#[cbor(tagged)]
 pub enum CborMemo {
     /// Memo that is not encoded as CBOR
     Raw(Memo),
     /// Memo encoded as CBOR
+    #[cbor(tag = CBOR_TAG)]
     Cbor(Memo),
-}
-
-impl CborSerialize for CborMemo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
-        match self {
-            Self::Raw(memo) => memo.serialize(encoder),
-            Self::Cbor(memo) => {
-                encoder.encode_tag(CBOR_TAG)?;
-                memo.serialize(encoder)
-            }
-        }
-    }
-}
-
-impl CborDeserialize for CborMemo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        Ok(match decoder.peek_data_item_header()? {
-            DataItemHeader::Tag(CBOR_TAG) => {
-                decoder.decode_tag_expect(CBOR_TAG)?;
-                Self::Cbor(Memo::deserialize(decoder)?)
-            }
-            _ => Self::Raw(Memo::deserialize(decoder)?),
-        })
-    }
 }
 
 #[cfg(test)]
@@ -305,6 +276,7 @@ pub mod test {
         common::cbor,
         protocol_level_tokens::{token_holder::test_fixtures::ADDRESS, HolderAccount},
     };
+    use assert_matches::assert_matches;
 
     #[test]
     fn test_cbor_memo_cbor() {
@@ -453,6 +425,8 @@ pub mod test {
     fn test_token_operation_cbor_unknown_variant() {
         let cbor = hex::decode("a172736f6d65556e6b6e6f776e56617269616e74a266616d6f756e74c4822219300c69726563697069656e74d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap();
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
-        assert_eq!(operation_decoded, TokenOperation::Unknown);
+        assert_matches!(operation_decoded, TokenOperation::Unknown(key, value::Value::Map(_)) => {
+            assert_eq!(key, "someUnknownVariant");
+        });
     }
 }
