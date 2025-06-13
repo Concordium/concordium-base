@@ -633,6 +633,8 @@ blockHashVersion = sing
 
 -- | This type family indicates when a 'ChainParametersVersion' and 'AuthorizationsVersion' are compatible,
 --  that is, there is a protocol version associated with both.
+-- | This type family indicates when a 'ChainParametersVersion' and 'AuthorizationsVersion' are compatible,
+--  that is, there is a protocol version associated with both.
 type family IsCompatibleAuthorizationsVersion cpv auv where
     IsCompatibleAuthorizationsVersion ChainParametersV0 AuthorizationsVersion0 = True
     IsCompatibleAuthorizationsVersion ChainParametersV1 AuthorizationsVersion1 = True
