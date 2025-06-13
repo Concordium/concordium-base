@@ -56,8 +56,9 @@ mod test {
             name:       "TK1".to_string(),
             // TODO comment in as part of COR-1385
             // metadata:   MetadataUrl {
-            //     url:              Some("https://tokenurl1".to_string()),
+            //     url:              "https://tokenurl1".to_string(),
             //     checksum_sha_256: Some(Bytes(vec![0x01; 32])),
+            //     additional:       Default::default(),
             // },
             allow_list: Some(true),
             deny_list:  None,

@@ -151,7 +151,7 @@ where
 
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
         let header = self.inner.pull()?;
-        let data_item_header = DataItemHeader::from_header(header);
+        let data_item_header = DataItemHeader::try_from_header(header)?;
         self.inner.push(header);
         Ok(data_item_header)
     }

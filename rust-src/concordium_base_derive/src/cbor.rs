@@ -25,7 +25,14 @@ pub struct CborVariantOpts {
     /// Deserialize unknown variants in CBOR to the variant with this
     /// attribute.
     #[darling(default)]
-    other: bool,
+    other:    bool,
+    /// CBOR tag to add to data item in the variant.
+    tag:      Option<Expr>,
+    /// CBOR tag to use to decided which variant to deserialize to.
+    /// The difference between specifying `cbor(tag)` and this attribute
+    /// is that the tag is not serialized as part of serializing the variant
+    /// but is expected be serialized by the variant value.
+    peek_tag: Option<Expr>,
 }
 
 #[derive(Debug, FromDeriveInput)]
@@ -39,11 +46,13 @@ pub struct CborOpts {
     tag:         Option<Expr>,
     /// Serialize enum as a map with a single entry. The variant
     /// name in camel case is used as the key as a text data item.
-    ///
-    /// This option is here because we want to extend with tagged enum encodings
-    /// also at some point. So you can use either `map` or `tagged`.
     #[darling(default)]
     map:         bool,
+    /// Serialize enum as a tagged data item. Each variant but have a
+    /// `cbor(tag)` attribute - except for at most one variant which can be
+    /// untagged.
+    #[darling(default)]
+    tagged:      bool,
 }
 
 #[derive(Debug)]
@@ -108,7 +117,7 @@ impl CborFields {
 
 impl CborFields {
     fn try_from_fields(fields: &Fields) -> syn::Result<Self> {
-        Ok(Self(
+        let this = Self(
             fields
                 .iter()
                 .zip(fields.members())
@@ -119,7 +128,15 @@ impl CborFields {
                     Ok(CborField { member, opts, ty })
                 })
                 .collect::<syn::Result<Vec<_>>>()?,
-        ))
+        );
+        if this.0.iter().filter(|field| field.opts.other).count() > 1 {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(other) can only be specified on a at most a single field",
+            ));
+        }
+
+        Ok(this)
     }
 }
 
@@ -164,11 +181,40 @@ impl CborVariants {
             })
             .collect()
     }
+
+    /// Identifier for untagged variant
+    fn untagged_ident(&self) -> Option<Ident> {
+        self.0
+            .iter()
+            .filter(|field| {
+                field.opts.tag.is_none() && field.opts.peek_tag.is_none() && !field.opts.other
+            })
+            .map(|field| field.ident.clone())
+            .next()
+    }
+
+    /// Get tagged variants
+    fn cbor_tagged_variants(&self) -> Vec<(Expr, Ident, Option<Expr>)> {
+        self.0
+            .iter()
+            .filter(|field| !field.opts.other)
+            .filter_map(|field| {
+                Some((
+                    field.opts.tag.clone().or(field.opts.peek_tag.clone())?,
+                    field.ident.clone(),
+                    field.opts.tag.clone(),
+                ))
+            })
+            .collect()
+    }
 }
 
 impl CborVariants {
-    fn try_from_variants(variants: &Punctuated<Variant, Comma>) -> syn::Result<Self> {
-        Ok(Self(
+    fn try_from_variants(
+        opts: &CborOpts,
+        variants: &Punctuated<Variant, Comma>,
+    ) -> syn::Result<Self> {
+        let this = Self(
             variants
                 .iter()
                 .map(|variant| {
@@ -180,7 +226,46 @@ impl CborVariants {
                     })
                 })
                 .collect::<syn::Result<Vec<_>>>()?,
-        ))
+        );
+        for variant in &this.0 {
+            if variant.opts.tag.is_some() && variant.opts.peek_tag.is_some() {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "Cannot specify both cbor(tag) and cbor(peek_tag)",
+                ));
+            }
+            if variant.opts.other && (variant.opts.tag.is_some() || variant.opts.peek_tag.is_some())
+            {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    "Cannot specify both cbor(tag) and cbor(other)",
+                ));
+            }
+        }
+        if this.0.iter().filter(|variant| variant.opts.other).count() > 1 {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(other) can only be specified on a at most a single variant",
+            ));
+        }
+        if opts.tagged
+            && this
+                .0
+                .iter()
+                .filter(|variant| {
+                    variant.opts.tag.is_none()
+                        && variant.opts.peek_tag.is_none()
+                        && !variant.opts.other
+                })
+                .count()
+                > 1
+        {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "cbor(tag) must be specified on all except at most one variant",
+            ));
+        }
+        Ok(this)
     }
 }
 
@@ -200,6 +285,12 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(map)] only valid for enums",
+        ));
+    }
+    if opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tagged)] only valid for enums",
         ));
     }
 
@@ -349,14 +440,21 @@ fn cbor_deserialize_enum_body(
         ));
     }
 
-    Ok(if opts.map {
-        let cbor_module = get_cbor_module()?;
+    if opts.map && opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
+        ));
+    }
 
-        let cbor_variants = CborVariants::try_from_variants(variants)?;
+    let cbor_module = get_cbor_module()?;
+    let cbor_variants = CborVariants::try_from_variants(opts, variants)?;
+
+    Ok(if opts.map {
         let variant_idents = cbor_variants.variant_idents();
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
-        let unknown_variant = if let Some(other_ident) = cbor_variants.other_ident() {
+        let deserialize_unknown = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
                 Self::#other_ident(key.into(), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)
             }
@@ -380,14 +478,77 @@ fn cbor_deserialize_enum_body(
                     }
                 )*
                 _ => {
-                    #unknown_variant
+                    #deserialize_unknown
+                }
+            })
+        }
+    } else if opts.tagged {
+        let tagged_variant_idents = cbor_variants
+            .cbor_tagged_variants()
+            .into_iter()
+            .map(|(_, ident, _)| ident)
+            .collect::<Vec<_>>();
+
+        let tagged_variant_tags = cbor_variants
+            .cbor_tagged_variants()
+            .into_iter()
+            .map(|(tag, _, _)| tag)
+            .collect::<Vec<_>>();
+
+        let deserialize_variant_tags = cbor_variants
+            .cbor_tagged_variants()
+            .into_iter()
+            .map(|(_, _, tag)| {
+                let tag = tag.into_iter();
+                quote! {
+                    #(
+                        #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, #tag)?;
+                    )*
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let deserialize_untagged = if let Some(untagged_ident) = cbor_variants.untagged_ident() {
+            quote! {
+                Self::#untagged_ident(#cbor_module::CborDeserialize::deserialize(decoder)?)
+            }
+        } else {
+            quote! {
+                return Err(#cbor_module::__private::anyhow::anyhow!("Tag needed to deserialize to enum, no tag specified").into());
+            }
+        };
+
+        let deserialize_unknown = if let Some(other_ident) = cbor_variants.other_ident() {
+            quote! {
+                Self::#other_ident(tag, #cbor_module::CborDeserialize::deserialize(decoder)?)
+            }
+        } else {
+            quote! {
+                return Err(#cbor_module::__private::anyhow::anyhow!("Tag {} not among declared variants", tag).into());
+            }
+        };
+
+        quote! {
+            Ok(match #cbor_module::CborDecoder::peek_data_item_header(&mut decoder)? {
+                #(
+                    #cbor_module::DataItemHeader::Tag(#tagged_variant_tags) => {
+                        #deserialize_variant_tags;
+                        Self::#tagged_variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?)
+                    }
+                )*
+                #cbor_module::DataItemHeader::Tag(tag) => {
+                    #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, tag)?;
+                    #deserialize_unknown
+                }
+                _ => {
+                    #deserialize_untagged
                 }
             })
         }
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
-            "#[cbor(map)] must be specified for enums",
+            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
         ));
     })
 }
@@ -433,6 +594,12 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
         return Err(syn::Error::new(
             Span::call_site(),
             "#[cbor(map)] only valid for enums",
+        ));
+    }
+    if opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "#[cbor(tagged)] only valid for enums",
         ));
     }
 
@@ -529,11 +696,18 @@ fn cbor_serialize_enum_body(
         ));
     }
 
-    Ok(if opts.map {
-        let cbor_module = get_cbor_module()?;
+    if opts.map && opts.tagged {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "Both #[cbor(map)] and #[cbor(tagged)] cannot be specified",
+        ));
+    }
 
-        let cbor_variants = CborVariants::try_from_variants(variants)?;
-        let variant_idents = cbor_variants.variant_idents();
+    let cbor_module = get_cbor_module()?;
+    let cbor_variants = CborVariants::try_from_variants(opts, variants)?;
+    let variant_idents = cbor_variants.variant_idents();
+
+    Ok(if opts.map {
         let variant_map_keys = cbor_variants.cbor_map_keys();
 
         let other_ident = cbor_variants.other_ident().into_iter();
@@ -554,10 +728,55 @@ fn cbor_serialize_enum_body(
             }
             #cbor_module::CborMapEncoder::end(map_encoder)
         }
+    } else if opts.tagged {
+        let tagged_variant_idents = cbor_variants
+            .cbor_tagged_variants()
+            .into_iter()
+            .map(|(_, ident, _)| ident)
+            .collect::<Vec<_>>();
+
+        let serialize_variant_tags = cbor_variants
+            .cbor_tagged_variants()
+            .into_iter()
+            .map(|(_, _, tag)| {
+                let tag = tag.into_iter();
+                quote! {
+                    #(
+                        #cbor_module::CborEncoder::encode_tag(&mut encoder, #tag)?;
+                    )*
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let untagged_ident = cbor_variants.untagged_ident().clone().into_iter();
+        let other_ident = cbor_variants.other_ident().clone().into_iter();
+
+        quote! {
+            match self {
+                #(
+                    Self::#tagged_variant_idents(value) => {
+                        #serialize_variant_tags
+                        #cbor_module::CborSerialize::serialize(value, encoder)?;
+                    }
+                )*
+                #(
+                    Self::#other_ident(tag, value) => {
+                        #cbor_module::CborEncoder::encode_tag(&mut encoder, *tag)?;
+                        #cbor_module::CborSerialize::serialize(value, encoder)?;
+                    }
+                )*
+                #(
+                    Self::#untagged_ident(value) => {
+                        #cbor_module::CborSerialize::serialize(value, encoder)?;
+                    }
+                )*
+            }
+            Ok(())
+        }
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
-            "#[cbor(map)] must be specified for enums",
+            "Either #[cbor(map)] or #[cbor(tagged)] must be specified for enums",
         ));
     })
 }
