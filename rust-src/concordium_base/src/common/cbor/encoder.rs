@@ -3,7 +3,10 @@ use crate::common::cbor::{
     CborSerialize,
 };
 use ciborium_ll::Header;
-use std::io::Write;
+use std::{
+    io::Write,
+    ops::{Index, Range},
+};
 
 /// CBOR encoder implementation
 pub struct Encoder<W: Write> {
@@ -71,11 +74,13 @@ where
 /// CBOR map encoder
 #[must_use]
 pub struct MapEncoder<'a, W: Write> {
-    declared_size: usize,
-    current_size:  usize,
-    encoder:       &'a mut Encoder<W>,
+    declared_size:   usize,
+    current_size:    usize,
+    encoder:         &'a mut Encoder<W>,
     /// Temporary buffer for unordered map entries
-    buffers:       Vec<Vec<u8>>,
+    buffer:          Vec<u8>,
+    /// Indexes for each entry in the buffer
+    entries_indexes: Vec<Range<usize>>,
 }
 
 impl<'a, W: Write> MapEncoder<'a, W> {
@@ -84,7 +89,8 @@ impl<'a, W: Write> MapEncoder<'a, W> {
             declared_size: size,
             current_size: 0,
             encoder,
-            buffers: Vec::new(),
+            buffer: Vec::new(),
+            entries_indexes: Vec::with_capacity(size),
         }
     }
 }
@@ -99,20 +105,21 @@ where
         value: &V,
     ) -> CborSerializationResult<()> {
         self.current_size += 1;
-        let mut buffer = Vec::new();
-        let mut tmp_encoder = Encoder::new(&mut buffer);
+        let index_start = self.buffer.len();
+        let mut tmp_encoder = Encoder::new(&mut self.buffer);
         key.serialize(&mut tmp_encoder)?;
         value.serialize(&mut tmp_encoder)?;
-        self.buffers.push(buffer);
+        self.entries_indexes.push(index_start..self.buffer.len());
         Ok(())
     }
 
     fn end(mut self) -> CborSerializationResult<()> {
         if self.declared_size == self.current_size {
             // Sort according to lexicographic byte order: https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding
-            self.buffers.sort();
-            for buffer in &self.buffers {
-                self.encoder.encode_raw(buffer)?;
+            self.entries_indexes
+                .sort_by_key(|index| self.buffer.index(index.clone()));
+            for index in &self.entries_indexes {
+                self.encoder.encode_raw(self.buffer.index(index.clone()))?;
             }
             Ok(())
         } else {
