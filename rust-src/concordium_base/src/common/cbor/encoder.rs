@@ -2,65 +2,69 @@ use crate::common::cbor::{
     CborArrayEncoder, CborEncoder, CborMapEncoder, CborSerializationError, CborSerializationResult,
     CborSerialize,
 };
-use ciborium_io::Write;
 use ciborium_ll::Header;
+use std::io::Write;
 
 /// CBOR encoder implementation
 pub struct Encoder<W: Write> {
-    inner: ciborium_ll::Encoder<W>,
+    write: W,
 }
 
 impl<W: Write> Encoder<W> {
-    pub fn new(write: W) -> Self {
-        let inner = ciborium_ll::Encoder::from(write);
+    pub fn new(write: W) -> Self { Self { write } }
 
-        Self { inner }
+    fn encode_raw(&mut self, bytes: &[u8]) -> CborSerializationResult<()> {
+        Ok(self.write.write_all(bytes)?)
+    }
+
+    fn encoder(&mut self) -> ciborium_ll::Encoder<&mut W> {
+        ciborium_ll::Encoder::from(&mut self.write)
     }
 }
 
 impl<'a, W: Write> CborEncoder for &'a mut Encoder<W>
 where
-    CborSerializationError: From<W::Error>,
+    CborSerializationError: From<<W as ciborium_io::Write>::Error>,
 {
     type ArrayEncoder = ArrayEncoder<'a, W>;
     type MapEncoder = MapEncoder<'a, W>;
 
     fn encode_tag(&mut self, tag: u64) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Tag(tag))?)
+        Ok(self.encoder().push(Header::Tag(tag))?)
     }
 
     fn encode_positive(self, positive: u64) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Positive(positive))?)
+        Ok(self.encoder().push(Header::Positive(positive))?)
     }
 
     fn encode_negative(self, negative: u64) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Negative(negative))?)
+        Ok(self.encoder().push(Header::Negative(negative))?)
     }
 
     fn encode_map(self, size: usize) -> CborSerializationResult<Self::MapEncoder> {
-        self.inner.push(Header::Map(Some(size)))?;
+        self.encoder().push(Header::Map(Some(size)))?;
         Ok(MapEncoder::new(size, self))
     }
 
     fn encode_array(self, size: usize) -> CborSerializationResult<Self::ArrayEncoder> {
-        self.inner.push(Header::Array(Some(size)))?;
+        self.encoder().push(Header::Array(Some(size)))?;
         Ok(ArrayEncoder::new(size, self))
     }
 
     fn encode_bytes(self, bytes: &[u8]) -> CborSerializationResult<()> {
-        Ok(self.inner.bytes(bytes, None)?)
+        Ok(self.encoder().bytes(bytes, None)?)
     }
 
     fn encode_text(self, text: &str) -> CborSerializationResult<()> {
-        Ok(self.inner.text(text, None)?)
+        Ok(self.encoder().text(text, None)?)
     }
 
     fn encode_simple(self, value: u8) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Simple(value))?)
+        Ok(self.encoder().push(Header::Simple(value))?)
     }
 
     fn encode_float(self, float: f64) -> CborSerializationResult<()> {
-        Ok(self.inner.push(Header::Float(float))?)
+        Ok(self.encoder().push(Header::Float(float))?)
     }
 }
 
@@ -70,6 +74,8 @@ pub struct MapEncoder<'a, W: Write> {
     declared_size: usize,
     current_size:  usize,
     encoder:       &'a mut Encoder<W>,
+    /// Temporary buffer for unordered map entries
+    buffers:       Vec<Vec<u8>>,
 }
 
 impl<'a, W: Write> MapEncoder<'a, W> {
@@ -78,13 +84,14 @@ impl<'a, W: Write> MapEncoder<'a, W> {
             declared_size: size,
             current_size: 0,
             encoder,
+            buffers: Vec::new(),
         }
     }
 }
 
 impl<W: Write> CborMapEncoder for MapEncoder<'_, W>
 where
-    CborSerializationError: From<W::Error>,
+    CborSerializationError: From<<W as ciborium_io::Write>::Error>,
 {
     fn serialize_entry<K: CborSerialize + ?Sized, V: CborSerialize + ?Sized>(
         &mut self,
@@ -92,13 +99,20 @@ where
         value: &V,
     ) -> CborSerializationResult<()> {
         self.current_size += 1;
-        key.serialize(&mut *self.encoder)?;
-        value.serialize(&mut *self.encoder)?;
+        let mut buffer = Vec::new();
+        let mut tmp_encoder = Encoder::new(&mut buffer);
+        key.serialize(&mut tmp_encoder)?;
+        value.serialize(&mut tmp_encoder)?;
+        self.buffers.push(buffer);
         Ok(())
     }
 
-    fn end(self) -> CborSerializationResult<()> {
+    fn end(mut self) -> CborSerializationResult<()> {
         if self.declared_size == self.current_size {
+            self.buffers.sort();
+            for buffer in &self.buffers {
+                self.encoder.encode_raw(buffer)?;
+            }
             Ok(())
         } else {
             Err(CborSerializationError::map_size(
@@ -129,7 +143,7 @@ impl<'a, W: Write> ArrayEncoder<'a, W> {
 
 impl<W: Write> CborArrayEncoder for ArrayEncoder<'_, W>
 where
-    CborSerializationError: From<W::Error>,
+    CborSerializationError: From<<W as ciborium_io::Write>::Error>,
 {
     fn serialize_element<T: CborSerialize + ?Sized>(
         &mut self,
@@ -149,5 +163,43 @@ where
                 self.current_size,
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_map_wrong_size() {
+        let mut bytes = Vec::new();
+        let mut encoder = Encoder::new(&mut bytes);
+        let map_encoder = encoder.encode_map(1).unwrap();
+        let err = map_encoder.end().unwrap_err().to_string();
+        assert!(err.contains("expected map size 1"), "err: {}", err);
+    }
+
+    #[test]
+    fn test_array_wrong_size() {
+        let mut bytes = Vec::new();
+        let mut encoder = Encoder::new(&mut bytes);
+        let array_encoder = encoder.encode_array(1).unwrap();
+        let err = array_encoder.end().unwrap_err().to_string();
+        assert!(err.contains("expected array length 1"), "err: {}", err);
+    }
+
+    /// Test that map entries are ordered according to the rules
+    /// in <https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding>
+    #[test]
+    fn test_map_entry_order() {
+        let mut bytes = Vec::new();
+        let mut encoder = Encoder::new(&mut bytes);
+        let mut map_encoder = encoder.encode_map(3).unwrap();
+        map_encoder.serialize_entry(&256, &0).unwrap();
+        map_encoder.serialize_entry(&(256 * 256), &0).unwrap();
+        map_encoder.serialize_entry(&1, &0).unwrap();
+        map_encoder.end().unwrap();
+
+        assert_eq!(hex::encode(&bytes), "a30100190100001a0001000000");
     }
 }

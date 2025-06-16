@@ -3,9 +3,8 @@ use crate::common::cbor::{
     CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions,
 };
 use anyhow::{anyhow, Context};
-use ciborium_io::Read;
 use ciborium_ll::Header;
-use std::fmt::Display;
+use std::{fmt::Display, io::Read};
 
 /// CBOR decoder implementation
 pub struct Decoder<R: Read> {
@@ -23,7 +22,7 @@ impl<R: Read> Decoder<R> {
 
 impl<'a, R: Read> CborDecoder for &'a mut Decoder<R>
 where
-    R::Error: Display,
+    <R as ciborium_io::Read>::Error: Display,
 {
     type ArrayDecoder = ArrayDecoder<'a, R>;
     type MapDecoder = MapDecoder<'a, R>;
@@ -209,7 +208,7 @@ impl<R: Read> Decoder<R> {
     /// means there is a single segment)
     fn decode_definite_length_bytes(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
     where
-        R::Error: Display, {
+        <R as ciborium_io::Read>::Error: Display, {
         let mut segments = self.inner.bytes(Some(dest.len()));
         let Some(mut segment) = segments.pull()? else {
             return Err(anyhow!("must have at least one segment").into());
@@ -232,7 +231,7 @@ impl<R: Read> Decoder<R> {
     /// means there is a single segment)
     fn decode_definite_length_text(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
     where
-        R::Error: Display, {
+        <R as ciborium_io::Read>::Error: Display, {
         let mut segments = self.inner.text(Some(dest.len()));
         let Some(mut segment) = segments.pull()? else {
             return Err(anyhow!("must have at least one segment").into());
@@ -277,7 +276,7 @@ impl<'a, R: Read> MapDecoder<'a, R> {
 
 impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
-    R::Error: Display,
+    <R as ciborium_io::Read>::Error: Display,
 {
     fn size(&self) -> usize { self.declared_size }
 
@@ -350,7 +349,7 @@ impl<'a, R: Read> ArrayDecoder<'a, R> {
 
 impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
-    R::Error: Display,
+    <R as ciborium_io::Read>::Error: Display,
 {
     fn size(&self) -> usize { self.declared_size }
 
