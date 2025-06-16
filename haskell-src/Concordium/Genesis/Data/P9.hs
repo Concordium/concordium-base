@@ -14,15 +14,21 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Genesis.Data.Base as Base
 import qualified Concordium.Genesis.Data.BaseV1 as BaseV1
 import Concordium.Types
+import Concordium.Types.Updates
 
 -- | Parameters data type for the 'P8' to 'P9' protocol update.
 --  This is provided as a parameter to the protocol update chain update instruction.
 data ProtocolUpdateData = ProtocolUpdateData
+    { -- | Access structure defining the keys and threshold for CreatePLT chain update.
+      updateCreatePLTAccessStructure :: !AccessStructure
+    }
     deriving (Eq, Show)
 
 instance Serialize ProtocolUpdateData where
-    put ProtocolUpdateData{} = put ()
-    get = return ProtocolUpdateData
+    put ProtocolUpdateData{..} = put updateCreatePLTAccessStructure
+    get = do
+        updateCreatePLTAccessStructure <- get
+        return ProtocolUpdateData{..}
 
 -- | Parameters used to migrate state from 'P8' to 'P9'.
 newtype StateMigrationData = StateMigrationData

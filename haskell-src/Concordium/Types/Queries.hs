@@ -30,8 +30,6 @@ import Concordium.Types.Block
 import Concordium.Types.Execution (SupplementedTransactionSummary)
 import qualified Concordium.Types.IdentityProviders as IPS
 import Concordium.Types.Parameters (
-    AuthorizationsVersion (..),
-    AuthorizationsVersionFor,
     ChainParameters',
     CooldownParameters,
     FinalizationCommitteeParameters,
@@ -619,6 +617,8 @@ data PendingUpdateEffect
       PUELevel2KeysV0 !(U.Authorizations 'AuthorizationsVersion0)
     | -- | Updates to the level 2 keys.
       PUELevel2KeysV1 !(U.Authorizations 'AuthorizationsVersion1)
+    | -- | Updates to the level 2 keys.
+      PUELevel2KeysV2 !(U.Authorizations 'AuthorizationsVersion2)
     | -- | Protocol updates.
       PUEProtocol !U.ProtocolUpdate
     | -- | Updates to the election difficulty parameter for chain parameters versions 1-2.
@@ -754,11 +754,11 @@ data BlockFinalizationSummary
     | Summary !FinalizationSummary
 
 -- | An existentially qualified pair of chain parameters and update keys currently in effect.
-data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion).
-      (IsChainParametersVersion cpv) =>
+data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion).
+      (IsChainParametersVersion cpv, IsAuthorizationsVersion auv, IsCompatibleAuthorizationsVersion cpv auv ~ 'True) =>
     EChainParametersAndKeys
     { ecpParams :: !(ChainParameters' cpv),
-      ecpKeys :: !(U.UpdateKeysCollection (AuthorizationsVersionFor cpv))
+      ecpKeys :: !(U.UpdateKeysCollection auv)
     }
 
 instance ToJSON EChainParametersAndKeys where
@@ -785,12 +785,6 @@ instance ToJSON EChainParametersAndKeys where
             SChainParametersV3 ->
                 object
                     [ "version" .= toJSON ChainParametersV3,
-                      "parameters" .= toJSON params,
-                      "updateKeys" .= toJSON keys
-                    ]
-            SChainParametersV4 ->
-                object
-                    [ "version" .= toJSON ChainParametersV4,
                       "parameters" .= toJSON params,
                       "updateKeys" .= toJSON keys
                     ]
