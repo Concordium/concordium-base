@@ -1,4 +1,6 @@
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Types for protocol level tokens (PLT).
 module Concordium.Types.Queries.Tokens (
@@ -9,6 +11,7 @@ module Concordium.Types.Queries.Tokens (
     TokenInfo (..),
 ) where
 
+import Data.Aeson as AE
 import qualified Data.ByteString as BS
 import Data.Maybe (catMaybes)
 import Data.Word
@@ -17,7 +20,6 @@ import Concordium.Crypto.ByteStringHelpers
 import Concordium.Types
 import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.Tokens
-import Data.Aeson
 
 -- | Protocol level token.
 data Token = Token
@@ -105,6 +107,31 @@ data TokenState = TokenState
     }
     deriving (Eq, Show)
 
+-- | A wrapper type for (de)-serializing a CBOR-encoded token module state to/from JSON.
+--  This can parse either a JSON object representation of 'TokenModuleState'
+--  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
+--  it will render as a JSON object if the contents can be decoded to a
+-- 'TokenModuleState', or otherwise as the hex-encoded byte string.
+newtype EncodedTokenModuleState = EncodedTokenModuleState BS.ByteString
+    deriving newtype (Eq, Show)
+
+instance AE.ToJSON EncodedTokenModuleState where
+    toJSON (EncodedTokenModuleState bytes) =
+        case CBOR.tokenModuleStateFromBytes
+            (BS.fromStrict bytes) of
+            Left _ -> AE.toJSON (ByteStringHex bytes)
+            Right v -> AE.toJSON v
+
+instance AE.FromJSON EncodedTokenModuleState where
+    parseJSON o@(AE.Object _) = do
+        state <- AE.parseJSON o
+        return $
+            EncodedTokenModuleState $
+                CBOR.tokenModuleStateToBytes state
+    parseJSON val = do
+        ByteStringHex bs <- AE.parseJSON val
+        return (EncodedTokenModuleState bs)
+
 -- | JSON instances for TokenState
 instance ToJSON TokenState where
     toJSON (TokenState tsTokenModuleRef tsIssuer tsDecimals tsTotalSupply tsModuleState) =
@@ -113,7 +140,7 @@ instance ToJSON TokenState where
               "issuer" .= tsIssuer,
               "decimals" .= tsDecimals,
               "totalSupply" .= tsTotalSupply,
-              "moduleState" .= ByteStringHex tsModuleState
+              "moduleState" AE..= EncodedTokenModuleState tsModuleState
             ]
 
 instance FromJSON TokenState where
@@ -122,7 +149,7 @@ instance FromJSON TokenState where
         tsIssuer <- o .: "issuer"
         tsDecimals <- o .: "decimals"
         tsTotalSupply <- o .: "totalSupply"
-        (ByteStringHex tsModuleState) <- o .: "moduleState"
+        (EncodedTokenModuleState tsModuleState) <- o AE..: "moduleState"
         return TokenState{..}
 
 -- | The global info about a protocol-level token.

@@ -15,6 +15,7 @@ import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Key as AE.Key
 import qualified Data.Aeson.KeyMap as KeyMap
+import Data.Aeson.Types ((.!=))
 import qualified Data.Aeson.Types as AE
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
@@ -1471,6 +1472,46 @@ data TokenModuleState = TokenModuleState
       tmsAdditional :: !(Map.Map Text CBOR.Term)
     }
     deriving (Eq, Show)
+
+instance AE.ToJSON TokenModuleState where
+    toJSON TokenModuleState{..} =
+        AE.object
+            ( [ "name" AE..= tmsName,
+                "metadata" AE..= tmsMetadata,
+                "allowList" AE..= tmsAllowList,
+                "denyList" AE..= tmsDenyList,
+                "mintable" AE..= tmsMintable,
+                "burnable" AE..= tmsBurnable
+              ]
+                ++ [ "_additional"
+                        AE..= AE.object
+                            [ AE.Key.fromText k AE..= cborTermToHex v
+                              | (k, v) <- Map.toList tmsAdditional
+                            ]
+                     | not (null tmsAdditional)
+                   ]
+            )
+
+instance AE.FromJSON TokenModuleState where
+    parseJSON = AE.withObject "TokenModuleState" $ \v -> do
+        tmsName <- v AE..: "name"
+        tmsMetadata <- v AE..: "metadata"
+        tmsAllowList <- v AE..: "allowList"
+        tmsDenyList <- v AE..: "denyList"
+        tmsMintable <- v AE..: "mintable"
+        tmsBurnable <- v AE..: "burnable"
+        -- Decode each hex string into a CBOR.Term
+        tmsAdditional <-
+            (v AE..:? "_additional" .!= Map.empty)
+                >>= Map.traverseWithKey
+                    ( \k hexTxt ->
+                        case hexToCborTerm hexTxt of
+                            Left err ->
+                                fail $ "Failed to decode CBOR for key " ++ show k ++ ": " ++ err
+                            Right term -> return term
+                    )
+
+        return TokenModuleState{..}
 
 -- | Encode a 'TokenModuleState' as CBOR. Any keys in 'tmsAdditional' that overlap with
 --  standardized keys (e.g. "name", "metadata", "allowList", etc.) will be ignored.

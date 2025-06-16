@@ -8,6 +8,7 @@ import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P4 as P4
 import qualified Concordium.Genesis.Data.P6 as P6
 import qualified Concordium.Genesis.Data.P8 as P8
+import qualified Concordium.Genesis.Data.P9 as P9
 import Concordium.Types
 import Concordium.Types.Accounts
 import Concordium.Types.Parameters
@@ -19,8 +20,8 @@ import Concordium.Types.Updates
 migrateAuthorizations ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    Authorizations (AuthorizationsVersionForPV oldpv) ->
-    Authorizations (AuthorizationsVersionForPV pv)
+    Authorizations (AuthorizationsVersionFor oldpv) ->
+    Authorizations (AuthorizationsVersionFor pv)
 migrateAuthorizations StateMigrationParametersTrivial auths = auths
 migrateAuthorizations StateMigrationParametersP1P2 auths = auths
 migrateAuthorizations StateMigrationParametersP2P3 auths = auths
@@ -38,7 +39,13 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
 migrateAuthorizations StateMigrationParametersP6ToP7{} auths = auths
 migrateAuthorizations StateMigrationParametersP7ToP8{} auths = auths
-migrateAuthorizations StateMigrationParametersP8ToP9{} auths = auths
+migrateAuthorizations (StateMigrationParametersP8ToP9 migration) Authorizations{..} =
+    Authorizations
+        { asCreatePLT = CTrue updateCreatePLTAccessStructure,
+          ..
+        }
+  where
+    P9.ProtocolUpdateData{..} = P9.migrationProtocolUpdateData migration
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -46,8 +53,8 @@ migrateAuthorizations StateMigrationParametersP8ToP9{} auths = auths
 migrateUpdateKeysCollection ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    UpdateKeysCollection (AuthorizationsVersionForPV oldpv) ->
-    UpdateKeysCollection (AuthorizationsVersionForPV pv)
+    UpdateKeysCollection (AuthorizationsVersionFor oldpv) ->
+    UpdateKeysCollection (AuthorizationsVersionFor pv)
 migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
     UpdateKeysCollection{level2Keys = migrateAuthorizations migration level2Keys, ..}
 

@@ -22,6 +22,7 @@ import System.FilePath
 
 import Concordium.Crypto.SignatureScheme
 import Concordium.Types.Parameters
+import Concordium.Types.ProtocolVersion
 import Concordium.Types.Updates
 
 data AuthDetails = AuthDetails
@@ -171,6 +172,7 @@ generateKeys guk = do
                 Authorizations
                     { asCooldownParameters = CFalse,
                       asTimeParameters = CFalse,
+                      asCreatePLT = CFalse,
                       ..
                     }
         GenerateUpdateKeysCPV1{..} -> do
@@ -180,7 +182,7 @@ generateKeys guk = do
             asTimeParameters <-
                 CTrue
                     <$> makeAS gukCooldownParameters "Add identity provider access structure"
-            doGenerateKeys @'AuthorizationsVersion1 Authorizations{..}
+            doGenerateKeys @'AuthorizationsVersion1 Authorizations{asCreatePLT = CFalse, ..}
   where
     CommonUpdateKeys{..} = gukCommon guk
     doGenerateKeys :: forall auv. (IsAuthorizationsVersion auv) => Authorizations auv -> IO ()

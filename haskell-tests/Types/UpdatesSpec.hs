@@ -36,12 +36,12 @@ checkUpdateInstructionSerialization spv = checkSerialization (getUpdateInstructi
 --  we get back the value we started with.
 testSerializeUpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Property
 testSerializeUpdatePayload spv =
-    forAll (resize 50 $ genUpdatePayload $ sChainParametersVersionFor spv) $ checkUpdatePayloadSerialization $ spv
+    forAll (resize 50 $ genUpdatePayload spv) $ checkUpdatePayloadSerialization $ spv
 
 -- | Test that if we JSON-encode and decode an 'UpdatePayload',
 --  we get back the value we started with.
-testJSONUpdatePayload :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv -> Property
-testJSONUpdatePayload scpv = forAll (resize 50 $ genUpdatePayload scpv) chk
+testJSONUpdatePayload :: (IsProtocolVersion pv) => SProtocolVersion pv -> Property
+testJSONUpdatePayload spv = forAll (resize 50 $ genUpdatePayload spv) chk
   where
     chk up = case AE.eitherDecode (AE.encode up) of
         Left err -> counterexample err False
@@ -62,8 +62,8 @@ type SignKeyGen =
 --  The second argument indicates whether the signature should be valid.
 testUpdateInstruction :: forall pv. (IsProtocolVersion pv) => SProtocolVersion pv -> SignKeyGen -> Bool -> Property
 testUpdateInstruction spv keyGen isValid =
-    forAll (withIsAuthorizationsVersionForPV (protocolVersion @pv) $ genKeyCollection @(AuthorizationsVersionForPV pv) 3) $ \(kc, rootK, level1K, level2K) ->
-        forAll (genRawUpdateInstruction scpv) $ \rui -> do
+    forAll (withIsAuthorizationsVersionFor (protocolVersion @pv) $ genKeyCollection @(AuthorizationsVersionFor pv) 3) $ \(kc, rootK, level1K, level2K) ->
+        forAll (genRawUpdateInstruction spv) $ \rui -> do
             let p = ruiPayload rui
             keysToSign <- case p of
                 RootUpdatePayload{} -> f p kc rootK
@@ -74,7 +74,6 @@ testUpdateInstruction spv keyGen isValid =
                 label "Signature check" (counterexample (show ui) $ isValid == checkAuthorizedUpdate kc ui)
                     .&&. label "Serialization check" (checkUpdateInstructionSerialization spv ui)
   where
-    scpv = sChainParametersVersionFor spv
     f :: UpdatePayload -> UpdateKeysCollection cpv -> [Sig.KeyPair] -> Gen (Map.Map UpdateKeyIndex Sig.KeyPair)
     f pld ukc availableKeys = do
         let (keyIndices, thr) = extractKeysIndices pld ukc
@@ -135,11 +134,15 @@ combineKeys kg1 kg2 keys authIxs threshold = do
 
 tests :: Spec
 tests = parallel $ do
-    specify "UpdatePayload JSON in CP0" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV0
-    specify "UpdatePayload JSON in CP1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV1
-    specify "UpdatePayload JSON in CP2" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV2
-    specify "UpdatePayload JSON in CP3" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV3
-    specify "UpdatePayload JSON in CP3" $ withMaxSuccess 1000 $ testJSONUpdatePayload SChainParametersV4
+    specify "UpdatePayload JSON in P1" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP1
+    specify "UpdatePayload JSON in P2" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP2
+    specify "UpdatePayload JSON in P3" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP3
+    specify "UpdatePayload JSON in P4" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP4
+    specify "UpdatePayload JSON in P5" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP5
+    specify "UpdatePayload JSON in P6" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP6
+    specify "UpdatePayload JSON in P7" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP7
+    specify "UpdatePayload JSON in P8" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP8
+    specify "UpdatePayload JSON in P9" $ withMaxSuccess 1000 $ testJSONUpdatePayload SP9
     versionedTests SP1
     versionedTests SP2
     versionedTests SP3
@@ -148,8 +151,7 @@ tests = parallel $ do
     versionedTests SP6
     versionedTests SP7
     versionedTests SP8
-    -- TODO: (NOD-701) Re-enable tests
-    xdescribe "P9 tests" $ versionedTests SP9
+    versionedTests SP9
   where
     versionedTests spv = describe (show $ demoteProtocolVersion spv) $ do
         specify "UpdatePayload serialization" $ withMaxSuccess 1000 $ testSerializeUpdatePayload spv
