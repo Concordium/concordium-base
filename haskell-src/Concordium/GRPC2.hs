@@ -1762,7 +1762,7 @@ instance ToProto TransactionType where
     toProto TTTransferWithScheduleAndMemo = Proto.TRANSFER_WITH_SCHEDULE_AND_MEMO
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
-    toProto TTTokenUpdate = Proto.TOKEN
+    toProto TTTokenUpdate = Proto.TOKEN_UPDATE
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy

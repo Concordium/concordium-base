@@ -379,9 +379,9 @@ data Payload
     | -- | An update for a protocol level token.
       TokenUpdate
         { -- | Identifier of the token type to which the transaction refers.
-          thTokenId :: !TokenId,
+          tuTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
-          thOperations :: !TokenParameter
+          tuOperations :: !TokenParameter
         }
     deriving (Eq, Show)
 
@@ -569,8 +569,8 @@ instance AE.ToJSON Payload where
             ]
     toJSON TokenUpdate{..} =
         AE.object
-            [ "tokenId" AE..= thTokenId,
-              "operations" AE..= EncodedTokenOperations thOperations
+            [ "tokenId" AE..= tuTokenId,
+              "operations" AE..= EncodedTokenOperations tuOperations
             ]
 
 instance AE.FromJSON Payload where
@@ -681,8 +681,8 @@ instance AE.FromJSON Payload where
                 cdDelegationTarget <- obj AE..: "delegationTarget"
                 return ConfigureDelegation{..}
             "tokenUpdate" -> do
-                thTokenId <- obj AE..: "tokenId"
-                (EncodedTokenOperations thOperations) <- obj AE..: "operations"
+                tuTokenId <- obj AE..: "tokenId"
+                (EncodedTokenOperations tuOperations) <- obj AE..: "operations"
                 return TokenUpdate{..}
             _ -> fail "Unrecognized 'TransactionType' tag"
 
@@ -825,8 +825,8 @@ putPayload ConfigureDelegation{..} = do
             .|. bitFor 2 cdDelegationTarget
 putPayload TokenUpdate{..} = do
     S.putWord8 27
-    S.put thTokenId
-    S.put thOperations
+    S.put tuTokenId
+    S.put tuOperations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -993,8 +993,8 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cdDelegationTarget <- maybeGet 2
                 return ConfigureDelegation{..}
             27 | supportProtocolLevelTokens -> S.label "TokenUpdate" $ do
-                thTokenId <- S.get
-                thOperations <- S.get
+                tuTokenId <- S.get
+                tuOperations <- S.get
                 return TokenUpdate{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
