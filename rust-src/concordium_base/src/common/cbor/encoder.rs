@@ -109,6 +109,7 @@ where
 
     fn end(mut self) -> CborSerializationResult<()> {
         if self.declared_size == self.current_size {
+            // Sort according to lexicographic byte order: https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding
             self.buffers.sort();
             for buffer in &self.buffers {
                 self.encoder.encode_raw(buffer)?;
