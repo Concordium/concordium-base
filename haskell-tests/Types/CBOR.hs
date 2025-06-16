@@ -24,6 +24,7 @@ import Test.Hspec
 import Test.QuickCheck
 
 import qualified Concordium.Crypto.SHA256 as Hash
+import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
@@ -63,6 +64,7 @@ genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- genText
     tipMetadata <- genTokenMetadataUrlSimple
+    tipGovernanceAccount <- genAccountAddress
     tipAllowList <- arbitrary
     tipDenyList <- arbitrary
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
@@ -94,17 +96,12 @@ genTaggableMemo =
           CBORMemo <$> genMemo
         ]
 
--- | Generator for 'TokenHolderTransaction'.
-genTokenHolderTransaction :: Gen TokenHolderTransaction
-genTokenHolderTransaction =
-    TokenHolderTransaction . Seq.fromList
-        <$> listOf (TokenHolderTransfer <$> genTokenTransfer)
-
 -- | Generator for 'TokenGovernanceOperation'.
-genTokenGovernanceOperation :: Gen TokenGovernanceOperation
-genTokenGovernanceOperation =
+genTokenOperation :: Gen TokenOperation
+genTokenOperation =
     oneof
-        [ TokenMint <$> genTokenAmount,
+        [ TokenTransfer <$> genTokenTransfer,
+          TokenMint <$> genTokenAmount,
           TokenBurn <$> genTokenAmount,
           TokenAddAllowList <$> genTokenHolder,
           TokenRemoveAllowList <$> genTokenHolder,
@@ -113,10 +110,10 @@ genTokenGovernanceOperation =
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
-genTokenGovernanceTransaction :: Gen TokenGovernanceTransaction
-genTokenGovernanceTransaction =
-    TokenGovernanceTransaction . Seq.fromList
-        <$> listOf genTokenGovernanceOperation
+genTokenTransaction :: Gen TokenTransaction
+genTokenTransaction =
+    TokenTransaction . Seq.fromList
+        <$> listOf genTokenOperation
 
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
@@ -199,12 +196,19 @@ tip1 =
                   tmChecksumSha256 = Nothing,
                   tmAdditional = Map.empty
                 },
+          tipGovernanceAccount = exampleAccountAddress,
           tipAllowList = False,
           tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = False,
           tipMintable = False,
           tipBurnable = False
         }
+  where
+    exampleAccountAddress = case addressFromText $ Text.pack "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
+        Right addr -> addr
+        -- This does not happen since the format
+        -- of the text is that of a valid address.
+        Left str -> error str
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
 testInitializationParameters :: Spec
@@ -215,9 +219,7 @@ testInitializationParameters = describe "token-initialization-parameters decodin
             (Right ("", tip1))
             ( deserialiseFromBytes
                 decodeTokenInitializationParameters
-                "\xA4\x64name\x69\
-                \ABC token\x68metadata\xA1\x63url\x76https://abc.token/meta\x69\
-                \allowList\xF4\x6DinitialSupply\xC4\x82\x24\x19\x27\x10"
+                "\168dnameiABC tokenhburnable\244hdenyList\244hmetadatavhttps://abc.token/metahmintable\244iallowList\244minitialSupply\196\130$\EM'\DLEqgovernanceAccountX \ACK\DLEI\220\DC1]\176\b`\RS\196\224\241\145c\ETB\193\204'\141l\237\t\212t\217\148\197N\172\172\161"
             )
     it "Missing \"name\"" $
         assertEqual
@@ -297,12 +299,12 @@ testEncodedInitializationParameters = describe "TokenInitializationParameters JS
                     invalidEncTip1
             )
 
--- | A test value for 'TokenHolderTransaction'.
-tops1 :: TokenHolderTransaction
+-- | A test value for 'TokenTransaction'.
+tops1 :: TokenTransaction
 tops1 =
-    TokenHolderTransaction $
+    TokenTransaction $
         Seq.fromList
-            [ TokenHolderTransfer
+            [ TokenTransfer
                 TokenTransferBody
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
                       ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
@@ -322,7 +324,7 @@ encTops1 =
         TokenParameter $
             BSS.toShort $
                 CBOR.toStrictByteString $
-                    encodeTokenHolderTransaction tops1
+                    encodeTokenTransaction tops1
 
 -- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
 invalidEncTops1 :: EncodedTokenOperations
@@ -347,7 +349,7 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                 AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
-    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenHolderTransaction" $
+    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenTransaction" $
         assertEqual
             "Deserialized"
             (Just invalidEncTops1)
@@ -699,21 +701,16 @@ tests = parallel $ describe "CBOR" $ do
         Just tmu === AE.decode (AE.encode tmu)
     it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
         Just tmu === AE.decode (AE.encode tmu)
-    it "Encode and decode TokenHolderTransaction" $ withMaxSuccess 1000 $ forAll genTokenHolderTransaction $ \tt ->
+    it "Encode and decode TokenTransaction" $ withMaxSuccess 1000 $ forAll genTokenHolderTransaction $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
-                decodeTokenHolderTransaction
-                (toLazyByteString $ encodeTokenHolderTransaction tt)
-    it "Encode and decode TokenGovernanceOperation" $ withMaxSuccess 1000 $ forAll genTokenGovernanceOperation $ \tt ->
+                decodeTokenTransaction
+                (toLazyByteString $ encodeTokenTransaction tt)
+    it "Encode and decode TokenOperation" $ withMaxSuccess 1000 $ forAll genTokenGovernanceOperation $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
-                decodeTokenGovernanceOperation
-                (toLazyByteString $ encodeTokenGovernanceOperation tt)
-    it "Encode and decode TokenGovernanceTransaction" $ withMaxSuccess 1000 $ forAll genTokenGovernanceTransaction $ \tt ->
-        Right ("", tt)
-            === deserialiseFromBytes
-                decodeTokenGovernanceTransaction
-                (toLazyByteString $ encodeTokenGovernanceTransaction tt)
+                decodeTokenOperation
+                (toLazyByteString $ encodeTokenOperation tt)
     it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
