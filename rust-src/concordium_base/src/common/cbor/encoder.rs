@@ -202,12 +202,17 @@ mod test {
     fn test_map_entry_order() {
         let mut bytes = Vec::new();
         let mut encoder = Encoder::new(&mut bytes);
-        let mut map_encoder = encoder.encode_map(3).unwrap();
+        let mut map_encoder = encoder.encode_map(5).unwrap();
+        map_encoder.serialize_entry(&"key2", &0).unwrap();
         map_encoder.serialize_entry(&256, &0).unwrap();
-        map_encoder.serialize_entry(&(256 * 256), &0).unwrap();
+        map_encoder.serialize_entry(&"key1", &0).unwrap();
+        map_encoder.serialize_entry(&65536, &0).unwrap();
         map_encoder.serialize_entry(&1, &0).unwrap();
         map_encoder.end().unwrap();
 
-        assert_eq!(hex::encode(&bytes), "a30100190100001a0001000000");
+        assert_eq!(
+            hex::encode(&bytes),
+            "a50100190100001a0001000000646b65793100646b65793200"
+        );
     }
 }
