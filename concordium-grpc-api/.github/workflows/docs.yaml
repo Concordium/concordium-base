@@ -1,0 +1,36 @@
+name: Build and Deploy documentation
+on:
+  workflow_dispatch: # allows manual trigger
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install system packages and protoc
+        run: |
+          wget https://github.com/protocolbuffers/protobuf/releases/download/v3.15.3/protoc-3.15.3-linux-x86_64.zip
+          unzip protoc-3.15.3-linux-x86_64.zip
+          sudo mv ./bin/protoc /usr/bin/protoc
+          # install the doc plugin and put it into path
+          wget https://github.com/pseudomuto/protoc-gen-doc/releases/download/v1.5.1/protoc-gen-doc_1.5.1_linux_amd64.tar.gz
+          tar xf protoc-gen-doc_1.5.1_linux_amd64.tar.gz protoc-gen-doc
+          sudo mv ./protoc-gen-doc /usr/bin/
+      - name: Generate docs
+        run: |
+          mkdir -p docs
+          protoc --doc_opt=:concordium_p2p.proto,google/protobuf/wrappers.proto \
+          --doc_out=./docs \
+          v2/concordium/types.proto \
+          v2/concordium/service.proto \
+          v2/concordium/health.proto
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4.3.0
+        with:
+          branch: gh-pages # The branch the action should deploy to.
+          folder: docs # The folder the action should deploy.

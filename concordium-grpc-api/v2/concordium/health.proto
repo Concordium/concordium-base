@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package concordium.health;
+
+// This specifies the package we want to use for our generated Go code.
+// Has no effect on code generated on other languages.
+option go_package = "./pb";
+
+// This specifies the package we want to use for our generated Java classes. 
+// Has no effect on code generated on other languages.
+option java_package = "com.concordium.health";
+
+// This specifies that separate .java files will be generated for each of the Java classes/enums/etc. generated for the top-level messages, services, and enumerations, 
+// and the wrapper Java class generated for this .proto file won't contain any nested classes/enums/etc. 
+// If not generating Java code, this option has no effect.
+option java_multiple_files = true;
+
+// This specifies the package we want to use for our generated C# classes. 
+// Has no effect on code generated on other languages.
+option csharp_namespace = "Concordium.Health";
+
+// Parameters to the node health query. The default message gives a good
+// default.
+message NodeHealthRequest {}
+
+// Response to the health check. A return code of "OK" is used for success, and
+// errors are handled via RPC status codes
+message NodeHealthResponse {}
+
+service Health {
+  // Check the health of the node. By necessity this involves a number of
+  // heuristics since in a distributed network we have to rely on the local
+  // information only and we don't have authoritative data on, e.g., last
+  // finalized block.
+  //
+  // In particular, a node that is not caught up to the head of the chain is not
+  // healthy.
+  //
+  // If possible the client should use other queries to get a more fine-grained
+  // understanding of the node health. However this endpoint should provide a
+  // reasonable default and is usable in cases where an automatic check is
+  // performed that does not allow for configuration, such as in load-balancers.
+  rpc Check(NodeHealthRequest) returns (NodeHealthResponse);
+}
