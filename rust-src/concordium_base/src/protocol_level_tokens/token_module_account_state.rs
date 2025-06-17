@@ -11,6 +11,17 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Default)]
+///  The account state represents account-specific information that is
+/// maintained by the Token Module, and is returned as part of a
+/// `GetAccountInfo` query. It does not include state that is managed by
+/// the Token Kernel, such as the token identifier and account balance.
+///
+/// All fields are optional, and can be omitted if the module implementation
+/// does not support them. The structure supports additional fields for future
+/// extensibility. Non-standard fields (i.e. any fields that are not defined by
+/// a standard, and are specific to the module implementation) may be included,
+/// and their tags should be prefixed with an underscore ("_") to distinguish
+/// them as such.
 pub struct TokenModuleAccountState {
     /// Whether the account is on the allow list.
     /// If `None`, the token does not support an allow list.
