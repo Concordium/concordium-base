@@ -2,11 +2,8 @@ use std::collections::HashMap;
 
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
-use super::{MetadataUrl, RawCbor};
-use crate::common::{
-    cbor,
-    cbor::{value, CborSerializationResult, SerializationOptions, UnknownMapKeys},
-};
+use super::MetadataUrl;
+use crate::common::cbor::value;
 
 /// Protocol level token (PLT) module state
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
@@ -29,22 +26,8 @@ pub struct TokenModuleState {
     pub additional: HashMap<String, value::Value>,
 }
 
-impl TokenModuleState {
-    pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
-        cbor::cbor_decode_with_options(
-            cbor.as_ref(),
-            SerializationOptions::default().unknown_map_keys(UnknownMapKeys::Ignore),
-        )
-    }
-
-    pub fn to_cbor(&self) -> CborSerializationResult<RawCbor> {
-        Ok(RawCbor::from(cbor::cbor_encode(&self)?))
-    }
-}
-
 #[cfg(test)]
 mod test {
-
     use super::*;
     use crate::common::cbor;
     use concordium_contracts_common::hashes::Hash;
