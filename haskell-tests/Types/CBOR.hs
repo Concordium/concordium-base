@@ -119,6 +119,7 @@ genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
     tmsName <- genText
     tmsMetadata <- genTokenMetadataUrlSimple
+    tmsGovernanceAccount <- genAccountAddress
     tmsAllowList <- arbitrary
     tmsDenyList <- arbitrary
     tmsMintable <- arbitrary
@@ -182,6 +183,15 @@ genTokenRejectReason =
           OperationNotPermitted <$> arbitrary <*> liftArbitrary genTokenHolder <*> liftArbitrary genText
         ]
 
+-- | An example value for governance account addresses.
+exampleAccountAddress :: AccountAddress
+exampleAccountAddress =
+    case addressFromText $ Text.pack "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
+        Right addr -> addr
+        -- This does not happen since the format
+        -- of the text is that of a valid address.
+        Left str -> error str
+
 -- | A test value for 'TokenInitializationParameters'.
 tip1 :: TokenInitializationParameters
 tip1 =
@@ -201,12 +211,6 @@ tip1 =
           tipMintable = False,
           tipBurnable = False
         }
-  where
-    exampleAccountAddress = case addressFromText $ Text.pack "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
-        Right addr -> addr
-        -- This does not happen since the format
-        -- of the text is that of a valid address.
-        Left str -> error str
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
 testInitializationParameters :: Spec
@@ -371,6 +375,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleAccountAddress, 
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -416,6 +421,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleAccountAddress,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -461,6 +467,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleAccountAddress,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -513,6 +520,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleAccountAddress,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,

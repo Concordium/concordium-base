@@ -1458,14 +1458,17 @@ decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
 
 -- * Token Module state
 
--- | A representation of the global state information maintained by the token module.
---  The name and metadata fields are required, but all other state is optional and may or may not
---  be provided depending on whether the token module supports it.
+-- | A representation of the global state information maintained by the token
+--  module. The name, metadata and governance account fields are required, but
+--  all other state is optional and may or may not be provided depending on
+--  whether the token module supports it.
 data TokenModuleState = TokenModuleState
     { -- | The name of the token.
       tmsName :: !Text,
       -- | A URL pointing to the token metadata.
       tmsMetadata :: !TokenMetadataUrl,
+      -- | The governance account address of the token.
+      tmsGovernanceAccount :: !AccountAddress,
       -- | Whether the token supports an allow list.
       tmsAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -1486,6 +1489,7 @@ instance AE.ToJSON TokenModuleState where
         AE.object
             ( [ "name" AE..= tmsName,
                 "metadata" AE..= tmsMetadata,
+                "governanceAccount" AE..= tmsGovernanceAccount,
                 "allowList" AE..= tmsAllowList,
                 "denyList" AE..= tmsDenyList,
                 "mintable" AE..= tmsMintable,
@@ -1504,6 +1508,7 @@ instance AE.FromJSON TokenModuleState where
     parseJSON = AE.withObject "TokenModuleState" $ \v -> do
         tmsName <- v AE..: "name"
         tmsMetadata <- v AE..: "metadata"
+        tmsGovernanceAccount <- v AE..: "governanceAccount"
         tmsAllowList <- v AE..: "allowList"
         tmsDenyList <- v AE..: "denyList"
         tmsMintable <- v AE..: "mintable"
@@ -1529,6 +1534,7 @@ encodeTokenModuleState TokenModuleState{..} =
         additionalMap
             & k "name" ?~ encodeString tmsName
             & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
+            & k "governanceAccount" ?~ encodeAccountAddress tmsGovernanceAccount
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
@@ -1555,10 +1561,11 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     build m0 = do
         (tmsName, m1) <- getAndClear "name" convertText m0
         (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
-        (tmsAllowList, m3) <- getMaybeAndClear "allowList" convertBool m2
-        (tmsDenyList, m4) <- getMaybeAndClear "denyList" convertBool m3
-        (tmsMintable, m5) <- getMaybeAndClear "mintable" convertBool m4
-        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m5
+        (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertAccountAddress m2
+        (tmsAllowList, m4) <- getMaybeAndClear "allowList" convertBool m3
+        (tmsDenyList, m5) <- getMaybeAndClear "denyList" convertBool m4
+        (tmsMintable, m6) <- getMaybeAndClear "mintable" convertBool m5
+        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m6
         return TokenModuleState{..}
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
@@ -1579,6 +1586,8 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     -- Convert CBOR to TokenMetadataUrl
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
     convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
+
+    convertAccountAddress = error "TODO(drsk) how are account addresses encoded?"
 
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
