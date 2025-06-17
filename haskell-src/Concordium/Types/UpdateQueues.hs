@@ -125,13 +125,13 @@ enqueue !t !e =
         . (uqQueue %~ \q -> let !r = takeWhile ((< t) . fst) q in r ++ [(t, e)])
 
 -- | Update queues for all on-chain update types.
-data PendingUpdates cpv = PendingUpdates
+data PendingUpdates cpv auv = PendingUpdates
     { -- | Updates to the root keys.
       _pRootKeysUpdateQueue :: !(UpdateQueue (HigherLevelKeys RootKeysKind)),
       -- | Updates to the level 1 keys.
       _pLevel1KeysUpdateQueue :: !(UpdateQueue (HigherLevelKeys Level1KeysKind)),
       -- | Updates to the level 2 keys.
-      _pLevel2KeysUpdateQueue :: !(UpdateQueue (Authorizations (AuthorizationsVersionFor cpv))),
+      _pLevel2KeysUpdateQueue :: !(UpdateQueue (Authorizations auv)),
       -- | Protocol updates.
       _pProtocolQueue :: !(UpdateQueue ProtocolUpdate),
       -- | Updates to the election difficulty parameter (CPV0 and CPV1 only).
@@ -173,7 +173,7 @@ data PendingUpdates cpv = PendingUpdates
 
 makeLenses ''PendingUpdates
 
-instance (IsChainParametersVersion cpv) => HashableTo H.Hash (PendingUpdates cpv) where
+instance (IsChainParametersVersion cpv) => HashableTo H.Hash (PendingUpdates cpv auv) where
     getHash PendingUpdates{..} =
         withCPVConstraints (chainParametersVersion @cpv) $
             H.hash $
@@ -204,7 +204,7 @@ instance (IsChainParametersVersion cpv) => HashableTo H.Hash (PendingUpdates cpv
         optionalHash :: (HashableTo H.Hash e) => OUpdateQueue pt cpv e -> BS.ByteString
         optionalHash = foldMap hsh
 
-pendingUpdatesV0ToJSON :: PendingUpdates 'ChainParametersV0 -> Value
+pendingUpdatesV0ToJSON :: (IsAuthorizationsVersion auv) => PendingUpdates 'ChainParametersV0 auv -> Value
 pendingUpdatesV0ToJSON PendingUpdates{..} =
     object
         [ "rootKeys" AE..= _pRootKeysUpdateQueue,
@@ -223,7 +223,7 @@ pendingUpdatesV0ToJSON PendingUpdates{..} =
           "addIdentityProvider" AE..= _pAddIdentityProviderQueue
         ]
 
-pendingUpdatesV1ToJSON :: PendingUpdates 'ChainParametersV1 -> Value
+pendingUpdatesV1ToJSON :: (IsAuthorizationsVersion auv) => PendingUpdates 'ChainParametersV1 auv -> Value
 pendingUpdatesV1ToJSON
     PendingUpdates
         { _pCooldownParametersQueue = SomeParam cpq,
@@ -249,7 +249,7 @@ pendingUpdatesV1ToJSON
               "timeParameters" AE..= tpq
             ]
 
-pendingUpdatesV2ToJSON :: PendingUpdates 'ChainParametersV2 -> Value
+pendingUpdatesV2ToJSON :: (IsAuthorizationsVersion auv) => PendingUpdates 'ChainParametersV2 auv -> Value
 pendingUpdatesV2ToJSON
     PendingUpdates
         { _pCooldownParametersQueue = SomeParam cpq,
@@ -275,7 +275,7 @@ pendingUpdatesV2ToJSON
               "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue,
               "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
             ]
-pendingUpdatesV3ToJSON :: PendingUpdates 'ChainParametersV3 -> Value
+pendingUpdatesV3ToJSON :: (IsAuthorizationsVersion auv) => PendingUpdates 'ChainParametersV3 auv -> Value
 pendingUpdatesV3ToJSON
     PendingUpdates
         { _pCooldownParametersQueue = SomeParam cpq,
@@ -301,41 +301,14 @@ pendingUpdatesV3ToJSON
               "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue,
               "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
             ]
-pendingUpdatesV4ToJSON :: PendingUpdates 'ChainParametersV4 -> Value
-pendingUpdatesV4ToJSON
-    PendingUpdates
-        { _pCooldownParametersQueue = SomeParam cpq,
-          _pTimeParametersQueue = SomeParam tpq,
-          ..
-        } =
-        object
-            [ "rootKeys" AE..= _pRootKeysUpdateQueue,
-              "level1Keys" AE..= _pLevel1KeysUpdateQueue,
-              "level2Keys" AE..= _pLevel2KeysUpdateQueue,
-              "protocol" AE..= _pProtocolQueue,
-              "euroPerEnergy" AE..= _pEuroPerEnergyQueue,
-              "microGTUPerEuro" AE..= _pMicroGTUPerEuroQueue,
-              "foundationAccount" AE..= _pFoundationAccountQueue,
-              "mintDistribution" AE..= _pMintDistributionQueue,
-              "transactionFeeDistribution" AE..= _pTransactionFeeDistributionQueue,
-              "gasRewards" AE..= _pGASRewardsQueue,
-              "poolParameters" AE..= _pPoolParametersQueue,
-              "addAnonymityRevoker" AE..= _pAddAnonymityRevokerQueue,
-              "addIdentityProvider" AE..= _pAddIdentityProviderQueue,
-              "cooldownParameters" AE..= cpq,
-              "timeParameters" AE..= tpq,
-              "consensus2TimingParameters" AE..= unOParam _pTimeoutParametersQueue,
-              "finalizationCommitteeParameters" AE..= unOParam _pFinalizationCommitteeParametersQueue
-            ]
-instance (IsChainParametersVersion cpv) => ToJSON (PendingUpdates cpv) where
+instance (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => ToJSON (PendingUpdates cpv auv) where
     toJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> pendingUpdatesV0ToJSON
         SChainParametersV1 -> pendingUpdatesV1ToJSON
         SChainParametersV2 -> pendingUpdatesV2ToJSON
         SChainParametersV3 -> pendingUpdatesV3ToJSON
-        SChainParametersV4 -> pendingUpdatesV4ToJSON
 
-parsePendingUpdatesV0 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV0)
+parsePendingUpdatesV0 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV0 auv)
 parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -360,7 +333,7 @@ parsePendingUpdatesV0 = withObject "PendingUpdates" $ \o -> do
     let _pValidatorScoreParametersQueue = NoParam
     return PendingUpdates{..}
 
-parsePendingUpdatesV1 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV1)
+parsePendingUpdatesV1 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV1 auv)
 parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -387,7 +360,7 @@ parsePendingUpdatesV1 = withObject "PendingUpdates" $ \o -> do
     let _pValidatorScoreParametersQueue = NoParam
     return PendingUpdates{..}
 
-parsePendingUpdatesV2 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV2)
+parsePendingUpdatesV2 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV2 auv)
 parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -414,7 +387,7 @@ parsePendingUpdatesV2 = withObject "PendingUpdates" $ \o -> do
     let _pValidatorScoreParametersQueue = NoParam
     return PendingUpdates{..}
 
-parsePendingUpdatesV3 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV3)
+parsePendingUpdatesV3 :: (IsAuthorizationsVersion auv) => Value -> AE.Parser (PendingUpdates 'ChainParametersV3 auv)
 parsePendingUpdatesV3 = withObject "PendingUpdates" $ \o -> do
     _pRootKeysUpdateQueue <- o AE..: "rootKeys"
     _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
@@ -441,43 +414,15 @@ parsePendingUpdatesV3 = withObject "PendingUpdates" $ \o -> do
     _pValidatorScoreParametersQueue <- SomeParam <$> o AE..: "validatorScoreParameters"
     return PendingUpdates{..}
 
-parsePendingUpdatesV4 :: Value -> AE.Parser (PendingUpdates 'ChainParametersV4)
-parsePendingUpdatesV4 = withObject "PendingUpdates" $ \o -> do
-    _pRootKeysUpdateQueue <- o AE..: "rootKeys"
-    _pLevel1KeysUpdateQueue <- o AE..: "level1Keys"
-    _pLevel2KeysUpdateQueue <- o AE..: "level2Keys"
-    _pProtocolQueue <- o AE..: "protocol"
-    let _pElectionDifficultyQueue = NoParam
-    _pEuroPerEnergyQueue <- o AE..: "euroPerEnergy"
-    _pMicroGTUPerEuroQueue <- o AE..: "microGTUPerEuro"
-    _pFoundationAccountQueue <- o AE..: "foundationAccount"
-    _pMintDistributionQueue <- o AE..: "mintDistribution"
-    _pTransactionFeeDistributionQueue <- o AE..: "transactionFeeDistribution"
-    _pGASRewardsQueue <- o AE..: "gasRewards"
-    _pPoolParametersQueue <- o AE..: "poolParameters"
-    _pAddAnonymityRevokerQueue <- o AE..: "addAnonymityRevoker"
-    _pAddIdentityProviderQueue <- o AE..: "addIdentityProvider"
-    cooldownQueue <- o AE..: "cooldownParameters"
-    timeQueue <- o AE..: "timeParameters"
-    let _pCooldownParametersQueue = SomeParam cooldownQueue
-    let _pTimeParametersQueue = SomeParam timeQueue
-    _pTimeoutParametersQueue <- SomeParam <$> o AE..: "timeoutParameters"
-    _pMinBlockTimeQueue <- SomeParam <$> o AE..: "minBlockTime"
-    _pBlockEnergyLimitQueue <- SomeParam <$> o AE..: "blockEnergyLimit"
-    _pFinalizationCommitteeParametersQueue <- SomeParam <$> o AE..: "finalizationCommitteeParameters"
-    _pValidatorScoreParametersQueue <- SomeParam <$> o AE..: "validatorScoreParameters"
-    return PendingUpdates{..}
-
-instance (IsChainParametersVersion cpv) => FromJSON (PendingUpdates cpv) where
+instance (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => FromJSON (PendingUpdates cpv auv) where
     parseJSON = case chainParametersVersion @cpv of
         SChainParametersV0 -> parsePendingUpdatesV0
         SChainParametersV1 -> parsePendingUpdatesV1
         SChainParametersV2 -> parsePendingUpdatesV2
         SChainParametersV3 -> parsePendingUpdatesV3
-        SChainParametersV4 -> parsePendingUpdatesV4
 
 -- | Initial pending updates with empty queues.
-emptyPendingUpdates :: forall cpv. (IsChainParametersVersion cpv) => PendingUpdates cpv
+emptyPendingUpdates :: forall cpv auv. (IsChainParametersVersion cpv) => PendingUpdates cpv auv
 emptyPendingUpdates =
     PendingUpdates
         emptyUpdateQueue
@@ -503,25 +448,25 @@ emptyPendingUpdates =
         (whenSupported emptyUpdateQueue)
 
 -- | Current state of updatable parameters and update queues.
-data Updates' (cpv :: ChainParametersVersion) = Updates
+data Updates' (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion) = Updates
     { -- | Current update authorizations.
-      _currentKeyCollection :: !(Hashed (UpdateKeysCollection (AuthorizationsVersionFor cpv))),
+      _currentKeyCollection :: !(Hashed (UpdateKeysCollection auv)),
       -- | Current protocol update.
       _currentProtocolUpdate :: !(Maybe ProtocolUpdate),
       -- | Current chain parameters.
       _currentParameters :: !(ChainParameters' cpv),
       -- | Pending updates.
-      _pendingUpdates :: !(PendingUpdates cpv),
+      _pendingUpdates :: !(PendingUpdates cpv auv),
       -- | Sequence number for updates to the protocol level tokens (PLT).
-      _pltUpdateSequenceNumber :: !(OParam 'PTProtocolLevelTokensParameters cpv UpdateSequenceNumber)
+      _pltUpdateSequenceNumber :: !(Conditionally (SupportsCreatePLT auv) UpdateSequenceNumber)
     }
     deriving (Show, Eq)
 
 makeLenses ''Updates'
 
-type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv)
+type Updates (pv :: ProtocolVersion) = Updates' (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv)
 
-instance (IsChainParametersVersion cpv) => HashableTo H.Hash (Updates' cpv) where
+instance (IsChainParametersVersion cpv) => HashableTo H.Hash (Updates' cpv auv) where
     getHash Updates{..} =
         H.hash $
             hsh _currentKeyCollection
@@ -530,55 +475,53 @@ instance (IsChainParametersVersion cpv) => HashableTo H.Hash (Updates' cpv) wher
                     Just cpu -> "\x01" <> hsh cpu
                 <> hsh _currentParameters
                 <> hsh _pendingUpdates
+                <> hshPLT
       where
         hsh :: (HashableTo H.Hash a) => a -> BS.ByteString
         hsh = H.hashToByteString . getHash
+        hshPLT = case _pltUpdateSequenceNumber of
+            CFalse -> mempty
+            CTrue usn -> H.hashToByteString $ H.hash $ runPut $ do
+                put usn
 
-instance forall cpv. (IsChainParametersVersion cpv) => ToJSON (Updates' cpv) where
+instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => ToJSON (Updates' cpv auv) where
     toJSON Updates{..} =
-        withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
-            object $
-                [ "keys" AE..= _unhashed _currentKeyCollection,
-                  "chainParameters" AE..= _currentParameters,
-                  "updateQueues" AE..= _pendingUpdates
-                ]
-                    <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
-                    <> case chainParametersVersion @cpv of
-                        SChainParametersV0 -> []
-                        SChainParametersV1 -> []
-                        SChainParametersV2 -> []
-                        SChainParametersV3 -> []
-                        SChainParametersV4 -> ["pltUpdateSequenceNumber" AE..= unOParam _pltUpdateSequenceNumber]
+        object $
+            [ "keys" AE..= _unhashed _currentKeyCollection,
+              "chainParameters" AE..= _currentParameters,
+              "updateQueues" AE..= _pendingUpdates
+            ]
+                <> toList (("protocolUpdate" AE..=) <$> _currentProtocolUpdate)
+                <> case _pltUpdateSequenceNumber of
+                    CFalse -> []
+                    CTrue usn -> ["pltUpdateSequenceNumber" AE..= usn]
 
-instance forall cpv. (IsChainParametersVersion cpv) => FromJSON (Updates' cpv) where
+instance forall cpv auv. (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) => FromJSON (Updates' cpv auv) where
     parseJSON = withObject "Updates" $ \o -> do
-        _currentKeyCollection <-
-            withIsAuthorizationsVersionFor (chainParametersVersion @cpv) $
-                makeHashed <$> o AE..: "keys"
+        _currentKeyCollection <- makeHashed <$> o AE..: "keys"
         _currentProtocolUpdate <- o AE..:? "protocolUpdate"
         _currentParameters <- o AE..: "chainParameters"
         _pendingUpdates <- o AE..: "updateQueues"
-        _pltUpdateSequenceNumber <- case chainParametersVersion @cpv of
-            SChainParametersV0 -> return NoParam
-            SChainParametersV1 -> return NoParam
-            SChainParametersV2 -> return NoParam
-            SChainParametersV3 -> return NoParam
-            SChainParametersV4 -> SomeParam <$> o AE..: "pltUpdateSequenceNumber"
+        _pltUpdateSequenceNumber <-
+            conditionallyA
+                (sSupportsCreatePLT (authorizationsVersion @auv))
+                $ o AE..: "pltUpdateSequenceNumber"
         return Updates{..}
 
 -- | An initial 'Updates' with the given initial 'Authorizations'
 --  and 'ChainParameters'.
 initialUpdates ::
-    (IsChainParametersVersion cpv) =>
-    UpdateKeysCollection (AuthorizationsVersionFor cpv) ->
+    forall cpv auv.
+    (IsChainParametersVersion cpv, IsAuthorizationsVersion auv) =>
+    UpdateKeysCollection auv ->
     ChainParameters' cpv ->
-    Updates' cpv
+    Updates' cpv auv
 initialUpdates initialKeyCollection _currentParameters =
     Updates
         { _currentKeyCollection = makeHashed initialKeyCollection,
           _currentProtocolUpdate = Nothing,
           _pendingUpdates = emptyPendingUpdates,
-          _pltUpdateSequenceNumber = whenSupported minUpdateSequenceNumber,
+          _pltUpdateSequenceNumber = conditionally (sSupportsCreatePLT (authorizationsVersion @auv)) minUpdateSequenceNumber,
           ..
         }
 

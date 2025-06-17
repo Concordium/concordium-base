@@ -48,13 +48,13 @@ pub struct Memo {
 }
 
 impl CborSerialize for Memo {
-    fn serialize<C: CborEncoder>(&self, encoder: &mut C) -> CborSerializationResult<()> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         encoder.encode_bytes(&self.bytes)
     }
 }
 
 impl CborDeserialize for Memo {
-    fn deserialize<C: CborDecoder>(decoder: &mut C) -> CborSerializationResult<Self>
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
         let bytes = decoder.decode_bytes()?;
@@ -2318,13 +2318,16 @@ pub mod construct {
                     | TokenOperation::RemoveAllowList(_)
                     | TokenOperation::AddDenyList(_)
                     | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
-                    TokenOperation::Unknown => Default::default(),
+                    TokenOperation::Unknown(_, _) => Default::default(),
                 })
                 .sum()
     }
 
     /// Construct a protocol level token holder transaction consisting of the
     /// token holder operations encoded in the given CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_holder_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -2353,6 +2356,9 @@ pub mod construct {
 
     /// Construct a protocol level token governance transaction consisting of
     /// the token governance operations encoded in the given CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_governance_operations(
         num_sigs: u32,
         sender: AccountAddress,
@@ -3012,6 +3018,9 @@ pub mod send {
 
     /// Construct and sign a protocol level token holder transaction consisting
     /// of the token holder operations encoded in the given CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_holder_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
@@ -3034,6 +3043,9 @@ pub mod send {
     /// Construct and sign a protocol level token governance transaction
     /// consisting of the token governance operations encoded in the given
     /// CBOR.
+    ///
+    /// Token operations can be created using the functions in
+    /// [`operations`](crate::protocol_level_tokens::operations).
     pub fn token_governance_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,

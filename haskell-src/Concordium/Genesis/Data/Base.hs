@@ -185,7 +185,7 @@ data GenesisState (pv :: ProtocolVersion) = GenesisState
       -- | The initial collection of anonymity revokers.
       genesisAnonymityRevokers :: !AnonymityRevokers,
       -- | The initial update keys structure for chain updates.
-      genesisUpdateKeys :: !(UpdateKeysCollection (AuthorizationsVersionForPV pv)),
+      genesisUpdateKeys :: !(UpdateKeysCollection (AuthorizationsVersionFor pv)),
       -- | The initial (updatable) chain parameters.
       genesisChainParameters :: !(ChainParameters pv),
       -- | The initial leadership election nonce.
@@ -210,7 +210,7 @@ instance forall pv. (IsProtocolVersion pv) => Serialize (GenesisState pv) where
         genesisIdentityProviders <- get
         genesisAnonymityRevokers <- get
         genesisUpdateKeys <-
-            withIsAuthorizationsVersionForPV
+            withIsAuthorizationsVersionFor
                 (protocolVersion @pv)
                 getUpdateKeysCollection
         genesisChainParameters <- getChainParameters
