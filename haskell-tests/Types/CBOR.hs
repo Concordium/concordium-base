@@ -146,7 +146,6 @@ genTokenModuleStateWithAdditional = do
 genTokenStateSimple :: Gen TokenState
 genTokenStateSimple = do
     tsTokenModuleRef <- genTokenModuleRef
-    tsIssuer <- genAccountAddress
     tsTotalSupply <- genTokenAmount
     tsDecimals <- arbitrary
     tms <- genTokenModuleStateSimple
@@ -156,7 +155,6 @@ genTokenStateSimple = do
 genTokenStateWithAdditional :: Gen TokenState
 genTokenStateWithAdditional = do
     tsTokenModuleRef <- genTokenModuleRef
-    tsIssuer <- genAccountAddress
     tsTotalSupply <- genTokenAmount
     tsDecimals <- arbitrary
     tms <- genTokenModuleStateWithAdditional
@@ -473,7 +471,6 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
     let object =
             TokenState
                 { tsTokenModuleRef = tokenModuleRef,
-                  tsIssuer = AccountAddress $ FBS.pack [0x1, 0x1],
                   tsTotalSupply = TokenAmount{taValue = 10000, taDecimals = 2},
                   tsDecimals = 2,
                   tsModuleState = tokenModuleStateToBytes tokenModuleState
@@ -526,7 +523,6 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
     let object =
             TokenState
                 { tsTokenModuleRef = tokenModuleRef,
-                  tsIssuer = AccountAddress $ FBS.pack [0x1, 0x1],
                   tsTotalSupply = TokenAmount{taValue = 10000, taDecimals = 2},
                   tsDecimals = 2,
                   tsModuleState = tokenModuleStateToBytes tokenModuleState
@@ -701,12 +697,12 @@ tests = parallel $ describe "CBOR" $ do
         Just tmu === AE.decode (AE.encode tmu)
     it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
         Just tmu === AE.decode (AE.encode tmu)
-    it "Encode and decode TokenTransaction" $ withMaxSuccess 1000 $ forAll genTokenHolderTransaction $ \tt ->
+    it "Encode and decode TokenTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
                 decodeTokenTransaction
                 (toLazyByteString $ encodeTokenTransaction tt)
-    it "Encode and decode TokenOperation" $ withMaxSuccess 1000 $ forAll genTokenGovernanceOperation $ \tt ->
+    it "Encode and decode TokenOperation" $ withMaxSuccess 1000 $ forAll genTokenOperation $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
                 decodeTokenOperation
