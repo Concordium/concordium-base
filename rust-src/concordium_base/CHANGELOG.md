@@ -1,3 +1,7 @@
+## Unreleased
+
+- `TokenAmount` changed to require explicit number of decimals equal to the token when creating a value
+
 ## 8.0.0-alpha (2025-06-06)
 
 - Protocol level token events and reject reasons are now defined in `concordium_base::protocol_level_tokens`.
