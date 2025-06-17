@@ -1,6 +1,6 @@
 use crate::common::cbor::{
     CborDecoder, CborDeserialize, CborEncoder, CborSerializationResult, CborSerialize,
-    DecimalFraction,
+    UnsignedDecimalFraction,
 };
 use anyhow::Context;
 
@@ -16,11 +16,11 @@ pub struct TokenAmount {
 
 impl CborSerialize for TokenAmount {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        let decimal_fraction = DecimalFraction::new(
+        let decimal_fraction = UnsignedDecimalFraction::new(
             i64::from(self.decimals)
                 .checked_neg()
                 .context("convert decimals to exponent")?,
-            i64::try_from(self.value).context("convert value to mantissa")?,
+            self.value,
         );
 
         decimal_fraction.serialize(encoder)
@@ -31,15 +31,14 @@ impl CborDeserialize for TokenAmount {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized, {
-        let decimal_fraction = DecimalFraction::deserialize(decoder)?;
+        let decimal_fraction = UnsignedDecimalFraction::deserialize(decoder)?;
 
         let decimals = decimal_fraction
             .exponent()
             .checked_neg()
             .and_then(|val| u8::try_from(val).ok())
             .context("convert exponent to decimals")?;
-        let value =
-            u64::try_from(decimal_fraction.mantissa()).context("convert mantissa to value")?;
+        let value = decimal_fraction.mantissa();
 
         Ok(Self { decimals, value })
     }
@@ -383,9 +382,17 @@ mod test {
             value:    12300,
             decimals: 3,
         };
-
         let cbor = cbor::cbor_encode(&token_amount).unwrap();
         assert_eq!(hex::encode(&cbor), "c4822219300c");
+        let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(token_amount_decoded, token_amount);
+
+        let token_amount = TokenAmount {
+            value:    u64::MAX,
+            decimals: 3,
+        };
+        let cbor = cbor::cbor_encode(&token_amount).unwrap();
+        assert_eq!(hex::encode(&cbor), "c482221bffffffffffffffff");
         let token_amount_decoded: TokenAmount = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_amount_decoded, token_amount);
     }
