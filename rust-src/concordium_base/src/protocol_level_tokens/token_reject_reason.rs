@@ -243,7 +243,7 @@ mod test {
             required_balance:  TokenAmount::from_raw(22300, 3),
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
-        assert_eq!(hex::encode(&cbor), "a365696e6465780370617661696c61626c6542616c616e6365c4822219300c6f726571756972656442616c616e6365c4822219571c");
+        assert_eq!(hex::encode(&cbor), "a365696e646578036f726571756972656442616c616e6365c4822219571c70617661696c61626c6542616c616e6365c4822219300c");
         let reject_reason = TokenModuleRejectReason {
             token_id:    TokenId::from_str("TK1").unwrap(),
             reason_type: "tokenBalanceInsufficient".to_string().try_into().unwrap(),
@@ -285,7 +285,7 @@ mod test {
             reason:         Some("testfailture".to_string()),
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
-        assert_eq!(hex::encode(&cbor), "a365696e646578006d6f7065726174696f6e547970656d746573746f7065726174696f6e66726561736f6e6c746573746661696c74757265");
+        assert_eq!(hex::encode(&cbor), "a365696e6465780066726561736f6e6c746573746661696c747572656d6f7065726174696f6e547970656d746573746f7065726174696f6e");
         let reject_reason = TokenModuleRejectReason {
             token_id:    TokenId::from_str("TK1").unwrap(),
             reason_type: "unsupportedOperation".to_string().try_into().unwrap(),
@@ -310,7 +310,7 @@ mod test {
             reason:  Some("testfailture".to_string()),
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
-        assert_eq!(hex::encode(&cbor), "a365696e646578006761646472657373d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2066726561736f6e6c746573746661696c74757265");
+        assert_eq!(hex::encode(&cbor), "a365696e6465780066726561736f6e6c746573746661696c747572656761646472657373d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let reject_reason = TokenModuleRejectReason {
             token_id:    TokenId::from_str("TK1").unwrap(),
             reason_type: "operationNotPermitted".to_string().try_into().unwrap(),
@@ -333,7 +333,7 @@ mod test {
             max_representable_amount: TokenAmount::from_raw(20000, 3),
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
-        assert_eq!(hex::encode(&cbor), "a465696e646578006f726571756573746564416d6f756e74c48222194e206d63757272656e74537570706c79c48222192710766d6178526570726573656e7461626c65416d6f756e74c48222194e20");
+        assert_eq!(hex::encode(&cbor), "a465696e646578006d63757272656e74537570706c79c482221927106f726571756573746564416d6f756e74c48222194e20766d6178526570726573656e7461626c65416d6f756e74c48222194e20");
         let reject_reason = TokenModuleRejectReason {
             token_id:    TokenId::from_str("TK1").unwrap(),
             reason_type: "mintWouldOverflow".to_string().try_into().unwrap(),
