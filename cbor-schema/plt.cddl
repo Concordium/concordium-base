@@ -146,6 +146,8 @@ token-initialization-parameters = {
     "name": text,
     ; A URL pointing to the token metadata
     "metadata": metadata-url,
+    ; The governance account of the token
+    "governanceAccount": token-holder
     ; Whether the token supports an allow list
     ? "allowList": bool .default false,
     ; Whether the token supports a deny list
