@@ -3,6 +3,8 @@ use crate::common::cbor::{
     DecimalFraction,
 };
 use anyhow::Context;
+use rust_decimal::Error;
+use std::str::FromStr;
 
 /// Protocol level token (PLT) amount representation. The numerical amount
 /// represented is `value * 10^(-decimals)`.
@@ -54,6 +56,15 @@ impl CborDeserialize for TokenAmount {
     }
 }
 
+/// Rule for converting to `TokenAmount`
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum ConversionRule {
+    /// Only allow conversions that preserve the exact same numerical value.
+    Exact,
+    /// Allow rounding when converting.
+    AllowRounding,
+}
+
 impl TokenAmount {
     /// Construct a [`TokenAmount`] from a value without decimal places and the
     /// number of decimals, meaning the token amount is computed as `value *
@@ -79,11 +90,12 @@ impl TokenAmount {
     /// number of `decimals`, an error is returned.
     ///
     /// The given number of `decimals` should
-    /// be equal to tbe number of decimals for the token it represents an amount
+    /// be equal to the number of decimals for the token it represents an amount
     /// for.
     pub fn try_from_rust_decimal(
         decimal: rust_decimal::Decimal,
         decimals: u8,
+        conversion_rule: ConversionRule,
     ) -> TokenAmountConversionResult<Self> {
         let decimals_u32 = decimals as u32;
         let mut decimal_scaled = decimal;
@@ -94,6 +106,8 @@ impl TokenAmount {
             ));
         }
         if decimal_scaled.scale() != decimals_u32 {
+            // If scale was not changed to the requested scale, it means that
+            // mantissa part would overflow at the requested scale
             return Err(TokenAmountConversionError::ValueOverflow);
         }
         let this = Self::from_raw(
@@ -104,14 +118,18 @@ impl TokenAmount {
             decimals,
         );
         decimal_scaled.rescale(decimal.scale());
-        if decimal_scaled.mantissa() != decimal.mantissa() {
+        if decimal_scaled.mantissa() != decimal.mantissa()
+            && conversion_rule == ConversionRule::Exact
+        {
+            // If mantissa is not the same when scaling back, it means that we lost
+            // precision (rounding) during the conversion
             return Err(TokenAmountConversionError::LossOfPrecision);
         }
         Ok(this)
     }
 
     /// Converts the token amount to a [`rust_decimal::Decimal`] of the same
-    /// scale.
+    /// scale and same exact numerical value.
     pub fn try_to_rust_decimal(&self) -> TokenAmountConversionResult<rust_decimal::Decimal> {
         Ok(rust_decimal::Decimal::try_from_i128_with_scale(
             self.value as i128,
@@ -126,11 +144,23 @@ impl TokenAmount {
     /// given number of `decimals`, an error is returned.
     ///
     /// The given number of `decimals` should
-    /// be equal to tbe number of decimals for the token it represents an amount
+    /// be equal to the number of decimals for the token it represents an amount
     /// for.
-    pub fn try_from_str(decimal_str: &str, decimals: u8) -> TokenAmountConversionResult<Self> {
-        let decimal = rust_decimal::Decimal::from_str_exact(decimal_str)?;
-        Self::try_from_rust_decimal(decimal, decimals)
+    pub fn from_str(
+        decimal_str: &str,
+        decimals: u8,
+        conversion_rule: ConversionRule,
+    ) -> TokenAmountConversionResult<Self> {
+        let decimal = match conversion_rule {
+            ConversionRule::Exact => {
+                rust_decimal::Decimal::from_str_exact(decimal_str).map_err(|err| match err {
+                    Error::Underflow => TokenAmountConversionError::LossOfPrecision,
+                    err => TokenAmountConversionError::RustDecimal(err),
+                })?
+            }
+            ConversionRule::AllowRounding => rust_decimal::Decimal::from_str(decimal_str)?,
+        };
+        Self::try_from_rust_decimal(decimal, decimals, conversion_rule)
     }
 }
 
@@ -224,27 +254,75 @@ mod test {
     }
 
     #[test]
-    fn test_try_from_str() {
+    fn test_try_from_str_exact() {
         let str = "123.450";
 
-        let token_amount = TokenAmount::try_from_str(str, 3).unwrap();
+        // Conversions that preserve the exact numerical value
+        let token_amount = TokenAmount::from_str(str, 3, ConversionRule::Exact).unwrap();
         assert_eq!(token_amount, TokenAmount::from_raw(123450, 3));
-        let token_amount = TokenAmount::try_from_str(str, 2).unwrap();
+        let token_amount = TokenAmount::from_str(str, 2, ConversionRule::Exact).unwrap();
         assert_eq!(token_amount, TokenAmount::from_raw(12345, 2));
-        let token_amount = TokenAmount::try_from_str(str, 5).unwrap();
+        let token_amount = TokenAmount::from_str(str, 5, ConversionRule::Exact).unwrap();
         assert_eq!(token_amount, TokenAmount::from_raw(12345000, 5));
 
-        let res = TokenAmount::try_from_str(str, 1);
+        // Conversion that looses precision (requires rounding)
+        let res = TokenAmount::from_str(str, 1, ConversionRule::Exact);
         assert_matches!(res, Err(TokenAmountConversionError::LossOfPrecision));
+        let token_amount = TokenAmount::from_str(str, 1, ConversionRule::AllowRounding).unwrap();
+        assert_eq!(token_amount, TokenAmount::from_raw(1235, 1));
 
-        let str = "0.000000000000000000000000000000000000001";
-        let res = TokenAmount::try_from_str(str, 1);
+        // Conversion that looses precision while parsing the string
+        let str = "1.000000000000000000000000000000000000001";
+        let res = TokenAmount::from_str(str, 1, ConversionRule::Exact);
+        assert_matches!(res, Err(TokenAmountConversionError::LossOfPrecision));
+        let token_amount = TokenAmount::from_str(str, 1, ConversionRule::AllowRounding).unwrap();
+        assert_eq!(token_amount, TokenAmount::from_raw(10, 1));
+    }
+
+    #[test]
+    fn test_try_from_rust_decimal() {
+        let decimal = rust_decimal::Decimal::new(12600, 4);
+
+        // Conversions that preserves the exact numerical value
+        let token_amount =
+            TokenAmount::try_from_rust_decimal(decimal, 4, ConversionRule::Exact).unwrap();
+        assert_eq!(token_amount, TokenAmount::from_raw(12600, 4));
+        let token_amount =
+            TokenAmount::try_from_rust_decimal(decimal, 2, ConversionRule::Exact).unwrap();
+        assert_eq!(token_amount, TokenAmount::from_raw(126, 2));
+        let token_amount =
+            TokenAmount::try_from_rust_decimal(decimal, 6, ConversionRule::Exact).unwrap();
+        assert_eq!(token_amount, TokenAmount::from_raw(1260000, 6));
+
+        // Conversion that looses precision (requires rounding)
+        let res = TokenAmount::try_from_rust_decimal(decimal, 1, ConversionRule::Exact);
+        assert_matches!(res, Err(TokenAmountConversionError::LossOfPrecision));
+        let token_amount =
+            TokenAmount::try_from_rust_decimal(decimal, 1, ConversionRule::AllowRounding).unwrap();
+        assert_eq!(token_amount, TokenAmount::from_raw(13, 1));
+
+        // Conversion using out of range scale
+        let res = TokenAmount::try_from_rust_decimal(decimal, 30, ConversionRule::Exact);
         assert_matches!(
             res,
             Err(TokenAmountConversionError::RustDecimal(
-                rust_decimal::Error::Underflow
+                rust_decimal::Error::ScaleExceedsMaximumPrecision(_)
             ))
         );
+
+        // Conversion where value overflows at the requested scale
+        let decimal = rust_decimal::Decimal::new(i64::MAX, 0);
+        let res = TokenAmount::try_from_rust_decimal(decimal, 28, ConversionRule::Exact);
+        assert_matches!(res, Err(TokenAmountConversionError::ValueOverflow));
+    }
+
+    #[test]
+    fn test_try_to_rust_decimal() {
+        let token_amount = TokenAmount::from_raw(12640, 4);
+
+        let decimal = token_amount.try_to_rust_decimal().unwrap();
+        assert_eq!(decimal.mantissa(), 12640);
+        assert_eq!(decimal.scale(), 4);
     }
 
     #[test]
@@ -262,44 +340,6 @@ mod test {
             let amount2 = TokenAmount::from_raw(456, 2);
             assert_eq!(amount1.partial_cmp(&amount2), None);
         }
-    }
-
-    #[test]
-    fn test_try_from_rust_decimal() {
-        let decimal = rust_decimal::Decimal::new(12600, 4);
-
-        let token_amount = TokenAmount::try_from_rust_decimal(decimal, 4).unwrap();
-        assert_eq!(token_amount, TokenAmount::from_raw(12600, 4));
-
-        let token_amount = TokenAmount::try_from_rust_decimal(decimal, 2).unwrap();
-        assert_eq!(token_amount, TokenAmount::from_raw(126, 2));
-
-        let token_amount = TokenAmount::try_from_rust_decimal(decimal, 6).unwrap();
-        assert_eq!(token_amount, TokenAmount::from_raw(1260000, 6));
-
-        let res = TokenAmount::try_from_rust_decimal(decimal, 30);
-        assert_matches!(
-            res,
-            Err(TokenAmountConversionError::RustDecimal(
-                rust_decimal::Error::ScaleExceedsMaximumPrecision(_)
-            ))
-        );
-
-        let res = TokenAmount::try_from_rust_decimal(decimal, 1);
-        assert_matches!(res, Err(TokenAmountConversionError::LossOfPrecision));
-
-        let decimal = rust_decimal::Decimal::new(i64::MAX, 0);
-        let res = TokenAmount::try_from_rust_decimal(decimal, 28);
-        assert_matches!(res, Err(TokenAmountConversionError::ValueOverflow));
-    }
-
-    #[test]
-    fn test_try_to_rust_decimal() {
-        let token_amount = TokenAmount::from_raw(12640, 4);
-
-        let decimal = token_amount.try_to_rust_decimal().unwrap();
-        assert_eq!(decimal.mantissa(), 12640);
-        assert_eq!(decimal.scale(), 4);
     }
 
     #[test]
