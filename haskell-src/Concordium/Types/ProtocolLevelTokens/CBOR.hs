@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Concordium.Types.ProtocolLevelTokens.CBOR where
@@ -27,7 +28,7 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe
 import Data.Scientific
 import qualified Data.Sequence as Seq
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.Lazy as LazyText
@@ -839,37 +840,66 @@ data TokenOperation
 instance AE.ToJSON TokenOperation where
     toJSON (TokenTransfer body) = do
         AE.object
-            [ "transfer" AE..= AE.toJSON body
+            [ "tag" AE..= AE.String "transfer",
+              "transfer" AE..= AE.toJSON body
             ]
     toJSON (TokenMint body) = do
         AE.object
-            [ "mint" AE..= AE.toJSON body
+            [ "tag" AE..= AE.String "mint",
+              "mint" AE..= AE.toJSON body
             ]
     toJSON (TokenBurn body) = do
         AE.object
-            [ "burn" AE..= AE.toJSON body
+            [ "tag" AE..= AE.String "burn",
+              "burn" AE..= AE.toJSON body
             ]
     toJSON (TokenAddAllowList body) = do
         AE.object
-            [ "addAllowList" AE..= AE.toJSON body
+            [ "tag" AE..= AE.String "addAllowList",
+              "addAllowList" AE..= AE.toJSON body
             ]
     toJSON (TokenAddDenyList body) = do
         AE.object
-            [ "addDenyList" AE..= AE.toJSON body
+            [ "tag" AE..= AE.String "addDenyList",
+              "addDenyList" AE..= AE.toJSON body
             ]
     toJSON (TokenRemoveAllowList body) = do
         AE.object
-            [ "removeAllowList" AE..= AE.toJSON body
+            [ "tag" AE..= AE.String "removeAllowList",
+              "removeAllowList" AE..= AE.toJSON body
             ]
     toJSON (TokenRemoveDenyList body) = do
         AE.object
-            [ "removeDenyList" AE..= AE.toJSON body
+            [ "tag" AE..= AE.String "removeDenyList",
+              "removeDenyList" AE..= AE.toJSON body
             ]
 
 instance AE.FromJSON TokenOperation where
     parseJSON = AE.withObject "TokenOperation" $ \o -> do
-        transferBody <- o AE..: "transfer"
-        pure $ TokenTransfer transferBody
+        tag :: Text <- o AE..: "tag"
+        case tag of
+            "transfer" -> do
+                body <- o AE..: "transfer"
+                pure $ TokenTransfer body
+            "mint" -> do
+                body <- o AE..: "mint"
+                pure $ TokenMint body
+            "burn" -> do
+                body <- o AE..: "burn"
+                pure $ TokenBurn body
+            "addAllowList" -> do
+                body <- o AE..: "addAllowList"
+                pure $ TokenAddAllowList body
+            "removeAllowList" -> do
+                body <- o AE..: "removeAllowList"
+                pure $ TokenRemoveAllowList body
+            "addDenyList" -> do
+                body <- o AE..: "addDenyList"
+                pure $ TokenAddDenyList body
+            "removeDenyList" -> do
+                body <- o AE..: "removeDenyList"
+                pure $ TokenRemoveDenyList body
+            other -> fail $ "token-operation: unsupported operation type: " ++ unpack other
 
 -- | Decode a CBOR-encoded 'TokenOperation'.
 decodeTokenOperation :: Decoder s TokenOperation
