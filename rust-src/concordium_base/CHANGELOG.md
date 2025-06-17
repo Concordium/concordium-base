@@ -1,3 +1,8 @@
+## Unreleased
+
+- `MetadataUrl` and `TokenModuleState` now supports decoding "additional" data matching the CDDL rule `* text => any`.
+- CBOR map encoding is now deterministic and follows the order described at <https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding>
+
 ## 8.0.0-alpha (2025-06-06)
 
 - Protocol level token events and reject reasons are now defined in `concordium_base::protocol_level_tokens`.
