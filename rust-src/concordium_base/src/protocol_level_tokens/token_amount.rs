@@ -10,7 +10,7 @@ use anyhow::Context;
 /// decimals for the token it represents an amount for. As such, `TokenAmount`
 /// can be considered a fixed point decimal.
 ///
-/// Notice that the `decimal` part could hence be left out of the representation
+/// Notice that the `decimal` part could be left out of the representation
 /// without loss of information, but it is there to make `TokenAmount`
 /// self-contained with regard to the numerical value represented. This enables
 /// additional validation, both programmatic and at user level.
