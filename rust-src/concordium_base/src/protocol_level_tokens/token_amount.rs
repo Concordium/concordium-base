@@ -9,13 +9,18 @@ use std::str::FromStr;
 /// Protocol level token (PLT) amount representation. The numerical amount
 /// represented is `value * 10^(-decimals)`.
 /// The number of decimals in the token amount should always match the number of
-/// decimals for the token it represents an amount for. As such, `TokenAmount`
-/// can be considered a fixed point decimal.
+/// decimals for the token it represents an amount for.
 ///
-/// Notice that the `decimal` part could be left out of the representation
-/// without loss of information, but it is there to make `TokenAmount`
-/// self-contained with regard to the numerical value represented. This enables
-/// additional validation, both programmatic and at user level.
+/// Since the number of decimals always matches the token, `TokenAmount`
+/// can be considered a fixed point decimal and does not implement any floating
+/// point behaviour. The type also does not implement any arithmetic operations.
+/// This is intentional, any arithmetic operations and floating point operations
+/// should be performed using e.g. `rust_decimal::Decimal` before converting to
+/// `TokenAmount`. Notice also that the `decimal` part could be left out of the
+/// `TokenAmount` representation without loss of information, but it is there to
+/// make `TokenAmount` self-contained with regard to the numerical value
+/// represented. This enables additional validation, both programmatic and at
+/// user level.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
 pub struct TokenAmount {
