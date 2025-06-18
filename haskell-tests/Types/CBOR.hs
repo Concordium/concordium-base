@@ -162,6 +162,30 @@ genTokenStateWithAdditional = do
     let tsModuleState = tokenModuleStateToBytes tms
     return TokenState{..}
 
+genTokenModuleAccountState :: Gen TokenModuleAccountState
+genTokenModuleAccountState = do
+    tmasAllowList <- arbitrary
+    tmasDenyList <- arbitrary
+    let tmasAdditional = Map.empty
+    return TokenModuleAccountState{..}
+
+genTokenModuleAccountStateWithAdditional :: Gen TokenModuleAccountState
+genTokenModuleAccountStateWithAdditional = do
+    tmas <- genTokenModuleAccountState
+    additional <- listOf1 genKV
+    return tmas{tmasAdditional = Map.fromList additional}
+  where
+    genKV = do
+        key <- genText
+        val <-
+            oneof
+                [ CBOR.TInt <$> arbitrary,
+                  CBOR.TString <$> genText,
+                  CBOR.TBool <$> arbitrary,
+                  pure CBOR.TNull
+                ]
+        return ("_" <> key, val)
+
 genTokenEvent :: Gen TokenEvent
 genTokenEvent =
     oneof
@@ -725,6 +749,18 @@ tests = parallel $ describe "CBOR" $ do
             === deserialiseFromBytes
                 decodeTokenModuleState
                 (toLazyByteString $ encodeTokenModuleState tt)
+    it "Encode and decode TokenModuleAccountState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleAccountState $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenModuleAccountState
+                    (toLazyByteString $ encodeTokenModuleAccountState tt)
+                )
+    it "Encode and decode TokenModuleAccountState (with additional)" $ withMaxSuccess 1000 $ forAll genTokenModuleAccountStateWithAdditional $ \tt ->
+        (Right ("", tt))
+            === ( deserialiseFromBytes
+                    decodeTokenModuleAccountState
+                    (toLazyByteString $ encodeTokenModuleAccountState tt)
+                )
     it "Encode and decode TokenEvent" $ withMaxSuccess 1000 $ forAll genTokenEvent $ \tt ->
         Right tt === decodeTokenEvent (encodeTokenEvent tt)
     it "Encode and decode TokenRejectReason" $ withMaxSuccess 1000 $ forAll genTokenRejectReason $ \tt ->

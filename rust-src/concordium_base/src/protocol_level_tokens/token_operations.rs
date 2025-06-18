@@ -123,7 +123,7 @@ pub struct TokenOperationsPayload {
 impl TokenOperationsPayload {
     /// Decode token operations from CBOR
     pub fn decode_operations(&self) -> CborSerializationResult<TokenOperations> {
-        TokenOperations::try_from_cbor(&self.operations)
+        cbor::cbor_decode(&self.operations)
     }
 }
 
@@ -147,16 +147,6 @@ impl FromIterator<TokenOperation> for TokenOperations {
 
 impl TokenOperations {
     pub fn new(operations: Vec<TokenOperation>) -> Self { Self { operations } }
-
-    /// Decode token operations from CBOR
-    pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
-        cbor::cbor_decode(cbor.as_ref())
-    }
-
-    /// Encode token operations to CBOR
-    pub fn try_to_cbor(&self) -> CborSerializationResult<RawCbor> {
-        Ok(RawCbor::from(cbor::cbor_encode(&self)?))
-    }
 }
 
 /// Protocol level token operation. An operation can be composed to a protocol

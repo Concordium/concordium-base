@@ -13,6 +13,7 @@ module Concordium.Types.Queries.Tokens (
 
 import Data.Aeson as AE
 import qualified Data.ByteString as BS
+import Data.Maybe (catMaybes)
 import Data.Word
 
 import Concordium.Crypto.ByteStringHelpers
@@ -47,31 +48,48 @@ instance FromJSON Token where
 data TokenAccountState = TokenAccountState
     { -- | The available token balance.
       balance :: !TokenAmount,
-      -- | Whether the account is a member of the allow list of the token.
-      -- If present, tokens can be transferred only, if both sender and receiver are
-      -- members of the allow list of the token.
-      memberAllowList :: !(Maybe Bool),
-      -- | Whether the account is a member of the deny list of the token.
-      -- If present, tokens can be transferred only, if neither sender or receiver
-      -- are members of the deny list.
-      memberDenyList :: !(Maybe Bool)
+      -- | The token-module specific state for the account.
+      --  This is CBOR-encoded.
+      moduleAccountState :: !(Maybe BS.ByteString)
     }
     deriving (Eq, Show)
 
+-- | A wrapper type for (de)-serializing a CBOR-encoded 'TokenModuleAccountState'
+--  to/from JSON. This can parse either a JSON object representation of 'TokenModuleAccountState'
+--  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
+--  it will render as a JSON object if the contents can be decded to a 'TokenModuleAccountState', or
+--  otherwise as the hex-encoded byte string.
+newtype EncodedTokenModuleAccountState = EncodedTokenModuleAccountState
+    { encodedTokenModuleAccountState :: BS.ByteString
+    }
+
+instance ToJSON EncodedTokenModuleAccountState where
+    toJSON (EncodedTokenModuleAccountState bs) =
+        case CBOR.tokenModuleAccountStateFromBytes (BS.fromStrict bs) of
+            Right state -> toJSON state
+            Left _ -> toJSON (ByteStringHex bs)
+
+instance FromJSON EncodedTokenModuleAccountState where
+    parseJSON o@(Object _) = do
+        state <- parseJSON o
+        return $ EncodedTokenModuleAccountState $ CBOR.tokenModuleAccountStateToBytes state
+    parseJSON val = do
+        ByteStringHex bs <- parseJSON val
+        return $ EncodedTokenModuleAccountState bs
+
 -- | JSON instances for TokenAccountState
 instance ToJSON TokenAccountState where
-    toJSON (TokenAccountState balance inAllowList inDenyList) =
-        object
-            [ "balance" .= balance,
-              "inAllowList" .= inAllowList,
-              "inDenyList" .= inDenyList
-            ]
+    toJSON (TokenAccountState balance moduleAccountState) =
+        object $
+            catMaybes
+                [ Just ("balance" .= balance),
+                  ("state" .=) . EncodedTokenModuleAccountState <$> moduleAccountState
+                ]
 
 instance FromJSON TokenAccountState where
     parseJSON = withObject "TokenAccountState" $ \o -> do
         balance <- o .: "balance"
-        memberAllowList <- o .: "inAllowList"
-        memberDenyList <- o .: "inDenyList"
+        moduleAccountState <- fmap encodedTokenModuleAccountState <$> o .:? "state"
         return TokenAccountState{..}
 
 -- | The global token state.
