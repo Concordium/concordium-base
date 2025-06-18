@@ -375,7 +375,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleAccountAddress, 
+                  tmsGovernanceAccount = exampleAccountAddress,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,

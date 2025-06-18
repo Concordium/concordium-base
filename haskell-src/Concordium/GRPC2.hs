@@ -1676,7 +1676,7 @@ convertAccountTransaction ty cost sender result = case ty of
                         left (const CEInvalidTransactionResult) $
                             mapM tokenHolderEventToProto events
                     Right . Proto.make $
-                        ProtoFields.tokenHolderEffect . ProtoFields.events .= protoEvents
+                        ProtoFields.tokenEffect . ProtoFields.events .= protoEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
