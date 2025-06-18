@@ -5,6 +5,8 @@
 - CBOR map encoding is now deterministic and follows the order described at <https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding>
 - `TokenAmount` CBOR encoding now supports `value` in full `u64` range and not just overlap between `u64` and `i64`
 - Added `TokenModuleAccountState` type.
+- Removed `try_from_cbor` and `to_cbor` from a number of types implementing CBOR serialization in favour of just 
+  using `cbor::cbor_encode/decode`.
 
 ## 8.0.0-alpha (2025-06-06)
 
