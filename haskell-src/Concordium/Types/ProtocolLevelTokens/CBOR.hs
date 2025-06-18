@@ -1582,3 +1582,110 @@ tokenModuleStateFromBytes lbs =
         Right (remaining, _) ->
             Left $
                 show (LBS.length remaining) ++ " bytes remaining after parsing token module state"
+
+-- * Token account state
+
+-- | The account state represents account-specific information that is maintained by the Token
+--  Module, and is returned as part of a `GetAccountInfo` query. It does not include state that is
+--  managed by the Token Kernel, such as the token identifier and account balance.
+--
+--  All fields are optional, and can be omitted if the module implementation does not support them.
+--  The structure supports additional fields for future extensibility. Non-standard fields (i.e. any
+--  fields that are not defined by a standard, and are specific to the module implementation) may
+--  be included, and their tags should be prefixed with an underscore ("_") to distinguish them
+--  as such.
+data TokenModuleAccountState = TokenModuleAccountState
+    { -- | Whether the account is on the allow list.
+      --  This is only present if the token supports an allow list; that is, accounts can only
+      --  send or receive tokens if they are on the allow list.
+      tmasAllowList :: !(Maybe Bool),
+      -- | Whether the account is on the deny list.
+      --  This is only present if the token supports a deny list; that is, accounts can
+      --  only send or receive tokens if they are not on the deny list.
+      tmasDenyList :: !(Maybe Bool),
+      -- | Any additional state data. Keys in this map SHOULD NOT overlap those
+      --  used for the other (standardised) fields in this structure as that will
+      --  break the invertability of the CBOR encoding.
+      tmasAdditional :: !(Map.Map Text CBOR.Term)
+    }
+    deriving (Eq, Show)
+
+instance AE.ToJSON TokenModuleAccountState where
+    toJSON TokenModuleAccountState{..} =
+        AE.object . catMaybes $
+            [ ("allowList" AE..=) <$> tmasAllowList,
+              ("denyList" AE..=) <$> tmasDenyList,
+              ("additional" AE..=) <$> additional
+            ]
+      where
+        additional
+            | null tmasAdditional = Nothing
+            | otherwise =
+                Just $
+                    AE.object
+                        [ AE.Key.fromText k AE..= cborTermToHex v
+                          | (k, v) <- Map.toList tmasAdditional
+                        ]
+
+instance AE.FromJSON TokenModuleAccountState where
+    parseJSON = AE.withObject "TokenModuleAccountState" $ \v -> do
+        tmasAllowList <- v AE..:? "allowList"
+        tmasDenyList <- v AE..:? "denyList"
+        additional <- v AE..:? "additional" AE..!= Map.empty
+        tmasAdditional <-
+            Map.traverseWithKey
+                ( \k hexVal -> case hexToCborTerm hexVal of
+                    Left err -> fail $ "Failed to decode CBOR key " ++ show k ++ ": " ++ err
+                    Right term -> return term
+                )
+                additional
+        return TokenModuleAccountState{..}
+
+-- | Encode a 'TokenModuleAccountState' as CBOR. Any keys in 'tmasAdditional' that overlap with
+--  standardized keys (e.g. "allowList", "denyList", etc.) will be ignored.
+encodeTokenModuleAccountState :: TokenModuleAccountState -> Encoding
+encodeTokenModuleAccountState TokenModuleAccountState{..} =
+    encodeMapDeterministic $
+        additionalMap
+            & k "allowList" .~ fmap encodeBool tmasAllowList
+            & k "denyList" .~ fmap encodeBool tmasDenyList
+  where
+    additionalMap =
+        Map.fromList
+            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
+              | (key, val) <- Map.toList tmasAdditional
+            ]
+    k = at . makeMapKeyEncoding . encodeString
+
+-- | CBOR-encode a 'TokenModuleAccountState' to a (strict) 'BS.ByteString'.
+tokenModuleAccountStateToBytes :: TokenModuleAccountState -> BS.ByteString
+tokenModuleAccountStateToBytes = CBOR.toStrictByteString . encodeTokenModuleAccountState
+
+-- | Decode a CBOR-encoded 'TokenModuleAccountState'.
+decodeTokenModuleAccountState :: Decoder s TokenModuleAccountState
+decodeTokenModuleAccountState = decodeMap decodeVal build Map.empty
+  where
+    decodeVal key = Just $ mapValueDecoder key CBOR.decodeTerm (at key)
+    build :: Map.Map Text CBOR.Term -> Either String TokenModuleAccountState
+    build m0 = do
+        (tmasAllowList, m1) <- getMaybeAndClear "allowList" convertBool m0
+        (tmasDenyList, tmasAdditional) <- getMaybeAndClear "denyList" convertBool m1
+        return TokenModuleAccountState{..}
+    getMaybeAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
+        return (maybeVal, m')
+    convertBool (CBOR.TBool b) = Just b
+    convertBool _ = Nothing
+
+-- | Parse a 'TokenModuleAccountState' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenModuleAccountStateFromBytes :: LBS.ByteString -> Either String TokenModuleAccountState
+tokenModuleAccountStateFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenModuleAccountState lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining)
+                    ++ " bytes remaining after parsing token module account state"
