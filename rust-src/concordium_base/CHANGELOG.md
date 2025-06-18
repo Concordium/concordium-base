@@ -3,6 +3,8 @@
 - `TokenAmount` changed to require explicit number of decimals equal to the token when creating a value
 - `MetadataUrl` and `TokenModuleState` now supports decoding "additional" data matching the CDDL rule `* text => any`.
 - CBOR map encoding is now deterministic and follows the order described at <https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding>
+- `TokenAmount` CBOR encoding now supports `value` in full `u64` range and not just overlap between `u64` and `i64`
+- Added `TokenModuleAccountState` type.
 
 ## 8.0.0-alpha (2025-06-06)
 
