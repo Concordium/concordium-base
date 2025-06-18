@@ -182,6 +182,7 @@ module Concordium.Types (
 
     -- * Protocol-level tokens
     TokenId (..),
+    TokenHolderEvent (HolderAccountEvent),
     makeTokenId,
     unsafeGetTokenId,
     TokenParameter (..),
@@ -411,6 +412,47 @@ instance AE.FromJSON UrlText where
 
 emptyUrlText :: UrlText
 emptyUrlText = UrlText ""
+
+newtype TokenHolderEvent
+    = HolderAccountEvent AccountAddress
+    deriving (Eq)
+
+instance Show TokenHolderEvent where
+    show (HolderAccountEvent addr) =
+        show addr
+
+instance AE.ToJSON TokenHolderEvent where
+    toJSON (HolderAccountEvent address) = do
+        AE.object
+            [ -- Tag with type of `account`.
+              "type" AE..= AE.String "account",
+              "address" AE..= address
+            ]
+
+instance AE.FromJSON TokenHolderEvent where
+    parseJSON = AE.withObject "TokenHolderEvent" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "account" -> do
+                address <- o AE..: "address"
+                return (HolderAccountEvent address)
+            _ -> fail ("Unknown TokenHolderEvent type " ++ type_string)
+
+instance S.Serialize TokenHolderEvent where
+    get = getHolderAccount
+    put = putHolderAccount
+
+getHolderAccount :: S.Get TokenHolderEvent
+getHolderAccount =
+    S.getWord8 >>= \case
+        0 -> do
+            HolderAccountEvent <$> S.get
+        n -> fail $ "Unrecognized TokenHolderEvent tag: " ++ show n
+
+putHolderAccount :: S.Putter TokenHolderEvent
+putHolderAccount (HolderAccountEvent address) =
+    S.putWord8 0
+        <> S.put address
 
 -- | Due to limitations on the ledger, there has to be some restriction on the
 --  precision of the input for updating ElectionDifficult. For this purpose,

@@ -78,8 +78,8 @@ genTokenTransfer = do
     ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
     return TokenTransferBody{..}
 
--- | Generator for `TokenHolder`
-genTokenHolder :: Gen TokenHolder
+-- | Generator for `CborTokenHolder`
+genTokenHolder :: Gen CborTokenHolder
 genTokenHolder =
     oneof
         [ HolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),

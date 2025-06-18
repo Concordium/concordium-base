@@ -3,8 +3,9 @@ use crate::{
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
+use concordium_contracts_common::AccountAddress;
 
-use super::{cbor::RawCbor, TokenAmount, TokenHolder, TokenId};
+use super::{cbor::RawCbor, TokenAmount, TokenHolder as CborTokenHolder, TokenId};
 
 /// An event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -89,7 +90,14 @@ pub enum TokenModuleEventType {
 #[serde(rename_all = "camelCase")]
 pub struct TokenListUpdateEventDetails {
     /// The account that was added or removed from an allow or deny list
-    pub target: TokenHolder,
+    pub target: CborTokenHolder,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
+pub enum TokenHolderEvent {
+    #[serde(rename = "account")]
+    HolderAccountEvent { address: AccountAddress },
 }
 
 /// An event emitted when a transfer of tokens from `from` to `to` is performed.
@@ -97,9 +105,9 @@ pub struct TokenListUpdateEventDetails {
 #[serde(rename_all = "camelCase")]
 pub struct TokenTransferEvent {
     /// The token holder from which the tokens are transferred.
-    pub from:   TokenHolder,
+    pub from:   TokenHolderEvent,
     /// The token holder to which the tokens are transferred.
-    pub to:     TokenHolder,
+    pub to:     TokenHolderEvent,
     /// The amount of tokens transferred.
     pub amount: TokenAmount,
     /// An optional memo field that can be used to attach a message to the token
@@ -113,7 +121,7 @@ pub struct TokenTransferEvent {
 #[serde(rename_all = "camelCase")]
 pub struct TokenSupplyUpdateEvent {
     /// The token holder the balance update is performed on.
-    pub target: TokenHolder,
+    pub target: TokenHolderEvent,
     /// The balance difference to be applied to the target.
     pub amount: TokenAmount,
 }
@@ -184,7 +192,7 @@ mod test {
     #[test]
     fn test_decode_add_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: TokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -206,7 +214,7 @@ mod test {
     #[test]
     fn test_decode_remove_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: TokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -228,7 +236,7 @@ mod test {
     #[test]
     fn test_decode_add_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: TokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -250,7 +258,7 @@ mod test {
     #[test]
     fn test_decode_remove_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: TokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::HolderAccount(HolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),

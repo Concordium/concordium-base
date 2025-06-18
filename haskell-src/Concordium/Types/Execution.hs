@@ -1414,9 +1414,9 @@ data Event' (supplemented :: Bool)
         { -- | The unique token identifier.
           ettTokenId :: !TokenId,
           -- | The source of the transfer.
-          ettFrom :: !AccountAddress,
+          ettFrom :: !TokenHolderEvent,
           -- | The target of the transfer.
-          ettTo :: !AccountAddress,
+          ettTo :: !TokenHolderEvent,
           -- | The amount transferred.
           ettAmount :: !TokenAmount,
           -- | An optional memo for the transfer.
@@ -1427,7 +1427,7 @@ data Event' (supplemented :: Bool)
         { -- | The unique token identifier.
           etmTokenId :: !TokenId,
           -- | The account receiving the minted tokens.
-          etmTarget :: !AccountAddress,
+          etmTarget :: !TokenHolderEvent,
           -- | The amount minted.
           etmAmount :: !TokenAmount
         }
@@ -1436,7 +1436,7 @@ data Event' (supplemented :: Bool)
         { -- | The unique token identifier.
           etbTokenId :: !TokenId,
           -- | The account from which the tokens are burned.
-          etbTarget :: !AccountAddress,
+          etbTarget :: !TokenHolderEvent,
           -- | The amount burned.
           etbAmount :: !TokenAmount
         }
@@ -1706,18 +1706,29 @@ putEvent = \case
             <> S.put etmeDetails
     TokenTransfer{..} ->
         S.putWord8 39
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            <> S.putWord8 bitmap
             <> S.put ettTokenId
             <> S.put ettFrom
             <> S.put ettTo
             <> S.put ettAmount
-            <> putMaybe S.put ettMemo
+            <> mapM_ S.put ettMemo
+      where
+        bitmap =
+            bitFor 0 ettMemo
     TokenMint{..} ->
         S.putWord8 40
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            <> S.putWord8 0
             <> S.put etmTokenId
             <> S.put etmTarget
             <> S.put etmAmount
     TokenBurn{..} ->
         S.putWord8 41
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            <> S.putWord8 0
             <> S.put etbTokenId
             <> S.put etbTarget
             <> S.put etbAmount
@@ -1729,8 +1740,7 @@ getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
     S.getWord8 >>= \case
         0 -> do
-            mref <- S.get
-            return (ModuleDeployed mref)
+            ModuleDeployed <$> S.get
         1 -> do
             ecRef <- S.get
             ecAddress <- S.get
@@ -1757,8 +1767,7 @@ getEvent spv =
             etTo <- S.get
             return Transferred{..}
         4 -> do
-            addr <- S.get
-            return $ AccountCreated addr
+            AccountCreated <$> S.get
         5 -> do
             ecdRegId <- S.get
             ecdAccount <- S.get
@@ -1923,18 +1932,30 @@ getEvent spv =
             etmeDetails <- S.get
             return TokenModuleEvent{..}
         39 | supportPlt -> do
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            bitmap <- S.getWord8
             ettTokenId <- S.get
             ettFrom <- S.get
             ettTo <- S.get
             ettAmount <- S.get
-            ettMemo <- getMaybe S.get
+            let maybeGet :: (S.Serialize g) => Int -> S.Get (Maybe g)
+                maybeGet b
+                    | testBit bitmap b = Just <$> S.get
+                    | otherwise = return Nothing
+            ettMemo <- maybeGet 0
             return TokenTransfer{..}
         40 | supportPlt -> do
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            _bitmap <- S.getWord8
             etmTokenId <- S.get
             etmTarget <- S.get
             etmAmount <- S.get
             return TokenMint{..}
         41 | supportPlt -> do
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            _bitmap <- S.getWord8
             etbTokenId <- S.get
             etbTarget <- S.get
             etbAmount <- S.get
