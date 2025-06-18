@@ -594,6 +594,10 @@ encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
 tokenAccountAddressFromBytes :: LBS.ByteString -> Either String AccountAddress
 tokenAccountAddressFromBytes = decodeFromBytes decodeAccountAddress "token account address"
 
+-- | Encode an 'AccountAddress' to a strict bytestring.
+tokenAccountAddressToBytes :: AccountAddress -> BS.ByteString
+tokenAccountAddressToBytes = CBOR.toStrictByteString . encodeAccountAddress
+
 -- | A destination that can receive and hold protocol-level tokens.
 --  Currently, this can only be a Concordium account address.
 data TokenHolder = HolderAccount
