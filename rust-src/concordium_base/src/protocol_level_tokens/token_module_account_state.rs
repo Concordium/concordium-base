@@ -2,13 +2,7 @@ use std::collections::HashMap;
 
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
-use crate::{
-    common::{
-        cbor,
-        cbor::{value, CborSerializationResult, SerializationOptions, UnknownMapKeys},
-    },
-    protocol_level_tokens::RawCbor,
-};
+use crate::common::cbor::value;
 
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize, Default)]
 ///  The account state represents account-specific information that is
@@ -35,22 +29,10 @@ pub struct TokenModuleAccountState {
     pub additional: HashMap<String, value::Value>,
 }
 
-impl TokenModuleAccountState {
-    pub fn try_from_cbor(cbor: &RawCbor) -> CborSerializationResult<Self> {
-        cbor::cbor_decode_with_options(
-            cbor.as_ref(),
-            SerializationOptions::default().unknown_map_keys(UnknownMapKeys::Ignore),
-        )
-    }
-
-    pub fn to_cbor(&self) -> CborSerializationResult<RawCbor> {
-        Ok(RawCbor::from(cbor::cbor_encode(&self)?))
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::common::cbor;
 
     #[test]
     fn test_token_module_account_state_cbor() {
@@ -60,33 +42,33 @@ mod test {
             additional: Default::default(),
         };
 
-        let cbor = token_module_account_state.to_cbor().unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
         assert_eq!(hex::encode(&cbor), "a169616c6c6f774c697374f5");
-        let decoded = TokenModuleAccountState::try_from_cbor(&cbor).unwrap();
+        let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
 
         token_module_account_state.allow_list = None;
-        let cbor = token_module_account_state.to_cbor().unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
         assert_eq!(hex::encode(&cbor), "a0");
-        let decoded = TokenModuleAccountState::try_from_cbor(&cbor).unwrap();
+        let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
 
         token_module_account_state.deny_list = Some(false);
-        let cbor = token_module_account_state.to_cbor().unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
         assert_eq!(hex::encode(&cbor), "a16864656e794c697374f4");
-        let decoded = TokenModuleAccountState::try_from_cbor(&cbor).unwrap();
+        let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
 
         token_module_account_state.additional.insert(
             "customKey".to_string(),
             value::Value::Text("customValue".to_string()),
         );
-        let cbor = token_module_account_state.to_cbor().unwrap();
+        let cbor = cbor::cbor_encode(&token_module_account_state).unwrap();
         assert_eq!(
             hex::encode(&cbor),
             "a26864656e794c697374f469637573746f6d4b65796b637573746f6d56616c7565"
         );
-        let decoded = TokenModuleAccountState::try_from_cbor(&cbor).unwrap();
+        let decoded: TokenModuleAccountState = cbor::cbor_decode(cbor).unwrap();
         assert_eq!(token_module_account_state, decoded);
     }
 }

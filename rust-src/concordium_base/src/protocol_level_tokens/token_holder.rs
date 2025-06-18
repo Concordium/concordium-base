@@ -53,20 +53,6 @@ pub struct HolderAccount {
     pub address:   AccountAddress,
 }
 
-impl CborSerialize for AccountAddress {
-    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        self.0.serialize(encoder)
-    }
-}
-
-impl CborDeserialize for AccountAddress {
-    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        Ok(Self(CborDeserialize::deserialize(decoder)?))
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CoinInfo {
