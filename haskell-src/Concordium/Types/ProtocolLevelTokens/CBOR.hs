@@ -345,17 +345,22 @@ encodeTokenMetadataUrl TokenMetadataUrl{..} =
     k = at . makeMapKeyEncoding . encodeString
     encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
 
--- | Parse a 'TokenMetadataUrl' from a 'LBS.ByteString'. The entire bytestring must
---  be consumed in the parsing.
-tokenMetadataUrlFromBytes :: LBS.ByteString -> Either String TokenMetadataUrl
-tokenMetadataUrlFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenMetadataUrl lbs of
+decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString ->  Either String a
+decodeFromBytes decoder name lbs =
+    case CBOR.deserialiseFromBytes decoder lbs of
         Left e -> Left (show e)
         Right ("", res) -> return res
         Right (remaining, _) ->
             Left $
                 show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token metadata URL"
+                    ++ " bytes remaining after parsing "
+                    ++ name
+
+-- | Parse a 'TokenMetadataUrl' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenMetadataUrlFromBytes :: LBS.ByteString -> Either String TokenMetadataUrl
+tokenMetadataUrlFromBytes =
+    decodeFromBytes decodeTokenMetadataUrl "token metadata url"
 
 -- | CBOR-encode a 'TokenMetadataUrl to a (strict) 'BS.ByteString'.
 tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
@@ -583,6 +588,11 @@ decodeAccountAddress = do
 encodeAccountAddress :: AccountAddress -> Encoding
 encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
     encodeByteArray (SBA.fromByteArray ba)
+
+-- | Parse an 'AccountAddress' from a 'LBS.ByteString'. The entire bytestring
+--  must be consumed in the parsing.
+tokenAccountAddressFromBytes :: LBS.ByteString -> Either String AccountAddress
+tokenAccountAddressFromBytes = decodeFromBytes decodeAccountAddress "token account address"
 
 -- | A destination that can receive and hold protocol-level tokens.
 --  Currently, this can only be a Concordium account address.
