@@ -38,7 +38,7 @@ num = "0.4"
 curve25519-dalek = { version = "4.1", features = ["rand_core", "group"]}
 zeroize = "1.1"
 # See https://github.com/serde-rs/json/issues/505 for the need to be careful.
-rust_decimal = { version = "1.25", features = ["serde-float", "serde-arbitrary-precision"]}
+rust_decimal = { version = "1.37.1", features = ["serde-float", "serde-arbitrary-precision"]}
 num-bigint = "0.4"
 num-traits = "0.2"
 bs58 = { version = "0.5", features = ["check"] }
