@@ -570,7 +570,8 @@ instance AE.ToJSON Payload where
     toJSON TokenUpdate{..} =
         AE.object
             [ "tokenId" AE..= tuTokenId,
-              "operations" AE..= EncodedTokenOperations tuOperations
+              "operations" AE..= EncodedTokenOperations tuOperations,
+              "transactionType" AE..= AE.String "tokenUpdate"
             ]
 
 instance AE.FromJSON Payload where

@@ -28,7 +28,7 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe
 import Data.Scientific
 import qualified Data.Sequence as Seq
-import Data.Text (Text, unpack)
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.Lazy as LazyText
@@ -913,7 +913,7 @@ instance AE.FromJSON TokenOperation where
             "removeDenyList" -> do
                 body <- o AE..: "removeDenyList"
                 pure $ TokenRemoveDenyList body
-            other -> fail $ "token-operation: unsupported operation type: " ++ unpack other
+            other -> fail $ "token-operation: unsupported operation type: " ++ Text.unpack other
 
 -- | Decode a CBOR-encoded 'TokenOperation'.
 decodeTokenOperation :: Decoder s TokenOperation
