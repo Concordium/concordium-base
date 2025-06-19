@@ -595,14 +595,14 @@ instance AE.ToJSON CborTokenHolder where
                 ++ ["coininfo" AE..= coinInfo | coinInfo <- toList holderAccountCoinInfo]
 
 instance AE.FromJSON CborTokenHolder where
-    parseJSON = AE.withObject "TokenReceiver" $ \o -> do
+    parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
                 holderAccountAddress <- o AE..: "address"
                 holderAccountCoinInfo <- o AE..:? "coininfo"
                 return HolderAccount{..}
-            _ -> fail ("Unknown TokenReceiver type " ++ type_string)
+            _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.

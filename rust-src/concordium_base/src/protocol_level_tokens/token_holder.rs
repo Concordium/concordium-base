@@ -24,10 +24,11 @@ const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
     CborSerialize,
     CborDeserialize,
 )]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "type")]
 #[cbor(tagged)]
 pub enum CborTokenHolder {
     #[cbor(peek_tag = ACCOUNT_HOLDER_TAG)]
+    #[serde(rename = "account")]
     HolderAccount(HolderAccount),
 }
 
