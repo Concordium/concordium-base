@@ -142,19 +142,19 @@ enum KeygenTool {
         about = "Test functionality of privacy guardian key by decrypting a test record.",
         version = "1.0"
     )]
-    TestDec(SingleTestDec),
+    SingleDec(SingleTestDec),
     #[structopt(
         name = "gen-enc",
         about = "Generate a test record for a given privacy guardian public key.",
         version = "1.0"
     )]
-    TestEnc(SingleTestEnc),
+    GenSingleEnc(SingleTestEnc),
     #[structopt(
         name = "gen-enc-prf",
         about = "Generate a fake encrypted PRF-share for a given privacy guardian public key.",
         version = "1.0"
     )]
-    TestPRFEnc(PRFTestEnc),
+    GenPRFEnc(PRFTestEnc),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -179,17 +179,17 @@ fn main() {
     let kg = KeygenTool::from_clap(&matches);
     use KeygenTool::*;
     match kg {
-        TestEnc(test_enc) => {
-            if let Err(e) = handle_generate_test_enc(test_enc) {
-                eprintln!("{}", e)
-            }
-        }
-        TestDec(test_dec) => {
+        SingleDec(test_dec) => {
             if let Err(e) = handle_test_dec(test_dec) {
                 eprintln!("{}", e)
             }
         }
-        TestPRFEnc(prftest_enc) => {
+        GenSingleEnc(test_enc) => {
+            if let Err(e) = handle_generate_test_enc(test_enc) {
+                eprintln!("{}", e)
+            }
+        }
+        GenPRFEnc(prftest_enc) => {
             if let Err(e) = handle_generate_test_enc_prf(prftest_enc) {
                 eprintln!("{}", e)
             }
@@ -298,7 +298,7 @@ fn encrypt_msg<C: Curve>(m: Value<C>, pk: &PublicKey<C>, g: &C) -> [Cipher<C>; 8
     let mut result = [Cipher(C::one_point(), C::one_point()); 8];
     ciphers.iter().enumerate().for_each(|(i, c)| {
         if i < 8 {
-            result[i] = c.0.clone();
+            result[i] = c.0;
         }
     });
     result
