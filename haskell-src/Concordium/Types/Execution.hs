@@ -2774,7 +2774,7 @@ data RejectReason
     | -- | Token ID does not exist.
       NonExistentTokenId !TokenId
     | -- | The token transaction was rejected.
-      TokenTransactionFailed !TokenModuleRejectReason
+      TokenUpdateTransactionFailed !TokenModuleRejectReason
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2847,7 +2847,7 @@ instance S.Serialize RejectReason where
         PoolWouldBecomeOverDelegated -> S.putWord8 53
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
-        TokenTransactionFailed reason -> S.putWord8 56 <> S.put reason
+        TokenUpdateTransactionFailed reason -> S.putWord8 56 <> S.put reason
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
@@ -2915,7 +2915,7 @@ instance S.Serialize RejectReason where
             53 -> return PoolWouldBecomeOverDelegated
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
-            56 -> TokenTransactionFailed <$> S.get
+            56 -> TokenUpdateTransactionFailed <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason
