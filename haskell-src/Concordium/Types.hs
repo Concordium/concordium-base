@@ -182,7 +182,7 @@ module Concordium.Types (
 
     -- * Protocol-level tokens
     TokenId (..),
-    TokenHolderEvent (HolderAccountEvent),
+    TokenHolder (HolderAccount),
     makeTokenId,
     unsafeGetTokenId,
     TokenParameter (..),
@@ -413,44 +413,44 @@ instance AE.FromJSON UrlText where
 emptyUrlText :: UrlText
 emptyUrlText = UrlText ""
 
-newtype TokenHolderEvent
-    = HolderAccountEvent AccountAddress
+newtype TokenHolder
+    = HolderAccount AccountAddress
     deriving (Eq)
 
-instance Show TokenHolderEvent where
-    show (HolderAccountEvent addr) =
+instance Show TokenHolder where
+    show (HolderAccount addr) =
         show addr
 
-instance AE.ToJSON TokenHolderEvent where
-    toJSON (HolderAccountEvent address) = do
+instance AE.ToJSON TokenHolder where
+    toJSON (HolderAccount address) = do
         AE.object
             [ -- Tag with type of `account`.
               "type" AE..= AE.String "account",
               "address" AE..= address
             ]
 
-instance AE.FromJSON TokenHolderEvent where
-    parseJSON = AE.withObject "TokenHolderEvent" $ \o -> do
+instance AE.FromJSON TokenHolder where
+    parseJSON = AE.withObject "TokenHolder" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
                 address <- o AE..: "address"
-                return (HolderAccountEvent address)
-            _ -> fail ("Unknown TokenHolderEvent type " ++ type_string)
+                return (HolderAccount address)
+            _ -> fail ("Unknown TokenHolder type " ++ type_string)
 
-instance S.Serialize TokenHolderEvent where
+instance S.Serialize TokenHolder where
     get = getHolderAccount
     put = putHolderAccount
 
-getHolderAccount :: S.Get TokenHolderEvent
+getHolderAccount :: S.Get TokenHolder
 getHolderAccount =
     S.getWord8 >>= \case
         0 -> do
-            HolderAccountEvent <$> S.get
-        n -> fail $ "Unrecognized TokenHolderEvent tag: " ++ show n
+            HolderAccount <$> S.get
+        n -> fail $ "Unrecognized TokenHolder tag: " ++ show n
 
-putHolderAccount :: S.Putter TokenHolderEvent
-putHolderAccount (HolderAccountEvent address) =
+putHolderAccount :: S.Putter TokenHolder
+putHolderAccount (HolderAccount address) =
     S.putWord8 0
         <> S.put address
 

@@ -26,7 +26,7 @@ const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 )]
 #[serde(rename_all = "camelCase")]
 #[cbor(tagged)]
-pub enum TokenHolder {
+pub enum CborTokenHolder {
     #[cbor(peek_tag = ACCOUNT_HOLDER_TAG)]
     HolderAccount(HolderAccount),
 }
@@ -138,7 +138,7 @@ mod test {
 
     #[test]
     fn test_token_holder_cbor_no_coin_info() {
-        let token_holder = TokenHolder::HolderAccount(HolderAccount {
+        let token_holder = CborTokenHolder::HolderAccount(HolderAccount {
             address:   ADDRESS,
             coin_info: None,
         });
@@ -148,20 +148,20 @@ mod test {
             hex::encode(&cbor),
             "d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let token_holder_decoded: TokenHolder = cbor::cbor_decode(&cbor).unwrap();
+        let token_holder_decoded: CborTokenHolder = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_holder_decoded, token_holder);
     }
 
     #[test]
     fn test_token_holder_cbor() {
-        let token_holder = TokenHolder::HolderAccount(HolderAccount {
+        let token_holder = CborTokenHolder::HolderAccount(HolderAccount {
             address:   ADDRESS,
             coin_info: Some(CoinInfo::CCD),
         });
 
         let cbor = cbor::cbor_encode(&token_holder).unwrap();
         assert_eq!(hex::encode(&cbor), "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let token_holder_decoded: TokenHolder = cbor::cbor_decode(&cbor).unwrap();
+        let token_holder_decoded: CborTokenHolder = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_holder_decoded, token_holder);
     }
 }

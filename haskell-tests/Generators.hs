@@ -83,8 +83,8 @@ genAggregationVerifyKeyAndProof = do
 genAccountAddress :: Gen AccountAddress
 genAccountAddress = AccountAddress . FBS.pack <$> vector accountAddressSize
 
-genTokenHolderEvent :: Gen TokenHolderEvent
-genTokenHolderEvent = HolderAccountEvent <$> genAccountAddress
+genTokenHolder :: Gen TokenHolder
+genTokenHolder = HolderAccount <$> genAccountAddress
 
 genAccountAliases :: AccountAddress -> Gen AccountAddress
 genAccountAliases (AccountAddress addr) = do
@@ -814,12 +814,12 @@ genEvent spv =
             [ TokenModuleEvent <$> genTokenId <*> genTokenEventType <*> genTokenEventDetails,
               TokenTransfer
                 <$> genTokenId
-                <*> genTokenHolderEvent
-                <*> genTokenHolderEvent
+                <*> genTokenHolder
+                <*> genTokenHolder
                 <*> genTokenAmount
                 <*> liftArbitrary genMemo,
-              TokenMint <$> genTokenId <*> genTokenHolderEvent <*> genTokenAmount,
-              TokenBurn <$> genTokenId <*> genTokenHolderEvent <*> genTokenAmount,
+              TokenMint <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
+              TokenBurn <$> genTokenId <*> genTokenHolder <*> genTokenAmount,
               TokenCreated <$> genCreatePLT
             ]
         | otherwise = []

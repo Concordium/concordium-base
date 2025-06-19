@@ -74,13 +74,13 @@ genTokenInitializationParameters = do
 genTokenTransfer :: Gen TokenTransferBody
 genTokenTransfer = do
     ttAmount <- genTokenAmount
-    ttRecipient <- genTokenHolder
+    ttRecipient <- genCborTokenHolder
     ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
     return TokenTransferBody{..}
 
 -- | Generator for `CborTokenHolder`
-genTokenHolder :: Gen CborTokenHolder
-genTokenHolder =
+genCborTokenHolder :: Gen CborTokenHolder
+genCborTokenHolder =
     oneof
         [ HolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
           HolderAccount <$> genAccountAddress <*> pure Nothing
@@ -106,10 +106,10 @@ genTokenGovernanceOperation =
     oneof
         [ TokenMint <$> genTokenAmount,
           TokenBurn <$> genTokenAmount,
-          TokenAddAllowList <$> genTokenHolder,
-          TokenRemoveAllowList <$> genTokenHolder,
-          TokenAddDenyList <$> genTokenHolder,
-          TokenRemoveDenyList <$> genTokenHolder
+          TokenAddAllowList <$> genCborTokenHolder,
+          TokenRemoveAllowList <$> genCborTokenHolder,
+          TokenAddDenyList <$> genCborTokenHolder,
+          TokenRemoveDenyList <$> genCborTokenHolder
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -193,22 +193,22 @@ genTokenModuleAccountStateWithAdditional = do
 genTokenEvent :: Gen TokenEvent
 genTokenEvent =
     oneof
-        [ AddAllowListEvent <$> genTokenHolder,
-          RemoveAllowListEvent <$> genTokenHolder,
-          AddDenyListEvent <$> genTokenHolder,
-          RemoveDenyListEvent <$> genTokenHolder
+        [ AddAllowListEvent <$> genCborTokenHolder,
+          RemoveAllowListEvent <$> genCborTokenHolder,
+          AddDenyListEvent <$> genCborTokenHolder,
+          RemoveDenyListEvent <$> genCborTokenHolder
         ]
 
 -- | Generator for 'TokenRejectReason'.
 genTokenRejectReason :: Gen TokenRejectReason
 genTokenRejectReason =
     oneof
-        [ AddressNotFound <$> arbitrary <*> genTokenHolder,
+        [ AddressNotFound <$> arbitrary <*> genCborTokenHolder,
           TokenBalanceInsufficient <$> arbitrary <*> genTokenAmount <*> genTokenAmount,
           DeserializationFailure <$> liftArbitrary genText,
           UnsupportedOperation <$> arbitrary <*> genText <*> liftArbitrary genText,
           MintWouldOverflow <$> arbitrary <*> genTokenAmount <*> genTokenAmount <*> genTokenAmount,
-          OperationNotPermitted <$> arbitrary <*> liftArbitrary genTokenHolder <*> liftArbitrary genText
+          OperationNotPermitted <$> arbitrary <*> liftArbitrary genCborTokenHolder <*> liftArbitrary genText
         ]
 
 -- | A test value for 'TokenInitializationParameters'.

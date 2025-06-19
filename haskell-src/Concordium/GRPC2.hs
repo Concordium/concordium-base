@@ -904,9 +904,9 @@ tokenHolderEventToProto TokenBurn{..} = Right . Proto.make $ do
             )
 tokenHolderEventToProto _ = Left ()
 
-instance ToProto TokenHolderEvent where
-    type Output TokenHolderEvent = Proto.TokenHolder
-    toProto (HolderAccountEvent addr) = Proto.make $ PLTFields.account .= toProto addr
+instance ToProto TokenHolder where
+    type Output TokenHolder = Proto.TokenHolder
+    toProto (HolderAccount addr) = Proto.make $ PLTFields.account .= toProto addr
 
 instance ToProto Updates.ProtocolUpdate where
     type Output Updates.ProtocolUpdate = Proto.ProtocolUpdate

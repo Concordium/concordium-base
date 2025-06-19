@@ -1414,9 +1414,9 @@ data Event' (supplemented :: Bool)
         { -- | The unique token identifier.
           ettTokenId :: !TokenId,
           -- | The source of the transfer.
-          ettFrom :: !TokenHolderEvent,
+          ettFrom :: !TokenHolder,
           -- | The target of the transfer.
-          ettTo :: !TokenHolderEvent,
+          ettTo :: !TokenHolder,
           -- | The amount transferred.
           ettAmount :: !TokenAmount,
           -- | An optional memo for the transfer.
@@ -1427,7 +1427,7 @@ data Event' (supplemented :: Bool)
         { -- | The unique token identifier.
           etmTokenId :: !TokenId,
           -- | The account receiving the minted tokens.
-          etmTarget :: !TokenHolderEvent,
+          etmTarget :: !TokenHolder,
           -- | The amount minted.
           etmAmount :: !TokenAmount
         }
@@ -1436,7 +1436,7 @@ data Event' (supplemented :: Bool)
         { -- | The unique token identifier.
           etbTokenId :: !TokenId,
           -- | The account from which the tokens are burned.
-          etbTarget :: !TokenHolderEvent,
+          etbTarget :: !TokenHolder,
           -- | The amount burned.
           etbAmount :: !TokenAmount
         }

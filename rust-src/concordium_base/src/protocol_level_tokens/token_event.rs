@@ -5,7 +5,7 @@ use crate::{
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 
-use super::{cbor::RawCbor, TokenAmount, TokenHolder as CborTokenHolder, TokenId};
+use super::{cbor::RawCbor, CborTokenHolder, TokenAmount, TokenId};
 
 /// An event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -95,9 +95,9 @@ pub struct TokenListUpdateEventDetails {
 
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
-pub enum TokenHolderEvent {
+pub enum TokenHolder {
     #[serde(rename = "account")]
-    HolderAccountEvent { address: AccountAddress },
+    HolderAccount { address: AccountAddress },
 }
 
 /// An event emitted when a transfer of tokens from `from` to `to` is performed.
@@ -105,9 +105,9 @@ pub enum TokenHolderEvent {
 #[serde(rename_all = "camelCase")]
 pub struct TokenTransferEvent {
     /// The token holder from which the tokens are transferred.
-    pub from:   TokenHolderEvent,
+    pub from:   TokenHolder,
     /// The token holder to which the tokens are transferred.
-    pub to:     TokenHolderEvent,
+    pub to:     TokenHolder,
     /// The amount of tokens transferred.
     pub amount: TokenAmount,
     /// An optional memo field that can be used to attach a message to the token
@@ -121,7 +121,7 @@ pub struct TokenTransferEvent {
 #[serde(rename_all = "camelCase")]
 pub struct TokenSupplyUpdateEvent {
     /// The token holder the balance update is performed on.
-    pub target: TokenHolderEvent,
+    pub target: TokenHolder,
     /// The balance difference to be applied to the target.
     pub amount: TokenAmount,
 }
