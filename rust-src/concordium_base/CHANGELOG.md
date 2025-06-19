@@ -7,6 +7,7 @@
 - Added `TokenModuleAccountState` type.
 - Removed `try_from_cbor` and `to_cbor` from a number of types implementing CBOR serialization in favour of just 
   using `cbor::cbor_encode/decode`.
+- The serialization of `AuthorizationsV1` is fixed to be compatible with the Haskell implementation.
 
 ## 8.0.0-alpha (2025-06-06)
 
