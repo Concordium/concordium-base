@@ -1,29 +1,110 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
-    common::{Versioned, VERSION_0}, curve_arithmetic::{Curve, Value}, elgamal::{encrypt_in_chunks_given_generator, Cipher, PublicKey, SecretKey}, id::{
-        constants::ArCurve, secret_sharing::Threshold, types::*
-    }, pedersen_commitment::CommitmentKey, random_oracle::RandomOracle, sigma_protocols::{com_enc_eq::{self, ComEncEq, ComEncEqSecret}, common::prove}
+    common::*,
+    curve_arithmetic::{Curve, Value},
+    elgamal::{
+        decrypt_from_chunks_given_generator, encrypt_in_chunks_given_generator, Cipher, PublicKey,
+        SecretKey,
+    },
+    id::{constants::ArCurve, secret_sharing::Threshold, types::*},
+    pedersen_commitment::CommitmentKey,
+    random_oracle::RandomOracle,
+    sigma_protocols::{
+        com_enc_eq::{self, ComEncEq, ComEncEqSecret},
+        common::prove,
+    },
 };
-use dialoguer::{Input};
-use rand::{rngs::ThreadRng, thread_rng};
+use dialoguer::Input;
+use hex::encode;
+use rand::{rngs::ThreadRng, seq::IteratorRandom, thread_rng};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    path::PathBuf,
-    str::FromStr,
+    path::{Path, PathBuf},
+    str::{from_utf8, FromStr},
 };
 use structopt::StructOpt;
 
+const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
+
+/// List of BIP39 words. There is a test that checks that this list has correct
+/// length, so there is no need to check when using this in the tool.
+fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
+
 #[derive(StructOpt)]
-struct TestEnc {
-    #[structopt(long = "message", help = "The test message to be encrypted")]
+struct SingleTestDec {
+    #[structopt(
+        short = "tr",
+        long = "test-rec",
+        help = "The test record to be decrypted."
+    )]
+    test_record: Option<PathBuf>,
+    #[structopt(
+        short = "sk",
+        long = "pg-priv",
+        help = "File with anonymity revoker's private and public keys."
+    )]
+    pg_priv:     Option<PathBuf>,
+    #[structopt(
+        short = "g",
+        long = "global",
+        help = "File with cryptographic parameters."
+    )]
+    global:      Option<PathBuf>,
+}
+
+#[derive(StructOpt)]
+struct SingleTestEnc {
+    #[structopt(
+        short = "pk",
+        long = "pg-pub",
+        help = "File with the privacy guardian public key."
+    )]
+    pg_pub:             Option<PathBuf>,
+    #[structopt(
+        short = "g",
+        long = "global",
+        help = "File with cryptographic parameters."
+    )]
+    global:             Option<PathBuf>,
+    #[structopt(short = "o", long = "out", help = "File to output the test record to.")]
+    out:                Option<PathBuf>,
+    #[structopt(
+        long = "use-custom-message",
+        help = "User can define custom message instead of three random BIP-39 words."
+    )]
+    use_custom_message: bool,
+    #[structopt(
+        long = "message",
+        help = "The custom message to be encrypted. Will encrypt the prefix if the message is too \
+                long."
+    )]
+    custom_message:     Option<String>,
+}
+
+#[derive(StructOpt)]
+struct PRFTestEnc {
+    #[structopt(
+        short = "m",
+        long = "message",
+        help = "The test message to be encrypted"
+    )]
     message: Option<String>,
-    #[structopt(long = "global", help = "File with cryptographic parameters.")]
-    global: Option<PathBuf>,
-    #[structopt(long = "ar-pub", help = "File with the PG public key.")]
-    pg_pub: Option<PathBuf>,
-    #[structopt(long = "out", help = "File to output the encryption to.")]
-    out: Option<PathBuf>,
+    #[structopt(
+        short = "g",
+        long = "global",
+        help = "File with cryptographic parameters."
+    )]
+    global:  Option<PathBuf>,
+    #[structopt(
+        short = "pk",
+        long = "pg-pub",
+        help = "File with the privacy guardian public key."
+    )]
+    pg_pub:  Option<PathBuf>,
+    #[structopt(short = "o", long = "out", help = "File to output the encryption to.")]
+    out:     Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -50,14 +131,44 @@ impl FromStr for Level {
 
 #[derive(StructOpt)]
 #[structopt(
-    about = "Tool for generating PG tests.",
+    about = "Tool privacy guardian tests.",
     name = "pg_test_tool",
     author = "Concordium",
     version = "1.0"
 )]
 enum KeygenTool {
-    #[structopt(name = "test-enc", about = "Generate test encryption", version = "1.0")]
-    TestEnc(TestEnc),
+    #[structopt(
+        name = "test-dec",
+        about = "Test functionality of privacy guardian key by decrypting a test record.",
+        version = "1.0"
+    )]
+    TestDec(SingleTestDec),
+    #[structopt(
+        name = "gen-enc",
+        about = "Generate a test record for a given privacy guardian public key.",
+        version = "1.0"
+    )]
+    TestEnc(SingleTestEnc),
+    #[structopt(
+        name = "gen-enc-prf",
+        about = "Generate a fake encrypted PRF-share for a given privacy guardian public key.",
+        version = "1.0"
+    )]
+    TestPRFEnc(PRFTestEnc),
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct SingleTestRecord<C: Curve> {
+    /// identity of the privacy guardian
+    #[serde(rename = "pgIdentity")]
+    pub pg_identity: ArIdentity,
+    /// hash of the encrypted message
+    #[serde(rename = "msgHash")]
+    pub msg_hash:    String,
+    /// ciphertext
+    #[serde(rename = "msgEnc")]
+    pub msg_enc:     [Cipher<C>; 8],
 }
 
 fn main() {
@@ -68,8 +179,18 @@ fn main() {
     let kg = KeygenTool::from_clap(&matches);
     use KeygenTool::*;
     match kg {
-        TestEnc(tstenc) => {
-            if let Err(e) = handle_generate_test_enc(tstenc) {
+        TestEnc(test_enc) => {
+            if let Err(e) = handle_generate_test_enc(test_enc) {
+                eprintln!("{}", e)
+            }
+        }
+        TestDec(test_dec) => {
+            if let Err(e) = handle_test_dec(test_dec) {
+                eprintln!("{}", e)
+            }
+        }
+        TestPRFEnc(prftest_enc) => {
+            if let Err(e) = handle_generate_test_enc_prf(prftest_enc) {
                 eprintln!("{}", e)
             }
         }
@@ -91,50 +212,99 @@ macro_rules! succeed_or_die {
     };
 }
 
-// This function takes a string maps roughly the first 32 bytes into a scalar of ArCurve
-fn to_field_element<C: Curve>(m: String) -> Value<C> {
+fn get_file_path(
+    maybe_file_path: Option<PathBuf>,
+    description: &str,
+    default_path: &str,
+) -> PathBuf {
+    maybe_file_path.unwrap_or_else(|| {
+        let validator = |candidate: &String| -> Result<(), String> {
+            if std::path::Path::new(candidate).exists() {
+                Ok(())
+            } else {
+                Err(format!("File {} does not exist. Try again.", candidate))
+            }
+        };
+
+        let mut input = Input::new();
+        input.with_prompt(format!("Enter the path to the {} file", description));
+        if std::path::Path::new(default_path).exists() {
+            input.default(default_path.to_string());
+        };
+        input.validate_with(validator);
+        loop {
+            match input.interact() {
+                Ok(x) => return PathBuf::from(x),
+                Err(e) => println!("{}", e),
+            }
+        }
+    })
+}
+
+// Try to read ArData, either from encrypted or a plaintext file.
+fn decrypt_pg_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
+    let data = succeed_or_die!(std::fs::read(fname), e => "Could not read privacy guardian secret keys due to {}");
+    match serde_json::from_slice(&data) {
+        Ok(v) => Ok(v),
+        Err(_) => {
+            // try to decrypt
+            let parsed = succeed_or_die!(serde_json::from_slice(&data), e => "Could not parse encrypted file {}");
+            let pass = succeed_or_die!(rpassword::prompt_password("Enter password to decrypt PG credentials: "), e => "Could not read password {}.");
+            let decrypted = succeed_or_die!(concordium_base::common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt PG credentials. Most likely the password you provided is incorrect {}.");
+            serde_json::from_slice(&decrypted).map_err(|_| {
+                "Could not decrypt PG credentials. Most likely the password you provided is \
+                 incorrect."
+                    .to_owned()
+            })
+        }
+    }
+}
+
+// This function takes an ASCII string of length at most 31 bytes and converts
+// it to a field element. The function does not check if the string is ASCII
+fn to_field_element<C: Curve>(m: String) -> Option<Value<C>> {
     let mut buf = [0u8; 32];
     let len = m.as_bytes().len();
-    let rev_bytes:Vec<u8> = m.as_bytes().iter().copied().rev().collect();
-    buf[(32-len-1)..31].copy_from_slice(&rev_bytes);
+    if len > 31 {
+        return None;
+    }
+    let rev_bytes: Vec<u8> = m
+        .as_bytes()
+        .iter()
+        .filter(|x| **x != 0)
+        .copied()
+        .rev()
+        .collect();
+    buf[(32 - len - 1)..31].copy_from_slice(&rev_bytes);
     let s = C::scalar_from_bytes(buf);
-    Value::<C>::new(s)
+    Some(Value::<C>::new(s))
 }
 
-// Compute encryption
-fn encrypt_msg<C: Curve>(msg: String, pk: &PublicKey<C>, g:&C) -> [Cipher<C>;8] {
-    let m = to_field_element(msg);
+// This function extracts an encoded string from a field element.
+fn from_field_element<C: Curve>(v: Value<C>) -> String {
+    let v: C::Scalar = *v;
+    let mut bytes = Vec::new();
+    v.serial(&mut bytes);
+    let bytes: Vec<u8> = bytes.into_iter().skip(1).filter(|x| *x != 0).collect();
+    from_utf8(&bytes)
+        .expect("Could not convert bytes to string")
+        .to_string()
+}
+
+fn encrypt_msg<C: Curve>(m: Value<C>, pk: &PublicKey<C>, g: &C) -> [Cipher<C>; 8] {
     let mut csprng = thread_rng();
-    let mut ciphers = encrypt_in_chunks_given_generator::<C, ThreadRng>(
-        pk,
-        &m,
-        CHUNK_SIZE,
-        g,
-        &mut csprng,
-    );
-    // Start crafting a fake PRF decryption request
-    let (encryption_8, _) = ciphers.pop().unwrap();
-    let (encryption_7, _) = ciphers.pop().unwrap();
-    let (encryption_6, _) = ciphers.pop().unwrap();
-    let (encryption_5, _) = ciphers.pop().unwrap();
-    let (encryption_4, _) = ciphers.pop().unwrap();
-    let (encryption_3, _) = ciphers.pop().unwrap();
-    let (encryption_2, _) = ciphers.pop().unwrap();
-    let (encryption_1, _) = ciphers.pop().unwrap();
-    [
-        encryption_1,
-        encryption_2,
-        encryption_3,
-        encryption_4,
-        encryption_5,
-        encryption_6,
-        encryption_7,
-        encryption_8,
-    ]
+    let ciphers =
+        encrypt_in_chunks_given_generator::<C, ThreadRng>(pk, &m, CHUNK_SIZE, g, &mut csprng);
+    let mut result = [Cipher(C::one_point(), C::one_point()); 8];
+    ciphers.iter().enumerate().for_each(|(i, c)| {
+        if i < 8 {
+            result[i] = c.0.clone();
+        }
+    });
+    result
 }
 
-
-fn gen_fake_proof<C:Curve>() -> com_enc_eq::Response<C> {
+fn gen_fake_proof<C: Curve>() -> com_enc_eq::Response<C> {
     let mut csprng = thread_rng();
     let sk = SecretKey::generate_all(&mut csprng);
     let public_key = PublicKey::from(&sk);
@@ -158,37 +328,14 @@ fn gen_fake_proof<C:Curve>() -> com_enc_eq::Response<C> {
         encryption_in_exponent_generator: h_in_exponent,
     };
     let ro = RandomOracle::domain([0u8]);
-    let proof = prove(&mut ro.split(), &prover, secret, &mut csprng).expect("Proving should succeed.");
+    let proof =
+        prove(&mut ro.split(), &prover, secret, &mut csprng).expect("Proving should succeed.");
     proof.response
 }
 
-
-fn handle_generate_test_enc(tenc: TestEnc) -> Result<(), String> {
-    // read global context
-    let global_file = tenc.global.unwrap_or_else(|| {
-        // read a file from the user, checking that the file they input actually exists.
-        let validator = |candidate: &String| -> Result<(), String> {
-            if std::path::Path::new(candidate).exists() {
-                Ok(())
-            } else {
-                Err(format!("File {} does not exist. Try again.", candidate))
-            }
-        };
-
-        let mut input = Input::new();
-        input.with_prompt("Enter the path to the global context file");
-        // offer a default option if the file exists.
-        if std::path::Path::new("global.json").exists() {
-            input.default("global.json".to_string());
-        };
-        input.validate_with(validator);
-        loop {
-            match input.interact() {
-                Ok(x) => return PathBuf::from(x),
-                Err(e) => println!("{}", e),
-            }
-        }
-    });
+fn handle_test_dec(test_dec: SingleTestDec) -> Result<(), String> {
+    // Read global context
+    let global_file = get_file_path(test_dec.global, "global context", "global.json");
 
     let global_ctx = {
         if let Some(gc) = read_global_context(global_file) {
@@ -198,35 +345,168 @@ fn handle_generate_test_enc(tenc: TestEnc) -> Result<(), String> {
         }
     };
 
-    // read PG public key
-    let pg_pub_file = tenc.pg_pub.unwrap_or_else(|| {
-        // read a file from the user, checking that the file they input actually exists.
-        let validator = |candidate: &String| -> Result<(), String> {
-            if std::path::Path::new(candidate).exists() {
-                Ok(())
-            } else {
-                Err(format!("File {} does not exist. Try again.", candidate))
-            }
-        };
+    // Read privacy guardian private key
+    let pg_priv_file = get_file_path(
+        test_dec.pg_priv,
+        "privacy guardian private key",
+        "pg-info.json",
+    );
+    let pg_data: ArData<ArCurve> = succeed_or_die!(decrypt_pg_data(&pg_priv_file), e => "Could not read AR secret keys due to {}");
 
-        let mut input = Input::new();
-        input.with_prompt("Enter the path to the PG public key file");
-        // offer a default option if the file exists.
-        if std::path::Path::new("ar-info.json").exists() {
-            input.default("ar-info.json".to_string());
-        };
-        input.validate_with(validator);
-        loop {
-            match input.interact() {
-                Ok(x) => return PathBuf::from(x),
-                Err(e) => println!("{}", e),
-            }
+    // Read the test record
+    let test_record_file = get_file_path(test_dec.test_record, "test record", "test-record.json");
+    let test_record: Versioned<SingleTestRecord<ArCurve>> = succeed_or_die!(read_json_from_file(test_record_file), e => "Could not read global context due to {}");
+    if test_record.version != VERSION_0 {
+        return Err("The version of the test record should be 0.".to_owned());
+    }
+    let test_record = test_record.value;
+
+    // Decrypt message
+    let m = decrypt_from_chunks_given_generator(
+        &pg_data.ar_secret_key,
+        &test_record.msg_enc,
+        global_ctx.encryption_in_exponent_generator(),
+        1 << 16,
+        CHUNK_SIZE,
+    );
+    let msg = from_field_element(m);
+
+    // Compute hash of the decrypted message
+    let h: [u8; 32] = Sha256::digest(&msg).into();
+    let h = encode(h);
+
+    // Check if hash matches the expected hash
+    if h == test_record.msg_hash {
+        println!("The encrypted message is: {}", msg);
+    } else {
+        return Err(
+            "The hash of the decrypted message does not match the expected hash.".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+fn handle_generate_test_enc(test_enc: SingleTestEnc) -> Result<(), String> {
+    // Read global context
+    let global_file = get_file_path(test_enc.global, "global context", "global.json");
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(global_file) {
+            gc
+        } else {
+            return Err("Cannot read cryptographic parameters. Terminating.".to_string());
         }
+    };
+
+    // Read privacy guardian public key
+    let pg_pub_file = get_file_path(
+        test_enc.pg_pub,
+        "privacy guardian public key",
+        "pg-info.pub.json",
+    );
+    let pg_pub: ArInfo<ArCurve> = succeed_or_die!(read_pg_info(pg_pub_file), e => "Could not read privacy guardian public key from provided file because {}");
+
+    // Define message to be encrypted
+    let msg = match test_enc.use_custom_message {
+        // Custom message
+        true => {
+            let msg = test_enc.custom_message.unwrap_or_else(|| {
+                let mut input = Input::new();
+                input.with_prompt("Enter the message to be encrypted");
+                loop {
+                    match input.interact() {
+                        Ok(x) => return x,
+                        Err(e) => println!("{}", e),
+                    }
+                }
+            });
+            if msg.as_bytes().len() > 31 {
+                return Err("Message is too long. It must be at most 31 bytes.".to_string());
+            }
+            msg
+        }
+        // Default: generate a random message from BIP-39 words
+        _ => {
+            // Note: Each word is at most 8 ASCII characters, so the message is at most
+            // 3*8+2 = 26 bytes.
+            let mut csprng = thread_rng();
+            let mut msg = String::new();
+            for _ in 0..3 {
+                let word = bip39_words().choose(&mut csprng).unwrap();
+                msg.push_str(word);
+                msg.push(' ');
+            }
+            msg.pop(); // Remove the last space
+            println!("The encrypted message will be: {}", msg);
+            msg
+        }
+    };
+
+    // Compute hash of the message
+    let h: [u8; 32] = Sha256::digest(&msg).into();
+
+    // Encrypt the message
+    let m = match to_field_element(msg) {
+        Some(m) => m,
+        None => return Err("Message is too long. It must be at most 31 bytes.".to_string()),
+    };
+    let enc = encrypt_msg(
+        m,
+        pg_pub.ar_public_key.get_public_key(),
+        global_ctx.encryption_in_exponent_generator(),
+    );
+
+    // Generate and save the output
+    let test_record = Versioned::new(VERSION_0, SingleTestRecord {
+        pg_identity: pg_pub.ar_identity,
+        msg_hash:    encode(h),
+        msg_enc:     enc,
     });
 
-    let pg_pub: ArInfo<ArCurve> = succeed_or_die!(read_pg_info(pg_pub_file), e => "Could not read PG public key from provided file because {}");
+    let out_file = test_enc.out.unwrap_or_else(|| {
+        PathBuf::from(
+            Input::new()
+                .with_prompt("Output file name")
+                .default(format!("pg-test-{}.json", pg_pub.ar_identity))
+                .interact()
+                .expect("Output file not provided."),
+        )
+    });
 
-    let msg = tenc.message.unwrap_or_else(|| {
+    match write_json_to_file(&out_file, &test_record) {
+        Ok(_) => println!("Wrote test information {}.", out_file.display()),
+        Err(e) => {
+            return Err(format!(
+                "Could not JSON write test information to file because {}",
+                e
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn handle_generate_test_enc_prf(prf_test_enc: PRFTestEnc) -> Result<(), String> {
+    // Read global context
+    let global_file = get_file_path(prf_test_enc.global, "global context", "global.json");
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(global_file) {
+            gc
+        } else {
+            return Err("Cannot read cryptographic parameters. Terminating.".to_string());
+        }
+    };
+
+    // Read privacy guardian public key
+    let pg_pub_file = get_file_path(
+        prf_test_enc.pg_pub,
+        "privacy guardian public key",
+        "pg-info.pub.json",
+    );
+
+    let pg_pub: ArInfo<ArCurve> = succeed_or_die!(read_pg_info(pg_pub_file), e => "Could not read privacy guardian public key from provided file because {}");
+
+    let msg = prf_test_enc.message.unwrap_or_else(|| {
         let mut input = Input::new();
         input.with_prompt("Enter the message to be encrypted");
         loop {
@@ -236,25 +516,33 @@ fn handle_generate_test_enc(tenc: TestEnc) -> Result<(), String> {
             }
         }
     });
-    
-    let enc = encrypt_msg(msg,pg_pub.ar_public_key.get_public_key(),global_ctx.encryption_in_exponent_generator());
 
-    let fake_ip_ar_data = IpArData{
+    let m = match to_field_element(msg) {
+        Some(m) => m,
+        None => return Err("Message is too long. It must be at most 31 bytes.".to_string()),
+    };
+    let enc = encrypt_msg(
+        m,
+        pg_pub.ar_public_key.get_public_key(),
+        global_ctx.encryption_in_exponent_generator(),
+    );
+
+    let fake_ip_ar_data = IpArData {
         enc_prf_key_share: enc,
-        proof_com_enc_eq: gen_fake_proof(),
+        proof_com_enc_eq:  gen_fake_proof(),
     };
 
     let mut fake_ar_data = BTreeMap::new();
     fake_ar_data.insert(pg_pub.ar_identity, fake_ip_ar_data);
 
     let fake_ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub: ArCurve::zero_point(),
-        ar_data: fake_ar_data,
+        id_cred_pub:  ArCurve::zero_point(),
+        ar_data:      fake_ar_data,
         max_accounts: 0,
-        threshold: Threshold(1u8),
+        threshold:    Threshold(1u8),
     });
 
-    let out_file = tenc.out.unwrap_or_else(|| {
+    let out_file = prf_test_enc.out.unwrap_or_else(|| {
         PathBuf::from(
             Input::new()
                 .with_prompt("Output file name")
@@ -278,4 +566,16 @@ fn handle_generate_test_enc(tenc: TestEnc) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use concordium_base::id::constants::ArCurve;
+
+    use crate::{from_field_element, to_field_element};
+
+    #[test]
+    fn test_msg_to_from_field() {
+        let msg = "abandon abandon zoo".to_string();
+        let v = to_field_element::<ArCurve>(msg.clone()).expect("failed conversion");
+        let msg_new = from_field_element(v);
+        assert_eq!(msg, msg_new)
+    }
+}
