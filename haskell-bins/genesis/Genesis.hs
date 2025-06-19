@@ -340,6 +340,7 @@ printInitial spv gh vcgp GDBase.GenesisState{..} = do
     printAccessStructure "add identity providers" asAddIdentityProvider
     mapM_ (printAccessStructure "cooldown parameters") asCooldownParameters
     mapM_ (printAccessStructure "time parameters") asTimeParameters
+    mapM_ (printAccessStructure "create PLT") asCreatePLT
   where
     totalGTU = sum (gaBalance <$> genesisAccounts)
 

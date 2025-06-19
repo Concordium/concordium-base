@@ -194,9 +194,12 @@
 //! are each deserialized into an entry in the map in the field `unknown`.
 
 mod composites;
+/// CBOR serialization of types from `concordium-contracts-common`
+mod contracts_common_types;
 mod decoder;
 mod encoder;
 mod primitives;
+/// Serde serialization of the types in `cbor` module
 pub(crate) mod serde;
 /// Dynamic data model for generic CBOR
 pub mod value;
@@ -310,16 +313,17 @@ pub fn cbor_encode<T: CborSerialize + ?Sized>(value: &T) -> CborSerializationRes
 
 /// Decodes value from the given CBOR. If all input is not parsed,
 /// an error is returned.
-pub fn cbor_decode<T: CborDeserialize>(cbor: &[u8]) -> CborSerializationResult<T> {
+pub fn cbor_decode<T: CborDeserialize>(cbor: impl AsRef<[u8]>) -> CborSerializationResult<T> {
     cbor_decode_with_options(cbor, SerializationOptions::default())
 }
 
 /// Decodes value from the given CBOR. If all input is not parsed,
 /// an error is returned.
 pub fn cbor_decode_with_options<T: CborDeserialize>(
-    cbor: &[u8],
+    cbor: impl AsRef<[u8]>,
     options: SerializationOptions,
 ) -> CborSerializationResult<T> {
+    let cbor = cbor.as_ref();
     let mut decoder = Decoder::new(cbor, options);
     let value = T::deserialize(&mut decoder)?;
     if decoder.offset() != cbor.len() {
