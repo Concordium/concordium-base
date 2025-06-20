@@ -82,8 +82,8 @@ genTokenTransfer = do
 genCborTokenHolder :: Gen CborTokenHolder
 genCborTokenHolder =
     oneof
-        [ Concordium.Types.ProtocolLevelTokens.CBOR.HolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
-          Concordium.Types.ProtocolLevelTokens.CBOR.HolderAccount <$> genAccountAddress <*> pure Nothing
+        [ CborHolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
+          CborHolderAccount <$> genAccountAddress <*> pure Nothing
         ]
 
 -- | Generator for `TaggableMemo`
@@ -331,9 +331,9 @@ tops1 =
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
                       ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
                       ttRecipient =
-                        Concordium.Types.ProtocolLevelTokens.CBOR.HolderAccount
-                            { holderAccountAddress = AccountAddress $ FBS.pack [0x1, 0x1],
-                              holderAccountCoinInfo = Just CoinInfoConcordium
+                        CborHolderAccount
+                            { cthAccount = AccountAddress $ FBS.pack [0x1, 0x1],
+                              cthCoinInfo = Just CoinInfoConcordium
                             },
                       ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
                     }

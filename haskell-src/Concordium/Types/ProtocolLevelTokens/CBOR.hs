@@ -523,29 +523,29 @@ instance AE.FromJSON CoinInfo where
     parseJSON (AE.String "CCD") = return CoinInfoConcordium
     parseJSON _ = fail "CoinInfo JSON must be the string 'CCD'"
 
--- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
+-- | Decode a tagged-coinInfo type. Only the concordium coinInfo type is supported.
 decodeCoinInfo :: Decoder s CoinInfo
 decodeCoinInfo = do
     tag <- decodeTag
     unless (tag == 40305) $
         fail $
-            "coininfo: Expected coininfo (tag 40305), but found tag " ++ show tag
+            "coinInfo: Expected coinInfo (tag 40305), but found tag " ++ show tag
     mLen <- decodeMapLenOrIndef
     forM_ mLen $ \len ->
         unless (len == 1) $
             fail $
-                "coininfo: Expected a map of size 1, but size was " ++ show len
+                "coinInfo: Expected a map of size 1, but size was " ++ show len
     key <- decodeInt
     unless (key == 1) $
         fail $
-            "coininfo: Expected type key (1), but found " ++ show key
+            "coinInfo: Expected type key (1), but found " ++ show key
     coinType <- decodeInt
     ci <- case coinType of
         919 -> return CoinInfoConcordium
-        _ -> fail $ "coininfo: Unsupported coin type: " ++ show coinType
+        _ -> fail $ "coinInfo: Unsupported coin type: " ++ show coinType
     when (isNothing mLen) $
         decodeBreakOr >>= \b ->
-            unless b (fail "coininfo: Expected end of array")
+            unless b (fail "coinInfo: Expected end of array")
     return ci
 
 -- | Encode a 'CoinInfo' in the tagged-coininfo schema.
@@ -576,53 +576,53 @@ encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
 
 -- | A destination that can receive and hold protocol-level tokens.
 --  Currently, this can only be a Concordium account address.
-data CborTokenHolder = HolderAccount
+data CborTokenHolder = CborHolderAccount
     { -- | The account address.
-      holderAccountAddress :: !AccountAddress,
+      cthAccount :: !AccountAddress,
       -- | Although the account can only be a Concordium address, this specifies whether the
       --  address type should be explicit in the CBOR encoding.
-      holderAccountCoinInfo :: !(Maybe CoinInfo)
+      cthCoinInfo :: !(Maybe CoinInfo)
     }
     deriving (Eq, Show)
 
 instance AE.ToJSON CborTokenHolder where
-    toJSON HolderAccount{..} = do
+    toJSON CborHolderAccount{..} = do
         AE.object $
             [ -- Tag with type of receiver
               "type" AE..= AE.String "account",
-              "address" AE..= holderAccountAddress
+              "address" AE..= cthAccount
             ]
-                ++ ["coininfo" AE..= coinInfo | coinInfo <- toList holderAccountCoinInfo]
+                ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList cthCoinInfo]
 
 instance AE.FromJSON CborTokenHolder where
     parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
-                holderAccountAddress <- o AE..: "address"
-                holderAccountCoinInfo <- o AE..:? "coininfo"
-                return HolderAccount{..}
+                cthAccount <- o AE..: "address"
+                cthCoinInfo <- o AE..:? "coinInfo"
+                return CborHolderAccount{..}
             _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
 
--- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
+-- | Create a 'CborHolderAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
 accountTokenHolder :: AccountAddress -> CborTokenHolder
 accountTokenHolder addr =
-    HolderAccount
-        { holderAccountAddress = addr,
-          holderAccountCoinInfo = Just CoinInfoConcordium
+    CborHolderAccount
+        { cthAccount = addr,
+          cthCoinInfo = Just CoinInfoConcordium
         }
 
--- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will not be present in
+-- | Create a 'CborHolderAccount' from an 'AccountAddress'. The address type will not be present in
 --  the CBOR encoding.
 accountTokenHolderShort :: AccountAddress -> CborTokenHolder
 accountTokenHolderShort addr =
-    HolderAccount
-        { holderAccountAddress = addr,
-          holderAccountCoinInfo = Nothing
+    CborHolderAccount
+        { cthAccount = addr,
+          cthCoinInfo = Nothing
         }
 
--- | A builder for the 'HolderAccount' constructor.
+-- | A builder for the 'CborHolderAccount' constructor.
 data HolderAccountBuilder = HolderAccountBuilder
     { -- | Receiver account address.
       _habAccountAddress :: Maybe AccountAddress,
@@ -649,7 +649,7 @@ decodeTokenHolder = do
         Just len -> decodeDefHelper decodeKV len emptyHolderAccountBuilder
     case builder ^. habAccountAddress of
         Nothing -> fail "token-holder: data (3) field is missing"
-        Just addr -> return $ HolderAccount addr (builder ^. habCoinInfo)
+        Just addr -> return $ CborHolderAccount addr (builder ^. habCoinInfo)
   where
     decodeKV builder = do
         key <- decodeInt
@@ -660,12 +660,12 @@ decodeTokenHolder = do
             _ -> fail $ "token-holder: unexpected map key " ++ show key
 
 encodeTokenHolder :: CborTokenHolder -> Encoding
-encodeTokenHolder HolderAccount{..} =
+encodeTokenHolder CborHolderAccount{..} =
     encodeTag 40307
         <> encodeMapDeterministic
             ( Map.empty
-                & k 1 .~ (encodeCoinInfo <$> holderAccountCoinInfo)
-                & k 3 ?~ encodeAccountAddress holderAccountAddress
+                & k 1 .~ (encodeCoinInfo <$> cthCoinInfo)
+                & k 3 ?~ encodeAccountAddress cthAccount
             )
   where
     k = at . makeMapKeyEncoding . encodeWord

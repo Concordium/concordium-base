@@ -208,7 +208,7 @@ mod test {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{token_holder, HolderAccount},
+        protocol_level_tokens::{token_holder, CborHolderAccount},
     };
     use std::str::FromStr;
 
@@ -216,7 +216,7 @@ mod test {
     fn test_address_not_found_reject_reason_cbor() {
         let variant = AddressNotFoundRejectReason {
             index:   3,
-            address: CborTokenHolder::HolderAccount(HolderAccount {
+            address: CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -304,7 +304,7 @@ mod test {
     fn test_operation_not_permitted_reject_reason_cbor() {
         let variant = OperationNotPermittedRejectReason {
             index:   0,
-            address: Some(CborTokenHolder::HolderAccount(HolderAccount {
+            address: Some(CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             })),

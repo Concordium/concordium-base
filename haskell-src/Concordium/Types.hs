@@ -182,7 +182,7 @@ module Concordium.Types (
 
     -- * Protocol-level tokens
     TokenId (..),
-    TokenHolder (HolderAccount),
+    TokenHolder (..),
     makeTokenId,
     unsafeGetTokenId,
     TokenParameter (..),
@@ -413,8 +413,7 @@ instance AE.FromJSON UrlText where
 emptyUrlText :: UrlText
 emptyUrlText = UrlText ""
 
-newtype TokenHolder
-    = HolderAccount AccountAddress
+newtype TokenHolder = HolderAccount {thAccount :: AccountAddress}
     deriving (Eq)
 
 instance Show TokenHolder where

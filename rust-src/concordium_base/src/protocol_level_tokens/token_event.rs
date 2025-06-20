@@ -96,8 +96,7 @@ pub struct TokenListUpdateEventDetails {
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum TokenHolder {
-    #[serde(rename = "account")]
-    HolderAccount { address: AccountAddress },
+    Account { address: AccountAddress },
 }
 
 /// An event emitted when a transfer of tokens from `from` to `to` is performed.
@@ -186,13 +185,13 @@ mod test {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{token_holder, HolderAccount},
+        protocol_level_tokens::{token_holder, CborHolderAccount},
     };
 
     #[test]
     fn test_decode_add_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -214,7 +213,7 @@ mod test {
     #[test]
     fn test_decode_remove_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -236,7 +235,7 @@ mod test {
     #[test]
     fn test_decode_add_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -258,7 +257,7 @@ mod test {
     #[test]
     fn test_decode_remove_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::HolderAccount(HolderAccount {
+            target: CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),

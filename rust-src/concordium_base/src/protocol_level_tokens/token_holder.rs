@@ -28,8 +28,7 @@ const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 #[cbor(tagged)]
 pub enum CborTokenHolder {
     #[cbor(peek_tag = ACCOUNT_HOLDER_TAG)]
-    #[serde(rename = "account")]
-    HolderAccount(HolderAccount),
+    Account(CborHolderAccount),
 }
 
 /// Account address that holds protocol level tokens
@@ -45,7 +44,7 @@ pub enum CborTokenHolder {
 )]
 #[serde(rename_all = "camelCase")]
 #[cbor(tag = ACCOUNT_HOLDER_TAG)]
-pub struct HolderAccount {
+pub struct CborHolderAccount {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cbor(key = 1)]
     pub coin_info: Option<CoinInfo>,
@@ -139,7 +138,7 @@ mod test {
 
     #[test]
     fn test_token_holder_cbor_no_coin_info() {
-        let token_holder = CborTokenHolder::HolderAccount(HolderAccount {
+        let token_holder = CborTokenHolder::Account(CborHolderAccount {
             address:   ADDRESS,
             coin_info: None,
         });
@@ -155,7 +154,7 @@ mod test {
 
     #[test]
     fn test_token_holder_cbor() {
-        let token_holder = CborTokenHolder::HolderAccount(HolderAccount {
+        let token_holder = CborTokenHolder::Account(CborHolderAccount {
             address:   ADDRESS,
             coin_info: Some(CoinInfo::CCD),
         });
