@@ -102,6 +102,7 @@ pub struct TokenListUpdateEventDetails {
 /// `TokenModuleEvent`.
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
+#[serde(rename_all = "camelCase")]
 pub enum TokenHolder {
     Account { address: AccountAddress },
 }
