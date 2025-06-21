@@ -574,14 +574,17 @@ encodeAccountAddress :: AccountAddress -> Encoding
 encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
     encodeByteArray (SBA.fromByteArray ba)
 
--- | A destination that can receive and hold protocol-level tokens.
---  Currently, this can only be a Concordium account address.
+-- | An entity that can receive and hold protocol-level tokens.
+-- Currently, this can only be a Concordium account address.
+-- The type is used in the transaction payload, in reject reasons, and in the `TokenModuleEvent`.
+-- This type shouldn't be confused with the `TokenHolder` type that in contrast is used
+-- in the `TokenTransfer`, `TokenMint`, and `TokenBurn` events.
 data CborTokenHolder = CborHolderAccount
     { -- | The account address.
-      cthAccount :: !AccountAddress,
+      chaAccount :: !AccountAddress,
       -- | Although the account can only be a Concordium address, this specifies whether the
       --  address type should be explicit in the CBOR encoding.
-      cthCoinInfo :: !(Maybe CoinInfo)
+      chaCoinInfo :: !(Maybe CoinInfo)
     }
     deriving (Eq, Show)
 
@@ -590,17 +593,17 @@ instance AE.ToJSON CborTokenHolder where
         AE.object $
             [ -- Tag with type of receiver
               "type" AE..= AE.String "account",
-              "address" AE..= cthAccount
+              "address" AE..= chaAccount
             ]
-                ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList cthCoinInfo]
+                ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
 
 instance AE.FromJSON CborTokenHolder where
     parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
-                cthAccount <- o AE..: "address"
-                cthCoinInfo <- o AE..:? "coinInfo"
+                chaAccount <- o AE..: "address"
+                chaCoinInfo <- o AE..:? "coinInfo"
                 return CborHolderAccount{..}
             _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
 
@@ -609,8 +612,8 @@ instance AE.FromJSON CborTokenHolder where
 accountTokenHolder :: AccountAddress -> CborTokenHolder
 accountTokenHolder addr =
     CborHolderAccount
-        { cthAccount = addr,
-          cthCoinInfo = Just CoinInfoConcordium
+        { chaAccount = addr,
+          chaCoinInfo = Just CoinInfoConcordium
         }
 
 -- | Create a 'CborHolderAccount' from an 'AccountAddress'. The address type will not be present in
@@ -618,8 +621,8 @@ accountTokenHolder addr =
 accountTokenHolderShort :: AccountAddress -> CborTokenHolder
 accountTokenHolderShort addr =
     CborHolderAccount
-        { cthAccount = addr,
-          cthCoinInfo = Nothing
+        { chaAccount = addr,
+          chaCoinInfo = Nothing
         }
 
 -- | A builder for the 'CborHolderAccount' constructor.
@@ -664,8 +667,8 @@ encodeTokenHolder CborHolderAccount{..} =
     encodeTag 40307
         <> encodeMapDeterministic
             ( Map.empty
-                & k 1 .~ (encodeCoinInfo <$> cthCoinInfo)
-                & k 3 ?~ encodeAccountAddress cthAccount
+                & k 1 .~ (encodeCoinInfo <$> chaCoinInfo)
+                & k 3 ?~ encodeAccountAddress chaAccount
             )
   where
     k = at . makeMapKeyEncoding . encodeWord

@@ -93,6 +93,13 @@ pub struct TokenListUpdateEventDetails {
     pub target: CborTokenHolder,
 }
 
+/// An entity that can hold PLTs (protocol level tokens).
+/// The type is used in the `TokenTransfer`, `TokenMint`, and `TokenBurn`
+/// events. Currently, this can only be a Concordium account address.
+/// The type can be extended to e.g. support smart contracts in the future.
+/// This type shouldn't be confused with the `CborTokenHolder` type that in
+/// contrast is used in the transaction payload, in reject reasons, and in the
+/// `TokenModuleEvent`.
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum TokenHolder {

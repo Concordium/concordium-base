@@ -12,8 +12,12 @@ const COIN_INFO_TAG: u64 = 40305;
 /// Concordiums listing in https://github.com/satoshilabs/slips/blob/master/slip-0044.md
 const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 
-/// A destination that can receive and hold protocol level tokens.
+/// An entity that can receive and hold protocol level tokens.
 /// Currently, this can only be a Concordium account address.
+/// The type is used in the transaction payload, in reject reasons, and in the
+/// `TokenModuleEvent`. This type shouldn't be confused with the `TokenHolder`
+/// type that in contrast is used in the `TokenTransfer`, `TokenMint`, and
+/// `TokenBurn` events.
 #[derive(
     Debug,
     Eq,

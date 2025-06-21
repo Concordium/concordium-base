@@ -332,8 +332,8 @@ tops1 =
                       ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
                       ttRecipient =
                         CborHolderAccount
-                            { cthAccount = AccountAddress $ FBS.pack [0x1, 0x1],
-                              cthCoinInfo = Just CoinInfoConcordium
+                            { chaAccount = AccountAddress $ FBS.pack [0x1, 0x1],
+                              chaCoinInfo = Just CoinInfoConcordium
                             },
                       ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
                     }

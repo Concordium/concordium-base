@@ -343,7 +343,7 @@ data Payload
         }
     | -- | Configure a baker on an account.
       -- The serialization uses a bitmap to indicate which fields are present.
-      -- The bitmap it 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
       -- could be added, while retaining the validity of existing transactions).
       ConfigureBaker
         { -- | The equity capital of the baker
@@ -1410,6 +1410,9 @@ data Event' (supplemented :: Bool)
           etmeDetails :: !TokenEventDetails
         }
     | -- | A token transfer event.
+      -- The serialization uses a bitmap to indicate which fields are present.
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- could be added, while retaining the validity of the existing event to support transferring to/from smart contracts).
       TokenTransfer
         { -- | The unique token identifier.
           ettTokenId :: !TokenId,
@@ -1423,6 +1426,9 @@ data Event' (supplemented :: Bool)
           ettMemo :: !(Maybe Memo)
         }
     | -- | A token mint event.
+      -- The serialization uses a bitmap to indicate which fields are present.
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- could be added, while retaining the validity of the existing event to support minting tokens to smart contracts).
       TokenMint
         { -- | The unique token identifier.
           etmTokenId :: !TokenId,
@@ -1432,6 +1438,9 @@ data Event' (supplemented :: Bool)
           etmAmount :: !TokenAmount
         }
     | -- | A token burn event.
+      -- The serialization uses a bitmap to indicate which fields are present.
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- could be added, while retaining the validity of the existing event to support burning tokens from smart contracts).
       TokenBurn
         { -- | The unique token identifier.
           etbTokenId :: !TokenId,
@@ -1707,7 +1716,7 @@ putEvent = \case
     TokenTransfer{..} ->
         S.putWord8 39
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
-            <> S.putWord8 bitmap
+            <> S.putWord16be bitmap
             <> S.put ettTokenId
             <> S.put ettFrom
             <> S.put ettTo
@@ -1720,7 +1729,7 @@ putEvent = \case
         S.putWord8 40
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
             -- No optional fields are defined at the moment.
-            <> S.putWord8 0
+            <> S.putWord16be 0
             <> S.put etmTokenId
             <> S.put etmTarget
             <> S.put etmAmount
@@ -1728,7 +1737,7 @@ putEvent = \case
         S.putWord8 41
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
             -- No optional fields are defined at the moment.
-            <> S.putWord8 0
+            <> S.putWord16be 0
             <> S.put etbTokenId
             <> S.put etbTarget
             <> S.put etbAmount
@@ -1933,7 +1942,9 @@ getEvent spv =
             return TokenModuleEvent{..}
         39 | supportPlt -> do
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
-            bitmap <- S.getWord8
+            bitmap <- S.getWord16be
+            unless (bitmap .&. configureTokenTransferBitMask == bitmap) $
+                fail "Unsupported TokenTranfser event field(s)"
             ettTokenId <- S.get
             ettFrom <- S.get
             ettTo <- S.get
@@ -1947,7 +1958,9 @@ getEvent spv =
         40 | supportPlt -> do
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
             -- No optional fields are defined at the moment.
-            _bitmap <- S.getWord8
+            bitmap <- S.getWord16be
+            unless (bitmap .&. configureTokenMintBitMask == bitmap) $
+                fail "Unsupported TokenMint event field(s)"
             etmTokenId <- S.get
             etmTarget <- S.get
             etmAmount <- S.get
@@ -1955,7 +1968,9 @@ getEvent spv =
         41 | supportPlt -> do
             -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
             -- No optional fields are defined at the moment.
-            _bitmap <- S.getWord8
+            bitmap <- S.getWord16be
+            unless (bitmap .&. configureTokenBurnBitMask == bitmap) $
+                fail "Unsupported TokenBurn event field(s)"
             etbTokenId <- S.get
             etbTarget <- S.get
             etbAmount <- S.get
@@ -1970,6 +1985,9 @@ getEvent spv =
     supportDelegation = protocolSupportsDelegation spv
     supportSuspend = protocolSupportsSuspend spv
     supportPlt = protocolSupportsPLT spv
+    configureTokenTransferBitMask = 0b0000000000000001
+    configureTokenMintBitMask = 0b0000000000000000
+    configureTokenBurnBitMask = 0b0000000000000000
 
 instance AE.ToJSON (Event' supplemented) where
     toJSON = \case
