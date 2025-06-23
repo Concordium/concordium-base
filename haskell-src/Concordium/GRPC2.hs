@@ -878,8 +878,8 @@ tokenUpdateEventToProto TokenTransfer{..} = Right . Proto.make $ do
     PLTFields.transferEvent
         .= Proto.make
             ( do
-                PLTFields.from .= Proto.make (PLTFields.account .= toProto ettFrom)
-                PLTFields.to .= Proto.make (PLTFields.account .= toProto ettTo)
+                PLTFields.from .= toProto ettFrom
+                PLTFields.to .= toProto ettTo
                 PLTFields.amount .= toProto ettAmount
                 PLTFields.maybe'memo .= fmap toProto ettMemo
             )
@@ -888,7 +888,7 @@ tokenUpdateEventToProto TokenMint{..} = Right . Proto.make $ do
     PLTFields.mintEvent
         .= Proto.make
             ( do
-                PLTFields.target .= Proto.make (PLTFields.account .= toProto etmTarget)
+                PLTFields.target .= toProto etmTarget
                 PLTFields.amount .= toProto etmAmount
             )
 tokenUpdateEventToProto TokenBurn{..} = Right . Proto.make $ do
@@ -896,10 +896,14 @@ tokenUpdateEventToProto TokenBurn{..} = Right . Proto.make $ do
     PLTFields.burnEvent
         .= Proto.make
             ( do
-                PLTFields.target .= Proto.make (PLTFields.account .= toProto etbTarget)
+                PLTFields.target .= toProto etbTarget
                 PLTFields.amount .= toProto etbAmount
             )
 tokenUpdateEventToProto _ = Left ()
+
+instance ToProto TokenHolder where
+    type Output TokenHolder = Proto.TokenHolder
+    toProto (HolderAccount addr) = Proto.make $ PLTFields.account .= toProto addr
 
 instance ToProto Updates.ProtocolUpdate where
     type Output Updates.ProtocolUpdate = Proto.ProtocolUpdate

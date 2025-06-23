@@ -1,7 +1,8 @@
 use crate::{
     common::{cbor, cbor::CborSerializationResult},
     protocol_level_tokens::{
-        token_holder::TokenHolder, RawCbor, TokenAmount, TokenId, TokenModuleCborTypeDiscriminator,
+        token_holder::CborTokenHolder, RawCbor, TokenAmount, TokenId,
+        TokenModuleCborTypeDiscriminator,
     },
 };
 use anyhow::Context;
@@ -87,7 +88,7 @@ pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index:   usize,
     /// The address that could not be resolved.
-    pub address: TokenHolder,
+    pub address: CborTokenHolder,
 }
 
 /// The balance of tokens on the sender account is insufficient
@@ -174,7 +175,7 @@ pub struct OperationNotPermittedRejectReason {
     pub index:   usize,
     /// (Optionally) the address that does not have the necessary permissions to
     /// perform the operation.
-    pub address: Option<TokenHolder>,
+    pub address: Option<CborTokenHolder>,
     /// The reason why the operation is not permitted.
     pub reason:  Option<String>,
 }
@@ -207,7 +208,7 @@ mod test {
     use super::*;
     use crate::{
         common::cbor,
-        protocol_level_tokens::{token_holder, HolderAccount},
+        protocol_level_tokens::{token_holder, CborHolderAccount},
     };
     use std::str::FromStr;
 
@@ -215,7 +216,7 @@ mod test {
     fn test_address_not_found_reject_reason_cbor() {
         let variant = AddressNotFoundRejectReason {
             index:   3,
-            address: TokenHolder::HolderAccount(HolderAccount {
+            address: CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             }),
@@ -303,7 +304,7 @@ mod test {
     fn test_operation_not_permitted_reject_reason_cbor() {
         let variant = OperationNotPermittedRejectReason {
             index:   0,
-            address: Some(TokenHolder::HolderAccount(HolderAccount {
+            address: Some(CborTokenHolder::Account(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             })),

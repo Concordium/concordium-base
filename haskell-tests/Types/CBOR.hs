@@ -76,16 +76,16 @@ genTokenInitializationParameters = do
 genTokenTransfer :: Gen TokenTransferBody
 genTokenTransfer = do
     ttAmount <- genTokenAmount
-    ttRecipient <- genTokenHolder
+    ttRecipient <- genCborTokenHolder
     ttMemo <- oneof [pure Nothing, Just <$> genTaggableMemo]
     return TokenTransferBody{..}
 
--- | Generator for `TokenHolder`
-genTokenHolder :: Gen TokenHolder
-genTokenHolder =
+-- | Generator for `CborTokenHolder`
+genCborTokenHolder :: Gen CborTokenHolder
+genCborTokenHolder =
     oneof
-        [ HolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
-          HolderAccount <$> genAccountAddress <*> pure Nothing
+        [ CborHolderAccount <$> genAccountAddress <*> pure (Just CoinInfoConcordium),
+          CborHolderAccount <$> genAccountAddress <*> pure Nothing
         ]
 
 -- | Generator for `TaggableMemo`
@@ -103,10 +103,10 @@ genTokenOperation =
         [ TokenTransfer <$> genTokenTransfer,
           TokenMint <$> genTokenAmount,
           TokenBurn <$> genTokenAmount,
-          TokenAddAllowList <$> genTokenHolder,
-          TokenRemoveAllowList <$> genTokenHolder,
-          TokenAddDenyList <$> genTokenHolder,
-          TokenRemoveDenyList <$> genTokenHolder
+          TokenAddAllowList <$> genCborTokenHolder,
+          TokenRemoveAllowList <$> genCborTokenHolder,
+          TokenAddDenyList <$> genCborTokenHolder,
+          TokenRemoveDenyList <$> genCborTokenHolder
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -189,22 +189,22 @@ genTokenModuleAccountStateWithAdditional = do
 genTokenEvent :: Gen TokenEvent
 genTokenEvent =
     oneof
-        [ AddAllowListEvent <$> genTokenHolder,
-          RemoveAllowListEvent <$> genTokenHolder,
-          AddDenyListEvent <$> genTokenHolder,
-          RemoveDenyListEvent <$> genTokenHolder
+        [ AddAllowListEvent <$> genCborTokenHolder,
+          RemoveAllowListEvent <$> genCborTokenHolder,
+          AddDenyListEvent <$> genCborTokenHolder,
+          RemoveDenyListEvent <$> genCborTokenHolder
         ]
 
 -- | Generator for 'TokenRejectReason'.
 genTokenRejectReason :: Gen TokenRejectReason
 genTokenRejectReason =
     oneof
-        [ AddressNotFound <$> arbitrary <*> genTokenHolder,
+        [ AddressNotFound <$> arbitrary <*> genCborTokenHolder,
           TokenBalanceInsufficient <$> arbitrary <*> genTokenAmount <*> genTokenAmount,
           DeserializationFailure <$> liftArbitrary genText,
           UnsupportedOperation <$> arbitrary <*> genText <*> liftArbitrary genText,
           MintWouldOverflow <$> arbitrary <*> genTokenAmount <*> genTokenAmount <*> genTokenAmount,
-          OperationNotPermitted <$> arbitrary <*> liftArbitrary genTokenHolder <*> liftArbitrary genText
+          OperationNotPermitted <$> arbitrary <*> liftArbitrary genCborTokenHolder <*> liftArbitrary genText
         ]
 
 -- | An example value for governance account addresses.
@@ -335,9 +335,9 @@ tops1 =
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
                       ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
                       ttRecipient =
-                        HolderAccount
-                            { holderAccountAddress = AccountAddress $ FBS.pack [0x1, 0x1],
-                              holderAccountCoinInfo = Just CoinInfoConcordium
+                        CborHolderAccount
+                            { chaAccount = AccountAddress $ FBS.pack [0x1, 0x1],
+                              chaCoinInfo = Just CoinInfoConcordium
                             },
                       ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
                     }

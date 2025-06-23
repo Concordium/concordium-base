@@ -182,6 +182,7 @@ module Concordium.Types (
 
     -- * Protocol-level tokens
     TokenId (..),
+    TokenHolder (..),
     makeTokenId,
     unsafeGetTokenId,
     TokenParameter (..),
@@ -410,6 +411,54 @@ instance AE.FromJSON UrlText where
 
 emptyUrlText :: UrlText
 emptyUrlText = UrlText ""
+
+-- | An entity that can hold PLTs (protocol level tokens).
+-- The type is used in the `TokenTransfer`, `TokenMint`, and `TokenBurn` events.
+-- Currently, this can only be a Concordium account address.
+-- The type can be extended to e.g. support smart contracts in the future.
+-- This type shouldn't be confused with the `CborTokenHolder` type that in contrast is used
+-- in the transaction payload, in reject reasons, and in the `TokenModuleEvent`.
+newtype TokenHolder = HolderAccount {haAccount :: AccountAddress}
+    deriving (Eq)
+
+instance Show TokenHolder where
+    show (HolderAccount addr) =
+        show addr
+
+instance AE.ToJSON TokenHolder where
+    toJSON (HolderAccount address) = do
+        AE.object
+            [ -- Tag with type of `account`.
+              "type" AE..= AE.String "account",
+              "address" AE..= address
+            ]
+
+instance AE.FromJSON TokenHolder where
+    parseJSON = AE.withObject "TokenHolder" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "account" -> do
+                address <- o AE..: "address"
+                return (HolderAccount address)
+            _ -> fail ("Unknown TokenHolder type " ++ type_string)
+
+-- Serialization instance for the `TokenHolder` type. A `Word8` tag is used
+-- to allow future extensions, such as supporting smart contract token holders.
+instance S.Serialize TokenHolder where
+    get = getHolderAccount
+    put = putHolderAccount
+
+getHolderAccount :: S.Get TokenHolder
+getHolderAccount =
+    S.getWord8 >>= \case
+        0 -> do
+            HolderAccount <$> S.get
+        n -> fail $ "Unrecognized TokenHolder tag: " ++ show n
+
+putHolderAccount :: S.Putter TokenHolder
+putHolderAccount (HolderAccount address) =
+    S.putWord8 0
+        <> S.put address
 
 -- | Due to limitations on the ledger, there has to be some restriction on the
 --  precision of the input for updating ElectionDifficult. For this purpose,
