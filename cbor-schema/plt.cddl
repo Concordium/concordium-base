@@ -2,29 +2,6 @@
 ; In particular, it defines the types token-holder-transaction, token-governance-transaction, and
 ; token-initialization-parameters, which are used as parameters for the token module.
 
-; A token holder transaction body. This is a list of token-holder operations, executed in order.
-; The transaction is executed in the context of a sender account and a designated token.
-token-holder-transaction = [ * token-holder-operation ]
-
-; A token-holder operation. Currently, only token transfers are supported.
-; All token-holder operations are represented as single-entry maps where the key determines
-; the type of the operation.
-token-holder-operation = token-transfer
-
-; A token transfer operation. This transfers a specified amount of tokens from the sender account
-; (implicit) to the recipient account.
-token-transfer = {
-    ; The operation type is "transfer".
-    "transfer": {
-        ; The amount of tokens to transfer.
-        "amount": token-amount,
-        ; The recipient account.
-        "recipient": token-holder,
-        ; An optional memo.
-        ? "memo": memo
-    }
-}
-
 ; We represent token amounts as a decimal fraction.
 ; The range and precision may be constrained by the token itself.
 token-amount = decfrac
@@ -67,19 +44,35 @@ ccd-coininfo = {
     ; The network (2) field is not supported.
 }
 
-; Token governance
+; Token update transaction
 
-; A token governance transaction body. This is a list of token governance operations, executed in
+; A token update transaction body. This is a list of token, executed in
 ; order. The transaction is executed in the context of a sender account and a designated token.
 ; The sender account must have the necessary permissions to execute the operations.
-token-governance-transaction = [ * token-governance-operation ]
 
-; A token governance operation. This can be a mint, burn, or update-list operation.
-; All governance operations are represented as single-entry maps where the key determines
+token-update-transaction = [ * token-operation ]
+
+; A token operation. This can be transfer, mint, burn or update-list-operation.
+; All token-holder operations are represented as single-entry maps where the key determines
 ; the type of the operation.
-token-governance-operation = token-mint
+token-operation = token-transfer
+    / token-mint
     / token-burn
     / token-update-list
+
+; A token transfer operation. This transfers a specified amount of tokens from the sender account
+; (implicit) to the recipient account.
+token-transfer = {
+    ; The operation type is "transfer".
+    "transfer": {
+        ; The amount of tokens to transfer.
+        "amount": token-amount,
+        ; The recipient account.
+        "recipient": token-holder,
+        ; An optional memo.
+        ? "memo": memo
+    }
+}
 
 ; Mint a specified amount to the sender account.
 token-mint = {
@@ -191,6 +184,8 @@ token-module-state = {
     "name": text,
     ; A URL pointing to the token metadata
     "metadata": metadata-url,
+    ; The governance account of the token
+    "governanceAccount": token-holder
     ; Whether the token supports an allow list.
     ? "allowList": bool,
     ; Whether the token supports a deny list.
