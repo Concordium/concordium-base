@@ -865,7 +865,7 @@ pub enum UpdateType {
     UpdateValidatorScoreParameters,
     /// Create a new protocol level token. Only applies to
     /// protocol version [`P9`](ProtocolVersion::P9) and up.
-    CreatePlt,
+    UpdateCreatePLT,
 }
 
 impl UpdatePayload {
@@ -897,7 +897,7 @@ impl UpdatePayload {
                 UpdateFinalizationCommitteeParameters
             }
             UpdatePayload::ValidatorScoreParametersCPV3(_) => UpdateValidatorScoreParameters,
-            UpdatePayload::CreatePlt(_) => CreatePlt,
+            UpdatePayload::CreatePlt(_) => UpdateCreatePLT,
         }
     }
 }
