@@ -212,30 +212,66 @@ instance AE.FromJSON CoinInfo where
     parseJSON (AE.String "CCD") = return CoinInfoConcordium
     parseJSON _ = fail "CoinInfo JSON must be the string 'CCD'"
 
+-- | Decode a 'CoinInfo' from a CBOR term.
+decodeCoinInfoHelper :: CBOR.Term -> Either String CoinInfo
+decodeCoinInfoHelper = \case
+    CBOR.TTagged tag term
+        | tag == 40305 -> do
+            keyValues <- case term of
+                CBOR.TMap kvs -> return kvs
+                CBOR.TMapI kvs -> return kvs
+                _ -> Left "coininfo: Expected a map"
+            keyValueList <- forM keyValues $ \(k, v) -> case k of
+                CBOR.TInt i -> return (i, v)
+                _ -> Left "coininfo: Expected an integer key"
+            build (Map.fromList keyValueList)
+        | otherwise -> Left $ "coininfo: Expected coininfo (tag 40305), but found tag " ++ show tag
+    other -> Left $ "coininfo: Unexpected term constructor for coin info: " ++ show other
+  where
+    build :: Map.Map Int CBOR.Term -> Either String CoinInfo
+    build m0 = do
+        ((), m1) <- getAndClear 1 convertCoinType m0
+        unless (Map.null m1) $ Left $ "coininfo: unexpected map key(s): " ++ show (Map.keys m1)
+        return CoinInfoConcordium
+    getAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        term <- maybeTerm `orFail` ("token-holder: Missing " ++ show key)
+        val <- convert term `orFail` ("token-holder: Invalid " ++ show key)
+        return (val, m')
+    convertCoinType :: CBOR.Term -> Maybe ()
+    convertCoinType (CBOR.TInt i)
+        | i == 919 = Just ()
+        | otherwise = Nothing
+    convertCoinType _ = Nothing
+
 -- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
 decodeCoinInfo :: Decoder s CoinInfo
 decodeCoinInfo = do
-    tag <- decodeTag
-    unless (tag == 40305) $
-        fail $
-            "coininfo: Expected coininfo (tag 40305), but found tag " ++ show tag
-    mLen <- decodeMapLenOrIndef
-    forM_ mLen $ \len ->
-        unless (len == 1) $
-            fail $
-                "coininfo: Expected a map of size 1, but size was " ++ show len
-    key <- decodeInt
-    unless (key == 1) $
-        fail $
-            "coininfo: Expected type key (1), but found " ++ show key
-    coinType <- decodeInt
-    ci <- case coinType of
-        919 -> return CoinInfoConcordium
-        _ -> fail $ "coininfo: Unsupported coin type: " ++ show coinType
-    when (isNothing mLen) $
-        decodeBreakOr >>= \b ->
-            unless b (fail "coininfo: Expected end of array")
-    return ci
+    term <- CBOR.decodeTerm
+    either fail return $ decodeCoinInfoHelper term
+
+-- decodeCoinInfo = do
+--     tag <- decodeTag
+--     unless (tag == 40305) $
+--         fail $
+--             "coininfo: Expected coininfo (tag 40305), but found tag " ++ show tag
+--     mLen <- decodeMapLenOrIndef
+--     forM_ mLen $ \len ->
+--         unless (len == 1) $
+--             fail $
+--                 "coininfo: Expected a map of size 1, but size was " ++ show len
+--     key <- decodeInt
+--     unless (key == 1) $
+--         fail $
+--             "coininfo: Expected type key (1), but found " ++ show key
+--     coinType <- decodeInt
+--     ci <- case coinType of
+--         919 -> return CoinInfoConcordium
+--         _ -> fail $ "coininfo: Unsupported coin type: " ++ show coinType
+--     when (isNothing mLen) $
+--         decodeBreakOr >>= \b ->
+--             unless b (fail "coininfo: Expected end of array")
+--     return ci
 
 -- | Encode a 'CoinInfo' in the tagged-coininfo schema.
 encodeCoinInfo :: CoinInfo -> Encoding
@@ -262,15 +298,6 @@ decodeAccountAddress = do
 encodeAccountAddress :: AccountAddress -> Encoding
 encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
     encodeByteArray (SBA.fromByteArray ba)
-
--- | Parse an 'AccountAddress' from a 'LBS.ByteString'. The entire bytestring
---  must be consumed in the parsing.
-tokenAccountAddressFromBytes :: LBS.ByteString -> Either String AccountAddress
-tokenAccountAddressFromBytes = decodeFromBytes decodeAccountAddress "token account address"
-
--- | Encode an 'AccountAddress' to a strict bytestring.
-tokenAccountAddressToBytes :: AccountAddress -> BS.ByteString
-tokenAccountAddressToBytes = CBOR.toStrictByteString . encodeAccountAddress
 
 -- | A destination that can receive and hold protocol-level tokens.
 --  Currently, this can only be a Concordium account address.
@@ -334,28 +361,74 @@ makeLenses ''HolderAccountBuilder
 emptyHolderAccountBuilder :: HolderAccountBuilder
 emptyHolderAccountBuilder = HolderAccountBuilder Nothing Nothing
 
+decodeTokenHolderHelper :: CBOR.Term -> Either String TokenHolder
+decodeTokenHolderHelper = \case
+    CBOR.TTagged tag term
+        | tag == 40307 -> do
+            keyValues <- case term of
+                CBOR.TMap kvs -> return kvs
+                CBOR.TMapI kvs -> return kvs
+                _ -> Left "token-holder: Expected a map"
+            keyValueList <- forM keyValues $ \(k, v) -> case k of
+                CBOR.TInt i -> return (i, v)
+                _ -> Left "token-holder: Expected an integer key"
+            build (Map.fromList keyValueList)
+        | otherwise -> Left $ "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
+    other -> Left $ "token-holder: Unexpected term constructor for token holder: " ++ show other
+  where
+    build :: Map.Map Int CBOR.Term -> Either String TokenHolder
+    build m0 = do
+        (holderAccountAddress, m1) <- getAndClear 3 convertAddress m0
+        (holderAccountCoinInfo, m2) <- getMaybeAndClear 1 convertCoinInfo m1
+        unless (Map.null m2) $ Left $ "token-holder: unexpected map key(s): " ++ show (Map.keys m2)
+        return HolderAccount{..}
+    getAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        term <- maybeTerm `orFail` ("token-holder: Missing " ++ show key)
+        val <- convert term `orFail` ("token-holder: Invalid " ++ show key)
+        return (val, m')
+    getMaybeAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
+        return (maybeVal, m')
+    convertAddress :: CBOR.Term -> Maybe AccountAddress
+    convertAddress (CBOR.TBytes bs)
+        | BS.length bs == accountAddressSize = Just $ AccountAddress $ FBS.fromByteString bs
+        | otherwise = Nothing
+    convertAddress _ = Nothing
+    convertCoinInfo :: CBOR.Term -> Maybe CoinInfo
+    convertCoinInfo (CBOR.TTagged t term) | t == 40305 =
+        case decodeCoinInfoHelper term of
+            Left _ -> Nothing
+            Right coinInfo -> Just coinInfo
+    convertCoinInfo _ = Nothing
+
 -- | Decode a CBOR-encoded 'TokenHolder'.
 decodeTokenHolder :: Decoder s TokenHolder
 decodeTokenHolder = do
-    tag <- decodeTag
-    unless (tag == 40307) $
-        fail $
-            "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
-    mLen <- decodeMapLenOrIndef
-    builder <- case mLen of
-        Nothing -> decodeIndefHelper decodeKV emptyHolderAccountBuilder
-        Just len -> decodeDefHelper decodeKV len emptyHolderAccountBuilder
-    case builder ^. habAccountAddress of
-        Nothing -> fail "token-holder: data (3) field is missing"
-        Just addr -> return $ HolderAccount addr (builder ^. habCoinInfo)
-  where
-    decodeKV builder = do
-        key <- decodeInt
-        case key of
-            1 -> mapValueDecoder "info (1)" decodeCoinInfo habCoinInfo builder
-            2 -> fail "token-holder: type (2) field is not supported"
-            3 -> mapValueDecoder "data (3)" decodeAccountAddress habAccountAddress builder
-            _ -> fail $ "token-holder: unexpected map key " ++ show key
+    term <- CBOR.decodeTerm
+    either fail return $ decodeTokenHolderHelper term
+
+-- decodeTokenHolder = do
+--     tag <- decodeTag
+--     unless (tag == 40307) $
+--         fail $
+--             "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
+--     mLen <- decodeMapLenOrIndef
+--     builder <- case mLen of
+--         Nothing -> decodeIndefHelper decodeKV emptyHolderAccountBuilder
+--         Just len -> decodeDefHelper decodeKV len emptyHolderAccountBuilder
+--     case builder ^. habAccountAddress of
+--         Nothing -> fail "token-holder: data (3) field is missing"
+--         Just addr -> return $ HolderAccount addr (builder ^. habCoinInfo)
+--   where
+--     decodeKV builder = do
+--         key <- decodeInt
+--         case key of
+--             1 -> mapValueDecoder "info (1)" decodeCoinInfo habCoinInfo builder
+--             2 -> fail "token-holder: type (2) field is not supported"
+--             3 -> mapValueDecoder "data (3)" decodeAccountAddress habAccountAddress builder
+--             _ -> fail $ "token-holder: unexpected map key " ++ show key
 
 encodeTokenHolder :: TokenHolder -> Encoding
 encodeTokenHolder HolderAccount{..} =
@@ -1576,7 +1649,7 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     build m0 = do
         (tmsName, m1) <- getAndClear "name" convertText m0
         (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
-        (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertAccountAddress m2
+        (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertTokenHolder m2
         (tmsAllowList, m4) <- getMaybeAndClear "allowList" convertBool m3
         (tmsDenyList, m5) <- getMaybeAndClear "denyList" convertBool m4
         (tmsMintable, m6) <- getMaybeAndClear "mintable" convertBool m5
@@ -1602,7 +1675,8 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
     convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
 
-    convertAccountAddress = error "TODO(drsk) how are account addresses encoded?"
+    convertTokenHolder :: CBOR.Term -> Maybe TokenHolder
+    convertTokenHolder = either (const Nothing) Just . decodeTokenHolderHelper
 
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
