@@ -345,6 +345,7 @@ encodeTokenMetadataUrl TokenMetadataUrl{..} =
     k = at . makeMapKeyEncoding . encodeString
     encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
 
+-- | Helper function to convert a 'Decoder s a' to a function from a lazy bytestring to 'a'.
 decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString ->  Either String a
 decodeFromBytes decoder name lbs =
     case CBOR.deserialiseFromBytes decoder lbs of
