@@ -14,13 +14,9 @@ use concordium_contracts_common::AccountAddress;
 /// Module that implements easy construction of protocol level token operations.
 ///
 /// The operations are composed to transactions via
-/// [`construct::token_holder_operations`](crate::transactions::construct::token_holder_operations)
-/// and
-/// [`construct::token_governance_operations`](crate::transactions::construct::token_governance_operations).
+/// [`construct::token_update_operations`](crate::transactions::construct::token_update_operations)
 /// To construct and sign transactions, use
-/// [`send::token_holder_operations`](crate::transactions::send::token_holder_operations)
-/// and
-/// [`send::token_governance_operations`](crate::transactions::send::token_governance_operations).///
+/// [`send::token_update_operations`](crate::transactions::send::token_update_operations)
 pub mod operations {
     use super::*;
 
