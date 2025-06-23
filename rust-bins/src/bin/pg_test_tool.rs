@@ -1,3 +1,6 @@
+//! # Privacy Guardian Test Tool
+//!
+//! An application to test the functionality of privacy guardian keys.
 use clap::AppSettings;
 use client_server_helpers::*;
 use concordium_base::{
@@ -5,47 +8,45 @@ use concordium_base::{
     curve_arithmetic::{Curve, Value},
     elgamal::{
         decrypt_from_chunks_given_generator, encrypt_in_chunks_given_generator, Cipher, PublicKey,
-        SecretKey,
     },
-    id::{constants::ArCurve, secret_sharing::Threshold, types::*},
-    pedersen_commitment::CommitmentKey,
-    random_oracle::RandomOracle,
-    sigma_protocols::{
-        com_enc_eq::{self, ComEncEq, ComEncEqSecret},
-        common::prove,
-    },
+    id::{constants::ArCurve, types::*},
 };
 use dialoguer::Input;
 use hex::encode;
 use rand::{rngs::ThreadRng, seq::IteratorRandom, thread_rng};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
     path::{Path, PathBuf},
-    str::{from_utf8, FromStr},
+    str::from_utf8,
 };
 use structopt::StructOpt;
 
+/// The path to the list of BIP39 words.
 const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
 
 /// List of BIP39 words. There is a test that checks that this list has correct
 /// length, so there is no need to check when using this in the tool.
 fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
 
+/// Options for testing the functionality of a single PG key.
+
 #[derive(StructOpt)]
-struct SingleTestDec {
+struct SingleKeyTestDec {
+    /// The test record containing the encrypted challenge message.
     #[structopt(
         short = "tr",
         long = "test-rec",
         help = "The test record to be decrypted."
     )]
     test_record: Option<PathBuf>,
+    /// The private key of the privacy guardian.
     #[structopt(
         short = "sk",
         long = "pg-priv",
         help = "File with anonymity revoker's private and public keys."
     )]
     pg_priv:     Option<PathBuf>,
+    /// The global cryptographic parameters of the blockchain.
     #[structopt(
         short = "g",
         long = "global",
@@ -54,27 +55,33 @@ struct SingleTestDec {
     global:      Option<PathBuf>,
 }
 
+/// Options for creating a test to check the functionality of a single PG key.
 #[derive(StructOpt)]
-struct SingleTestEnc {
+struct SingleKeyTestEnc {
+    /// The public key of the privacy guardian
     #[structopt(
         short = "pk",
         long = "pg-pub",
         help = "File with the privacy guardian public key."
     )]
     pg_pub:             Option<PathBuf>,
+    /// The global cryptographic parameters of the blockchain.
     #[structopt(
         short = "g",
         long = "global",
         help = "File with cryptographic parameters."
     )]
     global:             Option<PathBuf>,
+    /// The output test record.
     #[structopt(short = "o", long = "out", help = "File to output the test record to.")]
     out:                Option<PathBuf>,
+    /// Set if the user wants to encrypt a custom message.
     #[structopt(
         long = "use-custom-message",
         help = "User can define custom message instead of three random BIP-39 words."
     )]
     use_custom_message: bool,
+    /// The custom message used by the `use-custom-message`.
     #[structopt(
         long = "message",
         help = "The custom message to be encrypted. Will encrypt the prefix if the message is too \
@@ -83,90 +90,43 @@ struct SingleTestEnc {
     custom_message:     Option<String>,
 }
 
-#[derive(StructOpt)]
-struct PRFTestEnc {
-    #[structopt(
-        short = "m",
-        long = "message",
-        help = "The test message to be encrypted"
-    )]
-    message: Option<String>,
-    #[structopt(
-        short = "g",
-        long = "global",
-        help = "File with cryptographic parameters."
-    )]
-    global:  Option<PathBuf>,
-    #[structopt(
-        short = "pk",
-        long = "pg-pub",
-        help = "File with the privacy guardian public key."
-    )]
-    pg_pub:  Option<PathBuf>,
-    #[structopt(short = "o", long = "out", help = "File to output the encryption to.")]
-    out:     Option<PathBuf>,
-}
-
-#[derive(Debug)]
-enum Level {
-    Root,
-    One,
-    Two,
-}
-
-impl FromStr for Level {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "root" => Ok(Level::Root),
-            "1" => Ok(Level::One),
-            "one" => Ok(Level::One),
-            "2" => Ok(Level::Two),
-            "two" => Ok(Level::Two),
-            _ => anyhow::bail!("Unknown governance key level '{}'", s),
-        }
-    }
-}
-
+/// Enumerates the functionality of this tool.
 #[derive(StructOpt)]
 #[structopt(
-    about = "Tool privacy guardian tests.",
+    about = "Testing tool for privacy guardians.",
     name = "pg_test_tool",
     author = "Concordium",
     version = "1.0"
 )]
 enum KeygenTool {
+    /// Test the functionality of a single PG key.
     #[structopt(
         name = "test-dec",
         about = "Test functionality of privacy guardian key by decrypting a test record.",
         version = "1.0"
     )]
-    SingleDec(SingleTestDec),
+    SingleDec(SingleKeyTestDec),
+    /// Generate a new test instance for checking the functionality of a single
+    /// PG key.
     #[structopt(
         name = "gen-enc",
         about = "Generate a test record for a given privacy guardian public key.",
         version = "1.0"
     )]
-    GenSingleEnc(SingleTestEnc),
-    #[structopt(
-        name = "gen-enc-prf",
-        about = "Generate a fake encrypted PRF-share for a given privacy guardian public key.",
-        version = "1.0"
-    )]
-    GenPRFEnc(PRFTestEnc),
+    GenSingleEnc(SingleKeyTestEnc),
 }
 
+/// The test record for testing the functionality of a single PG key.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-pub struct SingleTestRecord<C: Curve> {
+pub struct SingleKeyTestRecord<C: Curve> {
     /// identity of the privacy guardian
     #[serde(rename = "pgIdentity")]
     pub pg_identity: ArIdentity,
     /// hash of the encrypted message
     #[serde(rename = "msgHash")]
     pub msg_hash:    String,
-    /// ciphertext
+    /// encrypted message
     #[serde(rename = "msgEnc")]
     pub msg_enc:     [Cipher<C>; 8],
 }
@@ -189,11 +149,6 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
-        GenPRFEnc(prftest_enc) => {
-            if let Err(e) = handle_generate_test_enc_prf(prftest_enc) {
-                eprintln!("{}", e)
-            }
-        }
     }
 }
 
@@ -212,6 +167,7 @@ macro_rules! succeed_or_die {
     };
 }
 
+/// Extract file path from options and ask the user for a path if this fails.
 fn get_file_path(
     maybe_file_path: Option<PathBuf>,
     description: &str,
@@ -241,7 +197,7 @@ fn get_file_path(
     })
 }
 
-// Try to read ArData, either from encrypted or a plaintext file.
+/// Try to read the PG data, either from encrypted or a plaintext file.
 fn decrypt_pg_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
     let data = succeed_or_die!(std::fs::read(fname), e => "Could not read privacy guardian secret keys due to {}");
     match serde_json::from_slice(&data) {
@@ -260,8 +216,13 @@ fn decrypt_pg_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
     }
 }
 
-// This function takes an ASCII string of length at most 31 bytes and converts
-// it to a field element. The function does not check if the string is ASCII
+/// Encode a short string in a field element.
+///
+/// This function takes a string of length at most 31 bytes and converts
+/// it to a field element.
+///
+/// The function may have undefined behavior if the string is not ASCII or
+/// contains \x00.
 fn to_field_element<C: Curve>(m: String) -> Option<Value<C>> {
     let mut buf = [0u8; 32];
     let len = m.as_bytes().len();
@@ -280,7 +241,9 @@ fn to_field_element<C: Curve>(m: String) -> Option<Value<C>> {
     Some(Value::<C>::new(s))
 }
 
-// This function extracts an encoded string from a field element.
+/// Decode a string from a field element.
+///
+/// Zero bytes (`\x00`) are ignored.
 fn from_field_element<C: Curve>(v: Value<C>) -> String {
     let v: C::Scalar = *v;
     let mut bytes = Vec::new();
@@ -291,6 +254,10 @@ fn from_field_element<C: Curve>(v: Value<C>) -> String {
         .to_string()
 }
 
+/// Encrypt an encoded message using a given public key.
+///
+/// Technically, this is "In-the-exponent" ElGamal encryption where the message
+/// is split into chunks.
 fn encrypt_msg<C: Curve>(m: Value<C>, pk: &PublicKey<C>, g: &C) -> [Cipher<C>; 8] {
     let mut csprng = thread_rng();
     let ciphers =
@@ -304,36 +271,9 @@ fn encrypt_msg<C: Curve>(m: Value<C>, pk: &PublicKey<C>, g: &C) -> [Cipher<C>; 8
     result
 }
 
-fn gen_fake_proof<C: Curve>() -> com_enc_eq::Response<C> {
-    let mut csprng = thread_rng();
-    let sk = SecretKey::generate_all(&mut csprng);
-    let public_key = PublicKey::from(&sk);
-    let comm_key = CommitmentKey::<C>::generate(&mut csprng);
-
-    let x = Value::generate_non_zero(&mut csprng);
-    let h_in_exponent = C::generate(&mut csprng);
-    let (cipher, elgamal_randomness) =
-        public_key.encrypt_exponent_rand_given_generator(&x, &h_in_exponent, &mut csprng);
-    let (commitment, randomness) = comm_key.commit(&x, &mut csprng);
-    let secret = ComEncEqSecret {
-        value:         x,
-        elgamal_rand:  elgamal_randomness,
-        pedersen_rand: randomness,
-    };
-    let prover = ComEncEq {
-        cipher,
-        commitment,
-        pub_key: public_key,
-        cmm_key: comm_key,
-        encryption_in_exponent_generator: h_in_exponent,
-    };
-    let ro = RandomOracle::domain([0u8]);
-    let proof =
-        prove(&mut ro.split(), &prover, secret, &mut csprng).expect("Proving should succeed.");
-    proof.response
-}
-
-fn handle_test_dec(test_dec: SingleTestDec) -> Result<(), String> {
+/// Test the functionality of a single PG key by decrypting the given test
+/// record.
+fn handle_test_dec(test_dec: SingleKeyTestDec) -> Result<(), String> {
     // Read global context
     let global_file = get_file_path(test_dec.global, "global context", "global.json");
 
@@ -355,7 +295,7 @@ fn handle_test_dec(test_dec: SingleTestDec) -> Result<(), String> {
 
     // Read the test record
     let test_record_file = get_file_path(test_dec.test_record, "test record", "test-record.json");
-    let test_record: Versioned<SingleTestRecord<ArCurve>> = succeed_or_die!(read_json_from_file(test_record_file), e => "Could not read global context due to {}");
+    let test_record: Versioned<SingleKeyTestRecord<ArCurve>> = succeed_or_die!(read_json_from_file(test_record_file), e => "Could not read global context due to {}");
     if test_record.version != VERSION_0 {
         return Err("The version of the test record should be 0.".to_owned());
     }
@@ -386,7 +326,8 @@ fn handle_test_dec(test_dec: SingleTestDec) -> Result<(), String> {
     Ok(())
 }
 
-fn handle_generate_test_enc(test_enc: SingleTestEnc) -> Result<(), String> {
+/// Generate a new test record for checking the functionality of a given PG key.
+fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
     // Read global context
     let global_file = get_file_path(test_enc.global, "global context", "global.json");
 
@@ -457,7 +398,7 @@ fn handle_generate_test_enc(test_enc: SingleTestEnc) -> Result<(), String> {
     );
 
     // Generate and save the output
-    let test_record = Versioned::new(VERSION_0, SingleTestRecord {
+    let test_record = Versioned::new(VERSION_0, SingleKeyTestRecord {
         pg_identity: pg_pub.ar_identity,
         msg_hash:    encode(h),
         msg_enc:     enc,
@@ -482,86 +423,6 @@ fn handle_generate_test_enc(test_enc: SingleTestEnc) -> Result<(), String> {
             ));
         }
     }
-    Ok(())
-}
-
-fn handle_generate_test_enc_prf(prf_test_enc: PRFTestEnc) -> Result<(), String> {
-    // Read global context
-    let global_file = get_file_path(prf_test_enc.global, "global context", "global.json");
-
-    let global_ctx = {
-        if let Some(gc) = read_global_context(global_file) {
-            gc
-        } else {
-            return Err("Cannot read cryptographic parameters. Terminating.".to_string());
-        }
-    };
-
-    // Read privacy guardian public key
-    let pg_pub_file = get_file_path(
-        prf_test_enc.pg_pub,
-        "privacy guardian public key",
-        "pg-info.pub.json",
-    );
-
-    let pg_pub: ArInfo<ArCurve> = succeed_or_die!(read_pg_info(pg_pub_file), e => "Could not read privacy guardian public key from provided file because {}");
-
-    let msg = prf_test_enc.message.unwrap_or_else(|| {
-        let mut input = Input::new();
-        input.with_prompt("Enter the message to be encrypted");
-        loop {
-            match input.interact() {
-                Ok(x) => return x,
-                Err(e) => println!("{}", e),
-            }
-        }
-    });
-
-    let m = match to_field_element(msg) {
-        Some(m) => m,
-        None => return Err("Message is too long. It must be at most 31 bytes.".to_string()),
-    };
-    let enc = encrypt_msg(
-        m,
-        pg_pub.ar_public_key.get_public_key(),
-        global_ctx.encryption_in_exponent_generator(),
-    );
-
-    let fake_ip_ar_data = IpArData {
-        enc_prf_key_share: enc,
-        proof_com_enc_eq:  gen_fake_proof(),
-    };
-
-    let mut fake_ar_data = BTreeMap::new();
-    fake_ar_data.insert(pg_pub.ar_identity, fake_ip_ar_data);
-
-    let fake_ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub:  ArCurve::zero_point(),
-        ar_data:      fake_ar_data,
-        max_accounts: 0,
-        threshold:    Threshold(1u8),
-    });
-
-    let out_file = prf_test_enc.out.unwrap_or_else(|| {
-        PathBuf::from(
-            Input::new()
-                .with_prompt("Output file name")
-                .default(format!("pg-test-{}.json", pg_pub.ar_identity))
-                .interact()
-                .expect("Output file not provided."),
-        )
-    });
-
-    match write_json_to_file(&out_file, &fake_ar_record) {
-        Ok(_) => println!("Wrote test information {}.", out_file.display()),
-        Err(e) => {
-            return Err(format!(
-                "Could not JSON write test information to file because {}",
-                e
-            ));
-        }
-    }
-
     Ok(())
 }
 
