@@ -43,6 +43,18 @@ import qualified Data.FixedByteString as FBS
 
 -- * Decoder helpers
 
+-- | Helper function to convert a 'Decoder s a' to a function from a lazy bytestring to 'a'.
+decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString -> Either String a
+decodeFromBytes decoder name lbs =
+    case CBOR.deserialiseFromBytes decoder lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining)
+                    ++ " bytes remaining after parsing "
+                    ++ name
+
 -- | A 'MapValueDecoder' consumes a value corresponding to a known key and sets it in the builder.
 --  It should fail if entry in the builder corresponding to the key is already set.
 type MapValueDecoder s builder = builder -> Decoder s builder
@@ -186,345 +198,6 @@ orFail (Just v) = const (Right v)
 orDefault :: Maybe a -> a -> a
 orDefault Nothing = id
 orDefault (Just a) = const a
-
--- * Token amounts
-
--- | Decode a CBOR-encoded 'TokenAmount'. This limits the number of decimals to the
---  range @[0..255]@.
-decodeTokenAmount :: Decoder s TokenAmount
-decodeTokenAmount = do
-    sci <- decodeDecimalFraction
-    unless (coefficient sci >= 0) $ fail "Unexpected negative token amount"
-    unless (coefficient sci <= fromIntegral (maxBound :: Word64)) $
-        fail "Token amount exceeds expressible bound"
-    unless (base10Exponent sci <= 0) $ fail "Token amount cannot have a positive exponent"
-    unless (base10Exponent sci >= -255) $ fail "Token amount exponent is too small"
-    return
-        TokenAmount
-            { taValue = fromIntegral (coefficient sci),
-              taDecimals = fromIntegral (negate (base10Exponent sci))
-            }
-
--- | Encode a 'TokenAmount' as CBOR.
-encodeTokenAmount :: TokenAmount -> Encoding
-encodeTokenAmount TokenAmount{..} =
-    encodeTag 4
-        <> encodeListLen 2
-        <> encodeInteger (-fromIntegral taDecimals)
-        <> encodeWord64 (theTokenRawAmount taValue)
-
--- | Helper function to encode a sequence.
-encodeSequence :: (a -> Encoding) -> Seq.Seq a -> Encoding
-encodeSequence encodeItem s =
-    encodeListLen (fromIntegral $ Seq.length s)
-        <> foldMap encodeItem s
-
--- | Convert CBOR.Term to a hex-encoded string
-cborTermToHex :: CBOR.Term -> Text
-cborTermToHex term =
-    let bs = CBOR.toStrictByteString $ CBOR.encodeTerm term
-    in  TextEncoding.decodeUtf8 (Base16.encode bs)
-
--- | Convert a hex-encoded string to a CBOR.Term.
-hexToCborTerm :: Text -> Either String CBOR.Term
-hexToCborTerm hexText = do
-    bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
-    decodeTerm bs
-  where
-    decodeTerm bs =
-        case CBOR.deserialiseFromBytes CBOR.decodeTerm (LBS.fromStrict bs) of
-            Left err -> Left $ "Failed to decode CBOR term: " ++ show err
-            Right ("", term) -> Right term
-            Right (remaining, _) -> Left $ "Extra bytes after decoding CBOR term: " ++ show (LBS.length remaining)
-
--- | A token metadata URL and an optional checksum. The checksum is a SHA256 hash of the metadata at the location of the URL.
-data TokenMetadataUrl = TokenMetadataUrl
-    { -- | The URL of the token metadata.
-      tmUrl :: !Text,
-      -- | The sha256 hash of the token metadata.
-      tmChecksumSha256 :: !(Maybe SHA256.Hash),
-      -- | Any additional values associated with the metadata url, e.g. checksums produced by alternative hash functions.
-      --  Keys in this map SHOULD NOT overlap those used for the other (standardised) fields in this structure as that will
-      --  break the invertability of the CBOR encoding.
-      tmAdditional :: !(Map.Map Text CBOR.Term)
-    }
-    deriving (Eq, Show)
-
--- | Create a 'TokenMetadataUrl' with the given URL and no checksum.
-createTokenMetadataUrl :: Text -> TokenMetadataUrl
-createTokenMetadataUrl url = TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = Nothing, tmAdditional = Map.empty}
-
--- | Create a 'TokenMetadataUrl' the given URL and associated SHA256 checksum.
-createTokenMetadataUrlWithSha256 :: Text -> SHA256.Hash -> TokenMetadataUrl
-createTokenMetadataUrlWithSha256 url checksum = TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = Just checksum, tmAdditional = Map.empty}
-
-instance AE.ToJSON TokenMetadataUrl where
-    toJSON TokenMetadataUrl{..} =
-        AE.object . catMaybes $
-            [ Just ("url" AE..= tmUrl),
-              ("checksumSha256" AE..=) <$> tmChecksumSha256,
-              ("_additional" AE..=) <$> additional
-            ]
-      where
-        additional :: Maybe AE.Value
-        additional
-            | null tmAdditional = Nothing
-            | otherwise = Just $ AE.object $ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList tmAdditional)
-
-instance AE.FromJSON TokenMetadataUrl where
-    parseJSON = AE.withObject "TokenMetadataUrl" $ \v -> do
-        tmUrl <- v AE..: "url" -- Mandatory field
-        tmChecksumSha256 <- v AE..:? "checksumSha256" -- Optional field
-        tmAdditional <- v AE..:? "_additional" >>= parseAdditional
-        return TokenMetadataUrl{..}
-      where
-        parseAdditional :: Maybe (KeyMap.KeyMap Text) -> AE.Parser (Map.Map Text CBOR.Term)
-        parseAdditional Nothing = return Map.empty
-        parseAdditional (Just additional)
-            | KeyMap.null additional = return Map.empty
-            | otherwise = do
-                fmap Map.fromList $ forM (KeyMap.toList additional) $ \(k, v) -> do
-                    term <- either (fail . ("Failed to parse hex as CBOR: " ++)) return $ hexToCborTerm v
-                    return (AE.Key.toText k, term)
-
-decodeTokenMetadataUrlHelper :: CBOR.Term -> Either String TokenMetadataUrl
-decodeTokenMetadataUrlHelper rootTerm = do
-    keyValues <- case rootTerm of
-        CBOR.TMap kvs -> return kvs
-        CBOR.TMapI kvs -> return kvs
-        _ -> Left $ "Expected a map"
-    keyValueList <- forM keyValues $ \(k, v) -> case k of
-        CBOR.TString t -> return (t, v)
-        CBOR.TStringI t -> return (LazyText.toStrict t, v)
-        _ -> Left $ "Expected a string key"
-    build (Map.fromList keyValueList)
-  where
-    build :: Map.Map Text CBOR.Term -> Either String TokenMetadataUrl
-    build m0 = do
-        (tmUrl, m1) <- getAndClear "url" convertText m0
-        (tmChecksumSha256, tmAdditional) <- getMaybeAndClear "checksumSha256" convertSha256Hash m1
-        return TokenMetadataUrl{..}
-    getAndClear key convert m = do
-        let (maybeTerm, m') = m & at key <<.~ Nothing
-        term <- maybeTerm `orFail` ("Missing " ++ show key)
-        val <- convert term `orFail` ("Invalid " ++ show key)
-        return (val, m')
-    getMaybeAndClear key convert m = do
-        let (maybeTerm, m') = m & at key <<.~ Nothing
-        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
-        return (maybeVal, m')
-    convertText (CBOR.TString t) = Just t
-    convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
-    convertText _ = Nothing
-
-    convertSha256Hash :: CBOR.Term -> Maybe SHA256.Hash
-    convertSha256Hash (CBOR.TBytes bs)
-        | BS.length bs == SHA256.digestSize = Just $ SHA256.Hash (FBS.fromByteString bs)
-        | otherwise = Nothing
-    convertSha256Hash _ = Nothing
-
--- | Decode a CBOR-encoded 'TokenMetadataUrl'.
-decodeTokenMetadataUrl :: Decoder s TokenMetadataUrl
-decodeTokenMetadataUrl = do
-    term <- CBOR.decodeTerm
-    either fail return $ decodeTokenMetadataUrlHelper term
-
--- | Encode a 'TokenMetadataUrl' as CBOR.
-encodeTokenMetadataUrl :: TokenMetadataUrl -> Encoding
-encodeTokenMetadataUrl TokenMetadataUrl{..} =
-    encodeMapDeterministic $
-        additionalMap
-            & k "url" ?~ encodeString tmUrl
-            & k "checksumSha256" .~ (encodeSha256Hash <$> tmChecksumSha256)
-  where
-    additionalMap =
-        Map.fromList
-            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
-              | (key, val) <- Map.toList tmAdditional
-            ]
-    k = at . makeMapKeyEncoding . encodeString
-    encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
-
--- | Helper function to convert a 'Decoder s a' to a function from a lazy bytestring to 'a'.
-decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString ->  Either String a
-decodeFromBytes decoder name lbs =
-    case CBOR.deserialiseFromBytes decoder lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing "
-                    ++ name
-
--- | Parse a 'TokenMetadataUrl' from a 'LBS.ByteString'. The entire bytestring must
---  be consumed in the parsing.
-tokenMetadataUrlFromBytes :: LBS.ByteString -> Either String TokenMetadataUrl
-tokenMetadataUrlFromBytes =
-    decodeFromBytes decodeTokenMetadataUrl "token metadata url"
-
--- | CBOR-encode a 'TokenMetadataUrl to a (strict) 'BS.ByteString'.
-tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
-tokenMetadataUrlToBytes = CBOR.toStrictByteString . encodeTokenMetadataUrl
-
--- * Initialization parameters
-
--- | The parsed token-initialization-parameters. These parameters are passed to the token module
---  to initialize the token.
-data TokenInitializationParameters = TokenInitializationParameters
-    { -- | The name of the token.
-      tipName :: !Text,
-      -- | A URL pointing to the token metadata.
-      tipMetadata :: !TokenMetadataUrl,
-      -- | The governance account of this token.
-      tipGovernanceAccount :: AccountAddress,
-      -- | Whether the token supports an allow list.
-      tipAllowList :: !Bool,
-      -- | Whether the token supports a deny list.
-      tipDenyList :: !Bool,
-      -- | The initial supply of the token. If not present, no tokens are minted initially.
-      tipInitialSupply :: !(Maybe TokenAmount),
-      -- | Whether the token is mintable.
-      tipMintable :: !Bool,
-      -- | Whether the token is burnable.
-      tipBurnable :: !Bool
-    }
-    deriving (Eq, Show)
-
--- | Builder for 'TokenInitializationParameters'
-data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
-    { _tipbName :: Maybe Text,
-      _tipbMetadata :: Maybe TokenMetadataUrl,
-      _tipbGovernanceAccount :: Maybe AccountAddress,
-      _tipbAllowList :: Maybe Bool,
-      _tipbDenyList :: Maybe Bool,
-      _tipbInitialSupply :: Maybe TokenAmount,
-      _tipbMintable :: Maybe Bool,
-      _tipbBurnable :: Maybe Bool
-    }
-
-makeLenses ''TokenInitializationParametersBuilder
-
--- | A 'TokenInitializationParametersBuilder' with no fields initialized.
-emptyTokenInitializationParametersBuilder :: TokenInitializationParametersBuilder
-emptyTokenInitializationParametersBuilder =
-    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
-
--- | Construct a 'TokenInitializationParameters' from a 'TokenInitializationParametersBuilder'.
---  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
---  is missing. Missing optional parameters are populated with the appropriate default values.
-buildTokenInitializationParameters ::
-    TokenInitializationParametersBuilder -> Either String TokenInitializationParameters
-buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
-    tipName <- _tipbName `orFail` "Missing \"name\""
-    tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
-    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governance account\""
-    let tipAllowList = _tipbAllowList `orDefault` False
-    let tipDenyList = _tipbDenyList `orDefault` False
-    let tipInitialSupply = _tipbInitialSupply
-    let tipMintable = _tipbMintable `orDefault` False
-    let tipBurnable = _tipbBurnable `orDefault` False
-    return TokenInitializationParameters{..}
-
-instance AE.ToJSON TokenInitializationParameters where
-    toJSON TokenInitializationParameters{..} = do
-        AE.object $
-            [ "name" AE..= tipName,
-              "metadata" AE..= tipMetadata,
-              "governanceAccount" AE..= tipGovernanceAccount,
-              "allowList" AE..= tipAllowList,
-              "denyList" AE..= tipDenyList,
-              "mintable" AE..= tipMintable,
-              "burnable" AE..= tipBurnable
-            ]
-                ++ ["initialSupply" AE..= initSupply | initSupply <- toList tipInitialSupply]
-
-instance AE.FromJSON TokenInitializationParameters where
-    parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
-        _tipbName <- o AE..:? "name"
-        _tipbMetadata <- o AE..:? "metadata"
-        _tipbGovernanceAccount <- o AE..:? "governanceAccount"
-        _tipbAllowList <- o AE..:? "allowList"
-        _tipbDenyList <- o AE..:? "denyList"
-        _tipbInitialSupply <- o AE..:? "initialSupply"
-        _tipbMintable <- o AE..:? "mintable"
-        _tipbBurnable <- o AE..:? "burnable"
-        case buildTokenInitializationParameters TokenInitializationParametersBuilder{..} of
-            Left e -> fail e
-            Right res -> return res
-
--- | Decode a CBOR-encoded 'TokenInitializationParameters'.
---  This decoder enforces CBOR-validity (in particular, no duplicate map keys), disallows
---  extraneous keys, and applies defaults specified by the CDDL schema.  It does not require
---  deterministic encoding.
-decodeTokenInitializationParameters :: Decoder s TokenInitializationParameters
-decodeTokenInitializationParameters =
-    decodeMap
-        valDecoder
-        buildTokenInitializationParameters
-        emptyTokenInitializationParametersBuilder
-  where
-    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
-    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
-    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeAccountAddress tipbGovernanceAccount
-    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
-    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
-    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
-    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipbMintable
-    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipbBurnable
-    valDecoder _ = Nothing
-
--- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
---  be consumed in the parsing.
-tokenInitializationParametersFromBytes :: LBS.ByteString -> Either String TokenInitializationParameters
-tokenInitializationParametersFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenInitializationParameters lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining) ++ " bytes remaining after parsing token initialization parameters"
-
--- | Encode a 'TokenInitializationParameters' as CBOR.
-encodeTokenInitializationParametersNoDefaults :: TokenInitializationParameters -> Encoding
-encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} =
-    encodeMapDeterministic $
-        Map.empty
-            & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
-            & k "governanceAccount" ?~ encodeAccountAddress tipGovernanceAccount
-            & k "allowList" ?~ encodeBool tipAllowList
-            & k "denyList" ?~ encodeBool tipDenyList
-            & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
-            & k "mintable" ?~ encodeBool tipMintable
-            & k "burnable" ?~ encodeBool tipBurnable
-  where
-    k = at . makeMapKeyEncoding . encodeString
-
--- | Encode a 'TokenInitializationParameters' as CBOR. Keys that hold their default values will
---  be omitted from the encoding.
-encodeTokenInitializationParametersWithDefaults :: TokenInitializationParameters -> Encoding
-encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..} =
-    encodeMapDeterministic $
-        Map.empty
-            & k "name" ?~ encodeString tipName
-            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
-            & k "governanceAccount" ?~ encodeAccountAddress tipGovernanceAccount
-            & setIfTrue "allowList" tipAllowList
-            & setIfTrue "denyList" tipDenyList
-            & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
-            & setIfTrue "mintable" tipMintable
-            & setIfTrue "burnable" tipBurnable
-  where
-    k = at . makeMapKeyEncoding . encodeString
-    setIfTrue _ False = id
-    setIfTrue key True = k key ?~ encodeBool True
-
--- | CBOR-encode a 'TokenInitializationParameters' to a (strict) 'BS.ByteString'.
---  This uses default values in the encoding.
-tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
-tokenInitializationParametersToBytes =
-    CBOR.toStrictByteString . encodeTokenInitializationParametersWithDefaults
 
 -- * Token holder parameters
 
@@ -694,6 +367,333 @@ encodeTokenHolder HolderAccount{..} =
             )
   where
     k = at . makeMapKeyEncoding . encodeWord
+
+-- * Token amounts
+
+-- | Decode a CBOR-encoded 'TokenAmount'. This limits the number of decimals to the
+--  range @[0..255]@.
+decodeTokenAmount :: Decoder s TokenAmount
+decodeTokenAmount = do
+    sci <- decodeDecimalFraction
+    unless (coefficient sci >= 0) $ fail "Unexpected negative token amount"
+    unless (coefficient sci <= fromIntegral (maxBound :: Word64)) $
+        fail "Token amount exceeds expressible bound"
+    unless (base10Exponent sci <= 0) $ fail "Token amount cannot have a positive exponent"
+    unless (base10Exponent sci >= -255) $ fail "Token amount exponent is too small"
+    return
+        TokenAmount
+            { taValue = fromIntegral (coefficient sci),
+              taDecimals = fromIntegral (negate (base10Exponent sci))
+            }
+
+-- | Encode a 'TokenAmount' as CBOR.
+encodeTokenAmount :: TokenAmount -> Encoding
+encodeTokenAmount TokenAmount{..} =
+    encodeTag 4
+        <> encodeListLen 2
+        <> encodeInteger (-fromIntegral taDecimals)
+        <> encodeWord64 (theTokenRawAmount taValue)
+
+-- | Helper function to encode a sequence.
+encodeSequence :: (a -> Encoding) -> Seq.Seq a -> Encoding
+encodeSequence encodeItem s =
+    encodeListLen (fromIntegral $ Seq.length s)
+        <> foldMap encodeItem s
+
+-- | Convert CBOR.Term to a hex-encoded string
+cborTermToHex :: CBOR.Term -> Text
+cborTermToHex term =
+    let bs = CBOR.toStrictByteString $ CBOR.encodeTerm term
+    in  TextEncoding.decodeUtf8 (Base16.encode bs)
+
+-- | Convert a hex-encoded string to a CBOR.Term.
+hexToCborTerm :: Text -> Either String CBOR.Term
+hexToCborTerm hexText = do
+    bs <- Base16.decode (TextEncoding.encodeUtf8 hexText)
+    decodeTerm bs
+  where
+    decodeTerm bs =
+        case CBOR.deserialiseFromBytes CBOR.decodeTerm (LBS.fromStrict bs) of
+            Left err -> Left $ "Failed to decode CBOR term: " ++ show err
+            Right ("", term) -> Right term
+            Right (remaining, _) -> Left $ "Extra bytes after decoding CBOR term: " ++ show (LBS.length remaining)
+
+-- | A token metadata URL and an optional checksum. The checksum is a SHA256 hash of the metadata at the location of the URL.
+data TokenMetadataUrl = TokenMetadataUrl
+    { -- | The URL of the token metadata.
+      tmUrl :: !Text,
+      -- | The sha256 hash of the token metadata.
+      tmChecksumSha256 :: !(Maybe SHA256.Hash),
+      -- | Any additional values associated with the metadata url, e.g. checksums produced by alternative hash functions.
+      --  Keys in this map SHOULD NOT overlap those used for the other (standardised) fields in this structure as that will
+      --  break the invertability of the CBOR encoding.
+      tmAdditional :: !(Map.Map Text CBOR.Term)
+    }
+    deriving (Eq, Show)
+
+-- | Create a 'TokenMetadataUrl' with the given URL and no checksum.
+createTokenMetadataUrl :: Text -> TokenMetadataUrl
+createTokenMetadataUrl url = TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = Nothing, tmAdditional = Map.empty}
+
+-- | Create a 'TokenMetadataUrl' the given URL and associated SHA256 checksum.
+createTokenMetadataUrlWithSha256 :: Text -> SHA256.Hash -> TokenMetadataUrl
+createTokenMetadataUrlWithSha256 url checksum = TokenMetadataUrl{tmUrl = url, tmChecksumSha256 = Just checksum, tmAdditional = Map.empty}
+
+instance AE.ToJSON TokenMetadataUrl where
+    toJSON TokenMetadataUrl{..} =
+        AE.object . catMaybes $
+            [ Just ("url" AE..= tmUrl),
+              ("checksumSha256" AE..=) <$> tmChecksumSha256,
+              ("_additional" AE..=) <$> additional
+            ]
+      where
+        additional :: Maybe AE.Value
+        additional
+            | null tmAdditional = Nothing
+            | otherwise = Just $ AE.object $ map (\(k, v) -> AE.Key.fromText k AE..= cborTermToHex v) (Map.toList tmAdditional)
+
+instance AE.FromJSON TokenMetadataUrl where
+    parseJSON = AE.withObject "TokenMetadataUrl" $ \v -> do
+        tmUrl <- v AE..: "url" -- Mandatory field
+        tmChecksumSha256 <- v AE..:? "checksumSha256" -- Optional field
+        tmAdditional <- v AE..:? "_additional" >>= parseAdditional
+        return TokenMetadataUrl{..}
+      where
+        parseAdditional :: Maybe (KeyMap.KeyMap Text) -> AE.Parser (Map.Map Text CBOR.Term)
+        parseAdditional Nothing = return Map.empty
+        parseAdditional (Just additional)
+            | KeyMap.null additional = return Map.empty
+            | otherwise = do
+                fmap Map.fromList $ forM (KeyMap.toList additional) $ \(k, v) -> do
+                    term <- either (fail . ("Failed to parse hex as CBOR: " ++)) return $ hexToCborTerm v
+                    return (AE.Key.toText k, term)
+
+decodeTokenMetadataUrlHelper :: CBOR.Term -> Either String TokenMetadataUrl
+decodeTokenMetadataUrlHelper rootTerm = do
+    keyValues <- case rootTerm of
+        CBOR.TMap kvs -> return kvs
+        CBOR.TMapI kvs -> return kvs
+        _ -> Left $ "Expected a map"
+    keyValueList <- forM keyValues $ \(k, v) -> case k of
+        CBOR.TString t -> return (t, v)
+        CBOR.TStringI t -> return (LazyText.toStrict t, v)
+        _ -> Left $ "Expected a string key"
+    build (Map.fromList keyValueList)
+  where
+    build :: Map.Map Text CBOR.Term -> Either String TokenMetadataUrl
+    build m0 = do
+        (tmUrl, m1) <- getAndClear "url" convertText m0
+        (tmChecksumSha256, tmAdditional) <- getMaybeAndClear "checksumSha256" convertSha256Hash m1
+        return TokenMetadataUrl{..}
+    getAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        term <- maybeTerm `orFail` ("Missing " ++ show key)
+        val <- convert term `orFail` ("Invalid " ++ show key)
+        return (val, m')
+    getMaybeAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
+        return (maybeVal, m')
+    convertText (CBOR.TString t) = Just t
+    convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
+    convertText _ = Nothing
+
+    convertSha256Hash :: CBOR.Term -> Maybe SHA256.Hash
+    convertSha256Hash (CBOR.TBytes bs)
+        | BS.length bs == SHA256.digestSize = Just $ SHA256.Hash (FBS.fromByteString bs)
+        | otherwise = Nothing
+    convertSha256Hash _ = Nothing
+
+-- | Decode a CBOR-encoded 'TokenMetadataUrl'.
+decodeTokenMetadataUrl :: Decoder s TokenMetadataUrl
+decodeTokenMetadataUrl = do
+    term <- CBOR.decodeTerm
+    either fail return $ decodeTokenMetadataUrlHelper term
+
+-- | Encode a 'TokenMetadataUrl' as CBOR.
+encodeTokenMetadataUrl :: TokenMetadataUrl -> Encoding
+encodeTokenMetadataUrl TokenMetadataUrl{..} =
+    encodeMapDeterministic $
+        additionalMap
+            & k "url" ?~ encodeString tmUrl
+            & k "checksumSha256" .~ (encodeSha256Hash <$> tmChecksumSha256)
+  where
+    additionalMap =
+        Map.fromList
+            [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
+              | (key, val) <- Map.toList tmAdditional
+            ]
+    k = at . makeMapKeyEncoding . encodeString
+    encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
+
+-- | Parse a 'TokenMetadataUrl' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenMetadataUrlFromBytes :: LBS.ByteString -> Either String TokenMetadataUrl
+tokenMetadataUrlFromBytes =
+    decodeFromBytes decodeTokenMetadataUrl "token metadata url"
+
+-- | CBOR-encode a 'TokenMetadataUrl to a (strict) 'BS.ByteString'.
+tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
+tokenMetadataUrlToBytes = CBOR.toStrictByteString . encodeTokenMetadataUrl
+
+-- * Initialization parameters
+
+-- | The parsed token-initialization-parameters. These parameters are passed to the token module
+--  to initialize the token.
+data TokenInitializationParameters = TokenInitializationParameters
+    { -- | The name of the token.
+      tipName :: !Text,
+      -- | A URL pointing to the token metadata.
+      tipMetadata :: !TokenMetadataUrl,
+      -- | The governance account of this token.
+      tipGovernanceAccount :: TokenHolder,
+      -- | Whether the token supports an allow list.
+      tipAllowList :: !Bool,
+      -- | Whether the token supports a deny list.
+      tipDenyList :: !Bool,
+      -- | The initial supply of the token. If not present, no tokens are minted initially.
+      tipInitialSupply :: !(Maybe TokenAmount),
+      -- | Whether the token is mintable.
+      tipMintable :: !Bool,
+      -- | Whether the token is burnable.
+      tipBurnable :: !Bool
+    }
+    deriving (Eq, Show)
+
+-- | Builder for 'TokenInitializationParameters'
+data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
+    { _tipbName :: Maybe Text,
+      _tipbMetadata :: Maybe TokenMetadataUrl,
+      _tipbGovernanceAccount :: Maybe TokenHolder,
+      _tipbAllowList :: Maybe Bool,
+      _tipbDenyList :: Maybe Bool,
+      _tipbInitialSupply :: Maybe TokenAmount,
+      _tipbMintable :: Maybe Bool,
+      _tipbBurnable :: Maybe Bool
+    }
+
+makeLenses ''TokenInitializationParametersBuilder
+
+-- | A 'TokenInitializationParametersBuilder' with no fields initialized.
+emptyTokenInitializationParametersBuilder :: TokenInitializationParametersBuilder
+emptyTokenInitializationParametersBuilder =
+    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+
+-- | Construct a 'TokenInitializationParameters' from a 'TokenInitializationParametersBuilder'.
+--  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
+--  is missing. Missing optional parameters are populated with the appropriate default values.
+buildTokenInitializationParameters ::
+    TokenInitializationParametersBuilder -> Either String TokenInitializationParameters
+buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
+    tipName <- _tipbName `orFail` "Missing \"name\""
+    tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
+    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governance account\""
+    let tipAllowList = _tipbAllowList `orDefault` False
+    let tipDenyList = _tipbDenyList `orDefault` False
+    let tipInitialSupply = _tipbInitialSupply
+    let tipMintable = _tipbMintable `orDefault` False
+    let tipBurnable = _tipbBurnable `orDefault` False
+    return TokenInitializationParameters{..}
+
+instance AE.ToJSON TokenInitializationParameters where
+    toJSON TokenInitializationParameters{..} = do
+        AE.object $
+            [ "name" AE..= tipName,
+              "metadata" AE..= tipMetadata,
+              "governanceAccount" AE..= tipGovernanceAccount,
+              "allowList" AE..= tipAllowList,
+              "denyList" AE..= tipDenyList,
+              "mintable" AE..= tipMintable,
+              "burnable" AE..= tipBurnable
+            ]
+                ++ ["initialSupply" AE..= initSupply | initSupply <- toList tipInitialSupply]
+
+instance AE.FromJSON TokenInitializationParameters where
+    parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
+        _tipbName <- o AE..:? "name"
+        _tipbMetadata <- o AE..:? "metadata"
+        _tipbGovernanceAccount <- o AE..:? "governanceAccount"
+        _tipbAllowList <- o AE..:? "allowList"
+        _tipbDenyList <- o AE..:? "denyList"
+        _tipbInitialSupply <- o AE..:? "initialSupply"
+        _tipbMintable <- o AE..:? "mintable"
+        _tipbBurnable <- o AE..:? "burnable"
+        case buildTokenInitializationParameters TokenInitializationParametersBuilder{..} of
+            Left e -> fail e
+            Right res -> return res
+
+-- | Decode a CBOR-encoded 'TokenInitializationParameters'.
+--  This decoder enforces CBOR-validity (in particular, no duplicate map keys), disallows
+--  extraneous keys, and applies defaults specified by the CDDL schema.  It does not require
+--  deterministic encoding.
+decodeTokenInitializationParameters :: Decoder s TokenInitializationParameters
+decodeTokenInitializationParameters =
+    decodeMap
+        valDecoder
+        buildTokenInitializationParameters
+        emptyTokenInitializationParametersBuilder
+  where
+    valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
+    valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
+    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeTokenHolder tipbGovernanceAccount
+    valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
+    valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
+    valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
+    valDecoder k@"mintable" = Just $ mapValueDecoder k decodeBool tipbMintable
+    valDecoder k@"burnable" = Just $ mapValueDecoder k decodeBool tipbBurnable
+    valDecoder _ = Nothing
+
+-- | Parse a 'TokenInitializationParameters' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenInitializationParametersFromBytes :: LBS.ByteString -> Either String TokenInitializationParameters
+tokenInitializationParametersFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenInitializationParameters lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining) ++ " bytes remaining after parsing token initialization parameters"
+
+-- | Encode a 'TokenInitializationParameters' as CBOR.
+encodeTokenInitializationParametersNoDefaults :: TokenInitializationParameters -> Encoding
+encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "name" ?~ encodeString tipName
+            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
+            & k "governanceAccount" ?~ encodeTokenHolder tipGovernanceAccount
+            & k "allowList" ?~ encodeBool tipAllowList
+            & k "denyList" ?~ encodeBool tipDenyList
+            & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
+            & k "mintable" ?~ encodeBool tipMintable
+            & k "burnable" ?~ encodeBool tipBurnable
+  where
+    k = at . makeMapKeyEncoding . encodeString
+
+-- | Encode a 'TokenInitializationParameters' as CBOR. Keys that hold their default values will
+--  be omitted from the encoding.
+encodeTokenInitializationParametersWithDefaults :: TokenInitializationParameters -> Encoding
+encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..} =
+    encodeMapDeterministic $
+        Map.empty
+            & k "name" ?~ encodeString tipName
+            & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
+            & k "governanceAccount" ?~ encodeTokenHolder tipGovernanceAccount
+            & setIfTrue "allowList" tipAllowList
+            & setIfTrue "denyList" tipDenyList
+            & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
+            & setIfTrue "mintable" tipMintable
+            & setIfTrue "burnable" tipBurnable
+  where
+    k = at . makeMapKeyEncoding . encodeString
+    setIfTrue _ False = id
+    setIfTrue key True = k key ?~ encodeBool True
+
+-- | CBOR-encode a 'TokenInitializationParameters' to a (strict) 'BS.ByteString'.
+--  This uses default values in the encoding.
+tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
+tokenInitializationParametersToBytes =
+    CBOR.toStrictByteString . encodeTokenInitializationParametersWithDefaults
 
 -- | A 'TaggableMemo' represents a 'Memo' that may optionally be tagged as CBOR-encoded.
 --  Memos are often assumed to be CBOR-encoded, but the tag can be used to make this explicit.
