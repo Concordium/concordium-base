@@ -33,16 +33,12 @@ const BIP39_ENGLISH: &str = include_str!("bin/data/BIP39English.txt");
 
 /// List of BIP39 words. There is a test that checks that this list has correct
 /// length, so there is no need to check when using this in the tool.
-pub fn bip39_words() -> impl Iterator<Item = &'static str> {
-    BIP39_ENGLISH.split_whitespace()
-}
+pub fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
 
 /// Inverse mapping to the implicit mapping in bip39_words. Maps word to its
 /// index in the list. This allows to quickly test membership and convert words
 /// to their index.
-pub fn bip39_map() -> HashMap<&'static str, usize> {
-    bip39_words().zip(0..).collect()
-}
+pub fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect() }
 
 /// Read an object containing a versioned global context from the given file.
 /// Currently only version 0 is supported.
@@ -237,19 +233,6 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + Debug>(
     }
 }
 
-/// Read privacy guardian information from a file, determining how to parse them from the
-/// version number.
-pub fn read_pg_info<P: AsRef<Path> + Debug>(filename: P) -> io::Result<ArInfo<ArCurve>> {
-    let vars: Versioned<serde_json::Value> = read_json_from_file(filename)?;
-    match vars.version {
-        Version { value: 0 } => Ok(serde_json::from_value(vars.value)?),
-        other => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid privacy guardian version {}.", other),
-        )),
-    }
-}
-
 /// Read anonymity revokers from a file, determining how to parse them from the
 /// version number.
 pub fn read_credential<P: AsRef<Path> + Debug>(
@@ -266,9 +249,7 @@ pub fn read_credential<P: AsRef<Path> + Debug>(
 }
 
 /// Parse YYYYMM as YearMonth
-pub fn parse_yearmonth(input: &str) -> Option<YearMonth> {
-    YearMonth::from_str(input).ok()
-}
+pub fn parse_yearmonth(input: &str) -> Option<YearMonth> { YearMonth::from_str(input).ok() }
 
 /// Output json to a file, pretty printed.
 pub fn write_json_to_file<P: AsRef<Path>, T: SerdeSerialize>(filepath: P, v: &T) -> io::Result<()> {
@@ -284,8 +265,7 @@ pub fn output_json<T: SerdeSerialize>(v: &T) {
 pub fn read_json_from_file<P, T>(path: P) -> io::Result<T>
 where
     P: AsRef<Path> + Debug,
-    T: DeserializeOwned,
-{
+    T: DeserializeOwned, {
     let file = File::open(path)?;
 
     let reader = BufReader::new(file);

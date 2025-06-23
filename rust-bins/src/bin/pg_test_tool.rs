@@ -16,6 +16,7 @@ use hex::encode;
 use rand::{rngs::ThreadRng, seq::IteratorRandom, thread_rng};
 use sha2::{Digest, Sha256};
 use std::{
+    fmt::Debug,
     path::{Path, PathBuf},
     str::from_utf8,
 };
@@ -213,6 +214,19 @@ fn decrypt_pg_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
                     .to_owned()
             })
         }
+    }
+}
+
+/// Read privacy guardian information from a file, determining how to parse them
+/// from the version number.
+pub fn read_pg_info<P: AsRef<Path> + Debug>(filename: P) -> std::io::Result<ArInfo<ArCurve>> {
+    let vars: Versioned<serde_json::Value> = read_json_from_file(filename)?;
+    match vars.version {
+        Version { value: 0 } => Ok(serde_json::from_value(vars.value)?),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Invalid privacy guardian version {}.", other),
+        )),
     }
 }
 
