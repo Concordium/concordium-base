@@ -984,24 +984,24 @@ encodeTokenOperation = \case
             <> encodeTokenHolder target
 
 -- | A token transaction consists of a sequence of token operations.
-newtype TokenTransaction = TokenTransaction
+newtype TokenUpdateTransaction = TokenUpdateTransaction
     { tokenOperations :: Seq.Seq TokenOperation
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON TokenTransaction where
+instance AE.ToJSON TokenUpdateTransaction where
     toJSON = AE.toJSON . tokenOperations
 
-instance AE.FromJSON TokenTransaction where
-    parseJSON = (TokenTransaction <$>) . AE.parseJSON
+instance AE.FromJSON TokenUpdateTransaction where
+    parseJSON = (TokenUpdateTransaction <$>) . AE.parseJSON
 
 -- | Decode a CBOR-encoded 'TokenTransaction'.
-decodeTokenTransaction :: Decoder s TokenTransaction
-decodeTokenTransaction = TokenTransaction <$> decodeSequence decodeTokenOperation
+decodeTokenTransaction :: Decoder s TokenUpdateTransaction
+decodeTokenTransaction = TokenUpdateTransaction <$> decodeSequence decodeTokenOperation
 
 -- | Parse a 'TokenTransaction' from a 'LBS.ByteString'. The entire bytestring
 --  must be consumed in the parsing.
-tokenTransactionFromBytes :: LBS.ByteString -> Either String TokenTransaction
+tokenTransactionFromBytes :: LBS.ByteString -> Either String TokenUpdateTransaction
 tokenTransactionFromBytes lbs =
     case CBOR.deserialiseFromBytes decodeTokenTransaction lbs of
         Left e -> Left (show e)
@@ -1012,11 +1012,11 @@ tokenTransactionFromBytes lbs =
                     ++ " bytes remaining after parsing token transaction"
 
 -- | Encode a 'TokenTransaction' as CBOR.
-encodeTokenTransaction :: TokenTransaction -> Encoding
+encodeTokenTransaction :: TokenUpdateTransaction -> Encoding
 encodeTokenTransaction = encodeSequence encodeTokenOperation . tokenOperations
 
 -- | CBOR-encode a 'TokenTransaction' to a (strict) 'BS.ByteString'.
-tokenTransactionToBytes :: TokenTransaction -> BS.ByteString
+tokenTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
 tokenTransactionToBytes = CBOR.toStrictByteString . encodeTokenTransaction
 
 -- * Token module events
