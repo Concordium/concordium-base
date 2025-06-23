@@ -1,6 +1,6 @@
 ; This CDDL schema defines the CBOR encodings used by protocol-level tokens (PLTs) in Concordium.
-; In particular, it defines the types token-holder-transaction, token-governance-transaction, and
-; token-initialization-parameters, which are used as parameters for the token module.
+; In particular, it defines the types token-update-transaction and token-initialization-parameters,
+; which are used as parameters for the token module.
 
 ; We represent token amounts as a decimal fraction.
 ; The range and precision may be constrained by the token itself.
@@ -247,7 +247,7 @@ token-remove-deny-list-event = token-list-update-details
 
 ; Reject reason details
 
-; A token-holder or token-governance transaction may be rejected for various reasons.
+; A token-update-transaction may be rejected for various reasons.
 ; The reject reason is defined by a string type, and may have additional CBOR-encoded
 ; details. The schemas for the details are defined here. (This does not preclude additional
 ; reject reasons being defined in the future.)
