@@ -64,7 +64,7 @@ genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- genText
     tipMetadata <- genTokenMetadataUrlSimple
-    tipGovernanceAccount <- genAccountAddress
+    tipGovernanceAccount <- genCborTokenHolder
     tipAllowList <- arbitrary
     tipDenyList <- arbitrary
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
@@ -110,16 +110,16 @@ genTokenOperation =
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
-genTokenTransaction :: Gen TokenTransaction
+genTokenTransaction :: Gen TokenUpdateTransaction
 genTokenTransaction =
-    TokenTransaction . Seq.fromList
+    TokenUpdateTransaction . Seq.fromList
         <$> listOf genTokenOperation
 
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
     tmsName <- genText
     tmsMetadata <- genTokenMetadataUrlSimple
-    tmsGovernanceAccount <- genAccountAddress
+    tmsGovernanceAccount <- genCborTokenHolder
     tmsAllowList <- arbitrary
     tmsDenyList <- arbitrary
     tmsMintable <- arbitrary
@@ -208,9 +208,11 @@ genTokenRejectReason =
         ]
 
 -- | An example value for governance account addresses.
-exampleAccountAddress :: AccountAddress
-exampleAccountAddress =
-    case addressFromText $ Text.pack "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
+exampleCborTokenHolder :: CborTokenHolder
+exampleCborTokenHolder =
+    CborHolderAccount accountAddress (Just CoinInfoConcordium)
+  where
+    accountAddress = case addressFromText $ Text.pack "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
         Right addr -> addr
         -- This does not happen since the format
         -- of the text is that of a valid address.
@@ -228,7 +230,7 @@ tip1 =
                   tmChecksumSha256 = Nothing,
                   tmAdditional = Map.empty
                 },
-          tipGovernanceAccount = exampleAccountAddress,
+          tipGovernanceAccount = exampleCborTokenHolder,
           tipAllowList = False,
           tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = False,
@@ -325,10 +327,10 @@ testEncodedInitializationParameters = describe "TokenInitializationParameters JS
                     invalidEncTip1
             )
 
--- | A test value for 'TokenTransaction'.
-tops1 :: TokenTransaction
+-- | A test value for 'TokenUpdateTransaction'.
+tops1 :: TokenUpdateTransaction
 tops1 =
-    TokenTransaction $
+    TokenUpdateTransaction $
         Seq.fromList
             [ TokenTransfer
                 TokenTransferBody
@@ -375,7 +377,7 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                 AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
-    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenTransaction" $
+    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
         assertEqual
             "Deserialized"
             (Just invalidEncTops1)
@@ -399,7 +401,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleAccountAddress,
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -445,7 +447,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleAccountAddress,
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -491,7 +493,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleAccountAddress,
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -544,7 +546,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
-                  tmsGovernanceAccount = exampleAccountAddress,
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -729,7 +731,7 @@ tests = parallel $ describe "CBOR" $ do
         Just tmu === AE.decode (AE.encode tmu)
     it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
         Just tmu === AE.decode (AE.encode tmu)
-    it "Encode and decode TokenTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
+    it "Encode and decode TokenUpdateTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
                 decodeTokenTransaction
