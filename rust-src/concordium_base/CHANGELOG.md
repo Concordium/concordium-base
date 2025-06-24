@@ -9,6 +9,7 @@
   using `cbor::cbor_encode/decode`.
 - The serialization of `AuthorizationsV1` is fixed to be compatible with the Haskell implementation.
 - Replace concepts `TokenHolder` and `TokenGovernance` by `TokenUpdate`.
+- Add `governance_account` to `TokenModuleState`.
 
 ## 8.0.0-alpha (2025-06-06)
 
