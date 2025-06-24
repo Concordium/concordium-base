@@ -46,7 +46,7 @@ ccd-coininfo = {
 
 ; Token update transaction
 
-; A token update transaction body. This is a list of token, executed in
+; A token update transaction body. This is a list of token operations, executed in
 ; order. The transaction is executed in the context of a sender account and a designated token.
 ; The sender account must have the necessary permissions to execute the operations.
 
