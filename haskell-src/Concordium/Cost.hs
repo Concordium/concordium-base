@@ -121,7 +121,7 @@ removeBakerCost = 300
 configureDelegationCost :: Energy
 configureDelegationCost = 300
 
--- | Base cost for token governance transactions.
+-- | Base cost for token update transactions.
 tokenBaseCost :: Energy
 tokenBaseCost = 300
 
