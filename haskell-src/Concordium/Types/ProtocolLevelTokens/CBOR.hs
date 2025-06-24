@@ -328,7 +328,7 @@ instance AE.FromJSON CborTokenHolder where
                 chaAccount <- o AE..: "address"
                 chaCoinInfo <- o AE..:? "coininfo"
                 return CborHolderAccount{..}
-            _ -> fail ("Unknown TokenReceiver type " ++ type_string)
+            _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
 
 -- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
 --  CBOR encoding.
