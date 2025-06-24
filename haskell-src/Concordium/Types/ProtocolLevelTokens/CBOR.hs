@@ -1027,7 +1027,7 @@ decodeTokenOperation = do
             build (Just v) = Right v
             build Nothing =
                 Left $
-                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing target"
+                    "token-operation (" ++ Text.unpack opType ++ "): missing target"
         decodeMap valDecoder build Nothing
 
 -- | Encode a 'TokenOperation' as CBOR.
