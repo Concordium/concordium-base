@@ -132,7 +132,7 @@ token-list-update-details = {
 ; Chain governance
 
 ; These parameters are passed to the token module to initialize the token.
-; The token initialization update will also include the ticker symbol, governance account,
+; The token initialization update will also include the ticker symbol,
 ; number of decimals, and a reference to the token module implementation.
 token-initialization-parameters = { 
     ; The name of the token
