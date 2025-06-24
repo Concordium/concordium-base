@@ -170,11 +170,10 @@ metadata-url = {
 
 ; The Token Module state represents global state information that is maintained by the Token Module,
 ; and is returned as part of a `GetTokenInfo` query. It does not include state that is managed by
-; the Token Kernel, such as the token identifier, global supply and governance account. It also
-; does not (typically) include account-specific state, which is returned as part of
-; `GetAccountInfo` instead.
+; the Token Kernel, such as the token identifier and global supply. It also does not (typically)
+; include account-specific state, which is returned as part of `GetAccountInfo` instead.
 ;
-; The "name" and "metadata" fields are required. Other fields are optional, and can be omitted if
+; The "name", "metadata" and "governanceAccount" fields are required. Other fields are optional, and can be omitted if
 ; the module implementation does not support them. The structure supports additional fields for
 ; future extensibility. Non-standard fields (i.e. any fields that are not defined by a standard,
 ; and are specific to the module implementation) may be included, and their tags should be
