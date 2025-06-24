@@ -685,6 +685,7 @@ instance AE.FromJSON Payload where
                 thTokenId <- obj AE..: "tokenId"
                 (EncodedTokenOperations thOperations) <- obj AE..: "operations"
                 return TokenUpdate{..}
+            _ -> fail "Unrecognized 'TransactionType' tag"
 
 -- | Payload serialization according to
 --
