@@ -247,7 +247,7 @@ testInitializationParameters = describe "token-initialization-parameters decodin
             (Right ("", tip1))
             ( deserialiseFromBytes
                 decodeTokenInitializationParameters
-                "\168dnameiABC tokenhburnable\244hdenyList\244hmetadatavhttps://abc.token/metahmintable\244iallowList\244minitialSupply\196\130$\EM'\DLEqgovernanceAccountX \ACK\DLEI\220\DC1]\176\b`\RS\196\224\241\145c\ETB\193\204'\141l\237\t\212t\217\148\197N\172\172\161"
+                "\168dnameiABC tokenhburnable\244hdenyList\244hmetadata\161curlvhttps://abc.token/metahmintable\244iallowList\244minitialSupply\196\130$\EM'\DLEqgovernanceAccount\217\157s\162\SOH\217\157q\161\SOH\EM\ETX\151\ETXX \ACK\DLEI\220\DC1]\176\b`\RS\196\224\241\145c\ETB\193\204'\141l\237\t\212t\217\148\197N\172\172\161"
             )
     it "Missing \"name\"" $
         assertEqual
@@ -419,10 +419,11 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}"
+        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coininfo\":\"CCD\",\"type\":\"account\"}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
+    -- TODO(drsk) why is coininfo lowercase encoded?
 
     it "Serializes to expected JSON object" $
         case AE.toJSON object of
@@ -465,7 +466,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}"
+        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coininfo\":\"CCD\",\"type\":\"account\"}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -519,7 +520,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coininfo\":\"CCD\",\"type\":\"account\"}}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -528,7 +529,6 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
         case AE.toJSON object of
             AE.Object o -> do
                 assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
-                assertBool "Does not contain field issuer" $ AE.member "issuer" o
                 assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
                 assertBool "Does not contain field decimals" $ AE.member "decimals" o
                 assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
@@ -572,7 +572,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coininfo\":\"CCD\",\"type\":\"account\"}}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -581,7 +581,6 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
         case AE.toJSON object of
             AE.Object o -> do
                 assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
-                assertBool "Does not contain field issuer" $ AE.member "issuer" o
                 assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
                 assertBool "Does not contain field decimals" $ AE.member "decimals" o
                 assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
@@ -731,6 +730,12 @@ tests = parallel $ describe "CBOR" $ do
         Just tmu === AE.decode (AE.encode tmu)
     it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
         Just tmu === AE.decode (AE.encode tmu)
+    it "JSON Encode and decode CborTokenHolder" $ withMaxSuccess 1000 $ forAll genTokenHolder $ \th -> Just th == AE.decode (AE.encode th)
+    it "CBOR Encode and decode CborTokenHolder" $ withMaxSuccess 1000 $ forAll genCborTokenHolder $ \th ->
+        Right ("", th)
+            === deserialiseFromBytes
+                decodeCborTokenHolder
+                (toLazyByteString $ encodeCborTokenHolder th)
     it "Encode and decode TokenUpdateTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
