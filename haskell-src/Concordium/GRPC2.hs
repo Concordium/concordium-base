@@ -661,7 +661,6 @@ instance ToProto TokenState where
     type Output TokenState = Proto.TokenState
     toProto TokenState{..} = Proto.make $ do
         PLTFields.tokenModuleRef .= toProto tsTokenModuleRef
-        PLTFields.issuer .= toProto tsIssuer
         PLTFields.decimals .= fromIntegral tsDecimals
         PLTFields.totalSupply .= toProto tsTotalSupply
         PLTFields.moduleState .= Proto.make (PLTFields.value .= tsModuleState)
@@ -775,9 +774,7 @@ instance ToProto RejectReason where
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
         NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
-        TokenHolderTransactionFailed reason -> Proto.make $ ProtoFields.tokenHolderTransactionFailed .= toProto reason
-        TokenGovernanceTransactionFailed reason -> Proto.make $ ProtoFields.tokenGovernanceTransactionFailed .= toProto reason
-        UnauthorizedTokenGovernance tokenId -> Proto.make $ ProtoFields.unauthorizedTokenGovernance .= toProto tokenId
+        TokenUpdateTransactionFailed reason -> Proto.make $ ProtoFields.tokenUpdateTransactionFailed .= toProto reason
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
@@ -1015,7 +1012,6 @@ instance ToProto CreatePLT where
     toProto CreatePLT{..} = Proto.make $ do
         PLTFields.tokenId .= toProto _cpltTokenId
         PLTFields.tokenModule .= toProto _cpltTokenModule
-        PLTFields.governanceAccount .= toProto _cpltGovernanceAccount
         PLTFields.decimals .= fromIntegral _cpltDecimals
         PLTFields.initializationParameters .= toProto _cpltInitializationParameters
 
@@ -1677,20 +1673,13 @@ convertAccountTransaction ty cost sender result = case ty of
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toDelegationEvent events
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v
-            TTTokenHolder ->
+            TTTokenUpdate ->
                 mkSuccess <$> do
                     protoEvents <-
                         left (const CEInvalidTransactionResult) $
                             mapM tokenHolderEventToProto events
                     Right . Proto.make $
-                        ProtoFields.tokenHolderEffect . ProtoFields.events .= protoEvents
-            TTTokenGovernance ->
-                mkSuccess <$> do
-                    protoEvents <-
-                        left (const CEInvalidTransactionResult) $
-                            mapM tokenHolderEventToProto events
-                    Right . Proto.make $
-                        ProtoFields.tokenGovernanceEffect . ProtoFields.events .= protoEvents
+                        ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
@@ -1776,8 +1765,7 @@ instance ToProto TransactionType where
     toProto TTTransferWithScheduleAndMemo = Proto.TRANSFER_WITH_SCHEDULE_AND_MEMO
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
-    toProto TTTokenHolder = Proto.TOKEN_HOLDER
-    toProto TTTokenGovernance = Proto.TOKEN_GOVERNANCE
+    toProto TTTokenUpdate = Proto.TOKEN_UPDATE
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy
