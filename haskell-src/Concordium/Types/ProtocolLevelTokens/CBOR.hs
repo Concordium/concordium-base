@@ -55,6 +55,9 @@ decodeFromBytes decoder name lbs =
                     ++ " bytes remaining after parsing "
                     ++ name
 
+encodeToBytes :: Encoding -> BS.ByteString
+encodeToBytes = CBOR.toStrictByteString
+
 -- | A 'MapValueDecoder' consumes a value corresponding to a known key and sets it in the builder.
 --  It should fail if entry in the builder corresponding to the key is already set.
 type MapValueDecoder s builder = builder -> Decoder s builder
