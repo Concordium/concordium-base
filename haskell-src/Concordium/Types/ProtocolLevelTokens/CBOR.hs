@@ -321,7 +321,7 @@ instance AE.ToJSON CborTokenHolder where
                 ++ ["coininfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
 
 instance AE.FromJSON CborTokenHolder where
-    parseJSON = AE.withObject "TokenReceiver" $ \o -> do
+    parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
         type_string <- o AE..: "type"
         case (type_string :: String) of
             "account" -> do
