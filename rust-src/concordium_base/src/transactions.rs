@@ -182,11 +182,8 @@ pub enum TransactionType {
     ConfigureBaker,
     ///  Configure an account's stake delegation.
     ConfigureDelegation,
-    /// Token holder transaction. Introduced in Concordium protocol version 9.
-    TokenHolder,
-    /// Token governance transaction. Introduced in Concordium protocol version
-    /// 9.
-    TokenGovernance,
+    /// Token update transaction. Introduced in Concordium protocol version 9.
+    TokenUpdate,
 }
 
 /// An error that occurs when trying to convert
@@ -221,8 +218,7 @@ impl TryFrom<i32> for TransactionType {
             18 => Self::TransferWithScheduleAndMemo,
             19 => Self::ConfigureBaker,
             20 => Self::ConfigureDelegation,
-            21 => Self::TokenHolder,
-            22 => Self::TokenGovernance,
+            21 => Self::TokenUpdate,
             n => return Err(TransactionTypeConversionError(n)),
         })
     }
@@ -982,13 +978,8 @@ pub enum Payload {
         #[serde(flatten)]
         data: ConfigureDelegationPayload,
     },
-    /// Token holder operations
-    TokenHolder {
-        #[serde(flatten)]
-        payload: TokenOperationsPayload,
-    },
-    /// Token governance operations
-    TokenGovernance {
+    /// Token update operations
+    TokenUpdate {
         #[serde(flatten)]
         payload: TokenOperationsPayload,
     },
@@ -1026,8 +1017,7 @@ impl Payload {
             }
             Payload::ConfigureBaker { .. } => TransactionType::ConfigureBaker,
             Payload::ConfigureDelegation { .. } => TransactionType::ConfigureDelegation,
-            Payload::TokenHolder { .. } => TransactionType::TokenHolder,
-            Payload::TokenGovernance { .. } => TransactionType::TokenGovernance,
+            Payload::TokenUpdate { .. } => TransactionType::TokenUpdate,
         }
     }
 }
@@ -1207,13 +1197,8 @@ impl Serial for Payload {
                     out.put(delegation_target);
                 }
             }
-            Payload::TokenHolder { payload } => {
+            Payload::TokenUpdate { payload } => {
                 out.put(&27u8);
-                out.put(&payload.token_id);
-                out.put(&payload.operations);
-            }
-            Payload::TokenGovernance { payload } => {
-                out.put(&28u8);
                 out.put(&payload.token_id);
                 out.put(&payload.operations);
             }
@@ -1423,16 +1408,7 @@ impl Deserial for Payload {
                     token_id,
                     operations,
                 };
-                Ok(Payload::TokenHolder { payload })
-            }
-            28 => {
-                let token_id = source.get()?;
-                let operations = source.get()?;
-                let payload = TokenOperationsPayload {
-                    token_id,
-                    operations,
-                };
-                Ok(Payload::TokenGovernance { payload })
+                Ok(Payload::TokenUpdate { payload })
             }
             _ => {
                 anyhow::bail!("Unsupported transaction payload tag {}", tag)
@@ -2323,12 +2299,12 @@ pub mod construct {
                 .sum()
     }
 
-    /// Construct a protocol level token holder transaction consisting of the
-    /// token holder operations encoded in the given CBOR.
+    /// Construct a protocol level token update transaction consisting of the
+    /// token update operations encoded in the given CBOR.
     ///
-    /// Token operations can be created using the functions in
+    /// Update operations can be created using the functions in
     /// [`operations`](crate::protocol_level_tokens::operations).
-    pub fn token_holder_operations(
+    pub fn token_update_operations(
         num_sigs: u32,
         sender: AccountAddress,
         nonce: Nonce,
@@ -2339,38 +2315,7 @@ pub mod construct {
         let energy = token_operations_txn_energy(&operations);
         let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
 
-        let payload = Payload::TokenHolder {
-            payload: TokenOperationsPayload {
-                token_id,
-                operations,
-            },
-        };
-        Ok(make_transaction(
-            sender,
-            nonce,
-            expiry,
-            GivenEnergy::Add { num_sigs, energy },
-            payload,
-        ))
-    }
-
-    /// Construct a protocol level token governance transaction consisting of
-    /// the token governance operations encoded in the given CBOR.
-    ///
-    /// Token operations can be created using the functions in
-    /// [`operations`](crate::protocol_level_tokens::operations).
-    pub fn token_governance_operations(
-        num_sigs: u32,
-        sender: AccountAddress,
-        nonce: Nonce,
-        expiry: TransactionTime,
-        token_id: TokenId,
-        operations: TokenOperations,
-    ) -> CborSerializationResult<PreAccountTransaction> {
-        let energy = token_operations_txn_energy(&operations);
-        let operations = RawCbor::from(cbor::cbor_encode(&operations)?);
-
-        let payload = Payload::TokenGovernance {
+        let payload = Payload::TokenUpdate {
             payload: TokenOperationsPayload {
                 token_id,
                 operations,
@@ -3016,12 +2961,12 @@ pub mod send {
         .sign(signer)
     }
 
-    /// Construct and sign a protocol level token holder transaction consisting
-    /// of the token holder operations encoded in the given CBOR.
+    /// Construct and sign a protocol level token update transaction consisting
+    /// of the token update operations encoded in the given CBOR.
     ///
-    /// Token operations can be created using the functions in
+    /// Update operations can be created using the functions in
     /// [`operations`](crate::protocol_level_tokens::operations).
-    pub fn token_holder_operations(
+    pub fn token_update_operations(
         signer: &impl ExactSizeTransactionSigner,
         sender: AccountAddress,
         nonce: Nonce,
@@ -3029,32 +2974,7 @@ pub mod send {
         token_id: TokenId,
         operations: TokenOperations,
     ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::token_holder_operations(
-            signer.num_keys(),
-            sender,
-            nonce,
-            expiry,
-            token_id,
-            operations,
-        )?
-        .sign(signer))
-    }
-
-    /// Construct and sign a protocol level token governance transaction
-    /// consisting of the token governance operations encoded in the given
-    /// CBOR.
-    ///
-    /// Token operations can be created using the functions in
-    /// [`operations`](crate::protocol_level_tokens::operations).
-    pub fn token_governance_operations(
-        signer: &impl ExactSizeTransactionSigner,
-        sender: AccountAddress,
-        nonce: Nonce,
-        expiry: TransactionTime,
-        token_id: TokenId,
-        operations: TokenOperations,
-    ) -> CborSerializationResult<AccountTransaction<EncodedPayload>> {
-        Ok(construct::token_governance_operations(
+        Ok(construct::token_update_operations(
             signer.num_keys(),
             sender,
             nonce,
