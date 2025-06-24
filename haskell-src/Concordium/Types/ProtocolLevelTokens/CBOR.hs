@@ -620,7 +620,7 @@ data TokenInitializationParameters = TokenInitializationParameters
       -- | A URL pointing to the token metadata.
       tipMetadata :: !TokenMetadataUrl,
       -- | The governance account of this token.
-      tipGovernanceAccount :: CborTokenHolder,
+      tipGovernanceAccount :: !CborTokenHolder,
       -- | Whether the token supports an allow list.
       tipAllowList :: !Bool,
       -- | Whether the token supports a deny list.
