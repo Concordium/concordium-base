@@ -423,7 +423,6 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
-    -- TODO(drsk) why is coininfo lowercase encoded?
 
     it "Serializes to expected JSON object" $
         case AE.toJSON object of

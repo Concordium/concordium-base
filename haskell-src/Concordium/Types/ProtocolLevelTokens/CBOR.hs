@@ -55,6 +55,7 @@ decodeFromBytes decoder name lbs =
                     ++ " bytes remaining after parsing "
                     ++ name
 
+-- | Helper function to converting an 'Encoder' to a strict bytestring.
 encodeToBytes :: Encoding -> BS.ByteString
 encodeToBytes = CBOR.toStrictByteString
 
@@ -298,7 +299,7 @@ instance AE.ToJSON CborTokenHolder where
               "type" AE..= AE.String "account",
               "address" AE..= chaAccount
             ]
-                ++ ["coininfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
+                ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
 
 instance AE.FromJSON CborTokenHolder where
     parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
@@ -306,7 +307,7 @@ instance AE.FromJSON CborTokenHolder where
         case (type_string :: String) of
             "account" -> do
                 chaAccount <- o AE..: "address"
-                chaCoinInfo <- o AE..:? "coininfo"
+                chaCoinInfo <- o AE..:? "coinInfo"
                 return CborHolderAccount{..}
             _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
 
