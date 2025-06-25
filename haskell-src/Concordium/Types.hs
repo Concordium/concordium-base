@@ -1329,7 +1329,7 @@ newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
 
 instance AE.ToJSON EncodedTokenOperations where
     toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
-        case CBOR.tokenTransactionFromBytes
+        case CBOR.tokenUpdateTransactionFromBytes
             (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
             Left _ -> AE.toJSON tp
             Right v -> AE.toJSON v
@@ -1341,7 +1341,7 @@ instance AE.FromJSON EncodedTokenOperations where
             EncodedTokenOperations $
                 TokenParameter $
                     BSS.toShort $
-                        CBOR.tokenTransactionToBytes tip
+                        CBOR.tokenUpdateTransactionToBytes tip
     parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 

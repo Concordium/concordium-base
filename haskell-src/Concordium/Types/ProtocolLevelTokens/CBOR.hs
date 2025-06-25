@@ -1029,14 +1029,14 @@ instance AE.FromJSON TokenUpdateTransaction where
     parseJSON = (TokenUpdateTransaction <$>) . AE.parseJSON
 
 -- | Decode a CBOR-encoded 'TokenTransaction'.
-decodeTokenTransaction :: Decoder s TokenUpdateTransaction
-decodeTokenTransaction = TokenUpdateTransaction <$> decodeSequence decodeTokenOperation
+decodeTokenUpdateTransaction :: Decoder s TokenUpdateTransaction
+decodeTokenUpdateTransaction = TokenUpdateTransaction <$> decodeSequence decodeTokenOperation
 
 -- | Parse a 'TokenTransaction' from a 'LBS.ByteString'. The entire bytestring
 --  must be consumed in the parsing.
-tokenTransactionFromBytes :: LBS.ByteString -> Either String TokenUpdateTransaction
-tokenTransactionFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenTransaction lbs of
+tokenUpdateTransactionFromBytes :: LBS.ByteString -> Either String TokenUpdateTransaction
+tokenUpdateTransactionFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenUpdateTransaction lbs of
         Left e -> Left (show e)
         Right ("", res) -> return res
         Right (remaining, _) ->
@@ -1045,12 +1045,12 @@ tokenTransactionFromBytes lbs =
                     ++ " bytes remaining after parsing token transaction"
 
 -- | Encode a 'TokenTransaction' as CBOR.
-encodeTokenTransaction :: TokenUpdateTransaction -> Encoding
-encodeTokenTransaction = encodeSequence encodeTokenOperation . tokenOperations
+encodeTokenUpdateTransaction :: TokenUpdateTransaction -> Encoding
+encodeTokenUpdateTransaction = encodeSequence encodeTokenOperation . tokenOperations
 
 -- | CBOR-encode a 'TokenTransaction' to a (strict) 'BS.ByteString'.
-tokenTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
-tokenTransactionToBytes = CBOR.toStrictByteString . encodeTokenTransaction
+tokenUpdateTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
+tokenUpdateTransactionToBytes = CBOR.toStrictByteString . encodeTokenUpdateTransaction
 
 -- * Token module events
 
