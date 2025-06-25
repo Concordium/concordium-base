@@ -28,6 +28,7 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe
 import Data.Scientific
 import qualified Data.Sequence as Seq
+import Data.Serialize (decode, encode)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
@@ -1508,8 +1509,8 @@ data TokenModuleState = TokenModuleState
       tmsName :: !Text,
       -- | A URL pointing to the token metadata.
       tmsMetadata :: !TokenMetadataUrl,
-      -- | The governance account address of the token.
-      tmsGovernanceAccount :: !CborTokenHolder,
+      -- | The governance account index of the token.
+      tmsGovernanceAccountIndex :: !Word64,
       -- | Whether the token supports an allow list.
       tmsAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -1530,7 +1531,7 @@ instance AE.ToJSON TokenModuleState where
         AE.object
             ( [ "name" AE..= tmsName,
                 "metadata" AE..= tmsMetadata,
-                "governanceAccount" AE..= tmsGovernanceAccount,
+                "governanceAccountIndex" AE..= tmsGovernanceAccountIndex,
                 "allowList" AE..= tmsAllowList,
                 "denyList" AE..= tmsDenyList,
                 "mintable" AE..= tmsMintable,
@@ -1549,7 +1550,7 @@ instance AE.FromJSON TokenModuleState where
     parseJSON = AE.withObject "TokenModuleState" $ \v -> do
         tmsName <- v AE..: "name"
         tmsMetadata <- v AE..: "metadata"
-        tmsGovernanceAccount <- v AE..: "governanceAccount"
+        tmsGovernanceAccountIndex <- v AE..: "governanceAccountIndex"
         tmsAllowList <- v AE..: "allowList"
         tmsDenyList <- v AE..: "denyList"
         tmsMintable <- v AE..: "mintable"
@@ -1575,7 +1576,7 @@ encodeTokenModuleState TokenModuleState{..} =
         additionalMap
             & k "name" ?~ encodeString tmsName
             & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
-            & k "governanceAccount" ?~ encodeCborTokenHolder tmsGovernanceAccount
+            & k "governanceAccountIndex" ?~ encodeBytes (encode tmsGovernanceAccountIndex)
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
@@ -1602,7 +1603,7 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     build m0 = do
         (tmsName, m1) <- getAndClear "name" convertText m0
         (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
-        (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertCborTokenHolder m2
+        (tmsGovernanceAccountIndex, m3) <- getAndClear "governanceAccountIndex" convertAccountIndex m2
         (tmsAllowList, m4) <- getMaybeAndClear "allowList" convertBool m3
         (tmsDenyList, m5) <- getMaybeAndClear "denyList" convertBool m4
         (tmsMintable, m6) <- getMaybeAndClear "mintable" convertBool m5
@@ -1628,8 +1629,14 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
     convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
 
-    convertCborTokenHolder :: CBOR.Term -> Maybe CborTokenHolder
-    convertCborTokenHolder = either (const Nothing) Just . decodeCborTokenHolderHelper
+    convertAccountIndex :: CBOR.Term -> Maybe Word64
+    convertAccountIndex (CBOR.TBytes bs) = case decode bs of
+        Right accIx -> Just accIx
+        Left _err -> Nothing
+    convertAccountIndex (CBOR.TBytesI bs) = case decode $ LBS.toStrict bs of
+        Right accIx -> Just accIx
+        Left _err -> Nothing
+    convertAccountIndex _ = Nothing
 
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
