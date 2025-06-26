@@ -987,7 +987,9 @@ pub fn validate_module(
                         let is_new = seen_imports.insert((&i.mod_name, &i.item_name));
                         ensure!(
                             imp.validate_import_function(!is_new, &i.mod_name, &i.item_name, ty),
-                            "Disallowed import."
+                            "Disallowed import: \"{}.{}\"",
+                            i.mod_name,
+                            i.item_name
                         );
                     } else {
                         bail!("Import refers to a non-existent type.");
