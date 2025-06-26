@@ -888,66 +888,59 @@ data TokenOperation
 instance AE.ToJSON TokenOperation where
     toJSON (TokenTransfer body) = do
         AE.object
-            [ "tag" AE..= AE.String "transfer",
-              "transfer" AE..= AE.toJSON body
+            [ "transfer" AE..= AE.toJSON body
             ]
     toJSON (TokenMint body) = do
         AE.object
-            [ "tag" AE..= AE.String "mint",
-              "mint" AE..= AE.toJSON body
+            [ "mint" AE..= AE.toJSON body
             ]
     toJSON (TokenBurn body) = do
         AE.object
-            [ "tag" AE..= AE.String "burn",
-              "burn" AE..= AE.toJSON body
+            [ "burn" AE..= AE.toJSON body
             ]
     toJSON (TokenAddAllowList body) = do
         AE.object
-            [ "tag" AE..= AE.String "addAllowList",
-              "addAllowList" AE..= AE.toJSON body
+            [ "addAllowList" AE..= AE.toJSON body
             ]
     toJSON (TokenAddDenyList body) = do
         AE.object
-            [ "tag" AE..= AE.String "addDenyList",
-              "addDenyList" AE..= AE.toJSON body
+            [ "addDenyList" AE..= AE.toJSON body
             ]
     toJSON (TokenRemoveAllowList body) = do
         AE.object
-            [ "tag" AE..= AE.String "removeAllowList",
-              "removeAllowList" AE..= AE.toJSON body
+            [ "removeAllowList" AE..= AE.toJSON body
             ]
     toJSON (TokenRemoveDenyList body) = do
         AE.object
-            [ "tag" AE..= AE.String "removeDenyList",
-              "removeDenyList" AE..= AE.toJSON body
+            [ "removeDenyList" AE..= AE.toJSON body
             ]
 
 instance AE.FromJSON TokenOperation where
     parseJSON = AE.withObject "TokenOperation" $ \o -> do
-        tag :: Text <- o AE..: "tag"
-        case tag of
-            "transfer" -> do
+        let keys = KeyMap.keys o
+        case keys of
+            ["transfer"] -> do
                 body <- o AE..: "transfer"
                 pure $ TokenTransfer body
-            "mint" -> do
+            ["mint"] -> do
                 body <- o AE..: "mint"
                 pure $ TokenMint body
-            "burn" -> do
+            ["burn"] -> do
                 body <- o AE..: "burn"
                 pure $ TokenBurn body
-            "addAllowList" -> do
+            ["addAllowList"] -> do
                 body <- o AE..: "addAllowList"
                 pure $ TokenAddAllowList body
-            "removeAllowList" -> do
+            ["removeAllowList"] -> do
                 body <- o AE..: "removeAllowList"
                 pure $ TokenRemoveAllowList body
-            "addDenyList" -> do
+            ["addDenyList"] -> do
                 body <- o AE..: "addDenyList"
                 pure $ TokenAddDenyList body
-            "removeDenyList" -> do
+            ["removeDenyList"] -> do
                 body <- o AE..: "removeDenyList"
                 pure $ TokenRemoveDenyList body
-            other -> fail $ "token-operation: unsupported operation type: " ++ Text.unpack other
+            other -> fail $ "token-operation: unsupported operation type: " ++ show other
 
 -- | Decode a CBOR-encoded 'TokenOperation'.
 decodeTokenOperation :: Decoder s TokenOperation
