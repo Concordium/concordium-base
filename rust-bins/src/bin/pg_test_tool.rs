@@ -79,14 +79,13 @@ struct SingleKeyTestEnc {
     /// Set if the user wants to encrypt a custom message.
     #[structopt(
         long = "use-custom-message",
-        help = "User can define custom message instead of three random BIP-39 words."
+        help = "Encrypt user defined message instead of three random BIP-39 words."
     )]
     use_custom_message: bool,
     /// The custom message used by the `use-custom-message`.
     #[structopt(
         long = "message",
-        help = "The custom message to be encrypted. Will encrypt the prefix if the message is too \
-                long."
+        help = "Pure ASCII string, excluding the null character (\x00), 31 character limit."
     )]
     custom_message:     Option<String>,
 }
@@ -235,9 +234,11 @@ pub fn read_pg_info<P: AsRef<Path> + Debug>(filename: P) -> std::io::Result<ArIn
 /// This function takes a string of length at most 31 bytes and converts
 /// it to a field element.
 ///
-/// The function may have undefined behavior if the string is not ASCII or
-/// contains \x00.
+/// Encoding fails if the string is not ASCII or contains \x00.
 fn to_field_element<C: Curve>(m: String) -> Option<Value<C>> {
+    if !m.is_ascii() || m.contains("\x00") {
+        return None;
+    }
     let mut buf = [0u8; 32];
     let len = m.as_bytes().len();
     if len > 31 {
@@ -258,6 +259,8 @@ fn to_field_element<C: Curve>(m: String) -> Option<Value<C>> {
 /// Decode a string from a field element.
 ///
 /// Zero bytes (`\x00`) are ignored.
+/// This function may have undefined behavior if the encoded string is is not
+/// ASCII or contains \x00.
 fn from_field_element<C: Curve>(v: Value<C>) -> String {
     let v: C::Scalar = *v;
     let mut bytes = Vec::new();
@@ -305,11 +308,15 @@ fn handle_test_dec(test_dec: SingleKeyTestDec) -> Result<(), String> {
         "privacy guardian private key",
         "pg-info.json",
     );
-    let pg_data: ArData<ArCurve> = succeed_or_die!(decrypt_pg_data(&pg_priv_file), e => "Could not read AR secret keys due to {}");
+    let pg_data: ArData<ArCurve> = succeed_or_die!(decrypt_pg_data(&pg_priv_file), e => "Could not read PG secret key due to {}");
 
     // Read the test record
-    let test_record_file = get_file_path(test_dec.test_record, "test record", "test-record.json");
-    let test_record: Versioned<SingleKeyTestRecord<ArCurve>> = succeed_or_die!(read_json_from_file(test_record_file), e => "Could not read global context due to {}");
+    let test_record_file = get_file_path(
+        test_dec.test_record,
+        "test record",
+        &format!("pg-test-{}.json", pg_data.public_ar_info.ar_identity),
+    );
+    let test_record: Versioned<SingleKeyTestRecord<ArCurve>> = succeed_or_die!(read_json_from_file(test_record_file), e => "Could not read test record due to {}");
     if test_record.version != VERSION_0 {
         return Err("The version of the test record should be 0.".to_owned());
     }
@@ -331,7 +338,8 @@ fn handle_test_dec(test_dec: SingleKeyTestDec) -> Result<(), String> {
 
     // Check if hash matches the expected hash
     if h == test_record.msg_hash {
-        println!("The encrypted message is: {}", msg);
+        println!("Test successful!");
+        println!("Please report back the following message: {}", msg);
     } else {
         return Err(
             "The hash of the decrypted message does not match the expected hash.".to_owned(),
@@ -393,6 +401,7 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
             }
             msg.pop(); // Remove the last space
             println!("The encrypted message will be: {}", msg);
+            println!("Record the message for test result verification.");
             msg
         }
     };
@@ -429,7 +438,7 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
     });
 
     match write_json_to_file(&out_file, &test_record) {
-        Ok(_) => println!("Wrote test information {}.", out_file.display()),
+        Ok(_) => println!("Wrote test information to {}.", out_file.display()),
         Err(e) => {
             return Err(format!(
                 "Could not JSON write test information to file because {}",
