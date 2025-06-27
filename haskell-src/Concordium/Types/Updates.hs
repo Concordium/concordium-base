@@ -1013,8 +1013,8 @@ extractKeysIndices p =
         GASRewardsUpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
         GASRewardsCPV2UpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
         BakerStakeThresholdUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
-        RootUpdatePayload{} -> getHiglerLevelKeysAndThreshold rootKeys
-        Level1UpdatePayload{} -> getHiglerLevelKeysAndThreshold level1Keys
+        RootUpdatePayload{} -> getHigherLevelKeysAndThreshold rootKeys
+        Level1UpdatePayload{} -> getHigherLevelKeysAndThreshold level1Keys
         AddAnonymityRevokerUpdatePayload{} -> getLevel2KeysAndThreshold asAddAnonymityRevoker
         AddIdentityProviderUpdatePayload{} -> getLevel2KeysAndThreshold asAddIdentityProvider
         CooldownParametersCPV1UpdatePayload{} -> getOptionalLevel2KeysAndThreshold asCooldownParameters
@@ -1025,16 +1025,11 @@ extractKeysIndices p =
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
         ValidatorScoreParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
-        -- TODO Not implemented yet, authorization of this update type is planned for a later iteration".
-        -- Tracked by issue NOD-701.
-        -- This is currently set to just authorize the first key, as this should always be safe.
-        -- Note: tests in UpdatesSpec have been disabled for P9 and should be re-enabled when this
-        -- is implemented.
-        CreatePLTUpdatePayload{} -> const (Set.fromAscList [0], 1)
+        CreatePLTUpdatePayload{} -> getOptionalLevel2KeysAndThreshold asCreatePLT
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
-    getHiglerLevelKeysAndThreshold v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
+    getHigherLevelKeysAndThreshold v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
     -- If the 'AccessStructure' is not supported at the chain parameter version @cpv@, then there are no keys to return.
     keysForOParam :: Conditionally c AccessStructure -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
     keysForOParam (CTrue AccessStructure{..}) = (accessPublicKeys, accessThreshold)
