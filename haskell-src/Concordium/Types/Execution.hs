@@ -2813,7 +2813,7 @@ data RejectReason
       PoolClosed
     | -- | Token ID does not exist.
       NonExistentTokenId !TokenId
-    | -- | The token transaction was rejected.
+    | -- | The token update transaction was rejected.
       TokenUpdateTransactionFailed !TokenModuleRejectReason
     deriving (Show, Eq, Generic)
 

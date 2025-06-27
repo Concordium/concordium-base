@@ -212,7 +212,7 @@ exampleCborTokenHolder :: CborTokenHolder
 exampleCborTokenHolder =
     CborHolderAccount accountAddress (Just CoinInfoConcordium)
   where
-    accountAddress = case addressFromText $ Text.pack "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
+    accountAddress = case addressFromText "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
         Right addr -> addr
         -- This does not happen since the format
         -- of the text is that of a valid address.

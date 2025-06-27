@@ -1320,10 +1320,10 @@ instance AE.FromJSON CreatePLT where
         return CreatePLT{..}
 
 -- | A wrapper type for (de)-serializing a CBOR-encoded token operations to/from JSON.
---  This can parse either a JSON object representation of 'TokenTransaction'
+--  This can parse either a JSON object representation of 'TokenOperation'
 -- (which is then re-encoded as CBOR) or a hex-encoded byte string. When
 -- rendering JSON,  it will render as a JSON object if the contents can be
--- decoded to a 'TokenTransaction', or otherwise as the hex-encoded byte string.
+-- decoded to a 'TokenOperation', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
     deriving newtype (Eq, Show)
 
