@@ -848,7 +848,12 @@ unsafe extern "C" fn empty_persistent_state() -> *mut PersistentState {
 
 /// Look up entry using key and read the value in a mutable state.
 ///
-/// Returns pointer to the value, null pointer if no entry was found.
+/// # Return value
+///
+/// Returns null pointer if no entry was found otherwise a pointer to the value
+/// stored in the entry. The return value is a pointer to a byte array buffer of
+/// size `*output_len`. To avoid leaking memory the buffer should be deallocated
+/// with `rs_free_array_len` (available in the crypto-common crate).
 #[no_mangle]
 unsafe extern "C" fn lookup_entry_value_mutable_state(
     mut loader: LoadCallback,
