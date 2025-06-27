@@ -224,23 +224,23 @@ decodeCoinInfoHelper = \case
             keyValues <- case term of
                 CBOR.TMap kvs -> return kvs
                 CBOR.TMapI kvs -> return kvs
-                _ -> Left "coinInfo: Expected a map"
+                _ -> Left "coin-info: Expected a map"
             keyValueList <- forM keyValues $ \(k, v) -> case k of
                 CBOR.TInt i -> return (i, v)
-                _ -> Left "coinInfo: Expected an integer key"
+                _ -> Left "coin-info: Expected an integer key"
             build (Map.fromList keyValueList)
-        | otherwise -> Left $ "coinInfo: Expected coininfo (tag 40305), but found tag " ++ show tag
-    other -> Left $ "coinInfo: Unexpected term constructor for coin info: " ++ show other
+        | otherwise -> Left $ "coin-info: Expected coininfo (tag 40305), but found tag " ++ show tag
+    other -> Left $ "coin-info: Unexpected term constructor for coin info: " ++ show other
   where
     build :: Map.Map Int CBOR.Term -> Either String CoinInfo
     build m0 = do
         ((), m1) <- getAndClear 1 convertCoinType m0
-        unless (Map.null m1) $ Left $ "coinInfo: unexpected map key(s): " ++ show (Map.keys m1)
+        unless (Map.null m1) $ Left $ "coin-info: unexpected map key(s): " ++ show (Map.keys m1)
         return CoinInfoConcordium
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
-        term <- maybeTerm `orFail` ("token-holder: Missing " ++ show key)
-        val <- convert term `orFail` ("token-holder: Invalid " ++ show key)
+        term <- maybeTerm `orFail` ("coin-info: Missing " ++ show key)
+        val <- convert term `orFail` ("coin-info: Invalid " ++ show key)
         return (val, m')
     convertCoinType :: CBOR.Term -> Maybe ()
     convertCoinType (CBOR.TInt i)
@@ -343,6 +343,7 @@ makeLenses ''HolderAccountBuilder
 emptyHolderAccountBuilder :: HolderAccountBuilder
 emptyHolderAccountBuilder = HolderAccountBuilder Nothing Nothing
 
+-- | Helper function for decoding a 'CborTokenHolder' from a 'CBOR.Term'.
 decodeCborTokenHolderHelper :: CBOR.Term -> Either String CborTokenHolder
 decodeCborTokenHolderHelper = \case
     CBOR.TTagged tag term
@@ -506,11 +507,11 @@ decodeTokenMetadataUrlHelper rootTerm = do
     keyValues <- case rootTerm of
         CBOR.TMap kvs -> return kvs
         CBOR.TMapI kvs -> return kvs
-        _ -> Left $ "metadataUrl: Expected a map"
+        _ -> Left $ "metadata-url: Expected a map"
     keyValueList <- forM keyValues $ \(k, v) -> case k of
         CBOR.TString t -> return (t, v)
         CBOR.TStringI t -> return (LazyText.toStrict t, v)
-        _ -> Left $ "metadataUrl: Expected a string key"
+        _ -> Left $ "metadata-url: Expected a string key"
     build (Map.fromList keyValueList)
   where
     build :: Map.Map Text CBOR.Term -> Either String TokenMetadataUrl
@@ -520,12 +521,12 @@ decodeTokenMetadataUrlHelper rootTerm = do
         return TokenMetadataUrl{..}
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
-        term <- maybeTerm `orFail` ("metadataUrl: Missing " ++ show key)
-        val <- convert term `orFail` ("metadataUrl: Invalid " ++ show key)
+        term <- maybeTerm `orFail` ("metadata-url: Missing " ++ show key)
+        val <- convert term `orFail` ("metadata-url: Invalid " ++ show key)
         return (val, m')
     getMaybeAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
-        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("metadataUrl: Invalid " ++ show key)
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("metadata-url: Invalid " ++ show key)
         return (maybeVal, m')
     convertText (CBOR.TString t) = Just t
     convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
@@ -620,7 +621,7 @@ buildTokenInitializationParameters ::
 buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
     tipName <- _tipbName `orFail` "Missing \"name\""
     tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
-    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governance account\""
+    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governanceAccount\""
     let tipAllowList = _tipbAllowList `orDefault` False
     let tipDenyList = _tipbDenyList `orDefault` False
     let tipInitialSupply = _tipbInitialSupply
