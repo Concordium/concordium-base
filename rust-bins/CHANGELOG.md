@@ -11,4 +11,5 @@
 ## 2.1.0
 
 - Added a tool to test the decryption keys of privacy guardians (formerly know as anonymity recovers).
-- Renamed the `anonymity_revocation` tool to `identity disclosure` and updated the user interface to reflect the new terminology.
+- Renamed the `anonymity_revocation` tool to `identity disclosure` and updated the user interface to reflect the new terminology. This includes the option names.
+- Updated the terminology in `keygen` to use the new terminology. This includes the option names.

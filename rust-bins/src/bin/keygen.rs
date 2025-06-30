@@ -78,22 +78,22 @@ struct KeygenIp {
 }
 
 #[derive(StructOpt)]
-struct KeygenAr {
+struct KeygenPG {
     #[structopt(
         long = "recover-from-phrase",
         help = "Recover keys from backup phrase. Otherwise, fresh keys are generated."
     )]
     recover:                bool,
     #[structopt(
-        long = "ar-identity",
-        help = "The integer identifying the anonymity revoker"
+        long = "pg-identity",
+        help = "The integer identifying the privacy guardian"
     )]
-    ar_identity:            Option<ArIdentity>,
-    #[structopt(long = "name", help = "Name of the anonymity revoker")]
+    pg_identity:            Option<ArIdentity>,
+    #[structopt(long = "name", help = "Name of the privacy guardian")]
     name:                   Option<String>,
-    #[structopt(long = "url", help = "url to anonymity revoker")]
+    #[structopt(long = "url", help = "url to the privacy guardian")]
     url:                    Option<String>,
-    #[structopt(long = "description", help = "Description of anonymity revoker")]
+    #[structopt(long = "description", help = "Description of the privacy guardian")]
     description:            Option<String>,
     #[structopt(long = "global", help = "File with cryptographic parameters.")]
     global:                 Option<PathBuf>,
@@ -208,11 +208,11 @@ enum KeygenTool {
     )]
     KeygenIp(KeygenIp),
     #[structopt(
-        name = "keygen-ar",
-        about = "Generate anonymity revoker keys.",
-        version = "2.0"
+        name = "keygen-pg",
+        about = "Generate privacy guardian keys.",
+        version = "2.1"
     )]
-    KeygenAr(KeygenAr),
+    KeygenPG(KeygenPG),
     #[structopt(
         name = "gen-rand",
         about = "Generate randomness file.",
@@ -240,8 +240,8 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
-        KeygenAr(kgar) => {
-            if let Err(e) = handle_generate_ar_keys(kgar) {
+        KeygenPG(kgar) => {
+            if let Err(e) = handle_generate_pg_keys(kgar) {
                 eprintln!("{}", e)
             }
         }
@@ -338,7 +338,7 @@ fn handle_generate_update_keys(kgup: KeygenGovernance) -> Result<(), String> {
     Ok(())
 }
 
-fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
+fn handle_generate_pg_keys(kgar: KeygenPG) -> Result<(), String> {
     let bip39_vec = bip39_words().collect::<Vec<_>>();
     let bip39_map = bip39_map();
 
@@ -437,7 +437,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
             return Err("Cannot read cryptographic parameters. Terminating.".to_string());
         }
     };
-    let ar_base = global_ctx.on_chain_commitment_key.g;
+    let pg_base = global_ctx.on_chain_commitment_key.g;
     let key_info = b"elgamal_keys".as_ref();
     let scalar = if kgar.v1 {
         println!("Using deprecated BLS keygen.");
@@ -445,54 +445,54 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
     } else {
         succeed_or_die!(keygen_bls(random_bytes, key_info), e => "Could not generate key because {}")
     };
-    let ar_secret_key = SecretKey {
-        generator: ar_base,
+    let pg_secret_key = SecretKey {
+        generator: pg_base,
         scalar,
     };
-    let ar_public_key = PublicKey::from(&ar_secret_key);
-    let ar_identity = kgar.ar_identity.unwrap_or_else(|| {
+    let pg_public_key = PublicKey::from(&pg_secret_key);
+    let pg_identity = kgar.pg_identity.unwrap_or_else(|| {
         Input::new()
-            .with_prompt("Enter AR identity")
+            .with_prompt("Enter PG identity")
             .interact()
-            .expect("AR identity not provided")
+            .expect("PG identity not provided")
     });
     let name = kgar.name.unwrap_or_else(|| {
         Input::new()
-            .with_prompt("Enter the name of the AR")
+            .with_prompt("Enter the name of the PG")
             .interact()
-            .expect("AR name not provided.")
+            .expect("PG name not provided.")
     });
     let url = kgar.url.unwrap_or_else(|| {
         Input::new()
-            .with_prompt("Enter URL of the AR")
+            .with_prompt("Enter URL of the PG")
             .interact()
-            .expect("AR URL not provided.")
+            .expect("PG URL not provided.")
     });
     let description = kgar.description.unwrap_or_else(|| {
         Input::new()
-            .with_prompt("Enter description of the AR")
+            .with_prompt("Enter description of the PG")
             .interact()
-            .expect("AR description not provided.")
+            .expect("PG description not provided.")
     });
-    let public_ar_info = ArInfo {
-        ar_identity,
+    let public_pg_info = ArInfo {
+        ar_identity:    pg_identity,
         ar_description: Description {
             name,
             url,
             description,
         },
-        ar_public_key,
+        ar_public_key:  pg_public_key,
     };
-    let ar_data = ArData {
-        public_ar_info,
-        ar_secret_key,
+    let pg_data = ArData {
+        public_ar_info: public_pg_info,
+        ar_secret_key:  pg_secret_key,
     };
-    let ver_public_ar_info = Versioned::new(VERSION_0, ar_data.public_ar_info.clone());
+    let ver_public_pg_info = Versioned::new(VERSION_0, pg_data.public_ar_info.clone());
     let out_file = kgar.out.unwrap_or_else(|| {
         PathBuf::from(
             Input::new()
                 .with_prompt("Output file name")
-                .default(format!("ar-data-{}.json", ar_identity))
+                .default(format!("pg-data-{}.json", pg_identity))
                 .interact()
                 .expect("Output file not provided."),
         )
@@ -501,12 +501,12 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
         PathBuf::from(
             Input::new()
                 .with_prompt("Output file for public data")
-                .default(format!("ar-info-{}.pub.json", ar_identity))
+                .default(format!("pg-info-{}.pub.json", pg_identity))
                 .interact()
                 .expect("Output file not provided."),
         )
     });
-    match output_possibly_encrypted(&out_file, &ar_data) {
+    match output_possibly_encrypted(&out_file, &pg_data) {
         Ok(_) => println!("Wrote private keys to {}.", out_file.display()),
         Err(e) => {
             return Err(format!(
@@ -515,7 +515,7 @@ fn handle_generate_ar_keys(kgar: KeygenAr) -> Result<(), String> {
             ));
         }
     }
-    match write_json_to_file(&out_pub_file, &ver_public_ar_info) {
+    match write_json_to_file(&out_pub_file, &ver_public_pg_info) {
         Ok(_) => println!("Wrote public keys to {}.", out_pub_file.display()),
         Err(e) => {
             return Err(format!(
