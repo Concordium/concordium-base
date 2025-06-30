@@ -661,7 +661,6 @@ instance ToProto TokenState where
     type Output TokenState = Proto.TokenState
     toProto TokenState{..} = Proto.make $ do
         PLTFields.tokenModuleRef .= toProto tsTokenModuleRef
-        PLTFields.issuer .= toProto tsIssuer
         PLTFields.decimals .= fromIntegral tsDecimals
         PLTFields.totalSupply .= toProto tsTotalSupply
         PLTFields.moduleState .= Proto.make (PLTFields.value .= tsModuleState)
@@ -775,9 +774,7 @@ instance ToProto RejectReason where
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
         NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
-        TokenHolderTransactionFailed reason -> Proto.make $ ProtoFields.tokenHolderTransactionFailed .= toProto reason
-        TokenGovernanceTransactionFailed reason -> Proto.make $ ProtoFields.tokenGovernanceTransactionFailed .= toProto reason
-        UnauthorizedTokenGovernance tokenId -> Proto.make $ ProtoFields.unauthorizedTokenGovernance .= toProto tokenId
+        TokenUpdateTransactionFailed reason -> Proto.make $ ProtoFields.tokenUpdateTransactionFailed .= toProto reason
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
@@ -852,7 +849,7 @@ instance ToProto SupplementedTransactionSummary where
                 (TokenCreated createPLT : initEvents) -> do
                     protoEvents <-
                         left (const CEInvalidUpdateResult) $
-                            mapM tokenHolderEventToProto initEvents
+                            mapM tokenUpdateEventToProto initEvents
                     Right . Proto.make $ do
                         ProtoFields.index .= mkWord64 tsIndex
                         ProtoFields.energyCost .= toProto tsEnergyCost
@@ -867,8 +864,8 @@ instance ToProto SupplementedTransactionSummary where
 
 -- | Convert an event to a 'Proto.TokenEvent'. Returns @Left ()@ if the event type is not
 --  one of the token event types.
-tokenHolderEventToProto :: Event' s -> Either () Proto.TokenEvent
-tokenHolderEventToProto TokenModuleEvent{..} = Right . Proto.make $ do
+tokenUpdateEventToProto :: Event' s -> Either () Proto.TokenEvent
+tokenUpdateEventToProto TokenModuleEvent{..} = Right . Proto.make $ do
     PLTFields.tokenId .= toProto etmeTokenId
     PLTFields.moduleEvent
         .= Proto.make
@@ -876,7 +873,7 @@ tokenHolderEventToProto TokenModuleEvent{..} = Right . Proto.make $ do
                 PLTFields.type' .= toProto etmeType
                 PLTFields.details .= toProto etmeDetails
             )
-tokenHolderEventToProto TokenTransfer{..} = Right . Proto.make $ do
+tokenUpdateEventToProto TokenTransfer{..} = Right . Proto.make $ do
     PLTFields.tokenId .= toProto ettTokenId
     PLTFields.transferEvent
         .= Proto.make
@@ -886,7 +883,7 @@ tokenHolderEventToProto TokenTransfer{..} = Right . Proto.make $ do
                 PLTFields.amount .= toProto ettAmount
                 PLTFields.maybe'memo .= fmap toProto ettMemo
             )
-tokenHolderEventToProto TokenMint{..} = Right . Proto.make $ do
+tokenUpdateEventToProto TokenMint{..} = Right . Proto.make $ do
     PLTFields.tokenId .= toProto etmTokenId
     PLTFields.mintEvent
         .= Proto.make
@@ -894,7 +891,7 @@ tokenHolderEventToProto TokenMint{..} = Right . Proto.make $ do
                 PLTFields.target .= toProto etmTarget
                 PLTFields.amount .= toProto etmAmount
             )
-tokenHolderEventToProto TokenBurn{..} = Right . Proto.make $ do
+tokenUpdateEventToProto TokenBurn{..} = Right . Proto.make $ do
     PLTFields.tokenId .= toProto etbTokenId
     PLTFields.burnEvent
         .= Proto.make
@@ -902,7 +899,7 @@ tokenHolderEventToProto TokenBurn{..} = Right . Proto.make $ do
                 PLTFields.target .= toProto etbTarget
                 PLTFields.amount .= toProto etbAmount
             )
-tokenHolderEventToProto _ = Left ()
+tokenUpdateEventToProto _ = Left ()
 
 instance ToProto TokenHolder where
     type Output TokenHolder = Proto.TokenHolder
@@ -1015,7 +1012,6 @@ instance ToProto CreatePLT where
     toProto CreatePLT{..} = Proto.make $ do
         PLTFields.tokenId .= toProto _cpltTokenId
         PLTFields.tokenModule .= toProto _cpltTokenModule
-        PLTFields.governanceAccount .= toProto _cpltGovernanceAccount
         PLTFields.decimals .= fromIntegral _cpltDecimals
         PLTFields.initializationParameters .= toProto _cpltInitializationParameters
 
@@ -1677,20 +1673,13 @@ convertAccountTransaction ty cost sender result = case ty of
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toDelegationEvent events
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v
-            TTTokenHolder ->
+            TTTokenUpdate ->
                 mkSuccess <$> do
                     protoEvents <-
                         left (const CEInvalidTransactionResult) $
-                            mapM tokenHolderEventToProto events
+                            mapM tokenUpdateEventToProto events
                     Right . Proto.make $
-                        ProtoFields.tokenHolderEffect . ProtoFields.events .= protoEvents
-            TTTokenGovernance ->
-                mkSuccess <$> do
-                    protoEvents <-
-                        left (const CEInvalidTransactionResult) $
-                            mapM tokenHolderEventToProto events
-                    Right . Proto.make $
-                        ProtoFields.tokenGovernanceEffect . ProtoFields.events .= protoEvents
+                        ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
@@ -1776,8 +1765,7 @@ instance ToProto TransactionType where
     toProto TTTransferWithScheduleAndMemo = Proto.TRANSFER_WITH_SCHEDULE_AND_MEMO
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
-    toProto TTTokenHolder = Proto.TOKEN_HOLDER
-    toProto TTTokenGovernance = Proto.TOKEN_GOVERNANCE
+    toProto TTTokenUpdate = Proto.TOKEN_UPDATE
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy

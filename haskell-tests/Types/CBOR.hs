@@ -24,6 +24,7 @@ import Test.Hspec
 import Test.QuickCheck
 
 import qualified Concordium.Crypto.SHA256 as Hash
+import Concordium.ID.Types
 import Concordium.Types
 import Concordium.Types.ProtocolLevelTokens.CBOR
 import Concordium.Types.Queries.Tokens
@@ -63,6 +64,7 @@ genTokenInitializationParameters :: Gen TokenInitializationParameters
 genTokenInitializationParameters = do
     tipName <- genText
     tipMetadata <- genTokenMetadataUrlSimple
+    tipGovernanceAccount <- genCborTokenHolder
     tipAllowList <- arbitrary
     tipDenyList <- arbitrary
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
@@ -94,17 +96,12 @@ genTaggableMemo =
           CBORMemo <$> genMemo
         ]
 
--- | Generator for 'TokenHolderTransaction'.
-genTokenHolderTransaction :: Gen TokenHolderTransaction
-genTokenHolderTransaction =
-    TokenHolderTransaction . Seq.fromList
-        <$> listOf (TokenHolderTransfer <$> genTokenTransfer)
-
 -- | Generator for 'TokenGovernanceOperation'.
-genTokenGovernanceOperation :: Gen TokenGovernanceOperation
-genTokenGovernanceOperation =
+genTokenOperation :: Gen TokenOperation
+genTokenOperation =
     oneof
-        [ TokenMint <$> genTokenAmount,
+        [ TokenTransfer <$> genTokenTransfer,
+          TokenMint <$> genTokenAmount,
           TokenBurn <$> genTokenAmount,
           TokenAddAllowList <$> genCborTokenHolder,
           TokenRemoveAllowList <$> genCborTokenHolder,
@@ -113,15 +110,16 @@ genTokenGovernanceOperation =
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
-genTokenGovernanceTransaction :: Gen TokenGovernanceTransaction
-genTokenGovernanceTransaction =
-    TokenGovernanceTransaction . Seq.fromList
-        <$> listOf genTokenGovernanceOperation
+genTokenTransaction :: Gen TokenUpdateTransaction
+genTokenTransaction =
+    TokenUpdateTransaction . Seq.fromList
+        <$> listOf genTokenOperation
 
 genTokenModuleStateSimple :: Gen TokenModuleState
 genTokenModuleStateSimple = do
     tmsName <- genText
     tmsMetadata <- genTokenMetadataUrlSimple
+    tmsGovernanceAccount <- genCborTokenHolder
     tmsAllowList <- arbitrary
     tmsDenyList <- arbitrary
     tmsMintable <- arbitrary
@@ -149,7 +147,6 @@ genTokenModuleStateWithAdditional = do
 genTokenStateSimple :: Gen TokenState
 genTokenStateSimple = do
     tsTokenModuleRef <- genTokenModuleRef
-    tsIssuer <- genAccountAddress
     tsTotalSupply <- genTokenAmount
     tsDecimals <- arbitrary
     tms <- genTokenModuleStateSimple
@@ -159,7 +156,6 @@ genTokenStateSimple = do
 genTokenStateWithAdditional :: Gen TokenState
 genTokenStateWithAdditional = do
     tsTokenModuleRef <- genTokenModuleRef
-    tsIssuer <- genAccountAddress
     tsTotalSupply <- genTokenAmount
     tsDecimals <- arbitrary
     tms <- genTokenModuleStateWithAdditional
@@ -211,6 +207,17 @@ genTokenRejectReason =
           OperationNotPermitted <$> arbitrary <*> liftArbitrary genCborTokenHolder <*> liftArbitrary genText
         ]
 
+-- | An example value for governance account addresses.
+exampleCborTokenHolder :: CborTokenHolder
+exampleCborTokenHolder =
+    CborHolderAccount accountAddress (Just CoinInfoConcordium)
+  where
+    accountAddress = case addressFromText "2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6" of
+        Right addr -> addr
+        -- This does not happen since the format
+        -- of the text is that of a valid address.
+        Left str -> error str
+
 -- | A test value for 'TokenInitializationParameters'.
 tip1 :: TokenInitializationParameters
 tip1 =
@@ -223,6 +230,7 @@ tip1 =
                   tmChecksumSha256 = Nothing,
                   tmAdditional = Map.empty
                 },
+          tipGovernanceAccount = exampleCborTokenHolder,
           tipAllowList = False,
           tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = False,
@@ -239,9 +247,7 @@ testInitializationParameters = describe "token-initialization-parameters decodin
             (Right ("", tip1))
             ( deserialiseFromBytes
                 decodeTokenInitializationParameters
-                "\xA4\x64name\x69\
-                \ABC token\x68metadata\xA1\x63url\x76https://abc.token/meta\x69\
-                \allowList\xF4\x6DinitialSupply\xC4\x82\x24\x19\x27\x10"
+                "\168dnameiABC tokenhburnable\244hdenyList\244hmetadata\161curlvhttps://abc.token/metahmintable\244iallowList\244minitialSupply\196\130$\EM'\DLEqgovernanceAccount\217\157s\162\SOH\217\157q\161\SOH\EM\ETX\151\ETXX \ACK\DLEI\220\DC1]\176\b`\RS\196\224\241\145c\ETB\193\204'\141l\237\t\212t\217\148\197N\172\172\161"
             )
     it "Missing \"name\"" $
         assertEqual
@@ -321,12 +327,12 @@ testEncodedInitializationParameters = describe "TokenInitializationParameters JS
                     invalidEncTip1
             )
 
--- | A test value for 'TokenHolderTransaction'.
-tops1 :: TokenHolderTransaction
+-- | A test value for 'TokenUpdateTransaction'.
+tops1 :: TokenUpdateTransaction
 tops1 =
-    TokenHolderTransaction $
+    TokenUpdateTransaction $
         Seq.fromList
-            [ TokenHolderTransfer
+            [ TokenTransfer
                 TokenTransferBody
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
                       ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
@@ -346,7 +352,7 @@ encTops1 =
         TokenParameter $
             BSS.toShort $
                 CBOR.toStrictByteString $
-                    encodeTokenHolderTransaction tops1
+                    encodeTokenUpdateTransaction tops1
 
 -- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
 invalidEncTops1 :: EncodedTokenOperations
@@ -371,7 +377,7 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                 AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
-    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenHolderTransaction" $
+    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
         assertEqual
             "Deserialized"
             (Just invalidEncTops1)
@@ -395,6 +401,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -412,7 +419,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}"
+        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -440,6 +447,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -457,7 +465,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}"
+        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -485,6 +493,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -495,7 +504,6 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
     let object =
             TokenState
                 { tsTokenModuleRef = tokenModuleRef,
-                  tsIssuer = AccountAddress $ FBS.pack [0x1, 0x1],
                   tsTotalSupply = TokenAmount{taValue = 10000, taDecimals = 2},
                   tsDecimals = 2,
                   tsModuleState = tokenModuleStateToBytes tokenModuleState
@@ -511,7 +519,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -520,7 +528,6 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
         case AE.toJSON object of
             AE.Object o -> do
                 assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
-                assertBool "Does not contain field issuer" $ AE.member "issuer" o
                 assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
                 assertBool "Does not contain field decimals" $ AE.member "decimals" o
                 assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
@@ -538,6 +545,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             TokenModuleState
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
+                  tmsGovernanceAccount = exampleCborTokenHolder,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -548,7 +556,6 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
     let object =
             TokenState
                 { tsTokenModuleRef = tokenModuleRef,
-                  tsIssuer = AccountAddress $ FBS.pack [0x1, 0x1],
                   tsTotalSupply = TokenAmount{taValue = 10000, taDecimals = 2},
                   tsDecimals = 2,
                   tsModuleState = tokenModuleStateToBytes tokenModuleState
@@ -564,7 +571,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"issuer\":\"2xBpYyTpaHzubNqzYqmnQhpWTppMTQytTqayXS1ewPPFUD3q5Y\",\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\"}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -573,7 +580,6 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
         case AE.toJSON object of
             AE.Object o -> do
                 assertBool "Does not contain field tokenModuleRef" $ AE.member "tokenModuleRef" o
-                assertBool "Does not contain field issuer" $ AE.member "issuer" o
                 assertBool "Does not contain field totalSupply" $ AE.member "totalSupply" o
                 assertBool "Does not contain field decimals" $ AE.member "decimals" o
                 assertBool "Does not contain field moduleState" $ AE.member "moduleState" o
@@ -723,21 +729,22 @@ tests = parallel $ describe "CBOR" $ do
         Just tmu === AE.decode (AE.encode tmu)
     it "JSON Encode and decode TokenMetadataUrl (with additional)" $ withMaxSuccess 1000 $ forAll genTokenMetadataUrlAdditional $ \tmu ->
         Just tmu === AE.decode (AE.encode tmu)
-    it "Encode and decode TokenHolderTransaction" $ withMaxSuccess 1000 $ forAll genTokenHolderTransaction $ \tt ->
+    it "JSON Encode and decode CborTokenHolder" $ withMaxSuccess 1000 $ forAll genTokenHolder $ \th -> Just th == AE.decode (AE.encode th)
+    it "CBOR Encode and decode CborTokenHolder" $ withMaxSuccess 1000 $ forAll genCborTokenHolder $ \th ->
+        Right ("", th)
+            === deserialiseFromBytes
+                decodeCborTokenHolder
+                (toLazyByteString $ encodeCborTokenHolder th)
+    it "Encode and decode TokenUpdateTransaction" $ withMaxSuccess 1000 $ forAll genTokenTransaction $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
-                decodeTokenHolderTransaction
-                (toLazyByteString $ encodeTokenHolderTransaction tt)
-    it "Encode and decode TokenGovernanceOperation" $ withMaxSuccess 1000 $ forAll genTokenGovernanceOperation $ \tt ->
+                decodeTokenUpdateTransaction
+                (toLazyByteString $ encodeTokenUpdateTransaction tt)
+    it "Encode and decode TokenOperation" $ withMaxSuccess 1000 $ forAll genTokenOperation $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes
-                decodeTokenGovernanceOperation
-                (toLazyByteString $ encodeTokenGovernanceOperation tt)
-    it "Encode and decode TokenGovernanceTransaction" $ withMaxSuccess 1000 $ forAll genTokenGovernanceTransaction $ \tt ->
-        Right ("", tt)
-            === deserialiseFromBytes
-                decodeTokenGovernanceTransaction
-                (toLazyByteString $ encodeTokenGovernanceTransaction tt)
+                decodeTokenOperation
+                (toLazyByteString $ encodeTokenOperation tt)
     it "Encode and decode TokenModuleState (simple)" $ withMaxSuccess 1000 $ forAll genTokenModuleStateSimple $ \tt ->
         Right ("", tt)
             === deserialiseFromBytes

@@ -195,7 +195,6 @@ module Concordium.Types (
     CreatePLT (..),
     cpltTokenId,
     cpltTokenModule,
-    cpltGovernanceAccount,
     cpltDecimals,
     cpltInitializationParameters,
     EncodedTokenOperations (..),
@@ -1274,8 +1273,6 @@ data CreatePLT = CreatePLT
       _cpltTokenId :: !TokenId,
       -- | A SHA256 hash that identifies the token module implementation.
       _cpltTokenModule :: !TokenModuleRef,
-      -- | The address of the account that will govern the token.
-      _cpltGovernanceAccount :: !AccountAddress,
       -- | The number of decimal places used in the representation of amounts of this token. This determines the smallest representable fraction of the token.
       _cpltDecimals :: !Word8,
       -- | The initialization parameters of the token, encoded in CBOR.
@@ -1294,13 +1291,11 @@ instance S.Serialize CreatePLT where
     put CreatePLT{..} = do
         S.put _cpltTokenId
         S.put _cpltTokenModule
-        S.put _cpltGovernanceAccount
         S.put _cpltDecimals
         S.put _cpltInitializationParameters
     get = do
         _cpltTokenId <- S.get
         _cpltTokenModule <- S.get
-        _cpltGovernanceAccount <- S.get
         _cpltDecimals <- S.get
         _cpltInitializationParameters <- S.get
         return CreatePLT{..}
@@ -1310,7 +1305,6 @@ instance AE.ToJSON CreatePLT where
         AE.object
             [ "tokenId" AE..= _cpltTokenId,
               "tokenModule" AE..= _cpltTokenModule,
-              "governanceAccount" AE..= _cpltGovernanceAccount,
               "decimals" AE..= _cpltDecimals,
               "initializationParameters"
                 AE..= EncodedTokenInitializationParameters _cpltInitializationParameters
@@ -1320,23 +1314,22 @@ instance AE.FromJSON CreatePLT where
     parseJSON = AE.withObject "CreatePLT" $ \o -> do
         _cpltTokenId <- o AE..: "tokenId"
         _cpltTokenModule <- o AE..: "tokenModule"
-        _cpltGovernanceAccount <- o AE..: "governanceAccount"
         _cpltDecimals <- o AE..: "decimals"
         (EncodedTokenInitializationParameters _cpltInitializationParameters) <-
             o AE..: "initializationParameters"
         return CreatePLT{..}
 
 -- | A wrapper type for (de)-serializing a CBOR-encoded token operations to/from JSON.
---  This can parse either a JSON object representation of 'TokenHolderTransaction'
---  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
---  it will render as a JSON object if the contents can be decoded to a
--- 'TokenHolderTransaction', or otherwise as the hex-encoded byte string.
+--  This can parse either a JSON object representation of 'TokenOperation'
+-- (which is then re-encoded as CBOR) or a hex-encoded byte string. When
+-- rendering JSON,  it will render as a JSON object if the contents can be
+-- decoded to a 'TokenOperation', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenOperations where
     toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
-        case CBOR.tokenHolderTransactionFromBytes
+        case CBOR.tokenUpdateTransactionFromBytes
             (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
             Left _ -> AE.toJSON tp
             Right v -> AE.toJSON v
@@ -1348,7 +1341,7 @@ instance AE.FromJSON EncodedTokenOperations where
             EncodedTokenOperations $
                 TokenParameter $
                     BSS.toShort $
-                        CBOR.tokenHolderTransactionToBytes tip
+                        CBOR.tokenUpdateTransactionToBytes tip
     parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 

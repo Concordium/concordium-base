@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Concordium.Types.ProtocolLevelTokens.CBOR where
@@ -41,6 +42,22 @@ import Concordium.Types.Tokens
 import qualified Data.FixedByteString as FBS
 
 -- * Decoder helpers
+
+-- | Helper function to convert a 'Decoder s a' to a function from a lazy bytestring to 'a'.
+decodeFromBytes :: (forall s. Decoder s a) -> String -> LBS.ByteString -> Either String a
+decodeFromBytes decoder name lbs =
+    case CBOR.deserialiseFromBytes decoder lbs of
+        Left e -> Left (show e)
+        Right ("", res) -> return res
+        Right (remaining, _) ->
+            Left $
+                show (LBS.length remaining)
+                    ++ " bytes remaining after parsing "
+                    ++ name
+
+-- | Helper function to converting an 'Encoder' to a strict bytestring.
+encodeToBytes :: Encoding -> BS.ByteString
+encodeToBytes = CBOR.toStrictByteString
 
 -- | A 'MapValueDecoder' consumes a value corresponding to a known key and sets it in the builder.
 --  It should fail if entry in the builder corresponding to the key is already set.
@@ -186,6 +203,205 @@ orDefault :: Maybe a -> a -> a
 orDefault Nothing = id
 orDefault (Just a) = const a
 
+-- * Token holder parameters
+
+-- | Coin info that indicates the type of the address. Only Concordium addresses are supported.
+data CoinInfo = CoinInfoConcordium
+    deriving (Eq, Show)
+
+instance AE.ToJSON CoinInfo where
+    toJSON CoinInfoConcordium = AE.String "CCD"
+
+instance AE.FromJSON CoinInfo where
+    parseJSON (AE.String "CCD") = return CoinInfoConcordium
+    parseJSON _ = fail "CoinInfo JSON must be the string 'CCD'"
+
+-- | Decode a 'CoinInfo' from a CBOR term.
+decodeCoinInfoHelper :: CBOR.Term -> Either String CoinInfo
+decodeCoinInfoHelper = \case
+    CBOR.TTagged tag term
+        | tag == 40305 -> do
+            keyValues <- case term of
+                CBOR.TMap kvs -> return kvs
+                CBOR.TMapI kvs -> return kvs
+                _ -> Left "coin-info: Expected a map"
+            keyValueList <- forM keyValues $ \(k, v) -> case k of
+                CBOR.TInt i -> return (i, v)
+                _ -> Left "coin-info: Expected an integer key"
+            build (Map.fromList keyValueList)
+        | otherwise -> Left $ "coin-info: Expected coininfo (tag 40305), but found tag " ++ show tag
+    other -> Left $ "coin-info: Unexpected term constructor for coin info: " ++ show other
+  where
+    build :: Map.Map Int CBOR.Term -> Either String CoinInfo
+    build m0 = do
+        ((), m1) <- getAndClear 1 convertCoinType m0
+        unless (Map.null m1) $ Left $ "coin-info: unexpected map key(s): " ++ show (Map.keys m1)
+        return CoinInfoConcordium
+    getAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        term <- maybeTerm `orFail` ("coin-info: Missing " ++ show key)
+        val <- convert term `orFail` ("coin-info: Invalid " ++ show key)
+        return (val, m')
+    convertCoinType :: CBOR.Term -> Maybe ()
+    convertCoinType (CBOR.TInt i)
+        | i == 919 = Just ()
+        | otherwise = Nothing
+    convertCoinType _ = Nothing
+
+-- | Decode a tagged-coininfo type. Only the concordium coininfo type is supported.
+decodeCoinInfo :: Decoder s CoinInfo
+decodeCoinInfo = do
+    term <- CBOR.decodeTerm
+    either fail return $ decodeCoinInfoHelper term
+
+-- | Encode a 'CoinInfo' in the tagged-coininfo schema.
+encodeCoinInfo :: CoinInfo -> Encoding
+encodeCoinInfo CoinInfoConcordium =
+    encodeTag 40305
+        <> encodeMapLen 1
+        <> encodeInt 1
+        <> encodeInt 919
+
+-- | Decode a CBOR-encoded account address, that is encoded as a raw byte string.
+decodeAccountAddress :: Decoder s AccountAddress
+decodeAccountAddress = do
+    addressBA <- decodeByteArray
+    let actualSize = BA.sizeofByteArray addressBA
+    unless (actualSize == accountAddressSize) $
+        fail $
+            "account-address: expected "
+                ++ show accountAddressSize
+                ++ " bytes, but saw "
+                ++ show actualSize
+    return $ AccountAddress $ FBS.FixedByteString $ BA.unBA addressBA
+
+-- | Encode an account address as a CBOR byte string.
+encodeAccountAddress :: AccountAddress -> Encoding
+encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
+    encodeByteArray (SBA.fromByteArray ba)
+
+-- | An entity that can receive and hold protocol-level tokens. Currently, this
+-- can only be a Concordium account address. The type is used in the transaction
+-- payload, in reject reasons, and in the `TokenModuleEvent`.
+data CborTokenHolder = CborHolderAccount
+    { -- | The account address.
+      chaAccount :: !AccountAddress,
+      -- | Although the account can only be a Concordium address, this specifies whether the
+      --  address type should be explicit in the CBOR encoding.
+      chaCoinInfo :: !(Maybe CoinInfo)
+    }
+    deriving (Eq, Show)
+
+instance AE.ToJSON CborTokenHolder where
+    toJSON CborHolderAccount{..} = do
+        AE.object $
+            [ -- Tag with type of receiver
+              "type" AE..= AE.String "account",
+              "address" AE..= chaAccount
+            ]
+                ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
+
+instance AE.FromJSON CborTokenHolder where
+    parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "account" -> do
+                chaAccount <- o AE..: "address"
+                chaCoinInfo <- o AE..:? "coinInfo"
+                return CborHolderAccount{..}
+            _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
+
+-- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will be present in the
+--  CBOR encoding.
+accountTokenHolder :: AccountAddress -> CborTokenHolder
+accountTokenHolder addr =
+    CborHolderAccount
+        { chaAccount = addr,
+          chaCoinInfo = Just CoinInfoConcordium
+        }
+
+-- | Create a 'HolderAccount' from an 'AccountAddress'. The address type will not be present in
+--  the CBOR encoding.
+accountTokenHolderShort :: AccountAddress -> CborTokenHolder
+accountTokenHolderShort addr =
+    CborHolderAccount
+        { chaAccount = addr,
+          chaCoinInfo = Nothing
+        }
+
+-- | A builder for the 'HolderAccount' constructor.
+data HolderAccountBuilder = HolderAccountBuilder
+    { -- | Receiver account address.
+      _habAccountAddress :: Maybe AccountAddress,
+      -- | Identifier for the address type.
+      _habCoinInfo :: Maybe CoinInfo
+    }
+
+makeLenses ''HolderAccountBuilder
+
+-- | Empty 'HolderAccountBuilder'.
+emptyHolderAccountBuilder :: HolderAccountBuilder
+emptyHolderAccountBuilder = HolderAccountBuilder Nothing Nothing
+
+-- | Helper function for decoding a 'CborTokenHolder' from a 'CBOR.Term'.
+decodeCborTokenHolderHelper :: CBOR.Term -> Either String CborTokenHolder
+decodeCborTokenHolderHelper = \case
+    CBOR.TTagged tag term
+        | tag == 40307 -> do
+            keyValues <- case term of
+                CBOR.TMap kvs -> return kvs
+                CBOR.TMapI kvs -> return kvs
+                _ -> Left "token-holder: Expected a map"
+            keyValueList <- forM keyValues $ \(k, v) -> case k of
+                CBOR.TInt i -> return (i, v)
+                _ -> Left "token-holder: Expected an integer key"
+            build (Map.fromList keyValueList)
+        | otherwise -> Left $ "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
+    other -> Left $ "token-holder: Unexpected term constructor for token holder: " ++ show other
+  where
+    build :: Map.Map Int CBOR.Term -> Either String CborTokenHolder
+    build m0 = do
+        (chaAccount, m1) <- getAndClear 3 convertAddress m0
+        (chaCoinInfo, m2) <- getMaybeAndClear 1 convertCoinInfo m1
+        unless (Map.null m2) $ Left $ "token-holder: unexpected map key(s): " ++ show (Map.keys m2)
+        return CborHolderAccount{..}
+    getAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        term <- maybeTerm `orFail` ("token-holder: Missing " ++ show key)
+        val <- convert term `orFail` ("token-holder: Invalid " ++ show key)
+        return (val, m')
+    getMaybeAndClear key convert m = do
+        let (maybeTerm, m') = m & at key <<.~ Nothing
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("token-holder: Invalid " ++ show key)
+        return (maybeVal, m')
+    convertAddress :: CBOR.Term -> Maybe AccountAddress
+    convertAddress (CBOR.TBytes bs)
+        | BS.length bs == accountAddressSize = Just $ AccountAddress $ FBS.fromByteString bs
+        | otherwise = Nothing
+    convertAddress _ = Nothing
+    convertCoinInfo :: CBOR.Term -> Maybe CoinInfo
+    convertCoinInfo term =
+        case decodeCoinInfoHelper term of
+            Left _err -> Nothing
+            Right coinInfo -> Just coinInfo
+
+-- | Decode a CBOR-encoded 'TokenHolder'.
+decodeCborTokenHolder :: Decoder s CborTokenHolder
+decodeCborTokenHolder = do
+    term <- CBOR.decodeTerm
+    either fail return $ decodeCborTokenHolderHelper term
+
+encodeCborTokenHolder :: CborTokenHolder -> Encoding
+encodeCborTokenHolder CborHolderAccount{..} =
+    encodeTag 40307
+        <> encodeMapDeterministic
+            ( Map.empty
+                & k 1 .~ (encodeCoinInfo <$> chaCoinInfo)
+                & k 3 ?~ encodeAccountAddress chaAccount
+            )
+  where
+    k = at . makeMapKeyEncoding . encodeWord
+
 -- * Token amounts
 
 -- | Decode a CBOR-encoded 'TokenAmount'. This limits the number of decimals to the
@@ -291,11 +507,11 @@ decodeTokenMetadataUrlHelper rootTerm = do
     keyValues <- case rootTerm of
         CBOR.TMap kvs -> return kvs
         CBOR.TMapI kvs -> return kvs
-        _ -> Left $ "Expected a map"
+        _ -> Left $ "metadata-url: Expected a map"
     keyValueList <- forM keyValues $ \(k, v) -> case k of
         CBOR.TString t -> return (t, v)
         CBOR.TStringI t -> return (LazyText.toStrict t, v)
-        _ -> Left $ "Expected a string key"
+        _ -> Left $ "metadata-url: Expected a string key"
     build (Map.fromList keyValueList)
   where
     build :: Map.Map Text CBOR.Term -> Either String TokenMetadataUrl
@@ -305,12 +521,12 @@ decodeTokenMetadataUrlHelper rootTerm = do
         return TokenMetadataUrl{..}
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
-        term <- maybeTerm `orFail` ("Missing " ++ show key)
-        val <- convert term `orFail` ("Invalid " ++ show key)
+        term <- maybeTerm `orFail` ("metadata-url: Missing " ++ show key)
+        val <- convert term `orFail` ("metadata-url: Invalid " ++ show key)
         return (val, m')
     getMaybeAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
-        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("Invalid " ++ show key)
+        maybeVal <- forM maybeTerm $ \term -> convert term `orFail` ("metadata-url: Invalid " ++ show key)
         return (maybeVal, m')
     convertText (CBOR.TString t) = Just t
     convertText (CBOR.TStringI t) = Just (LazyText.toStrict t)
@@ -347,14 +563,8 @@ encodeTokenMetadataUrl TokenMetadataUrl{..} =
 -- | Parse a 'TokenMetadataUrl' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
 tokenMetadataUrlFromBytes :: LBS.ByteString -> Either String TokenMetadataUrl
-tokenMetadataUrlFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenMetadataUrl lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token metadata URL"
+tokenMetadataUrlFromBytes =
+    decodeFromBytes decodeTokenMetadataUrl "token metadata url"
 
 -- | CBOR-encode a 'TokenMetadataUrl to a (strict) 'BS.ByteString'.
 tokenMetadataUrlToBytes :: TokenMetadataUrl -> BS.ByteString
@@ -369,6 +579,8 @@ data TokenInitializationParameters = TokenInitializationParameters
       tipName :: !Text,
       -- | A URL pointing to the token metadata.
       tipMetadata :: !TokenMetadataUrl,
+      -- | The governance account of this token.
+      tipGovernanceAccount :: !CborTokenHolder,
       -- | Whether the token supports an allow list.
       tipAllowList :: !Bool,
       -- | Whether the token supports a deny list.
@@ -386,6 +598,7 @@ data TokenInitializationParameters = TokenInitializationParameters
 data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
     { _tipbName :: Maybe Text,
       _tipbMetadata :: Maybe TokenMetadataUrl,
+      _tipbGovernanceAccount :: Maybe CborTokenHolder,
       _tipbAllowList :: Maybe Bool,
       _tipbDenyList :: Maybe Bool,
       _tipbInitialSupply :: Maybe TokenAmount,
@@ -398,7 +611,7 @@ makeLenses ''TokenInitializationParametersBuilder
 -- | A 'TokenInitializationParametersBuilder' with no fields initialized.
 emptyTokenInitializationParametersBuilder :: TokenInitializationParametersBuilder
 emptyTokenInitializationParametersBuilder =
-    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
 
 -- | Construct a 'TokenInitializationParameters' from a 'TokenInitializationParametersBuilder'.
 --  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
@@ -408,6 +621,7 @@ buildTokenInitializationParameters ::
 buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
     tipName <- _tipbName `orFail` "Missing \"name\""
     tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
+    tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governanceAccount\""
     let tipAllowList = _tipbAllowList `orDefault` False
     let tipDenyList = _tipbDenyList `orDefault` False
     let tipInitialSupply = _tipbInitialSupply
@@ -420,6 +634,7 @@ instance AE.ToJSON TokenInitializationParameters where
         AE.object $
             [ "name" AE..= tipName,
               "metadata" AE..= tipMetadata,
+              "governanceAccount" AE..= tipGovernanceAccount,
               "allowList" AE..= tipAllowList,
               "denyList" AE..= tipDenyList,
               "mintable" AE..= tipMintable,
@@ -431,6 +646,7 @@ instance AE.FromJSON TokenInitializationParameters where
     parseJSON = AE.withObject "TokenInitializationParameters" $ \o -> do
         _tipbName <- o AE..:? "name"
         _tipbMetadata <- o AE..:? "metadata"
+        _tipbGovernanceAccount <- o AE..:? "governanceAccount"
         _tipbAllowList <- o AE..:? "allowList"
         _tipbDenyList <- o AE..:? "denyList"
         _tipbInitialSupply <- o AE..:? "initialSupply"
@@ -453,6 +669,7 @@ decodeTokenInitializationParameters =
   where
     valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
     valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
+    valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborTokenHolder tipbGovernanceAccount
     valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
     valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
     valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
@@ -478,6 +695,7 @@ encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} 
         Map.empty
             & k "name" ?~ encodeString tipName
             & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
+            & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
             & k "allowList" ?~ encodeBool tipAllowList
             & k "denyList" ?~ encodeBool tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
@@ -494,6 +712,7 @@ encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..
         Map.empty
             & k "name" ?~ encodeString tipName
             & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
+            & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
             & setIfTrue "allowList" tipAllowList
             & setIfTrue "denyList" tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
@@ -509,169 +728,6 @@ encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..
 tokenInitializationParametersToBytes :: TokenInitializationParameters -> BS.ByteString
 tokenInitializationParametersToBytes =
     CBOR.toStrictByteString . encodeTokenInitializationParametersWithDefaults
-
--- * Token holder parameters
-
--- | Coin info that indicates the type of the address. Only Concordium addresses are supported.
-data CoinInfo = CoinInfoConcordium
-    deriving (Eq, Show)
-
-instance AE.ToJSON CoinInfo where
-    toJSON CoinInfoConcordium = AE.String "CCD"
-
-instance AE.FromJSON CoinInfo where
-    parseJSON (AE.String "CCD") = return CoinInfoConcordium
-    parseJSON _ = fail "CoinInfo JSON must be the string 'CCD'"
-
--- | Decode a tagged-coinInfo type. Only the concordium coinInfo type is supported.
-decodeCoinInfo :: Decoder s CoinInfo
-decodeCoinInfo = do
-    tag <- decodeTag
-    unless (tag == 40305) $
-        fail $
-            "coinInfo: Expected coinInfo (tag 40305), but found tag " ++ show tag
-    mLen <- decodeMapLenOrIndef
-    forM_ mLen $ \len ->
-        unless (len == 1) $
-            fail $
-                "coinInfo: Expected a map of size 1, but size was " ++ show len
-    key <- decodeInt
-    unless (key == 1) $
-        fail $
-            "coinInfo: Expected type key (1), but found " ++ show key
-    coinType <- decodeInt
-    ci <- case coinType of
-        919 -> return CoinInfoConcordium
-        _ -> fail $ "coinInfo: Unsupported coin type: " ++ show coinType
-    when (isNothing mLen) $
-        decodeBreakOr >>= \b ->
-            unless b (fail "coinInfo: Expected end of array")
-    return ci
-
--- | Encode a 'CoinInfo' in the tagged-coininfo schema.
-encodeCoinInfo :: CoinInfo -> Encoding
-encodeCoinInfo CoinInfoConcordium =
-    encodeTag 40305
-        <> encodeMapLen 1
-        <> encodeInt 1
-        <> encodeInt 919
-
--- | Decode a CBOR-encoded account address, that is encoded as a raw byte string.
-decodeAccountAddress :: Decoder s AccountAddress
-decodeAccountAddress = do
-    addressBA <- decodeByteArray
-    let actualSize = BA.sizeofByteArray addressBA
-    unless (actualSize == accountAddressSize) $
-        fail $
-            "account-address: expected "
-                ++ show accountAddressSize
-                ++ " bytes, but saw "
-                ++ show actualSize
-    return $ AccountAddress $ FBS.FixedByteString $ BA.unBA addressBA
-
--- | Encode an account address as a CBOR byte string.
-encodeAccountAddress :: AccountAddress -> Encoding
-encodeAccountAddress (AccountAddress (FBS.FixedByteString ba)) =
-    encodeByteArray (SBA.fromByteArray ba)
-
--- | An entity that can receive and hold protocol-level tokens.
--- Currently, this can only be a Concordium account address.
--- The type is used in the transaction payload, in reject reasons, and in the `TokenModuleEvent`.
--- This type shouldn't be confused with the `TokenHolder` type that in contrast is used
--- in the `TokenTransfer`, `TokenMint`, and `TokenBurn` events.
-data CborTokenHolder = CborHolderAccount
-    { -- | The account address.
-      chaAccount :: !AccountAddress,
-      -- | Although the account can only be a Concordium address, this specifies whether the
-      --  address type should be explicit in the CBOR encoding.
-      chaCoinInfo :: !(Maybe CoinInfo)
-    }
-    deriving (Eq, Show)
-
-instance AE.ToJSON CborTokenHolder where
-    toJSON CborHolderAccount{..} = do
-        AE.object $
-            [ -- Tag with type of receiver
-              "type" AE..= AE.String "account",
-              "address" AE..= chaAccount
-            ]
-                ++ ["coinInfo" AE..= coinInfo | coinInfo <- toList chaCoinInfo]
-
-instance AE.FromJSON CborTokenHolder where
-    parseJSON = AE.withObject "CborTokenHolder" $ \o -> do
-        type_string <- o AE..: "type"
-        case (type_string :: String) of
-            "account" -> do
-                chaAccount <- o AE..: "address"
-                chaCoinInfo <- o AE..:? "coinInfo"
-                return CborHolderAccount{..}
-            _ -> fail ("Unknown CborTokenHolder type " ++ type_string)
-
--- | Create a 'CborHolderAccount' from an 'AccountAddress'. The address type will be present in the
---  CBOR encoding.
-accountTokenHolder :: AccountAddress -> CborTokenHolder
-accountTokenHolder addr =
-    CborHolderAccount
-        { chaAccount = addr,
-          chaCoinInfo = Just CoinInfoConcordium
-        }
-
--- | Create a 'CborHolderAccount' from an 'AccountAddress'. The address type will not be present in
---  the CBOR encoding.
-accountTokenHolderShort :: AccountAddress -> CborTokenHolder
-accountTokenHolderShort addr =
-    CborHolderAccount
-        { chaAccount = addr,
-          chaCoinInfo = Nothing
-        }
-
--- | A builder for the 'CborHolderAccount' constructor.
-data HolderAccountBuilder = HolderAccountBuilder
-    { -- | Receiver account address.
-      _habAccountAddress :: Maybe AccountAddress,
-      -- | Identifier for the address type.
-      _habCoinInfo :: Maybe CoinInfo
-    }
-
-makeLenses ''HolderAccountBuilder
-
--- | Empty 'HolderAccountBuilder'.
-emptyHolderAccountBuilder :: HolderAccountBuilder
-emptyHolderAccountBuilder = HolderAccountBuilder Nothing Nothing
-
--- | Decode a CBOR-encoded 'CborTokenHolder'.
-decodeTokenHolder :: Decoder s CborTokenHolder
-decodeTokenHolder = do
-    tag <- decodeTag
-    unless (tag == 40307) $
-        fail $
-            "token-holder: Expected cryptocurrency address (tag 40307), but found tag " ++ show tag
-    mLen <- decodeMapLenOrIndef
-    builder <- case mLen of
-        Nothing -> decodeIndefHelper decodeKV emptyHolderAccountBuilder
-        Just len -> decodeDefHelper decodeKV len emptyHolderAccountBuilder
-    case builder ^. habAccountAddress of
-        Nothing -> fail "token-holder: data (3) field is missing"
-        Just addr -> return $ CborHolderAccount addr (builder ^. habCoinInfo)
-  where
-    decodeKV builder = do
-        key <- decodeInt
-        case key of
-            1 -> mapValueDecoder "info (1)" decodeCoinInfo habCoinInfo builder
-            2 -> fail "token-holder: type (2) field is not supported"
-            3 -> mapValueDecoder "data (3)" decodeAccountAddress habAccountAddress builder
-            _ -> fail $ "token-holder: unexpected map key " ++ show key
-
-encodeTokenHolder :: CborTokenHolder -> Encoding
-encodeTokenHolder CborHolderAccount{..} =
-    encodeTag 40307
-        <> encodeMapDeterministic
-            ( Map.empty
-                & k 1 .~ (encodeCoinInfo <$> chaCoinInfo)
-                & k 3 ?~ encodeAccountAddress chaAccount
-            )
-  where
-    k = at . makeMapKeyEncoding . encodeWord
 
 -- | A 'TaggableMemo' represents a 'Memo' that may optionally be tagged as CBOR-encoded.
 --  Memos are often assumed to be CBOR-encoded, but the tag can be used to make this explicit.
@@ -796,7 +852,7 @@ decodeTokenTransfer =
     decodeMap valDecoder buildTokenTransfer emptyTokenTransferBuilder
   where
     valDecoder k@"amount" = Just $ mapValueDecoder k decodeTokenAmount ttbAmount
-    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeTokenHolder ttbRecipient
+    valDecoder k@"recipient" = Just $ mapValueDecoder k decodeCborTokenHolder ttbRecipient
     valDecoder k@"memo" = Just $ mapValueDecoder k decodeTaggableMemo ttbMemo
     valDecoder _ = Nothing
 
@@ -806,85 +862,189 @@ encodeTokenTransfer TokenTransferBody{..} =
     encodeMapDeterministic $
         Map.empty
             & k "amount" ?~ encodeTokenAmount ttAmount
-            & k "recipient" ?~ encodeTokenHolder ttRecipient
+            & k "recipient" ?~ encodeCborTokenHolder ttRecipient
             & k "memo" .~ (encodeTaggableMemo <$> ttMemo)
   where
     k = at . makeMapKeyEncoding . encodeString
 
--- | A token-holder operation.
-newtype TokenHolderOperation = TokenHolderTransfer TokenTransferBody
+-- * Token Operations
+
+-- | A token operation. This can be a transfer, mint, burn or update to the allow or deny list.
+data TokenOperation
+    = TokenTransfer TokenTransferBody
+    | -- | Mint a specified token amount to the token governance account.
+      TokenMint {tgoMintAmount :: !TokenAmount}
+    | -- | Burn a specified token amount from the token governance account.
+      TokenBurn {tgoBurnAmount :: !TokenAmount}
+    | -- | Add the specified account to the allow list.
+      TokenAddAllowList {tgoTarget :: !CborTokenHolder}
+    | -- | Remove the specified account from the allow list.
+      TokenRemoveAllowList {tgoTarget :: !CborTokenHolder}
+    | -- | Add the specified account to the deny list.
+      TokenAddDenyList {tgoTarget :: !CborTokenHolder}
+    | -- | Remove the specified account from the deny list.
+      TokenRemoveDenyList {tgoTarget :: !CborTokenHolder}
     deriving (Eq, Show)
 
-instance AE.ToJSON TokenHolderOperation where
-    toJSON (TokenHolderTransfer body) = do
+instance AE.ToJSON TokenOperation where
+    toJSON (TokenTransfer body) = do
         AE.object
             [ "transfer" AE..= AE.toJSON body
             ]
+    toJSON (TokenMint body) = do
+        AE.object
+            [ "mint" AE..= AE.toJSON body
+            ]
+    toJSON (TokenBurn body) = do
+        AE.object
+            [ "burn" AE..= AE.toJSON body
+            ]
+    toJSON (TokenAddAllowList body) = do
+        AE.object
+            [ "addAllowList" AE..= AE.toJSON body
+            ]
+    toJSON (TokenAddDenyList body) = do
+        AE.object
+            [ "addDenyList" AE..= AE.toJSON body
+            ]
+    toJSON (TokenRemoveAllowList body) = do
+        AE.object
+            [ "removeAllowList" AE..= AE.toJSON body
+            ]
+    toJSON (TokenRemoveDenyList body) = do
+        AE.object
+            [ "removeDenyList" AE..= AE.toJSON body
+            ]
 
-instance AE.FromJSON TokenHolderOperation where
-    parseJSON = AE.withObject "TokenHolderOperation" $ \o -> do
-        transferBody <- o AE..: "transfer"
-        pure $ TokenHolderTransfer transferBody
+instance AE.FromJSON TokenOperation where
+    parseJSON = AE.withObject "TokenOperation" $ \o -> do
+        let keys = KeyMap.keys o
+        case keys of
+            ["transfer"] -> do
+                body <- o AE..: "transfer"
+                pure $ TokenTransfer body
+            ["mint"] -> do
+                body <- o AE..: "mint"
+                pure $ TokenMint body
+            ["burn"] -> do
+                body <- o AE..: "burn"
+                pure $ TokenBurn body
+            ["addAllowList"] -> do
+                body <- o AE..: "addAllowList"
+                pure $ TokenAddAllowList body
+            ["removeAllowList"] -> do
+                body <- o AE..: "removeAllowList"
+                pure $ TokenRemoveAllowList body
+            ["addDenyList"] -> do
+                body <- o AE..: "addDenyList"
+                pure $ TokenAddDenyList body
+            ["removeDenyList"] -> do
+                body <- o AE..: "removeDenyList"
+                pure $ TokenRemoveDenyList body
+            other -> fail $ "token-operation: unsupported operation type: " ++ show other
 
--- | Decode a CBOR-encoded 'TokenHolderOperation'.
-decodeTokenHolderOperation :: Decoder s TokenHolderOperation
-decodeTokenHolderOperation = do
+-- | Decode a CBOR-encoded 'TokenOperation'.
+decodeTokenOperation :: Decoder s TokenOperation
+decodeTokenOperation = do
     maybeMapLen <- decodeMapLenOrIndef
     forM_ maybeMapLen $ \mapLen ->
         unless (mapLen == 1) $
             fail $
-                "token-holder-operation: expected a map of size 1, but saw " ++ show mapLen
+                "token-operation: expected a map of size 1, but saw " ++ show mapLen
     opType <- decodeString
     res <- case opType of
-        "transfer" -> TokenHolderTransfer <$> decodeTokenTransfer
-        _ -> fail $ "token-holder-operation: unsupported operation type: " ++ show opType
+        "transfer" -> TokenTransfer <$> decodeTokenTransfer
+        "mint" -> TokenMint <$> decodeSupplyUpdate opType
+        "burn" -> TokenBurn <$> decodeSupplyUpdate opType
+        "addAllowList" -> TokenAddAllowList <$> decodeListTarget opType
+        "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
+        "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
+        "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
+        _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
-        unless isEnd $ fail "token-holder-operation: expected end of map"
+        unless isEnd $ fail "token-operation: expected end of map"
     return res
+  where
+    decodeSupplyUpdate opType = do
+        let valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-operation (" ++ Text.unpack opType ++ "): missing amount"
+        decodeMap valDecoder build Nothing
+    decodeListTarget opType = do
+        let valDecoder k@"target" = Just (mapValueDecoder k decodeCborTokenHolder id)
+            valDecoder _ = Nothing
+            build (Just v) = Right v
+            build Nothing =
+                Left $
+                    "token-operation (" ++ Text.unpack opType ++ "): missing target"
+        decodeMap valDecoder build Nothing
 
--- | Encode a 'TokenHolderOperation' as CBOR.
-encodeTokenHolderOperation :: TokenHolderOperation -> Encoding
-encodeTokenHolderOperation (TokenHolderTransfer ttb) =
-    encodeMapLen 1
-        <> encodeString "transfer"
-        <> encodeTokenTransfer ttb
+-- | Encode a 'TokenOperation' as CBOR.
+encodeTokenOperation :: TokenOperation -> Encoding
+encodeTokenOperation = \case
+    TokenTransfer ttb ->
+        encodeMapLen 1
+            <> encodeString "transfer"
+            <> encodeTokenTransfer ttb
+    TokenMint amount -> encodeSupplyUpdate "mint" amount
+    TokenBurn amount -> encodeSupplyUpdate "burn" amount
+    TokenAddAllowList target -> encodeListTarget "addAllowList" target
+    TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
+    TokenAddDenyList target -> encodeListTarget "addDenyList" target
+    TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
+  where
+    encodeSupplyUpdate opType amount =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "amount"
+            <> encodeTokenAmount amount
+    encodeListTarget opType target =
+        encodeMapLen 1
+            <> encodeString opType
+            <> encodeMapLen 1
+            <> encodeString "target"
+            <> encodeCborTokenHolder target
 
--- | A token-holder transaction consists of a sequence of token-holder operations.
-newtype TokenHolderTransaction = TokenHolderTransaction
-    { tokenHolderTransactions :: Seq.Seq TokenHolderOperation
+-- | A token transaction consists of a sequence of token operations.
+newtype TokenUpdateTransaction = TokenUpdateTransaction
+    { tokenOperations :: Seq.Seq TokenOperation
     }
     deriving (Eq, Show)
 
-instance AE.ToJSON TokenHolderTransaction where
-    toJSON = AE.toJSON . tokenHolderTransactions
+instance AE.ToJSON TokenUpdateTransaction where
+    toJSON = AE.toJSON . tokenOperations
 
-instance AE.FromJSON TokenHolderTransaction where
-    parseJSON = (TokenHolderTransaction <$>) . AE.parseJSON
+instance AE.FromJSON TokenUpdateTransaction where
+    parseJSON = (TokenUpdateTransaction <$>) . AE.parseJSON
 
--- | Decode a CBOR-encoded 'TokenHolderTransaction'.
-decodeTokenHolderTransaction :: Decoder s TokenHolderTransaction
-decodeTokenHolderTransaction = TokenHolderTransaction <$> decodeSequence decodeTokenHolderOperation
+-- | Decode a CBOR-encoded 'TokenTransaction'.
+decodeTokenUpdateTransaction :: Decoder s TokenUpdateTransaction
+decodeTokenUpdateTransaction = TokenUpdateTransaction <$> decodeSequence decodeTokenOperation
 
--- | Parse a 'TokenHolderTransaction' from a 'LBS.ByteString'. The entire bytestring must
---  be consumed in the parsing.
-tokenHolderTransactionFromBytes :: LBS.ByteString -> Either String TokenHolderTransaction
-tokenHolderTransactionFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenHolderTransaction lbs of
+-- | Parse a 'TokenTransaction' from a 'LBS.ByteString'. The entire bytestring
+--  must be consumed in the parsing.
+tokenUpdateTransactionFromBytes :: LBS.ByteString -> Either String TokenUpdateTransaction
+tokenUpdateTransactionFromBytes lbs =
+    case CBOR.deserialiseFromBytes decodeTokenUpdateTransaction lbs of
         Left e -> Left (show e)
         Right ("", res) -> return res
         Right (remaining, _) ->
             Left $
                 show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token-holder transaction"
+                    ++ " bytes remaining after parsing token transaction"
 
--- | Encode a 'TokenHolderTransaction' as CBOR.
-encodeTokenHolderTransaction :: TokenHolderTransaction -> Encoding
-encodeTokenHolderTransaction = encodeSequence encodeTokenHolderOperation . tokenHolderTransactions
+-- | Encode a 'TokenTransaction' as CBOR.
+encodeTokenUpdateTransaction :: TokenUpdateTransaction -> Encoding
+encodeTokenUpdateTransaction = encodeSequence encodeTokenOperation . tokenOperations
 
--- | CBOR-encode a 'TokenHolderTransaction' to a (strict) 'BS.ByteString'.
-tokenHolderTransactionToBytes :: TokenHolderTransaction -> BS.ByteString
-tokenHolderTransactionToBytes = CBOR.toStrictByteString . encodeTokenHolderTransaction
+-- | CBOR-encode a 'TokenTransaction' to a (strict) 'BS.ByteString'.
+tokenUpdateTransactionToBytes :: TokenUpdateTransaction -> BS.ByteString
+tokenUpdateTransactionToBytes = CBOR.toStrictByteString . encodeTokenUpdateTransaction
 
 -- * Token module events
 
@@ -915,7 +1075,7 @@ encodeTargetDetails target =
     TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
         encodeMapLen 1
             <> encodeString "target"
-            <> encodeTokenHolder target
+            <> encodeCborTokenHolder target
 
 -- | Encode a 'TokenEvent' as an 'EncodedTokenEvent'.
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
@@ -955,7 +1115,7 @@ decodeTokenEventTarget = do
         fail $
             "token-event: expected \"target\" key, but saw "
                 ++ show label
-    target <- decodeTokenHolder
+    target <- decodeCborTokenHolder
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
         unless isEnd $ fail "token-event: expected end of map"
@@ -1194,7 +1354,7 @@ encodeTokenRejectReason AddressNotFound{..} =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
                     & k "index" ?~ encodeWord64 trrOperationIndex
-                    & k "address" ?~ encodeTokenHolder trrAddress
+                    & k "address" ?~ encodeCborTokenHolder trrAddress
         }
   where
     k = at . makeMapKeyEncoding . encodeString
@@ -1252,7 +1412,7 @@ encodeTokenRejectReason OperationNotPermitted{..} =
             Just . BSS.toShort . CBOR.toStrictByteString . encodeMapDeterministic $
                 Map.empty
                     & k "index" ?~ encodeWord64 trrOperationIndex
-                    & k "address" .~ fmap encodeTokenHolder trrAddressNotPermitted
+                    & k "address" .~ fmap encodeCborTokenHolder trrAddressNotPermitted
                     & k "reason" .~ fmap encodeString trrReason
         }
   where
@@ -1267,7 +1427,7 @@ decodeTokenRejectReasonDetails "addressNotFound" =
         emptyAddressNotFoundBuilder
   where
     valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 anfbTransactionIndex
-    valDecoder k@"address" = Just $ mapValueDecoder k decodeTokenHolder anfbRecipient
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborTokenHolder anfbRecipient
     valDecoder _ = Nothing
 decodeTokenRejectReasonDetails "tokenBalanceInsufficient" =
     decodeMap
@@ -1315,7 +1475,7 @@ decodeTokenRejectReasonDetails "operationNotPermitted" =
         emptyOperationNotPermittedBuilder
   where
     valDecoder k@"index" = Just $ mapValueDecoder k decodeWord64 onpbTransactionIndex
-    valDecoder k@"address" = Just $ mapValueDecoder k decodeTokenHolder onpbAddressNotPermitted
+    valDecoder k@"address" = Just $ mapValueDecoder k decodeCborTokenHolder onpbAddressNotPermitted
     valDecoder k@"reason" = Just $ mapValueDecoder k decodeString onpbReason
     valDecoder _ = Nothing
 decodeTokenRejectReasonDetails unknownType =
@@ -1338,129 +1498,19 @@ decodeTokenRejectReason EncodedTokenRejectReason{..} = case etrrDetails of
                     show (LBS.length remaining)
                         ++ " bytes remaining after parsing token reject reason details"
 
--- * Token Governance
-
--- | A token governance operation. This can be a mint, burn or update to the allow or deny list.
-data TokenGovernanceOperation
-    = -- | Mint a specified token amount to the token governance account.
-      TokenMint {tgoMintAmount :: !TokenAmount}
-    | -- | Burn a specified token amount from the token governance account.
-      TokenBurn {tgoBurnAmount :: !TokenAmount}
-    | -- | Add the specified account to the allow list.
-      TokenAddAllowList {tgoTarget :: !CborTokenHolder}
-    | -- | Remove the specified account from the allow list.
-      TokenRemoveAllowList {tgoTarget :: !CborTokenHolder}
-    | -- | Add the specified account to the deny list.
-      TokenAddDenyList {tgoTarget :: !CborTokenHolder}
-    | -- | Remove the specified account from the deny list.
-      TokenRemoveDenyList {tgoTarget :: !CborTokenHolder}
-    deriving (Eq, Show)
-
--- | Decode a CBOR-encoded 'TokenGovernanceOperation'.
-decodeTokenGovernanceOperation :: Decoder s TokenGovernanceOperation
-decodeTokenGovernanceOperation = do
-    maybeMapLen <- decodeMapLenOrIndef
-    forM_ maybeMapLen $ \mapLen ->
-        unless (mapLen == 1) $
-            fail $
-                "token-governance-operation: expected a map of size 1, but saw " ++ show mapLen
-    opType <- decodeString
-    res <- case opType of
-        "mint" -> TokenMint <$> decodeSupplyUpdate opType
-        "burn" -> TokenBurn <$> decodeSupplyUpdate opType
-        "addAllowList" -> TokenAddAllowList <$> decodeListTarget opType
-        "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
-        "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
-        "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
-        _ -> fail $ "token-governance-operation: unsupported operation type: " ++ show opType
-    when (isNothing maybeMapLen) $ do
-        isEnd <- decodeBreakOr
-        unless isEnd $ fail "token-governance-operation: expected end of map"
-    return res
-  where
-    decodeSupplyUpdate opType = do
-        let valDecoder k@"amount" = Just (mapValueDecoder k decodeTokenAmount id)
-            valDecoder _ = Nothing
-            build (Just v) = Right v
-            build Nothing =
-                Left $
-                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing amount"
-        decodeMap valDecoder build Nothing
-    decodeListTarget opType = do
-        let valDecoder k@"target" = Just (mapValueDecoder k decodeTokenHolder id)
-            valDecoder _ = Nothing
-            build (Just v) = Right v
-            build Nothing =
-                Left $
-                    "token-governance-operation (" ++ Text.unpack opType ++ "): missing target"
-        decodeMap valDecoder build Nothing
-
--- | Encode a 'TokenGovernanceOperation' as CBOR.
-encodeTokenGovernanceOperation :: TokenGovernanceOperation -> Encoding
-encodeTokenGovernanceOperation = \case
-    TokenMint amount -> encodeSupplyUpdate "mint" amount
-    TokenBurn amount -> encodeSupplyUpdate "burn" amount
-    TokenAddAllowList target -> encodeListTarget "addAllowList" target
-    TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
-    TokenAddDenyList target -> encodeListTarget "addDenyList" target
-    TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
-  where
-    encodeSupplyUpdate opType amount =
-        encodeMapLen 1
-            <> encodeString opType
-            <> encodeMapLen 1
-            <> encodeString "amount"
-            <> encodeTokenAmount amount
-    encodeListTarget opType target =
-        encodeMapLen 1
-            <> encodeString opType
-            <> encodeMapLen 1
-            <> encodeString "target"
-            <> encodeTokenHolder target
-
--- | A token governance transaction consists of a sequence of token governance operations.
-newtype TokenGovernanceTransaction = TokenGovernanceTransaction
-    { tokenGovernanceOperations :: Seq.Seq TokenGovernanceOperation
-    }
-    deriving (Eq, Show)
-
--- | Decode a CBOR-encoded 'TokenGovernanceTransaction'.
-decodeTokenGovernanceTransaction :: Decoder s TokenGovernanceTransaction
-decodeTokenGovernanceTransaction =
-    TokenGovernanceTransaction <$> decodeSequence decodeTokenGovernanceOperation
-
--- | Parse a 'TokenGovernanceTransaction' from a 'LBS.ByteString'. The entire bytestring must
---  be consumed in the parsing.
-tokenGovernanceTransactionFromBytes :: LBS.ByteString -> Either String TokenGovernanceTransaction
-tokenGovernanceTransactionFromBytes lbs =
-    case CBOR.deserialiseFromBytes decodeTokenGovernanceTransaction lbs of
-        Left e -> Left (show e)
-        Right ("", res) -> return res
-        Right (remaining, _) ->
-            Left $
-                show (LBS.length remaining)
-                    ++ " bytes remaining after parsing token-governance transaction"
-
--- | Encode a 'TokenGovernanceTransaction' as CBOR.
-encodeTokenGovernanceTransaction :: TokenGovernanceTransaction -> Encoding
-encodeTokenGovernanceTransaction =
-    encodeSequence encodeTokenGovernanceOperation . tokenGovernanceOperations
-
--- | CBOR-encode a 'TokenGovernanceTransaction' to a (strict) 'BS.ByteString'.
-tokenGovernanceTransactionToBytes :: TokenGovernanceTransaction -> BS.ByteString
-tokenGovernanceTransactionToBytes =
-    CBOR.toStrictByteString . encodeTokenGovernanceTransaction
-
 -- * Token Module state
 
--- | A representation of the global state information maintained by the token module.
---  The name and metadata fields are required, but all other state is optional and may or may not
---  be provided depending on whether the token module supports it.
+-- | A representation of the global state information maintained by the token
+--  module. The name, metadata and governance account fields are required, but
+--  all other state is optional and may or may not be provided depending on
+--  whether the token module supports it.
 data TokenModuleState = TokenModuleState
     { -- | The name of the token.
       tmsName :: !Text,
       -- | A URL pointing to the token metadata.
       tmsMetadata :: !TokenMetadataUrl,
+      -- | The governance account address of the token.
+      tmsGovernanceAccount :: !CborTokenHolder,
       -- | Whether the token supports an allow list.
       tmsAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -1481,6 +1531,7 @@ instance AE.ToJSON TokenModuleState where
         AE.object
             ( [ "name" AE..= tmsName,
                 "metadata" AE..= tmsMetadata,
+                "governanceAccount" AE..= tmsGovernanceAccount,
                 "allowList" AE..= tmsAllowList,
                 "denyList" AE..= tmsDenyList,
                 "mintable" AE..= tmsMintable,
@@ -1499,6 +1550,7 @@ instance AE.FromJSON TokenModuleState where
     parseJSON = AE.withObject "TokenModuleState" $ \v -> do
         tmsName <- v AE..: "name"
         tmsMetadata <- v AE..: "metadata"
+        tmsGovernanceAccount <- v AE..: "governanceAccount"
         tmsAllowList <- v AE..: "allowList"
         tmsDenyList <- v AE..: "denyList"
         tmsMintable <- v AE..: "mintable"
@@ -1524,6 +1576,7 @@ encodeTokenModuleState TokenModuleState{..} =
         additionalMap
             & k "name" ?~ encodeString tmsName
             & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
+            & k "governanceAccount" ?~ encodeCborTokenHolder tmsGovernanceAccount
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
@@ -1550,10 +1603,11 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     build m0 = do
         (tmsName, m1) <- getAndClear "name" convertText m0
         (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
-        (tmsAllowList, m3) <- getMaybeAndClear "allowList" convertBool m2
-        (tmsDenyList, m4) <- getMaybeAndClear "denyList" convertBool m3
-        (tmsMintable, m5) <- getMaybeAndClear "mintable" convertBool m4
-        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m5
+        (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertCborTokenHolder m2
+        (tmsAllowList, m4) <- getMaybeAndClear "allowList" convertBool m3
+        (tmsDenyList, m5) <- getMaybeAndClear "denyList" convertBool m4
+        (tmsMintable, m6) <- getMaybeAndClear "mintable" convertBool m5
+        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m6
         return TokenModuleState{..}
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
@@ -1574,6 +1628,9 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
     -- Convert CBOR to TokenMetadataUrl
     convertTokenMetadataUrl :: CBOR.Term -> Maybe TokenMetadataUrl
     convertTokenMetadataUrl = either (const Nothing) Just . decodeTokenMetadataUrlHelper
+
+    convertCborTokenHolder :: CBOR.Term -> Maybe CborTokenHolder
+    convertCborTokenHolder = either (const Nothing) Just . decodeCborTokenHolderHelper
 
 -- | Parse a 'TokenModuleState' from a 'LBS.ByteString'. The entire bytestring must
 --  be consumed in the parsing.
