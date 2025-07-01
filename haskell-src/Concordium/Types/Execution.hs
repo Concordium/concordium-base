@@ -377,18 +377,11 @@ data Payload
           cdDelegationTarget :: !(Maybe DelegationTarget)
         }
     | -- | An update for a protocol level token.
-      TokenHolder
+      TokenUpdate
         { -- | Identifier of the token type to which the transaction refers.
-          thTokenId :: !TokenId,
+          tuTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
-          thOperations :: !TokenParameter
-        }
-    | -- | A governance update for a protocol level token.
-      TokenGovernance
-        { -- | Identifier of the token type to which the transaction refers.
-          tgTokenId :: !TokenId,
-          -- | The CBOR-encoded operations to perform.
-          tgOperations :: !TokenParameter
+          tuOperations :: !TokenParameter
         }
     deriving (Eq, Show)
 
@@ -426,8 +419,7 @@ instance S.Serialize TransactionType where
         TTTransferWithScheduleAndMemo -> S.putWord8 18
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
-        TTTokenHolder -> S.putWord8 21
-        TTTokenGovernance -> S.putWord8 22
+        TTTokenUpdate -> S.putWord8 21
 
     get =
         S.getWord8 >>= \case
@@ -452,8 +444,7 @@ instance S.Serialize TransactionType where
             18 -> return TTTransferWithScheduleAndMemo
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
-            21 -> return TTTokenHolder
-            22 -> return TTTokenGovernance
+            21 -> return TTTokenUpdate
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 instance AE.ToJSON Payload where
@@ -576,17 +567,11 @@ instance AE.ToJSON Payload where
               "proofAggregation" AE..= ubkProofAggregation,
               "transactionType" AE..= AE.String "updateBakerKeys"
             ]
-    toJSON TokenHolder{..} =
+    toJSON TokenUpdate{..} =
         AE.object
-            [ "tokenId" AE..= thTokenId,
-              "operations" AE..= EncodedTokenOperations thOperations,
-              "transactionType" AE..= AE.String "tokenHolder"
-            ]
-    toJSON TokenGovernance{..} =
-        AE.object
-            [ "tokenId" AE..= tgTokenId,
-              "operations" AE..= tgOperations,
-              "transactionType" AE..= AE.String "tokenGovernance"
+            [ "tokenId" AE..= tuTokenId,
+              "operations" AE..= EncodedTokenOperations tuOperations,
+              "transactionType" AE..= AE.String "tokenUpdate"
             ]
 
 instance AE.FromJSON Payload where
@@ -696,14 +681,10 @@ instance AE.FromJSON Payload where
                 cdRestakeEarnings <- obj AE..: "restakeEarnings"
                 cdDelegationTarget <- obj AE..: "delegationTarget"
                 return ConfigureDelegation{..}
-            "tokenHolder" -> do
-                thTokenId <- obj AE..: "tokenId"
-                (EncodedTokenOperations thOperations) <- obj AE..: "operations"
-                return TokenHolder{..}
-            "tokenGovernance" -> do
-                tgTokenId <- obj AE..: "tokenId"
-                tgOperations <- obj AE..: "operations"
-                return TokenGovernance{..}
+            "tokenUpdate" -> do
+                tuTokenId <- obj AE..: "tokenId"
+                (EncodedTokenOperations tuOperations) <- obj AE..: "operations"
+                return TokenUpdate{..}
             _ -> fail "Unrecognized 'TransactionType' tag"
 
 -- | Payload serialization according to
@@ -843,14 +824,10 @@ putPayload ConfigureDelegation{..} = do
         bitFor 0 cdCapital
             .|. bitFor 1 cdRestakeEarnings
             .|. bitFor 2 cdDelegationTarget
-putPayload TokenHolder{..} = do
+putPayload TokenUpdate{..} = do
     S.putWord8 27
-    S.put thTokenId
-    S.put thOperations
-putPayload TokenGovernance{..} = do
-    S.putWord8 28
-    S.put tgTokenId
-    S.put tgOperations
+    S.put tuTokenId
+    S.put tuOperations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -1016,14 +993,10 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cdRestakeEarnings <- maybeGet 1
                 cdDelegationTarget <- maybeGet 2
                 return ConfigureDelegation{..}
-            27 | supportProtocolLevelTokens -> S.label "TokenHolder" $ do
-                thTokenId <- S.get
-                thOperations <- S.get
-                return TokenHolder{..}
-            28 | supportProtocolLevelTokens -> S.label "TokenGovernance" $ do
-                tgTokenId <- S.get
-                tgOperations <- S.get
-                return TokenGovernance{..}
+            27 | supportProtocolLevelTokens -> S.label "TokenUpdate" $ do
+                tuTokenId <- S.get
+                tuOperations <- S.get
+                return TokenUpdate{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -2840,12 +2813,8 @@ data RejectReason
       PoolClosed
     | -- | Token ID does not exist.
       NonExistentTokenId !TokenId
-    | -- | The token-holder transaction was rejected.
-      TokenHolderTransactionFailed !TokenModuleRejectReason
-    | -- | The token-governance transaction was rejected.
-      TokenGovernanceTransactionFailed !TokenModuleRejectReason
-    | -- | Account sending the transaction is not authorized for governing the token.
-      UnauthorizedTokenGovernance !TokenId
+    | -- | The token update transaction was rejected.
+      TokenUpdateTransactionFailed !TokenModuleRejectReason
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2918,10 +2887,7 @@ instance S.Serialize RejectReason where
         PoolWouldBecomeOverDelegated -> S.putWord8 53
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
-        TokenHolderTransactionFailed reason -> S.putWord8 56 <> S.put reason
-        TokenGovernanceTransactionFailed reason -> S.putWord8 57 <> S.put reason
-        UnauthorizedTokenGovernance tokenId -> S.putWord8 58 <> S.put tokenId
-
+        TokenUpdateTransactionFailed reason -> S.putWord8 56 <> S.put reason
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
@@ -2989,9 +2955,7 @@ instance S.Serialize RejectReason where
             53 -> return PoolWouldBecomeOverDelegated
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
-            56 -> TokenHolderTransactionFailed <$> S.get
-            57 -> TokenGovernanceTransactionFailed <$> S.get
-            58 -> UnauthorizedTokenGovernance <$> S.get
+            56 -> TokenUpdateTransactionFailed <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason

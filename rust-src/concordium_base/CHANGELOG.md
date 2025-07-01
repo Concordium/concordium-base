@@ -1,5 +1,7 @@
 ## Unreleased
 
+## 8.0.0-alpha.1 (2025-06-30)
+
 - `TokenAmount` changed to require explicit number of decimals equal to the token when creating a value
 - `MetadataUrl` and `TokenModuleState` now supports decoding "additional" data matching the CDDL rule `* text => any`.
 - CBOR map encoding is now deterministic and follows the order described at <https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding>
@@ -8,6 +10,8 @@
 - Removed `try_from_cbor` and `to_cbor` from a number of types implementing CBOR serialization in favour of just 
   using `cbor::cbor_encode/decode`.
 - The serialization of `AuthorizationsV1` is fixed to be compatible with the Haskell implementation.
+- Replace concepts `TokenHolder` and `TokenGovernance` by `TokenUpdate`.
+- Add `governance_account` to `TokenModuleState`.
 
 ## 8.0.0-alpha (2025-06-06)
 
