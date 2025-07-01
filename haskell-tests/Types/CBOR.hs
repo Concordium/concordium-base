@@ -65,6 +65,7 @@ genTokenInitializationParameters = do
     tipName <- genText
     tipMetadata <- genTokenMetadataUrlSimple
     tipGovernanceAccount <- genCborTokenHolder
+    tipPaused <- arbitrary
     tipAllowList <- arbitrary
     tipDenyList <- arbitrary
     tipInitialSupply <- oneof [pure Nothing, Just <$> genTokenAmount]
@@ -232,6 +233,7 @@ tip1 =
                   tmAdditional = Map.empty
                 },
           tipGovernanceAccount = exampleCborTokenHolder,
+          tipPaused = False,
           tipAllowList = False,
           tipInitialSupply = Just (TokenAmount{taValue = 10000, taDecimals = 5}),
           tipDenyList = False,
