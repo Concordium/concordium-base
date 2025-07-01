@@ -581,6 +581,8 @@ data TokenInitializationParameters = TokenInitializationParameters
       tipMetadata :: !TokenMetadataUrl,
       -- | The governance account of this token.
       tipGovernanceAccount :: !CborTokenHolder,
+      -- | Whether token operations are paused.
+      tipPaused :: !Bool,
       -- | Whether the token supports an allow list.
       tipAllowList :: !Bool,
       -- | Whether the token supports a deny list.
@@ -599,6 +601,7 @@ data TokenInitializationParametersBuilder = TokenInitializationParametersBuilder
     { _tipbName :: Maybe Text,
       _tipbMetadata :: Maybe TokenMetadataUrl,
       _tipbGovernanceAccount :: Maybe CborTokenHolder,
+      _tipbPaused :: Maybe Bool,
       _tipbAllowList :: Maybe Bool,
       _tipbDenyList :: Maybe Bool,
       _tipbInitialSupply :: Maybe TokenAmount,
@@ -611,7 +614,7 @@ makeLenses ''TokenInitializationParametersBuilder
 -- | A 'TokenInitializationParametersBuilder' with no fields initialized.
 emptyTokenInitializationParametersBuilder :: TokenInitializationParametersBuilder
 emptyTokenInitializationParametersBuilder =
-    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+    TokenInitializationParametersBuilder Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
 
 -- | Construct a 'TokenInitializationParameters' from a 'TokenInitializationParametersBuilder'.
 --  This results in @Left err@ (where @err@ describes the failure reason) when a required parameter
@@ -622,6 +625,7 @@ buildTokenInitializationParameters TokenInitializationParametersBuilder{..} = do
     tipName <- _tipbName `orFail` "Missing \"name\""
     tipMetadata <- _tipbMetadata `orFail` "Missing \"metadata\""
     tipGovernanceAccount <- _tipbGovernanceAccount `orFail` "Missing \"governanceAccount\""
+    let tipPaused = _tipbPaused `orDefault` False
     let tipAllowList = _tipbAllowList `orDefault` False
     let tipDenyList = _tipbDenyList `orDefault` False
     let tipInitialSupply = _tipbInitialSupply
@@ -647,6 +651,7 @@ instance AE.FromJSON TokenInitializationParameters where
         _tipbName <- o AE..:? "name"
         _tipbMetadata <- o AE..:? "metadata"
         _tipbGovernanceAccount <- o AE..:? "governanceAccount"
+        _tipbPaused <- o AE..:? "paused"
         _tipbAllowList <- o AE..:? "allowList"
         _tipbDenyList <- o AE..:? "denyList"
         _tipbInitialSupply <- o AE..:? "initialSupply"
@@ -670,6 +675,7 @@ decodeTokenInitializationParameters =
     valDecoder k@"name" = Just $ mapValueDecoder k decodeString tipbName
     valDecoder k@"metadata" = Just $ mapValueDecoder k decodeTokenMetadataUrl tipbMetadata
     valDecoder k@"governanceAccount" = Just $ mapValueDecoder k decodeCborTokenHolder tipbGovernanceAccount
+    valDecoder k@"paused" = Just $ mapValueDecoder k decodeBool tipbPaused
     valDecoder k@"allowList" = Just $ mapValueDecoder k decodeBool tipbAllowList
     valDecoder k@"denyList" = Just $ mapValueDecoder k decodeBool tipbDenyList
     valDecoder k@"initialSupply" = Just $ mapValueDecoder k decodeTokenAmount tipbInitialSupply
@@ -696,6 +702,7 @@ encodeTokenInitializationParametersNoDefaults TokenInitializationParameters{..} 
             & k "name" ?~ encodeString tipName
             & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
             & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
+            & k "paused" ?~ encodeBool tipPaused
             & k "allowList" ?~ encodeBool tipAllowList
             & k "denyList" ?~ encodeBool tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
@@ -713,6 +720,7 @@ encodeTokenInitializationParametersWithDefaults TokenInitializationParameters{..
             & k "name" ?~ encodeString tipName
             & k "metadata" ?~ encodeTokenMetadataUrl tipMetadata
             & k "governanceAccount" ?~ encodeCborTokenHolder tipGovernanceAccount
+            & setIfTrue "paused" tipPaused
             & setIfTrue "allowList" tipAllowList
             & setIfTrue "denyList" tipDenyList
             & k "initialSupply" .~ (encodeTokenAmount <$> tipInitialSupply)
