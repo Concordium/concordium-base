@@ -52,13 +52,14 @@ ccd-coininfo = {
 
 token-update-transaction = [ * token-operation ]
 
-; A token operation. This can be transfer, mint, burn or update-list-operation.
+; A token operation. This can be transfer, mint, burn, any update-list-operation, or pause.
 ; All token-holder operations are represented as single-entry maps where the key determines
 ; the type of the operation.
 token-operation = token-transfer
     / token-mint
     / token-burn
     / token-update-list
+    / token-pause
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
