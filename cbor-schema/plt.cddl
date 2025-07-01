@@ -253,6 +253,13 @@ token-add-deny-list-event = token-list-update-details
 ; This is a token kernel event, and indicates the account was removed from the deny list.
 token-remove-deny-list-event = token-list-update-details
 
+; The details of a token "pause" event, indicating whether the execution of the "mint", "burn",
+; and "transfer" token operations has been paused.
+token-pause-event = {
+    ; Whether the execution of token operations has been paused.
+    "paused": bool
+}
+
 ; Reject reason details
 
 ; A token-update-transaction may be rejected for various reasons.
