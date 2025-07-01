@@ -25,7 +25,7 @@ token-holder = tagged-holder-account
 ; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-009-address.md
 tagged-holder-account = #6.40307(holder-account)
 
-holder-account = { 
+holder-account = {
     ; If the info (1) field is present, it must indicate CCD.
     ? 1: tagged-ccd-coininfo,
     ; We do not support the type (2) field.
@@ -37,10 +37,10 @@ holder-account = {
 ; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
 tagged-ccd-coininfo = #6.40305(ccd-coininfo)
 
-ccd-coininfo = { 
+ccd-coininfo = {
     ; The type (1) field is the [SLIP44](https://github.com/satoshilabs/slips/blob/master/slip-0044.md)
     ; code for Concordium
-    1: 919 
+    1: 919
     ; The network (2) field is not supported.
 }
 
@@ -93,7 +93,7 @@ token-supply-update-details = {
 }
 
 ; Update an allow or a deny list by adding or removing an account from it.
-token-update-list = 
+token-update-list =
     token-add-allow-list
     / token-remove-allow-list
     / token-add-deny-list
@@ -129,12 +129,19 @@ token-list-update-details = {
     "target": token-holder
 }
 
+; Pause or unpause the execution of certain token operations. This includes
+; the operations "mint", "burn", and "transfer".
+token-pause = {
+    ; Whether to pause or unpause token operations.
+    "pause": bool
+}
+
 ; Chain governance
 
 ; These parameters are passed to the token module to initialize the token.
 ; The token initialization update will also include the ticker symbol,
 ; number of decimals, and a reference to the token module implementation.
-token-initialization-parameters = { 
+token-initialization-parameters = {
     ; The name of the token
     "name": text,
     ; A URL pointing to the token metadata
@@ -193,6 +200,8 @@ token-module-state = {
     ? "mintable": bool,
     ; Whether the token is burnable.
     ? "burnable": bool,
+    ; Whether the execution of certain token operations has been paused.
+    ? "paused": bool,
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
