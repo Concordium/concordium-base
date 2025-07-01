@@ -1511,6 +1511,8 @@ data TokenModuleState = TokenModuleState
       tmsMetadata :: !TokenMetadataUrl,
       -- | The governance account address of the token.
       tmsGovernanceAccount :: !CborTokenHolder,
+      -- | Whether the token is paused.
+      tmsPaused :: !Bool,
       -- | Whether the token supports an allow list.
       tmsAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -1532,6 +1534,7 @@ instance AE.ToJSON TokenModuleState where
             ( [ "name" AE..= tmsName,
                 "metadata" AE..= tmsMetadata,
                 "governanceAccount" AE..= tmsGovernanceAccount,
+                "paused" AE..= tmsPaused,
                 "allowList" AE..= tmsAllowList,
                 "denyList" AE..= tmsDenyList,
                 "mintable" AE..= tmsMintable,
@@ -1551,6 +1554,7 @@ instance AE.FromJSON TokenModuleState where
         tmsName <- v AE..: "name"
         tmsMetadata <- v AE..: "metadata"
         tmsGovernanceAccount <- v AE..: "governanceAccount"
+        tmsPaused <- v AE..: "paused"
         tmsAllowList <- v AE..: "allowList"
         tmsDenyList <- v AE..: "denyList"
         tmsMintable <- v AE..: "mintable"
@@ -1577,6 +1581,7 @@ encodeTokenModuleState TokenModuleState{..} =
             & k "name" ?~ encodeString tmsName
             & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
             & k "governanceAccount" ?~ encodeCborTokenHolder tmsGovernanceAccount
+            & k "paused" ?~ encodeBool tmsPaused
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
@@ -1604,10 +1609,11 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
         (tmsName, m1) <- getAndClear "name" convertText m0
         (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
         (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertCborTokenHolder m2
-        (tmsAllowList, m4) <- getMaybeAndClear "allowList" convertBool m3
-        (tmsDenyList, m5) <- getMaybeAndClear "denyList" convertBool m4
-        (tmsMintable, m6) <- getMaybeAndClear "mintable" convertBool m5
-        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m6
+        (tmsPaused, m4) <- getAndClear "paused" convertBool m3
+        (tmsAllowList, m5) <- getMaybeAndClear "allowList" convertBool m4
+        (tmsDenyList, m6) <- getMaybeAndClear "denyList" convertBool m5
+        (tmsMintable, m7) <- getMaybeAndClear "mintable" convertBool m6
+        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m7
         return TokenModuleState{..}
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing
