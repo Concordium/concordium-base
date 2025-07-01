@@ -15,7 +15,7 @@ use std::{
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
-struct DecryptKey {
+struct DecryptLinkingKey {
     #[structopt(
         long = "id-record",
         help = "File with the JSON encoded identity record."
@@ -49,7 +49,7 @@ struct Decrypt {
 }
 
 #[derive(StructOpt)]
-struct CombineKey {
+struct CombineLinkingKey {
     #[structopt(
         long = "id-record",
         help = "File with the JSON encoded identity record."
@@ -57,10 +57,10 @@ struct CombineKey {
     id_record: PathBuf,
     #[structopt(
         long = "shares",
-        help = "Files with the JSON encoded decrypted shares."
+        help = "Files with the JSON encoded decrypted linking key shares."
     )]
     shares:    Vec<PathBuf>,
-    #[structopt(long = "out", help = "File to output the combined key to.")]
+    #[structopt(long = "out", help = "File to output the combined linking key to.")]
     out:       PathBuf,
 }
 
@@ -73,7 +73,7 @@ struct Combine {
     credential: PathBuf,
     #[structopt(
         long = "shares",
-        help = "Files with the JSON encoded decrypted shares."
+        help = "Files with the JSON encoded decrypted identifier shares."
     )]
     shares:     Vec<PathBuf>,
     #[structopt(long = "out", help = "File to output the public holder identifier to.")]
@@ -84,7 +84,7 @@ struct Combine {
 struct ComputeCredIds {
     #[structopt(long = "id-record", help = "The identity record.")]
     id_record:      PathBuf,
-    #[structopt(long = "key", help = "File containing the decrypted key.")]
+    #[structopt(long = "key", help = "File containing the decrypted linking key.")]
     key:            PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
@@ -95,7 +95,7 @@ struct ComputeCredIds {
     out:            PathBuf,
     #[structopt(
         long = "no-secret",
-        help = "Do __not__ output the decryption key together with the account credential \
+        help = "Do __not__ output the account decryption key together with the account credential \
                 identifiers."
     )]
     no_secret:      bool,
@@ -121,19 +121,19 @@ enum IdentityDisclosure {
     )]
     Combine(Combine),
     #[structopt(
-        name = "decrypt-prf",
+        name = "decrypt-linking-key",
         about = "Take an identity record and let one privacy guardian decrypt its share of the \
-                 PRF key."
+                 linking key."
     )]
-    DecryptKey(DecryptKey),
+    DecryptLinkingKey(DecryptLinkingKey),
     #[structopt(
-        name = "combine-prf",
-        about = "Combine decrypted shares of the PRF key to reconstruct the PRF key."
+        name = "combine-linking-key",
+        about = "Combine decrypted shares of the linking key to reconstruct the linking key."
     )]
-    CombineKey(CombineKey),
+    CombineLinkingKey(CombineLinkingKey),
     #[structopt(
         name = "compute-regids",
-        about = "Computes all possible account credential identifiers given a PRF key and the \
+        about = "Computes all possible account credential identifiers given a linking key and the \
                  maximal number of accounts."
     )]
     ComputeCredIds(ComputeCredIds),
@@ -164,12 +164,12 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
-        DecryptKey(dcr) => {
+        DecryptLinkingKey(dcr) => {
             if let Err(e) = handle_decrypt_key(dcr) {
                 eprintln!("{}", e)
             }
         }
-        CombineKey(cmb) => {
+        CombineLinkingKey(cmb) => {
             if let Err(e) = handle_combine_key(cmb) {
                 eprintln!("{}", e)
             }
@@ -203,7 +203,7 @@ fn handle_compute_cred_id(rid: ComputeCredIds) -> Result<(), String> {
         match read_json_from_file(file_name) {
             Ok(v) => v,
             Err(e) => {
-                return Err(format!("Could not read decrypted key due to {}", e));
+                return Err(format!("Could not read decrypted linking key due to {}", e));
             }
         }
     };
@@ -309,7 +309,10 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
         id_cred_pub_share: m,
     };
     match write_json_to_file(&dcr.out, &share) {
-        Ok(_) => println!("Wrote decrypted share to {}", dcr.out.display()),
+        Ok(_) => println!(
+            "Wrote decrypted public holder identifier share to {}",
+            dcr.out.display()
+        ),
         Err(e) => {
             eprintln!("Could not write JSON to file due to {}", e);
         }
@@ -318,7 +321,7 @@ fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
 }
 
 /// Decrypt encPrfKeyShare
-fn handle_decrypt_key(dcr: DecryptKey) -> Result<(), String> {
+fn handle_decrypt_key(dcr: DecryptLinkingKey) -> Result<(), String> {
     let id_record: Versioned<AnonymityRevocationRecord<ArCurve>> = succeed_or_die!(read_json_from_file(dcr.id_record), e => "Could not read identity record due to {}");
 
     if id_record.version != VERSION_0 {
@@ -351,7 +354,10 @@ fn handle_decrypt_key(dcr: DecryptKey) -> Result<(), String> {
         prf_key_share: m,
     };
     match write_json_to_file(&dcr.out, &share) {
-        Ok(_) => println!("Wrote decrypted share to {}.", dcr.out.display()),
+        Ok(_) => println!(
+            "Wrote decrypted linking key share to {}.",
+            dcr.out.display()
+        ),
         Err(e) => {
             eprintln!("Could not write JSON to file because {}", e);
         }
@@ -421,7 +427,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 
     let json = json!({ "idCredPub": id_cred_pub_string });
     match write_json_to_file(&cmb.out, &json) {
-        Ok(_) => println!("Wrote idCredPub to {}.", cmb.out.display()),
+        Ok(_) => println!("Wrote public holder identifier to {}.", cmb.out.display()),
         Err(e) => {
             eprintln!("Could not write to file because {}", e);
         }
@@ -429,7 +435,7 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
     Ok(())
 }
 
-fn handle_combine_key(cmb: CombineKey) -> Result<(), String> {
+fn handle_combine_key(cmb: CombineLinkingKey) -> Result<(), String> {
     let id_record: Versioned<AnonymityRevocationRecord<ArCurve>> = succeed_or_die!(read_json_from_file(cmb.id_record), e => "Could not read identity record due to {}");
 
     if id_record.version != VERSION_0 {
@@ -487,7 +493,7 @@ fn handle_combine_key(cmb: CombineKey) -> Result<(), String> {
     let prf_key_string = base16_encode_string(&prf_key);
     let json = json!({ "prfKey": prf_key_string });
     match write_json_to_file(&cmb.out, &json) {
-        Ok(_) => println!("Wrote key to {}.", cmb.out.display()),
+        Ok(_) => println!("Wrote linking key to {}.", cmb.out.display()),
         Err(e) => {
             println!("Could not write to file because {}", e);
         }
