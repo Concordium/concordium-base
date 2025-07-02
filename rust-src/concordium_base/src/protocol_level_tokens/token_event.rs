@@ -38,6 +38,7 @@ pub enum TokenEventDetails {
 #[serde(rename_all = "camelCase")]
 pub struct TokenModuleEvent {
     /// The type of event produced.
+    #[serde(rename = "type")]
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
     pub details:    RawCbor,
@@ -302,6 +303,25 @@ mod test {
         assert_eq!(
             module_event_type,
             TokenModuleEventType::RemoveDenyList(variant)
+        );
+    }
+
+    #[test]
+    fn test_decode_pause_event_cbor() {
+        let variant = TokenPauseEventDetails {
+            paused: true,
+        };
+        let cbor = cbor::cbor_encode(&variant).unwrap();
+        assert_eq!(hex::encode(&cbor), "a166706175736564f5");
+        let module_event = TokenModuleEvent {
+            event_type: "pause".to_string().try_into().unwrap(),
+            details:    cbor.into(),
+        };
+
+        let module_event_type = module_event.decode_token_module_event().unwrap();
+        assert_eq!(
+            module_event_type,
+            TokenModuleEventType::Pause(variant)
         );
     }
 }
