@@ -170,6 +170,9 @@ pub enum TokenOperation {
     /// Operation that removes an account from the deny list of a protocol level
     /// token
     RemoveDenyList(TokenListUpdateDetails),
+    /// Operation that pauses execution of "mint", "burn", and "transfer"
+    /// operations for a protocol level token
+    Pause(bool),
     /// Unknow operation. If new types of operations are added that are unknown
     /// to this enum, they will be decoded to this variant.
     #[cbor(other)]
@@ -403,6 +406,16 @@ pub mod test {
 
         let cbor = cbor::cbor_encode(&operation).unwrap();
         assert_eq!(hex::encode(&cbor), "a16e72656d6f766544656e794c697374a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_pause() {
+        let operation = TokenOperation::Pause(true);
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1657061757365f5");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
     }
