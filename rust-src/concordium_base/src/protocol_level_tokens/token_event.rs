@@ -38,6 +38,7 @@ pub enum TokenEventDetails {
 #[serde(rename_all = "camelCase")]
 pub struct TokenModuleEvent {
     /// The type of event produced.
+    #[serde(rename = "type")]
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
     pub details:    RawCbor,
@@ -53,6 +54,7 @@ impl TokenModuleEvent {
             "removeAllowList" => RemoveAllowList(cbor::cbor_decode(self.details.as_ref())?),
             "addDenyList" => AddDenyList(cbor::cbor_decode(self.details.as_ref())?),
             "removeDenyList" => RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?),
+            "pause" => Pause(cbor::cbor_decode(self.details.as_ref())?),
             _ => Unknow,
         })
     }
@@ -70,6 +72,9 @@ pub enum TokenModuleEventType {
     AddDenyList(TokenListUpdateEventDetails),
     /// An account was removed from the deny list of a protocol level token
     RemoveDenyList(TokenListUpdateEventDetails),
+    /// Execution of certain operations on a protocol level token was
+    /// paused/unpaused
+    Pause(TokenPauseEventDetails),
     /// Unknow token module event type. If new events types are added that are
     /// unknown to this enum, they will be decoded to this variant.
     Unknow,
@@ -91,6 +96,23 @@ pub enum TokenModuleEventType {
 pub struct TokenListUpdateEventDetails {
     /// The account that was added or removed from an allow or deny list
     pub target: CborTokenHolder,
+}
+
+/// An event emitted when the token is paused or unpaused.
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    CborSerialize,
+    CborDeserialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenPauseEventDetails {
+    /// Whether the token is paused or not.
+    pub paused: bool,
 }
 
 /// An entity that can hold PLTs (protocol level tokens).
@@ -282,5 +304,19 @@ mod test {
             module_event_type,
             TokenModuleEventType::RemoveDenyList(variant)
         );
+    }
+
+    #[test]
+    fn test_decode_pause_event_cbor() {
+        let variant = TokenPauseEventDetails { paused: true };
+        let cbor = cbor::cbor_encode(&variant).unwrap();
+        assert_eq!(hex::encode(&cbor), "a166706175736564f5");
+        let module_event = TokenModuleEvent {
+            event_type: "pause".to_string().try_into().unwrap(),
+            details:    cbor.into(),
+        };
+
+        let module_event_type = module_event.decode_token_module_event().unwrap();
+        assert_eq!(module_event_type, TokenModuleEventType::Pause(variant));
     }
 }

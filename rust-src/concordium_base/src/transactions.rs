@@ -1996,6 +1996,9 @@ pub mod cost {
     /// Additional cost of a PLT allow or deny list update
     pub const PLT_LIST_UPDATE: Energy = Energy { energy: 50 };
 
+    /// Additional cost of a PLT pause
+    pub const PLT_PAUSE: Energy = Energy { energy: 50 };
+
     /// Additional cost of an encrypted transfer.
     #[deprecated(
         since = "5.0.1",
@@ -2294,6 +2297,7 @@ pub mod construct {
                     | TokenOperation::RemoveAllowList(_)
                     | TokenOperation::AddDenyList(_)
                     | TokenOperation::RemoveDenyList(_) => cost::PLT_LIST_UPDATE,
+                    TokenOperation::Pause(_) => cost::PLT_PAUSE,
                     TokenOperation::Unknown(_, _) => Default::default(),
                 })
                 .sum()
