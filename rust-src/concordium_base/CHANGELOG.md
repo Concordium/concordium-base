@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Adjusted cost of PLT mint/burn from 100 to 50
+
 ## 8.0.0-alpha.1 (2025-06-30)
 
 - `TokenAmount` changed to require explicit number of decimals equal to the token when creating a value
