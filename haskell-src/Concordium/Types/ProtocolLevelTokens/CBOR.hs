@@ -869,21 +869,26 @@ encodeTokenTransfer TokenTransferBody{..} =
 
 -- * Token Operations
 
--- | A token operation. This can be a transfer, mint, burn or update to the allow or deny list.
+-- | A token operation. This can be a transfer, mint, burn, pause, unpause or update to
+--  the allow or deny list.
 data TokenOperation
     = TokenTransfer TokenTransferBody
     | -- | Mint a specified token amount to the token governance account.
-      TokenMint {tgoMintAmount :: !TokenAmount}
+      TokenMint {toMintAmount :: !TokenAmount}
     | -- | Burn a specified token amount from the token governance account.
-      TokenBurn {tgoBurnAmount :: !TokenAmount}
+      TokenBurn {toBurnAmount :: !TokenAmount}
     | -- | Add the specified account to the allow list.
-      TokenAddAllowList {tgoTarget :: !CborTokenHolder}
+      TokenAddAllowList {toTarget :: !CborTokenHolder}
     | -- | Remove the specified account from the allow list.
-      TokenRemoveAllowList {tgoTarget :: !CborTokenHolder}
+      TokenRemoveAllowList {toTarget :: !CborTokenHolder}
     | -- | Add the specified account to the deny list.
-      TokenAddDenyList {tgoTarget :: !CborTokenHolder}
+      TokenAddDenyList {toTarget :: !CborTokenHolder}
     | -- | Remove the specified account from the deny list.
-      TokenRemoveDenyList {tgoTarget :: !CborTokenHolder}
+      TokenRemoveDenyList {toTarget :: !CborTokenHolder}
+    | -- | Pause transfer/mint/burn operations for the token.
+      TokenPause
+    | -- | Unpause transfer/mint/burn operations for the token.
+      TokenUnpause
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenOperation where
@@ -915,6 +920,14 @@ instance AE.ToJSON TokenOperation where
         AE.object
             [ "removeDenyList" AE..= AE.toJSON body
             ]
+    toJSON TokenPause =
+        AE.object
+            [ "pause" AE..= AE.object []
+            ]
+    toJSON TokenUnpause =
+        AE.object
+            [ "unpause" AE..= AE.object []
+            ]
 
 instance AE.FromJSON TokenOperation where
     parseJSON = AE.withObject "TokenOperation" $ \o -> do
@@ -941,6 +954,10 @@ instance AE.FromJSON TokenOperation where
             ["removeDenyList"] -> do
                 body <- o AE..: "removeDenyList"
                 pure $ TokenRemoveDenyList body
+            ["pause"] -> do
+                pure TokenPause
+            ["unpause"] -> do
+                pure TokenUnpause
             other -> fail $ "token-operation: unsupported operation type: " ++ show other
 
 -- | Decode a CBOR-encoded 'TokenOperation'.
@@ -960,6 +977,8 @@ decodeTokenOperation = do
         "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
         "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
         "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
+        "pause" -> pure TokenPause
+        "unpause" -> pure TokenUnpause
         _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -996,6 +1015,8 @@ encodeTokenOperation = \case
     TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
     TokenAddDenyList target -> encodeListTarget "addDenyList" target
     TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
+    TokenPause -> encodePause
+    TokenUnpause -> encodeUnpause
   where
     encodeSupplyUpdate opType amount =
         encodeMapLen 1
@@ -1009,6 +1030,12 @@ encodeTokenOperation = \case
             <> encodeMapLen 1
             <> encodeString "target"
             <> encodeCborTokenHolder target
+    encodePause =
+        encodeMapLen 1
+            <> encodeString "pause"
+    encodeUnpause =
+        encodeMapLen 1
+            <> encodeString "unpause"
 
 -- | A token transaction consists of a sequence of token operations.
 newtype TokenUpdateTransaction = TokenUpdateTransaction
@@ -1066,16 +1093,56 @@ data TokenEvent
       AddDenyListEvent !CborTokenHolder
     | -- | An account was removed from the deny list.
       RemoveDenyListEvent !CborTokenHolder
+    | -- | Whether the execution of token operations has been paused.
+      Pause
+    | -- | Whether the execution of token operations has been unpaused.
+      Unpause
     deriving (Eq, Show)
 
--- | CBOR-encode the details for the list update events in the form:
---  > {"target": <TokenHolder>}
-encodeTargetDetails :: CborTokenHolder -> TokenEventDetails
-encodeTargetDetails target =
+-- | CBOR-encode the details for the token events in the form:
+--  > {"label": <CborEncodedValue>}
+encodeEventDetails :: Text.Text -> (a -> Encoding) -> a -> TokenEventDetails
+encodeEventDetails label encoder x =
     TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
         encodeMapLen 1
-            <> encodeString "target"
-            <> encodeCborTokenHolder target
+            <> encodeString label
+            <> encoder x
+
+-- | Decoder for the event details of token events.
+decodeTokenEventDetails ::
+    -- | The (single) field name of the event details
+    Text.Text ->
+    -- | The decoder for the field
+    (forall s. Decoder s a) ->
+    -- | The input bytestring
+    LBS.ByteString ->
+    Either String a
+decodeTokenEventDetails label innerDecoder detailsLBS =
+    case CBOR.deserialiseFromBytes (decodeWith innerDecoder) detailsLBS of
+        Left e -> Left $ "token-event: failed to decode event details: " ++ show e
+        Right ("", target) -> Right target
+        Right (remaining, _) ->
+            Left $
+                "token-event: "
+                    ++ show (LBS.length remaining)
+                    ++ " bytes remaining after parsing event details"
+  where
+    decodeWith decoder = do
+        maybeMapLen <- decodeMapLenOrIndef
+        forM_ maybeMapLen $ \mapLen ->
+            unless (mapLen == 1) $
+                fail $
+                    "token-event: expected a map of size 1, but saw " ++ show mapLen
+        label' <- decodeString
+        unless (label' == label) $
+            fail $
+                "token-event: expected \"target\" key, but saw "
+                    ++ show label'
+        x <- decoder
+        when (isNothing maybeMapLen) $ do
+            isEnd <- decodeBreakOr
+            unless isEnd $ fail "token-event: expected end of map"
+        return x
 
 -- | Encode a 'TokenEvent' as an 'EncodedTokenEvent'.
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
@@ -1100,46 +1167,31 @@ encodeTokenEvent = \case
             { eteType = TokenEventType "removeDenyList",
               eteDetails = encodeTargetDetails target
             }
-
--- | Decoder for the event details of the list update events.
---  This is the "token-list-update-details" type in the CDDL schema.
-decodeTokenEventTarget :: Decoder s CborTokenHolder
-decodeTokenEventTarget = do
-    maybeMapLen <- decodeMapLenOrIndef
-    forM_ maybeMapLen $ \mapLen ->
-        unless (mapLen == 1) $
-            fail $
-                "token-event: expected a map of size 1, but saw " ++ show mapLen
-    label <- decodeString
-    unless (label == "target") $
-        fail $
-            "token-event: expected \"target\" key, but saw "
-                ++ show label
-    target <- decodeCborTokenHolder
-    when (isNothing maybeMapLen) $ do
-        isEnd <- decodeBreakOr
-        unless isEnd $ fail "token-event: expected end of map"
-    return target
+    Pause ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "pause",
+              eteDetails = encodeEventDetails "paused" mempty ()
+            }
+    Unpause ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "unpause",
+              eteDetails = encodeEventDetails "unpaused" mempty ()
+            }
+  where
+    encodeTargetDetails = encodeEventDetails "target" encodeCborTokenHolder
 
 -- | Decode a 'TokenEvent' from an 'EncodedTokenEvent'.
 decodeTokenEvent :: EncodedTokenEvent -> Either String TokenEvent
 decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
-    "addAllowList" -> AddAllowListEvent <$> decodeTarget
-    "removeAllowList" -> RemoveAllowListEvent <$> decodeTarget
-    "addDenyList" -> AddDenyListEvent <$> decodeTarget
-    "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
+    "addAllowList" -> AddAllowListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
+    "removeAllowList" -> RemoveAllowListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
+    "addDenyList" -> AddDenyListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
+    "removeDenyList" -> RemoveDenyListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
+    "pause" -> pure Pause
+    "unpause" -> pure Unpause
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
-    decodeTarget = do
-        let detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
-        case CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS of
-            Left e -> Left $ "token-event: failed to decode event details: " ++ show e
-            Right ("", target) -> Right target
-            Right (remaining, _) ->
-                Left $
-                    "token-event: "
-                        ++ show (LBS.length remaining)
-                        ++ " bytes remaining after parsing event details"
+    detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
 
 -- * Reject reasons
 
