@@ -98,6 +98,9 @@ pub mod operations {
             }),
         })
     }
+
+    /// Construct operation to pause/unpause protocol level token.
+    pub fn pause(paused: bool) -> TokenOperation { TokenOperation::Pause(paused) }
 }
 
 /// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
