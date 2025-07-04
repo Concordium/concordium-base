@@ -127,8 +127,9 @@ jobs:
             ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ env.rust }}
       - name: Install Rust
         run: |
-#          rustup component add clippy
           rustup target add aarch64-linux-android
+
+      #          rustup component add clippy
 
       - name: Run clippy
         run: |
