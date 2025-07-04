@@ -44,7 +44,7 @@ jobs:
       uses: actions/checkout@v4
     - name: Run rustfmt
       run: | 
-#        rustup +nightly-2023-04-01 component add rustfmt
+        rustup +nightly-2023-04-01 component add rustfmt
         cargo +nightly-2023-04-01 fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
 
   rustdoc:
