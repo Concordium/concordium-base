@@ -23,7 +23,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches: main
+    branches:
+      - main
+      - plt
   workflow_dispatch: # allow manual trigger
 
 env:
@@ -45,7 +47,7 @@ jobs:
     - name: Run rustfmt
       run: |
         rustup +nightly-2023-04-01 component add rustfmt
-        cargo +nightly-2023-04-01 fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
+        cargo +nightly-2023-04-01 fmt -- --check
 
   rustdoc:
     runs-on: ubuntu-latest
@@ -100,7 +102,7 @@ jobs:
 
     - name: Check that concordium_base compiles with MSRV.
       run: |
-        cargo +1.73 check --locked -p concordium_base
+        cargo +1.73 check --all-features --locked -p concordium_base
 
   rust-clippy-test:
     runs-on: ubuntu-latest
@@ -156,16 +158,16 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          rust-src/target
+          rust-src/target 
           rust-bins/target
           identity-provider-service/target
           idiss/target
           mobile_wallet/target
           lib
-        key: ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}-${{ hashFiles('**/Cargo.toml', 'Cargo.lock') }}
+        key: ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ env.rust }}-${{ hashFiles('**/Cargo.toml', 'Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}
-
+          ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ env.rust }}
+# todo ar clean up cache paths
     # HASKELL #
 
     # Set up Haskell by caching '~/.stack', '.stack-work', and '~/.local/bin' separately.
