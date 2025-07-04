@@ -130,11 +130,16 @@ token-list-update-details = {
     "target": token-holder
 }
 
-; Pause or unpause the execution of certain token operations. This includes
+; Pause the execution of certain token operations. This (currently) includes
 ; the operations "mint", "burn", and "transfer".
 token-pause = {
-    ; Whether to pause or unpause token operations.
-    "pause": bool
+    "pause": {}
+}
+
+; Unpause the execution of certain token operations, acting as an inverse of `token-pause`.
+; This (currently) includes the operations "mint", "burn", and "transfer".
+token-unpause = {
+    "unpause": {}
 }
 
 ; Chain governance
@@ -174,6 +179,12 @@ metadata-url = {
     * text => any
 }
 
+; The pause state associated with the token. This is left open-ended for future extensibility.
+token-pause-state = {
+    ; Any fields used to describe the details of the pause operation
+    * text => any
+}
+
 ; Token state
 
 ; The Token Module state represents global state information that is maintained by the Token Module,
@@ -201,8 +212,8 @@ token-module-state = {
     ? "mintable": bool,
     ; Whether the token is burnable.
     ? "burnable": bool,
-    ; Whether the execution of certain token operations has been paused.
-    "paused": bool,
+    ; Describes whether the execution of certain token operations has been paused.
+    ? "paused": token-pause-state,
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
@@ -254,12 +265,11 @@ token-add-deny-list-event = token-list-update-details
 ; This is a token kernel event, and indicates the account was removed from the deny list.
 token-remove-deny-list-event = token-list-update-details
 
-; The details of a token "pause" event, indicating whether the execution of the "mint", "burn",
-; and "transfer" token operations has been paused.
-token-pause-event = {
-    ; Whether the execution of token operations has been paused.
-    "paused": bool
-}
+; The details of a token "pause" event, indicating whether the execution token operations has been paused.
+token-pause-event = token-pause-state
+
+; The details of a token "unpause" event, indicating whether the execution token operations has been paused.
+token-unpause-event = token-pause-state
 
 ; Reject reason details
 
