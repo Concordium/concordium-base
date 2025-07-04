@@ -28,19 +28,20 @@ on:
 
 env:
   dummy: 1                 # change to force cache invalidation
+  ghc: 9.6.6               # used for cache key only, the GHC version actually used is specified in stack.yaml
+  rust: 1.82               # used for cache key only, the Rust version actually used is specified in rust-toolchain.toml
   CARGO_TERM_COLOR: always # implicitly adds '--color=always' to all cargo commands
 
 jobs:
 
   rustfmt:
     runs-on: ubuntu-latest
+    name: "Rust: rustfmt"
     if: ${{ !github.event.pull_request.draft }}
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
-      with:
-        submodules: recursive
+      uses: actions/checkout@v4
 
     - name: Run rustfmt
       run: | 
@@ -49,6 +50,7 @@ jobs:
 
   rustdoc:
     runs-on: ubuntu-latest
+    name: "Rust: doc"
     if: ${{ !github.event.pull_request.draft }}
       
     steps:
@@ -64,6 +66,7 @@ jobs:
 
   fourmolu:
     runs-on: ubuntu-latest
+    name: "Haskell: fourmolu"
     if: ${{ !github.event.pull_request.draft }}
 
     steps:
@@ -75,7 +78,7 @@ jobs:
         version: '0.13.1.0'
 
     - name: Checkout project
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Run fourmolu
       run: |
@@ -88,6 +91,7 @@ jobs:
   # adds value. If it does bump the rust version here and in Cargo.toml in rust-src/concordium-base
   rust-msrv-compile:
     runs-on: ubuntu-latest
+    name: "Rust: check using MSRV"
     if: ${{ !github.event.pull_request.draft }}
 
     steps:
@@ -96,27 +100,56 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Check that concordium base compiles with MSRV.
+    - name: Check that concordium_base compiles with MSRV.
       run: |
         cargo +1.73 check --locked -p concordium_base
 
-  build-test:
+  rust-clippy-test:
     runs-on: ubuntu-latest
+    name: "Rust: clippy and test"
     if: ${{ !github.event.pull_request.draft }}
 
-    strategy:
-      matrix:
-        plan:
-        - ghc: 9.6.6 # used as cache key only; stack uses the one specified in stack.yaml
-          rust: 1.82
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Cache cargo dependencies and targets
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ env.rust }}-${{ hashFiles('**/Cargo.toml', 'Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ env.rust }}
+      - name: Install Rust
+        run: |
+#          rustup component add clippy
+          rustup target add aarch64-linux-android
+
+      - name: Run clippy
+        run: |
+          cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run tests
+        run: |
+          cargo test --locked --all-features --release
+      - name: Check mobile_wallet on Android compile target
+        run: |
+          cargo check --locked --all-features --all-targets -p mobile_wallet --target aarch64-linux-android
+# todo ar check haskell rust dep build
+  haskell-build-test:
+    runs-on: ubuntu-latest
+    name: "Haskell: build and test"
+    if: ${{ !github.event.pull_request.draft }}
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         submodules: recursive
-    # RUST #
-# todo ar caches
+
     # Set up Rust and restore dependencies and targets from cache.
     # This must be done before checking the Rust sources.
     - name: Cache cargo dependencies and targets
@@ -131,30 +164,9 @@ jobs:
           idiss/target
           mobile_wallet/target
           lib
-        key: ${{ runner.os }}-{{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}-${{ hashFiles('**/Cargo.toml', 'Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-{{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}
-    - name: Install Rust
-      run: |
-        rustup component add clippy 
-        rustup target add aarch64-linux-android
-
-    # Lightweight check that Rust code compiles.
-    # Catching failure here avoids restoring of Haskell caches.
-    - name: Check that all Rust targets build
-      run: |
-        cargo check --locked --all-features --all-targets
-        cargo check --locked --all-features --all-targets -p mobile_wallet --target aarch64-linux-android
-
-    # Rust code linting.
-    - name: Run cargo clippy on all targets
-      run: |
-        cargo clippy --all-targets --all-features -- -D warnings
-
-    # Run tests.
-    - name: Test Rust crates
-      run: |
-        cargo test --locked --all-features --release
+          ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ matrix.plan.rust }}
 
     # HASKELL #
 
@@ -168,24 +180,24 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.stack
-        key: ${{ runner.os }}-{{ env.dummy }}-stack-global-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
+        key: ${{ runner.os }}-${{ env.dummy }}-stack-global-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-{{ env.dummy }}-stack-global-${{ matrix.plan.ghc }}
+          ${{ runner.os }}-${{ env.dummy }}-stack-global-${{ matrix.plan.ghc }}
     - name: Cache stack-installed programs in '~/.local/bin'
       id: stack-programs
       uses: actions/cache@v4
       with:
         path: ~/.local/bin
-        key: ${{ runner.os }}-{{ env.dummy }}-stack-programs-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
+        key: ${{ runner.os }}-${{ env.dummy }}-stack-programs-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-{{ env.dummy }}-stack-programs-${{ matrix.plan.ghc }}
+          ${{ runner.os }}-${{ env.dummy }}-stack-programs-${{ matrix.plan.ghc }}
     - name: Cache '.stack-work'
       uses: actions/cache@v4
       with:
         path: .stack-work
-        key: ${{ runner.os }}-{{ env.dummy }}-stack-work-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
+        key: ${{ runner.os }}-${{ env.dummy }}-stack-work-${{ matrix.plan.ghc }}-${{ hashFiles('**.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-{{ env.dummy }}-stack-work-${{ matrix.plan.ghc }}
+          ${{ runner.os }}-${{ env.dummy }}-stack-work-${{ matrix.plan.ghc }}
 
     - name: Install GHC (unless it was cached)
       if: steps.stack-programs.outputs.cache-hit != 'true' || steps.stack-global.outputs.cache-hit != 'true'
