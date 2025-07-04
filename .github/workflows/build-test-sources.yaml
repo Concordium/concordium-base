@@ -44,7 +44,7 @@ jobs:
 
     - name: Run rustfmt
       run: | 
-        rustup +nightly-2023-04-01 component add rustfmt
+#        rustup +nightly-2023-04-01 component add rustfmt
         cargo +nightly-2023-04-01 fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
 
   rustdoc:
@@ -53,13 +53,13 @@ jobs:
       
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         submodules: recursive
 
     - name: Run cargo doc
       run: |
-        rustup component add rust-docs
+#        rustup component add rust-docs
         RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
   fourmolu:
@@ -86,23 +86,21 @@ jobs:
   # as old as reasonable since we publish it as a library.
   # If this job fails consider carefully whether the new language feature used
   # adds value. If it does bump the rust version here and in Cargo.toml in rust-src/concordium-base
-  check-base-compiles:
-    needs: [fourmolu, rustfmt]
+  rust-msrv-compile:
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         submodules: recursive
 
     - name: Check that concordium base compiles with MSRV.
       run: |
-        cargo +1.73 check --manifest-path rust-src/concordium_base/Cargo.toml
+        cargo +1.73 check --locked -p concordium_base
 
   build-test:
-    needs: [fourmolu, rustfmt]
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
 
