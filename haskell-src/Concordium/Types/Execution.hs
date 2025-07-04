@@ -343,7 +343,7 @@ data Payload
         }
     | -- | Configure a baker on an account.
       -- The serialization uses a bitmap to indicate which fields are present.
-      -- The bitmap it 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
       -- could be added, while retaining the validity of existing transactions).
       ConfigureBaker
         { -- | The equity capital of the baker
@@ -377,18 +377,11 @@ data Payload
           cdDelegationTarget :: !(Maybe DelegationTarget)
         }
     | -- | An update for a protocol level token.
-      TokenHolder
+      TokenUpdate
         { -- | Identifier of the token type to which the transaction refers.
-          thTokenId :: !TokenId,
+          tuTokenId :: !TokenId,
           -- | The CBOR-encoded operations to perform.
-          thOperations :: !TokenParameter
-        }
-    | -- | A governance update for a protocol level token.
-      TokenGovernance
-        { -- | Identifier of the token type to which the transaction refers.
-          tgTokenId :: !TokenId,
-          -- | The CBOR-encoded operations to perform.
-          tgOperations :: !TokenParameter
+          tuOperations :: !TokenParameter
         }
     deriving (Eq, Show)
 
@@ -426,8 +419,7 @@ instance S.Serialize TransactionType where
         TTTransferWithScheduleAndMemo -> S.putWord8 18
         TTConfigureBaker -> S.putWord8 19
         TTConfigureDelegation -> S.putWord8 20
-        TTTokenHolder -> S.putWord8 21
-        TTTokenGovernance -> S.putWord8 22
+        TTTokenUpdate -> S.putWord8 21
 
     get =
         S.getWord8 >>= \case
@@ -452,8 +444,7 @@ instance S.Serialize TransactionType where
             18 -> return TTTransferWithScheduleAndMemo
             19 -> return TTConfigureBaker
             20 -> return TTConfigureDelegation
-            21 -> return TTTokenHolder
-            22 -> return TTTokenGovernance
+            21 -> return TTTokenUpdate
             n -> fail $ "Unrecognized TransactionType tag: " ++ show n
 
 instance AE.ToJSON Payload where
@@ -576,17 +567,11 @@ instance AE.ToJSON Payload where
               "proofAggregation" AE..= ubkProofAggregation,
               "transactionType" AE..= AE.String "updateBakerKeys"
             ]
-    toJSON TokenHolder{..} =
+    toJSON TokenUpdate{..} =
         AE.object
-            [ "tokenId" AE..= thTokenId,
-              "operations" AE..= EncodedTokenOperations thOperations,
-              "transactionType" AE..= AE.String "tokenHolder"
-            ]
-    toJSON TokenGovernance{..} =
-        AE.object
-            [ "tokenId" AE..= tgTokenId,
-              "operations" AE..= tgOperations,
-              "transactionType" AE..= AE.String "tokenGovernance"
+            [ "tokenId" AE..= tuTokenId,
+              "operations" AE..= EncodedTokenOperations tuOperations,
+              "transactionType" AE..= AE.String "tokenUpdate"
             ]
 
 instance AE.FromJSON Payload where
@@ -696,14 +681,10 @@ instance AE.FromJSON Payload where
                 cdRestakeEarnings <- obj AE..: "restakeEarnings"
                 cdDelegationTarget <- obj AE..: "delegationTarget"
                 return ConfigureDelegation{..}
-            "tokenHolder" -> do
-                thTokenId <- obj AE..: "tokenId"
-                (EncodedTokenOperations thOperations) <- obj AE..: "operations"
-                return TokenHolder{..}
-            "tokenGovernance" -> do
-                tgTokenId <- obj AE..: "tokenId"
-                tgOperations <- obj AE..: "operations"
-                return TokenGovernance{..}
+            "tokenUpdate" -> do
+                tuTokenId <- obj AE..: "tokenId"
+                (EncodedTokenOperations tuOperations) <- obj AE..: "operations"
+                return TokenUpdate{..}
             _ -> fail "Unrecognized 'TransactionType' tag"
 
 -- | Payload serialization according to
@@ -843,14 +824,10 @@ putPayload ConfigureDelegation{..} = do
         bitFor 0 cdCapital
             .|. bitFor 1 cdRestakeEarnings
             .|. bitFor 2 cdDelegationTarget
-putPayload TokenHolder{..} = do
+putPayload TokenUpdate{..} = do
     S.putWord8 27
-    S.put thTokenId
-    S.put thOperations
-putPayload TokenGovernance{..} = do
-    S.putWord8 28
-    S.put tgTokenId
-    S.put tgOperations
+    S.put tuTokenId
+    S.put tuOperations
 
 -- | Set the given bit if the value is a 'Just'.
 bitFor :: (Bits b) => Int -> Maybe a -> b
@@ -1016,14 +993,10 @@ getPayload spv size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
                 cdRestakeEarnings <- maybeGet 1
                 cdDelegationTarget <- maybeGet 2
                 return ConfigureDelegation{..}
-            27 | supportProtocolLevelTokens -> S.label "TokenHolder" $ do
-                thTokenId <- S.get
-                thOperations <- S.get
-                return TokenHolder{..}
-            28 | supportProtocolLevelTokens -> S.label "TokenGovernance" $ do
-                tgTokenId <- S.get
-                tgOperations <- S.get
-                return TokenGovernance{..}
+            27 | supportProtocolLevelTokens -> S.label "TokenUpdate" $ do
+                tuTokenId <- S.get
+                tuOperations <- S.get
+                return TokenUpdate{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
     supportMemo = supportsMemo spv
     supportDelegation = protocolSupportsDelegation spv
@@ -1410,33 +1383,42 @@ data Event' (supplemented :: Bool)
           etmeDetails :: !TokenEventDetails
         }
     | -- | A token transfer event.
+      -- The serialization uses a bitmap to indicate which fields are present.
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- could be added, while retaining the validity of the existing event to support transferring to/from smart contracts).
       TokenTransfer
         { -- | The unique token identifier.
           ettTokenId :: !TokenId,
           -- | The source of the transfer.
-          ettFrom :: !AccountAddress,
+          ettFrom :: !TokenHolder,
           -- | The target of the transfer.
-          ettTo :: !AccountAddress,
+          ettTo :: !TokenHolder,
           -- | The amount transferred.
           ettAmount :: !TokenAmount,
           -- | An optional memo for the transfer.
           ettMemo :: !(Maybe Memo)
         }
     | -- | A token mint event.
+      -- The serialization uses a bitmap to indicate which fields are present.
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- could be added, while retaining the validity of the existing event to support minting tokens to smart contracts).
       TokenMint
         { -- | The unique token identifier.
           etmTokenId :: !TokenId,
           -- | The account receiving the minted tokens.
-          etmTarget :: !AccountAddress,
+          etmTarget :: !TokenHolder,
           -- | The amount minted.
           etmAmount :: !TokenAmount
         }
     | -- | A token burn event.
+      -- The serialization uses a bitmap to indicate which fields are present.
+      -- The bitmap is 16-bits, allowing room for future expansion if necessary (e.g. an extra field
+      -- could be added, while retaining the validity of the existing event to support burning tokens from smart contracts).
       TokenBurn
         { -- | The unique token identifier.
           etbTokenId :: !TokenId,
           -- | The account from which the tokens are burned.
-          etbTarget :: !AccountAddress,
+          etbTarget :: !TokenHolder,
           -- | The amount burned.
           etbAmount :: !TokenAmount
         }
@@ -1706,18 +1688,29 @@ putEvent = \case
             <> S.put etmeDetails
     TokenTransfer{..} ->
         S.putWord8 39
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            <> S.putWord16be bitmap
             <> S.put ettTokenId
             <> S.put ettFrom
             <> S.put ettTo
             <> S.put ettAmount
-            <> putMaybe S.put ettMemo
+            <> mapM_ S.put ettMemo
+      where
+        bitmap =
+            bitFor 0 ettMemo
     TokenMint{..} ->
         S.putWord8 40
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            <> S.putWord16be 0
             <> S.put etmTokenId
             <> S.put etmTarget
             <> S.put etmAmount
     TokenBurn{..} ->
         S.putWord8 41
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            <> S.putWord16be 0
             <> S.put etbTokenId
             <> S.put etbTarget
             <> S.put etbAmount
@@ -1729,8 +1722,7 @@ getEvent :: SProtocolVersion pv -> S.Get Event
 getEvent spv =
     S.getWord8 >>= \case
         0 -> do
-            mref <- S.get
-            return (ModuleDeployed mref)
+            ModuleDeployed <$> S.get
         1 -> do
             ecRef <- S.get
             ecAddress <- S.get
@@ -1757,8 +1749,7 @@ getEvent spv =
             etTo <- S.get
             return Transferred{..}
         4 -> do
-            addr <- S.get
-            return $ AccountCreated addr
+            AccountCreated <$> S.get
         5 -> do
             ecdRegId <- S.get
             ecdAccount <- S.get
@@ -1923,18 +1914,36 @@ getEvent spv =
             etmeDetails <- S.get
             return TokenModuleEvent{..}
         39 | supportPlt -> do
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            bitmap <- S.getWord16be
+            unless (bitmap .&. configureTokenTransferBitMask == bitmap) $
+                fail "Unsupported TokenTranfser event field(s)"
             ettTokenId <- S.get
             ettFrom <- S.get
             ettTo <- S.get
             ettAmount <- S.get
-            ettMemo <- getMaybe S.get
+            let maybeGet :: (S.Serialize g) => Int -> S.Get (Maybe g)
+                maybeGet b
+                    | testBit bitmap b = Just <$> S.get
+                    | otherwise = return Nothing
+            ettMemo <- maybeGet 0
             return TokenTransfer{..}
         40 | supportPlt -> do
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            bitmap <- S.getWord16be
+            unless (bitmap .&. configureTokenMintBitMask == bitmap) $
+                fail "Unsupported TokenMint event field(s)"
             etmTokenId <- S.get
             etmTarget <- S.get
             etmAmount <- S.get
             return TokenMint{..}
         41 | supportPlt -> do
+            -- The purpose of the bitmap is to make the event extendable with optional additional fields in the future.
+            -- No optional fields are defined at the moment.
+            bitmap <- S.getWord16be
+            unless (bitmap .&. configureTokenBurnBitMask == bitmap) $
+                fail "Unsupported TokenBurn event field(s)"
             etbTokenId <- S.get
             etbTarget <- S.get
             etbAmount <- S.get
@@ -1949,6 +1958,9 @@ getEvent spv =
     supportDelegation = protocolSupportsDelegation spv
     supportSuspend = protocolSupportsSuspend spv
     supportPlt = protocolSupportsPLT spv
+    configureTokenTransferBitMask = 0b0000000000000001
+    configureTokenMintBitMask = 0b0000000000000000
+    configureTokenBurnBitMask = 0b0000000000000000
 
 instance AE.ToJSON (Event' supplemented) where
     toJSON = \case
@@ -2801,12 +2813,8 @@ data RejectReason
       PoolClosed
     | -- | Token ID does not exist.
       NonExistentTokenId !TokenId
-    | -- | The token-holder transaction was rejected.
-      TokenHolderTransactionFailed !TokenModuleRejectReason
-    | -- | The token-governance transaction was rejected.
-      TokenGovernanceTransactionFailed !TokenModuleRejectReason
-    | -- | Account sending the transaction is not authorized for governing the token.
-      UnauthorizedTokenGovernance !TokenId
+    | -- | The token update transaction was rejected.
+      TokenUpdateTransactionFailed !TokenModuleRejectReason
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
@@ -2879,10 +2887,7 @@ instance S.Serialize RejectReason where
         PoolWouldBecomeOverDelegated -> S.putWord8 53
         PoolClosed -> S.putWord8 54
         NonExistentTokenId tokenId -> S.putWord8 55 <> S.put tokenId
-        TokenHolderTransactionFailed reason -> S.putWord8 56 <> S.put reason
-        TokenGovernanceTransactionFailed reason -> S.putWord8 57 <> S.put reason
-        UnauthorizedTokenGovernance tokenId -> S.putWord8 58 <> S.put tokenId
-
+        TokenUpdateTransactionFailed reason -> S.putWord8 56 <> S.put reason
     get =
         S.getWord8 >>= \case
             0 -> return ModuleNotWF
@@ -2950,9 +2955,7 @@ instance S.Serialize RejectReason where
             53 -> return PoolWouldBecomeOverDelegated
             54 -> return PoolClosed
             55 -> NonExistentTokenId <$> S.get
-            56 -> TokenHolderTransactionFailed <$> S.get
-            57 -> TokenGovernanceTransactionFailed <$> S.get
-            58 -> UnauthorizedTokenGovernance <$> S.get
+            56 -> TokenUpdateTransactionFailed <$> S.get
             n -> fail $ "Unrecognized RejectReason tag: " ++ show n
 
 instance AE.ToJSON RejectReason

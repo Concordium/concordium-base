@@ -81,3 +81,8 @@ uncond (CTrue a) = a
 fromCondDef :: Conditionally b a -> a -> a
 fromCondDef (CTrue a) _def = a
 fromCondDef CFalse def = def
+
+-- | Analogue of 'maybe' for 'Conditionally'.
+maybeConditionally :: b -> (a -> b) -> Conditionally bool a -> b
+maybeConditionally b _ CFalse = b
+maybeConditionally _ f (CTrue a) = f a

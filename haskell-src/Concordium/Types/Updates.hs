@@ -187,7 +187,9 @@ data Authorizations (auv :: AuthorizationsVersion) = Authorizations
       -- | Parameter keys: Cooldown periods for pool owners and delegators
       asCooldownParameters :: !(Conditionally (SupportsCooldownParametersAccessStructure auv) AccessStructure),
       -- | Parameter keys: Length of reward period / payday
-      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure)
+      asTimeParameters :: !(Conditionally (SupportsTimeParameters auv) AccessStructure),
+      -- | Authorization keys: CreatePLT transaction
+      asCreatePLT :: !(Conditionally (SupportsCreatePLT auv) AccessStructure)
     }
 
 deriving instance Eq (Authorizations auv)
@@ -211,6 +213,7 @@ putAuthorizations Authorizations{..} = do
     put asAddIdentityProvider
     mapM_ put asCooldownParameters
     mapM_ put asTimeParameters
+    mapM_ put asCreatePLT
 
 getAuthorizations :: forall auv. (IsAuthorizationsVersion auv) => Get (Authorizations auv)
 getAuthorizations = label "deserialization update authorizations" $ do
@@ -237,6 +240,7 @@ getAuthorizations = label "deserialization update authorizations" $ do
     asAddIdentityProvider <- getChecked
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure (sing @auv)) getChecked
     asTimeParameters <- conditionallyA (sSupportsTimeParameters (sing @auv)) getChecked
+    asCreatePLT <- conditionallyA (sSupportsCreatePLT (sing @auv)) getChecked
     return Authorizations{..}
 
 instance (IsAuthorizationsVersion auv) => Serialize (Authorizations auv) where
@@ -281,6 +285,7 @@ parseAuthorizationsJSON = AE.withObject "Authorizations" $ \v -> do
     let auv = sing @auv
     asCooldownParameters <- conditionallyA (sSupportsCooldownParametersAccessStructure auv) $ parseAS "cooldownParameters"
     asTimeParameters <- conditionallyA (sSupportsTimeParameters auv) $ parseAS "timeParameters"
+    asCreatePLT <- conditionallyA (sSupportsCreatePLT auv) $ parseAS "createPLT"
     return Authorizations{..}
 
 instance (IsAuthorizationsVersion auv) => AE.FromJSON (Authorizations auv) where
@@ -306,6 +311,7 @@ instance (IsAuthorizationsVersion auv) => AE.ToJSON (Authorizations auv) where
               ]
                 ++ cooldownParameters
                 ++ timeParameters'
+                ++ createPLT
             )
       where
         t AccessStructure{..} =
@@ -315,6 +321,7 @@ instance (IsAuthorizationsVersion auv) => AE.ToJSON (Authorizations auv) where
                 ]
         cooldownParameters = foldMap (\as -> ["cooldownParameters" AE..= t as]) asCooldownParameters
         timeParameters' = foldMap (\as -> ["timeParameters" AE..= t as]) asTimeParameters
+        createPLT = foldMap (\as -> ["createPLT" AE..= t as]) asCreatePLT
 
 -----------------
 
@@ -390,6 +397,10 @@ data RootUpdate
       Level2KeysRootUpdateV1
         { l2kruAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
+    | -- | Update the level 2 keys in authorizations version 2
+      Level2KeysRootUpdateV2
+        { l2kruAuthorizationsV2 :: !(Authorizations 'AuthorizationsVersion2)
+        }
     deriving (Eq, Show)
 
 putRootUpdate :: Putter RootUpdate
@@ -405,6 +416,9 @@ putRootUpdate Level2KeysRootUpdate{..} = do
 putRootUpdate Level2KeysRootUpdateV1{..} = do
     putWord8 3
     putAuthorizations l2kruAuthorizationsV1
+putRootUpdate Level2KeysRootUpdateV2{..} = do
+    putWord8 4
+    putAuthorizations l2kruAuthorizationsV2
 
 getRootUpdate :: SAuthorizationsVersion auv -> Get RootUpdate
 getRootUpdate sauv = label "RootUpdate" $ do
@@ -414,6 +428,7 @@ getRootUpdate sauv = label "RootUpdate" $ do
         1 -> Level1KeysRootUpdate <$> get
         2 | SAuthorizationsVersion0 <- sauv -> Level2KeysRootUpdate <$> getAuthorizations
         3 | SAuthorizationsVersion1 <- sauv -> Level2KeysRootUpdateV1 <$> getAuthorizations
+        4 | SAuthorizationsVersion2 <- sauv -> Level2KeysRootUpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.FromJSON RootUpdate where
@@ -424,6 +439,7 @@ instance AE.FromJSON RootUpdate where
             "level1KeysUpdate" -> Level1KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysRootUpdate <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysRootUpdateV1 <$> o .: "updatePayload"
+            "level2KeysUpdateV2" -> Level2KeysRootUpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON RootUpdate where
@@ -447,6 +463,11 @@ instance AE.ToJSON RootUpdate where
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kruAuthorizationsV1
             ]
+    toJSON Level2KeysRootUpdateV2{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
+              "updatePayload" AE..= l2kruAuthorizationsV2
+            ]
 
 --------------------
 
@@ -466,6 +487,9 @@ data Level1Update
     | Level2KeysLevel1UpdateV1
         { l2kl1uAuthorizationsV1 :: !(Authorizations 'AuthorizationsVersion1)
         }
+    | Level2KeysLevel1UpdateV2
+        { l2kl1uAuthorizationsV2 :: !(Authorizations 'AuthorizationsVersion2)
+        }
 
 deriving instance Eq Level1Update
 deriving instance Show Level1Update
@@ -480,6 +504,9 @@ putLevel1Update Level2KeysLevel1Update{..} = do
 putLevel1Update Level2KeysLevel1UpdateV1{..} = do
     putWord8 2
     putAuthorizations l2kl1uAuthorizationsV1
+putLevel1Update Level2KeysLevel1UpdateV2{..} = do
+    putWord8 3
+    putAuthorizations l2kl1uAuthorizationsV2
 
 getLevel1Update :: SAuthorizationsVersion auv -> Get Level1Update
 getLevel1Update sauv = label "Level1Update" $ do
@@ -488,6 +515,7 @@ getLevel1Update sauv = label "Level1Update" $ do
         0 -> Level1KeysLevel1Update <$> get
         1 | SAuthorizationsVersion0 <- sauv -> Level2KeysLevel1Update <$> getAuthorizations
         2 | SAuthorizationsVersion1 <- sauv -> Level2KeysLevel1UpdateV1 <$> getAuthorizations
+        3 | SAuthorizationsVersion2 <- sauv -> Level2KeysLevel1UpdateV2 <$> getAuthorizations
         _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.FromJSON Level1Update where
@@ -497,6 +525,7 @@ instance AE.FromJSON Level1Update where
             "level1KeysUpdate" -> Level1KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdate" -> Level2KeysLevel1Update <$> o .: "updatePayload"
             "level2KeysUpdateV1" -> Level2KeysLevel1UpdateV1 <$> o .: "updatePayload"
+            "level2KeysUpdateV2" -> Level2KeysLevel1UpdateV2 <$> o .: "updatePayload"
             _ -> fail $ "Unknown variant: " ++ show variant
 
 instance AE.ToJSON Level1Update where
@@ -514,6 +543,11 @@ instance AE.ToJSON Level1Update where
         AE.object
             [ "typeOfUpdate" AE..= ("level2KeysUpdateV1" :: Text),
               "updatePayload" AE..= l2kl1uAuthorizationsV1
+            ]
+    toJSON Level2KeysLevel1UpdateV2{..} =
+        AE.object
+            [ "typeOfUpdate" AE..= ("level2KeysUpdateV2" :: Text),
+              "updatePayload" AE..= l2kl1uAuthorizationsV2
             ]
 
 ----------------------
@@ -892,8 +926,8 @@ getUpdatePayload spv =
         9
             | PoolParametersVersion0 <- poolParametersVersionFor cpv ->
                 BakerStakeThresholdUpdatePayload <$> getPoolParameters SPoolParametersVersion0
-        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionFor scpv)
-        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionFor scpv)
+        10 -> RootUpdatePayload <$> getRootUpdate (sAuthorizationsVersionFor spv)
+        11 -> Level1UpdatePayload <$> getLevel1Update (sAuthorizationsVersionFor spv)
         12 -> AddAnonymityRevokerUpdatePayload <$> get
         13 -> AddIdentityProviderUpdatePayload <$> get
         14
@@ -914,11 +948,13 @@ getUpdatePayload spv =
         21 | GASRewardsVersion1 <- gasRewardsVersionFor cpv -> GASRewardsCPV2UpdatePayload <$> get
         22 | isSupported PTFinalizationCommitteeParameters cpv -> FinalizationCommitteeParametersUpdatePayload <$> get
         23 | isSupported PTValidatorScoreParameters cpv -> ValidatorScoreParametersUpdatePayload <$> get
-        24 | isSupported PTProtocolLevelTokensParameters cpv -> CreatePLTUpdatePayload <$> get
+        24 | supportsCreatePLT auv -> CreatePLTUpdatePayload <$> get
         x -> fail $ "Unknown update payload kind: " ++ show x
   where
     scpv = sChainParametersVersionFor spv
     cpv = demoteChainParameterVersion scpv
+    sauv = sAuthorizationsVersionFor spv
+    auv = fromSing sauv
 
 $( deriveJSON
     defaultOptions
@@ -950,9 +986,11 @@ updateType (RootUpdatePayload RootKeysRootUpdate{}) = UpdateRootKeys
 updateType (RootUpdatePayload Level1KeysRootUpdate{}) = UpdateLevel1Keys
 updateType (RootUpdatePayload Level2KeysRootUpdate{}) = UpdateLevel2Keys
 updateType (RootUpdatePayload Level2KeysRootUpdateV1{}) = UpdateLevel2Keys
+updateType (RootUpdatePayload Level2KeysRootUpdateV2{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level1KeysLevel1Update{}) = UpdateLevel1Keys
 updateType (Level1UpdatePayload Level2KeysLevel1Update{}) = UpdateLevel2Keys
 updateType (Level1UpdatePayload Level2KeysLevel1UpdateV1{}) = UpdateLevel2Keys
+updateType (Level1UpdatePayload Level2KeysLevel1UpdateV2{}) = UpdateLevel2Keys
 updateType TimeoutParametersUpdatePayload{} = UpdateTimeoutParameters
 updateType MinBlockTimeUpdatePayload{} = UpdateMinBlockTime
 updateType BlockEnergyLimitUpdatePayload{} = UpdateBlockEnergyLimit
@@ -975,8 +1013,8 @@ extractKeysIndices p =
         GASRewardsUpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
         GASRewardsCPV2UpdatePayload{} -> getLevel2KeysAndThreshold asParamGASRewards
         BakerStakeThresholdUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
-        RootUpdatePayload{} -> getHiglerLevelKeysAndThreshold rootKeys
-        Level1UpdatePayload{} -> getHiglerLevelKeysAndThreshold level1Keys
+        RootUpdatePayload{} -> getHigherLevelKeysAndThreshold rootKeys
+        Level1UpdatePayload{} -> getHigherLevelKeysAndThreshold level1Keys
         AddAnonymityRevokerUpdatePayload{} -> getLevel2KeysAndThreshold asAddAnonymityRevoker
         AddIdentityProviderUpdatePayload{} -> getLevel2KeysAndThreshold asAddIdentityProvider
         CooldownParametersCPV1UpdatePayload{} -> getOptionalLevel2KeysAndThreshold asCooldownParameters
@@ -987,16 +1025,11 @@ extractKeysIndices p =
         BlockEnergyLimitUpdatePayload{} -> getLevel2KeysAndThreshold asParamConsensusParameters
         FinalizationCommitteeParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
         ValidatorScoreParametersUpdatePayload{} -> getLevel2KeysAndThreshold asPoolParameters
-        -- TODO Not implemented yet, authorization of this update type is planned for a later iteration".
-        -- Tracked by issue NOD-701.
-        -- This is currently set to just authorize the first key, as this should always be safe.
-        -- Note: tests in UpdatesSpec have been disabled for P9 and should be re-enabled when this
-        -- is implemented.
-        CreatePLTUpdatePayload{} -> const (Set.fromAscList [0], 1)
+        CreatePLTUpdatePayload{} -> getOptionalLevel2KeysAndThreshold asCreatePLT
   where
     getLevel2KeysAndThreshold accessStructure = (\AccessStructure{..} -> (accessPublicKeys, accessThreshold)) . accessStructure . level2Keys
     getOptionalLevel2KeysAndThreshold accessStructure = keysForOParam . accessStructure . level2Keys
-    getHiglerLevelKeysAndThreshold v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
+    getHigherLevelKeysAndThreshold v = (\HigherLevelKeys{..} -> (Set.fromList [0 .. fromIntegral (Vec.length hlkKeys) - 1], hlkThreshold)) . v
     -- If the 'AccessStructure' is not supported at the chain parameter version @cpv@, then there are no keys to return.
     keysForOParam :: Conditionally c AccessStructure -> (Set.Set UpdateKeyIndex, UpdateKeysThreshold)
     keysForOParam (CTrue AccessStructure{..}) = (accessPublicKeys, accessThreshold)

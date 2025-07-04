@@ -182,6 +182,7 @@ module Concordium.Types (
 
     -- * Protocol-level tokens
     TokenId (..),
+    TokenHolder (..),
     makeTokenId,
     unsafeGetTokenId,
     TokenParameter (..),
@@ -194,7 +195,6 @@ module Concordium.Types (
     CreatePLT (..),
     cpltTokenId,
     cpltTokenModule,
-    cpltGovernanceAccount,
     cpltDecimals,
     cpltInitializationParameters,
     EncodedTokenOperations (..),
@@ -411,6 +411,54 @@ instance AE.FromJSON UrlText where
 
 emptyUrlText :: UrlText
 emptyUrlText = UrlText ""
+
+-- | An entity that can hold PLTs (protocol level tokens).
+-- The type is used in the `TokenTransfer`, `TokenMint`, and `TokenBurn` events.
+-- Currently, this can only be a Concordium account address.
+-- The type can be extended to e.g. support smart contracts in the future.
+-- This type shouldn't be confused with the `CborTokenHolder` type that in contrast is used
+-- in the transaction payload, in reject reasons, and in the `TokenModuleEvent`.
+newtype TokenHolder = HolderAccount {haAccount :: AccountAddress}
+    deriving (Eq)
+
+instance Show TokenHolder where
+    show (HolderAccount addr) =
+        show addr
+
+instance AE.ToJSON TokenHolder where
+    toJSON (HolderAccount address) = do
+        AE.object
+            [ -- Tag with type of `account`.
+              "type" AE..= AE.String "account",
+              "address" AE..= address
+            ]
+
+instance AE.FromJSON TokenHolder where
+    parseJSON = AE.withObject "TokenHolder" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "account" -> do
+                address <- o AE..: "address"
+                return (HolderAccount address)
+            _ -> fail ("Unknown TokenHolder type " ++ type_string)
+
+-- Serialization instance for the `TokenHolder` type. A `Word8` tag is used
+-- to allow future extensions, such as supporting smart contract token holders.
+instance S.Serialize TokenHolder where
+    get = getHolderAccount
+    put = putHolderAccount
+
+getHolderAccount :: S.Get TokenHolder
+getHolderAccount =
+    S.getWord8 >>= \case
+        0 -> do
+            HolderAccount <$> S.get
+        n -> fail $ "Unrecognized TokenHolder tag: " ++ show n
+
+putHolderAccount :: S.Putter TokenHolder
+putHolderAccount (HolderAccount address) =
+    S.putWord8 0
+        <> S.put address
 
 -- | Due to limitations on the ledger, there has to be some restriction on the
 --  precision of the input for updating ElectionDifficult. For this purpose,
@@ -1190,8 +1238,8 @@ makeTokenModuleRejectReason tmrrTokenId CBOR.EncodedTokenRejectReason{..} =
           ..
         }
 
--- | A wrapper type for (de)-serializing an CBOR-encoded initialization parameter to/from JSON.
---  This can parse either an JSON object representation of 'TokenInitializationParameters'
+-- | A wrapper type for (de)-serializing a CBOR-encoded initialization parameter to/from JSON.
+--  This can parse either a JSON object representation of 'TokenInitializationParameters'
 --  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
 --  it will render as a JSON object if the contents can be decoded to a
 -- 'TokenInitializationParameters', or otherwise as the hex-encoded byte string.
@@ -1225,8 +1273,6 @@ data CreatePLT = CreatePLT
       _cpltTokenId :: !TokenId,
       -- | A SHA256 hash that identifies the token module implementation.
       _cpltTokenModule :: !TokenModuleRef,
-      -- | The address of the account that will govern the token.
-      _cpltGovernanceAccount :: !AccountAddress,
       -- | The number of decimal places used in the representation of amounts of this token. This determines the smallest representable fraction of the token.
       _cpltDecimals :: !Word8,
       -- | The initialization parameters of the token, encoded in CBOR.
@@ -1245,13 +1291,11 @@ instance S.Serialize CreatePLT where
     put CreatePLT{..} = do
         S.put _cpltTokenId
         S.put _cpltTokenModule
-        S.put _cpltGovernanceAccount
         S.put _cpltDecimals
         S.put _cpltInitializationParameters
     get = do
         _cpltTokenId <- S.get
         _cpltTokenModule <- S.get
-        _cpltGovernanceAccount <- S.get
         _cpltDecimals <- S.get
         _cpltInitializationParameters <- S.get
         return CreatePLT{..}
@@ -1261,7 +1305,6 @@ instance AE.ToJSON CreatePLT where
         AE.object
             [ "tokenId" AE..= _cpltTokenId,
               "tokenModule" AE..= _cpltTokenModule,
-              "governanceAccount" AE..= _cpltGovernanceAccount,
               "decimals" AE..= _cpltDecimals,
               "initializationParameters"
                 AE..= EncodedTokenInitializationParameters _cpltInitializationParameters
@@ -1271,23 +1314,22 @@ instance AE.FromJSON CreatePLT where
     parseJSON = AE.withObject "CreatePLT" $ \o -> do
         _cpltTokenId <- o AE..: "tokenId"
         _cpltTokenModule <- o AE..: "tokenModule"
-        _cpltGovernanceAccount <- o AE..: "governanceAccount"
         _cpltDecimals <- o AE..: "decimals"
         (EncodedTokenInitializationParameters _cpltInitializationParameters) <-
             o AE..: "initializationParameters"
         return CreatePLT{..}
 
--- | A wrapper type for (de)-serializing an CBOR-encoded token operations to/from JSON.
---  This can parse either an JSON object representation of 'TokenHolderTransaction'
---  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
---  it will render as a JSON object if the contents can be decoded to a
--- 'TokenHolderTransaction', or otherwise as the hex-encoded byte string.
+-- | A wrapper type for (de)-serializing a CBOR-encoded token operations to/from JSON.
+--  This can parse either a JSON object representation of 'TokenOperation'
+-- (which is then re-encoded as CBOR) or a hex-encoded byte string. When
+-- rendering JSON,  it will render as a JSON object if the contents can be
+-- decoded to a 'TokenOperation', or otherwise as the hex-encoded byte string.
 newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
     deriving newtype (Eq, Show)
 
 instance AE.ToJSON EncodedTokenOperations where
     toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
-        case CBOR.tokenHolderTransactionFromBytes
+        case CBOR.tokenUpdateTransactionFromBytes
             (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
             Left _ -> AE.toJSON tp
             Right v -> AE.toJSON v
@@ -1299,7 +1341,7 @@ instance AE.FromJSON EncodedTokenOperations where
             EncodedTokenOperations $
                 TokenParameter $
                     BSS.toShort $
-                        CBOR.tokenHolderTransactionToBytes tip
+                        CBOR.tokenUpdateTransactionToBytes tip
     parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
     parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 

@@ -121,13 +121,9 @@ removeBakerCost = 300
 configureDelegationCost :: Energy
 configureDelegationCost = 300
 
--- | Base cost for token holder transactions.
-tokenHolderBaseCost :: Energy
-tokenHolderBaseCost = 300
-
--- | Base cost for token governance transactions.
-tokenGovernanceBaseCost :: Energy
-tokenGovernanceBaseCost = 300
+-- | Base cost for token update transactions.
+tokenUpdateBaseCost :: Energy
+tokenUpdateBaseCost = 300
 
 -- | Cost for the execution of a token transfer.
 tokenTransferCost :: Energy
@@ -135,11 +131,11 @@ tokenTransferCost = 100
 
 -- | Cost to mint a token.
 tokenMintCost :: Energy
-tokenMintCost = 100
+tokenMintCost = 50
 
 -- | Cost to burn a token.
 tokenBurnCost :: Energy
-tokenBurnCost = 100
+tokenBurnCost = 50
 
 -- | Cost to carry out a list operation (add/remove from allow/deny list).
 tokenListOperationCost :: Energy
