@@ -17,7 +17,7 @@
 # The dependencies between the steps are described in inline comments below
 # along with a few suggestions for improving parallelization.
 
-name: Check format, docs, build and run tests for Haskell and Rust sources
+name: Build and test
 
 on:
   pull_request:
