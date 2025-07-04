@@ -43,10 +43,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     - name: Run rustfmt
-      run: | 
+      run: |
+        rustup +nightly-2023-04-01 component add rustfmt
         cargo +nightly-2023-04-01 fmt --manifest-path ${{ matrix.crates }}/Cargo.toml --all -- --check
-
-#        rustup +nightly-2023-04-01 component add rustfmt
 
   rustdoc:
     runs-on: ubuntu-latest
@@ -62,8 +61,6 @@ jobs:
     - name: Run cargo doc
       run: |
         RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
-
-  #        rustup component add rust-docs
 
   fourmolu:
     runs-on: ubuntu-latest
@@ -127,9 +124,8 @@ jobs:
             ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ env.rust }}
       - name: Install Rust
         run: |
+          rustup component add clippy          
           rustup target add aarch64-linux-android
-
-      #          rustup component add clippy
 
       - name: Run clippy
         run: |
