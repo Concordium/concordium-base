@@ -22,7 +22,6 @@ on:
 name: Contracts common clippy & fmt
 
 env:
-  RUST_VERSION: "1.82"
   RUST_FMT: "nightly-2023-04-01"
 
 defaults:
@@ -38,10 +37,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Run cargo fmt
-        run: |
-          rustup default ${{ env.RUST_FMT }}
-          rustup component add rustfmt
-          cargo fmt --all --check
+        run: | 
+          rustup +${{ env.RUST_FMT }} component add rustfmt
+          cargo +${{ env.RUST_FMT }} fmt --all --check
 
   rustdoc:
     name: Docs
@@ -52,7 +50,6 @@ jobs:
 
       - name: Run cargo doc
         run: |
-          rustup default ${{ env.RUST_VERSION }}
           rustup component add rust-docs
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --color=always
 
@@ -79,7 +76,6 @@ jobs:
 
       - name: Run cargo clippy
         run: |
-          rustup default ${{ env.RUST_VERSION }}
           rustup component add clippy
           rustup target add ${{ matrix.target }}
           cargo clippy --manifest-path=concordium-contracts-common/Cargo.toml --target=${{ matrix.target }} --features=${{ matrix.features }} --no-default-features -- -D warnings
@@ -103,7 +99,6 @@ jobs:
 
       - name: Run cargo clippy
         run: |
-          rustup default ${{ env.RUST_VERSION }}
           rustup component add clippy
           rustup target add ${{ matrix.target }}
           cargo clippy --manifest-path=concordium-contracts-common-derive/Cargo.toml --target=${{ matrix.target }} --no-default-features -- -D warnings
@@ -117,5 +112,4 @@ jobs:
 
       - name: Run cargo test
         run: |
-          rustup default ${{ env.RUST_VERSION }}
           cargo test --workspace --all-features
