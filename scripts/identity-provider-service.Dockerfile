@@ -2,8 +2,8 @@
 ARG base_image_tag
 FROM concordium/base:${base_image_tag} as builder
 COPY . /build
-WORKDIR /build/identity-provider-service
-RUN cargo build --release
+WORKDIR /build
+RUN cargo build --release -p identity-provider-service
 
 # Collect build artifacts in fresh image.
 FROM ubuntu:24.04
@@ -15,7 +15,7 @@ RUN apt-get update && \
 
 LABEL base_image_tag=${base_image_tag}
 
-COPY --from=builder /build/identity-provider-service/target/release/identity-provider-service /identity-provider-service
-COPY --from=builder /build/identity-provider-service/target/release/identity-verifier /identity-verifier
+COPY --from=builder /build/target/release/identity-provider-service /identity-provider-service
+COPY --from=builder /build/target/release/identity-verifier /identity-verifier
 COPY --from=builder /build/scripts/start.sh /start.sh
 ENTRYPOINT ["/start.sh"]

@@ -17,6 +17,8 @@
 # The dependencies between the steps are described in inline comments below
 # along with a few suggestions for improving parallelization.
 
+# todo ar fix rustup default
+
 name: Build and test
 
 on:

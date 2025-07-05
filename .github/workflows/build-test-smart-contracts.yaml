@@ -1,4 +1,4 @@
-name: Build and test smart-contracts
+name: Smart contracts build and test
 
 # This job runs rustfmt and clippy linting,
 # and then it runs cargo test and ./target/debug/wasm-test

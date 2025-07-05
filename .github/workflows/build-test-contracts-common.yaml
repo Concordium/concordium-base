@@ -19,7 +19,7 @@ on:
       - 'smart-contracts/contracts-common/**/*.toml'
       - '.github/workflows/build-test-contracts-common.yaml'
 
-name: Clippy & fmt
+name: Contracts common clippy & fmt
 
 env:
   RUST_VERSION: "1.82"
