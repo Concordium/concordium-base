@@ -1,24 +1,18 @@
 use crate::{
-    common::{
-        types::{KeyIndex, KeyPair, TransactionTime},
-        *,
-    },
-    curve_arithmetic::Curve,
+    common::types::TransactionTime,
     dodis_yampolskiy_prf as prf,
     elgamal::{PublicKey, SecretKey},
     id::{
         account_holder::*,
-        anonymity_revoker::*,
-        chain::*,
         constants::{ArCurve, BaseField, IpPairing, *},
-        identity_provider::*,
         secret_sharing::Threshold,
         types::*,
     },
 };
+
 use ed25519::SigningKey;
 use ed25519_dalek as ed25519;
-use either::Either::Left;
+
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
 
@@ -48,8 +42,8 @@ pub fn test_create_ars<T: Rng>(
         let ar_info = ArInfo::<ArCurve> {
             ar_identity: ar_id,
             ar_description: Description {
-                name:        format!("AnonymityRevoker{}", i),
-                url:         format!("AnonymityRevoker{}.com", i),
+                name: format!("AnonymityRevoker{}", i),
+                url: format!("AnonymityRevoker{}.com", i),
                 description: format!("AnonymityRevoker{}", i),
             },
             ar_public_key,
@@ -81,8 +75,8 @@ pub fn test_create_ip_info<T: Rng + rand::CryptoRng>(
         public_ip_info: IpInfo {
             ip_identity: IpIdentity(0),
             ip_description: Description {
-                name:        "IP0".to_owned(),
-                url:         "IP0.com".to_owned(),
+                name: "IP0".to_owned(),
+                url: "IP0.com".to_owned(),
                 description: "IP0".to_owned(),
             },
             ip_verify_key,
@@ -178,363 +172,375 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     }
 }
 
-#[test]
-pub fn test_pipeline() {
-    let mut csprng = thread_rng();
-
-    // Generate PIO
-    let max_attrs = 10;
-    let num_ars = 5;
-    let IpData {
-        public_ip_info: ip_info,
-        ip_secret_key,
-        ip_cdi_secret_key,
-    } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-
-    let global_ctx = GlobalContext::generate(String::from("genesis_string"));
-
-    let (ars_infos, ars_secret) =
-        test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-
-    let id_use_data = test_create_id_use_data(&mut csprng);
-    let acc_data = InitialAccountData {
-        keys:      {
-            let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
-            keys
-        },
-        threshold: SignatureThreshold::TWO,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        common::types::{KeyIndex, KeyPair},
+        id::{anonymity_revoker::*, chain::*, identity_provider::*},
     };
-    let (context, pio, _) = test_create_pio(
-        &id_use_data,
-        &ip_info,
-        &ars_infos,
-        &global_ctx,
-        num_ars,
-        &acc_data,
-    );
-    let alist = test_create_attributes();
-    let ver_ok = verify_credentials(
-        &pio,
-        context,
-        &alist,
-        EXPIRY,
-        &ip_secret_key,
-        &ip_cdi_secret_key,
-    );
-    assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
+    use either::Left;
+    use crate::common::serialize_deserialize;
+    use crate::curve_arithmetic::Curve;
 
-    // Generate CDI
-    let (ip_sig, initial_cdi) = ver_ok.unwrap();
-    let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi, EXPIRY);
-    assert_eq!(cdi_check, Ok(()));
-    let initial_cdi_values = serialize_deserialize(&initial_cdi.values);
-    assert!(
-        initial_cdi_values.is_ok(),
-        "INITIAL VALUES Deserialization must be successful."
-    );
-    let initial_cdi_sig = serialize_deserialize(&initial_cdi.sig);
-    assert!(
-        initial_cdi_sig.is_ok(),
-        "Signature deserialization must be successful."
-    );
-    let des_initial = serialize_deserialize(&initial_cdi);
-    assert!(des_initial.is_ok(), "Deserialization must be successful.");
+    #[test]
+    pub fn test_pipeline() {
+        let mut csprng = thread_rng();
 
-    let id_object = IdentityObject {
-        pre_identity_object: pio,
-        alist,
-        signature: ip_sig,
-    };
-    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
-    let policy = Policy {
-        valid_to,
-        created_at,
-        policy_vec: {
-            let mut tree = BTreeMap::new();
-            tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-            tree
-        },
-        _phantom: Default::default(),
-    };
-    let acc_data = CredentialData {
-        keys:      {
-            let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
-            keys
-        },
-        threshold: SignatureThreshold::TWO,
-    };
-    let (cdi, _) = create_credential(
-        context,
-        &id_object,
-        &id_use_data,
-        0,
-        policy.clone(),
-        &acc_data,
-        &SystemAttributeRandomness {},
-        &Left(EXPIRY),
-    )
-    .expect("Should generate the credential successfully.");
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
-    assert_eq!(cdi_check, Ok(()));
+        // Generate PIO
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ip_cdi_secret_key,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
-    // Verify serialization
-    let cdi_values = serialize_deserialize(&cdi.values);
-    assert!(
-        cdi_values.is_ok(),
-        "VALUES Deserialization must be successful."
-    );
+        let global_ctx = GlobalContext::generate(String::from("genesis_string"));
 
-    let cdi_commitments = serialize_deserialize(&cdi.proofs.id_proofs.commitments);
-    assert!(
-        cdi_commitments.is_ok(),
-        "commitments Deserialization must be successful."
-    );
+        let (ars_infos, ars_secret) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
-    let cdi_proofs = serialize_deserialize(&cdi.proofs);
-    assert!(
-        cdi_proofs.is_ok(),
-        "Proof deserialization must be successful."
-    );
+        let id_use_data = test_create_id_use_data(&mut csprng);
+        let acc_data = InitialAccountData {
+            keys: {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold::TWO,
+        };
+        let (context, pio, _) = test_create_pio(
+            &id_use_data,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &acc_data,
+        );
+        let alist = test_create_attributes();
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &alist,
+            EXPIRY,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
+        assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
-    let des = serialize_deserialize(&cdi);
-    assert!(des.is_ok(), "Deserialization must be successful.");
-    // FIXME: Have better equality instances for CDI that do not place needless
-    // restrictions on the pairing (such as having PartialEq instnace).
-    // For now we just check that the last item in the proofs deserialized
-    // correctly.
-    assert_eq!(
-        des.unwrap().proofs.id_proofs.proof_reg_id,
-        cdi.proofs.id_proofs.proof_reg_id,
-        "It should deserialize back to what we started with."
-    );
+        // Generate CDI
+        let (ip_sig, initial_cdi) = ver_ok.unwrap();
+        let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi, EXPIRY);
+        assert_eq!(cdi_check, Ok(()));
+        let initial_cdi_values = serialize_deserialize(&initial_cdi.values);
+        assert!(
+            initial_cdi_values.is_ok(),
+            "INITIAL VALUES Deserialization must be successful."
+        );
+        let initial_cdi_sig = serialize_deserialize(&initial_cdi.sig);
+        assert!(
+            initial_cdi_sig.is_ok(),
+            "Signature deserialization must be successful."
+        );
+        let des_initial = serialize_deserialize(&initial_cdi);
+        assert!(des_initial.is_ok(), "Deserialization must be successful.");
 
-    // Revoking anonymity using all but one AR
-    let mut shares = Vec::new();
-    for (ar_id, key) in ars_secret.iter().skip(1) {
-        let ar = cdi
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let policy = Policy {
+            valid_to,
+            created_at,
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+                tree
+            },
+            _phantom: Default::default(),
+        };
+        let acc_data = CredentialData {
+            keys: {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold::TWO,
+        };
+        let (cdi, _) = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy.clone(),
+            &acc_data,
+            &SystemAttributeRandomness {},
+            &Left(EXPIRY),
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
+        assert_eq!(cdi_check, Ok(()));
+
+        // Verify serialization
+        let cdi_values = serialize_deserialize(&cdi.values);
+        assert!(
+            cdi_values.is_ok(),
+            "VALUES Deserialization must be successful."
+        );
+
+        let cdi_commitments = serialize_deserialize(&cdi.proofs.id_proofs.commitments);
+        assert!(
+            cdi_commitments.is_ok(),
+            "commitments Deserialization must be successful."
+        );
+
+        let cdi_proofs = serialize_deserialize(&cdi.proofs);
+        assert!(
+            cdi_proofs.is_ok(),
+            "Proof deserialization must be successful."
+        );
+
+        let des = serialize_deserialize(&cdi);
+        assert!(des.is_ok(), "Deserialization must be successful.");
+        // FIXME: Have better equality instances for CDI that do not place needless
+        // restrictions on the pairing (such as having PartialEq instnace).
+        // For now we just check that the last item in the proofs deserialized
+        // correctly.
+        assert_eq!(
+            des.unwrap().proofs.id_proofs.proof_reg_id,
+            cdi.proofs.id_proofs.proof_reg_id,
+            "It should deserialize back to what we started with."
+        );
+
+        // Revoking anonymity using all but one AR
+        let mut shares = Vec::new();
+        for (ar_id, key) in ars_secret.iter().skip(1) {
+            let ar = cdi
+                .values
+                .ar_data
+                .get(ar_id)
+                .unwrap_or_else(|| panic!("Anonymity revoker {} is not present.", ar_id));
+            let decrypted_share = (*ar_id, key.decrypt(&ar.enc_id_cred_pub_share));
+            shares.push(decrypted_share);
+        }
+        let revealed_id_cred_pub = reveal_id_cred_pub(&shares);
+        assert_eq!(
+            revealed_id_cred_pub,
+            global_ctx
+                .on_chain_commitment_key
+                .g
+                .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
+        );
+
+        // generate a new cdi from a modified pre-identity object in which we swapped
+        // two anonymity revokers. Verification of this credential should fail the
+        // signature at the very least.
+        let (mut cdi, _) = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy,
+            &acc_data,
+            &SystemAttributeRandomness {},
+            &Left(EXPIRY),
+        )
+        .expect("Should generate the credential successfully.");
+        // Swap two ar_data values for two anonymity revokers.
+        let x_2 = cdi
             .values
             .ar_data
-            .get(ar_id)
-            .unwrap_or_else(|| panic!("Anonymity revoker {} is not present.", ar_id));
-        let decrypted_share = (*ar_id, key.decrypt(&ar.enc_id_cred_pub_share));
-        shares.push(decrypted_share);
-    }
-    let revealed_id_cred_pub = reveal_id_cred_pub(&shares);
-    assert_eq!(
-        revealed_id_cred_pub,
-        global_ctx
-            .on_chain_commitment_key
-            .g
-            .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
-    );
-
-    // generate a new cdi from a modified pre-identity object in which we swapped
-    // two anonymity revokers. Verification of this credential should fail the
-    // signature at the very least.
-    let (mut cdi, _) = create_credential(
-        context,
-        &id_object,
-        &id_use_data,
-        0,
-        policy,
-        &acc_data,
-        &SystemAttributeRandomness {},
-        &Left(EXPIRY),
-    )
-    .expect("Should generate the credential successfully.");
-    // Swap two ar_data values for two anonymity revokers.
-    let x_2 = cdi
-        .values
-        .ar_data
-        .get(&ArIdentity::new(2))
-        .expect("AR 2 exists")
-        .clone();
-    let x_3 = cdi
-        .values
-        .ar_data
-        .get(&ArIdentity::new(3))
-        .expect("AR 3 exists")
-        .clone();
-    *cdi.values
-        .ar_data
-        .get_mut(&ArIdentity::new(2))
-        .expect("AR 2 exists") = x_3;
-    *cdi.values
-        .ar_data
-        .get_mut(&ArIdentity::new(3))
-        .expect("AR 2 exists") = x_2;
-    // Verification should now fail.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
-    assert_ne!(cdi_check, Ok(()));
-}
-
-#[test]
-pub fn test_pipeline_v1() {
-    let mut csprng = thread_rng();
-
-    // Generate PIO
-    let max_attrs = 10;
-    let num_ars = 5;
-    let IpData {
-        public_ip_info: ip_info,
-        ip_secret_key,
-        ..
-    } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-
-    let global_ctx = GlobalContext::generate(String::from("genesis_string"));
-
-    let (ars_infos, ars_secret) =
-        test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
-
-    let id_use_data = test_create_id_use_data(&mut csprng);
-    let (context, pio, randomness) =
-        test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
-    assert!(
-        *randomness == *id_use_data.randomness,
-        "Returned randomness is not equal to used randomness."
-    );
-    let alist = test_create_attributes();
-    let ver_ok = verify_credentials_v1(&pio, context, &alist, &ip_secret_key);
-    assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
-
-    // Generate CDI
-    let ip_sig = ver_ok.unwrap();
-
-    let id_object = IdentityObjectV1 {
-        pre_identity_object: pio,
-        alist,
-        signature: ip_sig,
-    };
-    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
-    let policy = Policy {
-        valid_to,
-        created_at,
-        policy_vec: {
-            let mut tree = BTreeMap::new();
-            tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-            tree
-        },
-        _phantom: Default::default(),
-    };
-    let acc_data = CredentialData {
-        keys:      {
-            let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
-            keys
-        },
-        threshold: SignatureThreshold::TWO,
-    };
-    let (cdi, _) = create_credential(
-        context,
-        &id_object,
-        &id_use_data,
-        0,
-        policy.clone(),
-        &acc_data,
-        &SystemAttributeRandomness {},
-        &Left(EXPIRY),
-    )
-    .expect("Should generate the credential successfully.");
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
-    assert_eq!(cdi_check, Ok(()));
-
-    // Verify serialization
-    let cdi_values = serialize_deserialize(&cdi.values);
-    assert!(
-        cdi_values.is_ok(),
-        "VALUES Deserialization must be successful."
-    );
-
-    let cdi_commitments = serialize_deserialize(&cdi.proofs.id_proofs.commitments);
-    assert!(
-        cdi_commitments.is_ok(),
-        "commitments Deserialization must be successful."
-    );
-
-    let cdi_proofs = serialize_deserialize(&cdi.proofs);
-    assert!(
-        cdi_proofs.is_ok(),
-        "Proof deserialization must be successful."
-    );
-
-    let des = serialize_deserialize(&cdi);
-    assert!(des.is_ok(), "Deserialization must be successful.");
-    // FIXME: Have better equality instances for CDI that do not place needless
-    // restrictions on the pairing (such as having PartialEq instnace).
-    // For now we just check that the last item in the proofs deserialized
-    // correctly.
-    assert_eq!(
-        des.unwrap().proofs.id_proofs.proof_reg_id,
-        cdi.proofs.id_proofs.proof_reg_id,
-        "It should deserialize back to what we started with."
-    );
-
-    // Revoking anonymity using all but one AR
-    let mut shares = Vec::new();
-    for (ar_id, key) in ars_secret.iter().skip(1) {
-        let ar = cdi
+            .get(&ArIdentity::new(2))
+            .expect("AR 2 exists")
+            .clone();
+        let x_3 = cdi
             .values
             .ar_data
-            .get(ar_id)
-            .unwrap_or_else(|| panic!("Anonymity revoker {} is not present.", ar_id));
-        let decrypted_share = (*ar_id, key.decrypt(&ar.enc_id_cred_pub_share));
-        shares.push(decrypted_share);
+            .get(&ArIdentity::new(3))
+            .expect("AR 3 exists")
+            .clone();
+        *cdi.values
+            .ar_data
+            .get_mut(&ArIdentity::new(2))
+            .expect("AR 2 exists") = x_3;
+        *cdi.values
+            .ar_data
+            .get_mut(&ArIdentity::new(3))
+            .expect("AR 2 exists") = x_2;
+        // Verification should now fail.
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
+        assert_ne!(cdi_check, Ok(()));
     }
-    let revealed_id_cred_pub = reveal_id_cred_pub(&shares);
-    assert_eq!(
-        revealed_id_cred_pub,
-        global_ctx
-            .on_chain_commitment_key
-            .g
-            .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
-    );
 
-    // generate a new cdi from a modified pre-identity object in which we swapped
-    // two anonymity revokers. Verification of this credential should fail the
-    // signature at the very least.
-    let (mut cdi, _) = create_credential(
-        context,
-        &id_object,
-        &id_use_data,
-        0,
-        policy,
-        &acc_data,
-        &SystemAttributeRandomness {},
-        &Left(EXPIRY),
-    )
-    .expect("Should generate the credential successfully.");
-    // Swap two ar_data values for two anonymity revokers.
-    let x_2 = cdi
-        .values
-        .ar_data
-        .get(&ArIdentity::new(2))
-        .expect("AR 2 exists")
-        .clone();
-    let x_3 = cdi
-        .values
-        .ar_data
-        .get(&ArIdentity::new(3))
-        .expect("AR 3 exists")
-        .clone();
-    *cdi.values
-        .ar_data
-        .get_mut(&ArIdentity::new(2))
-        .expect("AR 2 exists") = x_3;
-    *cdi.values
-        .ar_data
-        .get_mut(&ArIdentity::new(3))
-        .expect("AR 2 exists") = x_2;
-    // Verification should now fail.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
-    assert_ne!(cdi_check, Ok(()));
+    #[test]
+    pub fn test_pipeline_v1() {
+        let mut csprng = thread_rng();
+
+        // Generate PIO
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ..
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+
+        let global_ctx = GlobalContext::generate(String::from("genesis_string"));
+
+        let (ars_infos, ars_secret) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+
+        let id_use_data = test_create_id_use_data(&mut csprng);
+        let (context, pio, randomness) =
+            test_create_pio_v1(&id_use_data, &ip_info, &ars_infos, &global_ctx, num_ars);
+        assert!(
+            *randomness == *id_use_data.randomness,
+            "Returned randomness is not equal to used randomness."
+        );
+        let alist = test_create_attributes();
+        let ver_ok = verify_credentials_v1(&pio, context, &alist, &ip_secret_key);
+        assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
+
+        // Generate CDI
+        let ip_sig = ver_ok.unwrap();
+
+        let id_object = IdentityObjectV1 {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let policy = Policy {
+            valid_to,
+            created_at,
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+                tree
+            },
+            _phantom: Default::default(),
+        };
+        let acc_data = CredentialData {
+            keys: {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold::TWO,
+        };
+        let (cdi, _) = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy.clone(),
+            &acc_data,
+            &SystemAttributeRandomness {},
+            &Left(EXPIRY),
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
+        assert_eq!(cdi_check, Ok(()));
+
+        // Verify serialization
+        let cdi_values = serialize_deserialize(&cdi.values);
+        assert!(
+            cdi_values.is_ok(),
+            "VALUES Deserialization must be successful."
+        );
+
+        let cdi_commitments = serialize_deserialize(&cdi.proofs.id_proofs.commitments);
+        assert!(
+            cdi_commitments.is_ok(),
+            "commitments Deserialization must be successful."
+        );
+
+        let cdi_proofs = serialize_deserialize(&cdi.proofs);
+        assert!(
+            cdi_proofs.is_ok(),
+            "Proof deserialization must be successful."
+        );
+
+        let des = serialize_deserialize(&cdi);
+        assert!(des.is_ok(), "Deserialization must be successful.");
+        // FIXME: Have better equality instances for CDI that do not place needless
+        // restrictions on the pairing (such as having PartialEq instnace).
+        // For now we just check that the last item in the proofs deserialized
+        // correctly.
+        assert_eq!(
+            des.unwrap().proofs.id_proofs.proof_reg_id,
+            cdi.proofs.id_proofs.proof_reg_id,
+            "It should deserialize back to what we started with."
+        );
+
+        // Revoking anonymity using all but one AR
+        let mut shares = Vec::new();
+        for (ar_id, key) in ars_secret.iter().skip(1) {
+            let ar = cdi
+                .values
+                .ar_data
+                .get(ar_id)
+                .unwrap_or_else(|| panic!("Anonymity revoker {} is not present.", ar_id));
+            let decrypted_share = (*ar_id, key.decrypt(&ar.enc_id_cred_pub_share));
+            shares.push(decrypted_share);
+        }
+        let revealed_id_cred_pub = reveal_id_cred_pub(&shares);
+        assert_eq!(
+            revealed_id_cred_pub,
+            global_ctx
+                .on_chain_commitment_key
+                .g
+                .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
+        );
+
+        // generate a new cdi from a modified pre-identity object in which we swapped
+        // two anonymity revokers. Verification of this credential should fail the
+        // signature at the very least.
+        let (mut cdi, _) = create_credential(
+            context,
+            &id_object,
+            &id_use_data,
+            0,
+            policy,
+            &acc_data,
+            &SystemAttributeRandomness {},
+            &Left(EXPIRY),
+        )
+        .expect("Should generate the credential successfully.");
+        // Swap two ar_data values for two anonymity revokers.
+        let x_2 = cdi
+            .values
+            .ar_data
+            .get(&ArIdentity::new(2))
+            .expect("AR 2 exists")
+            .clone();
+        let x_3 = cdi
+            .values
+            .ar_data
+            .get(&ArIdentity::new(3))
+            .expect("AR 3 exists")
+            .clone();
+        *cdi.values
+            .ar_data
+            .get_mut(&ArIdentity::new(2))
+            .expect("AR 2 exists") = x_3;
+        *cdi.values
+            .ar_data
+            .get_mut(&ArIdentity::new(3))
+            .expect("AR 2 exists") = x_2;
+        // Verification should now fail.
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, &cdi, &Left(EXPIRY));
+        assert_ne!(cdi_check, Ok(()));
+    }
 }
