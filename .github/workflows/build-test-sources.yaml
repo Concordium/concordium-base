@@ -170,6 +170,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-${{ env.dummy }}-rust-deps-${{ env.rust }}
 # todo ar clean up cache paths
+# todo ar separate cache key
     # HASKELL #
 
     # Set up Haskell by caching '~/.stack', '.stack-work', and '~/.local/bin' separately.

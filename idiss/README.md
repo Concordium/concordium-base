@@ -142,7 +142,7 @@ To build the csharp exports, do instead
   ```
 - On Windows this will produce `idiss.dll`. 
 
-Both will build the library and produce artifacts in `./target/release/`.
+Both will build the library and produce artifacts in `../target/release/`.
 
 # Javascript API
 

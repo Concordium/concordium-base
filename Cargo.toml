@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members=[
+members = [
    "rust-src/sha_2",
    "rust-src/keygen_bls",
    "rust-src/ed25519_hd_key_derivation",
@@ -14,3 +14,21 @@ members=[
    "idiss",
    "mobile_wallet",
 ]
+
+exclude = [
+   "smart-contracts/wasm-chain-integration",
+   "smart-contracts/wasm-fuzz",
+   "smart-contracts/wasm-test",
+   "smart-contracts/wasm-transform",
+   "smart-contracts/rust-contracts/example-contracts/context-test",
+   "smart-contracts/rust-contracts/example-contracts/counter",
+   "smart-contracts/rust-contracts/example-contracts/erc20",
+   "smart-contracts/rust-contracts/example-contracts/escrow",
+   "smart-contracts/rust-contracts/example-contracts/every-example",
+   "smart-contracts/rust-contracts/example-contracts/fib",
+   "smart-contracts/rust-contracts/example-contracts/lockup",
+   "smart-contracts/rust-contracts/example-contracts/rate-limited",
+   "smart-contracts/rust-contracts/example-contracts/simple-game",
+   "smart-contracts/rust-contracts/example-contracts/use-all-host-functions"
+]
+
