@@ -3439,6 +3439,7 @@ mod tests {
         let bound: usize = rng.gen_range(1..20);
         for _ in 0..bound {
             let c_idx = CredentialIndex::from(rng.gen::<u8>());
+            #[allow(clippy::map_entry, clippy::unnecessary_get_then_check)]
             if keys.get(&c_idx).is_none() {
                 let inner_bound: usize = rng.gen_range(1..20);
                 let mut cred_keys = BTreeMap::new();

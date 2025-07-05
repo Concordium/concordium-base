@@ -1595,6 +1595,564 @@ fn write_bytes_for_length_of_size<W: Write>(
     }
 }
 
+/// Deserialize a uleb128 encoded [`BigUint`] from `source`.
+fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
+    let mut result = BigUint::zero();
+    let mut shift = 0;
+    for _ in 0..constraint {
+        let byte = source.read_u8()?;
+        let value_byte = BigUint::from(byte & 0b0111_1111);
+        result += value_byte << shift;
+        shift += 7;
+
+        if byte & 0b1000_0000 == 0 {
+            return Ok(result);
+        }
+    }
+    Err(ParseError {})
+}
+
+/// Deserialize a ileb128 encoded [`BigInt`] from `source`.
+fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
+    let mut result = BigInt::zero();
+    let mut shift = 0;
+    for _ in 0..constraint {
+        let byte = source.read_u8()?;
+        let value_byte = BigInt::from(byte & 0b0111_1111);
+        result += value_byte << shift;
+        shift += 7;
+
+        if byte & 0b1000_0000 == 0 {
+            if byte & 0b0100_0000 != 0 {
+                result -= BigInt::from(2).pow(shift)
+            }
+            return Ok(result);
+        }
+    }
+    Err(ParseError {})
+}
+
+impl Fields {
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
+        source: &mut Cursor<T>,
+    ) -> Result<serde_json::Value, ToJsonError> {
+        use serde_json::*;
+
+        match self {
+            Fields::Named(fields) => {
+                let mut values = map::Map::new();
+                for (key, ty) in fields.iter() {
+                    let value = ty.to_json(source)?;
+                    values.insert(key.to_string(), value);
+                }
+                Ok(Value::Object(values))
+            }
+            Fields::Unnamed(fields) => {
+                let mut values = Vec::new();
+                for ty in fields.iter() {
+                    values.push(ty.to_json(source)?);
+                }
+                Ok(Value::Array(values))
+            }
+            Fields::None => Ok(Value::Array(Vec::new())),
+        }
+    }
+}
+
+impl From<std::string::FromUtf8Error> for ParseError {
+    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
+}
+
+/// Deserialize a list of values corresponding to the `item_to_json` function
+/// from `source`
+fn item_list_to_json<T: AsRef<[u8]>>(
+    source: &mut Cursor<T>,
+    size_len: SizeLength,
+    item_to_json: impl Fn(&mut Cursor<T>) -> Result<serde_json::Value, ToJsonError>,
+    schema: &Type,
+) -> Result<Vec<serde_json::Value>, ToJsonError> {
+    let data = source.data.as_ref().to_owned().into();
+    let position = source.cursor_position();
+    let len = deserial_length(source, size_len).map_err(|_| ToJsonError::DeserialError {
+        data,
+        position,
+        reason: "Could not deserialize length of list".into(),
+        schema: schema.clone(),
+    })?;
+    let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
+    for _ in 0..len {
+        let value = item_to_json(source)?;
+        values.push(value);
+    }
+    Ok(values)
+}
+
+/// Deserialize a [`String`] of variable length from `source`.
+fn deserial_string<R: Read>(
+    source: &mut R,
+    size_len: SizeLength,
+) -> Result<String, ParseErrorWithReason> {
+    let len = deserial_length(source, size_len)
+        .map_err(|_| ParseErrorWithReason("Could not parse String length".into()))?;
+    // we are doing this case analysis so that we have a fast path for safe,
+    // most common, lengths, and a slower one longer ones.
+    if len <= MAX_PREALLOCATED_CAPACITY {
+        let mut bytes = vec![0u8; len];
+        source.read_exact(&mut bytes).map_err(|_| {
+            ParseErrorWithReason(format!(
+                "Parsed length {} for String value, but failed to read {} bytes from value",
+                len, len
+            ))
+        })?;
+        Ok(String::from_utf8(bytes)
+            .map_err(|_| ParseErrorWithReason("Failed to deserialize String from value".into()))?)
+    } else {
+        let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
+        let mut buf = [0u8; 64];
+        let mut read = 0;
+        while read < len {
+            let new = source.read(&mut buf).map_err(|_| {
+                let end = std::cmp::min(len - read, 64);
+                ParseErrorWithReason(format!(
+                    "Parsed length {} for String value, but failed to read bytes {}..{} from value",
+                    len,
+                    read,
+                    read + end
+                ))
+            })?;
+            if new == 0 {
+                break;
+            } else {
+                read += new;
+                bytes.extend_from_slice(&buf[..new]);
+            }
+        }
+        if read == len {
+            Ok(String::from_utf8(bytes).map_err(|_| {
+                ParseErrorWithReason("Failed to deserialize String from value".into())
+            })?)
+        } else {
+            Err(ParseErrorWithReason(format!(
+                "Parsed length {} for String value, but unexpectedly read {} bytes",
+                len, read
+            )))
+        }
+    }
+}
+
+impl Type {
+    /// Uses the schema to deserialize bytes into pretty json
+    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> Result<String, ToJsonError> {
+        let source = &mut Cursor::new(bytes);
+        let js = self.to_json(source)?;
+        serde_json::to_string_pretty(&js).map_err(|_| ToJsonError::FormatError {})
+    }
+
+    /// Uses the schema to deserialize bytes into json
+    pub fn to_json<T: AsRef<[u8]>>(
+        &self,
+        source: &mut Cursor<T>,
+    ) -> Result<serde_json::Value, ToJsonError> {
+        use serde_json::*;
+
+        let data = source.data.as_ref().to_owned().into();
+        let position = source.cursor_position();
+
+        let deserial_error = |reason: String| ToJsonError::DeserialError {
+            data,
+            position,
+            reason,
+            schema: self.clone(),
+        };
+
+        match self {
+            Type::Unit => Ok(Value::Null),
+            Type::Bool => {
+                let n = bool::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse bool from value, expected a byte containing the value 0 \
+                         or 1"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Bool(n))
+            }
+            Type::U8 => {
+                let n = u8::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u8 from value as not enough data was available (needs 1 \
+                         byte)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U16 => {
+                let n = u16::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u16 from value as not enough data was available (needs 2 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U32 => {
+                let n = u32::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u32 from value as not enough data was available (needs 4 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U64 => {
+                let n = u64::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u64 from value as not enough data was available (needs 8 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::U128 => {
+                let n = u128::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse u128 from value as not enough data was available (needs \
+                         16 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::String(n.to_string()))
+            }
+            Type::I8 => {
+                let n = i8::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i8 from value as not enough data was available (needs 1 \
+                         byte)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I16 => {
+                let n = i16::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i16 from value as not enough data was available (needs 2 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I32 => {
+                let n = i32::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i32 from value as not enough data was available (needs 4 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I64 => {
+                let n = i64::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i64 from value as not enough data was available (needs 8 \
+                         bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::Number(n.into()))
+            }
+            Type::I128 => {
+                let n = i128::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse i128 from value as not enough data was available (needs \
+                         16 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::String(n.to_string()))
+            }
+            Type::Amount => {
+                let n = Amount::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Amount from value as not enough data was available \
+                         (needs 8 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::String(n.micro_ccd().to_string()))
+            }
+            Type::AccountAddress => {
+                let address = AccountAddress::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse AccountAddress from value as not enough data was \
+                         available (needs 32 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::String(address.to_string()))
+            }
+            Type::ContractAddress => {
+                let address = ContractAddress::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse ContractAddress from value as not enough data was \
+                         available (needs 16 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(serde_json::to_value(address).map_err(|_| ToJsonError::FormatError {})?)
+            }
+            Type::Timestamp => {
+                let timestamp = Timestamp::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Timestamp from value as not enough data was available \
+                         (needs 8 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::String(timestamp.to_string()))
+            }
+            Type::Duration => {
+                let duration = Duration::deserial(source).map_err(|_| {
+                    deserial_error(
+                        "Could not parse Duration from value as not enough data was available \
+                         (needs 8 bytes)"
+                            .into(),
+                    )
+                })?;
+                Ok(Value::String(duration.to_string()))
+            }
+            Type::Pair(left_type, right_type) => {
+                let left = left_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                let right = right_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                Ok(Value::Array(vec![left, right]))
+            }
+            Type::List(size_len, ty) => {
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
+                    .map_err(|e| e.add_trace(position, self))?;
+                Ok(Value::Array(values))
+            }
+            Type::Set(size_len, ty) => {
+                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
+                    .map_err(|e| e.add_trace(position, self))?;
+                Ok(Value::Array(values))
+            }
+            Type::Map(size_len, key_type, value_type) => {
+                let values = item_list_to_json(
+                    source,
+                    *size_len,
+                    |s| {
+                        let key = key_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
+                        let value =
+                            value_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
+                        Ok(Value::Array(vec![key, value]))
+                    },
+                    self,
+                )?;
+                Ok(Value::Array(values))
+            }
+            Type::Array(len, ty) => {
+                let len: usize = (*len).try_into().map_err(|_| {
+                    deserial_error("Could not parse Array length from value".into())
+                })?;
+                let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
+                for _ in 0..len {
+                    let value = ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                    values.push(value);
+                }
+                Ok(Value::Array(values))
+            }
+            Type::Struct(fields_ty) => {
+                let fields = fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                Ok(fields)
+            }
+            Type::Enum(variants) => {
+                let idx = if variants.len() <= 256 {
+                    u8::deserial(source).map(|v| v as usize).map_err(|_| {
+                        ParseErrorWithReason(
+                            "Could not parse Enum id as u8 from value (needs 1 byte)".into(),
+                        )
+                    })
+                } else {
+                    u16::deserial(source).map(|v| v as usize).map_err(|_| {
+                        ParseErrorWithReason(
+                            "Could not parse Enum id as u16 from value (needs 2 bytes)".into(),
+                        )
+                    })
+                };
+                let variant = idx.and_then(|idx| {
+                    variants.get(idx).ok_or_else(|| {
+                        ParseErrorWithReason(format!("Could not find Enum variant with id {}", idx))
+                    })
+                });
+
+                // Map all error cases into the same error.
+                match variant {
+                    Ok((name, fields_ty)) => {
+                        let fields =
+                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                        Ok(json!({ name: fields }))
+                    }
+                    Err(e) => Err(deserial_error(e.0)),
+                }
+            }
+            Type::TaggedEnum(variants) => {
+                let idx = u8::deserial(source).map_err(|_| {
+                    ParseErrorWithReason(
+                        "Could not parse TaggedEnum id from value (needs 1 byte)".into(),
+                    )
+                });
+                let variant = idx.and_then(|idx| {
+                    variants.get(&idx).ok_or_else(|| {
+                        ParseErrorWithReason(format!(
+                            "Could not find TaggedEnum variant with id {}",
+                            idx
+                        ))
+                    })
+                });
+
+                match variant {
+                    Ok((name, fields_ty)) => {
+                        let fields =
+                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
+                        Ok(json!({ name: fields }))
+                    }
+                    Err(e) => Err(deserial_error(e.0)),
+                }
+            }
+            Type::String(size_len) => {
+                let string = deserial_string(source, *size_len).map_err(|e| deserial_error(e.0))?;
+                Ok(Value::String(string))
+            }
+            Type::ContractName(size_len) => {
+                let name = deserial_string(source, *size_len).map_err(|e| {
+                    ParseErrorWithReason(format!(
+                        "Could not parse contract name from value ({})",
+                        e
+                    ))
+                });
+                let owned_contract_name = name.and_then(|n| {
+                    OwnedContractName::new(n)
+                        .map_err(|e| ParseErrorWithReason(format!("Invalid contract name ({})", e)))
+                });
+
+                owned_contract_name
+                    .map(|ocn| {
+                        let name_without_init = ocn.as_contract_name().contract_name();
+                        json!({ "contract": name_without_init })
+                    })
+                    .map_err(|e| deserial_error(e.0))
+            }
+            Type::ReceiveName(size_len) => {
+                let name = deserial_string(source, *size_len).map_err(|e| {
+                    ParseErrorWithReason(format!("Could not parse receive name from value ({})", e))
+                });
+                let owned_receive_name = name.and_then(|n| {
+                    OwnedReceiveName::new(n)
+                        .map_err(|e| ParseErrorWithReason(format!("Invalid receive name ({})", e)))
+                });
+
+                owned_receive_name
+                    .map(|orn| {
+                        let receive_name = orn.as_receive_name();
+                        let contract_name = receive_name.contract_name();
+                        let func_name = receive_name.entrypoint_name();
+                        json!({"contract": contract_name, "func": func_name})
+                    })
+                    .map_err(|e| deserial_error(e.0))
+            }
+            Type::ULeb128(constraint) => {
+                let int = deserial_biguint(source, *constraint).map_err(|_| {
+                    deserial_error("Could not parse unsigned integer (uleb128) from value".into())
+                })?;
+                Ok(Value::String(int.to_string()))
+            }
+            Type::ILeb128(constraint) => {
+                let int = deserial_bigint(source, *constraint).map_err(|_| {
+                    deserial_error("Could not parse signed integer (leb128) from value".into())
+                })?;
+                Ok(Value::String(int.to_string()))
+            }
+            Type::ByteList(size_len) => {
+                let len = deserial_length(source, *size_len).map_err(|_| {
+                    ParseErrorWithReason("Could not parse ByteList length from value".into())
+                });
+                let bytes: core::result::Result<Vec<_>, _> =
+                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
+                        let mut bytes =
+                            Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
+
+                        for i in 0..*len {
+                            let byte = source.read_u8().map_err(|_| {
+                                ParseErrorWithReason(format!(
+                                    "Failed to read byte {} of ByteList value",
+                                    i
+                                ))
+                            });
+                            bytes.push(byte);
+                        }
+
+                        bytes.into_iter().collect()
+                    });
+
+                match (len, bytes) {
+                    (Ok(len), Ok(bytes)) => {
+                        let mut string = String::with_capacity(std::cmp::min(
+                            MAX_PREALLOCATED_CAPACITY,
+                            2 * len,
+                        ));
+                        string.push_str(&hex::encode(bytes));
+                        Ok(Value::String(string))
+                    }
+                    (Err(e), _) => Err(deserial_error(e.0)),
+                    (_, Err(e)) => Err(deserial_error(e.0)),
+                }
+            }
+            Type::ByteArray(len) => {
+                let len = usize::try_from(*len).map_err(|_| {
+                    ParseErrorWithReason("Could not parse ByteArray length from value".into())
+                });
+                let bytes: core::result::Result<Vec<_>, _> =
+                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
+                        let mut bytes =
+                            Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
+
+                        for i in 0..*len {
+                            let byte = source.read_u8().map_err(|_| {
+                                ParseErrorWithReason(format!(
+                                    "Failed to read byte {} of ByteArray value",
+                                    i
+                                ))
+                            });
+                            bytes.push(byte);
+                        }
+
+                        bytes.into_iter().collect()
+                    });
+
+                match (len, bytes) {
+                    (Ok(len), Ok(bytes)) => {
+                        let mut string = String::with_capacity(std::cmp::min(
+                            MAX_PREALLOCATED_CAPACITY,
+                            2 * len,
+                        ));
+                        string.push_str(&hex::encode(bytes));
+                        Ok(Value::String(string))
+                    }
+                    (Err(e), _) => Err(deserial_error(e.0)),
+                    (_, Err(e)) => Err(deserial_error(e.0)),
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -2454,562 +3012,4 @@ Contract: MySecondContract
             )
         ))
     }
-}
-
-impl Fields {
-    pub fn to_json<T: AsRef<[u8]>>(
-        &self,
-        source: &mut Cursor<T>,
-    ) -> Result<serde_json::Value, ToJsonError> {
-        use serde_json::*;
-
-        match self {
-            Fields::Named(fields) => {
-                let mut values = map::Map::new();
-                for (key, ty) in fields.iter() {
-                    let value = ty.to_json(source)?;
-                    values.insert(key.to_string(), value);
-                }
-                Ok(Value::Object(values))
-            }
-            Fields::Unnamed(fields) => {
-                let mut values = Vec::new();
-                for ty in fields.iter() {
-                    values.push(ty.to_json(source)?);
-                }
-                Ok(Value::Array(values))
-            }
-            Fields::None => Ok(Value::Array(Vec::new())),
-        }
-    }
-}
-
-impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(_: std::string::FromUtf8Error) -> Self { ParseError::default() }
-}
-
-/// Deserialize a list of values corresponding to the `item_to_json` function
-/// from `source`
-fn item_list_to_json<T: AsRef<[u8]>>(
-    source: &mut Cursor<T>,
-    size_len: SizeLength,
-    item_to_json: impl Fn(&mut Cursor<T>) -> Result<serde_json::Value, ToJsonError>,
-    schema: &Type,
-) -> Result<Vec<serde_json::Value>, ToJsonError> {
-    let data = source.data.as_ref().to_owned().into();
-    let position = source.cursor_position();
-    let len = deserial_length(source, size_len).map_err(|_| ToJsonError::DeserialError {
-        data,
-        position,
-        reason: "Could not deserialize length of list".into(),
-        schema: schema.clone(),
-    })?;
-    let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
-    for _ in 0..len {
-        let value = item_to_json(source)?;
-        values.push(value);
-    }
-    Ok(values)
-}
-
-/// Deserialize a [`String`] of variable length from `source`.
-fn deserial_string<R: Read>(
-    source: &mut R,
-    size_len: SizeLength,
-) -> Result<String, ParseErrorWithReason> {
-    let len = deserial_length(source, size_len)
-        .map_err(|_| ParseErrorWithReason("Could not parse String length".into()))?;
-    // we are doing this case analysis so that we have a fast path for safe,
-    // most common, lengths, and a slower one longer ones.
-    if len <= MAX_PREALLOCATED_CAPACITY {
-        let mut bytes = vec![0u8; len];
-        source.read_exact(&mut bytes).map_err(|_| {
-            ParseErrorWithReason(format!(
-                "Parsed length {} for String value, but failed to read {} bytes from value",
-                len, len
-            ))
-        })?;
-        Ok(String::from_utf8(bytes)
-            .map_err(|_| ParseErrorWithReason("Failed to deserialize String from value".into()))?)
-    } else {
-        let mut bytes: Vec<u8> = Vec::with_capacity(MAX_PREALLOCATED_CAPACITY);
-        let mut buf = [0u8; 64];
-        let mut read = 0;
-        while read < len {
-            let new = source.read(&mut buf).map_err(|_| {
-                let end = std::cmp::min(len - read, 64);
-                ParseErrorWithReason(format!(
-                    "Parsed length {} for String value, but failed to read bytes {}..{} from value",
-                    len,
-                    read,
-                    read + end
-                ))
-            })?;
-            if new == 0 {
-                break;
-            } else {
-                read += new;
-                bytes.extend_from_slice(&buf[..new]);
-            }
-        }
-        if read == len {
-            Ok(String::from_utf8(bytes).map_err(|_| {
-                ParseErrorWithReason("Failed to deserialize String from value".into())
-            })?)
-        } else {
-            Err(ParseErrorWithReason(format!(
-                "Parsed length {} for String value, but unexpectedly read {} bytes",
-                len, read
-            )))
-        }
-    }
-}
-
-impl Type {
-    /// Uses the schema to deserialize bytes into pretty json
-    pub fn to_json_string_pretty(&self, bytes: &[u8]) -> Result<String, ToJsonError> {
-        let source = &mut Cursor::new(bytes);
-        let js = self.to_json(source)?;
-        serde_json::to_string_pretty(&js).map_err(|_| ToJsonError::FormatError {})
-    }
-
-    /// Uses the schema to deserialize bytes into json
-    pub fn to_json<T: AsRef<[u8]>>(
-        &self,
-        source: &mut Cursor<T>,
-    ) -> Result<serde_json::Value, ToJsonError> {
-        use serde_json::*;
-
-        let data = source.data.as_ref().to_owned().into();
-        let position = source.cursor_position();
-
-        let deserial_error = |reason: String| ToJsonError::DeserialError {
-            data,
-            position,
-            reason,
-            schema: self.clone(),
-        };
-
-        match self {
-            Type::Unit => Ok(Value::Null),
-            Type::Bool => {
-                let n = bool::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse bool from value, expected a byte containing the value 0 \
-                         or 1"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Bool(n))
-            }
-            Type::U8 => {
-                let n = u8::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse u8 from value as not enough data was available (needs 1 \
-                         byte)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::U16 => {
-                let n = u16::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse u16 from value as not enough data was available (needs 2 \
-                         bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::U32 => {
-                let n = u32::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse u32 from value as not enough data was available (needs 4 \
-                         bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::U64 => {
-                let n = u64::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse u64 from value as not enough data was available (needs 8 \
-                         bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::U128 => {
-                let n = u128::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse u128 from value as not enough data was available (needs \
-                         16 bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::String(n.to_string()))
-            }
-            Type::I8 => {
-                let n = i8::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse i8 from value as not enough data was available (needs 1 \
-                         byte)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::I16 => {
-                let n = i16::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse i16 from value as not enough data was available (needs 2 \
-                         bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::I32 => {
-                let n = i32::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse i32 from value as not enough data was available (needs 4 \
-                         bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::I64 => {
-                let n = i64::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse i64 from value as not enough data was available (needs 8 \
-                         bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::Number(n.into()))
-            }
-            Type::I128 => {
-                let n = i128::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse i128 from value as not enough data was available (needs \
-                         16 bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::String(n.to_string()))
-            }
-            Type::Amount => {
-                let n = Amount::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse Amount from value as not enough data was available \
-                         (needs 8 bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::String(n.micro_ccd().to_string()))
-            }
-            Type::AccountAddress => {
-                let address = AccountAddress::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse AccountAddress from value as not enough data was \
-                         available (needs 32 bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::String(address.to_string()))
-            }
-            Type::ContractAddress => {
-                let address = ContractAddress::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse ContractAddress from value as not enough data was \
-                         available (needs 16 bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(serde_json::to_value(address).map_err(|_| ToJsonError::FormatError {})?)
-            }
-            Type::Timestamp => {
-                let timestamp = Timestamp::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse Timestamp from value as not enough data was available \
-                         (needs 8 bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::String(timestamp.to_string()))
-            }
-            Type::Duration => {
-                let duration = Duration::deserial(source).map_err(|_| {
-                    deserial_error(
-                        "Could not parse Duration from value as not enough data was available \
-                         (needs 8 bytes)"
-                            .into(),
-                    )
-                })?;
-                Ok(Value::String(duration.to_string()))
-            }
-            Type::Pair(left_type, right_type) => {
-                let left = left_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                let right = right_type.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                Ok(Value::Array(vec![left, right]))
-            }
-            Type::List(size_len, ty) => {
-                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
-                    .map_err(|e| e.add_trace(position, self))?;
-                Ok(Value::Array(values))
-            }
-            Type::Set(size_len, ty) => {
-                let values = item_list_to_json(source, *size_len, |s| ty.to_json(s), self)
-                    .map_err(|e| e.add_trace(position, self))?;
-                Ok(Value::Array(values))
-            }
-            Type::Map(size_len, key_type, value_type) => {
-                let values = item_list_to_json(
-                    source,
-                    *size_len,
-                    |s| {
-                        let key = key_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
-                        let value =
-                            value_type.to_json(s).map_err(|e| e.add_trace(position, self))?;
-                        Ok(Value::Array(vec![key, value]))
-                    },
-                    self,
-                )?;
-                Ok(Value::Array(values))
-            }
-            Type::Array(len, ty) => {
-                let len: usize = (*len).try_into().map_err(|_| {
-                    deserial_error("Could not parse Array length from value".into())
-                })?;
-                let mut values = Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, len));
-                for _ in 0..len {
-                    let value = ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                    values.push(value);
-                }
-                Ok(Value::Array(values))
-            }
-            Type::Struct(fields_ty) => {
-                let fields = fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                Ok(fields)
-            }
-            Type::Enum(variants) => {
-                let idx = if variants.len() <= 256 {
-                    u8::deserial(source).map(|v| v as usize).map_err(|_| {
-                        ParseErrorWithReason(
-                            "Could not parse Enum id as u8 from value (needs 1 byte)".into(),
-                        )
-                    })
-                } else {
-                    u16::deserial(source).map(|v| v as usize).map_err(|_| {
-                        ParseErrorWithReason(
-                            "Could not parse Enum id as u16 from value (needs 2 bytes)".into(),
-                        )
-                    })
-                };
-                let variant = idx.and_then(|idx| {
-                    variants.get(idx).ok_or_else(|| {
-                        ParseErrorWithReason(format!("Could not find Enum variant with id {}", idx))
-                    })
-                });
-
-                // Map all error cases into the same error.
-                match variant {
-                    Ok((name, fields_ty)) => {
-                        let fields =
-                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                        Ok(json!({ name: fields }))
-                    }
-                    Err(e) => Err(deserial_error(e.0)),
-                }
-            }
-            Type::TaggedEnum(variants) => {
-                let idx = u8::deserial(source).map_err(|_| {
-                    ParseErrorWithReason(
-                        "Could not parse TaggedEnum id from value (needs 1 byte)".into(),
-                    )
-                });
-                let variant = idx.and_then(|idx| {
-                    variants.get(&idx).ok_or_else(|| {
-                        ParseErrorWithReason(format!(
-                            "Could not find TaggedEnum variant with id {}",
-                            idx
-                        ))
-                    })
-                });
-
-                match variant {
-                    Ok((name, fields_ty)) => {
-                        let fields =
-                            fields_ty.to_json(source).map_err(|e| e.add_trace(position, self))?;
-                        Ok(json!({ name: fields }))
-                    }
-                    Err(e) => Err(deserial_error(e.0)),
-                }
-            }
-            Type::String(size_len) => {
-                let string = deserial_string(source, *size_len).map_err(|e| deserial_error(e.0))?;
-                Ok(Value::String(string))
-            }
-            Type::ContractName(size_len) => {
-                let name = deserial_string(source, *size_len).map_err(|e| {
-                    ParseErrorWithReason(format!(
-                        "Could not parse contract name from value ({})",
-                        e
-                    ))
-                });
-                let owned_contract_name = name.and_then(|n| {
-                    OwnedContractName::new(n)
-                        .map_err(|e| ParseErrorWithReason(format!("Invalid contract name ({})", e)))
-                });
-
-                owned_contract_name
-                    .map(|ocn| {
-                        let name_without_init = ocn.as_contract_name().contract_name();
-                        json!({ "contract": name_without_init })
-                    })
-                    .map_err(|e| deserial_error(e.0))
-            }
-            Type::ReceiveName(size_len) => {
-                let name = deserial_string(source, *size_len).map_err(|e| {
-                    ParseErrorWithReason(format!("Could not parse receive name from value ({})", e))
-                });
-                let owned_receive_name = name.and_then(|n| {
-                    OwnedReceiveName::new(n)
-                        .map_err(|e| ParseErrorWithReason(format!("Invalid receive name ({})", e)))
-                });
-
-                owned_receive_name
-                    .map(|orn| {
-                        let receive_name = orn.as_receive_name();
-                        let contract_name = receive_name.contract_name();
-                        let func_name = receive_name.entrypoint_name();
-                        json!({"contract": contract_name, "func": func_name})
-                    })
-                    .map_err(|e| deserial_error(e.0))
-            }
-            Type::ULeb128(constraint) => {
-                let int = deserial_biguint(source, *constraint).map_err(|_| {
-                    deserial_error("Could not parse unsigned integer (uleb128) from value".into())
-                })?;
-                Ok(Value::String(int.to_string()))
-            }
-            Type::ILeb128(constraint) => {
-                let int = deserial_bigint(source, *constraint).map_err(|_| {
-                    deserial_error("Could not parse signed integer (leb128) from value".into())
-                })?;
-                Ok(Value::String(int.to_string()))
-            }
-            Type::ByteList(size_len) => {
-                let len = deserial_length(source, *size_len).map_err(|_| {
-                    ParseErrorWithReason("Could not parse ByteList length from value".into())
-                });
-                let bytes: core::result::Result<Vec<_>, _> =
-                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
-                        let mut bytes =
-                            Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
-
-                        for i in 0..*len {
-                            let byte = source.read_u8().map_err(|_| {
-                                ParseErrorWithReason(format!(
-                                    "Failed to read byte {} of ByteList value",
-                                    i
-                                ))
-                            });
-                            bytes.push(byte);
-                        }
-
-                        bytes.into_iter().collect()
-                    });
-
-                match (len, bytes) {
-                    (Ok(len), Ok(bytes)) => {
-                        let mut string = String::with_capacity(std::cmp::min(
-                            MAX_PREALLOCATED_CAPACITY,
-                            2 * len,
-                        ));
-                        string.push_str(&hex::encode(bytes));
-                        Ok(Value::String(string))
-                    }
-                    (Err(e), _) => Err(deserial_error(e.0)),
-                    (_, Err(e)) => Err(deserial_error(e.0)),
-                }
-            }
-            Type::ByteArray(len) => {
-                let len = usize::try_from(*len).map_err(|_| {
-                    ParseErrorWithReason("Could not parse ByteArray length from value".into())
-                });
-                let bytes: core::result::Result<Vec<_>, _> =
-                    len.as_ref().map_err(|e| e.clone()).and_then(|len| {
-                        let mut bytes =
-                            Vec::with_capacity(std::cmp::min(MAX_PREALLOCATED_CAPACITY, *len));
-
-                        for i in 0..*len {
-                            let byte = source.read_u8().map_err(|_| {
-                                ParseErrorWithReason(format!(
-                                    "Failed to read byte {} of ByteArray value",
-                                    i
-                                ))
-                            });
-                            bytes.push(byte);
-                        }
-
-                        bytes.into_iter().collect()
-                    });
-
-                match (len, bytes) {
-                    (Ok(len), Ok(bytes)) => {
-                        let mut string = String::with_capacity(std::cmp::min(
-                            MAX_PREALLOCATED_CAPACITY,
-                            2 * len,
-                        ));
-                        string.push_str(&hex::encode(bytes));
-                        Ok(Value::String(string))
-                    }
-                    (Err(e), _) => Err(deserial_error(e.0)),
-                    (_, Err(e)) => Err(deserial_error(e.0)),
-                }
-            }
-        }
-    }
-}
-
-/// Deserialize a uleb128 encoded [`BigUint`] from `source`.
-fn deserial_biguint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigUint> {
-    let mut result = BigUint::zero();
-    let mut shift = 0;
-    for _ in 0..constraint {
-        let byte = source.read_u8()?;
-        let value_byte = BigUint::from(byte & 0b0111_1111);
-        result += value_byte << shift;
-        shift += 7;
-
-        if byte & 0b1000_0000 == 0 {
-            return Ok(result);
-        }
-    }
-    Err(ParseError {})
-}
-
-/// Deserialize a ileb128 encoded [`BigInt`] from `source`.
-fn deserial_bigint<R: Read>(source: &mut R, constraint: u32) -> ParseResult<BigInt> {
-    let mut result = BigInt::zero();
-    let mut shift = 0;
-    for _ in 0..constraint {
-        let byte = source.read_u8()?;
-        let value_byte = BigInt::from(byte & 0b0111_1111);
-        result += value_byte << shift;
-        shift += 7;
-
-        if byte & 0b1000_0000 == 0 {
-            if byte & 0b0100_0000 != 0 {
-                result -= BigInt::from(2).pow(shift)
-            }
-            return Ok(result);
-        }
-    }
-    Err(ParseError {})
 }

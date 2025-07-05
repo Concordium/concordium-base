@@ -492,7 +492,7 @@ mod tests {
         let five_com = keys.hide(&five_value, &PedersenRandomness::zero());
         let commitment_shifted = Commitment(commitment.0.plus_point(&five_com));
         if let Some(proof) = maybe_proof {
-            assert_eq!(
+            assert!(
                 verify_attribute_range(
                     ProofVersion::Version2,
                     &mut transcript,
@@ -503,8 +503,7 @@ mod tests {
                     &commitment_shifted,
                     &proof
                 )
-                .is_ok(),
-                false,
+                .is_err(),
                 "Shifting statement and commitment using same proof should fail."
             );
         } else {
@@ -561,7 +560,7 @@ mod tests {
         let set2 = BTreeSet::from([de, uk]);
         let set_statement = AttributeInSetStatement::<G1, _, AttributeKind> {
             attribute_tag: AttributeTag::from(4u8),
-            _phantom:      PhantomData::default(),
+            _phantom:      PhantomData,
             set:           set.clone(),
         };
 
@@ -570,7 +569,7 @@ mod tests {
             attribute_tag: AttributeTag::from(3u8),
             lower:         AttributeKind(String::from("19950505")),
             upper:         AttributeKind(String::from("19990505")),
-            _phantom:      PhantomData::default(),
+            _phantom:      PhantomData,
         };
 
         // full statement

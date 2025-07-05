@@ -2197,7 +2197,7 @@ mod tests {
             let mut comms = BTreeMap::new();
             for (tag, value) in randomness_2.iter() {
                 let _ = comms.insert(
-                    AttributeTag::from(*tag),
+                    *tag,
                     key.hide(
                         &pedersen_commitment::Value::<ArCurve>::new(
                             values_2.get(tag).unwrap().to_field_element(),

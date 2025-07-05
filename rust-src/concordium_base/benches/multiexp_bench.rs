@@ -37,7 +37,7 @@ pub fn bench_multiexp_bls(c: &mut Criterion) {
             let gsc = gs[..i].to_vec();
             let esc = es[..i].to_vec();
             group.bench_function(
-                &format!("{}: Multiexp for BLS (window = {w})", module_path!()),
+                format!("{}: Multiexp for BLS (window = {w})", module_path!()),
                 move |b| b.iter(|| GenericMultiExp::new(&gsc, w).multiexp(&esc)),
             );
         }

@@ -2688,7 +2688,7 @@ mod tests {
                     .verify(message, &ed25519_dalek::Signature::from_bytes(&signature.0))
                     .expect("Should be a valid signature");
             }
-            _ => assert!(false, "Could not get signature"),
+            _ => panic!("Could not get signature"),
         }
     }
 

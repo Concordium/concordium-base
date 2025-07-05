@@ -187,7 +187,7 @@ mod tests {
     /// to 32 bytes.
     #[test]
     fn scalar_from_bytes_short() {
-        let s = <G1 as Curve>::scalar_from_bytes(&SCALAR_BYTES_LE_SHORT);
+        let s = <G1 as Curve>::scalar_from_bytes(SCALAR_BYTES_LE_SHORT);
         let limbs: Vec<u64> = s.into_repr();
         // Convert limbs into an array of bytes
         let mut buffer = Vec::with_capacity(32);
@@ -207,7 +207,7 @@ mod tests {
     /// greater than 32, the extra bytes are ignored.
     #[test]
     fn scalar_from_bytes_long() {
-        let s = <G1 as Curve>::scalar_from_bytes(&SCALAR_BYTES_LE_LONG);
+        let s = <G1 as Curve>::scalar_from_bytes(SCALAR_BYTES_LE_LONG);
         let fits_capacity_limbs: Vec<u64> = s.into_repr();
         // Create four u64 limbs of the scalar representation from the first 32 bytes
         let mut limbs_from_long = [0u64; 4];
@@ -290,9 +290,7 @@ mod tests {
     #[test]
     fn test_into() {
         let bigint: BigUint = BigUint::from_bytes_le(&SCALAR_BYTES_LE);
-        let s: ArkField<Fr> = Fr::try_from(bigint)
-            .expect("Expected a valid scalar")
-            .into();
+        let s: ArkField<Fr> = Fr::from(bigint).into();
         assert_eq!(s.into_repr(), [1u64, 0u64, u64::MAX - 1, 0u64]);
     }
 

@@ -137,6 +137,6 @@ mod tests {
         let vec = z_vec(z, 2, n);
         assert_eq!(vec.len(), n, "Vector length should be {}", n);
         z.square();
-        assert_eq!(*vec.get(0).unwrap(), z, "First element should be z^2")
+        assert_eq!(*vec.first().unwrap(), z, "First element should be z^2")
     }
 }

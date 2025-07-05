@@ -411,7 +411,7 @@ mod tests {
             .get_account_signing_key(0, 55, 7)
             .unwrap();
         assert_eq!(
-            hex::encode(&signing_key),
+            hex::encode(signing_key),
             "e4d1693c86eb9438feb9cbc3d561fbd9299e3a8b3a676eb2483b135f8dbf6eb1"
         );
     }
@@ -581,7 +581,7 @@ mod tests {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                         abandon abandon";
         let seed = words_to_seed_with_passphrase(mnemonic, PASSPHRASE);
-        assert_eq!(seed.is_err(), true);
+        assert!(seed.is_err());
     }
 
     #[test]
@@ -590,37 +590,28 @@ mod tests {
                         abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                         abandon abandon abandon abandon abandon abandon abandon";
         let seed = words_to_seed_with_passphrase(mnemonic, PASSPHRASE);
-        assert_eq!(seed.is_err(), true);
+        assert!(seed.is_err());
     }
 
     #[test]
     pub fn words_to_seed_13_words_fail() {
         let mnemonic_13_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_13_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_13_words, PASSPHRASE).is_err());
     }
 
     #[test]
     pub fn words_to_seed_14_words_fail() {
         let mnemonic_14_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_14_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_14_words, PASSPHRASE).is_err());
     }
 
     #[test]
     pub fn words_to_seed_16_words_fail() {
         let mnemonic_16_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon abandon abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_16_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_16_words, PASSPHRASE).is_err());
     }
 
     #[test]
@@ -628,10 +619,7 @@ mod tests {
         let mnemonic_17_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_17_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_17_words, PASSPHRASE).is_err());
     }
 
     #[test]
@@ -639,10 +627,7 @@ mod tests {
         let mnemonic_19_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_19_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_19_words, PASSPHRASE).is_err());
     }
 
     #[test]
@@ -650,10 +635,7 @@ mod tests {
         let mnemonic_20_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_20_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_20_words, PASSPHRASE).is_err());
     }
 
     #[test]
@@ -661,10 +643,7 @@ mod tests {
         let mnemonic_22_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_22_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_22_words, PASSPHRASE).is_err());
     }
 
     #[test]
@@ -672,10 +651,7 @@ mod tests {
         let mnemonic_23_words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon abandon abandon \
                                  abandon abandon abandon abandon abandon abandon abandon";
-        assert_eq!(
-            words_to_seed_with_passphrase(mnemonic_23_words, PASSPHRASE).is_err(),
-            true
-        );
+        assert!(words_to_seed_with_passphrase(mnemonic_23_words, PASSPHRASE).is_err());
     }
 
     #[test]
@@ -868,7 +844,7 @@ mod tests {
             .get_verifiable_credential_signing_key(ContractAddress::new(1, 2), 1)
             .unwrap();
         assert_eq!(
-            hex::encode(&signing_key),
+            hex::encode(signing_key),
             "670d904509ce09372deb784e702d4951d4e24437ad3879188d71ae6db51f3301"
         );
     }
@@ -922,7 +898,7 @@ mod tests {
             .get_verifiable_credential_signing_key(ContractAddress::new(13, 0), 1)
             .unwrap();
         assert_eq!(
-            hex::encode(&signing_key),
+            hex::encode(signing_key),
             "c75a161b97a1e204d9f31202308958e541e14f0b14903bd220df883bd06702bb"
         );
     }
@@ -972,31 +948,31 @@ mod tests {
 
     #[test]
     fn capitalized_mainnet_net_mapped_correctly() {
-        let result = Net::from_str(&"Mainnet").expect("Should not fail on valid input");
+        let result = Net::from_str("Mainnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Mainnet);
     }
 
     #[test]
     fn capitalized_testnet_net_mapped_correctly() {
-        let result = Net::from_str(&"Testnet").expect("Should not fail on valid input");
+        let result = Net::from_str("Testnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Testnet);
     }
 
     #[test]
     fn mainnet_net_mapped_correctly() {
-        let result = Net::from_str(&"mainnet").expect("Should not fail on valid input");
+        let result = Net::from_str("mainnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Mainnet);
     }
 
     #[test]
     fn testnet_net_mapped_correctly() {
-        let result = Net::from_str(&"testnet").expect("Should not fail on valid input");
+        let result = Net::from_str("testnet").expect("Should not fail on valid input");
         assert_eq!(result, Net::Testnet);
     }
 
     #[test]
     fn invalid_net_input_fails() {
-        let result = Net::from_str(&"Stagenet");
-        assert_eq!(result.is_err(), true);
+        let result = Net::from_str("Stagenet");
+        assert!(result.is_err());
     }
 }
