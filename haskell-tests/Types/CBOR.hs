@@ -106,7 +106,9 @@ genTokenOperation =
           TokenAddAllowList <$> genCborTokenHolder,
           TokenRemoveAllowList <$> genCborTokenHolder,
           TokenAddDenyList <$> genCborTokenHolder,
-          TokenRemoveDenyList <$> genCborTokenHolder
+          TokenRemoveDenyList <$> genCborTokenHolder,
+          pure TokenPause,
+          pure TokenUnpause
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -193,7 +195,9 @@ genTokenEvent =
         [ AddAllowListEvent <$> genCborTokenHolder,
           RemoveAllowListEvent <$> genCborTokenHolder,
           AddDenyListEvent <$> genCborTokenHolder,
-          RemoveDenyListEvent <$> genCborTokenHolder
+          RemoveDenyListEvent <$> genCborTokenHolder,
+          pure Pause,
+          pure Unpause
         ]
 
 -- | Generator for 'TokenRejectReason'.
