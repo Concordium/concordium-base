@@ -1104,7 +1104,7 @@ data TokenEvent
 encodeTokenEventDetails :: Maybe Text.Text -> (a -> Encoding) -> a -> TokenEventDetails
 encodeTokenEventDetails mbLabel encoder x = case mbLabel of
     Nothing -> TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
-    Just label -> 
+    Just label ->
         TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
             encodeMapLen 1
                 <> encodeString label
