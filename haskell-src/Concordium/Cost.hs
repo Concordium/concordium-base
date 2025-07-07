@@ -141,6 +141,10 @@ tokenBurnCost = 100
 tokenListOperationCost :: Energy
 tokenListOperationCost = 50
 
+-- | Cost to pause/unpause mint/burn/transfer operations.
+tokenPauseUnpauseCost :: Energy
+tokenPauseUnpauseCost = 50
+
 -- | C_t for updating account credentials
 updateCredentialsCost ::
     -- | The number of credentials on the account before the update.
