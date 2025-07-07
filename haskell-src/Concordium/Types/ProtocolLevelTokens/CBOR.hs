@@ -1101,12 +1101,14 @@ data TokenEvent
 
 -- | CBOR-encode the details for the token events in the form:
 --  > {"label": <CborEncodedValue>}
-encodeEventDetails :: Text.Text -> (a -> Encoding) -> a -> TokenEventDetails
-encodeEventDetails label encoder x =
-    TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
-        encodeMapLen 1
-            <> encodeString label
-            <> encoder x
+encodeTokenEventDetails :: Maybe Text.Text -> (a -> Encoding) -> a -> TokenEventDetails
+encodeTokenEventDetails mbLabel encoder x = case mbLabel of
+    Nothing -> TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
+    Just label -> 
+        TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+            encodeMapLen 1
+                <> encodeString label
+                <> encoder x
 
 -- | Decoder for the event details of token events.
 decodeTokenEventDetails ::
@@ -1170,15 +1172,15 @@ encodeTokenEvent = \case
     Pause ->
         EncodedTokenEvent
             { eteType = TokenEventType "pause",
-              eteDetails = encodeEventDetails "paused" mempty ()
+              eteDetails = encodeTokenEventDetails Nothing mempty ()
             }
     Unpause ->
         EncodedTokenEvent
             { eteType = TokenEventType "unpause",
-              eteDetails = encodeEventDetails "unpaused" mempty ()
+              eteDetails = encodeTokenEventDetails Nothing mempty ()
             }
   where
-    encodeTargetDetails = encodeEventDetails "target" encodeCborTokenHolder
+    encodeTargetDetails = encodeTokenEventDetails (Just "target") encodeCborTokenHolder
 
 -- | Decode a 'TokenEvent' from an 'EncodedTokenEvent'.
 decodeTokenEvent :: EncodedTokenEvent -> Either String TokenEvent
