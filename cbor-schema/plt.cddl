@@ -60,6 +60,7 @@ token-operation = token-transfer
     / token-burn
     / token-update-list
     / token-pause
+    / token-unpause
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
