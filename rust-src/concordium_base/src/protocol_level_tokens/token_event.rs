@@ -1,5 +1,8 @@
 use crate::{
-    common::{cbor, cbor::CborSerializationResult},
+    common::cbor::{
+        self, CborDeserialize, CborMapDecoder, CborSerializationError, CborSerializationResult,
+        CborSerialize,
+    },
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -55,6 +58,7 @@ impl TokenModuleEvent {
             "addDenyList" => AddDenyList(cbor::cbor_decode(self.details.as_ref())?),
             "removeDenyList" => RemoveDenyList(cbor::cbor_decode(self.details.as_ref())?),
             "pause" => Pause(cbor::cbor_decode(self.details.as_ref())?),
+            "unpause" => Unpause(cbor::cbor_decode(self.details.as_ref())?),
             _ => Unknow,
         })
     }
@@ -73,8 +77,11 @@ pub enum TokenModuleEventType {
     /// An account was removed from the deny list of a protocol level token
     RemoveDenyList(TokenListUpdateEventDetails),
     /// Execution of certain operations on a protocol level token was
-    /// paused/unpaused
+    /// paused
     Pause(TokenPauseEventDetails),
+    /// Execution of certain operations on a protocol level token was
+    /// unpaused
+    Unpause(TokenPauseEventDetails),
     /// Unknow token module event type. If new events types are added that are
     /// unknown to this enum, they will be decoded to this variant.
     Unknow,
@@ -99,20 +106,27 @@ pub struct TokenListUpdateEventDetails {
 }
 
 /// An event emitted when the token is paused or unpaused.
-#[derive(
-    Debug,
-    Clone,
-    Eq,
-    PartialEq,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
-)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TokenPauseEventDetails {
-    /// Whether the token is paused or not.
-    pub paused: bool,
+pub struct TokenPauseEventDetails {}
+
+impl CborSerialize for TokenPauseEventDetails {
+    fn serialize<C: cbor::CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        encoder.encode_map(0)?;
+        Ok(())
+    }
+}
+
+impl CborDeserialize for TokenPauseEventDetails {
+    fn deserialize<C: cbor::CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        let map_decoder = decoder.decode_map()?;
+        if map_decoder.size() != 0 {
+            return Err(CborSerializationError::map_size(0, map_decoder.size()));
+        }
+        Ok(TokenPauseEventDetails {})
+    }
 }
 
 /// An entity that can hold PLTs (protocol level tokens).
@@ -308,9 +322,9 @@ mod test {
 
     #[test]
     fn test_decode_pause_event_cbor() {
-        let variant = TokenPauseEventDetails { paused: true };
+        let variant = TokenPauseEventDetails {};
         let cbor = cbor::cbor_encode(&variant).unwrap();
-        assert_eq!(hex::encode(&cbor), "a166706175736564f5");
+        assert_eq!(hex::encode(&cbor), "a0");
         let module_event = TokenModuleEvent {
             event_type: "pause".to_string().try_into().unwrap(),
             details:    cbor.into(),
@@ -318,5 +332,19 @@ mod test {
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
         assert_eq!(module_event_type, TokenModuleEventType::Pause(variant));
+    }
+
+    #[test]
+    fn test_decode_unpause_event_cbor() {
+        let variant = TokenPauseEventDetails {};
+        let cbor = cbor::cbor_encode(&variant).unwrap();
+        assert_eq!(hex::encode(&cbor), "a0");
+        let module_event = TokenModuleEvent {
+            event_type: "unpause".to_string().try_into().unwrap(),
+            details:    cbor.into(),
+        };
+
+        let module_event_type = module_event.decode_token_module_event().unwrap();
+        assert_eq!(module_event_type, TokenModuleEventType::Unpause(variant));
     }
 }
