@@ -446,10 +446,20 @@ pub mod test {
 
     #[test]
     fn test_token_operation_cbor_pause() {
-        let operation = TokenOperation::Pause(true);
+        let operation = TokenOperation::Pause(TokenPauseDetails {});
 
         let cbor = cbor::cbor_encode(&operation).unwrap();
-        assert_eq!(hex::encode(&cbor), "a1657061757365f5");
+        assert_eq!(hex::encode(&cbor), "a1657061757365a0");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_unpause() {
+        let operation = TokenOperation::Unpause(TokenPauseDetails {});
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a167756e7061757365a0");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
     }
