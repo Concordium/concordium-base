@@ -23,7 +23,7 @@ pub struct TokenModuleState {
     /// Whether the token is burnable.
     pub burnable:           Option<bool>,
     /// Whether the execution of certain token operations is paused.
-    pub paused:             bool,
+    pub paused:             Option<bool>,
     /// Additional state information may be provided under further text keys,
     /// the meaning of which are not defined in the present specification.
     #[cbor(other)]
@@ -59,7 +59,7 @@ mod test {
             deny_list:          Some(true),
             mintable:           Some(true),
             burnable:           Some(true),
-            paused:             false,
+            paused:             Some(false),
             additional:         vec![("other1".to_string(), value::Value::Positive(2))]
                 .into_iter()
                 .collect(),
@@ -85,10 +85,11 @@ mod test {
         token_module_state.allow_list = None;
         token_module_state.mintable = None;
         token_module_state.additional = HashMap::new();
+        token_module_state.paused = None;
 
         let cbor = cbor::cbor_encode(&token_module_state).unwrap();
         assert_eq!(hex::encode(&cbor),
-        "a4646e616d6563544b3166706175736564f4686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d5368613235365820010101010101010101010101010101010101010101010101010101010101010171676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        "a3646e616d6563544b31686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d5368613235365820010101010101010101010101010101010101010101010101010101010101010171676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
         let token_module_state_decoded: TokenModuleState = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_module_state_decoded, token_module_state);

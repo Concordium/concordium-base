@@ -1,7 +1,7 @@
 use crate::{
-    common::{
-        cbor,
-        cbor::{value, CborSerializationResult},
+    common::cbor::{
+        self, value, CborDeserialize, CborMapDecoder, CborSerializationError,
+        CborSerializationResult, CborSerialize,
     },
     protocol_level_tokens::{
         token_holder::CborTokenHolder, CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId,
@@ -99,8 +99,11 @@ pub mod operations {
         })
     }
 
-    /// Construct operation to pause/unpause protocol level token.
-    pub fn pause(paused: bool) -> TokenOperation { TokenOperation::Pause(paused) }
+    /// Construct operation to pause protocol level token.
+    pub fn pause() -> TokenOperation { TokenOperation::Pause(TokenPauseDetails {}) }
+
+    /// Construct operation to unpause protocol level token.
+    pub fn unpause() -> TokenOperation { TokenOperation::Unpause(TokenPauseDetails {}) }
 }
 
 /// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
@@ -173,9 +176,12 @@ pub enum TokenOperation {
     /// Operation that removes an account from the deny list of a protocol level
     /// token
     RemoveDenyList(TokenListUpdateDetails),
-    /// Operation that pauses execution of "mint", "burn", and "transfer"
-    /// operations for a protocol level token
-    Pause(bool),
+    /// Operation that pauses execution of any balance changing operations for a
+    /// protocol level token
+    Pause(TokenPauseDetails),
+    /// Operation that unpauses execution of any balance changing operations for
+    /// a protocol level token
+    Unpause(TokenPauseDetails),
     /// Unknow operation. If new types of operations are added that are unknown
     /// to this enum, they will be decoded to this variant.
     #[cbor(other)]
@@ -198,6 +204,31 @@ pub struct TokenSupplyUpdateDetails {
     /// Change in supply of the token. Must be interpreted as an increment or
     /// decrement depending on whether the operation is a mint or burn.
     pub amount: TokenAmount,
+}
+
+/// Details of an operation that changes the `paused` state of a protocol level
+/// token.
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenPauseDetails {}
+
+impl CborSerialize for TokenPauseDetails {
+    fn serialize<C: cbor::CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        encoder.encode_map(0)?;
+        Ok(())
+    }
+}
+
+impl CborDeserialize for TokenPauseDetails {
+    fn deserialize<C: cbor::CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        let map_decoder = decoder.decode_map()?;
+        if map_decoder.size() != 0 {
+            return Err(CborSerializationError::map_size(0, map_decoder.size()));
+        }
+        Ok(TokenPauseDetails {})
+    }
 }
 
 /// Details of an operation that adds or removes an account from
@@ -415,10 +446,20 @@ pub mod test {
 
     #[test]
     fn test_token_operation_cbor_pause() {
-        let operation = TokenOperation::Pause(true);
+        let operation = TokenOperation::Pause(TokenPauseDetails {});
 
         let cbor = cbor::cbor_encode(&operation).unwrap();
-        assert_eq!(hex::encode(&cbor), "a1657061757365f5");
+        assert_eq!(hex::encode(&cbor), "a1657061757365a0");
+        let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
+        assert_eq!(operation_decoded, operation);
+    }
+
+    #[test]
+    fn test_token_operation_cbor_unpause() {
+        let operation = TokenOperation::Unpause(TokenPauseDetails {});
+
+        let cbor = cbor::cbor_encode(&operation).unwrap();
+        assert_eq!(hex::encode(&cbor), "a167756e7061757365a0");
         let operation_decoded: TokenOperation = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(operation_decoded, operation);
     }
