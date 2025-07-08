@@ -179,8 +179,8 @@ pub enum TokenOperation {
     /// Operation that pauses execution of any balance changing operations for a
     /// protocol level token
     Pause(TokenPauseDetails),
-    /// Operation that unpauses execution of any balance changing operations for a
-    /// protocol level token
+    /// Operation that unpauses execution of any balance changing operations for
+    /// a protocol level token
     Unpause(TokenPauseDetails),
     /// Unknow operation. If new types of operations are added that are unknown
     /// to this enum, they will be decoded to this variant.
