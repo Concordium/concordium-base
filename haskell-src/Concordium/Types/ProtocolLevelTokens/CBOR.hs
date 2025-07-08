@@ -1100,7 +1100,10 @@ data TokenEvent
     deriving (Eq, Show)
 
 -- | CBOR-encode the details for the token events in the form:
+-- 
 --  > {"label": <CborEncodedValue>}
+--
+--  The empty object (i.e. no label) is encoded as a map of length 0.
 encodeTokenEventDetails :: Maybe Text.Text -> (a -> Encoding) -> a -> TokenEventDetails
 encodeTokenEventDetails mbLabel encoder x = case mbLabel of
     Nothing -> TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
