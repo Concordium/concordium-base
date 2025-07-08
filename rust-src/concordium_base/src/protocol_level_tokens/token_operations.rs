@@ -26,7 +26,7 @@ pub mod operations {
             amount,
             recipient: CborTokenHolder::Account(CborHolderAccount {
                 coin_info: Some(CoinInfo::CCD),
-                address:   receiver,
+                address: receiver,
             }),
             memo: None,
         })
@@ -42,7 +42,7 @@ pub mod operations {
             amount,
             recipient: CborTokenHolder::Account(CborHolderAccount {
                 coin_info: Some(CoinInfo::CCD),
-                address:   receiver,
+                address: receiver,
             }),
             memo: Some(memo),
         })
@@ -63,7 +63,7 @@ pub mod operations {
         TokenOperation::AddAllowList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
                 coin_info: Some(CoinInfo::CCD),
-                address:   target,
+                address: target,
             }),
         })
     }
@@ -73,7 +73,7 @@ pub mod operations {
         TokenOperation::RemoveAllowList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
                 coin_info: Some(CoinInfo::CCD),
-                address:   target,
+                address: target,
             }),
         })
     }
@@ -83,7 +83,7 @@ pub mod operations {
         TokenOperation::AddDenyList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
                 coin_info: Some(CoinInfo::CCD),
-                address:   target,
+                address: target,
             }),
         })
     }
@@ -94,13 +94,20 @@ pub mod operations {
         TokenOperation::RemoveDenyList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
                 coin_info: Some(CoinInfo::CCD),
-                address:   target,
+                address: target,
             }),
         })
     }
 
-    /// Construct operation to pause/unpause protocol level token.
-    pub fn pause(paused: bool) -> TokenOperation { TokenOperation::Pause(paused) }
+    /// Construct operation to pause protocol level token.
+    pub fn pause() -> TokenOperation {
+        TokenOperation::Pause
+    }
+
+    /// Construct operation to unpause protocol level token.
+    pub fn unpause() -> TokenOperation {
+        TokenOperation::Unpause
+    }
 }
 
 /// Embedded CBOR, see <https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml>
@@ -114,7 +121,7 @@ const CBOR_TAG: u64 = 24;
 #[serde(rename_all = "camelCase")]
 pub struct TokenOperationsPayload {
     /// Id of the token
-    pub token_id:   TokenId,
+    pub token_id: TokenId,
     /// Token operations in the transaction
     pub operations: RawCbor,
 }
@@ -145,7 +152,9 @@ impl FromIterator<TokenOperation> for TokenOperations {
 }
 
 impl TokenOperations {
-    pub fn new(operations: Vec<TokenOperation>) -> Self { Self { operations } }
+    pub fn new(operations: Vec<TokenOperation>) -> Self {
+        Self { operations }
+    }
 }
 
 /// Protocol level token operation. An operation can be composed to a protocol
@@ -173,9 +182,12 @@ pub enum TokenOperation {
     /// Operation that removes an account from the deny list of a protocol level
     /// token
     RemoveDenyList(TokenListUpdateDetails),
-    /// Operation that pauses execution of "mint", "burn", and "transfer"
-    /// operations for a protocol level token
-    Pause(bool),
+    /// Operation that pauses execution of any balance changing operations for a
+    /// protocol level token
+    Pause,
+    /// Operation that pauses execution of any balance changing operations for a
+    /// protocol level token
+    Unpause,
     /// Unknow operation. If new types of operations are added that are unknown
     /// to this enum, they will be decoded to this variant.
     #[cbor(other)]
@@ -232,12 +244,12 @@ pub struct TokenListUpdateDetails {
 #[serde(rename_all = "camelCase")]
 pub struct TokenTransfer {
     /// The amount of tokens to transfer.
-    pub amount:    TokenAmount,
+    pub amount: TokenAmount,
     /// The recipient account.
     pub recipient: CborTokenHolder,
     /// An optional memo.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub memo:      Option<CborMemo>,
+    pub memo: Option<CborMemo>,
 }
 
 /// Memo attached to a protocol level token transfer
@@ -291,12 +303,12 @@ pub mod test {
     fn test_token_operations_cbor() {
         let operations = TokenOperations {
             operations: vec![TokenOperation::Transfer(TokenTransfer {
-                amount:    TokenAmount::from_raw(12300, 3),
+                amount: TokenAmount::from_raw(12300, 3),
                 recipient: CborTokenHolder::Account(CborHolderAccount {
-                    address:   ADDRESS,
+                    address: ADDRESS,
                     coin_info: None,
                 }),
-                memo:      None,
+                memo: None,
             })],
         };
 
@@ -309,12 +321,12 @@ pub mod test {
     #[test]
     fn test_token_operation_cbor_transfer() {
         let operation = TokenOperation::Transfer(TokenTransfer {
-            amount:    TokenAmount::from_raw(12300, 3),
+            amount: TokenAmount::from_raw(12300, 3),
             recipient: CborTokenHolder::Account(CborHolderAccount {
-                address:   ADDRESS,
+                address: ADDRESS,
                 coin_info: None,
             }),
-            memo:      None,
+            memo: None,
         });
 
         let cbor = cbor::cbor_encode(&operation).unwrap();
@@ -357,7 +369,7 @@ pub mod test {
     fn test_token_operation_cbor_add_allow_list() {
         let operation = TokenOperation::AddAllowList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
-                address:   ADDRESS,
+                address: ADDRESS,
                 coin_info: None,
             }),
         });
@@ -372,7 +384,7 @@ pub mod test {
     fn test_token_operation_cbor_remove_allow_list() {
         let operation = TokenOperation::RemoveAllowList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
-                address:   ADDRESS,
+                address: ADDRESS,
                 coin_info: None,
             }),
         });
@@ -387,7 +399,7 @@ pub mod test {
     fn test_token_operation_cbor_add_deny_list() {
         let operation = TokenOperation::AddDenyList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
-                address:   ADDRESS,
+                address: ADDRESS,
                 coin_info: None,
             }),
         });
@@ -402,7 +414,7 @@ pub mod test {
     fn test_token_operation_cbor_remove_deny_list() {
         let operation = TokenOperation::RemoveDenyList(TokenListUpdateDetails {
             target: CborTokenHolder::Account(CborHolderAccount {
-                address:   ADDRESS,
+                address: ADDRESS,
                 coin_info: None,
             }),
         });
