@@ -1512,7 +1512,7 @@ data TokenModuleState = TokenModuleState
       -- | The governance account address of the token.
       tmsGovernanceAccount :: !CborTokenHolder,
       -- | Whether the token is paused.
-      tmsPaused :: !Bool,
+      tmsPaused :: !(Maybe Bool),
       -- | Whether the token supports an allow list.
       tmsAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -1581,7 +1581,7 @@ encodeTokenModuleState TokenModuleState{..} =
             & k "name" ?~ encodeString tmsName
             & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
             & k "governanceAccount" ?~ encodeCborTokenHolder tmsGovernanceAccount
-            & k "paused" ?~ encodeBool tmsPaused
+            & k "paused" .~ fmap encodeBool tmsPaused
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
@@ -1609,7 +1609,7 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
         (tmsName, m1) <- getAndClear "name" convertText m0
         (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
         (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertCborTokenHolder m2
-        (tmsPaused, m4) <- getAndClear "paused" convertBool m3
+        (tmsPaused, m4) <- getMaybeAndClear "paused" convertBool m3
         (tmsAllowList, m5) <- getMaybeAndClear "allowList" convertBool m4
         (tmsDenyList, m6) <- getMaybeAndClear "denyList" convertBool m5
         (tmsMintable, m7) <- getMaybeAndClear "mintable" convertBool m6
