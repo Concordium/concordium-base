@@ -1100,7 +1100,7 @@ data TokenEvent
     deriving (Eq, Show)
 
 -- | CBOR-encode the details for the token events in the form:
--- 
+--
 --  > {"label": <CborEncodedValue>}
 --
 --  The empty object (i.e. no label) is encoded as a map of length 0.
