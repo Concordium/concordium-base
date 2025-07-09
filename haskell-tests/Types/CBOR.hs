@@ -240,8 +240,8 @@ tip1 =
         }
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
-testInitializationParameters :: Spec
-testInitializationParameters = describe "token-initialization-parameters decoding" $ do
+testEncodedInitializationParametersCBOR :: Spec
+testEncodedInitializationParametersCBOR = describe "TokenInitializationParameters CBOR serialization" $ do
     it "Decode success" $
         assertEqual
             "Decoded CBOR"
@@ -305,9 +305,9 @@ invalidEncTip1 =
         TokenParameter $
             BSS.pack [0x1, 0x2, 0x3, 0x4]
 
-testEncodedInitializationParameters :: Spec
-testEncodedInitializationParameters = describe "TokenInitializationParameters JSON serialization" $ do
-    it "Serialize/Deserialize roundtrip success" $
+testEncodedInitializationParametersJSON :: Spec
+testEncodedInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
+    it "Serialize/Deserialize roundtrip success JSON" $
         assertEqual
             "Deserialized"
             (Just encTip1)
@@ -384,8 +384,8 @@ invalidEncTops1 =
         TokenParameter $
             BSS.pack [0x1, 0x2, 0x3, 0x4]
 
-testEncodedTokenOperations :: Spec
-testEncodedTokenOperations = describe "EncodedTokenOperations JSON/CBOR serialization" $ do
+testEncodedTokenOperationsJSON :: Spec
+testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serialization" $ do
     it "Serialize/Deserialize roundtrip success" $
         assertEqual
             "Deserialized"
@@ -422,15 +422,6 @@ testEncodedTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serializa
             "CBOR serialized"
             (tokenUpdateTransactionToBytes tops1)
             "\135¡htransfer£dmemoD\SOH\STX\ETX\EOTfamountÄ\130$\EM09irecipientÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡dmint¡famountÄ\130$\EM09¡dburn¡famountÄ\130$\EM09¡laddAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡oremoveAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡kaddDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡nremoveDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
-
-    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
-        assertEqual
-            "Deserialized"
-            (Just invalidEncTops1)
-            ( AE.decode $
-                AE.encode
-                    invalidEncTops1
-            )
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
@@ -742,9 +733,10 @@ testTokenMetadataUrlCBOR = describe "TokenMetadataUrl CBOR serialization" $ do
 
 tests :: Spec
 tests = parallel $ describe "CBOR" $ do
-    testInitializationParameters
-    testEncodedInitializationParameters
-    testEncodedTokenOperations
+    testEncodedInitializationParametersCBOR
+    testEncodedInitializationParametersJSON
+    testEncodedTokenOperationsJSON
+    testEncodedTokenOperationsCBOR
     testEncodedTokenEvents
     testTokenMetadataUrlJSON
     testTokenMetadataUrlCBOR
