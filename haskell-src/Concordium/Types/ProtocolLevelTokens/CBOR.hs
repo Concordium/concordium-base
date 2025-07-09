@@ -1125,7 +1125,7 @@ decodeTokenEventDetails ::
 decodeTokenEventDetails label innerDecoder detailsLBS =
     case CBOR.deserialiseFromBytes (decodeWith innerDecoder) detailsLBS of
         Left e -> Left $ "token-event: failed to decode event details: " ++ show e
-        Right ("", target) -> Right target
+        Right ("", details) -> Right details
         Right (remaining, _) ->
             Left $
                 "token-event: "
