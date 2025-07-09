@@ -1141,7 +1141,9 @@ decodeTokenEventDetails label innerDecoder detailsLBS =
         label' <- decodeString
         unless (label' == label) $
             fail $
-                "token-event: expected \"target\" key, but saw "
+                "token-event: expected "
+                    ++ Text.unpack label
+                    ++ " key, but saw "
                     ++ show label'
         x <- decoder
         when (isNothing maybeMapLen) $ do
