@@ -344,12 +344,12 @@ tops1 =
                       ttRecipient = cborHolder,
                       ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
                     },
-              TokenMint{tgoMintAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
-              TokenBurn{tgoBurnAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
-              TokenAddAllowList{tgoTarget = cborHolder},
-              TokenRemoveAllowList{tgoTarget = cborHolder},
-              TokenAddDenyList{tgoTarget = cborHolder},
-              TokenRemoveDenyList{tgoTarget = cborHolder}
+              TokenMint{toMintAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenBurn{toBurnAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenAddAllowList{toTarget = cborHolder},
+              TokenRemoveAllowList{toTarget = cborHolder},
+              TokenAddDenyList{toTarget = cborHolder},
+              TokenRemoveDenyList{toTarget = cborHolder}
             ]
   where
     cborHolder =
