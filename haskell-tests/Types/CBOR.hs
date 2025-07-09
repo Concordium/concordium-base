@@ -240,8 +240,8 @@ tip1 =
         }
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
-testInitializationParameters :: Spec
-testInitializationParameters = describe "token-initialization-parameters decoding" $ do
+testEncodedInitializationParametersCBOR :: Spec
+testEncodedInitializationParametersCBOR = describe "TokenInitializationParameters CBOR serialization" $ do
     it "Decode success" $
         assertEqual
             "Decoded CBOR"
@@ -305,9 +305,9 @@ invalidEncTip1 =
         TokenParameter $
             BSS.pack [0x1, 0x2, 0x3, 0x4]
 
-testEncodedInitializationParameters :: Spec
-testEncodedInitializationParameters = describe "TokenInitializationParameters JSON serialization" $ do
-    it "Serialize/Deserialize roundtrip success" $
+testEncodedInitializationParametersJSON :: Spec
+testEncodedInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
+    it "Serialize/Deserialize roundtrip success JSON" $
         assertEqual
             "Deserialized"
             (Just encTip1)
@@ -337,14 +337,22 @@ tops1 =
                 TokenTransferBody
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
                       ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
-                      ttRecipient =
-                        CborHolderAccount
-                            { chaAccount = AccountAddress $ FBS.pack [0x1, 0x1],
-                              chaCoinInfo = Just CoinInfoConcordium
-                            },
+                      ttRecipient = cborHolder,
                       ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
-                    }
+                    },
+              TokenMint{tgoMintAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenBurn{tgoBurnAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenAddAllowList{tgoTarget = cborHolder},
+              TokenRemoveAllowList{tgoTarget = cborHolder},
+              TokenAddDenyList{tgoTarget = cborHolder},
+              TokenRemoveDenyList{tgoTarget = cborHolder}
             ]
+  where
+    cborHolder =
+        CborHolderAccount
+            { chaAccount = AccountAddress $ FBS.pack [0x1, 0x1],
+              chaCoinInfo = Just CoinInfoConcordium
+            }
 
 -- | Encoded 'TokenHolderTransaction' that can be successfully CBOR decoded
 encTops1 :: EncodedTokenOperations
@@ -355,6 +363,20 @@ encTops1 =
                 CBOR.toStrictByteString $
                     encodeTokenUpdateTransaction tops1
 
+tevents1 :: [TokenEvent]
+tevents1 =
+    [ AddAllowListEvent cborHolder,
+      RemoveAllowListEvent cborHolder,
+      AddDenyListEvent cborHolder,
+      RemoveDenyListEvent cborHolder
+    ]
+  where
+    cborHolder =
+        CborHolderAccount
+            { chaAccount = AccountAddress $ FBS.pack [0x1, 0x1],
+              chaCoinInfo = Just CoinInfoConcordium
+            }
+
 -- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
 invalidEncTops1 :: EncodedTokenOperations
 invalidEncTops1 =
@@ -362,8 +384,8 @@ invalidEncTops1 =
         TokenParameter $
             BSS.pack [0x1, 0x2, 0x3, 0x4]
 
-testEncodedTokenOperations :: Spec
-testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization" $ do
+testEncodedTokenOperationsJSON :: Spec
+testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serialization" $ do
     it "Serialize/Deserialize roundtrip success" $
         assertEqual
             "Deserialized"
@@ -378,6 +400,7 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                 AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
+
     it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
         assertEqual
             "Deserialized"
@@ -386,6 +409,48 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                 AE.encode
                     invalidEncTops1
             )
+
+testEncodedTokenOperationsCBOR :: Spec
+testEncodedTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $ do
+    it "Serialize/Deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops1)
+            (Right tops1)
+    it "Serializes to expected CBOR bytestring" $
+        assertEqual
+            "CBOR serialized"
+            (tokenUpdateTransactionToBytes tops1)
+            "\135¡htransfer£dmemoD\SOH\STX\ETX\EOTfamountÄ\130$\EM09irecipientÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡dmint¡famountÄ\130$\EM09¡dburn¡famountÄ\130$\EM09¡laddAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡oremoveAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡kaddDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡nremoveDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
+
+testEncodedTokenEvents :: Spec
+testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
+    it "Serialize/Deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (map (decodeTokenEvent . encodeTokenEvent) tevents1)
+            (map Right tevents1)
+    it "Serializes to expected CBOR bytestring" $ do
+        assertEqual
+            "Serialized to expected CBOR bytestring"
+            [ EncodedTokenEvent
+                { eteType = TokenEventType "addAllowList",
+                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "removeAllowList",
+                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "addDenyList",
+                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "removeDenyList",
+                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                }
+            ]
+            (map encodeTokenEvent tevents1)
 
 emptyStringHash :: Hash.Hash
 emptyStringHash = Hash.hash ""
@@ -668,9 +733,11 @@ testTokenMetadataUrlCBOR = describe "TokenMetadataUrl CBOR serialization" $ do
 
 tests :: Spec
 tests = parallel $ describe "CBOR" $ do
-    testInitializationParameters
-    testEncodedInitializationParameters
-    testEncodedTokenOperations
+    testEncodedInitializationParametersCBOR
+    testEncodedInitializationParametersJSON
+    testEncodedTokenOperationsJSON
+    testEncodedTokenOperationsCBOR
+    testEncodedTokenEvents
     testTokenMetadataUrlJSON
     testTokenMetadataUrlCBOR
     testTokenModuleStateSimpleJSON
