@@ -106,7 +106,9 @@ genTokenOperation =
           TokenAddAllowList <$> genCborTokenHolder,
           TokenRemoveAllowList <$> genCborTokenHolder,
           TokenAddDenyList <$> genCborTokenHolder,
-          TokenRemoveDenyList <$> genCborTokenHolder
+          TokenRemoveDenyList <$> genCborTokenHolder,
+          pure TokenPause,
+          pure TokenUnpause
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -193,7 +195,9 @@ genTokenEvent =
         [ AddAllowListEvent <$> genCborTokenHolder,
           RemoveAllowListEvent <$> genCborTokenHolder,
           AddDenyListEvent <$> genCborTokenHolder,
-          RemoveDenyListEvent <$> genCborTokenHolder
+          RemoveDenyListEvent <$> genCborTokenHolder,
+          pure Pause,
+          pure Unpause
         ]
 
 -- | Generator for 'TokenRejectReason'.
@@ -340,12 +344,14 @@ tops1 =
                       ttRecipient = cborHolder,
                       ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
                     },
-              TokenMint{tgoMintAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
-              TokenBurn{tgoBurnAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
-              TokenAddAllowList{tgoTarget = cborHolder},
-              TokenRemoveAllowList{tgoTarget = cborHolder},
-              TokenAddDenyList{tgoTarget = cborHolder},
-              TokenRemoveDenyList{tgoTarget = cborHolder}
+              TokenMint{toMintAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenBurn{toBurnAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenAddAllowList{toTarget = cborHolder},
+              TokenRemoveAllowList{toTarget = cborHolder},
+              TokenAddDenyList{toTarget = cborHolder},
+              TokenRemoveDenyList{toTarget = cborHolder},
+              TokenPause,
+              TokenUnpause
             ]
   where
     cborHolder =
@@ -368,7 +374,9 @@ tevents1 =
     [ AddAllowListEvent cborHolder,
       RemoveAllowListEvent cborHolder,
       AddDenyListEvent cborHolder,
-      RemoveDenyListEvent cborHolder
+      RemoveDenyListEvent cborHolder,
+      Pause,
+      Unpause
     ]
   where
     cborHolder =
@@ -421,7 +429,7 @@ testEncodedTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serializa
         assertEqual
             "CBOR serialized"
             (tokenUpdateTransactionToBytes tops1)
-            "\135¡htransfer£dmemoD\SOH\STX\ETX\EOTfamountÄ\130$\EM09irecipientÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡dmint¡famountÄ\130$\EM09¡dburn¡famountÄ\130$\EM09¡laddAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡oremoveAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡kaddDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡nremoveDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
+            "\137¡htransfer£dmemoD\SOH\STX\ETX\EOTfamountÄ\130$\EM09irecipientÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡dmint¡famountÄ\130$\EM09¡dburn¡famountÄ\130$\EM09¡laddAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡oremoveAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡kaddDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡nremoveDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL¡epause¡gunpause"
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
@@ -448,6 +456,14 @@ testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
               EncodedTokenEvent
                 { eteType = TokenEventType "removeDenyList",
                   eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "pause",
+                  eteDetails = TokenEventDetails $ BSS.pack [160]
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "unpause",
+                  eteDetails = TokenEventDetails $ BSS.pack [160]
                 }
             ]
             (map encodeTokenEvent tevents1)
