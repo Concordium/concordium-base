@@ -400,6 +400,23 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON/CBOR serializ
                 AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
+
+    it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
+        assertEqual
+            "Deserialized"
+            (Just invalidEncTops1)
+            ( AE.decode $
+                AE.encode
+                    invalidEncTops1
+            )
+
+testEncodedTokenOperationsCBOR :: Spec
+testEncodedTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $ do
+    it "Serialize/Deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops1)
+            (Right tops1)
     it "Serializes to expected CBOR bytestring" $
         assertEqual
             "CBOR serialized"
@@ -417,6 +434,11 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON/CBOR serializ
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
+    it "Serialize/Deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (map (decodeTokenEvent . encodeTokenEvent) tevents1)
+            (map Right tevents1)
     it "Serializes to expected CBOR bytestring" $ do
         assertEqual
             "Serialized to expected CBOR bytestring"
