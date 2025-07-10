@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Adjusted cost of PLT mint/burn from 100 to 50
 - Adds `pause` function to `concordium_base::protocol_level_tokens::operations`, to support pausing/unpausing
   execution of token operations.
 - Adds support for decoding `paused` state as part of the state of a token module instance.

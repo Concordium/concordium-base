@@ -131,11 +131,11 @@ tokenTransferCost = 100
 
 -- | Cost to mint a token.
 tokenMintCost :: Energy
-tokenMintCost = 100
+tokenMintCost = 50
 
 -- | Cost to burn a token.
 tokenBurnCost :: Energy
-tokenBurnCost = 100
+tokenBurnCost = 50
 
 -- | Cost to carry out a list operation (add/remove from allow/deny list).
 tokenListOperationCost :: Energy

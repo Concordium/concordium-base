@@ -1988,10 +1988,10 @@ pub mod cost {
     pub const PLT_TRANSFER: Energy = Energy { energy: 100 };
 
     /// Additional cost of a PLT mint
-    pub const PLT_MINT: Energy = Energy { energy: 100 };
+    pub const PLT_MINT: Energy = Energy { energy: 50 };
 
     /// Additional cost of a PLT burn
-    pub const PLT_BURN: Energy = Energy { energy: 100 };
+    pub const PLT_BURN: Energy = Energy { energy: 50 };
 
     /// Additional cost of a PLT allow or deny list update
     pub const PLT_LIST_UPDATE: Energy = Energy { energy: 50 };

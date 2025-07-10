@@ -3007,6 +3007,8 @@ data FailureKind
       DuplicateTokenId !TokenId
     | -- | The token module encountered an error when initializing the protocol-level token.
       TokenInitializeFailure !String
+    | -- | The token module reference is unknown or invalid.
+      InvalidTokenModuleRef !TokenModuleRef
     deriving (Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
