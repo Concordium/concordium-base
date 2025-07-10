@@ -977,8 +977,8 @@ decodeTokenOperation = do
         "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
         "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
         "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
-        "pause" -> pure TokenPause
-        "unpause" -> pure TokenUnpause
+        "pause" -> TokenPause <$ decodeEmptyMap
+        "unpause" -> TokenUnpause <$ decodeEmptyMap
         _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
