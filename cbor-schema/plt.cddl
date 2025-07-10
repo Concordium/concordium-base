@@ -264,7 +264,7 @@ token-add-deny-list-event = token-list-update-details
 token-remove-deny-list-event = token-list-update-details
 
 ; The details of a token "pause" event, indicating whether token operations involving balance
-; changes has been suspended.
+; changes have been suspended.
 token-pause-event = {}
 
 ; The details of a token "unpause" event, indicating whether the suspension of token operations
