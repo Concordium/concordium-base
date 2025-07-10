@@ -880,7 +880,7 @@ data UpdatePayload
       ValidatorScoreParametersUpdatePayload !ValidatorScoreParameters
     | -- | Issue a new Protocol Level Token (PLT) (Support starting from protocol version 9)
       CreatePLTUpdatePayload !CreatePLT
-    deriving (Show)
+    deriving (Eq, Show)
 
 putUpdatePayload :: Putter UpdatePayload
 putUpdatePayload (ProtocolUpdatePayload u) = putWord8 1 >> put u
@@ -1127,7 +1127,7 @@ data UpdateInstruction = UpdateInstruction
       uiSignHash :: !UpdateInstructionSignHashV0,
       uiSignatures :: !UpdateInstructionSignatures
     }
-    deriving (Show)
+    deriving (Eq, Show)
 
 getUpdateInstruction :: SProtocolVersion pv -> Get UpdateInstruction
 getUpdateInstruction spv = do
@@ -1159,7 +1159,7 @@ data RawUpdateInstruction = RawUpdateInstruction
       ruiTimeout :: TransactionTime,
       ruiPayload :: UpdatePayload
     }
-    deriving (Show)
+    deriving (Eq, Show)
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''RawUpdateInstruction)
 

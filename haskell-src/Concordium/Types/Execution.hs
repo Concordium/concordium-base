@@ -383,8 +383,7 @@ data Payload
           -- | The CBOR-encoded operations to perform.
           tuOperations :: !TokenParameter
         }
-
--- deriving (Eq, Show)
+    deriving (Eq, Show)
 
 -- Define `TransactionType`  and relevant conversion function to convert from/to `Payload`.
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -1428,7 +1427,7 @@ data Event' (supplemented :: Bool)
         { -- | The update payload used to create the token.
           etcPayload :: !CreatePLT
         }
-    deriving (Show, Generic) -- FIXME:
+    deriving (Show, Generic, Eq)
 
 -- | A contract event, without supplemental data. This is what is stored in the database and
 --  hashed in the transaction outcomes.
@@ -2579,7 +2578,7 @@ class TransactionResult a where
 data ValidResult' supplemented
     = TxSuccess {vrEvents :: ![Event' supplemented]}
     | TxReject {vrRejectReason :: !RejectReason}
-    deriving (Show, Generic) -- FIXME:
+    deriving (Show, Generic, Eq)
 
 instance AE.ToJSON (ValidResult' supplemented) where
     toJSON TxSuccess{..} =
@@ -2816,7 +2815,7 @@ data RejectReason
       NonExistentTokenId !TokenId
     | -- | The token update transaction was rejected.
       TokenUpdateTransactionFailed !TokenModuleRejectReason
-    deriving (Show, Generic)
+    deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReasonInit :: Wasm.ContractExecutionFailure -> RejectReason
 wasmRejectToRejectReasonInit (Wasm.ContractReject reason) = RejectedInit reason
@@ -3010,7 +3009,7 @@ data FailureKind
       TokenInitializeFailure !String
     | -- | The token module reference is unknown or invalid.
       InvalidTokenModuleRef !TokenModuleRef
-    deriving (Show) -- FIXME:
+    deriving (Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 

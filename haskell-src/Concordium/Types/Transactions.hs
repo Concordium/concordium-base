@@ -340,7 +340,7 @@ data BareBlockItem
     | ChainUpdate
         { biUpdate :: !UpdateInstruction
         }
-    deriving (Show)
+    deriving (Eq, Show)
 
 instance HashableTo TransactionHash BareBlockItem where
     getHash = transactionHashFromBareBlockItem

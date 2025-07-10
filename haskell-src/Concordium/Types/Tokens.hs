@@ -22,6 +22,7 @@ import qualified Concordium.Crypto.ByteStringHelpers as BSH
 --  This is given as a symbol unique across the whole chain.
 --  The byte string must be between 1 and 128 bytes long and only consist of a-z, A-Z, 0-9, `-`, `.` and `%`.
 newtype TokenId = TokenId {tokenId :: BSS.ShortByteString}
+    deriving (Eq, Ord)
 
 instance Show TokenId where
     show (TokenId sbs) = T.unpack (T.decodeUtf8Lenient (BSS.fromShort sbs))
