@@ -1095,7 +1095,7 @@ data TokenEvent
       RemoveDenyListEvent !CborTokenHolder
     | -- | The execution of balance-changing operations was paused.
       Pause
-    | -- | Whether the execution of token operations has been unpaused.
+    | -- | The execution of balance-changing operations was unpaused.
       Unpause
     deriving (Eq, Show)
 
