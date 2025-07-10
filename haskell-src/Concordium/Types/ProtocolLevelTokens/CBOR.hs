@@ -1184,7 +1184,7 @@ encodeTokenEvent = \case
     Unpause ->
         EncodedTokenEvent
             { eteType = TokenEventType "unpause",
-              eteDetails = encodeTokenEventDetails Nothing mempty ()
+              eteDetails = encodeEmptyMap
             }
   where
     encodeTargetDetails = encodeTokenEventDetails (Just "target") encodeCborTokenHolder
