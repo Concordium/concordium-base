@@ -41,6 +41,7 @@ impl TryFrom<String> for TokenId {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         let byte_len = value.as_bytes().len();
+        #[allow(clippy::manual_range_contains)]
         if byte_len < TOKEN_ID_MIN_BYTE_LEN || byte_len > TOKEN_ID_MAX_BYTE_LEN {
             return Err(TokenIdFromStringError::InvalidLength {
                 actual_size: byte_len,
