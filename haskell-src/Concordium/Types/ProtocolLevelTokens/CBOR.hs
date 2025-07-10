@@ -1196,8 +1196,8 @@ decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     "removeAllowList" -> RemoveAllowListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
     "addDenyList" -> AddDenyListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
     "removeDenyList" -> RemoveDenyListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
-    "pause" -> pure Pause
-    "unpause" -> pure Unpause
+    "pause" -> Pause <$ decodeEmptyMap
+    "unpause" -> Unpause <$ decodeEmptyMap
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
