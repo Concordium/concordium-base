@@ -1093,7 +1093,7 @@ data TokenEvent
       AddDenyListEvent !CborTokenHolder
     | -- | An account was removed from the deny list.
       RemoveDenyListEvent !CborTokenHolder
-    | -- | Whether the execution of token operations has been paused.
+    | -- | The execution of balance-changing operations was paused.
       Pause
     | -- | Whether the execution of token operations has been unpaused.
       Unpause
