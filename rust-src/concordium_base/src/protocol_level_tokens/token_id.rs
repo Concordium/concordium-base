@@ -1,7 +1,8 @@
 use crate::common;
 
 /// The limit for the length of the byte encoding of a Token ID.
-pub const TOKEN_ID_MAX_BYTE_LEN: usize = 255;
+pub const TOKEN_ID_MIN_BYTE_LEN: usize = 1;
+pub const TOKEN_ID_MAX_BYTE_LEN: usize = 128;
 
 /// Protocol level token (PLT) ID.
 #[derive(
@@ -15,12 +16,13 @@ pub struct TokenId {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error(
-    "Byte encoding of TokenID must be within {TOKEN_ID_MAX_BYTE_LEN} bytes, instead got \
-     {actual_size}"
-)]
-pub struct TokenIdFromStringError {
-    actual_size: usize,
+pub enum TokenIdFromStringError {
+    #[error("TokenId must be between {TOKEN_ID_MIN_BYTE_LEN} and {TOKEN_ID_MAX_BYTE_LEN} characters, got {actual_size}")]
+    InvalidLength {
+        actual_size: usize,
+    },
+    #[error("TokenId contains invalid characters: only a-z, A-Z, 0-9, '-', '.', '%' are allowed")]
+    InvalidCharacters,
 }
 
 impl AsRef<str> for TokenId {
@@ -38,13 +40,18 @@ impl TryFrom<String> for TokenId {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         let byte_len = value.as_bytes().len();
-        if byte_len > TOKEN_ID_MAX_BYTE_LEN {
-            Err(TokenIdFromStringError {
+        if byte_len < TOKEN_ID_MIN_BYTE_LEN || byte_len > TOKEN_ID_MAX_BYTE_LEN {
+            return Err(TokenIdFromStringError::InvalidLength {
                 actual_size: byte_len,
             })
-        } else {
-            Ok(Self { value })
         }
+
+        if !value.chars().all(|c| matches!(c,
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '.' | '%')) {
+            return Err(TokenIdFromStringError::InvalidCharacters);
+        }
+
+        Ok(Self { value })
     }
 }
 
@@ -56,7 +63,7 @@ impl common::Serial for TokenId {
     fn serial<B: common::Buffer>(&self, out: &mut B) {
         let bytes = self.value.as_bytes();
         u8::try_from(bytes.len())
-            .expect("Invariant violation for byte length of TokenId")
+            .expect("Invariant violation for byte length of TokenId") // This error will never occur due to length being at most 128
             .serial(out);
         out.write_all(bytes)
             .expect("Writing TokenId bytes to buffer should not fail");
@@ -69,6 +76,6 @@ impl common::Deserial for TokenId {
         let mut buf = vec![0u8; len as usize];
         source.read_exact(&mut buf)?;
         let value = String::from_utf8(buf)?;
-        Ok(Self { value })
+        Ok(value.try_into()?)
     }
 }

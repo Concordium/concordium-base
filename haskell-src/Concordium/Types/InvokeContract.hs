@@ -97,7 +97,8 @@ data InvokeContractResult
           -- | Energy used by the execution.
           rcrUsedEnergy :: !Energy
         }
-    deriving (Eq)
+
+-- deriving (Eq) FIXME:
 
 instance AE.FromJSON InvokeContractResult where
     parseJSON = AE.withObject "InvokeContractResult" $ \obj -> do

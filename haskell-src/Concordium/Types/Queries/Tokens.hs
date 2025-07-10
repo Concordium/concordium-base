@@ -28,7 +28,7 @@ data Token = Token
       -- | The account level state of the token.
       tokenAccountState :: !TokenAccountState
     }
-    deriving (Eq, Show)
+    deriving (Show)
 
 -- | JSON instances for Token
 instance ToJSON Token where
@@ -155,7 +155,7 @@ data TokenInfo = TokenInfo
       -- | The global state of the token.
       tiTokenState :: TokenState
     }
-    deriving (Eq, Show)
+    deriving (Show)
 
 -- | JSON instances for TokenInfo
 instance ToJSON TokenInfo where

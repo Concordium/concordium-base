@@ -1198,7 +1198,7 @@ data TokenModuleRejectReason = TokenModuleRejectReason
       -- | (Optional) CBOR-encoded details.
       tmrrDetails :: !(Maybe TokenEventDetails)
     }
-    deriving (Eq, Show)
+    deriving (Show)
 
 instance S.Serialize TokenModuleRejectReason where
     put TokenModuleRejectReason{..} = do
@@ -1278,7 +1278,7 @@ data CreatePLT = CreatePLT
       -- | The initialization parameters of the token, encoded in CBOR.
       _cpltInitializationParameters :: !TokenParameter
     }
-    deriving (Eq, Show)
+    deriving (Show)
 
 makeLenses ''CreatePLT
 

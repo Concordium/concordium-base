@@ -800,7 +800,7 @@ data AccountInfo = AccountInfo
       -- | The protocol level tokens (PLT) held by the account.
       aiAccountTokens :: ![Token]
     }
-    deriving (Eq, Show)
+    deriving (Show)
 
 -- | Helper function for 'ToJSON' instance for 'AccountInfo'.
 accountInfoPairs :: (KeyValue kv) => AccountInfo -> [kv]

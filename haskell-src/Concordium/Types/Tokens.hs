@@ -1,4 +1,3 @@
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -10,6 +9,7 @@ import qualified Data.Aeson as AE
 import qualified Data.Aeson.Types as AE
 import Data.Bits
 import qualified Data.ByteString.Short as BSS
+import Data.Char
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -20,23 +20,34 @@ import qualified Concordium.Crypto.ByteStringHelpers as BSH
 
 -- | The unique token identifier for a protocol-level token.
 --  This is given as a symbol unique across the whole chain.
---  The byte string must be at most 255 bytes long and be a valid UTF-8 string.
+--  The byte string must be between 1 and 128 bytes long and only consist of a-z, A-Z, 0-9, `-`, `.` and `%`.
 newtype TokenId = TokenId {tokenId :: BSS.ShortByteString}
-    deriving newtype (Eq, Ord)
 
 instance Show TokenId where
     show (TokenId sbs) = T.unpack (T.decodeUtf8Lenient (BSS.fromShort sbs))
 
+-- | Check if a byte represents an allowed character
+isAllowedByte :: Word8 -> Bool
+isAllowedByte w =
+    let c = chr (fromIntegral w)
+    in  isAsciiLower c
+            || isAsciiUpper c
+            || isDigit c
+            || c `elem` ['-', '.', '%']
+
 -- | Try to construct a valid 'TokenId' from a 'BSS.ShortByteString'.
---  This can fail if the string is longer than 255 bytes or is not valid UTF-8.
+--  This can fail if the string is shorter than 1 or longer than 128 bytes or does not consist of only
+--  a-z, A-Z, 0-9, `-`, `.` and `%`.
 --  In the event of a failure @Left err@ is returned, where @err@ describes the failure.
 makeTokenId :: BSS.ShortByteString -> Either String TokenId
 makeTokenId sbs
-    | BSS.length sbs > 255 =
-        Left $ "TokenId length (" ++ show (BSS.length sbs) ++ ") out of bounds."
-    | Left decodeErr <- T.decodeUtf8' (BSS.fromShort sbs) =
-        Left $ "TokenId is not valid UTF-8: " ++ show decodeErr
-    | otherwise = Right $ TokenId sbs
+    | len < 1 = Left $ "TokenId length (" ++ show (BSS.length sbs) ++ ") must be at least 1"
+    | len > 128 = Left $ "TokenId length (" ++ show (BSS.length sbs) ++ ") must be at most 128"
+    | not (BSS.all isAllowedByte sbs) =
+        Left "TokenId contains invalid characters"
+    | otherwise = Right (TokenId sbs)
+  where
+    len = BSS.length sbs
 
 instance S.Serialize TokenId where
     put (TokenId tid) = do
@@ -63,7 +74,9 @@ instance AE.ToJSON TokenId where
     toJSON TokenId{..} = AE.String $ T.decodeUtf8 $ BSS.fromShort tokenId
 
 instance AE.FromJSON TokenId where
-    parseJSON (AE.String text) = return $ TokenId $ BSS.toShort $ T.encodeUtf8 text
+    parseJSON (AE.String text) = case makeTokenId (BSS.toShort $ T.encodeUtf8 text) of
+        Right tid -> return tid
+        Left err -> fail ("TokenId validation failed: " ++ err)
     parseJSON invalid = AE.prependFailure "parsing TokenId failed" (AE.typeMismatch "String" invalid)
 
 -- | Represents the raw amount of a token. This is the amount of the token in its smallest unit.
