@@ -838,3 +838,93 @@ unsafe extern "C" fn is_legacy_artifact(
         0u8
     }
 }
+
+/// Allocate empty persistent state.
+#[no_mangle]
+unsafe extern "C" fn empty_persistent_state() -> *mut PersistentState {
+    let state = PersistentState::Empty;
+    Box::into_raw(Box::new(state))
+}
+
+/// Look up entry using key and read the value in a mutable state.
+///
+/// # Return value
+///
+/// Returns null pointer if no entry was found otherwise a pointer to the value
+/// stored in the entry. The return value is a pointer to a byte array buffer of
+/// size `*output_len`. To avoid leaking memory the buffer should be deallocated
+/// with `rs_free_array_len` (available in the crypto-common crate).
+#[no_mangle]
+unsafe extern "C" fn lookup_entry_value_mutable_state(
+    mut loader: LoadCallback,
+    key: *const u8,
+    key_len: libc::size_t,
+    tree: *mut MutableState,
+    out_len: *mut libc::size_t,
+) -> *mut u8 {
+    let tree = unsafe { &mut *tree };
+    let key = unsafe { std::slice::from_raw_parts(key, key_len) };
+    let mut inner = tree.get_inner(&mut loader).lock();
+    let Some(entry_id) = inner.get_entry(&mut loader, key) else {
+        return std::ptr::null_mut();
+    };
+    if let Some(mut value) = inner.with_entry(entry_id, &mut loader, |v| v.to_vec()) {
+        value.shrink_to_fit();
+        unsafe { *out_len = value.len() as size_t };
+        let ptr = value.as_mut_ptr();
+        std::mem::forget(value);
+        ptr
+    } else {
+        std::ptr::null_mut()
+    }
+}
+
+/// Delete entry at key.
+///
+/// Returns:
+/// - `0` if no entry found to be deleted.
+/// - `1` if an entry was deleted.
+/// - `2` failed due to the entry being locked.
+#[no_mangle]
+unsafe extern "C" fn delete_entry_mutable_state(
+    mut loader: LoadCallback,
+    key: *const u8,
+    key_len: libc::size_t,
+    tree: *mut MutableState,
+) -> u8 {
+    let tree = unsafe { &mut *tree };
+    let key = unsafe { std::slice::from_raw_parts(key, key_len) };
+    let mut inner = tree.get_inner(&mut loader).lock();
+    match inner.delete(&mut loader, key) {
+        Ok(false) => 0,
+        Ok(true) => 1,
+        Err(trie::AttemptToModifyLockedArea) => 2,
+    }
+}
+
+#[no_mangle]
+/// Insert entry into the mutable state, overwriting the value if already
+/// present.
+///
+/// Returns:
+/// - `0` If no entry was present already.
+/// - `1` An entry was overwritten.
+/// - `2` Failed inserting due to the entry being locked.
+unsafe extern "C" fn insert_entry_value_mutable_state(
+    mut loader: LoadCallback,
+    key: *const u8,
+    key_len: libc::size_t,
+    value: *const u8,
+    value_len: libc::size_t,
+    tree: *mut MutableState,
+) -> u8 {
+    let tree = unsafe { &mut *tree };
+    let key = unsafe { std::slice::from_raw_parts(key, key_len) };
+    let value = unsafe { std::slice::from_raw_parts(value, value_len) };
+    let mut inner = tree.get_inner(&mut loader).lock();
+    match inner.insert(&mut loader, key, value.to_vec()) {
+        Ok((_, false)) => 0,
+        Ok((_, true)) => 1,
+        Err(trie::AttemptToModifyLockedArea) => 2,
+    }
+}
