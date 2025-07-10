@@ -1179,7 +1179,7 @@ encodeTokenEvent = \case
     Pause ->
         EncodedTokenEvent
             { eteType = TokenEventType "pause",
-              eteDetails = encodeTokenEventDetails Nothing mempty ()
+              eteDetails = encodeEmptyMap
             }
     Unpause ->
         EncodedTokenEvent
