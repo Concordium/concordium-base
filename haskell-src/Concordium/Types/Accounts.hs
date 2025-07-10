@@ -187,7 +187,7 @@ instance Serialize BakerPoolInfo where
 makeClassy ''BakerPoolInfo
 
 -- | Helper function for defining 'ToJSON'.
-bakerPoolInfoV1Pairs :: (KeyValue kv) => BakerPoolInfo -> [kv]
+bakerPoolInfoV1Pairs :: (KeyValue e kv) => BakerPoolInfo -> [kv]
 bakerPoolInfoV1Pairs BakerPoolInfo{..} =
     [ "openStatus" .= _poolOpenStatus,
       "metadataUrl" .= _poolMetadataUrl,
@@ -683,7 +683,7 @@ toAccountStakingInfoP4 =
     toAccountStakingInfo
         (error "Epoch conversion is not used for account staking info in this protocol version")
 
-pendingChangeToJSON :: (KeyValue kv) => StakePendingChange' UTCTime -> [kv]
+pendingChangeToJSON :: (KeyValue e kv) => StakePendingChange' UTCTime -> [kv]
 pendingChangeToJSON NoChange = []
 pendingChangeToJSON (ReduceStake amt eff) =
     [ "pendingChange"
@@ -696,7 +696,7 @@ pendingChangeToJSON (RemoveStake eff) =
             ["change" .= String "RemoveStake", "effectiveTime" .= eff]
     ]
 
-accountStakingInfoToJSON :: (KeyValue kv) => AccountStakingInfo -> [kv]
+accountStakingInfoToJSON :: (KeyValue e kv) => AccountStakingInfo -> [kv]
 accountStakingInfoToJSON AccountStakingNone = []
 accountStakingInfoToJSON AccountStakingBaker{..} = ["accountBaker" .= bi]
   where
@@ -803,7 +803,7 @@ data AccountInfo = AccountInfo
     deriving (Eq, Show)
 
 -- | Helper function for 'ToJSON' instance for 'AccountInfo'.
-accountInfoPairs :: (KeyValue kv) => AccountInfo -> [kv]
+accountInfoPairs :: (KeyValue e kv) => AccountInfo -> [kv]
 {-# INLINE accountInfoPairs #-}
 accountInfoPairs AccountInfo{..} =
     [ "accountNonce" .= aiAccountNonce,

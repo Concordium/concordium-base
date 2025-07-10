@@ -144,8 +144,9 @@ genInvalidPayloadConfigureBaker pv =
         return $
             modifyPayloadBitmap (if doSetSuspendBit then setSuspendBit else id) $
                 S.runPut $
-                    putPayload $
-                        p{cbSuspend = Just b}
+                    putPayload $ case p of
+                        ConfigureBaker{} -> p{cbSuspend = Just b}
+                        _ -> p -- This cannot happen.
     suspendBitmask = Bit.shiftL 1 9
     setSuspendBit bm = suspendBitmask Bit..|. bm
 
