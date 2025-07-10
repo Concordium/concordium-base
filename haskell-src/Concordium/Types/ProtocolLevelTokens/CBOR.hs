@@ -1033,9 +1033,11 @@ encodeTokenOperation = \case
     encodePause =
         encodeMapLen 1
             <> encodeString "pause"
+            <> encodeMapLen 0
     encodeUnpause =
         encodeMapLen 1
             <> encodeString "unpause"
+            <> encodeMapLen 0
 
 -- | A token transaction consists of a sequence of token operations.
 newtype TokenUpdateTransaction = TokenUpdateTransaction
