@@ -17,10 +17,11 @@ pub struct TokenId {
 
 #[derive(Debug, thiserror::Error)]
 pub enum TokenIdFromStringError {
-    #[error("TokenId must be between {TOKEN_ID_MIN_BYTE_LEN} and {TOKEN_ID_MAX_BYTE_LEN} characters, got {actual_size}")]
-    InvalidLength {
-        actual_size: usize,
-    },
+    #[error(
+        "TokenId must be between {TOKEN_ID_MIN_BYTE_LEN} and {TOKEN_ID_MAX_BYTE_LEN} characters, \
+         got {actual_size}"
+    )]
+    InvalidLength { actual_size: usize },
     #[error("TokenId contains invalid characters: only a-z, A-Z, 0-9, '-', '.', '%' are allowed")]
     InvalidCharacters,
 }
@@ -43,11 +44,13 @@ impl TryFrom<String> for TokenId {
         if byte_len < TOKEN_ID_MIN_BYTE_LEN || byte_len > TOKEN_ID_MAX_BYTE_LEN {
             return Err(TokenIdFromStringError::InvalidLength {
                 actual_size: byte_len,
-            })
+            });
         }
 
-        if !value.chars().all(|c| matches!(c,
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '.' | '%')) {
+        if !value.chars().all(|c| {
+            matches!(c,
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '.' | '%')
+        }) {
             return Err(TokenIdFromStringError::InvalidCharacters);
         }
 
