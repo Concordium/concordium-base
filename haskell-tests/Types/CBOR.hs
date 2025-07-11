@@ -10,6 +10,7 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Lazy.Char8 as B8
 import qualified Data.ByteString.Short as BSS
 import qualified Data.FixedByteString as FBS
@@ -358,9 +359,28 @@ tops1 =
         CborHolderAccount
             { chaAccount =
                 AccountAddress $
-                    FBS.pack [0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1],
+                    FBS.pack (replicate 32 1),
               chaCoinInfo = Just CoinInfoConcordium
             }
+
+-- | The CBOR encoding of 'tops1'
+tops1ExpectedCbor :: BS.ByteString
+tops1ExpectedCbor =
+    BS16.decodeLenient
+        "89a1687472616e73666572a3646d656d6f440102030466616d6f756e74c48224\
+        \19303969726563697069656e74d99d73a201d99d71a101190397035820010101\
+        \0101010101010101010101010101010101010101010101010101010101a1646d\
+        \696e74a166616d6f756e74c48224193039a1646275726ea166616d6f756e74c4\
+        \8224193039a16c616464416c6c6f774c697374a166746172676574d99d73a201\
+        \d99d71a101190397035820010101010101010101010101010101010101010101\
+        \0101010101010101010101a16f72656d6f7665416c6c6f774c697374a1667461\
+        \72676574d99d73a201d99d71a101190397035820010101010101010101010101\
+        \0101010101010101010101010101010101010101a16b61646444656e794c6973\
+        \74a166746172676574d99d73a201d99d71a10119039703582001010101010101\
+        \01010101010101010101010101010101010101010101010101a16e72656d6f76\
+        \6544656e794c697374a166746172676574d99d73a201d99d71a1011903970358\
+        \2001010101010101010101010101010101010101010101010101010101010101\
+        \01a1657061757365a0a167756e7061757365a0"
 
 -- | Encoded 'TokenHolderTransaction' that can be successfully CBOR decoded
 encTops1 :: EncodedTokenOperations
@@ -371,21 +391,30 @@ encTops1 =
                 CBOR.toStrictByteString $
                     encodeTokenUpdateTransaction tops1
 
+-- | A dummy 'CborTokenHolder' value.
+dummyCborHolder :: CborTokenHolder
+dummyCborHolder =
+    CborHolderAccount
+        { chaAccount = AccountAddress $ FBS.pack (replicate 32 1),
+          chaCoinInfo = Just CoinInfoConcordium
+        }
+
+-- | The expected CBOR encoding of 'dummyCborHolder'.
+expectedDummyCborHolderEncoding :: BSS.ShortByteString
+expectedDummyCborHolderEncoding =
+    BSS.toShort . BS16.decodeLenient $
+        "a166746172676574d99d73a201d99d71a101190397035820\
+        \0101010101010101010101010101010101010101010101010101010101010101"
+
 tevents1 :: [TokenEvent]
 tevents1 =
-    [ AddAllowListEvent cborHolder,
-      RemoveAllowListEvent cborHolder,
-      AddDenyListEvent cborHolder,
-      RemoveDenyListEvent cborHolder,
+    [ AddAllowListEvent dummyCborHolder,
+      RemoveAllowListEvent dummyCborHolder,
+      AddDenyListEvent dummyCborHolder,
+      RemoveDenyListEvent dummyCborHolder,
       Pause,
       Unpause
     ]
-  where
-    cborHolder =
-        CborHolderAccount
-            { chaAccount = AccountAddress $ FBS.pack [0x1, 0x1],
-              chaCoinInfo = Just CoinInfoConcordium
-            }
 
 -- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
 invalidEncTops1 :: EncodedTokenOperations
@@ -431,7 +460,7 @@ testEncodedTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serializa
         assertEqual
             "CBOR serialized"
             (tokenUpdateTransactionToBytes tops1)
-            "\137¡htransfer£dmemoD\SOH\STX\ETX\EOTfamountÄ\130$\EM09irecipientÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH¡dmint¡famountÄ\130$\EM09¡dburn¡famountÄ\130$\EM09¡laddAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH¡oremoveAllowList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH¡kaddDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH¡nremoveDenyList¡ftargetÙ\157s¢\SOHÙ\157q¡\SOH\EM\ETX\151\ETXX \SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH\SOH¡epause ¡gunpause "
+            tops1ExpectedCbor
 
 testEncodedTokenEvents :: Spec
 testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
@@ -445,19 +474,19 @@ testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
             "Serialized to expected CBOR bytestring"
             [ EncodedTokenEvent
                 { eteType = TokenEventType "addAllowList",
-                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
                 },
               EncodedTokenEvent
                 { eteType = TokenEventType "removeAllowList",
-                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
                 },
               EncodedTokenEvent
                 { eteType = TokenEventType "addDenyList",
-                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
                 },
               EncodedTokenEvent
                 { eteType = TokenEventType "removeDenyList",
-                  eteDetails = TokenEventDetails $ BSS.pack [161, 102, 116, 97, 114, 103, 101, 116, 217, 157, 115, 162, 1, 217, 157, 113, 161, 1, 25, 3, 151, 3, 88, 32, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
                 },
               EncodedTokenEvent
                 { eteType = TokenEventType "pause",

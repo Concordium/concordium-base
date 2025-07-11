@@ -140,9 +140,12 @@ decodeMap valDecoder runBuilder emptyBuilder = do
 -- | Decode the empty map
 decodeEmptyMap :: Decoder s ()
 decodeEmptyMap = do
-    decodeMapLen >>= \case
-        len | len == 0 -> return ()
-        other -> fail $ "Unexpected non-empty map of length " ++ show other
+    decodeMapLenOrIndef >>= \case
+        Just 0 -> return ()
+        Just len -> fail $ "Unexpected non-empty map of length " ++ show len
+        Nothing -> do
+            isEmpty <- decodeBreakOr
+            unless isEmpty $ fail "Unexpected non-empty map"
 
 -- | Decode a CBOR decimal fraction into a 'Scientific'. The result is not normalized.
 decodeDecimalFraction :: Decoder s Scientific
