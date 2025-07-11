@@ -83,3 +83,59 @@ impl common::Deserial for TokenId {
         Ok(value.try_into()?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn valid_token_ids() {
+        // Min length
+        assert!(TokenId::from_str("a").is_ok());
+
+        // Max length (128)
+        let max_len_token = "a".repeat(TOKEN_ID_MAX_BYTE_LEN);
+        assert!(TokenId::from_str(&max_len_token).is_ok());
+
+        // Allowed chars
+        let valid_chars = "abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ012345676789.-%";
+        assert!(TokenId::from_str(valid_chars).is_ok());
+    }
+
+    #[test]
+    fn invalid_token_ids_due_to_length() {
+        // Empty string
+        let err = TokenId::from_str("").unwrap_err();
+        matches!(err, TokenIdFromStringError::InvalidLength {
+            actual_size: 0,
+        });
+
+        // Over 128 bytes
+        let too_long = "a".repeat(TOKEN_ID_MAX_BYTE_LEN + 1);
+        let err = TokenId::from_str(&too_long).unwrap_err();
+        matches!(err, TokenIdFromStringError::InvalidLength { .. });
+    }
+
+    #[test]
+    fn invalid_token_ids_due_to_characters() {
+        let cases = [
+            "abc@",    // '@' not allowed
+            "abc#",    // '#' not allowed
+            "abc ",    // space  not allowed
+            "abc/def", // '/'  not allowed
+            "æøå",     // non-ASCII
+            "abc😀",   // emoji
+            "é",
+        ];
+
+        for case in cases {
+            let err = TokenId::from_str(case).unwrap_err();
+            assert!(
+                matches!(err, TokenIdFromStringError::InvalidCharacters),
+                "Failed for: {}",
+                case
+            );
+        }
+    }
+}
