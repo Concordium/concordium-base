@@ -1120,6 +1120,11 @@ encodeTargetDetails target =
             <> encodeString "target"
             <> encodeCborTokenHolder target
 
+-- | CBOR-encoded event details consisting of just the empty map.
+--  > {}
+emptyEventDetails :: TokenEventDetails
+emptyEventDetails = TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
+
 -- | Encode a 'TokenEvent' as an 'EncodedTokenEvent'.
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
 encodeTokenEvent = \case
@@ -1146,15 +1151,13 @@ encodeTokenEvent = \case
     Pause ->
         EncodedTokenEvent
             { eteType = TokenEventType "pause",
-              eteDetails = encodeEmptyMap
+              eteDetails = emptyEventDetails
             }
     Unpause ->
         EncodedTokenEvent
             { eteType = TokenEventType "unpause",
-              eteDetails = encodeEmptyMap
+              eteDetails = emptyEventDetails
             }
-  where
-    encodeEmptyMap = TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
 
 -- | Decoder for the event details of the list update events.
 --  This is the "token-list-update-details" type in the CDDL schema.
