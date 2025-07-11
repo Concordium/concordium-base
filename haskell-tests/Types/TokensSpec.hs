@@ -82,6 +82,8 @@ testTokenIds = do
     checkInvalid "@"
     -- Invalid character
     checkInvalid "&"
+    -- Space not allowed
+    checkInvalid "abc "
     -- Length of 1 should succeed
     checkValid "a"
     -- a-z, A-Z, 0-9 and ".", "-", "%" are allowed
