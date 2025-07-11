@@ -137,6 +137,16 @@ decodeMap valDecoder runBuilder emptyBuilder = do
             Nothing -> fail $ "Unexpected key " ++ show key
             Just decoder -> decoder builder
 
+-- | Decode the empty map
+decodeEmptyMap :: Decoder s ()
+decodeEmptyMap = do
+    decodeMapLenOrIndef >>= \case
+        Just 0 -> return ()
+        Just len -> fail $ "Unexpected non-empty map of length " ++ show len
+        Nothing -> do
+            isEmpty <- decodeBreakOr
+            unless isEmpty $ fail "Unexpected non-empty map"
+
 -- | Decode a CBOR decimal fraction into a 'Scientific'. The result is not normalized.
 decodeDecimalFraction :: Decoder s Scientific
 decodeDecimalFraction = do
@@ -869,21 +879,26 @@ encodeTokenTransfer TokenTransferBody{..} =
 
 -- * Token Operations
 
--- | A token operation. This can be a transfer, mint, burn or update to the allow or deny list.
+-- | A token operation. This can be a transfer, mint, burn, pause, unpause or update to
+--  the allow or deny list.
 data TokenOperation
     = TokenTransfer TokenTransferBody
     | -- | Mint a specified token amount to the token governance account.
-      TokenMint {tgoMintAmount :: !TokenAmount}
+      TokenMint {toMintAmount :: !TokenAmount}
     | -- | Burn a specified token amount from the token governance account.
-      TokenBurn {tgoBurnAmount :: !TokenAmount}
+      TokenBurn {toBurnAmount :: !TokenAmount}
     | -- | Add the specified account to the allow list.
-      TokenAddAllowList {tgoTarget :: !CborTokenHolder}
+      TokenAddAllowList {toTarget :: !CborTokenHolder}
     | -- | Remove the specified account from the allow list.
-      TokenRemoveAllowList {tgoTarget :: !CborTokenHolder}
+      TokenRemoveAllowList {toTarget :: !CborTokenHolder}
     | -- | Add the specified account to the deny list.
-      TokenAddDenyList {tgoTarget :: !CborTokenHolder}
+      TokenAddDenyList {toTarget :: !CborTokenHolder}
     | -- | Remove the specified account from the deny list.
-      TokenRemoveDenyList {tgoTarget :: !CborTokenHolder}
+      TokenRemoveDenyList {toTarget :: !CborTokenHolder}
+    | -- | Pause transfer/mint/burn operations for the token.
+      TokenPause
+    | -- | Unpause transfer/mint/burn operations for the token.
+      TokenUnpause
     deriving (Eq, Show)
 
 instance AE.ToJSON TokenOperation where
@@ -915,6 +930,14 @@ instance AE.ToJSON TokenOperation where
         AE.object
             [ "removeDenyList" AE..= AE.toJSON body
             ]
+    toJSON TokenPause =
+        AE.object
+            [ "pause" AE..= AE.object []
+            ]
+    toJSON TokenUnpause =
+        AE.object
+            [ "unpause" AE..= AE.object []
+            ]
 
 instance AE.FromJSON TokenOperation where
     parseJSON = AE.withObject "TokenOperation" $ \o -> do
@@ -941,6 +964,10 @@ instance AE.FromJSON TokenOperation where
             ["removeDenyList"] -> do
                 body <- o AE..: "removeDenyList"
                 pure $ TokenRemoveDenyList body
+            ["pause"] -> do
+                pure TokenPause
+            ["unpause"] -> do
+                pure TokenUnpause
             other -> fail $ "token-operation: unsupported operation type: " ++ show other
 
 -- | Decode a CBOR-encoded 'TokenOperation'.
@@ -960,6 +987,8 @@ decodeTokenOperation = do
         "removeAllowList" -> TokenRemoveAllowList <$> decodeListTarget opType
         "addDenyList" -> TokenAddDenyList <$> decodeListTarget opType
         "removeDenyList" -> TokenRemoveDenyList <$> decodeListTarget opType
+        "pause" -> TokenPause <$ decodeEmptyMap
+        "unpause" -> TokenUnpause <$ decodeEmptyMap
         _ -> fail $ "token-operation: unsupported operation type: " ++ show opType
     when (isNothing maybeMapLen) $ do
         isEnd <- decodeBreakOr
@@ -996,6 +1025,8 @@ encodeTokenOperation = \case
     TokenRemoveAllowList target -> encodeListTarget "removeAllowList" target
     TokenAddDenyList target -> encodeListTarget "addDenyList" target
     TokenRemoveDenyList target -> encodeListTarget "removeDenyList" target
+    TokenPause -> encodePause
+    TokenUnpause -> encodeUnpause
   where
     encodeSupplyUpdate opType amount =
         encodeMapLen 1
@@ -1009,6 +1040,14 @@ encodeTokenOperation = \case
             <> encodeMapLen 1
             <> encodeString "target"
             <> encodeCborTokenHolder target
+    encodePause =
+        encodeMapLen 1
+            <> encodeString "pause"
+            <> encodeMapLen 0
+    encodeUnpause =
+        encodeMapLen 1
+            <> encodeString "unpause"
+            <> encodeMapLen 0
 
 -- | A token transaction consists of a sequence of token operations.
 newtype TokenUpdateTransaction = TokenUpdateTransaction
@@ -1066,6 +1105,10 @@ data TokenEvent
       AddDenyListEvent !CborTokenHolder
     | -- | An account was removed from the deny list.
       RemoveDenyListEvent !CborTokenHolder
+    | -- | The execution of balance-changing operations was paused.
+      Pause
+    | -- | The execution of balance-changing operations was unpaused.
+      Unpause
     deriving (Eq, Show)
 
 -- | CBOR-encode the details for the list update events in the form:
@@ -1076,6 +1119,11 @@ encodeTargetDetails target =
         encodeMapLen 1
             <> encodeString "target"
             <> encodeCborTokenHolder target
+
+-- | CBOR-encoded event details consisting of just the empty map.
+--  > {}
+emptyEventDetails :: TokenEventDetails
+emptyEventDetails = TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
 
 -- | Encode a 'TokenEvent' as an 'EncodedTokenEvent'.
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
@@ -1099,6 +1147,16 @@ encodeTokenEvent = \case
         EncodedTokenEvent
             { eteType = TokenEventType "removeDenyList",
               eteDetails = encodeTargetDetails target
+            }
+    Pause ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "pause",
+              eteDetails = emptyEventDetails
+            }
+    Unpause ->
+        EncodedTokenEvent
+            { eteType = TokenEventType "unpause",
+              eteDetails = emptyEventDetails
             }
 
 -- | Decoder for the event details of the list update events.
@@ -1128,18 +1186,21 @@ decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
     "removeAllowList" -> RemoveAllowListEvent <$> decodeTarget
     "addDenyList" -> AddDenyListEvent <$> decodeTarget
     "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
+    "pause" -> Pause <$ decodePauseUnpause
+    "unpause" -> Unpause <$ decodePauseUnpause
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
-    decodeTarget = do
-        let detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
-        case CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS of
-            Left e -> Left $ "token-event: failed to decode event details: " ++ show e
-            Right ("", target) -> Right target
-            Right (remaining, _) ->
-                Left $
-                    "token-event: "
-                        ++ show (LBS.length remaining)
-                        ++ " bytes remaining after parsing event details"
+    detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
+    handleDeserializationResult = \case
+        Left e -> Left $ "token-event: failed to decode event details: " ++ show e
+        Right ("", target) -> Right target
+        Right (remaining, _) ->
+            Left $
+                "token-event: "
+                    ++ show (LBS.length remaining)
+                    ++ " bytes remaining after parsing event details"
+    decodeTarget = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS
+    decodePauseUnpause = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeEmptyMap detailsLBS
 
 -- * Reject reasons
 
@@ -1511,6 +1572,8 @@ data TokenModuleState = TokenModuleState
       tmsMetadata :: !TokenMetadataUrl,
       -- | The governance account address of the token.
       tmsGovernanceAccount :: !CborTokenHolder,
+      -- | Whether the token is paused.
+      tmsPaused :: !(Maybe Bool),
       -- | Whether the token supports an allow list.
       tmsAllowList :: !(Maybe Bool),
       -- | Whether the token supports a deny list.
@@ -1532,6 +1595,7 @@ instance AE.ToJSON TokenModuleState where
             ( [ "name" AE..= tmsName,
                 "metadata" AE..= tmsMetadata,
                 "governanceAccount" AE..= tmsGovernanceAccount,
+                "paused" AE..= tmsPaused,
                 "allowList" AE..= tmsAllowList,
                 "denyList" AE..= tmsDenyList,
                 "mintable" AE..= tmsMintable,
@@ -1551,6 +1615,7 @@ instance AE.FromJSON TokenModuleState where
         tmsName <- v AE..: "name"
         tmsMetadata <- v AE..: "metadata"
         tmsGovernanceAccount <- v AE..: "governanceAccount"
+        tmsPaused <- v AE..: "paused"
         tmsAllowList <- v AE..: "allowList"
         tmsDenyList <- v AE..: "denyList"
         tmsMintable <- v AE..: "mintable"
@@ -1577,6 +1642,7 @@ encodeTokenModuleState TokenModuleState{..} =
             & k "name" ?~ encodeString tmsName
             & k "metadata" ?~ encodeTokenMetadataUrl tmsMetadata
             & k "governanceAccount" ?~ encodeCborTokenHolder tmsGovernanceAccount
+            & k "paused" .~ fmap encodeBool tmsPaused
             & k "allowList" .~ fmap encodeBool tmsAllowList
             & k "denyList" .~ fmap encodeBool tmsDenyList
             & k "mintable" .~ fmap encodeBool tmsMintable
@@ -1604,10 +1670,11 @@ decodeTokenModuleState = decodeMap decodeVal build Map.empty
         (tmsName, m1) <- getAndClear "name" convertText m0
         (tmsMetadata, m2) <- getAndClear "metadata" convertTokenMetadataUrl m1
         (tmsGovernanceAccount, m3) <- getAndClear "governanceAccount" convertCborTokenHolder m2
-        (tmsAllowList, m4) <- getMaybeAndClear "allowList" convertBool m3
-        (tmsDenyList, m5) <- getMaybeAndClear "denyList" convertBool m4
-        (tmsMintable, m6) <- getMaybeAndClear "mintable" convertBool m5
-        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m6
+        (tmsPaused, m4) <- getMaybeAndClear "paused" convertBool m3
+        (tmsAllowList, m5) <- getMaybeAndClear "allowList" convertBool m4
+        (tmsDenyList, m6) <- getMaybeAndClear "denyList" convertBool m5
+        (tmsMintable, m7) <- getMaybeAndClear "mintable" convertBool m6
+        (tmsBurnable, tmsAdditional) <- getMaybeAndClear "burnable" convertBool m7
         return TokenModuleState{..}
     getAndClear key convert m = do
         let (maybeTerm, m') = m & at key <<.~ Nothing

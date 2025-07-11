@@ -1,6 +1,10 @@
 ## Unreleased
 
 - Adjusted cost of PLT mint/burn from 100 to 50
+- Adds `pause` function to `concordium_base::protocol_level_tokens::operations`, to support pausing/unpausing
+  execution of token operations.
+- Adds support for decoding `paused` state as part of the state of a token module instance.
+- Adds support for decoding token modules events related to pausing/unpausing tokens.
 
 ## 8.0.0-alpha.1 (2025-06-30)
 
@@ -9,7 +13,7 @@
 - CBOR map encoding is now deterministic and follows the order described at <https://www.rfc-editor.org/rfc/rfc8949.html#name-core-deterministic-encoding>
 - `TokenAmount` CBOR encoding now supports `value` in full `u64` range and not just overlap between `u64` and `i64`
 - Added `TokenModuleAccountState` type.
-- Removed `try_from_cbor` and `to_cbor` from a number of types implementing CBOR serialization in favour of just 
+- Removed `try_from_cbor` and `to_cbor` from a number of types implementing CBOR serialization in favour of just
   using `cbor::cbor_encode/decode`.
 - The serialization of `AuthorizationsV1` is fixed to be compatible with the Haskell implementation.
 - Replace concepts `TokenHolder` and `TokenGovernance` by `TokenUpdate`.
