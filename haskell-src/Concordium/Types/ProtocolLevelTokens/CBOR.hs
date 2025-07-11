@@ -137,6 +137,13 @@ decodeMap valDecoder runBuilder emptyBuilder = do
             Nothing -> fail $ "Unexpected key " ++ show key
             Just decoder -> decoder builder
 
+-- | Decode the empty map
+decodeEmptyMap :: Decoder s ()
+decodeEmptyMap = do
+    decodeMapLen >>= \case
+        len | len == 0 -> return ()
+        other -> fail $ "Unexpected non-empty map of length " ++ show other
+
 -- | Decode a CBOR decimal fraction into a 'Scientific'. The result is not normalized.
 decodeDecimalFraction :: Decoder s Scientific
 decodeDecimalFraction = do
@@ -1101,57 +1108,14 @@ data TokenEvent
       Unpause
     deriving (Eq, Show)
 
--- | CBOR-encode the details for the token events in the form:
---
---  > {"label": <CborEncodedValue>}
---
---  The empty object (i.e. no label) is encoded as a map of length 0.
-encodeTokenEventDetails :: Maybe Text.Text -> (a -> Encoding) -> a -> TokenEventDetails
-encodeTokenEventDetails mbLabel encoder x = case mbLabel of
-    Nothing -> TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
-    Just label ->
-        TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
-            encodeMapLen 1
-                <> encodeString label
-                <> encoder x
-
--- | Decoder for the event details of token events.
-decodeTokenEventDetails ::
-    -- | The (single) field name of the event details
-    Text.Text ->
-    -- | The decoder for the field
-    (forall s. Decoder s a) ->
-    -- | The input bytestring
-    LBS.ByteString ->
-    Either String a
-decodeTokenEventDetails label innerDecoder detailsLBS =
-    case CBOR.deserialiseFromBytes (decodeWith innerDecoder) detailsLBS of
-        Left e -> Left $ "token-event: failed to decode event details: " ++ show e
-        Right ("", details) -> Right details
-        Right (remaining, _) ->
-            Left $
-                "token-event: "
-                    ++ show (LBS.length remaining)
-                    ++ " bytes remaining after parsing event details"
-  where
-    decodeWith decoder = do
-        maybeMapLen <- decodeMapLenOrIndef
-        forM_ maybeMapLen $ \mapLen ->
-            unless (mapLen == 1) $
-                fail $
-                    "token-event: expected a map of size 1, but saw " ++ show mapLen
-        label' <- decodeString
-        unless (label' == label) $
-            fail $
-                "token-event: expected "
-                    ++ Text.unpack label
-                    ++ " key, but saw "
-                    ++ show label'
-        x <- decoder
-        when (isNothing maybeMapLen) $ do
-            isEnd <- decodeBreakOr
-            unless isEnd $ fail "token-event: expected end of map"
-        return x
+-- | CBOR-encode the details for the list update events in the form:
+--  > {"target": <TokenHolder>}
+encodeTargetDetails :: CborTokenHolder -> TokenEventDetails
+encodeTargetDetails target =
+    TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $
+        encodeMapLen 1
+            <> encodeString "target"
+            <> encodeCborTokenHolder target
 
 -- | Encode a 'TokenEvent' as an 'EncodedTokenEvent'.
 encodeTokenEvent :: TokenEvent -> EncodedTokenEvent
@@ -1187,20 +1151,50 @@ encodeTokenEvent = \case
               eteDetails = encodeEmptyMap
             }
   where
-    encodeTargetDetails = encodeTokenEventDetails (Just "target") encodeCborTokenHolder
+    encodeEmptyMap = TokenEventDetails . BSS.toShort . CBOR.toStrictByteString $ encodeMapLen 0
+
+-- | Decoder for the event details of the list update events.
+--  This is the "token-list-update-details" type in the CDDL schema.
+decodeTokenEventTarget :: Decoder s CborTokenHolder
+decodeTokenEventTarget = do
+    maybeMapLen <- decodeMapLenOrIndef
+    forM_ maybeMapLen $ \mapLen ->
+        unless (mapLen == 1) $
+            fail $
+                "token-event: expected a map of size 1, but saw " ++ show mapLen
+    label <- decodeString
+    unless (label == "target") $
+        fail $
+            "token-event: expected \"target\" key, but saw "
+                ++ show label
+    target <- decodeCborTokenHolder
+    when (isNothing maybeMapLen) $ do
+        isEnd <- decodeBreakOr
+        unless isEnd $ fail "token-event: expected end of map"
+    return target
 
 -- | Decode a 'TokenEvent' from an 'EncodedTokenEvent'.
 decodeTokenEvent :: EncodedTokenEvent -> Either String TokenEvent
 decodeTokenEvent EncodedTokenEvent{..} = case tokenEventTypeBytes eteType of
-    "addAllowList" -> AddAllowListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
-    "removeAllowList" -> RemoveAllowListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
-    "addDenyList" -> AddDenyListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
-    "removeDenyList" -> RemoveDenyListEvent <$> decodeTokenEventDetails "target" decodeCborTokenHolder detailsLBS
-    "pause" -> Pause <$ decodeEmptyMap
-    "unpause" -> Unpause <$ decodeEmptyMap
+    "addAllowList" -> AddAllowListEvent <$> decodeTarget
+    "removeAllowList" -> RemoveAllowListEvent <$> decodeTarget
+    "addDenyList" -> AddDenyListEvent <$> decodeTarget
+    "removeDenyList" -> RemoveDenyListEvent <$> decodeTarget
+    "pause" -> Pause <$ decodePauseUnpause
+    "unpause" -> Unpause <$ decodePauseUnpause
     unknownType -> Left $ "token-event: unsupported event type: " ++ show unknownType
   where
     detailsLBS = LBS.fromStrict $ BSS.fromShort $ tokenEventDetailsBytes eteDetails
+    handleDeserializationResult = \case
+        Left e -> Left $ "token-event: failed to decode event details: " ++ show e
+        Right ("", target) -> Right target
+        Right (remaining, _) ->
+            Left $
+                "token-event: "
+                    ++ show (LBS.length remaining)
+                    ++ " bytes remaining after parsing event details"
+    decodeTarget = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeTokenEventTarget detailsLBS
+    decodePauseUnpause = handleDeserializationResult $ CBOR.deserialiseFromBytes decodeEmptyMap detailsLBS
 
 -- * Reject reasons
 
