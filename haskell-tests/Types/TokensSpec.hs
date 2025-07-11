@@ -76,6 +76,12 @@ testTokenIds = do
     checkInvalid $ BSS.pack (replicate 256 0x41)
     -- Too short
     checkInvalid ""
+    -- Invalid character
+    checkInvalid "$"
+    -- Invalid character
+    checkInvalid "@"
+    -- Invalid character
+    checkInvalid "&"
     -- Length of 1 should succeed
     checkValid "a"
     -- a-z, A-Z, 0-9 and ".", "-", "%" are allowed

@@ -9,7 +9,6 @@ import qualified Data.Aeson as AE
 import qualified Data.Aeson.Types as AE
 import Data.Bits
 import qualified Data.ByteString.Short as BSS
-import Data.Char
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -30,11 +29,12 @@ instance Show TokenId where
 -- | Check if a byte represents an allowed character
 isAllowedByte :: Word8 -> Bool
 isAllowedByte w =
-    let c = chr (fromIntegral w)
-    in  isAsciiLower c
-            || isAsciiUpper c
-            || isDigit c
-            || c `elem` ['-', '.', '%']
+    (0x41 <= w && w <= 0x5A) -- 'A'-'Z'
+        || (0x61 <= w && w <= 0x7A) -- 'a'-'z'
+        || (0x30 <= w && w <= 0x39) -- '0'-'9'
+        || w == 0x2D -- '-'
+        || w == 0x2E -- '.'
+        || w == 0x25 -- '%'
 
 -- | Try to construct a valid 'TokenId' from a 'BSS.ShortByteString'.
 --  This can fail if the string is shorter than 1 or longer than 128 bytes or does not consist of only
