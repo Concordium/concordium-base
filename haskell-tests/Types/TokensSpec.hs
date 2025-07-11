@@ -61,8 +61,8 @@ testTokenIdEncodeDecodeUnsafe = property $ \(tid :: TokenId) ->
     decodeFull unsafeGetTokenId (encode tid) == Right tid
 
 -- | Test some invalid 'TokenId's
-testInvalidTokenIds :: Spec
-testInvalidTokenIds = do
+testTokenIds :: Spec
+testTokenIds = do
     -- Not a valid byte
     checkInvalid "\xff"
     -- Surrogate codepoint
@@ -74,10 +74,31 @@ testInvalidTokenIds = do
     checkInvalid "\xc2\x01"
     -- Too long
     checkInvalid $ BSS.pack (replicate 256 0x41)
+    -- Too short
+    checkInvalid ""
+    -- Invalid character
+    checkInvalid "$"
+    -- Invalid character
+    checkInvalid "@"
+    -- Invalid character
+    checkInvalid "&"
+    -- Space not allowed
+    checkInvalid "abc "
+    -- Length of 1 should succeed
+    checkValid "a"
+    -- a-z, A-Z, 0-9 and ".", "-", "%" are allowed
+    checkValid "abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ012345676789.-%"
+    -- Length of 128 should succeed
+    checkValid "abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ012345676789.-%aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    -- Length of 129 should fail
+    checkInvalid "abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ012345676789.-%aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   where
     checkInvalid sbs = it ("makeTokenId invalid case: " ++ show sbs) $ case makeTokenId sbs of
         Left _ -> return ()
         Right _ -> assertFailure "makeTokenId should fail."
+    checkValid sbs = it ("makeTokenId valid case: " ++ show sbs) $ case makeTokenId sbs of
+        Left _ -> assertFailure "makeTokenId should succeed."
+        Right _ -> return ()
 
 -- | Test that encoding and decoding a 'TokenRawAmount' value works as expected.
 testTokenRawAmountEncodeDecode :: Property
@@ -138,7 +159,7 @@ tests = parallel $ do
             withMaxSuccess 10000 testTokenIdEncodeDecode
         it "Serialization and unsafe deserialization of valid TokenIds" $
             withMaxSuccess 10000 testTokenIdEncodeDecodeUnsafe
-        testInvalidTokenIds
+        testTokenIds
     describe "TokenRawAmount" $ do
         it "Serialization and deserialization of valid TokenRawAmounts" $
             withMaxSuccess 10000 testTokenRawAmountEncodeDecode
