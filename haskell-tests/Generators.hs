@@ -14,6 +14,7 @@ import Control.Monad
 import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
+import Data.Char
 import qualified Data.Map.Strict as Map
 import Data.Ratio
 import qualified Data.Sequence as Seq
@@ -1134,11 +1135,25 @@ genUtf8String len
         rest <- genUtf8String (len - length c)
         return (c ++ rest)
 
+-- | Allowed token id characters
+allowedChars :: [Word8]
+allowedChars =
+    map (fromIntegral . ord) $
+        ['0' .. '9'] ++ ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ".-%"
+
+-- | Generate an allowed character
+genAllowedChar :: Gen Word8
+genAllowedChar = elements allowedChars
+
+-- | Generate allowed characters of specific length
+genAllowedChars :: Int -> Gen [Word8]
+genAllowedChars len = vectorOf len genAllowedChar
+
 -- | Generate an arbitrary 'TokenId', consisting of up to 255 bytes that is a valid UTF-8 string.
 genTokenId :: Gen TokenId
 genTokenId = do
-    len <- chooseBoundedIntegral (0, 255)
-    TokenId . BSS.pack <$> genUtf8String len
+    len <- chooseBoundedIntegral (1, 128)
+    TokenId . BSS.pack <$> genAllowedChars len
 
 genTokenEventType :: Gen TokenEventType
 genTokenEventType = do
