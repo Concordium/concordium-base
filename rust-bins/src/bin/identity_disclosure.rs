@@ -132,7 +132,7 @@ enum IdentityDisclosure {
     )]
     CombineLinkingKey(CombineLinkingKey),
     #[structopt(
-        name = "compute-regids",
+        name = "compute-credids",
         about = "Computes all possible account credential identifiers given a linking key and the \
                  maximal number of accounts."
     )]
@@ -151,9 +151,9 @@ fn main() {
         .setting(AppSettings::ArgRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp);
     let matches = app.get_matches();
-    let ar = IdentityDisclosure::from_clap(&matches);
+    let id = IdentityDisclosure::from_clap(&matches);
     use IdentityDisclosure::*;
-    match ar {
+    match id {
         Decrypt(dcr) => {
             if let Err(e) = handle_decrypt_id(dcr) {
                 eprintln!("{}", e)
@@ -229,30 +229,30 @@ fn handle_compute_cred_id(rid: ComputeCredIds) -> Result<(), String> {
     let g = global_context.on_chain_commitment_key.g;
     let prf_key: prf::SecretKey<_> = prf_wrapper.prf_key;
 
-    let mut regids = Vec::with_capacity(usize::from(max_account));
+    let mut credids = Vec::with_capacity(usize::from(max_account));
     for x in 0..=max_account {
         if let Ok(secret) = prf_key.prf_exponent(x) {
-            let regid = g.mul_by_scalar(&secret);
-            let regid_hex = hex::encode(to_bytes(&regid));
+            let credid = g.mul_by_scalar(&secret);
+            let credid_hex = hex::encode(to_bytes(&credid));
             if !rid.no_secret {
-                regids.push(json!({
-                    "regId": regid_hex,
-                    "accountAddress": account_address_from_registration_id(&regid),
+                credids.push(json!({
+                    "regId": credid_hex,
+                    "accountAddress": account_address_from_registration_id(&credid),
                     "encryptionSecretKey": elgamal::SecretKey{
                         generator: *global_context.elgamal_generator(),
                         scalar: secret
                     }
                 }));
             } else {
-                regids.push(json!({
-                    "regId": regid_hex,
-                    "accountAddress": account_address_from_registration_id(&regid),
+                credids.push(json!({
+                    "regId": credid_hex,
+                    "accountAddress": account_address_from_registration_id(&credid),
                 }));
             }
         }
     }
 
-    match write_json_to_file(&rid.out, &regids) {
+    match write_json_to_file(&rid.out, &credids) {
         Ok(_) => eprintln!("Wrote account credential ids to {}.", rid.out.display()),
         Err(e) => {
             eprintln!("Could not JSON write to file due to {}", e);

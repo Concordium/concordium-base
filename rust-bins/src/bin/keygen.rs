@@ -240,8 +240,8 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
-        KeygenPG(kgar) => {
-            if let Err(e) = handle_generate_pg_keys(kgar) {
+        KeygenPG(kgpg) => {
+            if let Err(e) = handle_generate_pg_keys(kgpg) {
                 eprintln!("{}", e)
             }
         }
