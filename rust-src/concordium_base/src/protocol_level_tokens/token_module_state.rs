@@ -22,6 +22,8 @@ pub struct TokenModuleState {
     pub mintable:           Option<bool>,
     /// Whether the token is burnable.
     pub burnable:           Option<bool>,
+    /// Whether the execution of certain token operations is paused.
+    pub paused:             Option<bool>,
     /// Additional state information may be provided under further text keys,
     /// the meaning of which are not defined in the present specification.
     #[cbor(other)]
@@ -57,6 +59,7 @@ mod test {
             deny_list:          Some(true),
             mintable:           Some(true),
             burnable:           Some(true),
+            paused:             Some(false),
             additional:         vec![("other1".to_string(), value::Value::Positive(2))]
                 .into_iter()
                 .collect(),
@@ -64,7 +67,7 @@ mod test {
 
         let cbor = cbor::cbor_encode(&token_module_state).unwrap();
         assert_eq!(hex::encode(&cbor),
-        "a8646e616d6563544b31666f746865723102686275726e61626c65f56864656e794c697374f5686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101686d696e7461626c65f569616c6c6f774c697374f571676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        "a9646e616d6563544b31666f74686572310266706175736564f4686275726e61626c65f56864656e794c697374f5686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101686d696e7461626c65f569616c6c6f774c697374f571676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
         let token_module_state_decoded: TokenModuleState = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_module_state_decoded, token_module_state);
@@ -74,7 +77,7 @@ mod test {
 
         let cbor = cbor::cbor_encode(&token_module_state).unwrap();
         assert_eq!(hex::encode(&cbor),
-        "a6646e616d6563544b31666f746865723102686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101686d696e7461626c65f569616c6c6f774c697374f571676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        "a7646e616d6563544b31666f74686572310266706175736564f4686d65746164617461a26375726c7168747470733a2f2f746f6b656e75726c316e636865636b73756d53686132353658200101010101010101010101010101010101010101010101010101010101010101686d696e7461626c65f569616c6c6f774c697374f571676f7665726e616e63654163636f756e74d99d73a201d99d71a101190397035820ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         );
         let token_module_state_decoded: TokenModuleState = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_module_state_decoded, token_module_state);
@@ -82,6 +85,7 @@ mod test {
         token_module_state.allow_list = None;
         token_module_state.mintable = None;
         token_module_state.additional = HashMap::new();
+        token_module_state.paused = None;
 
         let cbor = cbor::cbor_encode(&token_module_state).unwrap();
         assert_eq!(hex::encode(&cbor),

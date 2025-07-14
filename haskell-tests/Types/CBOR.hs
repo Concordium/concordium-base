@@ -10,6 +10,7 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.KeyMap as AE
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Lazy.Char8 as B8
 import qualified Data.ByteString.Short as BSS
 import qualified Data.FixedByteString as FBS
@@ -106,7 +107,9 @@ genTokenOperation =
           TokenAddAllowList <$> genCborTokenHolder,
           TokenRemoveAllowList <$> genCborTokenHolder,
           TokenAddDenyList <$> genCborTokenHolder,
-          TokenRemoveDenyList <$> genCborTokenHolder
+          TokenRemoveDenyList <$> genCborTokenHolder,
+          pure TokenPause,
+          pure TokenUnpause
         ]
 
 -- | Generator for 'TokenGovernanceOperation'.
@@ -120,6 +123,7 @@ genTokenModuleStateSimple = do
     tmsName <- genText
     tmsMetadata <- genTokenMetadataUrlSimple
     tmsGovernanceAccount <- genCborTokenHolder
+    tmsPaused <- arbitrary
     tmsAllowList <- arbitrary
     tmsDenyList <- arbitrary
     tmsMintable <- arbitrary
@@ -192,7 +196,9 @@ genTokenEvent =
         [ AddAllowListEvent <$> genCborTokenHolder,
           RemoveAllowListEvent <$> genCborTokenHolder,
           AddDenyListEvent <$> genCborTokenHolder,
-          RemoveDenyListEvent <$> genCborTokenHolder
+          RemoveDenyListEvent <$> genCborTokenHolder,
+          pure Pause,
+          pure Unpause
         ]
 
 -- | Generator for 'TokenRejectReason'.
@@ -239,8 +245,8 @@ tip1 =
         }
 
 -- | Basic tests for CBOR encoding/decoding of 'TokenInitializationParameters'.
-testInitializationParameters :: Spec
-testInitializationParameters = describe "token-initialization-parameters decoding" $ do
+testEncodedInitializationParametersCBOR :: Spec
+testEncodedInitializationParametersCBOR = describe "TokenInitializationParameters CBOR serialization" $ do
     it "Decode success" $
         assertEqual
             "Decoded CBOR"
@@ -304,9 +310,9 @@ invalidEncTip1 =
         TokenParameter $
             BSS.pack [0x1, 0x2, 0x3, 0x4]
 
-testEncodedInitializationParameters :: Spec
-testEncodedInitializationParameters = describe "TokenInitializationParameters JSON serialization" $ do
-    it "Serialize/Deserialize roundtrip success" $
+testEncodedInitializationParametersJSON :: Spec
+testEncodedInitializationParametersJSON = describe "TokenInitializationParameters JSON serialization" $ do
+    it "Serialize/Deserialize roundtrip success JSON" $
         assertEqual
             "Deserialized"
             (Just encTip1)
@@ -336,14 +342,45 @@ tops1 =
                 TokenTransferBody
                     { -- Use a token amount that is not modified by "normalization". Normalization may be removed entirely, but for now, work around it like this
                       ttAmount = TokenAmount{taValue = 12345, taDecimals = 5},
-                      ttRecipient =
-                        CborHolderAccount
-                            { chaAccount = AccountAddress $ FBS.pack [0x1, 0x1],
-                              chaCoinInfo = Just CoinInfoConcordium
-                            },
+                      ttRecipient = cborHolder,
                       ttMemo = Just $ UntaggedMemo $ Memo $ BSS.pack [0x1, 0x2, 0x3, 0x4]
-                    }
+                    },
+              TokenMint{toMintAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenBurn{toBurnAmount = TokenAmount{taValue = 12345, taDecimals = 5}},
+              TokenAddAllowList{toTarget = cborHolder},
+              TokenRemoveAllowList{toTarget = cborHolder},
+              TokenAddDenyList{toTarget = cborHolder},
+              TokenRemoveDenyList{toTarget = cborHolder},
+              TokenPause,
+              TokenUnpause
             ]
+  where
+    cborHolder =
+        CborHolderAccount
+            { chaAccount =
+                AccountAddress $
+                    FBS.pack (replicate 32 1),
+              chaCoinInfo = Just CoinInfoConcordium
+            }
+
+-- | The CBOR encoding of 'tops1'
+tops1ExpectedCbor :: BS.ByteString
+tops1ExpectedCbor =
+    BS16.decodeLenient
+        "89a1687472616e73666572a3646d656d6f440102030466616d6f756e74c48224\
+        \19303969726563697069656e74d99d73a201d99d71a101190397035820010101\
+        \0101010101010101010101010101010101010101010101010101010101a1646d\
+        \696e74a166616d6f756e74c48224193039a1646275726ea166616d6f756e74c4\
+        \8224193039a16c616464416c6c6f774c697374a166746172676574d99d73a201\
+        \d99d71a101190397035820010101010101010101010101010101010101010101\
+        \0101010101010101010101a16f72656d6f7665416c6c6f774c697374a1667461\
+        \72676574d99d73a201d99d71a101190397035820010101010101010101010101\
+        \0101010101010101010101010101010101010101a16b61646444656e794c6973\
+        \74a166746172676574d99d73a201d99d71a10119039703582001010101010101\
+        \01010101010101010101010101010101010101010101010101a16e72656d6f76\
+        \6544656e794c697374a166746172676574d99d73a201d99d71a1011903970358\
+        \2001010101010101010101010101010101010101010101010101010101010101\
+        \01a1657061757365a0a167756e7061757365a0"
 
 -- | Encoded 'TokenHolderTransaction' that can be successfully CBOR decoded
 encTops1 :: EncodedTokenOperations
@@ -354,6 +391,31 @@ encTops1 =
                 CBOR.toStrictByteString $
                     encodeTokenUpdateTransaction tops1
 
+-- | A dummy 'CborTokenHolder' value.
+dummyCborHolder :: CborTokenHolder
+dummyCborHolder =
+    CborHolderAccount
+        { chaAccount = AccountAddress $ FBS.pack (replicate 32 1),
+          chaCoinInfo = Just CoinInfoConcordium
+        }
+
+-- | The expected CBOR encoding of 'dummyCborHolder'.
+expectedDummyCborHolderEncoding :: BSS.ShortByteString
+expectedDummyCborHolderEncoding =
+    BSS.toShort . BS16.decodeLenient $
+        "a166746172676574d99d73a201d99d71a101190397035820\
+        \0101010101010101010101010101010101010101010101010101010101010101"
+
+tevents1 :: [TokenEvent]
+tevents1 =
+    [ AddAllowListEvent dummyCborHolder,
+      RemoveAllowListEvent dummyCborHolder,
+      AddDenyListEvent dummyCborHolder,
+      RemoveDenyListEvent dummyCborHolder,
+      Pause,
+      Unpause
+    ]
+
 -- | Encoded 'TokenHolderTransaction' that cannot be successfully CBOR decoded
 invalidEncTops1 :: EncodedTokenOperations
 invalidEncTops1 =
@@ -361,8 +423,8 @@ invalidEncTops1 =
         TokenParameter $
             BSS.pack [0x1, 0x2, 0x3, 0x4]
 
-testEncodedTokenOperations :: Spec
-testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization" $ do
+testEncodedTokenOperationsJSON :: Spec
+testEncodedTokenOperationsJSON = describe "EncodedTokenOperations JSON serialization" $ do
     it "Serialize/Deserialize roundtrip success" $
         assertEqual
             "Deserialized"
@@ -377,6 +439,7 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                 AE.Object o -> assertBool "Does not contain field amount" $ AE.member "transfer" o
                 _ -> assertFailure "Does not encode to JSON object"
             _ -> assertFailure "Does not encode to JSON array"
+
     it "Serialize/Deserialize roundtrip where CBOR is not a valid TokenUpdateTransaction" $
         assertEqual
             "Deserialized"
@@ -385,6 +448,56 @@ testEncodedTokenOperations = describe "EncodedTokenOperations JSON serialization
                 AE.encode
                     invalidEncTops1
             )
+
+testEncodedTokenOperationsCBOR :: Spec
+testEncodedTokenOperationsCBOR = describe "EncodedTokenOperations CBOR serialization" $ do
+    it "Serialize/Deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (tokenUpdateTransactionFromBytes $ B8.fromStrict $ tokenUpdateTransactionToBytes tops1)
+            (Right tops1)
+    it "Serializes to expected CBOR bytestring" $
+        assertEqual
+            "CBOR serialized"
+            (tokenUpdateTransactionToBytes tops1)
+            tops1ExpectedCbor
+
+testEncodedTokenEvents :: Spec
+testEncodedTokenEvents = describe "TokenEvents CBOR serialization" $ do
+    it "Serialize/Deserialize roundtrip" $
+        assertEqual
+            "Deserialized"
+            (map (decodeTokenEvent . encodeTokenEvent) tevents1)
+            (map Right tevents1)
+    it "Serializes to expected CBOR bytestring" $ do
+        assertEqual
+            "Serialized to expected CBOR bytestring"
+            [ EncodedTokenEvent
+                { eteType = TokenEventType "addAllowList",
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "removeAllowList",
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "addDenyList",
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "removeDenyList",
+                  eteDetails = TokenEventDetails expectedDummyCborHolderEncoding
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "pause",
+                  eteDetails = TokenEventDetails $ BSS.pack [160]
+                },
+              EncodedTokenEvent
+                { eteType = TokenEventType "unpause",
+                  eteDetails = TokenEventDetails $ BSS.pack [160]
+                }
+            ]
+            (map encodeTokenEvent tevents1)
 
 emptyStringHash :: Hash.Hash
 emptyStringHash = Hash.hash ""
@@ -402,6 +515,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsGovernanceAccount = exampleCborTokenHolder,
+                  tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -419,7 +533,7 @@ testTokenModuleStateSimpleJSON = describe "TokenModuleState JSON serialization w
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}"
+        let jsonString = "{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}, \"paused\":false}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -448,6 +562,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsGovernanceAccount = exampleCborTokenHolder,
+                  tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -465,7 +580,7 @@ testTokenModuleStateJSON = describe "TokenModuleState JSON serialization with ad
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}"
+        let jsonString = "{\"_additional\":{\"otherField\":\"f5\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}, \"paused\":false}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -494,6 +609,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsGovernanceAccount = exampleCborTokenHolder,
+                  tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -519,7 +635,7 @@ testTokenStateSimpleJSON = describe "TokenState JSON serialization without addit
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}, \"paused\":false}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -546,6 +662,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
                 { tmsMetadata = tokenMetadataURL,
                   tmsName = "bla bla",
                   tmsGovernanceAccount = exampleCborTokenHolder,
+                  tmsPaused = Just False,
                   tmsAllowList = Just True,
                   tmsDenyList = Just True,
                   tmsMintable = Just True,
@@ -571,7 +688,7 @@ testTokenStateJSON = describe "TokenState JSON serialization with additional sta
             )
 
     it "Compare JSON object" $ do
-        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}}}"
+        let jsonString = "{\"totalSupply\":{\"decimals\":2.0,\"value\":\"10000\"},\"tokenModuleRef\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"decimals\":2.0,\"moduleState\":{\"_additional\":{\"otherField1\":\"63616263\",\"otherField2\":\"03\",\"otherField3\":\"f5\",\"otherField4\":\"f6\"},\"allowList\":true,\"denyList\":true,\"burnable\":false,\"mintable\":true,\"metadata\":{\"url\":\"https://example.com/token-metadata\"},\"name\":\"bla bla\",\"governanceAccount\":{\"address\":\"2zR4h351M1bqhrL9UywsbHrP3ucA1xY3TBTFRuTsRout8JnLD6\",\"coinInfo\":\"CCD\",\"type\":\"account\"}, \"paused\":false}}"
             expectedValue = AE.decode (B8.pack jsonString) :: Maybe AE.Value
             actualValue = Just (AE.toJSON object)
         assertEqual "Comparing JSON object failed" expectedValue actualValue
@@ -663,9 +780,11 @@ testTokenMetadataUrlCBOR = describe "TokenMetadataUrl CBOR serialization" $ do
 
 tests :: Spec
 tests = parallel $ describe "CBOR" $ do
-    testInitializationParameters
-    testEncodedInitializationParameters
-    testEncodedTokenOperations
+    testEncodedInitializationParametersCBOR
+    testEncodedInitializationParametersJSON
+    testEncodedTokenOperationsJSON
+    testEncodedTokenOperationsCBOR
+    testEncodedTokenEvents
     testTokenMetadataUrlJSON
     testTokenMetadataUrlCBOR
     testTokenModuleStateSimpleJSON

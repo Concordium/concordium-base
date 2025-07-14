@@ -25,7 +25,7 @@ token-holder = tagged-holder-account
 ; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-009-address.md
 tagged-holder-account = #6.40307(holder-account)
 
-holder-account = { 
+holder-account = {
     ; If the info (1) field is present, it must indicate CCD.
     ? 1: tagged-ccd-coininfo,
     ; We do not support the type (2) field.
@@ -37,10 +37,10 @@ holder-account = {
 ; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
 tagged-ccd-coininfo = #6.40305(ccd-coininfo)
 
-ccd-coininfo = { 
+ccd-coininfo = {
     ; The type (1) field is the [SLIP44](https://github.com/satoshilabs/slips/blob/master/slip-0044.md)
     ; code for Concordium
-    1: 919 
+    1: 919
     ; The network (2) field is not supported.
 }
 
@@ -52,13 +52,15 @@ ccd-coininfo = {
 
 token-update-transaction = [ * token-operation ]
 
-; A token operation. This can be transfer, mint, burn or update-list-operation.
+; A token operation. This can be transfer, mint, burn, any update-list-operation, or pause/unpause.
 ; All token operations are represented as single-entry maps where the key determines
 ; the type of the operation.
 token-operation = token-transfer
     / token-mint
     / token-burn
     / token-update-list
+    / token-pause
+    / token-unpause
 
 ; A token transfer operation. This transfers a specified amount of tokens from the sender account
 ; (implicit) to the recipient account.
@@ -93,7 +95,7 @@ token-supply-update-details = {
 }
 
 ; Update an allow or a deny list by adding or removing an account from it.
-token-update-list = 
+token-update-list =
     token-add-allow-list
     / token-remove-allow-list
     / token-add-deny-list
@@ -129,12 +131,27 @@ token-list-update-details = {
     "target": token-holder
 }
 
+; Suspend any current or future token operations involving
+; balance changes. If any transaction submitted includes any such operation
+; while the token is in its paused state, the transaction will fail. The
+; suspension lasts until the token is unpaused with the corresponding
+; `token-unpause` operation.
+token-pause = {
+    "pause": {}
+}
+
+; Unpause the token operations described in the `token-pause` operation,
+; thus acting as an inverse of `token-pause`.
+token-unpause = {
+    "unpause": {}
+}
+
 ; Chain governance
 
 ; These parameters are passed to the token module to initialize the token.
 ; The token initialization update will also include the ticker symbol,
 ; number of decimals, and a reference to the token module implementation.
-token-initialization-parameters = { 
+token-initialization-parameters = {
     ; The name of the token
     "name": text,
     ; A URL pointing to the token metadata
@@ -193,6 +210,8 @@ token-module-state = {
     ? "mintable": bool,
     ; Whether the token is burnable.
     ? "burnable": bool,
+    ; Whether token operations involving balance changes have been suspended.
+    ? "paused": bool,
     ; Additional state information may be provided under further text keys, the meaning
     ; of which are not defined in the present specification.
     * text => any
@@ -243,6 +262,14 @@ token-add-deny-list-event = token-list-update-details
 ; The details of a token "removeDenyList" event.
 ; This indicates the account was removed from the deny list.
 token-remove-deny-list-event = token-list-update-details
+
+; The details of a token "pause" event, indicating whether token operations involving balance
+; changes have been suspended.
+token-pause-event = {}
+
+; The details of a token "unpause" event, indicating whether the suspension of token operations
+; involving balance changes has been removed.
+token-unpause-event = {}
 
 ; Reject reason details
 
