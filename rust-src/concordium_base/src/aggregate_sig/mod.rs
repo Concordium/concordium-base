@@ -456,6 +456,7 @@ mod test {
     fn test_to_from_bytes_identity() {
         let mut rng = thread_rng();
 
+        #[allow(clippy::vec_init_then_push)]
         for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
@@ -491,6 +492,7 @@ mod test {
     fn test_to_bytes_correct_length() {
         let mut rng = thread_rng();
 
+        #[allow(clippy::vec_init_then_push)]
         for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();

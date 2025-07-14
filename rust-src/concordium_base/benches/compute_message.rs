@@ -158,7 +158,7 @@ fn bench_sign_identity_object(c: &mut Criterion) {
 
     // Act
     c.bench_function("Sign identity object", move |b| {
-        b.iter(|| sign_identity_object(&pio, &context.ip_info, &attrs, &ip_secret_key))
+        b.iter(|| sign_identity_object(&pio, context.ip_info, &attrs, &ip_secret_key))
     });
 }
 

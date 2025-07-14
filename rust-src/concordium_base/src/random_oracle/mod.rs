@@ -135,7 +135,7 @@ mod tests {
     // Tests that extend_from acts in the intended way.
     #[test]
     pub fn test_extend_from() {
-        let mut v1 = vec![0u8; 50];
+        let mut v1 = [0u8; 50];
         let mut csprng = thread_rng();
         for _ in 0..1000 {
             for v in v1.iter_mut() {

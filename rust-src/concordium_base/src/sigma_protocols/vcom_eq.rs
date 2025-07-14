@@ -191,6 +191,7 @@ impl<C: Curve> SigmaProtocol for VecComEq<C> {
         let r = Value::new(C::generate_scalar(csprng));
         let mut comm = h.mul_by_scalar(&r);
         let mut i = 0;
+        #[allow(clippy::explicit_counter_loop)]
         for _ in 0..data_size {
             let xi = C::generate_scalar(csprng);
             let ri = C::generate_scalar(csprng);
@@ -261,6 +262,7 @@ mod tests {
             comm = comm.plus_point(&gi.mul_by_scalar(&xi));
             xis.push(xi);
             gis.push(gi);
+            #[allow(clippy::manual_range_contains)]
             if i >= 5 && i <= 10 {
                 let i_u8 = i.try_into().unwrap(); // This if fine since `i` is small.
                 let ri = G1::generate_scalar(csprng);
@@ -300,6 +302,7 @@ mod tests {
         let r = Value::new(G1::generate_scalar(csprng));
         let mut comm = h.mul_by_scalar(&r);
         let mut i = 0;
+        #[allow(clippy::explicit_counter_loop)]
         for _ in 0..data_size {
             let xi = G1::generate_scalar(csprng);
             let gi = G1::generate(csprng);

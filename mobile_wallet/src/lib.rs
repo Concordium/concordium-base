@@ -1286,15 +1286,15 @@ macro_rules! get_string {
 }
 
 /// Make a wrapper for functions of the form
-/// ```
+/// ```ignore
 ///    f(success: *mut u8) -> *mut c_char
 /// ```
 /// or
-/// ```
+/// ```ignore
 ///    f(input_ptr: *const c_char, success: *mut u8) -> *mut c_char
 /// ```
 /// or
-/// ```
+/// ```ignore
 ///    f(input_ptr_1: *const c_char, input_ptr_2: *const c_char, success: *mut u8) -> *mut c_char
 /// ```
 macro_rules! make_wrapper {

@@ -107,7 +107,7 @@ fn bench_verify_aggregate_sig_hybrid(c: &mut Criterion) {
     let mut group = c.benchmark_group("verify_aggregate_sig_hybrid");
     let no_signers = vec![10, 20, 40, 100, 200, 400];
     for n in no_signers {
-        let num_signers = vec![n, n];
+        let num_signers = [n, n];
         // accumulator for the signature.
         let mut agg_sig = Signature::<Bls12>::empty();
         // messages and pk pairs to verify
@@ -150,6 +150,7 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
         let m = rand_m_of_length!(1000, csprng);
 
         let mut agg_sig = sks[0].sign(&m);
+        #[allow(clippy::needless_range_loop)]
         for i in 1..s {
             let new_sig = sks[i].sign(&m);
             agg_sig = new_sig.aggregate(agg_sig);

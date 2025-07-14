@@ -207,6 +207,7 @@ mod test {
 
     // Test Lagrange interpolation polynomials at x={0,1}
     #[test]
+    #[allow(clippy::vec_init_then_push)]
     pub fn test_lagrange() {
         // For any kxs, the 0'th Lagrange polynomial is 1 at x=0
         let mut kxs = Vec::<u32>::new();
@@ -231,6 +232,7 @@ mod test {
     pub fn test_share_output_length() {
         let mut csprng = thread_rng();
         let secret = <G1 as Curve>::generate_scalar(&mut csprng);
+        #[allow(clippy::manual_clamp)]
         let n = std::cmp::max(1, std::cmp::min(200, csprng.gen::<u32>()));
         // x points to secret-share on.
         let mut xs = (0..n).collect::<Vec<_>>();

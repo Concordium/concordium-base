@@ -410,16 +410,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            verify_transfer_data(
-                &context,
-                &pk_receiver,
-                &pk_sender,
-                &S_in_chunks.0,
-                &transfer_data
-            ),
-            true
-        );
+        assert!(verify_transfer_data(
+            &context,
+            &pk_receiver,
+            &pk_sender,
+            &S_in_chunks.0,
+            &transfer_data
+        ));
     }
 
     #[test]
@@ -457,9 +454,11 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            verify_sec_to_pub_transfer_data(&context, &pk_sender, &S_in_chunks.0, &transfer_data),
-            true
-        );
+        assert!(verify_sec_to_pub_transfer_data(
+            &context,
+            &pk_sender,
+            &S_in_chunks.0,
+            &transfer_data
+        ));
     }
 }

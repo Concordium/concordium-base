@@ -17,7 +17,7 @@ build/
 *.swo
 *.hi
 *.o
-*.lock
+stack.yaml.lock
 dist/
 
 **/target/

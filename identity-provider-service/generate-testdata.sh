@@ -13,9 +13,9 @@ set -ea
 
 OUT_DIR=${TMP_WORK_DIR:-"database"}
 
-cargo build --release --manifest-path ../rust-bins/Cargo.toml
+cargo build --release -p misc_tools
 
-CLIENT="../rust-bins/target/release/client"
+CLIENT="../target/release/client"
 
 # Make a directory where we'll store intermediate date.
 mkdir $OUT_DIR

@@ -531,7 +531,7 @@ mod tests {
     ) -> Commitment<SomeCurve> {
         let v_value = Value::<SomeCurve>::new(*v);
 
-        v_keys.hide(&v_value, &v_rand)
+        v_keys.hide(&v_value, v_rand)
     }
 
     #[test]

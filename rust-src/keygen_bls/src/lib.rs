@@ -188,7 +188,7 @@ mod tests {
         for i in 0..10 {
             if let Ok(seed) = hex::decode(inputs[i]) {
                 if let Ok(sk) = keygen_bls(&seed, b"") {
-                    let res: Fr = sk.into();
+                    let res: Fr = sk;
                     assert_eq!(res.into_repr(), expected_outputs[i])
                 } else {
                     panic!("Could not generate key from seed.")
