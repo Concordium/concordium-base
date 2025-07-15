@@ -22,15 +22,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-/// The path to the list of BIP39 words.
-const BIP39_ENGLISH: &str = include_str!("data/BIP39English.txt");
-
-/// List of BIP39 words. There is a test that checks that this list has correct
-/// length, so there is no need to check when using this in the tool.
-fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split_whitespace() }
-
 /// Options for testing the functionality of a single PG key.
-
 #[derive(StructOpt)]
 struct SingleKeyTestDec {
     /// The test record containing the encrypted challenge message.
@@ -195,25 +187,6 @@ fn get_file_path(
             }
         }
     })
-}
-
-/// Try to read the PG data, either from encrypted or a plaintext file.
-fn decrypt_pg_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
-    let data = succeed_or_die!(std::fs::read(fname), e => "Could not read privacy guardian secret keys due to {}");
-    match serde_json::from_slice(&data) {
-        Ok(v) => Ok(v),
-        Err(_) => {
-            // try to decrypt
-            let parsed = succeed_or_die!(serde_json::from_slice(&data), e => "Could not parse encrypted file {}");
-            let pass = succeed_or_die!(rpassword::prompt_password("Enter password to decrypt PG credentials: "), e => "Could not read password {}.");
-            let decrypted = succeed_or_die!(concordium_base::common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt PG credentials. Most likely the password you provided is incorrect {}.");
-            serde_json::from_slice(&decrypted).map_err(|_| {
-                "Could not decrypt PG credentials. Most likely the password you provided is \
-                 incorrect."
-                    .to_owned()
-            })
-        }
-    }
 }
 
 /// Read privacy guardian information from a file, determining how to parse them

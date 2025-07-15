@@ -8,10 +8,7 @@ use concordium_base::{
     id::{anonymity_revoker::*, constants::ArCurve, types::*},
 };
 use serde_json::json;
-use std::{
-    convert::TryFrom,
-    path::{Path, PathBuf},
-};
+use std::{convert::TryFrom, path::PathBuf};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -259,25 +256,6 @@ fn handle_compute_cred_id(rid: ComputeCredIds) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-// Try to read ArData, either from encrypted or a plaintext file.
-fn decrypt_pg_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
-    let data = succeed_or_die!(std::fs::read(fname), e => "Could not read private guardian's secret keys due to {}");
-    match serde_json::from_slice(&data) {
-        Ok(v) => Ok(v),
-        Err(_) => {
-            // try to decrypt
-            let parsed = succeed_or_die!(serde_json::from_slice(&data), e => "Could not parse encrypted file {}");
-            let pass = succeed_or_die!(rpassword::prompt_password("Enter password to decrypt PG credentials: "), e => "Could not read password {}.");
-            let decrypted = succeed_or_die!(concordium_base::common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt PG credentials. Most likely the password you provided is incorrect {}.");
-            serde_json::from_slice(&decrypted).map_err(|_| {
-                "Could not decrypt PG credentials. Most likely the password you provided is \
-                 incorrect."
-                    .to_owned()
-            })
-        }
-    }
 }
 
 /// Decrypt encIdCredPubShare

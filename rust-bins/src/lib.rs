@@ -40,6 +40,21 @@ pub fn bip39_words() -> impl Iterator<Item = &'static str> { BIP39_ENGLISH.split
 /// to their index.
 pub fn bip39_map() -> HashMap<&'static str, usize> { bip39_words().zip(0..).collect() }
 
+macro_rules! succeed_or_die {
+    ($e:expr, $match:ident => $s:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err($match) => return Err(format!($s, $match)),
+        }
+    };
+    ($e:expr, $s:expr) => {
+        match $e {
+            Some(x) => x,
+            None => return Err($s.to_owned()),
+        }
+    };
+}
+
 /// Read an object containing a versioned global context from the given file.
 /// Currently only version 0 is supported.
 pub fn read_global_context<P: AsRef<Path> + Debug>(filename: P) -> Option<GlobalContext<ArCurve>> {
@@ -248,6 +263,25 @@ pub fn read_credential<P: AsRef<Path> + Debug>(
     }
 }
 
+// Try to read ArData, either from encrypted or a plaintext file.
+pub fn decrypt_pg_data(fname: &Path) -> Result<ArData<ArCurve>, String> {
+    let data = succeed_or_die!(std::fs::read(fname), e => "Could not read private guardian's secret keys due to {}");
+    match serde_json::from_slice(&data) {
+        Ok(v) => Ok(v),
+        Err(_) => {
+            // try to decrypt
+            let parsed = succeed_or_die!(serde_json::from_slice(&data), e => "Could not parse encrypted file {}");
+            let pass = succeed_or_die!(rpassword::prompt_password("Enter password to decrypt PG credentials: "), e => "Could not read password {}.");
+            let decrypted = succeed_or_die!(concordium_base::common::encryption::decrypt(&pass.into(), &parsed), e =>  "Could not decrypt PG credentials. Most likely the password you provided is incorrect {}.");
+            serde_json::from_slice(&decrypted).map_err(|_| {
+                "Could not decrypt PG credentials. Most likely the password you provided is \
+                 incorrect."
+                    .to_owned()
+            })
+        }
+    }
+}
+
 /// Parse YYYYMM as YearMonth
 pub fn parse_yearmonth(input: &str) -> Option<YearMonth> { YearMonth::from_str(input).ok() }
 
@@ -294,21 +328,6 @@ pub fn ask_for_password_confirm(
 }
 
 // BIP related stuff
-
-macro_rules! succeed_or_die {
-    ($e:expr, $match:ident => $s:expr) => {
-        match $e {
-            Ok(v) => v,
-            Err($match) => return Err(format!($s, $match)),
-        }
-    };
-    ($e:expr, $s:expr) => {
-        match $e {
-            Some(x) => x,
-            None => return Err($s.to_owned()),
-        }
-    };
-}
 
 /// Asks user to input word with given number and reads it from stdin.
 /// Checks whether the word is in valid_words if verify is true.
