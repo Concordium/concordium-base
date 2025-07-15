@@ -88,7 +88,7 @@ impl CborDeserialize for Value {
             ),
             DataItemHeader::Array(_) => {
                 let mut array_decoder = decoder.decode_array()?;
-                let mut vec = Vec::with_capacity(array_decoder.size());
+                let mut vec = Vec::with_capacity(array_decoder.size().unwrap_or_default());
                 while let Some(element) = array_decoder.deserialize_element()? {
                     vec.push(element);
                 }

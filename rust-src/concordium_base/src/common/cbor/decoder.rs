@@ -69,7 +69,7 @@ where
 
     fn decode_array(self) -> CborSerializationResult<Self::ArrayDecoder> {
         match self.inner.pull()? {
-            Header::Array(Some(size)) => Ok(ArrayDecoder::new(size, self)),
+            Header::Array(size) => Ok(ArrayDecoder::new(size, self)),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Array,
                 DataItemType::from_header(header),
@@ -149,10 +149,7 @@ where
     }
 
     fn peek_data_item_header(&mut self) -> CborSerializationResult<DataItemHeader> {
-        let header = self.inner.pull()?;
-        let data_item_header = DataItemHeader::try_from_header(header)?;
-        self.inner.push(header);
-        Ok(data_item_header)
+        DataItemHeader::try_from_header(self.peek_header()?)
     }
 
     fn skip_data_item(mut self) -> CborSerializationResult<()> {
@@ -175,15 +172,21 @@ where
             }
             DataItemType::Array => {
                 let array_decoder = self.decode_array()?;
-                for _ in 0..array_decoder.declared_size {
-                    array_decoder.decoder.skip_data_item()?;
+                if let Some(size) = array_decoder.size() {
+                    for _ in 0..size {
+                        array_decoder.decoder.skip_data_item()?;
+                    }
+                } else {
+                    while !array_decoder.decoder.pull_break()? {
+                        array_decoder.decoder.skip_data_item()?;
+                    }
                 }
             }
             DataItemType::Map => {
-                let map_decocer = self.decode_map()?;
-                for _ in 0..map_decocer.declared_size {
-                    map_decocer.decoder.skip_data_item()?;
-                    map_decocer.decoder.skip_data_item()?;
+                let map_decoder = self.decode_map()?;
+                for _ in 0..map_decoder.declared_size {
+                    map_decoder.decoder.skip_data_item()?;
+                    map_decoder.decoder.skip_data_item()?;
                 }
             }
             DataItemType::Break => {
@@ -245,6 +248,21 @@ impl<R: Read> Decoder<R> {
             return Err(anyhow!("expected to only one segment").into());
         }
         Ok(())
+    }
+
+    fn peek_header(&mut self) -> CborSerializationResult<Header> {
+        let header = self.inner.pull()?;
+        self.inner.push(header);
+        Ok(header)
+    }
+
+    fn pull_break(&mut self) -> CborSerializationResult<bool> {
+        let header = self.peek_header()?;
+        let is_break = header == Header::Break;
+        if is_break {
+            self.inner.pull()?;
+        }
+        Ok(is_break)
     }
 }
 
@@ -332,16 +350,16 @@ where
 /// Decoder of CBOR array
 #[must_use]
 pub struct ArrayDecoder<'a, R: Read> {
-    declared_size:      usize,
-    remaining_elements: usize,
-    decoder:            &'a mut Decoder<R>,
+    declared_size:    Option<usize>,
+    decoded_elements: usize,
+    decoder:          &'a mut Decoder<R>,
 }
 
 impl<'a, R: Read> ArrayDecoder<'a, R> {
-    fn new(size: usize, decoder: &'a mut Decoder<R>) -> Self {
+    fn new(size: Option<usize>, decoder: &'a mut Decoder<R>) -> Self {
         Self {
             declared_size: size,
-            remaining_elements: size,
+            decoded_elements: 0,
             decoder,
         }
     }
@@ -351,15 +369,126 @@ impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> usize { self.declared_size }
+    fn size(&self) -> Option<usize> { self.declared_size }
 
     fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>> {
-        if self.remaining_elements == 0 {
-            return Ok(None);
+        if let Some(declared_size) = self.declared_size {
+            if self.decoded_elements == declared_size {
+                return Ok(None);
+            }
+        } else {
+            if self.decoder.pull_break()? {
+                return Ok(None);
+            }
         }
 
-        self.remaining_elements -= 1;
+        self.decoded_elements += 1;
 
         Ok(Some(T::deserialize(&mut *self.decoder)?))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::common::cbor::{
+        CborArrayEncoder, CborDecoder, CborEncoder, CborMapEncoder, Encoder,
+    };
+    use ciborium_ll::simple;
+
+    #[test]
+    fn test_array_definite_length() {
+        let mut bytes = hex::decode("820102").unwrap();
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        let mut array_decoder = decoder.decode_array().unwrap();
+        assert_eq!(array_decoder.size(), Some(2));
+        let elm1: u32 = array_decoder.deserialize_element().unwrap().unwrap();
+        assert_eq!(elm1, 1);
+        let elm2: u32 = array_decoder.deserialize_element().unwrap().unwrap();
+        assert_eq!(elm2, 2);
+        let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
+        assert_eq!(elm3, None);
+        assert_eq!(array_decoder.size(), Some(2));
+        assert_eq!(decoder.inner.offset(), bytes.len());
+    }
+
+    #[test]
+    fn test_array_indefinite_length() {
+        let mut bytes = hex::decode("9f0102ff").unwrap();
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        let mut array_decoder = decoder.decode_array().unwrap();
+        assert_eq!(array_decoder.size(), None);
+        let elm1: u32 = array_decoder.deserialize_element().unwrap().unwrap();
+        assert_eq!(elm1, 1);
+        let elm2: u32 = array_decoder.deserialize_element().unwrap().unwrap();
+        assert_eq!(elm2, 2);
+        let elm3: Option<u32> = array_decoder.deserialize_element().unwrap();
+        assert_eq!(elm3, None);
+        assert_eq!(decoder.inner.offset(), bytes.len());
+    }
+
+    /// Test skipping data items during decode
+    #[test]
+    fn test_skip_data_item() {
+        // simple
+        test_skip_data_item_impl(|encoder| encoder.encode_simple(simple::TRUE).unwrap());
+        // positive int
+        test_skip_data_item_impl(|encoder| encoder.encode_positive(2).unwrap());
+        // negative int
+        test_skip_data_item_impl(|encoder| encoder.encode_negative(2).unwrap());
+        // tagged data item
+        test_skip_data_item_impl(|mut encoder| {
+            encoder.encode_tag(2).unwrap();
+            encoder.encode_positive(2).unwrap();
+        });
+        // bytes
+        test_skip_data_item_impl(|encoder| encoder.encode_bytes(&[0x01; 30]).unwrap());
+        // text
+        test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
+        // definite length array
+        test_skip_data_item_impl(|encoder| {
+            let mut array_encoder = encoder.encode_array(2).unwrap();
+            array_encoder.serialize_element(&2).unwrap();
+            array_encoder.serialize_element(&2).unwrap();
+            array_encoder.end().unwrap();
+        });
+        // indefinite length array
+        test_skip_data_item_impl_ciborium_encoder(|encoder| {
+            encoder.push(Header::Array(None)).unwrap();
+            encoder.push(Header::Positive(2)).unwrap();
+            encoder.push(Header::Positive(2)).unwrap();
+            encoder.push(Header::Break).unwrap();
+        });
+        // definite length map
+        test_skip_data_item_impl(|encoder| {
+            let mut map_encoder = encoder.encode_map(2).unwrap();
+            map_encoder.serialize_entry(&2, &2).unwrap();
+            map_encoder.serialize_entry(&2, &2).unwrap();
+            map_encoder.end().unwrap();
+        });
+    }
+
+    fn test_skip_data_item_impl(encode_data_item: impl FnOnce(&mut Encoder<&mut Vec<u8>>)) {
+        let mut bytes = Vec::new();
+        let mut encoder = Encoder::new(&mut bytes);
+        encode_data_item(&mut encoder);
+        encoder.encode_positive(12345).unwrap();
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        decoder.skip_data_item().unwrap();
+        assert_eq!(12345, decoder.decode_positive().unwrap());
+        assert_eq!(decoder.inner.offset(), bytes.len());
+    }
+
+    fn test_skip_data_item_impl_ciborium_encoder(
+        encode_data_item: impl FnOnce(&mut ciborium_ll::Encoder<&mut Vec<u8>>),
+    ) {
+        let mut bytes = Vec::new();
+        let mut encoder = ciborium_ll::Encoder::from(&mut bytes);
+        encode_data_item(&mut encoder);
+        encoder.push(Header::Positive(12345)).unwrap();
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        decoder.skip_data_item().unwrap();
+        assert_eq!(12345, decoder.decode_positive().unwrap());
+        assert_eq!(decoder.offset(), bytes.len());
     }
 }

@@ -275,8 +275,12 @@ impl CborSerializationError {
         anyhow!("map value for key {:?} not present and cannot be null", key).into()
     }
 
-    pub fn array_size(expected: usize, actual: usize) -> Self {
-        anyhow!("expected array length {}, was {}", expected, actual).into()
+    pub fn array_size(expected: usize, actual: Option<usize>) -> Self {
+        if let Some(actual) = actual {
+            anyhow!("expected array length {}, was {}", expected, actual).into()
+        } else {
+            anyhow!("expected array length {}, was indefinite", expected).into()
+        }
     }
 
     pub fn map_size(expected: usize, actual: usize) -> Self {
@@ -517,7 +521,7 @@ pub trait CborDecoder {
     where
         Self: Sized, {
         let array_decoder = self.decode_array()?;
-        if array_decoder.size() != expected_size {
+        if array_decoder.size() != Some(expected_size) {
             return Err(CborSerializationError::array_size(
                 expected_size,
                 array_decoder.size(),
@@ -591,8 +595,8 @@ pub trait CborMapDecoder {
 /// Decoder of CBOR array
 pub trait CborArrayDecoder {
     /// Number of elements in the array being decoded (total number of elements,
-    /// not remaining)
-    fn size(&self) -> usize;
+    /// not remaining). Returns `None` if the array as indefinite length.
+    fn size(&self) -> Option<usize>;
 
     /// Deserialize an array element. Returns `None` if all
     /// elements in the array has been deserialized.
@@ -725,7 +729,7 @@ impl<T: CborDeserialize> CborDeserialize for Vec<T> {
     where
         Self: Sized, {
         let mut array_decoder = decoder.decode_array()?;
-        let mut vec = Vec::with_capacity(array_decoder.size());
+        let mut vec = Vec::with_capacity(array_decoder.size().unwrap_or_default());
         while let Some(element) = array_decoder.deserialize_element()? {
             vec.push(element);
         }
@@ -738,6 +742,7 @@ impl<T: CborDeserialize> CborDeserialize for Vec<T> {
 mod test {
     use super::*;
     use concordium_base_derive::{CborDeserialize, CborSerialize};
+    use nom::bytes;
     use std::collections::HashMap;
 
     /// Struct with named fields encoded as map. Uses field name string literals
@@ -1232,6 +1237,15 @@ mod test {
     }
 
     #[test]
+    fn test_vec_indefinite_length() {
+        let vec = vec![1, 2];
+
+        let cbor = hex::decode("9f0102ff").unwrap();
+        let bytes_decoded: Vec<u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, vec);
+    }
+
+    #[test]
     fn test_option() {
         let value = Some(3u64);
         let cbor = cbor_encode(&value).unwrap();
@@ -1244,40 +1258,5 @@ mod test {
         assert_eq!(hex::encode(&cbor), "f6");
         let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
-    }
-
-    #[test]
-    fn test_skip_data_item() {
-        test_skip_data_item_impl(|encoder| encoder.encode_simple(simple::TRUE).unwrap());
-        test_skip_data_item_impl(|encoder| encoder.encode_positive(2).unwrap());
-        test_skip_data_item_impl(|encoder| encoder.encode_negative(2).unwrap());
-        test_skip_data_item_impl(|mut encoder| {
-            encoder.encode_tag(2).unwrap();
-            encoder.encode_positive(2).unwrap();
-        });
-        test_skip_data_item_impl(|encoder| encoder.encode_bytes(&[0x01; 30]).unwrap());
-        test_skip_data_item_impl(|encoder| encoder.encode_text(&"a".repeat(30)).unwrap());
-        test_skip_data_item_impl(|encoder| {
-            let mut array_encoder = encoder.encode_array(2).unwrap();
-            array_encoder.serialize_element(&2).unwrap();
-            array_encoder.serialize_element(&2).unwrap();
-            array_encoder.end().unwrap();
-        });
-        test_skip_data_item_impl(|encoder| {
-            let mut map_encoder = encoder.encode_map(2).unwrap();
-            map_encoder.serialize_entry(&2, &2).unwrap();
-            map_encoder.serialize_entry(&2, &2).unwrap();
-            map_encoder.end().unwrap();
-        });
-    }
-
-    fn test_skip_data_item_impl(encode_data_item: impl FnOnce(&mut Encoder<&mut Vec<u8>>)) {
-        let mut bytes = Vec::new();
-        let mut encoder = Encoder::new(&mut bytes);
-        encode_data_item(&mut encoder);
-        encoder.encode_positive(1).unwrap();
-        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
-        decoder.skip_data_item().unwrap();
-        assert_eq!(1, decoder.decode_positive().unwrap());
     }
 }
