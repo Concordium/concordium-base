@@ -1,8 +1,5 @@
 use crate::{
-    common::cbor::{
-        self,  CborSerializationResult,
-
-    },
+    common::cbor::{self, CborSerializationResult},
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -106,7 +103,16 @@ pub struct TokenListUpdateEventDetails {
 }
 
 /// An event emitted when the token is paused or unpaused.
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    CborSerialize,
+    CborDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenPauseEventDetails {}
 

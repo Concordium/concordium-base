@@ -1,8 +1,5 @@
 use crate::{
-    common::cbor::{
-        self, value,
-        CborSerializationResult,
-    },
+    common::cbor::{self, value, CborSerializationResult},
     protocol_level_tokens::{
         token_holder::CborTokenHolder, CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId,
     },
@@ -208,7 +205,16 @@ pub struct TokenSupplyUpdateDetails {
 
 /// Details of an operation that changes the `paused` state of a protocol level
 /// token.
-#[derive(Debug, Clone, Eq, PartialEq, CborSerialize, CborDeserialize, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    CborSerialize,
+    CborDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenPauseDetails {}
 
