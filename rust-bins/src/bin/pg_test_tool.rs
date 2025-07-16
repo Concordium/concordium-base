@@ -123,7 +123,7 @@ pub struct SingleKeyTestRecord<C: Curve> {
     pub msg_enc:     [Cipher<C>; 8],
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let app = KeygenTool::clap()
         .setting(AppSettings::ArgRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp);
@@ -131,16 +131,8 @@ fn main() {
     let kg = KeygenTool::from_clap(&matches);
     use KeygenTool::*;
     match kg {
-        SingleDec(test_dec) => {
-            if let Err(e) = handle_test_dec(test_dec) {
-                eprintln!("{}", e)
-            }
-        }
-        GenSingleEnc(test_enc) => {
-            if let Err(e) = handle_generate_test_enc(test_enc) {
-                eprintln!("{}", e)
-            }
-        }
+        SingleDec(test_dec) => handle_test_dec(test_dec),
+        GenSingleEnc(test_enc) => handle_generate_test_enc(test_enc),
     }
 }
 
@@ -148,13 +140,13 @@ macro_rules! succeed_or_die {
     ($e:expr, $match:ident => $s:expr) => {
         match $e {
             Ok(v) => v,
-            Err($match) => return Err(format!($s, $match)),
+            Err(e) => anyhow::bail!($s, e),
         }
     };
     ($e:expr, $s:expr) => {
         match $e {
             Some(x) => x,
-            None => return Err($s.to_owned()),
+            None => anyhow::bail!($s),
         }
     };
 }
@@ -263,17 +255,14 @@ fn encrypt_msg<C: Curve>(m: Value<C>, pk: &PublicKey<C>, g: &C) -> [Cipher<C>; 8
 
 /// Test the functionality of a single PG key by decrypting the given test
 /// record.
-fn handle_test_dec(test_dec: SingleKeyTestDec) -> Result<(), String> {
+fn handle_test_dec(test_dec: SingleKeyTestDec) -> anyhow::Result<()> {
     // Read global context
     let global_file = get_file_path(test_dec.global, "global context", "global.json");
 
-    let global_ctx = {
-        if let Some(gc) = read_global_context(global_file) {
-            gc
-        } else {
-            return Err("Cannot read cryptographic parameters. Terminating.".to_string());
-        }
-    };
+    let global_context: GlobalContext<ArCurve> = succeed_or_die!(
+        read_global_context(global_file),
+        "Cannot read cryptographic parameters. Terminating."
+    );
 
     // Read privacy guardian private key
     let pg_priv_file = get_file_path(
@@ -281,7 +270,10 @@ fn handle_test_dec(test_dec: SingleKeyTestDec) -> Result<(), String> {
         "privacy guardian private key",
         "pg-info.json",
     );
-    let pg_data: ArData<ArCurve> = succeed_or_die!(decrypt_pg_data(&pg_priv_file), e => "Could not read PG secret key due to {}");
+    let pg_data: ArData<ArCurve> = succeed_or_die!(
+        decrypt_pg_data(&pg_priv_file),
+        e => "Could not read PG secret key due to {}"
+    );
 
     // Read the test record
     let test_record_file = get_file_path(
@@ -289,17 +281,21 @@ fn handle_test_dec(test_dec: SingleKeyTestDec) -> Result<(), String> {
         "test record",
         &format!("pg-test-{}.json", pg_data.public_ar_info.ar_identity),
     );
-    let test_record: Versioned<SingleKeyTestRecord<ArCurve>> = succeed_or_die!(read_json_from_file(test_record_file), e => "Could not read test record due to {}");
-    if test_record.version != VERSION_0 {
-        return Err("The version of the test record should be 0.".to_owned());
-    }
+    let test_record: Versioned<SingleKeyTestRecord<ArCurve>> = succeed_or_die!(
+        read_json_from_file(test_record_file),
+        e => "Could not read test record due to {}"
+    );
+    anyhow::ensure!(
+        test_record.version == VERSION_0,
+        "The version of the test record should be 0."
+    );
     let test_record = test_record.value;
 
     // Decrypt message
     let m = decrypt_from_chunks_given_generator(
         &pg_data.ar_secret_key,
         &test_record.msg_enc,
-        global_ctx.encryption_in_exponent_generator(),
+        global_context.encryption_in_exponent_generator(),
         1 << 16,
         CHUNK_SIZE,
     );
@@ -310,29 +306,25 @@ fn handle_test_dec(test_dec: SingleKeyTestDec) -> Result<(), String> {
     let h = encode(h);
 
     // Check if hash matches the expected hash
-    if h == test_record.msg_hash {
-        println!("Test successful!");
-        println!("Please report back the following message: {}", msg);
-    } else {
-        return Err(
-            "The hash of the decrypted message does not match the expected hash.".to_owned(),
-        );
-    }
+    anyhow::ensure!(
+        h == test_record.msg_hash,
+        "The hash of the decrypted message does not match the expected hash."
+    );
+
+    println!("Test successful!");
+    println!("Please report back the following message: {}", msg);
     Ok(())
 }
 
 /// Generate a new test record for checking the functionality of a given PG key.
-fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
+fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> anyhow::Result<()> {
     // Read global context
     let global_file = get_file_path(test_enc.global, "global context", "global.json");
 
-    let global_ctx = {
-        if let Some(gc) = read_global_context(global_file) {
-            gc
-        } else {
-            return Err("Cannot read cryptographic parameters. Terminating.".to_string());
-        }
-    };
+    let global_ctx = succeed_or_die!(
+        read_global_context(global_file),
+        "Cannot read cryptographic parameters. Terminating."
+    );
 
     // Read privacy guardian public key
     let pg_pub_file = get_file_path(
@@ -340,7 +332,9 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
         "privacy guardian public key",
         "pg-info.pub.json",
     );
-    let pg_pub: ArInfo<ArCurve> = succeed_or_die!(read_pg_info(pg_pub_file), e => "Could not read privacy guardian public key from provided file because {}");
+    let pg_pub: ArInfo<ArCurve> = succeed_or_die!(
+        read_pg_info(pg_pub_file),e => "Could not read privacy guardian public key from provided file because {}"
+    );
 
     // Define message to be encrypted
     let msg = match test_enc.use_custom_message {
@@ -356,9 +350,10 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
                     }
                 }
             });
-            if msg.as_bytes().len() > 31 {
-                return Err("Message is too long. It must be at most 31 bytes.".to_string());
-            }
+            anyhow::ensure!(
+                msg.as_bytes().len() <= 31,
+                "Message is too long. It must be at most 31 bytes."
+            );
             msg
         }
         // Default: generate a random message from BIP-39 words
@@ -383,10 +378,11 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
     let h: [u8; 32] = Sha256::digest(&msg).into();
 
     // Encrypt the message
-    let m = match to_field_element(msg) {
-        Some(m) => m,
-        None => return Err("Message is too long. It must be at most 31 bytes.".to_string()),
-    };
+    let m = succeed_or_die!(
+        to_field_element(msg),
+        "Message is too long. It must be at most 31 bytes."
+    );
+
     let enc = encrypt_msg(
         m,
         pg_pub.ar_public_key.get_public_key(),
@@ -410,15 +406,11 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> Result<(), String> {
         )
     });
 
-    match write_json_to_file(&out_file, &test_record) {
-        Ok(_) => println!("Wrote test information to {}.", out_file.display()),
-        Err(e) => {
-            return Err(format!(
-                "Could not JSON write test information to file because {}",
-                e
-            ));
-        }
-    }
+    succeed_or_die!(
+        write_json_to_file(&out_file, &test_record),
+        e => "Could not JSON write test information to file because {}"
+    );
+    println!("Wrote test information to {}.", out_file.display());
     Ok(())
 }
 
