@@ -41,7 +41,7 @@ instance HashableTo Hash.Hash Amount where
 
 instance (Monad m) => MHashableTo m Hash.Hash Amount
 
--- | Converts an amount to GTU decimal representation.
+-- | Converts an amount to CCD decimal representation.
 amountToString :: Amount -> String
 amountToString (Amount amount) =
     let
@@ -51,12 +51,12 @@ amountToString (Amount amount) =
     in
         high ++ "." ++ pad ++ low
 
--- | Parse an amount from GTU decimal representation.
+-- | Parse an amount from CCD decimal representation.
 amountFromString :: String -> Maybe Amount
-amountFromString s =
-    if length s == 0 || length parsed /= 1
-        then Nothing
-        else Just $ Amount (fst (head parsed))
+amountFromString "" = Nothing
+amountFromString s = case parsed of
+    [(amount, _)] -> Just $ Amount amount
+    _ -> Nothing
   where
     parsed = RP.readP_to_S amountParser s
 

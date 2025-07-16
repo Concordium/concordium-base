@@ -906,7 +906,7 @@ data InstanceInfo
     deriving (Eq, Show)
 
 -- | Helper function for JSON encoding an 'InstanceInfo'.
-instancePairs :: (AE.KeyValue kv) => InstanceInfo -> [kv]
+instancePairs :: (AE.KeyValue e kv) => InstanceInfo -> [kv]
 {-# INLINE instancePairs #-}
 instancePairs InstanceInfoV0{..} =
     [ "model" AE..= iiModel,
