@@ -125,7 +125,7 @@ where
         } else {
             Err(CborSerializationError::map_size(
                 self.declared_size,
-                self.current_size,
+                Some(self.current_size),
             ))
         }
     }
@@ -215,5 +215,4 @@ mod test {
             "a50100190100001a0001000000646b65793100646b65793200"
         );
     }
-
 }

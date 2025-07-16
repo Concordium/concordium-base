@@ -208,12 +208,16 @@ pub use composites::*;
 pub use decoder::*;
 pub use encoder::*;
 pub use primitives::*;
+use std::collections::HashMap;
 
 use anyhow::anyhow;
 
 use ciborium_ll::{simple, Header};
 use concordium_base_derive::{CborDeserialize, CborSerialize};
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 
 /// Reexports for derive macros
 #[doc(hidden)]
@@ -283,8 +287,12 @@ impl CborSerializationError {
         }
     }
 
-    pub fn map_size(expected: usize, actual: usize) -> Self {
-        anyhow!("expected map size {}, was {}", expected, actual).into()
+    pub fn map_size(expected: usize, actual: Option<usize>) -> Self {
+        if let Some(actual) = actual {
+            anyhow!("expected map size {}, was {}", expected, actual).into()
+        } else {
+            anyhow!("expected map size {}, was indefinite", expected).into()
+        }
     }
 }
 
@@ -500,7 +508,7 @@ pub trait CborDecoder {
     where
         Self: Sized, {
         let map_decoder = self.decode_map()?;
-        if map_decoder.size() != expected_size {
+        if map_decoder.size() != Some(expected_size) {
             return Err(CborSerializationError::map_size(
                 expected_size,
                 map_decoder.size(),
@@ -738,11 +746,36 @@ impl<T: CborDeserialize> CborDeserialize for Vec<T> {
     }
 }
 
+impl<K: CborSerialize, V: CborSerialize> CborSerialize for HashMap<K, V> {
+    fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
+        let mut map_encoder = encoder.encode_map(self.len())?;
+        for (key, value) in self.iter() {
+            map_encoder.serialize_entry(key, value)?
+        }
+        map_encoder.end()?;
+        Ok(())
+    }
+}
+
+impl<K: CborDeserialize + Eq + Hash, V: CborDeserialize> CborDeserialize for HashMap<K, V> {
+    fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
+    where
+        Self: Sized, {
+        let mut map_decoder = decoder.decode_map()?;
+        let mut map = HashMap::with_capacity(map_decoder.size().unwrap_or_default());
+        while let Some((key, value)) = map_decoder.deserialize_entry()? {
+            map.insert(key, value);
+        }
+
+        Ok(map)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use concordium_base_derive::{CborDeserialize, CborSerialize};
-    use nom::bytes;
+
     use std::collections::HashMap;
 
     /// Struct with named fields encoded as map. Uses field name string literals
@@ -1256,6 +1289,25 @@ mod test {
         let cbor = hex::decode("9f0102ff").unwrap();
         let bytes_decoded: Vec<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, vec);
+    }
+
+    #[test]
+    fn test_map() {
+        let map: HashMap<u64, u64> = [(1, 2), (3, 4)].into_iter().collect();
+
+        let cbor = cbor_encode(&map).unwrap();
+        assert_eq!(hex::encode(&cbor), "a201020304");
+        let bytes_decoded: HashMap<u64, u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, map);
+    }
+
+    #[test]
+    fn test_map_indefinite_length() {
+        let map: HashMap<u64, u64> = [(1, 2), (3, 4)].into_iter().collect();
+
+        let cbor = hex::decode("bf01020304ff").unwrap();
+        let bytes_decoded: HashMap<u64, u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, map);
     }
 
     #[test]

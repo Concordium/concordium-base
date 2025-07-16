@@ -59,7 +59,7 @@ where
 
     fn decode_map(self) -> CborSerializationResult<Self::MapDecoder> {
         match self.inner.pull()? {
-            Header::Map(Some(size)) => Ok(MapDecoder::new(size, self)),
+            Header::Map(size) => Ok(MapDecoder::new(size, self)),
             header => Err(CborSerializationError::expected_data_item(
                 DataItemType::Map,
                 DataItemType::from_header(header),
@@ -184,9 +184,16 @@ where
             }
             DataItemType::Map => {
                 let map_decoder = self.decode_map()?;
-                for _ in 0..map_decoder.declared_size {
-                    map_decoder.decoder.skip_data_item()?;
-                    map_decoder.decoder.skip_data_item()?;
+                if let Some(size) = map_decoder.size() {
+                    for _ in 0..size {
+                        map_decoder.decoder.skip_data_item()?;
+                        map_decoder.decoder.skip_data_item()?;
+                    }
+                } else {
+                    while !map_decoder.decoder.pull_break()? {
+                        map_decoder.decoder.skip_data_item()?;
+                        map_decoder.decoder.skip_data_item()?;
+                    }
                 }
             }
             DataItemType::Break => {
@@ -275,17 +282,17 @@ enum MapDecoderStateEnum {
 /// Decoder of CBOR map
 #[must_use]
 pub struct MapDecoder<'a, R: Read> {
-    declared_size:     usize,
-    remaining_entries: usize,
-    decoder:           &'a mut Decoder<R>,
-    state:             MapDecoderStateEnum,
+    declared_size:   Option<usize>,
+    decoded_entries: usize,
+    decoder:         &'a mut Decoder<R>,
+    state:           MapDecoderStateEnum,
 }
 
 impl<'a, R: Read> MapDecoder<'a, R> {
-    fn new(size: usize, decoder: &'a mut Decoder<R>) -> Self {
+    fn new(size: Option<usize>, decoder: &'a mut Decoder<R>) -> Self {
         Self {
             declared_size: size,
-            remaining_entries: size,
+            decoded_entries: 0,
             decoder,
             state: MapDecoderStateEnum::ExpectKey,
         }
@@ -296,7 +303,7 @@ impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> Option<usize> { Some(self.declared_size) }
+    fn size(&self) -> Option<usize> { self.declared_size }
 
     fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>> {
         self.state = match self.state {
@@ -309,11 +316,15 @@ where
             }
         };
 
-        if self.remaining_entries == 0 {
+        if let Some(declared_size) = self.declared_size {
+            if self.decoded_entries == declared_size {
+                return Ok(None);
+            }
+        } else if self.decoder.pull_break()? {
             return Ok(None);
         }
 
-        self.remaining_entries -= 1;
+        self.decoded_entries += 1;
 
         Ok(Some(K::deserialize(&mut *self.decoder)?))
     }
@@ -376,10 +387,8 @@ where
             if self.decoded_elements == declared_size {
                 return Ok(None);
             }
-        } else {
-            if self.decoder.pull_break()? {
-                return Ok(None);
-            }
+        } else if self.decoder.pull_break()? {
+            return Ok(None);
         }
 
         self.decoded_elements += 1;
@@ -398,7 +407,7 @@ mod test {
 
     #[test]
     fn test_array_definite_length() {
-        let mut bytes = hex::decode("820102").unwrap();
+        let bytes = hex::decode("820102").unwrap();
         let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
         let mut array_decoder = decoder.decode_array().unwrap();
         assert_eq!(array_decoder.size(), Some(2));
@@ -414,7 +423,7 @@ mod test {
 
     #[test]
     fn test_array_indefinite_length() {
-        let mut bytes = hex::decode("9f0102ff").unwrap();
+        let bytes = hex::decode("9f0102ff").unwrap();
         let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
         let mut array_decoder = decoder.decode_array().unwrap();
         assert_eq!(array_decoder.size(), None);
@@ -429,15 +438,15 @@ mod test {
 
     #[test]
     fn test_map_definite_length() {
-        let mut bytes = hex::decode("a201020304").unwrap();
+        let bytes = hex::decode("a201020304").unwrap();
         let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
         let mut map_decoder = decoder.decode_map().unwrap();
         assert_eq!(map_decoder.size(), Some(2));
         let entry1: (u32, u32) = map_decoder.deserialize_entry().unwrap().unwrap();
         assert_eq!(entry1, (1, 2));
-        let entry2: (u32, u32) = map_decoder.deserialize_element().unwrap().unwrap();
+        let entry2: (u32, u32) = map_decoder.deserialize_entry().unwrap().unwrap();
         assert_eq!(entry2, (3, 4));
-        let entry3: Option<(u32, u32)> = map_decoder.deserialize_element().unwrap();
+        let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), Some(2));
         assert_eq!(decoder.inner.offset(), bytes.len());
@@ -445,15 +454,15 @@ mod test {
 
     #[test]
     fn test_map_indefinite_length() {
-        let mut bytes = hex::decode("bf01020304ff").unwrap();
+        let bytes = hex::decode("bf01020304ff").unwrap();
         let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
         let mut map_decoder = decoder.decode_map().unwrap();
         assert_eq!(map_decoder.size(), None);
         let entry1: (u32, u32) = map_decoder.deserialize_entry().unwrap().unwrap();
         assert_eq!(entry1, (1, 2));
-        let entry2: (u32, u32) = map_decoder.deserialize_element().unwrap().unwrap();
+        let entry2: (u32, u32) = map_decoder.deserialize_entry().unwrap().unwrap();
         assert_eq!(entry2, (3, 4));
-        let entry3: Option<(u32, u32)> = map_decoder.deserialize_element().unwrap();
+        let entry3: Option<(u32, u32)> = map_decoder.deserialize_entry().unwrap();
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), None);
         assert_eq!(decoder.inner.offset(), bytes.len());
