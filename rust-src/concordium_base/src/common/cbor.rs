@@ -565,8 +565,8 @@ pub trait CborDecoder {
 /// Decoder of CBOR map
 pub trait CborMapDecoder {
     /// Number of entries of the map being decoded (total number of entries, not
-    /// remaining)
-    fn size(&self) -> usize;
+    /// remaining). Returns `None` if the map as indefinite size.
+    fn size(&self) -> Option<usize>;
 
     /// Deserialize an entry consisting of a key and value. Returns `None` if
     /// all entries in the map has been deserialized.

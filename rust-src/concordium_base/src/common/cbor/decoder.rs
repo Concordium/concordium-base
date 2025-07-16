@@ -296,7 +296,7 @@ impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> usize { self.declared_size }
+    fn size(&self) -> Option<usize> { Some(self.declared_size) }
 
     fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>> {
         self.state = match self.state {
@@ -427,6 +427,39 @@ mod test {
         assert_eq!(decoder.inner.offset(), bytes.len());
     }
 
+    #[test]
+    fn test_map_definite_length() {
+        let mut bytes = hex::decode("a201020304").unwrap();
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        let mut map_decoder = decoder.decode_map().unwrap();
+        assert_eq!(map_decoder.size(), Some(2));
+        let entry1: (u32, u32) = map_decoder.deserialize_entry().unwrap().unwrap();
+        assert_eq!(entry1, (1, 2));
+        let entry2: (u32, u32) = map_decoder.deserialize_element().unwrap().unwrap();
+        assert_eq!(entry2, (3, 4));
+        let entry3: Option<(u32, u32)> = map_decoder.deserialize_element().unwrap();
+        assert_eq!(entry3, None);
+        assert_eq!(map_decoder.size(), Some(2));
+        assert_eq!(decoder.inner.offset(), bytes.len());
+    }
+
+    #[test]
+    fn test_map_indefinite_length() {
+        let mut bytes = hex::decode("bf01020304ff").unwrap();
+        let mut decoder = Decoder::new(bytes.as_slice(), SerializationOptions::default());
+        let mut map_decoder = decoder.decode_map().unwrap();
+        assert_eq!(map_decoder.size(), None);
+        let entry1: (u32, u32) = map_decoder.deserialize_entry().unwrap().unwrap();
+        assert_eq!(entry1, (1, 2));
+        let entry2: (u32, u32) = map_decoder.deserialize_element().unwrap().unwrap();
+        assert_eq!(entry2, (3, 4));
+        let entry3: Option<(u32, u32)> = map_decoder.deserialize_element().unwrap();
+        assert_eq!(entry3, None);
+        assert_eq!(map_decoder.size(), None);
+        assert_eq!(decoder.inner.offset(), bytes.len());
+    }
+
+    // assert_eq!(hex::encode(&bytes), "");
     /// Test skipping data items during decode
     #[test]
     fn test_skip_data_item() {
@@ -465,6 +498,15 @@ mod test {
             map_encoder.serialize_entry(&2, &2).unwrap();
             map_encoder.serialize_entry(&2, &2).unwrap();
             map_encoder.end().unwrap();
+        });
+        // indefinite length map
+        test_skip_data_item_impl_ciborium_encoder(|encoder| {
+            encoder.push(Header::Map(None)).unwrap();
+            encoder.push(Header::Positive(2)).unwrap();
+            encoder.push(Header::Positive(2)).unwrap();
+            encoder.push(Header::Positive(2)).unwrap();
+            encoder.push(Header::Positive(2)).unwrap();
+            encoder.push(Header::Break).unwrap();
         });
     }
 
