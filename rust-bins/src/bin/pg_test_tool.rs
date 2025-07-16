@@ -6,14 +6,12 @@ use client_server_helpers::*;
 use concordium_base::{
     common::*,
     curve_arithmetic::{Curve, Value},
-    elgamal::{
-        decrypt_from_chunks_given_generator, encrypt_in_chunks_given_generator, Cipher, PublicKey,
-    },
-    id::{constants::ArCurve, types::*},
+    elgamal::{decrypt_from_chunks_given_generator, Cipher},
+    id::{constants::ArCurve, types::*, utils::encrypt_prf_share},
 };
 use dialoguer::Input;
 use hex::encode;
-use rand::{rngs::ThreadRng, seq::IteratorRandom, thread_rng};
+use rand::{seq::IteratorRandom, thread_rng};
 use sha2::{Digest, Sha256};
 use std::{
     fmt::Debug,
@@ -236,23 +234,6 @@ fn from_field_element<C: Curve>(v: Value<C>) -> String {
         .to_string()
 }
 
-/// Encrypt an encoded message using a given public key.
-///
-/// Technically, this is "In-the-exponent" ElGamal encryption where the message
-/// is split into chunks.
-fn encrypt_msg<C: Curve>(m: Value<C>, pk: &PublicKey<C>, g: &C) -> [Cipher<C>; 8] {
-    let mut csprng = thread_rng();
-    let ciphers =
-        encrypt_in_chunks_given_generator::<C, ThreadRng>(pk, &m, CHUNK_SIZE, g, &mut csprng);
-    let mut result = [Cipher(C::one_point(), C::one_point()); 8];
-    ciphers.iter().enumerate().for_each(|(i, c)| {
-        if i < 8 {
-            result[i] = c.0;
-        }
-    });
-    result
-}
-
 /// Test the functionality of a single PG key by decrypting the given test
 /// record.
 fn handle_test_dec(test_dec: SingleKeyTestDec) -> anyhow::Result<()> {
@@ -382,12 +363,14 @@ fn handle_generate_test_enc(test_enc: SingleKeyTestEnc) -> anyhow::Result<()> {
         to_field_element(msg),
         "Message is too long. It must be at most 31 bytes."
     );
-
-    let enc = encrypt_msg(
-        m,
+    let mut csprng = thread_rng();
+    let enc = encrypt_prf_share(
+        &global_ctx,
         pg_pub.ar_public_key.get_public_key(),
-        global_ctx.encryption_in_exponent_generator(),
-    );
+        &m,
+        &mut csprng,
+    )
+    .0;
 
     // Generate and save the output
     let test_record = Versioned::new(VERSION_0, SingleKeyTestRecord {
