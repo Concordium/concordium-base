@@ -919,6 +919,19 @@ mod test {
     }
 
     #[test]
+    fn test_struct_as_map_empty() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct {}
+
+        let value = TestStruct {};
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a0");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
     fn test_struct_as_array_derived() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct(u64, String);

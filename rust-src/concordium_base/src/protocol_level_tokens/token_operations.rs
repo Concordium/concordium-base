@@ -1,8 +1,5 @@
 use crate::{
-    common::cbor::{
-        self, value, CborDeserialize, CborMapDecoder, CborSerializationError,
-        CborSerializationResult, CborSerialize,
-    },
+    common::cbor::{self, value, CborSerializationResult},
     protocol_level_tokens::{
         token_holder::CborTokenHolder, CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId,
     },
@@ -208,28 +205,18 @@ pub struct TokenSupplyUpdateDetails {
 
 /// Details of an operation that changes the `paused` state of a protocol level
 /// token.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    CborSerialize,
+    CborDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenPauseDetails {}
-
-impl CborSerialize for TokenPauseDetails {
-    fn serialize<C: cbor::CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        encoder.encode_map(0)?;
-        Ok(())
-    }
-}
-
-impl CborDeserialize for TokenPauseDetails {
-    fn deserialize<C: cbor::CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        let map_decoder = decoder.decode_map()?;
-        if map_decoder.size() != 0 {
-            return Err(CborSerializationError::map_size(0, map_decoder.size()));
-        }
-        Ok(TokenPauseDetails {})
-    }
-}
 
 /// Details of an operation that adds or removes an account from
 /// an allow or deny list.
