@@ -36,7 +36,7 @@ struct SingleKeyTestDec {
     #[structopt(
         short = "sk",
         long = "pg-priv",
-        help = "File with anonymity revoker's private and public keys."
+        help = "File with privacy guardian's private and public keys."
     )]
     pg_priv:     Option<PathBuf>,
     /// The global cryptographic parameters of the blockchain.
