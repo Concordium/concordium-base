@@ -172,6 +172,9 @@ where
             }
             DataItemType::Array => {
                 let array_decoder = self.decode_array()?;
+                // Arrays of definite length encodes "size" number of data item elements,
+                // arrays of indefinite length encodes data item elements until a break is
+                // encountered.
                 if let Some(size) = array_decoder.size() {
                     for _ in 0..size {
                         array_decoder.decoder.skip_data_item()?;
@@ -184,6 +187,9 @@ where
             }
             DataItemType::Map => {
                 let map_decoder = self.decode_map()?;
+                // Maps of definite length encodes "size" number of data item pairs,
+                // maps of indefinite length encodes data item pairs until a break is
+                // encountered.
                 if let Some(size) = map_decoder.size() {
                     for _ in 0..size {
                         map_decoder.decoder.skip_data_item()?;
@@ -316,6 +322,9 @@ where
             }
         };
 
+        // Maps of definite length encodes "size" number of data item pairs.
+        // Maps of indefinite length encodes data item pairs until a break is
+        // encountered. See https://www.rfc-editor.org/rfc/rfc8949.html#name-indefinite-lengths-for-some
         if let Some(declared_size) = self.declared_size {
             if self.decoded_entries == declared_size {
                 return Ok(None);
@@ -383,6 +392,9 @@ where
     fn size(&self) -> Option<usize> { self.declared_size }
 
     fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>> {
+        // Arrays of definite length encodes "size" number of data item elements.
+        // Arrays of indefinite length encodes data item elements until a break is
+        // encountered. See https://www.rfc-editor.org/rfc/rfc8949.html#name-indefinite-lengths-for-some
         if let Some(declared_size) = self.declared_size {
             if self.decoded_elements == declared_size {
                 return Ok(None);
