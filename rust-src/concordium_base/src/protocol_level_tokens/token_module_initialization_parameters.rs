@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 use super::{MetadataUrl, TokenAmount};
-use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborTokenHolder};
+use crate::protocol_level_tokens::token_holder::CborTokenHolder;
 
 /// These parameters are passed to the token module to initialize the token.
 /// The token initialization update will also include the ticker symbol,
