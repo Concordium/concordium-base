@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added PLT `TokenInitializationParameters` CBOR type
+
 ## 8.0.0-alpha.2 (2025-07-14)
 
 - Adjusted cost of PLT mint/burn from 100 to 50
