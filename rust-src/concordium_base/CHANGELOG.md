@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Added PLT `TokenModuleInitializationParameters` CBOR type
 - Support empty structs with `CborSerialize` derive macro
 
 ## 8.0.0-alpha.2 (2025-07-14)
