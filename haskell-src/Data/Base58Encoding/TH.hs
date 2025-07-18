@@ -28,7 +28,7 @@ codeLookup' = do
                     (LitP (IntegerL (fromIntegral i)))
                     (NormalB (LitE (IntegerL (fromIntegral (Vec.unsafeIndex codeTable i)))))
                     []
-                  | i <- [0 .. 57]
+                | i <- [0 .. 57]
                 ]
                     ++ [defaultCase]
             )
@@ -44,7 +44,7 @@ decodeLookup' = do
                     (LitP (IntegerL (fromIntegral i)))
                     (NormalB (LitE (IntegerL (fromIntegral (Vec.unsafeIndex decodeTable i)))))
                     []
-                  | i <- [0 .. 255]
+                | i <- [0 .. 255]
                 ]
                     ++ [defaultCase]
             )

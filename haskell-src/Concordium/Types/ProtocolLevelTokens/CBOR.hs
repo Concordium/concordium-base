@@ -565,7 +565,7 @@ encodeTokenMetadataUrl TokenMetadataUrl{..} =
     additionalMap =
         Map.fromList
             [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
-              | (key, val) <- Map.toList tmAdditional
+            | (key, val) <- Map.toList tmAdditional
             ]
     k = at . makeMapKeyEncoding . encodeString
     encodeSha256Hash (SHA256.Hash h) = encodeBytes (FBS.toByteString h)
@@ -1604,9 +1604,9 @@ instance AE.ToJSON TokenModuleState where
                 ++ [ "_additional"
                         AE..= AE.object
                             [ AE.Key.fromText k AE..= cborTermToHex v
-                              | (k, v) <- Map.toList tmsAdditional
+                            | (k, v) <- Map.toList tmsAdditional
                             ]
-                     | not (null tmsAdditional)
+                   | not (null tmsAdditional)
                    ]
             )
 
@@ -1651,7 +1651,7 @@ encodeTokenModuleState TokenModuleState{..} =
     additionalMap =
         Map.fromList
             [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
-              | (key, val) <- Map.toList tmsAdditional
+            | (key, val) <- Map.toList tmsAdditional
             ]
     k = at . makeMapKeyEncoding . encodeString
 
@@ -1751,7 +1751,7 @@ instance AE.ToJSON TokenModuleAccountState where
                 Just $
                     AE.object
                         [ AE.Key.fromText k AE..= cborTermToHex v
-                          | (k, v) <- Map.toList tmasAdditional
+                        | (k, v) <- Map.toList tmasAdditional
                         ]
 
 instance AE.FromJSON TokenModuleAccountState where
@@ -1780,7 +1780,7 @@ encodeTokenModuleAccountState TokenModuleAccountState{..} =
     additionalMap =
         Map.fromList
             [ (makeMapKeyEncoding (encodeString key), CBOR.encodeTerm val)
-              | (key, val) <- Map.toList tmasAdditional
+            | (key, val) <- Map.toList tmasAdditional
             ]
     k = at . makeMapKeyEncoding . encodeString
 
