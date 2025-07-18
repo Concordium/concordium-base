@@ -1,6 +1,6 @@
 ## Unreleased
 
-- Added PLT `TokenInitializationParameters` CBOR type
+- Added PLT `TokenModuleInitializationParameters` CBOR type
 
 ## 8.0.0-alpha.2 (2025-07-14)
 
