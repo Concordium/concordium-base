@@ -414,6 +414,16 @@ encodeCborTokenHolder CborHolderAccount{..} =
 
 -- * Token amounts
 
+-- | Parse a 'TokenAmount' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+tokenAmountFromBytes :: LBS.ByteString -> Either String TokenAmount
+tokenAmountFromBytes =
+    decodeFromBytes decodeTokenAmount "token amount"
+
+tokenAmountToBytes :: TokenAmount -> BS.ByteString
+tokenAmountToBytes =
+    CBOR.toStrictByteString . encodeTokenAmount
+
 -- | Decode a CBOR-encoded 'TokenAmount'. This limits the number of decimals to the
 --  range @[0..255]@.
 decodeTokenAmount :: Decoder s TokenAmount
@@ -747,6 +757,16 @@ data TaggableMemo
     | -- | The memo is represented as a byte string with a tag indicating CBOR-encoded data.
       CBORMemo {cborMemo :: !Memo}
     deriving (Eq, Show)
+
+-- | Parse a 'TaggableMemo' from a 'LBS.ByteString'. The entire bytestring must
+--  be consumed in the parsing.
+taggableMemoFromBytes :: LBS.ByteString -> Either String TaggableMemo
+taggableMemoFromBytes =
+    decodeFromBytes decodeTaggableMemo "taggable memo"
+
+taggableMemoToBytes :: TaggableMemo -> BS.ByteString
+taggableMemoToBytes =
+    CBOR.toStrictByteString . encodeTaggableMemo
 
 -- | Unwrap the 'TaggableMemo' into the inner 'Memo'
 taggableMemoInner :: TaggableMemo -> Memo
