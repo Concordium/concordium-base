@@ -28,7 +28,6 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.Types.ProtocolVersion
 import Control.Monad.Reader
 import qualified Data.FixedByteString as FBS
-import Data.Foldable
 import Data.Maybe
 
 -- * Merkle proofs

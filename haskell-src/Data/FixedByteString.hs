@@ -12,7 +12,6 @@ import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short.Internal as BSS
 import Data.Data (Data, Typeable)
-import Data.Foldable
 import Data.Primitive.ByteArray
 import Data.Primitive.Types
 import Data.Word

@@ -754,7 +754,8 @@ data BlockFinalizationSummary
     | Summary !FinalizationSummary
 
 -- | An existentially qualified pair of chain parameters and update keys currently in effect.
-data EChainParametersAndKeys = forall (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion).
+data EChainParametersAndKeys
+    = forall (cpv :: ChainParametersVersion) (auv :: AuthorizationsVersion).
       (IsChainParametersVersion cpv, IsAuthorizationsVersion auv, IsCompatibleAuthorizationsVersion cpv auv ~ 'True) =>
     EChainParametersAndKeys
     { ecpParams :: !(ChainParameters' cpv),
