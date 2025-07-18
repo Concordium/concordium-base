@@ -1,8 +1,5 @@
 use crate::{
-    common::cbor::{
-        self, CborDeserialize, CborMapDecoder, CborSerializationError, CborSerializationResult,
-        CborSerialize,
-    },
+    common::cbor::{self, CborSerializationResult},
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
@@ -106,28 +103,18 @@ pub struct TokenListUpdateEventDetails {
 }
 
 /// An event emitted when the token is paused or unpaused.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    CborSerialize,
+    CborDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenPauseEventDetails {}
-
-impl CborSerialize for TokenPauseEventDetails {
-    fn serialize<C: cbor::CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
-        encoder.encode_map(0)?;
-        Ok(())
-    }
-}
-
-impl CborDeserialize for TokenPauseEventDetails {
-    fn deserialize<C: cbor::CborDecoder>(decoder: C) -> CborSerializationResult<Self>
-    where
-        Self: Sized, {
-        let map_decoder = decoder.decode_map()?;
-        if map_decoder.size() != 0 {
-            return Err(CborSerializationError::map_size(0, map_decoder.size()));
-        }
-        Ok(TokenPauseEventDetails {})
-    }
-}
 
 /// An entity that can hold PLTs (protocol level tokens).
 /// The type is used in the `TokenTransfer`, `TokenMint`, and `TokenBurn`

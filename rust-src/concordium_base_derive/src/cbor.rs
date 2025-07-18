@@ -659,9 +659,17 @@ fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<T
                 quote! { 0 }
             };
 
+            let non_null_field_count = if field_idents.is_empty() {
+                quote! { 0 }
+            } else {
+                quote! {
+                    #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
+                }
+            };
+
             quote! {
                 let mut map_encoder = #cbor_module::CborEncoder::encode_map(encoder,
-                    #(if #cbor_module::CborSerialize::is_null(&self.#field_idents) {0} else {1})+*
+                    #non_null_field_count
                       + #other_field_size
                 )?;
 
