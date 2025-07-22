@@ -26,7 +26,7 @@ genCorrupt :: AccountAddress -> Gen AccountAddress
 genCorrupt (AccountAddress addr) = do
     place <- choose (0, 31)
     let res = splitAt place (FBS.unpack addr) -- since we split at most at 31 there is at least one element of the tail
-    let (start, rest) = (fst res, tail $ snd res)
+    let (start, rest) = (fst res, drop 1 $ snd res)
     new <- arbitrary
     return $ AccountAddress . FBS.pack $ (start ++ new : rest)
 

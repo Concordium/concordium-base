@@ -138,6 +138,7 @@ library
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -201,6 +202,7 @@ executable generate-update-keys
       QuickCheck >=2.12
     , aeson >=1.4.2
     , aeson-pretty >=0.8
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -262,6 +264,7 @@ executable genesis
       QuickCheck >=2.12
     , aeson >=1.4.2
     , aeson-pretty >=0.8
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -354,6 +357,7 @@ test-suite test
       HUnit >=1.6
     , QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -416,6 +420,7 @@ benchmark bls-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -475,6 +480,7 @@ benchmark ed25519-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -534,6 +540,7 @@ benchmark ed25519dlog-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -593,6 +600,7 @@ benchmark sha256-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
@@ -652,6 +660,7 @@ benchmark verify-credential-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0

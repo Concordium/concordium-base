@@ -50,6 +50,7 @@ flags:
 
 dependencies:
 - aeson >= 1.4.2
+- attoparsec-aeson
 - base >= 4.7 && < 5
 - base16-bytestring >= 0.1.1.6
 - base64-bytestring >= 1.1.0.0

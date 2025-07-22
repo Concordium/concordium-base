@@ -1989,8 +1989,7 @@ instance ToProto Transactions.AccountTransaction where
         ProtoFields.header .= toProto atrHeader
         ProtoFields.payload
             .= Proto.make
-                ( ProtoFields.rawPayload .= BSS.fromShort (_spayload atrPayload)
-                )
+                (ProtoFields.rawPayload .= BSS.fromShort (_spayload atrPayload))
 
 instance ToProto Transactions.AccountCreation where
     type Output Transactions.AccountCreation = Proto.CredentialDeployment
@@ -2026,8 +2025,7 @@ instance ToProto Updates.UpdateInstruction where
         ProtoFields.header .= toProto uiHeader
         ProtoFields.payload
             .= Proto.make
-                ( ProtoFields.rawPayload .= S.runPut (Updates.putUpdatePayload uiPayload)
-                )
+                (ProtoFields.rawPayload .= S.runPut (Updates.putUpdatePayload uiPayload))
 
 instance ToProto Transactions.BlockItem where
     type Output Transactions.BlockItem = Proto.BlockItem
