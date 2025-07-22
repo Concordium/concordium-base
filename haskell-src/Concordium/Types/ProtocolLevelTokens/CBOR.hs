@@ -1286,7 +1286,7 @@ emptyAddressNotFoundBuilder = AddressNotFoundBuilder Nothing Nothing
 --  is missing.
 buildAddressNotFound :: AddressNotFoundBuilder -> Either String TokenRejectReason
 buildAddressNotFound AddressNotFoundBuilder{..} = do
-    trrOperationIndex <- _anfbTransactionIndex `orFail` "Missing \"index\""
+    trrOperationIndex <- _anfbTransactionIndex `orFail` "Missing \"index\" <touch for test>"
     trrAddress <- _anfbRecipient `orFail` "Missing \"recipient\""
     return AddressNotFound{..}
 
