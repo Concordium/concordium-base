@@ -68,4 +68,5 @@ extra-deps:
 # compiler-check: newer-minor
  
 ghc-options:
+  # build modules in parallel
   "$everything": -j
