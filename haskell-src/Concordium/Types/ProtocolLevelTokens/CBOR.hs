@@ -1287,7 +1287,7 @@ emptyAddressNotFoundBuilder = AddressNotFoundBuilder Nothing Nothing
 buildAddressNotFound :: AddressNotFoundBuilder -> Either String TokenRejectReason
 buildAddressNotFound AddressNotFoundBuilder{..} = do
     trrOperationIndex <- _anfbTransactionIndex `orFail` "Missing \"index\""
-    trrAddress <- _anfbRecipient `orFail` "Missing \"recipient\""
+    trrAddress <- _anfbRecipient `orFail` "Missing \"recipient\" <touch for cache test>"
     return AddressNotFound{..}
 
 -- | A builder for constructing 'TokenRejectReason' values with the 'TokenBalanceInsufficient'
