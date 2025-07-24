@@ -952,7 +952,7 @@ mod test {
     }
 
     #[test]
-    fn test_struct_as_map_empty() {
+    fn test_struct_as_map_derived_empty() {
         #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct {}
 
@@ -973,6 +973,19 @@ mod test {
 
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "82036461626364");
+        let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_struct_as_array_derived_empty() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        struct TestStruct();
+
+        let value = TestStruct();
+
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "80");
         let value_decoded: TestStruct = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
@@ -1283,6 +1296,16 @@ mod test {
     }
 
     #[test]
+    fn test_vec_empty() {
+        let vec: Vec<u64> = vec![];
+
+        let cbor = cbor_encode(&vec).unwrap();
+        assert_eq!(hex::encode(&cbor), "80");
+        let bytes_decoded: Vec<u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, vec);
+    }
+
+    #[test]
     fn test_vec_indefinite_length() {
         let vec = vec![1, 2];
 
@@ -1297,6 +1320,16 @@ mod test {
 
         let cbor = cbor_encode(&map).unwrap();
         assert_eq!(hex::encode(&cbor), "a201020304");
+        let bytes_decoded: HashMap<u64, u64> = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, map);
+    }
+
+    #[test]
+    fn test_map_empty() {
+        let map: HashMap<u64, u64> = [].into_iter().collect();
+
+        let cbor = cbor_encode(&map).unwrap();
+        assert_eq!(hex::encode(&cbor), "a0");
         let bytes_decoded: HashMap<u64, u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, map);
     }
