@@ -2,7 +2,7 @@ use crate::common::cbor::{
     CborArrayDecoder, CborDecoder, CborDeserialize, CborMapDecoder, CborSerializationError,
     CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions,
 };
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use ciborium_ll::Header;
 use std::{fmt::Display, io::Read};
 
