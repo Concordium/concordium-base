@@ -2,7 +2,7 @@ use crate::common::cbor::{
     CborArrayDecoder, CborDecoder, CborDeserialize, CborMapDecoder, CborSerializationError,
     CborSerializationResult, DataItemHeader, DataItemType, SerializationOptions,
 };
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use ciborium_ll::Header;
 use std::{fmt::Display, io::Read};
 
@@ -253,7 +253,7 @@ impl<R: Read> Decoder<R> {
             return Err(anyhow!("must have at least one segment").into());
         };
 
-        segment.pull(dest)?.context("no data in segment")?;
+        segment.pull(dest)?;
         if segment.left() != 0 {
             return Err(anyhow!("remaining data in segment").into());
         }
