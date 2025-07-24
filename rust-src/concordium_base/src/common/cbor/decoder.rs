@@ -237,7 +237,7 @@ impl<R: Read> Decoder<R> {
             return Err(anyhow!("must have at least one segment").into());
         };
 
-        segment.pull(dest)?.context("no data in segment")?;
+        segment.pull(dest)?;
         if segment.left() != 0 {
             return Err(anyhow!("remaining data in segment").into());
         }

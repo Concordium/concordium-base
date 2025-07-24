@@ -414,6 +414,16 @@ mod test {
     }
 
     #[test]
+    fn test_bytes_empty() {
+        let bytes = Bytes(vec![]);
+
+        let cbor = cbor_encode(&bytes).unwrap();
+        assert_eq!(hex::encode(&cbor), "40");
+        let bytes_decoded: Bytes = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, bytes);
+    }
+
+    #[test]
     fn test_bytes_exact_length() {
         let bytes: [u8; 5] = [1, 2, 3, 4, 5];
 
@@ -443,6 +453,16 @@ mod test {
 
         let cbor = cbor_encode(&text).unwrap();
         assert_eq!(hex::encode(&cbor), "6461626364");
+        let text_decoded: String = cbor_decode(&cbor).unwrap();
+        assert_eq!(text_decoded, text);
+    }
+
+    #[test]
+    fn test_text_empty() {
+        let text = "";
+
+        let cbor = cbor_encode(&text).unwrap();
+        assert_eq!(hex::encode(&cbor), "60");
         let text_decoded: String = cbor_decode(&cbor).unwrap();
         assert_eq!(text_decoded, text);
     }
