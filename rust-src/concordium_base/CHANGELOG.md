@@ -2,6 +2,7 @@
 
 - Added PLT `TokenModuleInitializationParameters` CBOR type
 - Support empty structs with `CborSerialize` derive macro
+- Support CBOR decoding maps and arrays of indefinite length
 
 ## 8.0.0-alpha.2 (2025-07-14)
 
