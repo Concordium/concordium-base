@@ -8,7 +8,9 @@ import Control.Monad
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Types as AE
 import Data.Bits
+import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Short as BSS
+import Data.Char (toUpper)
 import qualified Data.Serialize as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -22,6 +24,10 @@ import qualified Concordium.Crypto.ByteStringHelpers as BSH
 --  The byte string must be between 1 and 128 bytes long and only consist of a-z, A-Z, 0-9, `-`, `.` and `%`.
 newtype TokenId = TokenId {tokenId :: BSS.ShortByteString}
     deriving (Eq, Ord)
+
+-- Normalize a 'TokenId', making all letters upper case.
+toUpperCase :: TokenId -> TokenId
+toUpperCase (TokenId tid) = TokenId $ BSS.toShort $ BSC.map toUpper $ BSS.fromShort tid
 
 instance Show TokenId where
     show (TokenId sbs) = T.unpack (T.decodeUtf8Lenient (BSS.fromShort sbs))

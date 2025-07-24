@@ -182,6 +182,7 @@ module Concordium.Types (
 
     -- * Protocol-level tokens
     TokenId (..),
+    toUpperCase,
     TokenHolder (..),
     makeTokenId,
     unsafeGetTokenId,
