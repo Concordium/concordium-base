@@ -125,7 +125,7 @@ where
         } else {
             Err(CborSerializationError::map_size(
                 self.declared_size,
-                self.current_size,
+                Some(self.current_size),
             ))
         }
     }
@@ -168,7 +168,7 @@ where
         } else {
             Err(CborSerializationError::array_size(
                 self.declared_size,
-                self.current_size,
+                Some(self.current_size),
             ))
         }
     }
