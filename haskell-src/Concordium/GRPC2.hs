@@ -1701,11 +1701,11 @@ convertAccountTransaction ty cost sender result = case ty of
                )
 
 instance ToProto TokenParameter where
-    type Output TokenParameter = Proto.CBor
+    type Output TokenParameter = Proto.Cbor
     toProto (TokenParameter parameter) = Proto.make $ PLTFields.value .= BSS.fromShort parameter
 
 instance ToProto TokenEventDetails where
-    type Output TokenEventDetails = Proto.CBor
+    type Output TokenEventDetails = Proto.Cbor
     toProto (TokenEventDetails details) = Proto.make $ PLTFields.value .= BSS.fromShort details
 
 instance ToProto TokenEventType where
