@@ -22,6 +22,7 @@ module Concordium.GRPC2 (
 )
 where
 
+import Control.Arrow
 import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
@@ -36,10 +37,14 @@ import qualified Data.Serialize as S
 import qualified Data.Set as Set
 import Data.Singletons
 import Data.Text (Text)
+import Data.Text.Encoding (decodeUtf8)
 import Data.Time (UTCTime)
 import qualified Data.Vector as Vec
 import Data.Word
 import Lens.Micro.Platform
+import qualified Proto.V2.Concordium.Kernel as Proto
+import qualified Proto.V2.Concordium.ProtocolLevelTokens as Proto
+import qualified Proto.V2.Concordium.ProtocolLevelTokens_Fields as PLTFields
 import qualified Proto.V2.Concordium.Types as Proto
 import qualified Proto.V2.Concordium.Types_Fields as ProtoFields
 
@@ -66,6 +71,8 @@ import Concordium.Types.Execution
 import qualified Concordium.Types.InvokeContract as InvokeContract
 import qualified Concordium.Types.Parameters as Parameters
 import qualified Concordium.Types.Queries.KonsensusV1 as KonsensusV1
+import Concordium.Types.Queries.Tokens
+import Concordium.Types.Tokens (TokenRawAmount (..))
 import qualified Concordium.Types.Updates as Updates
 import qualified Concordium.Wasm as Wasm
 
@@ -279,6 +286,7 @@ instance ToProto ProtocolVersion where
     toProto P6 = Proto.PROTOCOL_VERSION_6
     toProto P7 = Proto.PROTOCOL_VERSION_7
     toProto P8 = Proto.PROTOCOL_VERSION_8
+    toProto P9 = Proto.PROTOCOL_VERSION_9
 
 instance ToProto QueryTypes.NextAccountNonce where
     type Output QueryTypes.NextAccountNonce = Proto.NextAccountSequenceNumber
@@ -614,6 +622,24 @@ instance ToProto Cooldown where
         ProtoFields.amount .= toProto cooldownAmount
         ProtoFields.status .= toProto cooldownStatus
 
+instance ToProto TokenAmount where
+    type Output TokenAmount = Proto.TokenAmount
+    toProto TokenAmount{..} = Proto.make $ do
+        PLTFields.value .= theTokenRawAmount taValue
+        PLTFields.decimals .= fromIntegral taDecimals
+
+instance ToProto TokenAccountState where
+    type Output TokenAccountState = Proto.TokenAccountState
+    toProto TokenAccountState{..} = Proto.make $ do
+        PLTFields.balance .= toProto balance
+        PLTFields.maybe'moduleState .= (Proto.make . (PLTFields.value .=) <$> moduleAccountState)
+
+instance ToProto Token where
+    type Output Token = Proto.AccountInfo'Token
+    toProto Token{..} = Proto.make $ do
+        ProtoFields.tokenId .= toProto tokenId
+        ProtoFields.tokenAccountState .= toProto tokenAccountState
+
 instance ToProto AccountInfo where
     type Output AccountInfo = Proto.AccountInfo
     toProto AccountInfo{..} = Proto.make $ do
@@ -629,10 +655,36 @@ instance ToProto AccountInfo where
         ProtoFields.maybe'stake .= toProto aiStakingInfo
         ProtoFields.cooldowns .= fmap toProto aiAccountCooldowns
         ProtoFields.availableBalance .= toProto aiAccountAvailableAmount
+        ProtoFields.tokens .= fmap toProto aiAccountTokens
+
+instance ToProto TokenState where
+    type Output TokenState = Proto.TokenState
+    toProto TokenState{..} = Proto.make $ do
+        PLTFields.tokenModuleRef .= toProto tsTokenModuleRef
+        PLTFields.decimals .= fromIntegral tsDecimals
+        PLTFields.totalSupply .= toProto tsTotalSupply
+        PLTFields.moduleState .= Proto.make (PLTFields.value .= tsModuleState)
+
+instance ToProto TokenInfo where
+    type Output TokenInfo = Proto.TokenInfo
+    toProto TokenInfo{..} = Proto.make $ do
+        ProtoFields.tokenId .= toProto tiTokenId
+        ProtoFields.tokenState .= toProto tiTokenState
 
 instance ToProto Wasm.Parameter where
     type Output Wasm.Parameter = Proto.Parameter
     toProto Wasm.Parameter{..} = Proto.make $ ProtoFields.value .= BSS.fromShort parameter
+
+instance ToProto TokenModuleRef where
+    type Output TokenModuleRef = Proto.TokenModuleRef
+    toProto = mkSerialize
+
+instance ToProto TokenModuleRejectReason where
+    type Output TokenModuleRejectReason = Proto.TokenModuleRejectReason
+    toProto TokenModuleRejectReason{..} = Proto.make $ do
+        PLTFields.tokenId .= toProto tmrrTokenId
+        PLTFields.type' .= toProto tmrrType
+        PLTFields.maybe'details .= fmap toProto tmrrDetails
 
 instance ToProto RejectReason where
     type Output RejectReason = Proto.RejectReason
@@ -721,6 +773,8 @@ instance ToProto RejectReason where
         StakeOverMaximumThresholdForPool -> Proto.make $ ProtoFields.stakeOverMaximumThresholdForPool .= Proto.defMessage
         PoolWouldBecomeOverDelegated -> Proto.make $ ProtoFields.poolWouldBecomeOverDelegated .= Proto.defMessage
         PoolClosed -> Proto.make $ ProtoFields.poolClosed .= Proto.defMessage
+        NonExistentTokenId tokenId -> Proto.make $ ProtoFields.nonExistentTokenId .= toProto tokenId
+        TokenUpdateTransactionFailed reason -> Proto.make $ ProtoFields.tokenUpdateTransactionFailed .= toProto reason
 
 -- | Attempt to convert the node's TransactionStatus type into the protobuf BlockItemStatus type.
 --   The protobuf type is better structured and removes the need for handling impossible cases.
@@ -792,7 +846,64 @@ instance ToProto SupplementedTransactionSummary where
                         ProtoFields.energyCost .= toProto tsEnergyCost
                         ProtoFields.hash .= toProto tsHash
                         ProtoFields.update .= details
+                (TokenCreated createPLT : initEvents) -> do
+                    protoEvents <-
+                        left (const CEInvalidUpdateResult) $
+                            mapM tokenUpdateEventToProto initEvents
+                    Right . Proto.make $ do
+                        ProtoFields.index .= mkWord64 tsIndex
+                        ProtoFields.energyCost .= toProto tsEnergyCost
+                        ProtoFields.hash .= toProto tsHash
+                        ProtoFields.tokenCreation
+                            .= Proto.make
+                                ( do
+                                    PLTFields.createPlt .= toProto createPLT
+                                    PLTFields.events .= protoEvents
+                                )
                 _ -> Left CEInvalidUpdateResult
+
+-- | Convert an event to a 'Proto.TokenEvent'. Returns @Left ()@ if the event type is not
+--  one of the token event types.
+tokenUpdateEventToProto :: Event' s -> Either () Proto.TokenEvent
+tokenUpdateEventToProto TokenModuleEvent{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto etmeTokenId
+    PLTFields.moduleEvent
+        .= Proto.make
+            ( do
+                PLTFields.type' .= toProto etmeType
+                PLTFields.details .= toProto etmeDetails
+            )
+tokenUpdateEventToProto TokenTransfer{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto ettTokenId
+    PLTFields.transferEvent
+        .= Proto.make
+            ( do
+                PLTFields.from .= toProto ettFrom
+                PLTFields.to .= toProto ettTo
+                PLTFields.amount .= toProto ettAmount
+                PLTFields.maybe'memo .= fmap toProto ettMemo
+            )
+tokenUpdateEventToProto TokenMint{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto etmTokenId
+    PLTFields.mintEvent
+        .= Proto.make
+            ( do
+                PLTFields.target .= toProto etmTarget
+                PLTFields.amount .= toProto etmAmount
+            )
+tokenUpdateEventToProto TokenBurn{..} = Right . Proto.make $ do
+    PLTFields.tokenId .= toProto etbTokenId
+    PLTFields.burnEvent
+        .= Proto.make
+            ( do
+                PLTFields.target .= toProto etbTarget
+                PLTFields.amount .= toProto etbAmount
+            )
+tokenUpdateEventToProto _ = Left ()
+
+instance ToProto TokenHolder where
+    type Output TokenHolder = Proto.TokenHolder
+    toProto (HolderAccount addr) = Proto.make $ PLTFields.account .= toProto addr
 
 instance ToProto Updates.ProtocolUpdate where
     type Output Updates.ProtocolUpdate = Proto.ProtocolUpdate
@@ -896,6 +1007,14 @@ instance ToProto (Parameters.ConsensusParameters' 'Parameters.ConsensusParameter
         ProtoFields.minBlockTime .= toProto _cpMinBlockTime
         ProtoFields.blockEnergyLimit .= toProto _cpBlockEnergyLimit
 
+instance ToProto CreatePLT where
+    type Output CreatePLT = Proto.CreatePLT
+    toProto CreatePLT{..} = Proto.make $ do
+        PLTFields.tokenId .= toProto _cpltTokenId
+        PLTFields.tokenModule .= toProto _cpltTokenModule
+        PLTFields.decimals .= fromIntegral _cpltDecimals
+        PLTFields.initializationParameters .= toProto _cpltInitializationParameters
+
 -- | Attempt to construct the protobuf updatepayload.
 --   See @toBlockItemStatus@ for more context.
 convertUpdatePayload :: Updates.UpdateType -> Updates.UpdatePayload -> Either ConversionError Proto.UpdatePayload
@@ -916,9 +1035,11 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateLevel1Keys, Updates.RootUpdatePayload ru@(Updates.Level1KeysRootUpdate{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdate{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdateV1{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
+    (Updates.UpdateLevel2Keys, Updates.RootUpdatePayload ru@(Updates.Level2KeysRootUpdateV2{})) -> Right . Proto.make $ ProtoFields.rootUpdate .= toProto ru
     (Updates.UpdateLevel1Keys, Updates.Level1UpdatePayload u@(Updates.Level1KeysLevel1Update{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1Update{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1UpdateV1{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
+    (Updates.UpdateLevel2Keys, Updates.Level1UpdatePayload u@(Updates.Level2KeysLevel1UpdateV2{})) -> Right . Proto.make $ ProtoFields.level1Update .= toProto u
     (Updates.UpdateAddAnonymityRevoker, Updates.AddAnonymityRevokerUpdatePayload ai) -> Right . Proto.make $ ProtoFields.addAnonymityRevokerUpdate .= toProto ai
     (Updates.UpdateAddIdentityProvider, Updates.AddIdentityProviderUpdatePayload ip) -> Right . Proto.make $ ProtoFields.addIdentityProviderUpdate .= toProto ip
     (Updates.UpdateCooldownParameters, Updates.CooldownParametersCPV1UpdatePayload cp) -> Right $ Proto.make $ ProtoFields.cooldownParametersCpv1Update .= toProto cp
@@ -930,6 +1051,7 @@ convertUpdatePayload ut pl = case (ut, pl) of
     (Updates.UpdateBlockEnergyLimit, Updates.BlockEnergyLimitUpdatePayload bel) -> Right . Proto.make $ ProtoFields.blockEnergyLimitUpdate .= toProto bel
     (Updates.UpdateFinalizationCommitteeParameters, Updates.FinalizationCommitteeParametersUpdatePayload fcp) -> Right . Proto.make $ ProtoFields.finalizationCommitteeParametersUpdate .= toProto fcp
     (Updates.UpdateValidatorScoreParameters, Updates.ValidatorScoreParametersUpdatePayload vsp) -> Right . Proto.make $ ProtoFields.validatorScoreParametersUpdate .= toProto vsp
+    (Updates.UpdateCreatePLT, Updates.CreatePLTUpdatePayload cplt) -> Right . Proto.make $ ProtoFields.createPltUpdate .= toProto cplt
     _ -> Left CEInvalidUpdateResult
 
 -- | The different conversions errors possible in @toBlockItemStatus@ (and the helper to* functions it calls).
@@ -1022,6 +1144,7 @@ instance ToProto Updates.Level1Update where
     toProto Updates.Level1KeysLevel1Update{..} = Proto.make $ ProtoFields.level1KeysUpdate .= toProto l1kl1uKeys
     toProto Updates.Level2KeysLevel1Update{..} = Proto.make $ ProtoFields.level2KeysUpdateV0 .= toProto l2kl1uAuthorizations
     toProto Updates.Level2KeysLevel1UpdateV1{..} = Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kl1uAuthorizationsV1
+    toProto Updates.Level2KeysLevel1UpdateV2{..} = Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kl1uAuthorizationsV2
 
 instance ToProto Updates.RootUpdate where
     type Output Updates.RootUpdate = Proto.RootUpdate
@@ -1030,6 +1153,7 @@ instance ToProto Updates.RootUpdate where
         Updates.Level1KeysRootUpdate{..} -> Proto.make $ ProtoFields.level1KeysUpdate .= toProto l1kruKeys
         Updates.Level2KeysRootUpdate{..} -> Proto.make $ ProtoFields.level2KeysUpdateV0 .= toProto l2kruAuthorizations
         Updates.Level2KeysRootUpdateV1{..} -> Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kruAuthorizationsV1
+        Updates.Level2KeysRootUpdateV2{..} -> Proto.make $ ProtoFields.level2KeysUpdateV1 .= toProto l2kruAuthorizationsV2
 
 instance ToProto (Updates.HigherLevelKeys kind) where
     type Output (Updates.HigherLevelKeys kind) = Proto.HigherLevelKeys
@@ -1037,7 +1161,7 @@ instance ToProto (Updates.HigherLevelKeys kind) where
         ProtoFields.keys .= map toProto (Vec.toList $ Updates.hlkKeys keys)
         ProtoFields.threshold .= toProto (Updates.hlkThreshold keys)
 
-instance (Parameters.IsAuthorizationsVersion auv) => ToProto (Updates.Authorizations auv) where
+instance (IsAuthorizationsVersion auv) => ToProto (Updates.Authorizations auv) where
     type Output (Updates.Authorizations auv) = AuthorizationsFamily auv
     toProto auth =
         let
@@ -1058,16 +1182,22 @@ instance (Parameters.IsAuthorizationsVersion auv) => ToProto (Updates.Authorizat
                 ProtoFields.addIdentityProvider .= toProto (Updates.asAddIdentityProvider auth)
         in
             case sing @auv of
-                Parameters.SAuthorizationsVersion0 -> v0
-                Parameters.SAuthorizationsVersion1 -> Proto.make $ do
+                SAuthorizationsVersion0 -> v0
+                SAuthorizationsVersion1 -> Proto.make $ do
                     ProtoFields.v0 .= v0
                     ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
                     ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                SAuthorizationsVersion2 -> Proto.make $ do
+                    ProtoFields.v0 .= v0
+                    ProtoFields.parameterCooldown .= toProto (Updates.asCooldownParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.parameterTime .= toProto (Updates.asTimeParameters auth ^. Parameters.unconditionally)
+                    ProtoFields.createPlt .= toProto (Updates.asCreatePLT auth ^. Parameters.unconditionally)
 
 -- | Defines a type family that is used in the ToProto instance for Updates.Authorizations.
-type family AuthorizationsFamily cpv where
-    AuthorizationsFamily 'Parameters.AuthorizationsVersion0 = Proto.AuthorizationsV0
-    AuthorizationsFamily 'Parameters.AuthorizationsVersion1 = Proto.AuthorizationsV1
+type family AuthorizationsFamily auv where
+    AuthorizationsFamily 'AuthorizationsVersion0 = Proto.AuthorizationsV0
+    AuthorizationsFamily 'AuthorizationsVersion1 = Proto.AuthorizationsV1
+    AuthorizationsFamily 'AuthorizationsVersion2 = Proto.AuthorizationsV1
 
 instance ToProto Updates.AccessStructure where
     type Output Updates.AccessStructure = Proto.AccessStructure
@@ -1543,6 +1673,13 @@ convertAccountTransaction ty cost sender result = case ty of
                             _ -> Left CEInvalidTransactionResult
                     v <- mapM toDelegationEvent events
                     Right . Proto.make $ ProtoFields.delegationConfigured . ProtoFields.events .= v
+            TTTokenUpdate ->
+                mkSuccess <$> do
+                    protoEvents <-
+                        left (const CEInvalidTransactionResult) $
+                            mapM tokenUpdateEventToProto events
+                    Right . Proto.make $
+                        ProtoFields.tokenUpdateEffect . ProtoFields.events .= protoEvents
   where
     mkSuccess :: Proto.AccountTransactionEffects -> Proto.AccountTransactionDetails
     mkSuccess effects = Proto.make $ do
@@ -1562,6 +1699,18 @@ convertAccountTransaction ty cost sender result = case ty of
                         Nothing -> return ()
                         Just ty' -> ProtoFields.transactionType .= toProto ty'
                )
+
+instance ToProto TokenParameter where
+    type Output TokenParameter = Proto.Cbor
+    toProto (TokenParameter parameter) = Proto.make $ PLTFields.value .= BSS.fromShort parameter
+
+instance ToProto TokenEventDetails where
+    type Output TokenEventDetails = Proto.Cbor
+    toProto (TokenEventDetails details) = Proto.make $ PLTFields.value .= BSS.fromShort details
+
+instance ToProto TokenEventType where
+    type Output TokenEventType = Text
+    toProto (TokenEventType eventType) = decodeUtf8 (BSS.fromShort eventType)
 
 instance ToProto Address where
     type Output Address = Proto.Address
@@ -1591,6 +1740,7 @@ instance ToProto Updates.UpdateType where
     toProto Updates.UpdateBlockEnergyLimit = Proto.UPDATE_BLOCK_ENERGY_LIMIT
     toProto Updates.UpdateFinalizationCommitteeParameters = Proto.UPDATE_FINALIZATION_COMMITTEE_PARAMETERS
     toProto Updates.UpdateValidatorScoreParameters = Proto.UPDATE_VALIDATOR_SCORE_PARAMETERS
+    toProto Updates.UpdateCreatePLT = Proto.UPDATE_CREATE_PLT
 
 instance ToProto TransactionType where
     type Output TransactionType = Proto.TransactionType
@@ -1615,6 +1765,7 @@ instance ToProto TransactionType where
     toProto TTTransferWithScheduleAndMemo = Proto.TRANSFER_WITH_SCHEDULE_AND_MEMO
     toProto TTConfigureBaker = Proto.CONFIGURE_BAKER
     toProto TTConfigureDelegation = Proto.CONFIGURE_DELEGATION
+    toProto TTTokenUpdate = Proto.TOKEN_UPDATE
 
 instance ToProto Energy where
     type Output Energy = Proto.Energy
@@ -1838,8 +1989,7 @@ instance ToProto Transactions.AccountTransaction where
         ProtoFields.header .= toProto atrHeader
         ProtoFields.payload
             .= Proto.make
-                ( ProtoFields.rawPayload .= BSS.fromShort (_spayload atrPayload)
-                )
+                (ProtoFields.rawPayload .= BSS.fromShort (_spayload atrPayload))
 
 instance ToProto Transactions.AccountCreation where
     type Output Transactions.AccountCreation = Proto.CredentialDeployment
@@ -1875,8 +2025,7 @@ instance ToProto Updates.UpdateInstruction where
         ProtoFields.header .= toProto uiHeader
         ProtoFields.payload
             .= Proto.make
-                ( ProtoFields.rawPayload .= S.runPut (Updates.putUpdatePayload uiPayload)
-                )
+                (ProtoFields.rawPayload .= S.runPut (Updates.putUpdatePayload uiPayload))
 
 instance ToProto Transactions.BlockItem where
     type Output Transactions.BlockItem = Proto.BlockItem
@@ -2006,6 +2155,7 @@ instance ToProto (TransactionTime, QueryTypes.PendingUpdateEffect) where
             QueryTypes.PUELevel1Keys keys -> ProtoFields.level1Keys .= toProto keys
             QueryTypes.PUELevel2KeysV0 auth -> ProtoFields.level2KeysCpv0 .= toProto auth
             QueryTypes.PUELevel2KeysV1 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
+            QueryTypes.PUELevel2KeysV2 auth -> ProtoFields.level2KeysCpv1 .= toProto auth
             QueryTypes.PUEProtocol protocolUpdate -> ProtoFields.protocol .= toProto protocolUpdate
             QueryTypes.PUEElectionDifficulty electionDifficulty -> ProtoFields.electionDifficulty .= toProto electionDifficulty
             QueryTypes.PUEEuroPerEnergy euroPerEnergy -> ProtoFields.euroPerEnergy .= toProto euroPerEnergy
@@ -2052,6 +2202,7 @@ instance ToProto QueryTypes.NextUpdateSequenceNumbers where
         ProtoFields.blockEnergyLimit .= toProto _nusnBlockEnergyLimit
         ProtoFields.finalizationCommitteeParameters .= toProto _nusnFinalizationCommitteeParameters
         ProtoFields.validatorScoreParameters .= toProto _nusnValidatorScoreParameters
+        ProtoFields.protocolLevelTokens .= toProto _nusnProtocolLevelTokensParameters
 
 instance ToProto Epoch where
     type Output Epoch = Proto.Epoch
@@ -2068,9 +2219,9 @@ instance ToProto CredentialsPerBlockLimit where
 instance ToProto (AccountAddress, EChainParametersAndKeys) where
     type Output (AccountAddress, EChainParametersAndKeys) = Proto.ChainParameters
 
-    toProto (foundationAddr, EChainParametersAndKeys (params :: Parameters.ChainParameters' cpv) keys) =
-        case chainParametersVersion @cpv of
-            SChainParametersV0 ->
+    toProto (foundationAddr, EChainParametersAndKeys (params :: Parameters.ChainParameters' cpv) (keys :: Updates.UpdateKeysCollection auv)) =
+        case (chainParametersVersion @cpv, authorizationsVersion @auv) of
+            (SChainParametersV0, SAuthorizationsVersion0) ->
                 let Parameters.ChainParameters
                         { _cpCooldownParameters = Parameters.CooldownParametersV0 epochs,
                           _cpPoolParameters = Parameters.PoolParametersV0 minThreshold,
@@ -2094,7 +2245,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                 )
-            SChainParametersV1 ->
+            (SChainParametersV1, SAuthorizationsVersion1) ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v1
@@ -2115,7 +2266,7 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                 )
-            SChainParametersV2 ->
+            (SChainParametersV2, SAuthorizationsVersion1) ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v2
@@ -2137,7 +2288,30 @@ instance ToProto (AccountAddress, EChainParametersAndKeys) where
                                     ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
                                     ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
                                 )
-            SChainParametersV3 ->
+            (SChainParametersV3, SAuthorizationsVersion1) ->
+                let Parameters.ChainParameters{..} = params
+                in  Proto.make $
+                        ProtoFields.v3
+                            .= Proto.make
+                                ( do
+                                    ProtoFields.consensusParameters .= toProto _cpConsensusParameters
+                                    ProtoFields.euroPerEnergy .= toProto (Parameters._erEuroPerEnergy _cpExchangeRates)
+                                    ProtoFields.microCcdPerEuro .= toProto (Parameters._erMicroGTUPerEuro _cpExchangeRates)
+                                    ProtoFields.cooldownParameters .= toProto _cpCooldownParameters
+                                    ProtoFields.timeParameters .= toProto (Parameters.unOParam _cpTimeParameters)
+                                    ProtoFields.accountCreationLimit .= toProto _cpAccountCreationLimit
+                                    ProtoFields.mintDistribution .= toProto (Parameters._rpMintDistribution _cpRewardParameters)
+                                    ProtoFields.transactionFeeDistribution .= toProto (Parameters._rpTransactionFeeDistribution _cpRewardParameters)
+                                    ProtoFields.gasRewards .= toProto (Parameters._rpGASRewards _cpRewardParameters)
+                                    ProtoFields.foundationAccount .= toProto foundationAddr
+                                    ProtoFields.poolParameters .= toProto _cpPoolParameters
+                                    ProtoFields.rootKeys .= toProto (Updates.rootKeys keys)
+                                    ProtoFields.level1Keys .= toProto (Updates.level1Keys keys)
+                                    ProtoFields.level2Keys .= toProto (Updates.level2Keys keys)
+                                    ProtoFields.finalizationCommitteeParameters .= toProto (Parameters.unOParam _cpFinalizationCommitteeParameters)
+                                    ProtoFields.validatorScoreParameters .= toProto (Parameters.unOParam _cpValidatorScoreParameters)
+                                )
+            (SChainParametersV3, SAuthorizationsVersion2) ->
                 let Parameters.ChainParameters{..} = params
                 in  Proto.make $
                         ProtoFields.v3
@@ -2476,3 +2650,8 @@ instance ToProto AccountPending where
     toProto AccountPending{..} = Proto.make $ do
         ProtoFields.accountIndex .= toProto apAccountIndex
         ProtoFields.firstTimestamp .= toProto apFirstTimestamp
+
+instance ToProto TokenId where
+    type Output TokenId = Proto.TokenId
+    toProto (TokenId bss) = Proto.make $ do
+        PLTFields.value .= decodeUtf8 (BSS.fromShort bss)

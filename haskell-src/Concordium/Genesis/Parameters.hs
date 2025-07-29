@@ -153,7 +153,7 @@ parseJSONForGCPV2 =
 -- | Parse 'GenesisChainParameters' from JSON for 'ChainParametersV2'.
 parseJSONForGCPV3 :: Value -> Parser (GenesisChainParameters' 'ChainParametersV3)
 parseJSONForGCPV3 =
-    withObject "GenesisChainParametersV2" $ \v -> do
+    withObject "GenesisChainParametersV3" $ \v -> do
         _erEuroPerEnergy <- v .: "euroPerEnergy"
         _erMicroGTUPerEuro <- v .: "microGTUPerEuro"
         _cpPoolOwnerCooldown <- v .: "poolOwnerCooldown"
@@ -328,7 +328,7 @@ data GenesisParametersV2 pv = GenesisParametersV2
       -- | Maximum total energy that can be consumed by the transactions in a block
       gpMaxBlockEnergy :: Energy,
       -- | The collection of update keys for performing updates
-      gpUpdateKeys :: UpdateKeysCollection (AuthorizationsVersionFor (ChainParametersVersionFor pv)),
+      gpUpdateKeys :: UpdateKeysCollection (AuthorizationsVersionFor pv),
       -- | The initial (updatable) chain parameters
       gpChainParameters :: GenesisChainParameters pv
     }
@@ -354,7 +354,7 @@ instance forall pv. (IsProtocolVersion pv) => FromJSON (GenesisParametersV2 pv) 
         mapM_ validateBaker (zip [0 ..] gpInitialAccounts)
         gpMaxBlockEnergy <- v .: "maxBlockEnergy"
         gpUpdateKeys <-
-            withIsAuthorizationsVersionForPV (protocolVersion @pv) $
+            withIsAuthorizationsVersionFor (protocolVersion @pv) $
                 v .: "updateKeys"
         gpChainParameters <- v .: "chainParameters"
         let facct = gcpFoundationAccount gpChainParameters

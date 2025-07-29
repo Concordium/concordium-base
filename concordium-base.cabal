@@ -16,6 +16,8 @@ build-type:     Custom
 extra-source-files:
     README.md
     LICENSE
+    ./concordium-grpc-api/v2/concordium/kernel.proto
+    ./concordium-grpc-api/v2/concordium/protocol-level-tokens.proto
     ./concordium-grpc-api/v2/concordium/types.proto
     ./concordium-grpc-api/v2/concordium/service.proto
     ./concordium-grpc-api/v2/concordium/health.proto
@@ -63,6 +65,7 @@ library
       Concordium.Genesis.Data.P6
       Concordium.Genesis.Data.P7
       Concordium.Genesis.Data.P8
+      Concordium.Genesis.Data.P9
       Concordium.Genesis.Parameters
       Concordium.GRPC2
       Concordium.ID.Account
@@ -85,14 +88,18 @@ library
       Concordium.Types.HashableTo
       Concordium.Types.IdentityProviders
       Concordium.Types.InvokeContract
+      Concordium.Types.Memo
       Concordium.Types.Migration
       Concordium.Types.Parameters
+      Concordium.Types.ProtocolLevelTokens.CBOR
       Concordium.Types.ProtocolVersion
       Concordium.Types.ProtocolVersion.TH
       Concordium.Types.Queries
       Concordium.Types.Queries.KonsensusV1
+      Concordium.Types.Queries.Tokens
       Concordium.Types.SeedState
       Concordium.Types.SmartContracts
+      Concordium.Types.Tokens
       Concordium.Types.Transactions
       Concordium.Types.UpdateQueues
       Concordium.Types.Updates
@@ -106,12 +113,12 @@ library
       Data.Base58Encoding
       Data.Base58Encoding.TH
       Data.FixedByteString
-      Proto.V2.Concordium.Health Proto.V2.Concordium.Health_Fields Proto.V2.Concordium.Service Proto.V2.Concordium.Service_Fields Proto.V2.Concordium.Types Proto.V2.Concordium.Types_Fields
+      Proto.V2.Concordium.Health Proto.V2.Concordium.Health_Fields Proto.V2.Concordium.Service Proto.V2.Concordium.Service_Fields Proto.V2.Concordium.Types Proto.V2.Concordium.Types_Fields Proto.V2.Concordium.Kernel Proto.V2.Concordium.Kernel_Fields Proto.V2.Concordium.ProtocolLevelTokens Proto.V2.Concordium.ProtocolLevelTokens_Fields
   other-modules:
       Paths_concordium_base
   autogen-modules:
       Paths_concordium_base
-      Proto.V2.Concordium.Health Proto.V2.Concordium.Health_Fields Proto.V2.Concordium.Service Proto.V2.Concordium.Service_Fields Proto.V2.Concordium.Types Proto.V2.Concordium.Types_Fields
+      Proto.V2.Concordium.Health Proto.V2.Concordium.Health_Fields Proto.V2.Concordium.Service Proto.V2.Concordium.Service_Fields Proto.V2.Concordium.Types Proto.V2.Concordium.Types_Fields Proto.V2.Concordium.Kernel Proto.V2.Concordium.Kernel_Fields Proto.V2.Concordium.ProtocolLevelTokens Proto.V2.Concordium.ProtocolLevelTokens_Fields
   hs-source-dirs:
       haskell-src
   default-extensions:
@@ -131,11 +138,13 @@ library
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , containers >=0.6
     , cryptonite >=0.27
@@ -193,11 +202,13 @@ executable generate-update-keys
       QuickCheck >=2.12
     , aeson >=1.4.2
     , aeson-pretty >=0.8
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -253,11 +264,13 @@ executable genesis
       QuickCheck >=2.12
     , aeson >=1.4.2
     , aeson-pretty >=0.8
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , cmdargs >=0.10
     , concordium-base
@@ -314,10 +327,12 @@ test-suite test
       Types.AddressesSpec
       Types.AmountFraction
       Types.AmountSpec
+      Types.CBOR
       Types.ParametersSpec
       Types.PayloadSerializationSpec
       Types.PayloadSpec
       Types.TimestampSpec
+      Types.TokensSpec
       Types.TransactionSerializationSpec
       Types.TransactionSummarySpec
       Types.UpdatesSpec
@@ -342,11 +357,13 @@ test-suite test
       HUnit >=1.6
     , QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers
@@ -403,11 +420,13 @@ benchmark bls-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -461,11 +480,13 @@ benchmark ed25519-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -519,11 +540,13 @@ benchmark ed25519dlog-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -577,11 +600,13 @@ benchmark sha256-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6
@@ -635,11 +660,13 @@ benchmark verify-credential-perf
   build-depends:
       QuickCheck >=2.12
     , aeson >=1.4.2
+    , attoparsec-aeson
     , base >=4.7 && <5
     , base16-bytestring >=0.1.1.6
     , base64-bytestring >=1.1.0.0
     , binary >=0.8
     , bytestring >=0.10
+    , cborg >=0.2
     , cereal >=0.5
     , concordium-base
     , containers >=0.6

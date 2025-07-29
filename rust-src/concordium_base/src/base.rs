@@ -20,7 +20,7 @@ pub use concordium_contracts_common::{
     AccountThreshold, Address, ContractAddress, ContractIndex, ContractSubIndex, ExchangeRate,
     ZeroSignatureThreshold,
 };
-use derive_more::{Add, Display, From, FromStr, Into, Sub};
+use derive_more::{Add, Display, From, FromStr, Into, Sub, Sum};
 use ed25519_dalek::Signer;
 use rand::{CryptoRng, Rng};
 use std::{
@@ -446,6 +446,9 @@ pub enum ProtocolVersion {
     #[display(fmt = "P8")]
     /// Protocol `P8` introduces support for suspended validators.
     P8,
+    #[display(fmt = "P9")]
+    /// Protocol `P9` introduces support for protocol level tokens (PLT).
+    P9,
 }
 
 #[derive(Debug, Error, Display)]
@@ -469,6 +472,7 @@ impl TryFrom<u64> for ProtocolVersion {
             6 => Ok(ProtocolVersion::P6),
             7 => Ok(ProtocolVersion::P7),
             8 => Ok(ProtocolVersion::P8),
+            9 => Ok(ProtocolVersion::P9),
             version => Err(UnknownProtocolVersion { version }),
         }
     }
@@ -485,6 +489,7 @@ impl From<ProtocolVersion> for u64 {
             ProtocolVersion::P6 => 6,
             ProtocolVersion::P7 => 7,
             ProtocolVersion::P8 => 8,
+            ProtocolVersion::P9 => 9,
         }
     }
 }
@@ -543,7 +548,21 @@ pub struct AccountIndex {
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(transparent)]
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, FromStr, Display, From, Into, Add, Sub,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Default,
+    FromStr,
+    Display,
+    From,
+    Into,
+    Add,
+    Sub,
+    Sum,
 )]
 pub struct Energy {
     pub energy: u64,

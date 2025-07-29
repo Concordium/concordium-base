@@ -11,7 +11,7 @@ use crate::{
         deserial_vector_no_length, types::*, Buffer, Deserial, Get, ParseResult, ReadBytesExt,
         SerdeDeserialize, SerdeSerialize, Serial,
     },
-    hashes,
+    hashes, protocol_level_tokens,
     transactions::PayloadSize,
 };
 use derive_more::*;
@@ -181,8 +181,21 @@ pub struct GASRewardsV1 {
 pub enum RootUpdate {
     RootKeysUpdate(HigherLevelAccessStructure<RootKeysKind>),
     Level1KeysUpdate(HigherLevelAccessStructure<Level1KeysKind>),
-    Level2KeysUpdate(Box<Authorizations<ChainParameterVersion0>>),
-    Level2KeysUpdateV1(Box<Authorizations<ChainParameterVersion1>>),
+    Level2KeysUpdate(Box<AuthorizationsV0>),
+    /// Updates the level 2 keys using the provided `AuthorizationsV1`.
+    ///
+    /// ### Note
+    ///
+    /// The `AuthorizationsV1` provided to this constructor *must* have `None`
+    /// for the `create_plt` field.
+    Level2KeysUpdateV1(Box<AuthorizationsV1>),
+    /// Updates the level 2 keys using the provided `AuthorizationsV1`.
+    ///
+    /// ### Note
+    ///
+    /// The `AuthorizationsV1` provided to this constructor *must* have
+    /// `Some(create_plt)` for the `create_plt` field.
+    Level2KeysUpdateV2(Box<AuthorizationsV1>),
 }
 
 impl Serial for RootUpdate {
@@ -204,6 +217,10 @@ impl Serial for RootUpdate {
                 3u8.serial(out);
                 l2k.serial(out)
             }
+            RootUpdate::Level2KeysUpdateV2(l2k) => {
+                4u8.serial(out);
+                l2k.serial(out)
+            }
         }
     }
 }
@@ -214,7 +231,12 @@ impl Deserial for RootUpdate {
             0u8 => Ok(RootUpdate::RootKeysUpdate(source.get()?)),
             1u8 => Ok(RootUpdate::Level1KeysUpdate(source.get()?)),
             2u8 => Ok(RootUpdate::Level2KeysUpdate(source.get()?)),
-            3u8 => Ok(RootUpdate::Level2KeysUpdateV1(source.get()?)),
+            3u8 => Ok(RootUpdate::Level2KeysUpdateV1(Box::new(
+                AuthorizationsV1::deserial_v1(source)?,
+            ))),
+            4u8 => Ok(RootUpdate::Level2KeysUpdateV2(Box::new(
+                AuthorizationsV1::deserial_v2(source)?,
+            ))),
             tag => anyhow::bail!("Unknown RootUpdate tag {}", tag),
         }
     }
@@ -227,8 +249,21 @@ impl Deserial for RootUpdate {
 /// updates must be a separate transaction.
 pub enum Level1Update {
     Level1KeysUpdate(HigherLevelAccessStructure<Level1KeysKind>),
-    Level2KeysUpdate(Box<Authorizations<ChainParameterVersion0>>),
-    Level2KeysUpdateV1(Box<Authorizations<ChainParameterVersion1>>),
+    Level2KeysUpdate(Box<AuthorizationsV0>),
+    /// Updates the level 2 keys using the provided `AuthorizationsV1`.
+    ///
+    /// ### Note
+    ///
+    /// The `AuthorizationsV1` provided to this constructor *must* have `None`
+    /// for the `create_plt` field.
+    Level2KeysUpdateV1(Box<AuthorizationsV1>),
+    /// Updates the level 2 keys using the provided `AuthorizationsV1`.
+    ///
+    /// ### Note
+    ///
+    /// The `AuthorizationsV1` provided to this constructor *must* have
+    /// `Some(create_plt)` for the `create_plt` field.
+    Level2KeysUpdateV2(Box<AuthorizationsV1>),
 }
 
 impl Serial for Level1Update {
@@ -246,6 +281,10 @@ impl Serial for Level1Update {
                 2u8.serial(out);
                 l2k.serial(out)
             }
+            Level1Update::Level2KeysUpdateV2(l2k) => {
+                3u8.serial(out);
+                l2k.serial(out)
+            }
         }
     }
 }
@@ -255,7 +294,12 @@ impl Deserial for Level1Update {
         match u8::deserial(source)? {
             0u8 => Ok(Level1Update::Level1KeysUpdate(source.get()?)),
             1u8 => Ok(Level1Update::Level2KeysUpdate(source.get()?)),
-            2u8 => Ok(Level1Update::Level2KeysUpdateV1(source.get()?)),
+            2u8 => Ok(Level1Update::Level2KeysUpdateV1(Box::new(
+                AuthorizationsV1::deserial_v1(source)?,
+            ))),
+            3u8 => Ok(Level1Update::Level2KeysUpdateV2(Box::new(
+                AuthorizationsV1::deserial_v2(source)?,
+            ))),
             tag => anyhow::bail!("Unknown Level1Update tag {}", tag),
         }
     }
@@ -336,7 +380,7 @@ impl Deserial for AccessStructure {
 
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, common::Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Access structures for each of the different possible chain updates, togehter
+/// Access structures for each of the different possible chain updates, together
 /// with the context giving all the possible keys.
 pub struct AuthorizationsV0 {
     #[size_length = 2]
@@ -415,17 +459,19 @@ where
     Some(signer)
 }
 
-#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone, common::Serialize)]
+#[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-/// Access structures for each of the different possible chain updates, togehter
+/// Access structures for each of the different possible chain updates, together
 /// with the context giving all the possible keys.
 pub struct AuthorizationsV1 {
     #[serde(flatten)]
     pub v0:                  AuthorizationsV0,
     /// Keys for changing cooldown periods related to baking and delegating.
     pub cooldown_parameters: AccessStructure,
-    /// Keys for changing the lenghts of the reward period.
+    /// Keys for changing the length of the reward period.
     pub time_parameters:     AccessStructure,
+    /// Keys for creating a protocol level token.
+    pub create_plt:          Option<AccessStructure>,
 }
 
 impl AuthorizationsV1 {
@@ -442,6 +488,49 @@ impl AuthorizationsV1 {
     where
         UpdatePublicKey: for<'a> From<&'a K>, {
         construct_update_signer_worker(&self.v0.keys, update_key_indices, actual_keys)
+    }
+}
+
+impl Serial for AuthorizationsV1 {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.v0.serial(out);
+        self.cooldown_parameters.serial(out);
+        self.time_parameters.serial(out);
+        if let Some(create_plt) = &self.create_plt {
+            create_plt.serial(out);
+        }
+    }
+}
+
+impl AuthorizationsV1 {
+    /// Deserialize an "AuthorizationsV1" as an `AuthorizationsV1`.
+    /// This version does omits `create_plt`.
+    fn deserial_v1<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let v0: AuthorizationsV0 = source.get()?;
+        let cooldown_parameters: AccessStructure = source.get()?;
+        let time_parameters: AccessStructure = source.get()?;
+        let create_plt = None;
+        Ok(Self {
+            v0,
+            cooldown_parameters,
+            time_parameters,
+            create_plt,
+        })
+    }
+
+    /// Deserialize an "AuthorizationsV2"` as an `AuthorizationsV1`.
+    /// This version includes `create_plt`.
+    fn deserial_v2<R: ReadBytesExt>(source: &mut R) -> ParseResult<Self> {
+        let v0: AuthorizationsV0 = source.get()?;
+        let cooldown_parameters: AccessStructure = source.get()?;
+        let time_parameters: AccessStructure = source.get()?;
+        let create_plt = Some(source.get()?);
+        Ok(Self {
+            v0,
+            cooldown_parameters,
+            time_parameters,
+            create_plt,
+        })
     }
 }
 
@@ -694,6 +783,23 @@ pub enum UpdatePayload {
     FinalizationCommitteeParametersCPV2(FinalizationCommitteeParameters),
     #[serde(rename = "validatorScoreParametersCPV3")]
     ValidatorScoreParametersCPV3(ValidatorScoreParameters),
+    #[serde(rename = "createPlt")]
+    CreatePlt(CreatePlt),
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, common::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePlt {
+    /// The symbol of the token.
+    pub token_id:                  protocol_level_tokens::TokenId,
+    /// A SHA256 hash that identifies the token module implementation.
+    pub token_module:              protocol_level_tokens::TokenModuleRef,
+    /// The number of decimal places used in the representation of amounts of
+    /// this token. This determines the smallest representable fraction of the
+    /// token.
+    pub decimals:                  u8,
+    /// The initialization parameters of the token, encoded in CBOR.
+    pub initialization_parameters: protocol_level_tokens::RawCbor,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, Copy)]
@@ -757,6 +863,9 @@ pub enum UpdateType {
     /// Update of the validator score parameters. Only applies to
     /// protocol version [`P8`](ProtocolVersion::P8) and up.
     UpdateValidatorScoreParameters,
+    /// Create a new protocol level token. Only applies to
+    /// protocol version [`P9`](ProtocolVersion::P9) and up.
+    UpdateCreatePLT,
 }
 
 impl UpdatePayload {
@@ -788,6 +897,7 @@ impl UpdatePayload {
                 UpdateFinalizationCommitteeParameters
             }
             UpdatePayload::ValidatorScoreParametersCPV3(_) => UpdateValidatorScoreParameters,
+            UpdatePayload::CreatePlt(_) => UpdateCreatePLT,
         }
     }
 }
@@ -1009,6 +1119,10 @@ impl Serial for UpdatePayload {
                 23u8.serial(out);
                 update.serial(out)
             }
+            UpdatePayload::CreatePlt(update) => {
+                24u8.serial(out);
+                update.serial(out)
+            }
         }
     }
 }
@@ -1063,6 +1177,7 @@ impl Deserial for UpdatePayload {
                 source.get()?,
             )),
             23u8 => Ok(UpdatePayload::ValidatorScoreParametersCPV3(source.get()?)),
+            24u8 => Ok(UpdatePayload::CreatePlt(source.get()?)),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
     }

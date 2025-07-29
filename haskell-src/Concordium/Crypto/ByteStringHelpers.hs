@@ -24,6 +24,18 @@ import qualified Data.ByteString.Short.Internal as BSS
 import qualified Data.ByteString.Unsafe as BSU
 import Foreign.Marshal
 
+newtype ByteStringHex = ByteStringHex {hex :: BS.ByteString}
+
+instance AE.ToJSON ByteStringHex where
+    toJSON (ByteStringHex bs) =
+        AE.String (Text.decodeUtf8 (BS16.encode bs))
+
+instance AE.FromJSON ByteStringHex where
+    parseJSON = AE.withText "ByteStringHex" $ \txt ->
+        case BS16.decode (Text.encodeUtf8 txt) of
+            Right bs -> pure $ ByteStringHex bs
+            _ -> fail "Invalid Base16 encoding"
+
 byteStringToHex :: ByteString -> String
 byteStringToHex b = BS8.unpack (BS16.encode b)
 
@@ -57,11 +69,11 @@ fbsGet = FBS.fromShortByteString <$> getShortByteString (FBS.fixedLength (undefi
 
 -- | Wrapper used to automatically derive Show instances in base16 for types
 --  simply wrapping bytestrings.
-newtype ByteStringHex = ByteStringHex ShortByteString
+newtype ShortByteStringHex = ShortByteStringHex ShortByteString
     deriving (Eq)
 
-instance Show ByteStringHex where
-    show (ByteStringHex s) = byteStringToHex (BSS.fromShort s)
+instance Show ShortByteStringHex where
+    show (ShortByteStringHex s) = byteStringToHex (BSS.fromShort s)
 
 -- | Wrapper used to automatically derive Show and JSON instances in base16 for
 --  types simply wrapping fixed byte stringns.
@@ -121,14 +133,14 @@ instance AE.FromJSON Short65K where
             Left _ -> AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
 -- | JSON instances based on base16 encoding.
-instance AE.ToJSON ByteStringHex where
+instance AE.ToJSON ShortByteStringHex where
     toJSON v = AE.String (Text.pack (show v))
 
 -- | JSON instances based on base16 encoding.
-instance AE.FromJSON ByteStringHex where
+instance AE.FromJSON ShortByteStringHex where
     parseJSON = AE.withText "ByteStringHex" $ \t ->
         case BS16.decode (Text.encodeUtf8 t) of
-            Right bs -> return (ByteStringHex (BSS.toShort bs))
+            Right bs -> return (ShortByteStringHex (BSS.toShort bs))
             Left _ -> AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
 -- | Use the serialize instance of a type to deserialize. In contrast to

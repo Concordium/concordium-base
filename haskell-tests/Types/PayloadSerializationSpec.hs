@@ -54,6 +54,7 @@ isPayloadSupported pv ConfigureBaker{..}
     | isNothing cbSuspend = pv > P3
     | otherwise = pv > P7
 isPayloadSupported pv ConfigureDelegation{} = pv > P3
+isPayloadSupported pv TokenUpdate{} = pv >= P9
 
 testSerializeEncryptedTransfer :: SProtocolVersion pv -> Property
 testSerializeEncryptedTransfer spv =
@@ -143,8 +144,9 @@ genInvalidPayloadConfigureBaker pv =
         return $
             modifyPayloadBitmap (if doSetSuspendBit then setSuspendBit else id) $
                 S.runPut $
-                    putPayload $
-                        p{cbSuspend = Just b}
+                    putPayload $ case p of
+                        ConfigureBaker{} -> p{cbSuspend = Just b}
+                        _ -> p -- This cannot happen.
     suspendBitmask = Bit.shiftL 1 9
     setSuspendBit bm = suspendBitmask Bit..|. bm
 
@@ -185,6 +187,7 @@ tests = do
         test SP7 25 1000
         test SP7 50 500
         test SP8 50 500
+        test SP9 50 500
     describe "Negative payload serialization tests" $ do
         negativeTest SP4 20 200
         negativeTest SP6 20 200
@@ -193,6 +196,7 @@ tests = do
         negativeTestPadded SP6 20 200
         negativeTestPadded SP7 20 200
         negativeTestPadded SP8 20 200
+        negativeTestPadded SP9 20 200
     describe "Encrypted transfer payloads P6" $ do
         specify "Encrypted transfer" $ testSerializeEncryptedTransfer SP6
         specify "Encrypted transfer with memo" $ testSerializeEncryptedTransferWithMemo SP6
@@ -206,7 +210,7 @@ tests = do
         specify "Encrypted transfer with memo" $ testSerializeEncryptedTransferWithMemo SP8
         specify "Transfer to public" $ testSecToPubTransfer SP8
     describe "Unsafe payload serialization tests" $ do
-        forM_ [P1, P2, P3, P4, P5, P6, P7, P8] $ \pv -> do
+        forM_ [P1, P2, P3, P4, P5, P6, P7, P8, P9] $ \pv -> do
             case promoteProtocolVersion pv of
                 (SomeProtocolVersion spv) -> testUnsafe spv 25 1000
   where

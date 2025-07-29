@@ -362,9 +362,9 @@ toRawCredRegId = RawCredentialRegistrationID . FBS.fromByteString . encode
 
 newtype Proofs = Proofs ShortByteString
     deriving (Eq)
-    deriving (Show) via ByteStringHex
-    deriving (ToJSON) via ByteStringHex
-    deriving (FromJSON) via ByteStringHex
+    deriving (Show) via ShortByteStringHex
+    deriving (ToJSON) via ShortByteStringHex
+    deriving (FromJSON) via ShortByteStringHex
 
 -- | NB: This puts the length information up front, which is possibly not what we
 --  want.
@@ -904,7 +904,7 @@ instance (Serialize credTy) => Serialize (InitialCredentialDeploymentValues' cre
 -- | A signature using the Ed25519 signature scheme.
 --  Always 64 bytes in length.
 newtype IpCdiSignature = IpCdiSignature {theSignature :: ShortByteString}
-    deriving (ToJSON, FromJSON, Show) via ByteStringHex
+    deriving (ToJSON, FromJSON, Show) via ShortByteStringHex
 
 instance Serialize IpCdiSignature where
     put = putShortByteString . theSignature

@@ -95,6 +95,26 @@ module Concordium.Types.ProtocolVersion (
     -- | Defunctionalisation symbol for 'ChainParametersVersionFor'.
     ChainParametersVersionForSym0,
 
+    -- * Authorizations version
+
+    -- | Version of the authorizations structure.
+    --
+    --  * 'AuthorizationsVersion0' ('ChainParametersV0').
+    --  * 'AuthorizationsVersion1' ('ChainParametersV1', 'ChainParametersV2'): add access structures
+    --    for cooldown parameters and time parameters
+    AuthorizationsVersion (..),
+    -- | Singleton type associated with 'AuthorizationsVersion'.
+    SAuthorizationsVersion (..),
+    -- | The authorizations version associated with a protocol version.
+    authorizationsVersionFor,
+    authorizationsVersion,
+    -- | The authorizations version associated with a protocol version (types).
+    AuthorizationsVersionFor,
+    -- | The authorizations version associated with a protocol version (singletons).
+    sAuthorizationsVersionFor,
+    IsAuthorizationsVersion,
+    IsCompatibleAuthorizationsVersion,
+
     -- * Account version
 
     -- | A data kind used for parametrising account-related types.
@@ -108,6 +128,10 @@ module Concordium.Types.ProtocolVersion (
     --    * 'AccountV2' is used in 'P5' and 'P6'. Modifies the hash calculation.
     --
     --    * 'AccountV3' is used in 'P7'. Modifies the stake cooldown behaviour.
+    --
+    --    * 'AccountV4' is used in 'P8'. Adds suspension of inactive validators.
+    --
+    --    * 'AccountV5' is used in 'P9'. Adds protocol level tokens.
     AccountVersion (..),
     -- | Singleton type corresponding to 'AccountVersion'.
     SAccountVersion (..),
@@ -189,6 +213,18 @@ module Concordium.Types.ProtocolVersion (
     AVSupportsValidatorSuspension,
     PVSupportsValidatorSuspension,
 
+    -- * PLT support
+
+    -- | Determine whether protocol level tokens are supported.
+    SupportsPLT,
+    supportsPLT,
+    sSupportsPLT,
+    protocolSupportsPLT,
+    -- | Determine whether a specific account version supports protocol level tokens.
+    AVSupportsPLT,
+    -- | Determine whether a specific protocol version supports protocol level tokens.
+    PVSupportsPLT,
+
     -- * Block hash version
 
     -- | The version of the block hashing structure.
@@ -233,6 +269,7 @@ module Concordium.Types.ProtocolVersion (
     P6Sym0,
     P7Sym0,
     P8Sym0,
+    P9Sym0,
 ) where
 
 import Control.Monad.Except (ExceptT)
@@ -262,6 +299,7 @@ $( singletons
             | P6
             | P7
             | P8
+            | P9
             deriving (Eq, Ord)
 
         data ChainParametersVersion
@@ -280,6 +318,7 @@ $( singletons
         chainParametersVersionFor P6 = ChainParametersV2
         chainParametersVersionFor P7 = ChainParametersV2
         chainParametersVersionFor P8 = ChainParametersV3
+        chainParametersVersionFor P9 = ChainParametersV3
 
         -- \* Account versions
 
@@ -297,6 +336,8 @@ $( singletons
               AccountV3
             | -- \|Account version used in P8. Adds suspension of inactive validators.
               AccountV4
+            | -- \|Account version used in P9. Adds protocol level tokens.
+              AccountV5
 
         -- \|'AccountVersion' associated with a 'ProtocolVersion'.
         accountVersionFor :: ProtocolVersion -> AccountVersion
@@ -308,6 +349,25 @@ $( singletons
         accountVersionFor P6 = AccountV2
         accountVersionFor P7 = AccountV3
         accountVersionFor P8 = AccountV4
+        accountVersionFor P9 = AccountV5
+
+        -- \|Authorizations version.
+        data AuthorizationsVersion
+            = AuthorizationsVersion0 -- \^Initial set of authorizations
+            | AuthorizationsVersion1 -- \^Adds cooldown parameters and time parameters
+            | AuthorizationsVersion2 -- \^Adds authorization for the CreatePLT chain update
+
+        -- \|The authorizations version associated with a protocol version.
+        authorizationsVersionFor :: ProtocolVersion -> AuthorizationsVersion
+        authorizationsVersionFor P1 = AuthorizationsVersion0
+        authorizationsVersionFor P2 = AuthorizationsVersion0
+        authorizationsVersionFor P3 = AuthorizationsVersion0
+        authorizationsVersionFor P4 = AuthorizationsVersion1
+        authorizationsVersionFor P5 = AuthorizationsVersion1
+        authorizationsVersionFor P6 = AuthorizationsVersion1
+        authorizationsVersionFor P7 = AuthorizationsVersion1
+        authorizationsVersionFor P8 = AuthorizationsVersion1
+        authorizationsVersionFor P9 = AuthorizationsVersion2
 
         -- \|Transaction outcomes versions.
         -- The difference between the two versions are only related
@@ -333,6 +393,7 @@ $( singletons
         transactionOutcomesVersionFor P6 = TOV1
         transactionOutcomesVersionFor P7 = TOV2
         transactionOutcomesVersionFor P8 = TOV2
+        transactionOutcomesVersionFor P9 = TOV2
 
         supportsDelegation :: AccountVersion -> Bool
         supportsDelegation AccountV0 = False
@@ -340,6 +401,7 @@ $( singletons
         supportsDelegation AccountV2 = True
         supportsDelegation AccountV3 = True
         supportsDelegation AccountV4 = True
+        supportsDelegation AccountV5 = True
 
         supportsFlexibleCooldown :: AccountVersion -> Bool
         supportsFlexibleCooldown AccountV0 = False
@@ -347,6 +409,7 @@ $( singletons
         supportsFlexibleCooldown AccountV2 = False
         supportsFlexibleCooldown AccountV3 = True
         supportsFlexibleCooldown AccountV4 = True
+        supportsFlexibleCooldown AccountV5 = True
 
         supportsValidatorSuspension :: AccountVersion -> Bool
         supportsValidatorSuspension AccountV0 = False
@@ -354,6 +417,15 @@ $( singletons
         supportsValidatorSuspension AccountV2 = False
         supportsValidatorSuspension AccountV3 = False
         supportsValidatorSuspension AccountV4 = True
+        supportsValidatorSuspension AccountV5 = True
+
+        supportsPLT :: AccountVersion -> Bool
+        supportsPLT AccountV0 = False
+        supportsPLT AccountV1 = False
+        supportsPLT AccountV2 = False
+        supportsPLT AccountV3 = False
+        supportsPLT AccountV4 = False
+        supportsPLT AccountV5 = True
 
         -- \| A type representing the different hashing structures used for the block hash depending on
         -- the protocol version.
@@ -373,6 +445,7 @@ $( singletons
         blockHashVersionFor P6 = BlockHashVersion0
         blockHashVersionFor P7 = BlockHashVersion1
         blockHashVersionFor P8 = BlockHashVersion1
+        blockHashVersionFor P9 = BlockHashVersion1
 
         -- \| Whether the block state hash is tracked as part of the block metadata.
         blockStateHashInMetadata :: BlockHashVersion -> Bool
@@ -398,6 +471,7 @@ protocolVersionToWord64 P5 = 5
 protocolVersionToWord64 P6 = 6
 protocolVersionToWord64 P7 = 7
 protocolVersionToWord64 P8 = 8
+protocolVersionToWord64 P9 = 9
 
 -- | Parse a 'Word64' as a 'ProtocolVersion'.
 protocolVersionFromWord64 :: (MonadFail m) => Word64 -> m ProtocolVersion
@@ -409,6 +483,7 @@ protocolVersionFromWord64 5 = return P5
 protocolVersionFromWord64 6 = return P6
 protocolVersionFromWord64 7 = return P7
 protocolVersionFromWord64 8 = return P8
+protocolVersionFromWord64 9 = return P9
 protocolVersionFromWord64 v = fail $ "Unknown protocol version: " ++ show v
 
 -- | Convert a @ChainParametersVersion@ to the corresponding 'Word64'.
@@ -445,6 +520,7 @@ promoteProtocolVersion P5 = SomeProtocolVersion SP5
 promoteProtocolVersion P6 = SomeProtocolVersion SP6
 promoteProtocolVersion P7 = SomeProtocolVersion SP7
 promoteProtocolVersion P8 = SomeProtocolVersion SP8
+promoteProtocolVersion P9 = SomeProtocolVersion SP9
 
 -- | Demote an 'SProtocolVersion' to a 'ProtocolVersion'.
 demoteProtocolVersion :: SProtocolVersion pv -> ProtocolVersion
@@ -457,6 +533,10 @@ type IsAccountVersion (av :: AccountVersion) = SingI av
 -- | Constraint on a type level 'ChainParametersVersion' that can be used to get a corresponding
 --  'SChainParametersVersion' (see 'chainParametersVersion'). (An alias for 'SingI'.)
 type IsChainParametersVersion (cpv :: ChainParametersVersion) = SingI cpv
+
+-- | Constraint on a type level 'AuthorizationsVersion' that can be used to get a corresponding
+--  'SAuthorizationsVersion'.
+type IsAuthorizationsVersion (auv :: AuthorizationsVersion) = SingI auv
 
 -- | Constraint on a type level 'TransactionOutcomesVersion' that can be used to get a corresponding
 --  'STransactionOutcomesVersion' (see 'transactionOutcomesVersion'). (An alias for 'SingI'.)
@@ -478,6 +558,8 @@ type IsBlockHashVersion (bhv :: BlockHashVersion) = SingI bhv
 class
     ( SingI pv,
       IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAuthorizationsVersion (AuthorizationsVersionFor pv),
+      IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
       IsBlockHashVersion (BlockHashVersionFor pv)
@@ -487,6 +569,8 @@ class
 instance
     ( SingI pv,
       IsChainParametersVersion (ChainParametersVersionFor pv),
+      IsAuthorizationsVersion (AuthorizationsVersionFor pv),
+      IsCompatibleAuthorizationsVersion (ChainParametersVersionFor pv) (AuthorizationsVersionFor pv) ~ 'True,
       IsAccountVersion (AccountVersionFor pv),
       IsTransactionOutcomesVersion (TransactionOutcomesVersionFor pv),
       IsBlockHashVersion (BlockHashVersionFor pv)
@@ -521,6 +605,10 @@ accountVersion = sing
 chainParametersVersion :: (IsChainParametersVersion cpv) => SChainParametersVersion cpv
 chainParametersVersion = sing
 
+-- | Produce the singleton 'SAuthorizationsVersion' from an 'IsAuthorizationsVersion' constraint.
+authorizationsVersion :: (IsAuthorizationsVersion auv) => SAuthorizationsVersion auv
+authorizationsVersion = sing
+
 -- | Produce the singleton 'STransactionOutcomesVersion' from an 'IsTransactionOutcomesVersion' constraint.
 transactionOutcomesVersion :: (IsTransactionOutcomesVersion tov) => STransactionOutcomesVersion tov
 transactionOutcomesVersion = sing
@@ -532,6 +620,16 @@ demoteChainParameterVersion = fromSing
 -- | Produce the singleton 'SBlockHashVersion' from an 'IsBlockHashVersion' constraint.
 blockHashVersion :: (IsBlockHashVersion bhv) => SBlockHashVersion bhv
 blockHashVersion = sing
+
+-- | This type family indicates when a 'ChainParametersVersion' and 'AuthorizationsVersion' are compatible,
+--  that is, there is a protocol version associated with both.
+type family IsCompatibleAuthorizationsVersion cpv auv where
+    IsCompatibleAuthorizationsVersion ChainParametersV0 AuthorizationsVersion0 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV1 AuthorizationsVersion1 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV2 AuthorizationsVersion1 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion1 = True
+    IsCompatibleAuthorizationsVersion ChainParametersV3 AuthorizationsVersion2 = True
+    IsCompatibleAuthorizationsVersion _ _ = False
 
 -- | Constraint that an account version supports delegation.
 type AVSupportsDelegation (av :: AccountVersion) =
@@ -558,6 +656,7 @@ delegationSupport = case accountVersion @av of
     SAccountV2 -> SAVDelegationSupported
     SAccountV3 -> SAVDelegationSupported
     SAccountV4 -> SAVDelegationSupported
+    SAccountV5 -> SAVDelegationSupported
 
 -- | Whether the protocol supports delegation functionality.
 protocolSupportsDelegation :: SProtocolVersion pv -> Bool
@@ -581,6 +680,21 @@ type AVSupportsValidatorSuspension (av :: AccountVersion) =
 type PVSupportsValidatorSuspension (pv :: ProtocolVersion) =
     AVSupportsValidatorSuspension (AccountVersionFor pv)
 
+-- | Constraint that an account version supports protocol level tokens.
+type AVSupportsPLT (av :: AccountVersion) =
+    SupportsPLT av ~ 'True
+
+-- | Constraint that a protocol version supports protocol level tokens.
+type PVSupportsPLT (pv :: ProtocolVersion) =
+    AVSupportsPLT (AccountVersionFor pv)
+
+-- | Whether the protocol version supports Protocol Level Tokens (PLT).
+protocolSupportsPLT :: SProtocolVersion pv -> Bool
+{-# INLINE protocolSupportsPLT #-}
+protocolSupportsPLT spv = case sSupportsPLT (sAccountVersionFor spv) of
+    STrue -> True
+    SFalse -> False
+
 -- | Constraint that an account version supports flexible cooldown.
 --
 -- Note, we do not use 'Assert' here, since that results in a weaker constraint that requires
@@ -603,6 +717,7 @@ supportsMemo SP5 = True
 supportsMemo SP6 = True
 supportsMemo SP7 = True
 supportsMemo SP8 = True
+supportsMemo SP9 = True
 
 -- | Whether the protocol version supports account aliases.
 --  (Account aliases are supported in 'P3' onwards.)
@@ -615,6 +730,7 @@ supportsAccountAliases SP5 = True
 supportsAccountAliases SP6 = True
 supportsAccountAliases SP7 = True
 supportsAccountAliases SP8 = True
+supportsAccountAliases SP9 = True
 
 -- | Whether the protocol version supports V1 smart contracts.
 --  (V1 contracts are supported in 'P4' onwards.)
@@ -627,6 +743,7 @@ supportsV1Contracts SP5 = True
 supportsV1Contracts SP6 = True
 supportsV1Contracts SP7 = True
 supportsV1Contracts SP8 = True
+supportsV1Contracts SP9 = True
 
 -- | Whether the protocol version supports delegation.
 --  (Delegation is supported in 'P4' onwards.)
@@ -639,6 +756,7 @@ supportsDelegationPV SP5 = True
 supportsDelegationPV SP6 = True
 supportsDelegationPV SP7 = True
 supportsDelegationPV SP8 = True
+supportsDelegationPV SP9 = True
 
 -- | Whether the protocol version supports upgradable smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -652,6 +770,7 @@ supportsUpgradableContracts spv = case spv of
     SP6 -> True
     SP7 -> True
     SP8 -> True
+    SP9 -> True
 
 -- | Whether the protocol version supports chain queries in smart contracts.
 --  (Supported in 'P5' and onwards)
@@ -665,6 +784,7 @@ supportsChainQueryContracts spv = case spv of
     SP6 -> True
     SP7 -> True
     SP8 -> True
+    SP9 -> True
 
 -- | Whether the protocol version supports sign extension instructions for V1
 --  contracts. (Supported in 'P6' and onwards)
@@ -678,6 +798,7 @@ supportsSignExtensionInstructions spv = case spv of
     SP6 -> True
     SP7 -> True
     SP8 -> True
+    SP9 -> True
 
 -- | Whether the protocol version allows globals in data and element sections of
 --  Wasm modules for V1 contracts. (Supported before 'P6')
@@ -691,6 +812,7 @@ supportsGlobalsInInitSections spv = case spv of
     SP6 -> False
     SP7 -> False
     SP8 -> False
+    SP9 -> False
 
 -- | Whether the protocol version specifies that custom section should not be
 --  counted towards module size when executing V1 contracts.
@@ -710,6 +832,7 @@ supportsAccountSignatureChecks spv = case spv of
     SP6 -> True
     SP7 -> True
     SP8 -> True
+    SP9 -> True
 
 -- | Whether the protocol version supports querying a smart contract's module reference and name
 --  from smart contracts.
@@ -724,6 +847,7 @@ supportsContractInspectionQueries = \case
     SP6 -> False
     SP7 -> True
     SP8 -> True
+    SP9 -> True
 
 -- | Whether the protocol version supports encrypting balances and sending encrypted transfers.
 --  (Disabled in 'P7' and onwards.)
@@ -737,3 +861,4 @@ supportsEncryptedTransfers = \case
     SP6 -> True
     SP7 -> False
     SP8 -> False
+    SP9 -> False

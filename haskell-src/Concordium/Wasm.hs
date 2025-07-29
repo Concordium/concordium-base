@@ -170,7 +170,7 @@ import Foreign.C (CStringLen)
 
 import Concordium.Common.Time
 import Concordium.Constants
-import Concordium.Crypto.ByteStringHelpers (ByteStringHex (..))
+import Concordium.Crypto.ByteStringHelpers (ShortByteStringHex (..))
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.ID.Types
 import Concordium.Types
@@ -194,6 +194,7 @@ pvCostSemanticsVersion = \case
     SP6 -> CSV0
     SP7 -> CSV1
     SP8 -> CSV1
+    SP9 -> CSV1
 
 -- | Convert the version to a Word8. This is used when transferring information
 --  via FFI.
@@ -585,7 +586,7 @@ instance Serialize ReceiveName where
 --  by deserialization methods.
 newtype Parameter = Parameter {parameter :: ShortByteString}
     deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via ByteStringHex
+    deriving (AE.ToJSON, AE.FromJSON, Show) via ShortByteStringHex
 
 -- | Parameter of size 0.
 emptyParameter :: Parameter
@@ -851,7 +852,7 @@ getActionsTree' size = go HM.empty 0
 -- | Event as reported by contract execution.
 newtype ContractEvent = ContractEvent BSS.ShortByteString
     deriving (Eq)
-    deriving (AE.ToJSON, AE.FromJSON, Show) via ByteStringHex
+    deriving (AE.ToJSON, AE.FromJSON, Show) via ShortByteStringHex
 
 instance Serialize ContractEvent where
     put (ContractEvent ev) = putShortByteStringWord32 ev
@@ -905,7 +906,7 @@ data InstanceInfo
     deriving (Eq, Show)
 
 -- | Helper function for JSON encoding an 'InstanceInfo'.
-instancePairs :: (AE.KeyValue kv) => InstanceInfo -> [kv]
+instancePairs :: (AE.KeyValue e kv) => InstanceInfo -> [kv]
 {-# INLINE instancePairs #-}
 instancePairs InstanceInfoV0{..} =
     [ "model" AE..= iiModel,

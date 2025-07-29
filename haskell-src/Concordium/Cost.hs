@@ -121,6 +121,30 @@ removeBakerCost = 300
 configureDelegationCost :: Energy
 configureDelegationCost = 300
 
+-- | Base cost for token update transactions.
+tokenUpdateBaseCost :: Energy
+tokenUpdateBaseCost = 300
+
+-- | Cost for the execution of a token transfer.
+tokenTransferCost :: Energy
+tokenTransferCost = 100
+
+-- | Cost to mint a token.
+tokenMintCost :: Energy
+tokenMintCost = 50
+
+-- | Cost to burn a token.
+tokenBurnCost :: Energy
+tokenBurnCost = 50
+
+-- | Cost to carry out a list operation (add/remove from allow/deny list).
+tokenListOperationCost :: Energy
+tokenListOperationCost = 50
+
+-- | Cost to pause/unpause mint/burn/transfer operations.
+tokenPauseUnpauseCost :: Energy
+tokenPauseUnpauseCost = 50
+
 -- | C_t for updating account credentials
 updateCredentialsCost ::
     -- | The number of credentials on the account before the update.
@@ -224,6 +248,7 @@ lookupModule SP5 ms = fromIntegral ms `div` 50
 lookupModule SP6 ms = fromIntegral ms `div` 50
 lookupModule SP7 ms = fromIntegral ms `div` 500
 lookupModule SP8 ms = fromIntegral ms `div` 500
+lookupModule SP9 ms = fromIntegral ms `div` 500
 
 -- | The base cost of initializing a contract instance to cover administrative costs.
 -- Even if no code is run and no instance created.

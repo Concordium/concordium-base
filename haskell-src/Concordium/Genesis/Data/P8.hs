@@ -149,7 +149,7 @@ regenesisBlockHash GDP8Regenesis{genesisRegenesis = BaseV1.RegenesisDataV1{..}} 
 regenesisBlockHash GDP8RegenesisFromP7{genesisRegenesis = BaseV1.RegenesisDataV1{..}, ..} = BlockHash . Hash.hashLazy . runPutLazy $ do
     put genesisSlot
     put P8
-    putWord8 2 -- migration from P6 variant
+    putWord8 2 -- migration from P7 variant
     put genesisCore
     put genesisFirstGenesis
     put genesisPreviousGenesis

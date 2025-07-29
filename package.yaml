@@ -9,6 +9,8 @@ copyright:           "Concordium AG"
 extra-source-files:
 - README.md
 - LICENSE
+- ./concordium-grpc-api/v2/concordium/kernel.proto
+- ./concordium-grpc-api/v2/concordium/protocol-level-tokens.proto
 - ./concordium-grpc-api/v2/concordium/types.proto
 - ./concordium-grpc-api/v2/concordium/service.proto
 - ./concordium-grpc-api/v2/concordium/health.proto
@@ -48,6 +50,7 @@ flags:
 
 dependencies:
 - aeson >= 1.4.2
+- attoparsec-aeson
 - base >= 4.7 && < 5
 - base16-bytestring >= 0.1.1.6
 - base64-bytestring >= 1.1.0.0
@@ -55,6 +58,7 @@ dependencies:
 # be used for everything else.
 - binary >= 0.8
 - bytestring >= 0.10
+- cborg >= 0.2
 - cereal >= 0.5
 - containers >= 0.6
 - cryptonite >= 0.27
@@ -112,6 +116,10 @@ library:
     Proto.V2.Concordium.Service_Fields
     Proto.V2.Concordium.Types
     Proto.V2.Concordium.Types_Fields
+    Proto.V2.Concordium.Kernel
+    Proto.V2.Concordium.Kernel_Fields
+    Proto.V2.Concordium.ProtocolLevelTokens
+    Proto.V2.Concordium.ProtocolLevelTokens_Fields
 
 executables:
   generate-update-keys:

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Extend FFI with functions for lookup and inserting values into the state trie.
+
 ## concordium-smart-contract-engine 6.1.0 (2025-03-18)
 
 - Removed `TestResult` and `run_module_tests` since they will be moved to `cargo-concordium`. As part of this `TestHost.rng_used` has been made public.

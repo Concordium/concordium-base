@@ -39,6 +39,7 @@ $( singletons
         seedStateVersionFor P6 = SeedStateVersion1
         seedStateVersionFor P7 = SeedStateVersion1
         seedStateVersionFor P8 = SeedStateVersion1
+        seedStateVersionFor P9 = SeedStateVersion1
 
         supportsEpochLength :: SeedStateVersion -> Bool
         supportsEpochLength SeedStateVersion0 = True

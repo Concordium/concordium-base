@@ -8,6 +8,7 @@ import Concordium.Genesis.Data
 import qualified Concordium.Genesis.Data.P4 as P4
 import qualified Concordium.Genesis.Data.P6 as P6
 import qualified Concordium.Genesis.Data.P8 as P8
+import qualified Concordium.Genesis.Data.P9 as P9
 import Concordium.Types
 import Concordium.Types.Accounts
 import Concordium.Types.Parameters
@@ -19,8 +20,8 @@ import Concordium.Types.Updates
 migrateAuthorizations ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    Authorizations (AuthorizationsVersionForPV oldpv) ->
-    Authorizations (AuthorizationsVersionForPV pv)
+    Authorizations (AuthorizationsVersionFor oldpv) ->
+    Authorizations (AuthorizationsVersionFor pv)
 migrateAuthorizations StateMigrationParametersTrivial auths = auths
 migrateAuthorizations StateMigrationParametersP1P2 auths = auths
 migrateAuthorizations StateMigrationParametersP2P3 auths = auths
@@ -38,6 +39,13 @@ migrateAuthorizations StateMigrationParametersP4ToP5 auths = auths
 migrateAuthorizations StateMigrationParametersP5ToP6{} auths = auths
 migrateAuthorizations StateMigrationParametersP6ToP7{} auths = auths
 migrateAuthorizations StateMigrationParametersP7ToP8{} auths = auths
+migrateAuthorizations (StateMigrationParametersP8ToP9 migration) Authorizations{..} =
+    Authorizations
+        { asCreatePLT = CTrue updateCreatePLTAccessStructure,
+          ..
+        }
+  where
+    P9.ProtocolUpdateData{..} = P9.migrationProtocolUpdateData migration
 
 -- | Apply a state migration to an 'UpdateKeysCollection' structure.
 --
@@ -45,8 +53,8 @@ migrateAuthorizations StateMigrationParametersP7ToP8{} auths = auths
 migrateUpdateKeysCollection ::
     forall oldpv pv.
     StateMigrationParameters oldpv pv ->
-    UpdateKeysCollection (AuthorizationsVersionForPV oldpv) ->
-    UpdateKeysCollection (AuthorizationsVersionForPV pv)
+    UpdateKeysCollection (AuthorizationsVersionFor oldpv) ->
+    UpdateKeysCollection (AuthorizationsVersionFor pv)
 migrateUpdateKeysCollection migration UpdateKeysCollection{..} =
     UpdateKeysCollection{level2Keys = migrateAuthorizations migration level2Keys, ..}
 
@@ -67,6 +75,7 @@ migrateMintDistribution StateMigrationParametersP4ToP5 mint = mint
 migrateMintDistribution StateMigrationParametersP5ToP6{} mint = mint
 migrateMintDistribution StateMigrationParametersP6ToP7{} mint = mint
 migrateMintDistribution StateMigrationParametersP7ToP8{} mint = mint
+migrateMintDistribution StateMigrationParametersP8ToP9{} mint = mint
 
 -- | Apply a state migration to a 'PoolParameters' structure.
 --
@@ -85,6 +94,7 @@ migratePoolParameters StateMigrationParametersP4ToP5 poolParams = poolParams
 migratePoolParameters StateMigrationParametersP5ToP6{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP6ToP7{} poolParams = poolParams
 migratePoolParameters StateMigrationParametersP7ToP8{} poolParams = poolParams
+migratePoolParameters StateMigrationParametersP8ToP9{} poolParams = poolParams
 
 -- | Apply a state migration to a 'GASRewards' structure.
 --
@@ -103,6 +113,7 @@ migrateGASRewards StateMigrationParametersP4ToP5 gr = gr
 migrateGASRewards StateMigrationParametersP5ToP6{} GASRewards{..} = GASRewards{_gasFinalizationProof = CFalse, ..}
 migrateGASRewards StateMigrationParametersP6ToP7{} gr = gr
 migrateGASRewards StateMigrationParametersP7ToP8{} gr = gr
+migrateGASRewards StateMigrationParametersP8ToP9{} gr = gr
 
 -- | Apply a state migration to a 'ChainParameters' structure.
 --
@@ -175,6 +186,16 @@ migrateChainParameters m@(StateMigrationParametersP7ToP8 migration) ChainParamet
         }
   where
     RewardParameters{..} = _cpRewardParameters
+migrateChainParameters StateMigrationParametersP8ToP9{} ChainParameters{..} =
+    ChainParameters
+        { _cpValidatorScoreParameters = SomeParam $ unOParam _cpValidatorScoreParameters,
+          _cpTimeParameters = SomeParam $ unOParam _cpTimeParameters,
+          _cpFinalizationCommitteeParameters = SomeParam $ unOParam _cpFinalizationCommitteeParameters,
+          _cpRewardParameters = RewardParameters{..},
+          ..
+        }
+  where
+    RewardParameters{..} = _cpRewardParameters
 
 -- | Migrate time of the effective change from V0 to V1 accounts. Currently this
 --  translates times relative to genesis to times relative to the unix epoch.
@@ -204,3 +225,4 @@ migrateStakePendingChange StateMigrationParametersP4ToP5 = fmap coercePendingCha
 migrateStakePendingChange StateMigrationParametersP5ToP6{} = id
 migrateStakePendingChange StateMigrationParametersP6ToP7{} = const NoChange
 migrateStakePendingChange StateMigrationParametersP7ToP8{} = const NoChange
+migrateStakePendingChange StateMigrationParametersP8ToP9{} = const NoChange

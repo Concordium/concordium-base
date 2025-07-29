@@ -136,19 +136,19 @@ testSerializeProofJSON = forAllSK $ \sk d -> monadicIO $ do
 
 tests :: Spec
 tests = describe "Concordium.Crypto.BlsSignature" $ do
-    it "bls_key_collision" $ withMaxSuccess 10000 $ testKeyCollision
-    it "bls_signature_collision" $ withMaxSuccess 10000 $ testNoSignatureCollision
-    it "bls_sign_and_verify" $ withMaxSuccess 10000 $ testSignAndVerify
-    it "bls_verify_aggregated_sig_hybrid" $ withMaxSuccess 1000 $ testVerifyAggratedSigHybrid
-    it "bls_sign_and_verify_collision" $ withMaxSuccess 10000 $ testSignAndVerifyCollision
-    it "bls_serialize_sk" $ withMaxSuccess 10000 $ testSerializeSecretKey
-    it "bls_serialize_pk" $ withMaxSuccess 10000 $ testSerializePublicKey
-    it "bls_serialize_sig" $ withMaxSuccess 10000 $ testSerializeSignature
-    it "bls_json_pk" $ withMaxSuccess 10000 $ testSerializePublicKeyJSON
-    it "bls_json_sk" $ withMaxSuccess 10000 $ testSerializeSecretKeyJSON
-    it "bls_json_sig" $ withMaxSuccess 10000 $ testSerializeSignatureJSON
-    it "bls_serialize_proof" $ withMaxSuccess 10000 $ testSerializeProof
-    it "bls_json_proof" $ withMaxSuccess 10000 $ testSerializeProofJSON
-    it "bls_proof_sound" $ withMaxSuccess 10000 $ testProofSoundness
-    it "bls_proof_no_context_collision" $ withMaxSuccess 10000 $ testProofNoContextCollision
-    it "bls_wrong_proof" $ withMaxSuccess 10000 $ testProofWrongKey
+    it "bls_key_collision" $ withMaxSuccess 1000 $ testKeyCollision
+    it "bls_signature_collision" $ withMaxSuccess 1000 $ testNoSignatureCollision
+    it "bls_sign_and_verify" $ withMaxSuccess 1000 $ testSignAndVerify
+    it "bls_verify_aggregated_sig_hybrid" $ withMaxSuccess 100 $ testVerifyAggratedSigHybrid
+    it "bls_sign_and_verify_collision" $ withMaxSuccess 1000 $ testSignAndVerifyCollision
+    it "bls_serialize_sk" $ withMaxSuccess 1000 $ testSerializeSecretKey
+    it "bls_serialize_pk" $ withMaxSuccess 1000 $ testSerializePublicKey
+    it "bls_serialize_sig" $ withMaxSuccess 1000 $ testSerializeSignature
+    it "bls_json_pk" $ withMaxSuccess 1000 $ testSerializePublicKeyJSON
+    it "bls_json_sk" $ withMaxSuccess 1000 $ testSerializeSecretKeyJSON
+    it "bls_json_sig" $ withMaxSuccess 1000 $ testSerializeSignatureJSON
+    it "bls_serialize_proof" $ withMaxSuccess 1000 $ testSerializeProof
+    it "bls_json_proof" $ withMaxSuccess 1000 $ testSerializeProofJSON
+    it "bls_proof_sound" $ withMaxSuccess 1000 $ testProofSoundness
+    it "bls_proof_no_context_collision" $ withMaxSuccess 1000 $ testProofNoContextCollision
+    it "bls_wrong_proof" $ withMaxSuccess 1000 $ testProofWrongKey

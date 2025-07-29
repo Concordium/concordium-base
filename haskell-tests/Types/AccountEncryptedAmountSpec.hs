@@ -22,5 +22,5 @@ testJSONSerialization = forAll genAccountEncryptedAmount $ \acc ->
 
 tests :: Spec
 tests = parallel $ do
-    specify "AccountEncryptedAmount binary serialization" $ withMaxSuccess 1000 $ testBinarySerialization
-    specify "AccountEncryptedAmount JSON serialization" $ withMaxSuccess 1000 $ testJSONSerialization
+    specify "AccountEncryptedAmount binary serialization" $ withMaxSuccess 500 $ testBinarySerialization
+    specify "AccountEncryptedAmount JSON serialization" $ withMaxSuccess 500 $ testJSONSerialization

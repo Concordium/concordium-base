@@ -179,6 +179,26 @@ module Concordium.Types (
     -- * PartsPerHundredThousands
     PartsPerHundredThousands (..),
     partsPerHundredThousandsToRational,
+
+    -- * Protocol-level tokens
+    TokenId (..),
+    TokenHolder (..),
+    makeTokenId,
+    unsafeGetTokenId,
+    TokenParameter (..),
+    TokenModuleRef (..),
+    TokenEventDetails (..),
+    TokenEventType (..),
+    makeTokenEventType,
+    TokenModuleRejectReason (..),
+    makeTokenModuleRejectReason,
+    CreatePLT (..),
+    cpltTokenId,
+    cpltTokenModule,
+    cpltDecimals,
+    cpltInitializationParameters,
+    EncodedTokenOperations (..),
+    EncodedTokenInitializationParameters (..),
 ) where
 
 import Data.Data (Data, Typeable)
@@ -198,8 +218,11 @@ import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
 import Concordium.Types.Block
 import Concordium.Types.HashableTo
+import Concordium.Types.Memo
+import qualified Concordium.Types.ProtocolLevelTokens.CBOR as CBOR
 import Concordium.Types.ProtocolVersion
 import Concordium.Types.SmartContracts
+import Concordium.Types.Tokens
 import qualified Data.FixedByteString as FBS
 
 import Control.Exception (assert)
@@ -207,6 +230,7 @@ import Control.Monad
 import Control.Monad.Except
 
 import Data.Bits
+import qualified Data.ByteString.Builder as BSBuilder
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Short as BSS
@@ -233,6 +257,7 @@ import Lens.Micro.Platform
 
 import Text.Read (readMaybe)
 
+import Concordium.Utils.Serialization (getMaybe, putMaybe)
 import Test.QuickCheck (Arbitrary, choose)
 import Test.QuickCheck.Arbitrary (Arbitrary (arbitrary))
 
@@ -386,6 +411,54 @@ instance AE.FromJSON UrlText where
 
 emptyUrlText :: UrlText
 emptyUrlText = UrlText ""
+
+-- | An entity that can hold PLTs (protocol level tokens).
+-- The type is used in the `TokenTransfer`, `TokenMint`, and `TokenBurn` events.
+-- Currently, this can only be a Concordium account address.
+-- The type can be extended to e.g. support smart contracts in the future.
+-- This type shouldn't be confused with the `CborTokenHolder` type that in contrast is used
+-- in the transaction payload, in reject reasons, and in the `TokenModuleEvent`.
+newtype TokenHolder = HolderAccount {haAccount :: AccountAddress}
+    deriving (Eq)
+
+instance Show TokenHolder where
+    show (HolderAccount addr) =
+        show addr
+
+instance AE.ToJSON TokenHolder where
+    toJSON (HolderAccount address) = do
+        AE.object
+            [ -- Tag with type of `account`.
+              "type" AE..= AE.String "account",
+              "address" AE..= address
+            ]
+
+instance AE.FromJSON TokenHolder where
+    parseJSON = AE.withObject "TokenHolder" $ \o -> do
+        type_string <- o AE..: "type"
+        case (type_string :: String) of
+            "account" -> do
+                address <- o AE..: "address"
+                return (HolderAccount address)
+            _ -> fail ("Unknown TokenHolder type " ++ type_string)
+
+-- Serialization instance for the `TokenHolder` type. A `Word8` tag is used
+-- to allow future extensions, such as supporting smart contract token holders.
+instance S.Serialize TokenHolder where
+    get = getHolderAccount
+    put = putHolderAccount
+
+getHolderAccount :: S.Get TokenHolder
+getHolderAccount =
+    S.getWord8 >>= \case
+        0 -> do
+            HolderAccount <$> S.get
+        n -> fail $ "Unrecognized TokenHolder tag: " ++ show n
+
+putHolderAccount :: S.Putter TokenHolder
+putHolderAccount (HolderAccount address) =
+    S.putWord8 0
+        <> S.put address
 
 -- | Due to limitations on the ledger, there has to be some restriction on the
 --  precision of the input for updating ElectionDifficult. For this purpose,
@@ -778,56 +851,12 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
--- | Data type for memos that can be added to transfers.
---  Max length of 'maxMemoSize' is assumed.
---  Create new values with 'memoFromBSS' to ensure assumed properties.
---
---  Note that the ToJSON instance of this type is derived, based on hex encoding.
---  The FromJSON instance is manually implemented to ensure length limits.
-newtype Memo = Memo BSS.ShortByteString
-    deriving (Eq)
-    deriving (AE.ToJSON, Show) via BSH.ByteStringHex
-
--- | Maximum size for 'Memo'.
-maxMemoSize :: Int
-maxMemoSize = 256
-
-tooBigErrorString :: String -> Int -> Int -> String
-tooBigErrorString name len maxSize = "Size of the " ++ name ++ " (" ++ show len ++ " bytes) exceeds maximum allowed size (" ++ show maxSize ++ " bytes)."
-
--- | Construct 'Memo' from a 'BSS.ShortByteString'.
---  Fails if the length exceeds 'maxMemoSize'.
-memoFromBSS :: (MonadError String m) => BSS.ShortByteString -> m Memo
-memoFromBSS bss =
-    if len <= maxMemoSize
-        then return . Memo $ bss
-        else throwError $ tooBigErrorString "memo" len maxMemoSize
-  where
-    len = BSS.length bss
-
-instance S.Serialize Memo where
-    put (Memo bss) = do
-        S.putWord16be . fromIntegral . BSS.length $ bss
-        S.putShortByteString bss
-
-    get = G.label "Memo" $ do
-        l <- fromIntegral <$> S.getWord16be
-        unless (l <= maxMemoSize) $ fail $ tooBigErrorString "memo" l maxMemoSize
-        Memo <$> S.getShortByteString l
-
-instance AE.FromJSON Memo where
-    parseJSON v = do
-        (BSH.ByteStringHex bss) <- AE.parseJSON v
-        case memoFromBSS bss of
-            Left err -> fail err
-            Right rd -> return rd
-
 -- | Data type for registering data on chain.
 --  Max length of 'maxRegisteredDataSize' is assumed.
 --  Create new values with 'registeredDataFromBSS' to ensure assumed properties.
 newtype RegisteredData = RegisteredData BSS.ShortByteString
     deriving (Eq)
-    deriving (AE.ToJSON, Show) via BSH.ByteStringHex
+    deriving (AE.ToJSON, Show) via BSH.ShortByteStringHex
 
 -- | Maximum size for 'RegisteredData'.
 maxRegisteredDataSize :: Int
@@ -856,7 +885,7 @@ instance S.Serialize RegisteredData where
 
 instance AE.FromJSON RegisteredData where
     parseJSON v = do
-        (BSH.ByteStringHex bss) <- AE.parseJSON v
+        (BSH.ShortByteStringHex bss) <- AE.parseJSON v
         case registeredDataFromBSS bss of
             Left err -> fail err
             Right rd -> return rd
@@ -1144,6 +1173,177 @@ createAlias (AccountAddress addr) count = AccountAddress ((addr .&. mask) .|. re
   where
     rest = FBS.encodeInteger (toInteger (count .&. 0xffffff))
     mask = complement (FBS.encodeInteger 0xffffff) -- mask to clear out the last three bytes of the addr
+
+-- * Protocol level tokens
+
+-- | Parameter for a Token module.
+newtype TokenParameter = TokenParameter {parameterBytes :: BSS.ShortByteString}
+    deriving (Eq)
+    deriving (AE.ToJSON, AE.FromJSON, Show) via BSH.ShortByteStringHex
+
+instance S.Serialize TokenParameter where
+    get = do
+        len <- S.getWord32be
+        TokenParameter <$> S.getShortByteString (fromIntegral len)
+    put (TokenParameter parameter) = do
+        S.putWord32be (fromIntegral (BSS.length parameter))
+        S.putShortByteString parameter
+
+-- | Details provided by the token module in the event of rejecting a transaction.
+data TokenModuleRejectReason = TokenModuleRejectReason
+    { -- | The token symbol.
+      tmrrTokenId :: !TokenId,
+      -- | The type of the reject reason. At most 255 bytes.
+      tmrrType :: !TokenEventType,
+      -- | (Optional) CBOR-encoded details.
+      tmrrDetails :: !(Maybe TokenEventDetails)
+    }
+    deriving (Eq, Show)
+
+instance S.Serialize TokenModuleRejectReason where
+    put TokenModuleRejectReason{..} = do
+        S.put tmrrTokenId
+        S.put tmrrType
+        putMaybe S.put tmrrDetails
+    get = do
+        tmrrTokenId <- S.get
+        tmrrType <- S.get
+        tmrrDetails <- getMaybe S.get
+        return TokenModuleRejectReason{..}
+
+instance AE.ToJSON TokenModuleRejectReason where
+    toJSON TokenModuleRejectReason{..} =
+        AE.object $
+            [ "tokenId" AE..= tmrrTokenId,
+              "type" AE..= tmrrType
+            ]
+                ++ foldMap (\details -> ["details" AE..= details]) tmrrDetails
+
+instance AE.FromJSON TokenModuleRejectReason where
+    parseJSON = AE.withObject "TokenModuleRejectReason" $ \o -> do
+        tmrrTokenId <- o AE..: "tokenId"
+        tmrrType <- o AE..: "type"
+        tmrrDetails <- o AE..:? "details"
+        return TokenModuleRejectReason{..}
+
+-- | Make a 'TokenModuleRejectReason' given a 'TokenId' and an 'CBOR.EncodedTokenRejectReason'.
+--  If the type is longer than 255 bytes, it is truncated. It is not checked that the type
+--  is UTF-8 encoded, and the truncation can also break UTF-8 validity (if it truncates in the
+--  middle of a multi-byte character).
+makeTokenModuleRejectReason :: TokenId -> CBOR.EncodedTokenRejectReason -> TokenModuleRejectReason
+makeTokenModuleRejectReason tmrrTokenId CBOR.EncodedTokenRejectReason{..} =
+    TokenModuleRejectReason
+        { tmrrType = TokenEventType (BSS.take 255 etrrType),
+          tmrrDetails = TokenEventDetails <$> etrrDetails,
+          ..
+        }
+
+-- | A wrapper type for (de)-serializing a CBOR-encoded initialization parameter to/from JSON.
+--  This can parse either a JSON object representation of 'TokenInitializationParameters'
+--  (which is then re-encoded as CBOR) or a hex-encoded byte string. When rendering JSON,
+--  it will render as a JSON object if the contents can be decoded to a
+-- 'TokenInitializationParameters', or otherwise as the hex-encoded byte string.
+newtype EncodedTokenInitializationParameters = EncodedTokenInitializationParameters TokenParameter
+    deriving newtype (Eq, Show)
+
+instance AE.ToJSON EncodedTokenInitializationParameters where
+    toJSON (EncodedTokenInitializationParameters tp@(TokenParameter sbs)) =
+        case CBOR.tokenInitializationParametersFromBytes
+            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
+            Left _ -> AE.toJSON tp
+            Right v -> AE.toJSON v
+
+instance AE.FromJSON EncodedTokenInitializationParameters where
+    parseJSON o@(AE.Object _) = do
+        tip <- AE.parseJSON o
+        return $
+            EncodedTokenInitializationParameters $
+                TokenParameter $
+                    BSS.toShort $
+                        CBOR.tokenInitializationParametersToBytes tip
+    parseJSON val = EncodedTokenInitializationParameters <$> AE.parseJSON val
+
+-- | A hash that identifies the specific implementation to use for a token.
+newtype TokenModuleRef = TokenModuleRef {theTokenModuleRef :: Hash.Hash}
+    deriving newtype (Eq, Ord, S.Serialize, Show, AE.FromJSON, AE.ToJSON)
+
+-- | Update payload for creating a new protocol-level token.
+data CreatePLT = CreatePLT
+    { -- | The symbol of the token.
+      _cpltTokenId :: !TokenId,
+      -- | A SHA256 hash that identifies the token module implementation.
+      _cpltTokenModule :: !TokenModuleRef,
+      -- | The number of decimal places used in the representation of amounts of this token. This determines the smallest representable fraction of the token.
+      _cpltDecimals :: !Word8,
+      -- | The initialization parameters of the token, encoded in CBOR.
+      _cpltInitializationParameters :: !TokenParameter
+    }
+    deriving (Eq, Show)
+
+makeLenses ''CreatePLT
+
+instance HashableTo Hash.Hash CreatePLT where
+    getHash = Hash.hash . S.encode
+
+instance (Monad m) => MHashableTo m Hash.Hash CreatePLT
+
+instance S.Serialize CreatePLT where
+    put CreatePLT{..} = do
+        S.put _cpltTokenId
+        S.put _cpltTokenModule
+        S.put _cpltDecimals
+        S.put _cpltInitializationParameters
+    get = do
+        _cpltTokenId <- S.get
+        _cpltTokenModule <- S.get
+        _cpltDecimals <- S.get
+        _cpltInitializationParameters <- S.get
+        return CreatePLT{..}
+
+instance AE.ToJSON CreatePLT where
+    toJSON CreatePLT{..} =
+        AE.object
+            [ "tokenId" AE..= _cpltTokenId,
+              "tokenModule" AE..= _cpltTokenModule,
+              "decimals" AE..= _cpltDecimals,
+              "initializationParameters"
+                AE..= EncodedTokenInitializationParameters _cpltInitializationParameters
+            ]
+
+instance AE.FromJSON CreatePLT where
+    parseJSON = AE.withObject "CreatePLT" $ \o -> do
+        _cpltTokenId <- o AE..: "tokenId"
+        _cpltTokenModule <- o AE..: "tokenModule"
+        _cpltDecimals <- o AE..: "decimals"
+        (EncodedTokenInitializationParameters _cpltInitializationParameters) <-
+            o AE..: "initializationParameters"
+        return CreatePLT{..}
+
+-- | A wrapper type for (de)-serializing a CBOR-encoded token operations to/from JSON.
+--  This can parse either a JSON object representation of 'TokenOperation'
+-- (which is then re-encoded as CBOR) or a hex-encoded byte string. When
+-- rendering JSON,  it will render as a JSON object if the contents can be
+-- decoded to a 'TokenOperation', or otherwise as the hex-encoded byte string.
+newtype EncodedTokenOperations = EncodedTokenOperations TokenParameter
+    deriving newtype (Eq, Show)
+
+instance AE.ToJSON EncodedTokenOperations where
+    toJSON (EncodedTokenOperations tp@(TokenParameter sbs)) =
+        case CBOR.tokenUpdateTransactionFromBytes
+            (BSBuilder.toLazyByteString $ BSBuilder.shortByteString sbs) of
+            Left _ -> AE.toJSON tp
+            Right v -> AE.toJSON v
+
+instance AE.FromJSON EncodedTokenOperations where
+    parseJSON v@(AE.Array _) = do
+        tip <- AE.parseJSON v
+        return $
+            EncodedTokenOperations $
+                TokenParameter $
+                    BSS.toShort $
+                        CBOR.tokenUpdateTransactionToBytes tip
+    parseJSON v@(AE.String _) = EncodedTokenOperations <$> AE.parseJSON v
+    parseJSON _ = fail "EncodedTokenOperations JSON must be either an array or a string"
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)

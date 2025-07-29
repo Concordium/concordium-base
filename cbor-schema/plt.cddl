@@ -1,0 +1,342 @@
+; This CDDL schema defines the CBOR encodings used by protocol-level tokens (PLTs) in Concordium.
+; In particular, it defines the types token-update-transaction and token-initialization-parameters,
+; which are used as parameters for the token module.
+
+; We represent token amounts as a decimal fraction.
+; The range and precision may be constrained by the token itself.
+token-amount = decfrac
+
+; A memo can be a byte string of up to 256 bytes.
+; When the memo is CBOR encoded, cbor-memo can be used to indicate that.
+memo = raw-memo / cbor-memo
+
+; A raw memo is a byte string of up to 256 bytes.
+raw-memo = bytes .size (0..256)
+
+; Tag 24 indicates that the contained byte string is CBOR encoded.
+; https://www.rfc-editor.org/rfc/rfc8949.html#name-encoded-cbor-data-item
+cbor-memo = #6.24(raw-memo)
+
+; A destination that can receive and hold tokens.
+; Currently, this can only be a Concordium account address.
+token-holder = tagged-holder-account
+
+; We use a subtype of the tagged-address type from
+; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-009-address.md
+tagged-holder-account = #6.40307(holder-account)
+
+holder-account = {
+    ; If the info (1) field is present, it must indicate CCD.
+    ? 1: tagged-ccd-coininfo,
+    ; We do not support the type (2) field.
+    ; The data (3) field must be the 32-byte representation of a Concordium address
+    3: bytes .size 32
+}
+
+; We use a subtype of the tagged-coininfo type from
+; https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-007-hdkey.md
+tagged-ccd-coininfo = #6.40305(ccd-coininfo)
+
+ccd-coininfo = {
+    ; The type (1) field is the [SLIP44](https://github.com/satoshilabs/slips/blob/master/slip-0044.md)
+    ; code for Concordium
+    1: 919
+    ; The network (2) field is not supported.
+}
+
+; Token update transaction
+
+; A token update transaction body. This is a list of token operations, executed in
+; order. The transaction is executed in the context of a sender account and a designated token.
+; The sender account must have the necessary permissions to execute the operations.
+
+token-update-transaction = [ * token-operation ]
+
+; A token operation. This can be transfer, mint, burn, any update-list-operation, or pause/unpause.
+; All token operations are represented as single-entry maps where the key determines
+; the type of the operation.
+token-operation = token-transfer
+    / token-mint
+    / token-burn
+    / token-update-list
+    / token-pause
+    / token-unpause
+
+; A token transfer operation. This transfers a specified amount of tokens from the sender account
+; (implicit) to the recipient account.
+token-transfer = {
+    ; The operation type is "transfer".
+    "transfer": {
+        ; The amount of tokens to transfer.
+        "amount": token-amount,
+        ; The recipient account.
+        "recipient": token-holder,
+        ; An optional memo.
+        ? "memo": memo
+    }
+}
+
+; Mint a specified amount to the sender account.
+token-mint = {
+    ; The operation type is "mint".
+    "mint": token-supply-update-details
+}
+
+; Burn a specified amount from the sender account.
+token-burn = {
+    ; The operation type is "burn".
+    "burn": token-supply-update-details
+}
+
+; Specifies the details of a mint/burn operation.
+token-supply-update-details = {
+    ; The amount of tokens to either mint or burn.
+    "amount": token-amount
+}
+
+; Update an allow or a deny list by adding or removing an account from it.
+token-update-list =
+    token-add-allow-list
+    / token-remove-allow-list
+    / token-add-deny-list
+    / token-remove-deny-list
+
+; Add an account to the allow list.
+token-add-allow-list = {
+    ; The operation type is "addAllowList".
+    "addAllowList": token-list-update-details
+}
+
+; Remove an account from the allow list.
+token-remove-allow-list = {
+    ; The operation type is "removeAllowList".
+    "removeAllowList": token-list-update-details
+}
+
+; Add an account to the deny list.
+token-add-deny-list = {
+    ; The operation type is "addDenyList".
+    "addDenyList": token-list-update-details
+}
+
+; Remove an account from the deny list.
+token-remove-deny-list = {
+    ; The operation type is "removeDenyList".
+    "removeDenyList": token-list-update-details
+}
+
+; Specifies the details of a list update operation.
+token-list-update-details = {
+    ; The account to add or remove from the list.
+    "target": token-holder
+}
+
+; Suspend any current or future token operations involving
+; balance changes. If any transaction submitted includes any such operation
+; while the token is in its paused state, the transaction will fail. The
+; suspension lasts until the token is unpaused with the corresponding
+; `token-unpause` operation.
+token-pause = {
+    "pause": {}
+}
+
+; Unpause the token operations described in the `token-pause` operation,
+; thus acting as an inverse of `token-pause`.
+token-unpause = {
+    "unpause": {}
+}
+
+; Chain governance
+
+; These parameters are passed to the token module to initialize the token.
+; The token initialization update will also include the ticker symbol,
+; number of decimals, and a reference to the token module implementation.
+token-initialization-parameters = {
+    ; The name of the token
+    "name": text,
+    ; A URL pointing to the token metadata
+    "metadata": metadata-url,
+    ; The governance account of the token
+    "governanceAccount": token-holder
+    ; Whether the token supports an allow list
+    ? "allowList": bool .default false,
+    ; Whether the token supports a deny list
+    ? "denyList": bool .default false,
+    ; The initial supply of the token. If not present, no tokens are minted initially.
+    ? "initialSupply": token-amount,
+    ; Whether the token is mintable
+    ? "mintable": bool .default false,
+    ; Whether the token is burnable
+    ? "burnable": bool .default false
+}
+
+; Type alias for a sha256 hash
+sha256-hash = bytes .size(32)
+
+; Type alias for metadata with a URL and checksum
+metadata-url = {
+    ; A string field representing the URL
+    "url": text,
+    ; An optional sha256 checksum value tied to the content of the URL
+    ? "checksumSha256": sha256-hash
+    ; Additional fields may be included for future extensibility, e.g. another hash algorithm.
+    * text => any
+}
+
+; Token state
+
+; The Token Module state represents global state information that is maintained by the Token Module,
+; and is returned as part of a `GetTokenInfo` query. It does not include state that is managed by
+; the Token Kernel, such as the token identifier and global supply. It also does not (typically)
+; include account-specific state, which is returned as part of `GetAccountInfo` instead.
+;
+; The "name", "metadata" and "governanceAccount" fields are required. Other fields are optional, and can be omitted if
+; the module implementation does not support them. The structure supports additional fields for
+; future extensibility. Non-standard fields (i.e. any fields that are not defined by a standard,
+; and are specific to the module implementation) may be included, and their tags should be
+; prefixed with an underscore ("_") to distinguish them as such.
+token-module-state = {
+    ; The name of the token
+    "name": text,
+    ; A URL pointing to the token metadata
+    "metadata": metadata-url,
+    ; The governance account of the token
+    "governanceAccount": token-holder
+    ; Whether the token supports an allow list.
+    ? "allowList": bool,
+    ; Whether the token supports a deny list.
+    ? "denyList": bool,
+    ; Whether the token is mintable.
+    ? "mintable": bool,
+    ; Whether the token is burnable.
+    ? "burnable": bool,
+    ; Whether token operations involving balance changes have been suspended.
+    ? "paused": bool,
+    ; Additional state information may be provided under further text keys, the meaning
+    ; of which are not defined in the present specification.
+    * text => any
+}
+
+; Account state details
+
+; The account state represents account-specific information that is maintained by the Token Module,
+; and is returned as part of a `GetAccountInfo` query. It does not include state that is managed by
+; the Token Kernel, such as the token identifier and account balance.
+;
+; All fields are optional, and can be omitted if the module implementation does not support them.
+; The structure supports additional fields for future extensibility. Non-standard fields (i.e. any
+; fields that are not defined by a standard, and are specific to the module implementation) may
+; be included, and their tags should be prefixed with an underscore ("_") to distinguish them
+; as such.
+token-module-account-state = {
+    ; Whether the account is on the allow list.
+    ; This is only present if the token supports an allow list; that is accounts can only
+    ; send or receive tokens if they are on the allow list.
+    ? "allowList": bool,
+    ; Whether the account is on the deny list.
+    ; This is only present if the token supports a deny list; that is accounts can only
+    ; send or receive tokens if they are not on the deny list.
+    ? "denyList": bool,
+    ; Additional state information may be provided under further text keys, the meaning
+    ; of which are not defined in the present specification.
+    * text => any
+}
+
+; Token module events.
+
+; These events are limited to the events emitted by the token module. Events related to balance changes
+; for protocol-level tokens are defined separately and are not subject to CBOR encoding.
+
+; The details of a token "addAllowList" event.
+; This indicates the account was added to the allow list.
+token-add-allow-list-event = token-list-update-details
+
+; The details of a token "removeAllowList" event.
+; This indicates the account was removed from the allow list.
+token-remove-allow-list-event = token-list-update-details
+
+; The details of a token "addDenyList" event.
+; This indicates the account was added to the deny list.
+token-add-deny-list-event = token-list-update-details
+
+; The details of a token "removeDenyList" event.
+; This indicates the account was removed from the deny list.
+token-remove-deny-list-event = token-list-update-details
+
+; The details of a token "pause" event, indicating whether token operations involving balance
+; changes have been suspended.
+token-pause-event = {}
+
+; The details of a token "unpause" event, indicating whether the suspension of token operations
+; involving balance changes has been removed.
+token-unpause-event = {}
+
+; Reject reason details
+
+; A token-update-transaction may be rejected for various reasons.
+; The reject reason is defined by a string type, and may have additional CBOR-encoded
+; details. The schemas for the details are defined here. (This does not preclude additional
+; reject reasons being defined in the future.)
+
+; "addressNotFound": a token holder address was not valid.
+reject-details-address-not-found = {
+    ; The index in the list of operations of the failing operation.
+    "index": uint,
+    ; The address that could not be resolved.
+    "address": token-holder
+}
+
+; "tokenBalanceInsufficient": the balance of tokens on the sender account is insufficient
+; to perform the operation.
+reject-details-token-balance-insufficient = {
+    ; The index in the list of operations of the failing operation.
+    "index": uint,
+    ; The available balance of the sender.
+    "availableBalance": token-amount,
+    ; The minimum required balance to perform the operation.
+    "requiredBalance": token-amount
+}
+
+; "deserializationFailure": the transaction could not be deserialized.
+reject-details-deserialization-failure = {
+    ; Text description of the failure mode.
+    ? "cause": text
+}
+
+; "unsupportedOperation": the operation is not supported by the token module.
+; This may be because the operation is not implemented by the module, or because the
+; token is not configured to support the operation. If the operation is not authorized
+; (i.e. the particular participants do not have the authority to perform the operation)
+; then the reject reason is "operationNotPermitted" instead.
+reject-details-unsupported-operation = {
+    ; The index in the list of operations of the failing operation.
+    "index": uint,
+    ; The type of operation that was not supported.
+    "operationType": text,
+    ; The reason why the operation was not supported.
+    ? "reason": text
+}
+
+; "operationNotPermitted": the operation requires that a participating account has a certain
+; permission, but the account does not have that permission.
+reject-details-operation-not-permitted = {
+    ; The index in the list of operations of the failing operation.
+    "index": uint,
+    ; (Optionally) the address that does not have the necessary permissions to perform the
+    ; operation.
+    ? "address": token-holder,
+    ; The reason why the operation is not permitted.
+    ? "reason": text
+}
+
+; "mintWouldOverflow": minting the requested amount would overflow the representable token amount.
+reject-details-mint-would-overflow = {
+    ; The index in the list of operations of the failing operation.
+    "index": uint,
+    ; The requested amount to mint.
+    "requestedAmount": token-amount,
+    ; The current supply of the token.
+    "currentSupply": token-amount,
+    ; The maximum representable token amount.
+    "maxRepresentableAmount": token-amount,
+}
