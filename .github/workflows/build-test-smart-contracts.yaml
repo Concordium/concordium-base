@@ -7,12 +7,10 @@ on:
   push:
     branches:
         - main
-        - plt
 
   pull_request:
     branches:
         - main
-        - plt
 
   workflow_dispatch: # allows manual trigger
 

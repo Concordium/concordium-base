@@ -1,10 +1,9 @@
 on:
   # Trigger the workflow on push or pull request,
-  # but only for the main and plt branches
+  # but only for the main branch
   push:
     branches:
       - main
-      - plt
     paths:
       - 'smart-contracts/contracts-common/**/*.rs'
       - 'smart-contracts/contracts-common/**/*.toml'
@@ -13,7 +12,6 @@ on:
   pull_request:
     branches:
       - main
-      - plt
     paths:
       - 'smart-contracts/contracts-common/**/*.rs'
       - 'smart-contracts/contracts-common/**/*.toml'
