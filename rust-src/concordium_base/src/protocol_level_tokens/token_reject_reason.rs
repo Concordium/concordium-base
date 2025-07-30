@@ -46,7 +46,7 @@ impl TokenModuleRejectReason {
             "mintWouldOverflow" => MintWouldOverflow(cbor::cbor_decode(
                 self.details.as_ref().context("no CBOR details")?.as_ref(),
             )?),
-            _ => Unknow,
+            _ => Unknown,
         })
     }
 }
@@ -68,9 +68,9 @@ pub enum TokenModuleRejectReasonType {
     /// Minting the requested amount would overflow the representable token
     /// amount.
     MintWouldOverflow(MintWouldOverflowRejectReason),
-    /// Unknow reject reason type. If new reject reasons are added that are
+    /// Unknown reject reason type. If new reject reasons are added that are
     /// unknown to this enum, they will be decoded to this variant.
-    Unknow,
+    Unknown,
 }
 
 /// A token holder address was not valid.
