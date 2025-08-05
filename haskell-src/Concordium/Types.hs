@@ -192,6 +192,7 @@ module Concordium.Types (
     makeTokenEventType,
     TokenModuleRejectReason (..),
     makeTokenModuleRejectReason,
+    decodeTokenModuleRejectReason,
     CreatePLT (..),
     cpltTokenId,
     cpltTokenModule,
@@ -1237,6 +1238,15 @@ makeTokenModuleRejectReason tmrrTokenId CBOR.EncodedTokenRejectReason{..} =
           tmrrDetails = TokenEventDetails <$> etrrDetails,
           ..
         }
+
+-- | Decode a 'TokenRejectReason' from an 'TokenModuleRejectReason'.
+decodeTokenModuleRejectReason :: TokenModuleRejectReason -> Either String CBOR.TokenRejectReason
+decodeTokenModuleRejectReason moduleReason =
+    CBOR.decodeTokenRejectReason
+        CBOR.EncodedTokenRejectReason
+            { etrrType = tokenEventTypeBytes $ tmrrType moduleReason,
+              etrrDetails = tokenEventDetailsBytes <$> tmrrDetails moduleReason
+            }
 
 -- | A wrapper type for (de)-serializing a CBOR-encoded initialization parameter to/from JSON.
 --  This can parse either a JSON object representation of 'TokenInitializationParameters'
