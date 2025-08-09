@@ -425,9 +425,23 @@ mod test {
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0x01);
 
+        // if we are within range, it is ok that the bignum is more than 8 bytes
+        let cbor = hex::decode("C24A00001000000000000001").unwrap();
+        let value_decoded: u64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x01000000000000001);
+
         let cbor = hex::decode("C248FFFFFFFFFFFFFFFF").unwrap();
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0xFFFFFFFFFFFFFFFF);
+
+        // value outside range
+        let cbor = hex::decode("C249FF0000000000000000").unwrap();
+        let error = cbor_decode::<u64>(&cbor).unwrap_err();
+        assert!(
+            error.to_string().contains("bignum out of u64 range"),
+            "message: {}",
+            error
+        );
 
         // value outside range
         let cbor = hex::decode("C24AFF000000000000000000").unwrap();
