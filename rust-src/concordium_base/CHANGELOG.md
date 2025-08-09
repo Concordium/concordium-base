@@ -4,6 +4,7 @@
 - Support empty structs with `CborSerialize` derive macro
 - Support CBOR decoding maps and arrays of indefinite length
 - Fix bug where CBOR decoding would fail on empty text strings
+- Support decoding unsigned and negative CBOR bignums to fixed-size machine integers (`i8`, ..., `i64`, `u8`, ..., `u64`)
 
 ## 8.0.0-alpha.2 (2025-07-14)
 
