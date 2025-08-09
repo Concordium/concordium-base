@@ -98,7 +98,7 @@ macro_rules! serialize_deserialize_unsigned_integer {
                 let value = match decoder.peek_data_item_header()? {
                     // support the non-preferred bignum encoding as long as we are within range
                     DataItemHeader::Tag(UNSIGNED_BIGNUM_TAG) => {
-                        decode_positive_bignum_to_u64(decoder)?
+                        decode_unsigned_bignum_to_u64(decoder)?
                     }
                     DataItemHeader::Positive(_) => decoder.decode_positive()?,
                     header => {
@@ -148,22 +148,40 @@ macro_rules! serialize_deserialize_signed_integer {
             fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
             where
                 Self: Sized, {
-                match decoder.peek_data_item_header()?.to_type() {
-                    DataItemType::Positive => Ok(<$t>::try_from(decoder.decode_positive()?)
-                        .context(concat!("convert positive to ", stringify!($t)))?),
-                    DataItemType::Negative => Ok(<$t>::try_from(decoder.decode_negative()?)
+                let convert_positive = |value: u64| -> anyhow::Result<$t> {
+                    <$t>::try_from(value).context(concat!("convert positive to ", stringify!($t)))
+                };
+
+                let convert_negative = |value: u64| -> anyhow::Result<$t> {
+                    <$t>::try_from(value)
                         .ok()
                         .and_then(|val| val.checked_neg())
                         .and_then(|val| val.checked_sub(1))
-                        .context(concat!("convert negative to ", stringify!($t)))?),
-                    data_item_type => Err(anyhow!(
-                        "expected data item {:?} or {:?} as for {}, was {:?}",
-                        DataItemType::Positive,
-                        DataItemType::Negative,
-                        stringify!($t),
-                        data_item_type
-                    )
-                    .into()),
+                        .context(concat!("convert negative to ", stringify!($t)))
+                };
+
+                match decoder.peek_data_item_header()? {
+                    DataItemHeader::Positive(_) => {
+                        Ok(convert_positive(decoder.decode_positive()?)?)
+                    }
+                    // support the non-preferred bignum encoding as long as we are within range
+                    DataItemHeader::Tag(UNSIGNED_BIGNUM_TAG) => {
+                        Ok(convert_positive(decode_unsigned_bignum_to_u64(decoder)?)?)
+                    }
+                    DataItemHeader::Negative(_) => {
+                        Ok(convert_negative(decoder.decode_negative()?)?)
+                    }
+                    // support the non-preferred bignum encoding as long as we are within range
+                    DataItemHeader::Tag(NEGATIVE_BIGNUM_TAG) => {
+                        Ok(convert_negative(decode_negative_bignum_to_u64(decoder)?)?)
+                    }
+                    header => {
+                        return Err(anyhow!(format!(
+                            "data item {:?} cannot be decoded to positive or negative integer",
+                            header.to_type()
+                        ))
+                        .into())
+                    }
                 }
             }
         }
@@ -306,10 +324,17 @@ impl CborSerialize for MapKey {
     }
 }
 
-fn decode_positive_bignum_to_u64<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<u64> {
+fn decode_unsigned_bignum_to_u64<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<u64> {
     decoder.decode_tag_expect(UNSIGNED_BIGNUM_TAG)?;
-    let bytes = decoder.decode_bytes()?;
+    decode_ne_bytes_to_u64(&decoder.decode_bytes()?)
+}
 
+fn decode_negative_bignum_to_u64<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<u64> {
+    decoder.decode_tag_expect(NEGATIVE_BIGNUM_TAG)?;
+    decode_ne_bytes_to_u64(&decoder.decode_bytes()?)
+}
+
+fn decode_ne_bytes_to_u64(bytes: &[u8]) -> CborSerializationResult<u64> {
     let bytes_outside_range = &bytes[..bytes.len() - bytes.len().min(8)];
     if bytes_outside_range.iter().copied().any(|byte| byte != 0) {
         return Err(anyhow!("bignum out of u64 range").into());
@@ -400,15 +425,40 @@ mod test {
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0x01);
 
-        let cbor = hex::decode("C248FF00000000000000").unwrap();
+        let cbor = hex::decode("C248FFFFFFFFFFFFFFFF").unwrap();
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
-        assert_eq!(value_decoded, 0xFF00000000000000);
+        assert_eq!(value_decoded, 0xFFFFFFFFFFFFFFFF);
 
         // value outside range
         let cbor = hex::decode("C24AFF000000000000000000").unwrap();
         let error = cbor_decode::<u64>(&cbor).unwrap_err();
         assert!(
             error.to_string().contains("bignum out of u64 range"),
+            "message: {}",
+            error
+        );
+    }
+
+    /// Tests decoding tag 2 bignums into https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+    #[test]
+    fn test_u8_bignum() {
+        let cbor = hex::decode("C24100").unwrap();
+        let value_decoded: u8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x00);
+
+        let cbor = hex::decode("C24101").unwrap();
+        let value_decoded: u8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x01);
+
+        let cbor = hex::decode("C241FF").unwrap();
+        let value_decoded: u8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0xFF);
+
+        // value outside range
+        let cbor = hex::decode("C2420100").unwrap();
+        let error = cbor_decode::<u8>(&cbor).unwrap_err();
+        assert!(
+            error.to_string().contains("convert from u64 to u8"),
             "message: {}",
             error
         );
@@ -514,6 +564,94 @@ mod test {
         assert_eq!(hex::encode(&cbor), "387f");
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    /// Tests decoding tag 2 bignums into https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+    #[test]
+    fn test_i64_bignum() {
+        let cbor = hex::decode("C240").unwrap();
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x00);
+
+        let cbor = hex::decode("C24101").unwrap();
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x01);
+
+        let cbor = hex::decode("C34100").unwrap();
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, -0x01);
+
+        let cbor = hex::decode("C34101").unwrap();
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, -0x02);
+
+        let cbor = hex::decode("C2487FFFFFFFFFFFFFFF").unwrap();
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x7FFFFFFFFFFFFFFF);
+
+        let cbor = hex::decode("C3487FFFFFFFFFFFFFFF").unwrap();
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, -0x8000000000000000);
+
+        // value outside range
+        let cbor = hex::decode("C2488000000000000000").unwrap();
+        let error = cbor_decode::<i64>(&cbor).unwrap_err();
+        assert!(
+            error.to_string().contains("convert positive to i64"),
+            "message: {}",
+            error
+        );
+
+        // value outside range
+        let cbor = hex::decode("C3488000000000000000").unwrap();
+        let error = cbor_decode::<i64>(&cbor).unwrap_err();
+        assert!(
+            error.to_string().contains("convert negative to i64"),
+            "message: {}",
+            error
+        );
+    }
+
+    /// Tests decoding tag 2 bignums into https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+    #[test]
+    fn test_i8_bignum() {
+        let cbor = hex::decode("C24100").unwrap();
+        let value_decoded: i8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x00);
+
+        let cbor = hex::decode("C24101").unwrap();
+        let value_decoded: i8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x01);
+
+        let cbor = hex::decode("C34100").unwrap();
+        let value_decoded: i8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, -0x01);
+
+        let cbor = hex::decode("C2417F").unwrap();
+        let value_decoded: i8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x7F);
+
+        let cbor = hex::decode("C3417F").unwrap();
+        let value_decoded: i8 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, -0x80);
+
+        // value outside range
+        let cbor = hex::decode("C2420100").unwrap();
+        let error = cbor_decode::<i8>(&cbor).unwrap_err();
+        assert!(
+            error.to_string().contains("convert positive to i8"),
+            "message: {}",
+            error
+        );
+
+        // value outside range
+        let cbor = hex::decode("C3420100").unwrap();
+        let error = cbor_decode::<i8>(&cbor).unwrap_err();
+        assert!(
+            error.to_string().contains("convert negative to i8"),
+            "message: {}",
+            error
+        );
     }
 
     #[test]
