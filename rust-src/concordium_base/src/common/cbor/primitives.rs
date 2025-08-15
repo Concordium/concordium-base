@@ -400,7 +400,7 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
-    /// Tests decoding tag 2 bignums into https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+    /// Tests decoding tag 2 bignums into u64
     #[test]
     fn test_u64_bignum() {
         let cbor = hex::decode("C240").unwrap();
@@ -454,7 +454,7 @@ mod test {
         );
     }
 
-    /// Tests decoding tag 2 bignums into https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+    /// Tests decoding tag 2 bignums into u8
     #[test]
     fn test_u8_bignum() {
         let cbor = hex::decode("C24100").unwrap();
@@ -582,7 +582,7 @@ mod test {
         assert_eq!(value_decoded, value);
     }
 
-    /// Tests decoding tag 2 bignums into https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+    /// Tests decoding tag 2 and 3 bignums into i64
     #[test]
     fn test_i64_bignum() {
         let cbor = hex::decode("C240").unwrap();
@@ -630,7 +630,7 @@ mod test {
         );
     }
 
-    /// Tests decoding tag 2 bignums into https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
+    /// Tests decoding tag 2 and 3 bignums into i8
     #[test]
     fn test_i8_bignum() {
         let cbor = hex::decode("C24100").unwrap();
