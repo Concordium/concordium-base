@@ -430,6 +430,7 @@ mod test {
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0x01000000000000001);
 
+        // test max value
         let cbor = hex::decode("C248FFFFFFFFFFFFFFFF").unwrap();
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0xFFFFFFFFFFFFFFFF);
@@ -464,6 +465,7 @@ mod test {
         let value_decoded: u8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0x01);
 
+        // test max value
         let cbor = hex::decode("C241FF").unwrap();
         let value_decoded: u8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0xFF);
@@ -599,10 +601,12 @@ mod test {
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, -0x02);
 
+        // max value
         let cbor = hex::decode("C2487FFFFFFFFFFFFFFF").unwrap();
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0x7FFFFFFFFFFFFFFF);
 
+        // min value
         let cbor = hex::decode("C3487FFFFFFFFFFFFFFF").unwrap();
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, -0x8000000000000000);
@@ -641,10 +645,12 @@ mod test {
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, -0x01);
 
+        // max value
         let cbor = hex::decode("C2417F").unwrap();
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0x7F);
 
+        // min value
         let cbor = hex::decode("C3417F").unwrap();
         let value_decoded: i8 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, -0x80);
