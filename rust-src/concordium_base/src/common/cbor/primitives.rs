@@ -342,7 +342,7 @@ fn decode_ne_bytes_to_u64(bytes: &[u8]) -> CborSerializationResult<u64> {
 
     let bytes_in_range = &bytes[bytes.len() - bytes.len().min(8)..];
     let mut u64bytes = [0u8; 8];
-    u64bytes[8 - bytes_in_range.len()..].copy_from_slice(&bytes_in_range);
+    u64bytes[8 - bytes_in_range.len()..].copy_from_slice(bytes_in_range);
 
     Ok(u64::from_be_bytes(u64bytes))
 }
