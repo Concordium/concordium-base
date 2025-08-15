@@ -83,4 +83,13 @@ mod test {
         let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
+
+    /// Tests decoding tag 2 bignums into decimal fraction
+    #[test]
+    fn test_unsigned_decimal_fraction_bignum() {
+        let cbor = hex::decode("c48203C24105").unwrap();
+        let value_decoded: UnsignedDecimalFraction = cbor_decode(&cbor).unwrap();
+        let expected_value = UnsignedDecimalFraction::new(3, 5);
+        assert_eq!(value_decoded, expected_value);
+    }
 }
