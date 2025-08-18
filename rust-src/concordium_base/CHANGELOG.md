@@ -1,6 +1,6 @@
 ## Unreleased
 
-## 9.0.0 (2025-08-18)
+## 8.0.0 (2025-08-18)
 
 Adds support for integrating with Concordium nodes running protocol version 9.
 
