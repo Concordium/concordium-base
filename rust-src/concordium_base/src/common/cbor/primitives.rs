@@ -102,10 +102,10 @@ macro_rules! serialize_deserialize_unsigned_integer {
                     }
                     DataItemHeader::Positive(_) => decoder.decode_positive()?,
                     header => {
-                        return Err(anyhow!(format!(
+                        return Err(anyhow!(
                             "data item {:?} cannot be decoded to positive integer",
                             header.to_type()
-                        ))
+                        )
                         .into())
                     }
                 };
@@ -148,17 +148,17 @@ macro_rules! serialize_deserialize_signed_integer {
             fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
             where
                 Self: Sized, {
-                let convert_positive = |value: u64| -> anyhow::Result<$t> {
+                fn convert_positive(value: u64) -> anyhow::Result<$t> {
                     <$t>::try_from(value).context(concat!("convert positive to ", stringify!($t)))
-                };
+                }
 
-                let convert_negative = |value: u64| -> anyhow::Result<$t> {
+                fn convert_negative(value: u64) -> anyhow::Result<$t> {
                     <$t>::try_from(value)
                         .ok()
                         .and_then(|val| val.checked_neg())
                         .and_then(|val| val.checked_sub(1))
                         .context(concat!("convert negative to ", stringify!($t)))
-                };
+                }
 
                 match decoder.peek_data_item_header()? {
                     DataItemHeader::Positive(_) => {
@@ -176,10 +176,10 @@ macro_rules! serialize_deserialize_signed_integer {
                         Ok(convert_negative(decode_negative_bignum_to_u64(decoder)?)?)
                     }
                     header => {
-                        return Err(anyhow!(format!(
+                        return Err(anyhow!(
                             "data item {:?} cannot be decoded to positive or negative integer",
                             header.to_type()
-                        ))
+                        )
                         .into())
                     }
                 }
