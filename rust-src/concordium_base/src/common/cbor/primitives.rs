@@ -334,12 +334,20 @@ fn decode_negative_bignum_to_u64<C: CborDecoder>(mut decoder: C) -> CborSerializ
     decode_ne_bytes_to_u64(&decoder.decode_bytes()?)
 }
 
+/// Decode the given bytes as a bignum represented in network byte order
+/// (<https://www.rfc-editor.org/rfc/rfc8949.html#name-bignums>).
+/// The output value is restricted to `u64`; decoding will fail if the value
+/// is outside the range of `u64`.
 fn decode_ne_bytes_to_u64(bytes: &[u8]) -> CborSerializationResult<u64> {
+    // The bytes that are outside the range of the 8 bytes covered by u64 must
+    // all be 0.
     let bytes_outside_range = &bytes[..bytes.len() - bytes.len().min(8)];
     if bytes_outside_range.iter().copied().any(|byte| byte != 0) {
         return Err(anyhow!("bignum out of u64 range").into());
     }
 
+    // The bytes that are inside the range of the 8 bytes covered by u64 are
+    // then interpreted as an u64.
     let bytes_in_range = &bytes[bytes.len() - bytes.len().min(8)..];
     let mut u64bytes = [0u8; 8];
     u64bytes[8 - bytes_in_range.len()..].copy_from_slice(bytes_in_range);
@@ -414,6 +422,10 @@ mod test {
         let cbor = hex::decode("C24101").unwrap();
         let value_decoded: u64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, 0x01);
+
+        let cbor = hex::decode("C2420101").unwrap();
+        let value_decoded: u64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, 0x0101);
 
         // bignum in non-preferred serialization (leading zeros)
         let cbor = hex::decode("C243000001").unwrap();
@@ -596,6 +608,10 @@ mod test {
         let cbor = hex::decode("C34100").unwrap();
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, -0x01);
+
+        let cbor = hex::decode("C3420100").unwrap();
+        let value_decoded: i64 = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, -0x0101);
 
         let cbor = hex::decode("C34101").unwrap();
         let value_decoded: i64 = cbor_decode(&cbor).unwrap();
