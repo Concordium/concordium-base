@@ -1,2 +1,56 @@
 [package]
 name = "testroot"
+version = "7.0.0-alpha.3"
+authors = ["Concordium <developers@concordium.com>"]
+edition = "2021"
+rust-version = "1.85"
+license-file = "LICENSE"
+readme = "README.md"
+include = ["src/", "examples/", "CHANGELOG.md"]
+description = "An SDK to use the Concordium blockchain."
+repository = "https://github.com/Concordium/concordium-rust-sdk"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = {version = "0.12.0"}
+prost = "0.13.0"
+tokio = { version = "1.27", features = ["net", "macros"] }
+futures = "0.3"
+serde_json = "1.0"
+serde = {version = "1.0", features = ["derive"]}
+chrono = {version = "0.4", features = ["serde"] }
+thiserror = "2.0.0"
+hex = "0.4.3"
+derive_more = "0.99"
+semver = "1"
+anyhow = "1.0"
+# See https://github.com/serde-rs/json/issues/505 for how to be careful.
+rust_decimal = { version = "1.26", features = ["serde-float", "serde-arbitrary-precision"]}
+ed25519-dalek = "2"
+sha2 = "0.10"
+rand = {version = "0.8", features = ["small_rng"]}
+num = "0.4"
+num-bigint = "0.4"
+num-traits = "0.2"
+http = "1.2.0"
+tokio-stream = "0.1"
+
+#concordium_base = { version = "8.0.0-alpha.1", path = "./concordium-base/rust-src/concordium_base/", features = ["encryption"] }
+#concordium-smart-contract-engine = { version = "6.0", path = "./concordium-base/smart-contracts/wasm-chain-integration/", default-features = false, features = ["async"]}
+aes-gcm = { version = "0.10", features = ["std"] }
+tracing = "0.1"
+
+#sha_2 = { path = "./concordium-base/rust-src/sha_2/" }
+#key_derivation = { path = "./concordium-base/rust-src/key_derivation/" }
+
+
+[dev-dependencies]
+structopt = "0.3"
+clap = "2.34"
+csv = "1.1"
+tokio = { version = "1.27", features = ["full"] }
+tokio-test = { version = "0.4" }
+tonic = {version = "0.12.0", features = ["tls", "tls-roots"]} # Use system trust roots.
+tracing-subscriber = "0.3"
+sqlite = "0.33"
