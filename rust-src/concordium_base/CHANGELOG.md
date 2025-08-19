@@ -1,6 +1,6 @@
 ## Unreleased
 
-- Added support for additional fields in `TokenModuleInitializationParameters`
+- Add support for additional fields in `TokenModuleInitializationParameters`
 
 ## 8.0.0 (2025-08-18)
 
