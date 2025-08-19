@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Support decoding unsigned and negative CBOR bignums to fixed-size machine integers (`i8`, ..., `i64`, `u8`, ..., `u64`)
+
 ## 8.0.0 (2025-08-18)
 
 Adds support for integrating with Concordium nodes running protocol version 9.
