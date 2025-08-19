@@ -4,6 +4,7 @@ version = "2.1.1"
 authors = ["Concordium AG <developers@concordium.com>"]
 edition = "2018"
 license-file = "../../LICENSE"
+repository = "https://github.com/Concordium/concordium-base"
 
 [dependencies]
 hmac = "0.12.1"
