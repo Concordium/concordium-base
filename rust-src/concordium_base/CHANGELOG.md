@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Added support for additional fields in `TokenModuleInitializationParameters`
+
 ## 8.0.0 (2025-08-18)
 
 Adds support for integrating with Concordium nodes running protocol version 9.
