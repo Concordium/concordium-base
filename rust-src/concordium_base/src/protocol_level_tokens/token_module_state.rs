@@ -4,6 +4,7 @@ use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 use super::MetadataUrl;
 use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborTokenHolder};
+use crate::common::cbor::Upward;
 
 /// Protocol level token (PLT) module state
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
@@ -13,7 +14,7 @@ pub struct TokenModuleState {
     // /// A URL pointing to the token metadata
     pub metadata:           MetadataUrl,
     /// The governance account of the token.
-    pub governance_account: CborTokenHolder,
+    pub governance_account: Upward<CborTokenHolder, value::Value>,
     /// Whether the token supports an allow list.
     pub allow_list:         Option<bool>,
     /// Whether the token supports a deny list.
