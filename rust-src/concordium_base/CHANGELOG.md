@@ -18,11 +18,11 @@ Adds support for integrating with Concordium nodes running protocol version 9.
   - `TokenHolder`: A representation of the different token holder entities. Currently, only accounts are supported.
 - Added new struct `CreatePlt` and corresponding `UpdatePayload` type representing the payload of a create PLT chain-update transaction creating a new token.
 - Added new variant `TokenUpdate` to the `Payload` enum and corresponding `TransactionType` representing the payload of an account transaction updating a token.
-- Added `TokenOperations` type to represent the different actions when updating a token (e.g. `mint/burn/transfer/pause/unpause/addAndRemoveFromToAllowDenyLists`).
+- Added `TokenOperations` type to represent the different actions when updating a token (e.g. `mint/burn/transfer/pause/unpause/addAndRemoveFromToAllowDenyLists`). Operations can be created using functions in `concordium_base::protocol_level_tokens::operations`.
 - Added `TokenEvent` type.
-- Added ` Module(TokenModuleEvent)`, `Transfer(TokenTransferEvent)`, `Mint(TokenSupplyUpdateEvent)`, `Burn(TokenSupplyUpdateEvent)` types to `TokenEventDetails` enum and helpers to encode/decode the `TokenModuleEvent` details into/from cbor.
-- Added `token_reject_reason` related to PLT transaction rejections and helpers to encode/decode them into/from cbor.
-- Added helpers to encode/decode cbor encoded plt types (e.g. `TokenModuleInitializationParameters`, `TokenModuleState`).
+- Added `TokenEventDetails` enum with variants `Module(TokenModuleEvent)`, `Transfer(TokenTransferEvent)`, `Mint(TokenSupplyUpdateEvent)`, and `Burn(TokenSupplyUpdateEvent)`.
+- Added `TokenModuleRejectReason` struct representing PLT transaction rejections.
+- Added generic support for `cbor` encoding/decoding in the `cbor` module. The `cbor::cbor_decode/encode` function can encode/decode PLT types that are represented as `cbor`.
 - Added `Level2KeysUpdateV2(AuthorizationsV1)` variant to the `RootUpdate` enum which must have a field `Some(create_plt)` for exposing and updating the access structure for PLT creation.
 - Added new method `get_canonical_address` on the `AccountAddress` type.
 - Added Clone derive for `AccountCredentialWithoutProofs`.
