@@ -3,8 +3,10 @@ use std::collections::HashMap;
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 
 use super::MetadataUrl;
-use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborTokenHolder};
-use crate::common::cbor::Upward;
+use crate::{
+    common::cbor::{value, Upward},
+    protocol_level_tokens::token_holder::CborTokenHolder,
+};
 
 /// Protocol level token (PLT) module state
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
@@ -35,11 +37,10 @@ pub struct TokenModuleState {
 mod test {
     use super::*;
     use crate::{
-        common::cbor,
+        common::{cbor, cbor::CborUpward},
         protocol_level_tokens::{CborHolderAccount, CoinInfo},
     };
     use concordium_contracts_common::{hashes::Hash, AccountAddress};
-    use crate::common::cbor::CborUpward;
 
     const TEST_HASH: [u8; 32] = [1; 32];
     const TEST_ADDRESS: AccountAddress = AccountAddress([0xff; 32]);

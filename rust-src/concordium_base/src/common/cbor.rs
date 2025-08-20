@@ -237,8 +237,7 @@ pub enum Upward<A, R = ()> {
 impl<A, R> Upward<A, R> {
     pub fn known_or_else<E, F>(self, error: F) -> Result<A, E>
     where
-        F: FnOnce(R) -> E,
-    {
+        F: FnOnce(R) -> E, {
         match self {
             Upward::Unknown(residual) => Err(error(residual)),
             Upward::Known(output) => Ok(output),
@@ -292,9 +291,7 @@ impl CborSerializationError {
         anyhow!("expected map key {}, was {}", expected, actual).into()
     }
 
-    pub fn unknown_map_key(key: MapKeyRef) -> Self {
-        anyhow!("unknown map key {:?}", key).into()
-    }
+    pub fn unknown_map_key(key: MapKeyRef) -> Self { anyhow!("unknown map key {:?}", key).into() }
 
     pub fn invalid_data(message: impl Display) -> Self {
         anyhow!("invalid data: {}", message).into()
@@ -337,9 +334,7 @@ where
 }
 
 impl From<std::io::Error> for CborSerializationError {
-    fn from(err: std::io::Error) -> Self {
-        anyhow!("IO error: {}", err).into()
-    }
+    fn from(err: std::io::Error) -> Self { anyhow!("IO error: {}", err).into() }
 }
 
 /// Encodes the given value as CBOR
@@ -377,9 +372,7 @@ pub trait CborSerialize {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()>;
 
     /// Whether the value corresponds to `null`
-    fn is_null(&self) -> bool {
-        false
-    }
+    fn is_null(&self) -> bool { false }
 }
 
 impl<T: CborSerialize> CborSerialize for Option<T> {
@@ -390,9 +383,7 @@ impl<T: CborSerialize> CborSerialize for Option<T> {
         }
     }
 
-    fn is_null(&self) -> bool {
-        self.is_none()
-    }
+    fn is_null(&self) -> bool { self.is_none() }
 }
 
 /// Type that can be deserialized from CBOR
@@ -407,16 +398,14 @@ pub trait CborDeserialize {
         decoder: C,
     ) -> CborSerializationResult<CborUpward<Self>>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         Self::deserialize(decoder).map(Upward::Known)
     }
 
     /// Produce value corresponding to `null` if possible for this type
     fn null() -> Option<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         None
     }
 }
@@ -424,8 +413,7 @@ pub trait CborDeserialize {
 impl<T: CborDeserialize> CborDeserialize for Option<T> {
     fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         Ok(match decoder.peek_data_item_header()? {
             DataItemHeader::Simple(simple::NULL) => {
                 let value = decoder.decode_simple()?;
@@ -438,8 +426,7 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
 
     fn null() -> Option<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         Some(None)
     }
 }
@@ -456,8 +443,7 @@ impl<T: CborSerialize> CborSerialize for CborUpward<T> {
 impl<T: CborDeserialize> CborDeserialize for CborUpward<T> {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         T::deserialize_maybe_unknown(decoder)
     }
 }
@@ -568,8 +554,7 @@ pub trait CborDecoder {
         expected_size: usize,
     ) -> CborSerializationResult<Self::MapDecoder>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         let map_decoder = self.decode_map()?;
         if map_decoder.size() != Some(expected_size) {
             return Err(CborSerializationError::map_size(
@@ -590,8 +575,7 @@ pub trait CborDecoder {
         expected_size: usize,
     ) -> CborSerializationResult<Self::ArrayDecoder>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         let array_decoder = self.decode_array()?;
         if array_decoder.size() != Some(expected_size) {
             return Err(CborSerializationError::array_size(
@@ -799,8 +783,7 @@ impl<T: CborSerialize> CborSerialize for &[T] {
 impl<T: CborDeserialize> CborDeserialize for Vec<T> {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         let mut array_decoder = decoder.decode_array()?;
         let mut vec = Vec::with_capacity(array_decoder.size().unwrap_or_default());
         while let Some(element) = array_decoder.deserialize_element()? {
@@ -825,8 +808,7 @@ impl<K: CborSerialize, V: CborSerialize> CborSerialize for HashMap<K, V> {
 impl<K: CborDeserialize + Eq + Hash, V: CborDeserialize> CborDeserialize for HashMap<K, V> {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized,
-    {
+        Self: Sized, {
         let mut map_decoder = decoder.decode_map()?;
         let mut map = HashMap::with_capacity(map_decoder.size().unwrap_or_default());
         while let Some((key, value)) = map_decoder.deserialize_entry()? {
@@ -987,7 +969,7 @@ mod test {
 
         #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
         struct TestStruct2 {
-            field1: u64,
+            field1:  u64,
             #[cbor(other)]
             unknown: HashMap<MapKey, value::Value>,
         }
@@ -1000,7 +982,7 @@ mod test {
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: TestStruct2 = cbor_decode(&cbor).unwrap();
         let value_unknown = TestStruct2 {
-            field1: 3,
+            field1:  3,
             unknown: [
                 (
                     MapKey::Text("field2".to_string()),
