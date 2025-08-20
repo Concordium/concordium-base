@@ -460,7 +460,7 @@ fn cbor_deserialize_enum_body(
             }
         } else {
             quote! {
-                #cbor_module::CborUpward::Unknown(vec![#cbor_module::value::Value::Text(key), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?])
+                #cbor_module::CborUpward::Unknown(#cbor_module::value::Value::Map(vec![(#cbor_module::value::Value::Text(key), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)]))
             }
         };
 
@@ -517,7 +517,7 @@ fn cbor_deserialize_enum_body(
 
         let deserialize_untagged = if let Some(untagged_ident) = cbor_variants.untagged_ident() {
             quote! {
-                Self::#untagged_ident(#cbor_module::CborDeserialize::deserialize(decoder)?)
+                #cbor_module::CborUpward::Known(Self::#untagged_ident(#cbor_module::CborDeserialize::deserialize(decoder)?))
             }
         } else {
             quote! {
@@ -527,21 +527,26 @@ fn cbor_deserialize_enum_body(
 
         let deserialize_unknown = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
-                Self::#other_ident(tag, #cbor_module::CborDeserialize::deserialize(decoder)?)
+                #cbor_module::CborUpward::Known(Self::#other_ident(tag, #cbor_module::CborDeserialize::deserialize(decoder)?))
             }
         } else {
             quote! {
-                return Err(#cbor_module::__private::anyhow::anyhow!("tag {} not among declared variants", tag).into());
+                #cbor_module::CborUpward::Unknown(#cbor_module::value::Value::Tag(tag, Box::new(#cbor_module::CborDeserialize::deserialize(decoder)?)))
             }
         };
 
         (
             quote! {
+                #cbor_module::CborDeserialize::deserialize_maybe_unknown(decoder)
+                  .and_then(|upward| upward.known_or_else(|_| #cbor_module::__private::anyhow::anyhow!("tag x not among declared variants").into()))
+                // todo use error #cbor_module::__private::anyhow::anyhow!("tag {} not among declared variants", tag).into()
+            },
+            Some(quote! {
                 Ok(match #cbor_module::CborDecoder::peek_data_item_header(&mut decoder)? {
                     #(
                         #cbor_module::DataItemHeader::Tag(#tagged_variant_tags) => {
                             #deserialize_variant_tags;
-                            Self::#tagged_variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?)
+                            #cbor_module::CborUpward::Known(Self::#tagged_variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?))
                         }
                     )*
                     #cbor_module::DataItemHeader::Tag(tag) => {
@@ -552,8 +557,7 @@ fn cbor_deserialize_enum_body(
                         #deserialize_untagged
                     }
                 })
-            },
-            None,
+            }),
         )
     } else {
         return Err(syn::Error::new(

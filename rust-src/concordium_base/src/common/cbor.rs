@@ -246,7 +246,7 @@ impl<A, R> Upward<A, R> {
     }
 }
 
-pub type CborUpward<A> = Upward<A, Vec<value::Value>>;
+pub type CborUpward<A> = Upward<A, value::Value>;
 
 /// How to handle unknown keys in decoded CBOR maps.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
@@ -1209,7 +1209,11 @@ mod test {
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
         let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
-        assert!(err.contains("unknown map key Text(\"var2\")"), "err: {}", err);
+        assert!(
+            err.contains("unknown map key Text(\"var2\")"),
+            "err: {}",
+            err
+        );
     }
 
     #[test]
@@ -1278,10 +1282,10 @@ mod test {
         let value = CborUpward::Known(TestEnum::Var2("abcd".to_string()));
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: CborUpward<TestEnum2> = cbor_decode(&cbor).unwrap();
-        let value_unknown = CborUpward::Unknown(vec![
+        let value_unknown = CborUpward::Unknown(Value::Map(vec![(
             Value::Text("var2".to_string()),
             Value::Text("abcd".to_string()),
-        ]);
+        )]));
         assert_eq!(value_decoded, value_unknown);
 
         // test encode unknown variant and decode it in a type where it is known
@@ -1471,10 +1475,8 @@ mod test {
         let value = CborUpward::Known(TestEnum::Var2("abcd".to_string()));
         let cbor = cbor_encode(&value).unwrap();
         let value_decoded: CborUpward<TestEnum2> = cbor_decode(&cbor).unwrap();
-        let value_unknown = CborUpward::Unknown(vec![Value::Tag(
-            39992,
-            Box::new(Value::Text("abcd".to_string())),
-        )]);
+        let value_unknown =
+            CborUpward::Unknown(Value::Tag(39992, Box::new(Value::Text("abcd".to_string()))));
         assert_eq!(value_decoded, value_unknown);
 
         // test encode unknown variant and decode it in a type where it is known
