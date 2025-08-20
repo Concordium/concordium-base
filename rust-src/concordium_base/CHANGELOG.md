@@ -1,6 +1,7 @@
 ## Unreleased
 
 - Add support for additional fields in `TokenModuleInitializationParameters`
+- Make `name`, `metadata` and `governanceAccount` optional in `TokenModuleInitializationParameters` and `TokenModuleState`
 
 ## 8.0.0 (2025-08-18)
 
