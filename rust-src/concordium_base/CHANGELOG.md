@@ -1,9 +1,38 @@
 ## Unreleased
 
-- Added PLT `TokenModuleInitializationParameters` CBOR type
-- Support empty structs with `CborSerialize` derive macro
-- Support CBOR decoding maps and arrays of indefinite length
-- Fix bug where CBOR decoding would fail on empty text strings
+- Support decoding unsigned and negative CBOR bignums to fixed-size machine integers (`i8`, ..., `i64`, `u8`, ..., `u64`)
+
+## 8.0.0 (2025-08-18)
+
+Adds support for integrating with Concordium nodes running protocol version 9.
+
+- Introduce protocol version 9 variant `ProtocolVersion::P9`.
+- Introduce basic types related to protocol level tokens (PLT)
+  - `RawCbor`: Represents CBOR encoded details for PLT module state, events, and operations
+  - `CborMemo`: Represents CBOR encoded memos for PLT transactions
+  - `TokenId`: A unique text identifier of a PLT
+  - `TokenAmount`: A representation of a PLT amount
+  - `TokenModuleRef`: The module reference of a PLT instance
+  - `MetadataUrl`: An object containing the url for token metadata
+  - `TokenModuleAccountState`: The state of an account with respect to a PLT token (e.g. balances or if account is on the allow/deny list)
+  - `TokenModuleInitializationParameters`: The parameters that are parsed to the token module when creating a PLT token.
+  - `TokenModuleState`: The state stored by the token module.
+  - `TokenHolder`: A representation of the different token holder entities. Currently, only accounts are supported.
+- Added new struct `CreatePlt` and corresponding `UpdatePayload` type representing the payload of a create PLT chain-update transaction creating a new token.
+- Added new variant `TokenUpdate` to the `Payload` enum and corresponding `TransactionType` representing the payload of an account transaction updating a token.
+- Added `TokenOperations` type to represent the different actions when updating a token (e.g. `mint/burn/transfer/pause/unpause/addAndRemoveFromToAllowDenyLists`). Operations can be created using functions in `concordium_base::protocol_level_tokens::operations`.
+- Added `TokenEvent` type.
+- Added `TokenEventDetails` enum with variants `Module(TokenModuleEvent)`, `Transfer(TokenTransferEvent)`, `Mint(TokenSupplyUpdateEvent)`, and `Burn(TokenSupplyUpdateEvent)`.
+- Added `TokenModuleRejectReason` struct representing PLT transaction rejections.
+- Added generic support for `cbor` encoding/decoding in the `cbor` module. The `cbor::cbor_decode/encode` function can encode/decode PLT types that are represented as `cbor`.
+- Added `Level2KeysUpdateV2(AuthorizationsV1)` variant to the `RootUpdate` enum which must have a field `Some(create_plt)` for exposing and updating the access structure for PLT creation.
+- Added new method `get_canonical_address` on the `AccountAddress` type.
+- Added Clone derive for `AccountCredentialWithoutProofs`.
+- Additional changes with respect to the last `alpha` release: 
+  - Added PLT `TokenModuleInitializationParameters` CBOR type.
+  - Support empty structs with `CborSerialize` derive macro.
+  - Support CBOR decoding maps and arrays of indefinite length.
+  - Fix bug where CBOR decoding would fail on empty text strings.
 
 ## 8.0.0-alpha.2 (2025-07-14)
 

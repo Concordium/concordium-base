@@ -4,7 +4,7 @@ use crate::common;
 ///
 /// Note: There are no checks for whether the bytes represent a valid CBOR
 /// encoding.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
 #[serde(try_from = "String", into = "String")]
 #[repr(transparent)]
 pub struct RawCbor {

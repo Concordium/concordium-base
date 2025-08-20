@@ -21,7 +21,7 @@ use std::str::FromStr;
 /// make `TokenAmount` self-contained with regard to the numerical value
 /// represented. This enables additional validation, both programmatic and at
 /// user level.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "TokenAmountJson", into = "TokenAmountJson")]
 pub struct TokenAmount {
     /// The amount of tokens as an unscaled integer value.
