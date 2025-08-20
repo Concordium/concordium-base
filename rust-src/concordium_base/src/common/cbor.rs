@@ -234,7 +234,19 @@ pub enum Upward<A, R = ()> {
     Known(A),
 }
 
-pub type UpwardCbor<A> = Upward<A, value::Value>;
+impl<A, R> Upward<A, R> {
+    pub fn known_or_else<E, F>(self, error: F) -> Result<A, E>
+    where
+        F: FnOnce(R) -> E,
+    {
+        match self {
+            Upward::Unknown(residual) => Err(error(residual)),
+            Upward::Known(output) => Ok(output),
+        }
+    }
+}
+
+pub type CborUpward<A> = Upward<A, Vec<value::Value>>;
 
 /// How to handle unknown keys in decoded CBOR maps.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
@@ -393,7 +405,7 @@ pub trait CborDeserialize {
     /// Deserialize value from the given decoder
     fn deserialize_maybe_unknown<C: CborDecoder>(
         decoder: C,
-    ) -> CborSerializationResult<UpwardCbor<Self>>
+    ) -> CborSerializationResult<CborUpward<Self>>
     where
         Self: Sized,
     {
@@ -432,7 +444,7 @@ impl<T: CborDeserialize> CborDeserialize for Option<T> {
     }
 }
 
-impl<T: CborSerialize> CborSerialize for UpwardCbor<T> {
+impl<T: CborSerialize> CborSerialize for CborUpward<T> {
     fn serialize<C: CborEncoder>(&self, encoder: C) -> CborSerializationResult<()> {
         match self {
             Upward::Unknown(value) => value.serialize(encoder),
@@ -441,7 +453,7 @@ impl<T: CborSerialize> CborSerialize for UpwardCbor<T> {
     }
 }
 
-impl<T: CborDeserialize> CborDeserialize for UpwardCbor<T> {
+impl<T: CborDeserialize> CborDeserialize for CborUpward<T> {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
         Self: Sized,
@@ -830,6 +842,7 @@ mod test {
     use super::*;
     use concordium_base_derive::{CborDeserialize, CborSerialize};
 
+    use crate::common::cbor::value::Value;
     use std::collections::HashMap;
 
     /// Struct with named fields encoded as map. Uses field name string literals
@@ -1196,7 +1209,7 @@ mod test {
         let value = TestEnum::Var2("abcd".to_string());
         let cbor = cbor_encode(&value).unwrap();
         let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
-        assert!(err.contains("unknown map key"), "err: {}", err);
+        assert!(err.contains("unknown map key Text(\"var2\")"), "err: {}", err);
     }
 
     #[test]
@@ -1227,6 +1240,53 @@ mod test {
 
         let cbor = cbor_encode(&value_unknown).unwrap();
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived_upward_known() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        let value = CborUpward::Known(TestEnum::Var1(3));
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "a1647661723103");
+        let value_decoded: CborUpward<TestEnum> = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_map_derived_upward_unknown() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum {
+            Var1(u64),
+            Var2(String),
+        }
+
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(map)]
+        enum TestEnum2 {
+            Var1(u64),
+        }
+
+        // test decode unknown variant
+        let value = CborUpward::Known(TestEnum::Var2("abcd".to_string()));
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: CborUpward<TestEnum2> = cbor_decode(&cbor).unwrap();
+        let value_unknown = CborUpward::Unknown(vec![
+            Value::Text("var2".to_string()),
+            Value::Text("abcd".to_string()),
+        ]);
+        assert_eq!(value_decoded, value_unknown);
+
+        // test encode unknown variant and decode it in a type where it is known
+        let cbor = cbor_encode(&value_unknown).unwrap();
+        let value_decoded: CborUpward<TestEnum> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
 
@@ -1275,6 +1335,36 @@ mod test {
         assert_eq!(hex::encode(&cbor), "6461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_tagged_derived_unknown_tag() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            #[cbor(tag = 39992)]
+            Var2(String),
+            Var3(String),
+        }
+
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum2 {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            Var3(String),
+        }
+
+        let value = TestEnum::Var2("abcd".to_string());
+        let cbor = cbor_encode(&value).unwrap();
+        let err = cbor_decode::<TestEnum2>(&cbor).unwrap_err().to_string();
+        assert!(
+            err.contains("tag 39992 not among declared variants"),
+            "err: {}",
+            err
+        );
     }
 
     #[test]
@@ -1336,6 +1426,60 @@ mod test {
         let cbor = cbor_encode(&value).unwrap();
         assert_eq!(hex::encode(&cbor), "d99c386461626364");
         let value_decoded: TestEnum = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_tagged_derived_upward_known() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            #[cbor(tag = 39992)]
+            Var2(String),
+        }
+
+        let value = CborUpward::Known(TestEnum::Var1(3));
+        let cbor = cbor_encode(&value).unwrap();
+        assert_eq!(hex::encode(&cbor), "d99c3703");
+        let value_decoded: CborUpward<TestEnum> = cbor_decode(&cbor).unwrap();
+        assert_eq!(value_decoded, value);
+    }
+
+    #[test]
+    fn test_enum_as_tagged_derived_upward_unknown() {
+        #[derive(Debug, Eq, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            #[cbor(tag = 39992)]
+            Var2(String),
+            Var3(String),
+        }
+
+        #[derive(Debug, PartialEq, CborSerialize, CborDeserialize)]
+        #[cbor(tagged)]
+        enum TestEnum2 {
+            #[cbor(tag = 39991)]
+            Var1(u64),
+            Var3(String),
+        }
+
+        // test decode unknown variant
+        let value = CborUpward::Known(TestEnum::Var2("abcd".to_string()));
+        let cbor = cbor_encode(&value).unwrap();
+        let value_decoded: CborUpward<TestEnum2> = cbor_decode(&cbor).unwrap();
+        let value_unknown = CborUpward::Unknown(vec![Value::Tag(
+            39992,
+            Box::new(Value::Text("abcd".to_string())),
+        )]);
+        assert_eq!(value_decoded, value_unknown);
+
+        // test encode unknown variant and decode it in a type where it is known
+        let cbor = cbor_encode(&value_unknown).unwrap();
+        let value_decoded: CborUpward<TestEnum> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
 

@@ -1,6 +1,6 @@
 use crate::common::cbor::{
     Bytes, CborArrayDecoder, CborArrayEncoder, CborDecoder, CborDeserialize, CborEncoder,
-    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader,
+    CborMapDecoder, CborMapEncoder, CborSerializationResult, CborSerialize, DataItemHeader, MapKey,
 };
 use anyhow::Context;
 use ciborium_ll::simple;
@@ -71,13 +71,16 @@ impl CborSerialize for Value {
         }
     }
 
-    fn is_null(&self) -> bool { matches!(self, Value::Null) }
+    fn is_null(&self) -> bool {
+        matches!(self, Value::Null)
+    }
 }
 
 impl CborDeserialize for Value {
     fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(match decoder.peek_data_item_header()? {
             DataItemHeader::Positive(_) => Value::Positive(decoder.decode_positive()?),
             DataItemHeader::Negative(_) => Value::Negative(decoder.decode_negative()?),
@@ -119,8 +122,18 @@ impl CborDeserialize for Value {
 
     fn null() -> Option<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Some(Value::Null)
+    }
+}
+
+impl Value {
+    pub fn from_map_key(map_key: MapKey) -> Self {
+        match map_key {
+            MapKey::Positive(value) => Value::Positive(value),
+            MapKey::Text(value) => Value::Text(value),
+        }
     }
 }
 

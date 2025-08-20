@@ -14,7 +14,7 @@ pub struct TokenModuleState {
     // /// A URL pointing to the token metadata
     pub metadata:           MetadataUrl,
     /// The governance account of the token.
-    pub governance_account: Upward<CborTokenHolder, value::Value>,
+    pub governance_account: CborTokenHolder,
     /// Whether the token supports an allow list.
     pub allow_list:         Option<bool>,
     /// Whether the token supports a deny list.
@@ -39,6 +39,7 @@ mod test {
         protocol_level_tokens::{CborHolderAccount, CoinInfo},
     };
     use concordium_contracts_common::{hashes::Hash, AccountAddress};
+    use crate::common::cbor::CborUpward;
 
     const TEST_HASH: [u8; 32] = [1; 32];
     const TEST_ADDRESS: AccountAddress = AccountAddress([0xff; 32]);

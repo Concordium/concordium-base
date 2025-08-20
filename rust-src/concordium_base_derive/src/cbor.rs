@@ -12,7 +12,7 @@ use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
     /// name in camel case is used as key as a text data item.
-    key:   Option<Expr>,
+    key: Option<Expr>,
     /// Deserialize fields in CBOR map that is not present in the struct
     /// to the field with this attribute.
     #[darling(default)]
@@ -25,9 +25,9 @@ pub struct CborVariantOpts {
     /// Deserialize unknown variants in CBOR to the variant with this
     /// attribute.
     #[darling(default)]
-    other:    bool,
+    other: bool,
     /// CBOR tag to add to data item in the variant.
-    tag:      Option<Expr>,
+    tag: Option<Expr>,
     /// CBOR tag to use to decided which variant to deserialize to.
     /// The difference between specifying `cbor(tag)` and this attribute
     /// is that the tag is not serialized as part of serializing the variant
@@ -43,23 +43,23 @@ pub struct CborOpts {
     #[darling(default)]
     transparent: bool,
     /// Add CBOR tag to data item <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items>.
-    tag:         Option<Expr>,
+    tag: Option<Expr>,
     /// Serialize enum as a map with a single entry. The variant
     /// name in camel case is used as the key as a text data item.
     #[darling(default)]
-    map:         bool,
+    map: bool,
     /// Serialize enum as a tagged data item. Each variant but have a
     /// `cbor(tag)` attribute - except for at most one variant which can be
     /// untagged.
     #[darling(default)]
-    tagged:      bool,
+    tagged: bool,
 }
 
 #[derive(Debug)]
 struct CborField {
     member: Member,
-    ty:     Type,
-    opts:   CborFieldOpts,
+    ty: Type,
+    opts: CborFieldOpts,
 }
 
 #[derive(Debug)]
@@ -143,7 +143,7 @@ impl CborFields {
 #[derive(Debug)]
 struct CborVariant {
     ident: Ident,
-    opts:  CborVariantOpts,
+    opts: CborVariantOpts,
 }
 
 #[derive(Debug)]
@@ -432,7 +432,7 @@ fn cbor_deserialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result
 fn cbor_deserialize_enum_body(
     variants: &Punctuated<Variant, Comma>,
     opts: &CborOpts,
-) -> syn::Result<TokenStream> {
+) -> syn::Result<(TokenStream, Option<TokenStream>)> {
     if opts.transparent {
         return Err(syn::Error::new(
             Span::call_site(),
@@ -456,32 +456,39 @@ fn cbor_deserialize_enum_body(
 
         let deserialize_unknown = if let Some(other_ident) = cbor_variants.other_ident() {
             quote! {
-                Self::#other_ident(key.into(), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)
+                #cbor_module::CborUpward::Known(Self::#other_ident(key.into(), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
             }
         } else {
             quote! {
-                return Err(#cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(&key)));
+                #cbor_module::CborUpward::Unknown(vec![#cbor_module::value::Value::Text(key), #cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?])
             }
         };
 
-        quote! {
-            let mut map_decoder = decoder.decode_map_expect_size(1)?;
+        (
+            quote! {
+                #cbor_module::CborDeserialize::deserialize_maybe_unknown(decoder)
+                  .and_then(|upward| upward.known_or_else(|_| #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(""))))
+                // todo use error #cbor_module::CborSerializationError::unknown_map_key(#cbor_module::MapKeyRef::Text(&key))
+            },
+            Some(quote! {
+                let mut map_decoder = decoder.decode_map_expect_size(1)?;
 
-            let Some(key): Option<String> = #cbor_module::CborMapDecoder::deserialize_key(&mut map_decoder)? else {
-                return Err(#cbor_module::__private::anyhow::anyhow!("expected an array element since size has already been checked to be 1").into());
-            };
+                let Some(key): Option<String> = #cbor_module::CborMapDecoder::deserialize_key(&mut map_decoder)? else {
+                    return Err(#cbor_module::__private::anyhow::anyhow!("expected an array element since size has already been checked to be 1").into());
+                };
 
-            Ok(match key.as_str() {
-                #(
-                    #variant_map_keys => {
-                        Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?)
+                Ok(match key.as_str() {
+                    #(
+                        #variant_map_keys => {
+                            #cbor_module::CborUpward::Known(Self::#variant_idents(#cbor_module::CborMapDecoder::deserialize_value(&mut map_decoder)?))
+                        }
+                    )*
+                    _ => {
+                        #deserialize_unknown
                     }
-                )*
-                _ => {
-                    #deserialize_unknown
-                }
-            })
-        }
+                })
+            }),
+        )
     } else if opts.tagged {
         let tagged_variant_idents = cbor_variants
             .cbor_tagged_variants()
@@ -514,7 +521,7 @@ fn cbor_deserialize_enum_body(
             }
         } else {
             quote! {
-                return Err(#cbor_module::__private::anyhow::anyhow!("Tag needed to deserialize to enum, no tag specified").into());
+                return Err(#cbor_module::__private::anyhow::anyhow!("tag needed to deserialize to enum, no tag specified").into());
             }
         };
 
@@ -524,27 +531,30 @@ fn cbor_deserialize_enum_body(
             }
         } else {
             quote! {
-                return Err(#cbor_module::__private::anyhow::anyhow!("Tag {} not among declared variants", tag).into());
+                return Err(#cbor_module::__private::anyhow::anyhow!("tag {} not among declared variants", tag).into());
             }
         };
 
-        quote! {
-            Ok(match #cbor_module::CborDecoder::peek_data_item_header(&mut decoder)? {
-                #(
-                    #cbor_module::DataItemHeader::Tag(#tagged_variant_tags) => {
-                        #deserialize_variant_tags;
-                        Self::#tagged_variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?)
+        (
+            quote! {
+                Ok(match #cbor_module::CborDecoder::peek_data_item_header(&mut decoder)? {
+                    #(
+                        #cbor_module::DataItemHeader::Tag(#tagged_variant_tags) => {
+                            #deserialize_variant_tags;
+                            Self::#tagged_variant_idents(#cbor_module::CborDeserialize::deserialize(decoder)?)
+                        }
+                    )*
+                    #cbor_module::DataItemHeader::Tag(tag) => {
+                        #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, tag)?;
+                        #deserialize_unknown
                     }
-                )*
-                #cbor_module::DataItemHeader::Tag(tag) => {
-                    #cbor_module::CborDecoder::decode_tag_expect(&mut decoder, tag)?;
-                    #deserialize_unknown
-                }
-                _ => {
-                    #deserialize_untagged
-                }
-            })
-        }
+                    _ => {
+                        #deserialize_untagged
+                    }
+                })
+            },
+            None,
+        )
     } else {
         return Err(syn::Error::new(
             Span::call_site(),
@@ -560,8 +570,10 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
 
     let cbor_module = get_cbor_module()?;
 
-    let deserialize_body = match &ast.data {
-        Data::Struct(DataStruct { fields, .. }) => cbor_deserialize_struct_body(fields, &opts)?,
+    let (deserialize_body, deserialize_maybe_unknown_body) = match &ast.data {
+        Data::Struct(DataStruct { fields, .. }) => {
+            (cbor_deserialize_struct_body(fields, &opts)?, None)
+        }
         Data::Enum(DataEnum { variants, .. }) => cbor_deserialize_enum_body(variants, &opts)?,
         _ => {
             return Err(syn::Error::new(
@@ -579,14 +591,34 @@ pub fn impl_cbor_deserialize(ast: &syn::DeriveInput) -> syn::Result<TokenStream>
         quote!()
     };
 
-    Ok(quote! {
-        impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
-            fn deserialize<C: #cbor_module::CborDecoder>(mut decoder: C) -> #cbor_module::CborSerializationResult<Self> {
-                #decode_tag
-                #deserialize_body
+    Ok(
+        if let Some(deserialize_maybe_unknown_body) = deserialize_maybe_unknown_body {
+            quote! {
+                impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
+                    fn deserialize<C: #cbor_module::CborDecoder>(decoder: C) -> #cbor_module::CborSerializationResult<Self> {
+                        #deserialize_body
+                    }
+
+                    fn deserialize_maybe_unknown<C: #cbor_module::CborDecoder>(
+                        mut decoder: C,
+                    ) -> #cbor_module::CborSerializationResult<#cbor_module::CborUpward<Self>>
+                    {
+                        #decode_tag
+                        #deserialize_maybe_unknown_body
+                    }
+                }
             }
-        }
-    })
+        } else {
+            quote! {
+                impl #impl_generics #cbor_module::CborDeserialize for #name #ty_generics #where_clauses {
+                    fn deserialize<C: #cbor_module::CborDecoder>(mut decoder: C) -> #cbor_module::CborSerializationResult<Self> {
+                        #decode_tag
+                        #deserialize_body
+                    }
+                }
+            }
+        },
+    )
 }
 
 fn cbor_serialize_struct_body(fields: &Fields, opts: &CborOpts) -> syn::Result<TokenStream> {
