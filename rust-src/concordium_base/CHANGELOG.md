@@ -1,7 +1,7 @@
 ## Unreleased
 
 - Support decoding unsigned and negative CBOR bignums to fixed-size machine integers (`i8`, ..., `i64`, `u8`, ..., `u64`)
-- Support decoding indefinite length CBOR byte and text string
+- Support decoding indefinite length CBOR byte and text strings
 
 ## 8.0.0 (2025-08-18)
 

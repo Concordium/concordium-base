@@ -265,11 +265,8 @@ impl<R: Read> Decoder<R> {
     /// Current byte offset for the decoding
     pub fn offset(&mut self) -> usize { self.inner.offset() }
 
-    /// Decodes bytes data item into given destination. Length of bytes data
-    /// item must match the destination length.
-    ///
-    /// This function works only for bytes data items of definite length (which
-    /// means there is a single segment)
+    /// Decodes bytes data item into given destination. Destination will
+    /// be extended as needed (or an error returned)
     fn decode_bytes_impl<T>(
         &mut self,
         dest: &mut Cursor<T>,
@@ -562,8 +559,8 @@ mod test {
     }
 
     #[test]
-    fn test_byte_string_indefinite_length_zero_size_chunk() {
-        // byte string with an empty chunk
+    fn test_byte_string_indefinite_length_zero_size_segment() {
+        // byte string with an empty segment
         let cbor = hex::decode("5F44aabbccdd4043eeff99FF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let bytes_decoded = decoder.decode_bytes().unwrap();
@@ -571,8 +568,8 @@ mod test {
     }
 
     #[test]
-    fn test_byte_string_indefinite_length_zero_chunks() {
-        // byte string with zero chunks
+    fn test_byte_string_indefinite_length_zero_segments() {
+        // byte string with zero segments
         let cbor = hex::decode("5FFF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let bytes_decoded = decoder.decode_bytes().unwrap();
@@ -592,7 +589,7 @@ mod test {
     /// Decode using `decode_bytes_exact`
     #[test]
     fn test_byte_string_exact_indefinite_length() {
-        // byte string with two chunks
+        // byte string with two segments
         let cbor = hex::decode("5F44aabbccdd43eeff99FF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let mut bytes = [0u8; 7];
@@ -650,7 +647,7 @@ mod test {
 
     #[test]
     fn test_text_string_indefinite_length() {
-        // text string with two chunks
+        // text string with two segments
         let cbor = hex::decode("7F646162636463656667FF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
@@ -658,8 +655,8 @@ mod test {
     }
 
     #[test]
-    fn test_text_string_indefinite_length_zero_size_chunk() {
-        // text string with an empty chunk
+    fn test_text_string_indefinite_length_zero_size_segment() {
+        // text string with an empty segment
         let cbor = hex::decode("7F64616263646063656667FF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
@@ -667,8 +664,8 @@ mod test {
     }
 
     #[test]
-    fn test_text_string_indefinite_length_zero_chunks() {
-        // text string with zero chunks
+    fn test_text_string_indefinite_length_zero_segments() {
+        // text string with zero segments
         let cbor = hex::decode("7FFF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
