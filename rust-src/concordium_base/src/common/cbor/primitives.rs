@@ -744,12 +744,19 @@ mod test {
         assert_eq!(bytes_decoded, bytes);
 
         let err = cbor_decode::<[u8; 4]>(&cbor).unwrap_err().to_string();
-        assert!(err.contains("fixed length byte string destination too short"), "err: {}", err);
+        assert!(
+            err.contains("fixed length byte string destination too short"),
+            "err: {}",
+            err
+        );
 
         let err = cbor_decode::<[u8; 6]>(&cbor).unwrap_err().to_string();
-        assert!(err.contains("fixed length byte string destination too long"), "err: {}", err);
+        assert!(
+            err.contains("fixed length byte string destination too long"),
+            "err: {}",
+            err
+        );
     }
-
 
     #[test]
     fn test_bytes_indefinite_length() {
@@ -757,8 +764,6 @@ mod test {
         let bytes_decoded: Bytes = cbor_decode(&cbor).unwrap();
         assert_eq!(bytes_decoded, Bytes(hex::decode("aabbccddeeff99").unwrap()));
     }
-
-
 
     #[test]
     fn test_string() {
@@ -786,6 +791,4 @@ mod test {
         let text_decoded: String = cbor_decode(&cbor).unwrap();
         assert_eq!(text_decoded, "abcdefg");
     }
-
-
 }

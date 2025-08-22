@@ -1359,9 +1359,4 @@ mod test {
         let err = cbor_decode::<bool>(&cbor).unwrap_err().to_string();
         assert!(err.contains("data remaining after parse"), "err: {}", err);
     }
-
-
-
-
-
 }

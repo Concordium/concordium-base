@@ -579,8 +579,6 @@ mod test {
         assert_eq!(bytes_decoded, hex::decode("").unwrap());
     }
 
-
-
     /// Decode using `decode_bytes_exact`
     #[test]
     fn test_byte_string_exact_definite_length() {
@@ -682,15 +680,12 @@ mod test {
     fn test_bytes_length_invalid() {
         let cbor = hex::decode("58ff0102030405").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
-        let error =decoder.decode_bytes().unwrap_err();
+        let error = decoder.decode_bytes().unwrap_err();
         assert!(
-            error
-                .to_string()
-                .contains("failed to fill whole buffer"),
+            error.to_string().contains("failed to fill whole buffer"),
             "message: {}",
             error.to_string()
         );
-
     }
 
     /// Test text string is longer than CBOR content
@@ -698,18 +693,13 @@ mod test {
     fn test_text_length_invalid() {
         let cbor = hex::decode("78ff61626364").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
-        let error =decoder.decode_text().unwrap_err();
+        let error = decoder.decode_text().unwrap_err();
         assert!(
-            error
-                .to_string()
-                .contains("failed to fill whole buffer"),
+            error.to_string().contains("failed to fill whole buffer"),
             "message: {}",
             error.to_string()
         );
-
-
     }
-
 
     #[test]
     fn test_skip_data_item() {
