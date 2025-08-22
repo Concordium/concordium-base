@@ -1351,4 +1351,17 @@ mod test {
         let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
     }
+
+    /// Test that `cbor_decode` fails if there is remaining data
+    #[test]
+    fn test_remaining_data() {
+        let cbor = hex::decode("f4f4").unwrap();
+        let err = cbor_decode::<bool>(&cbor).unwrap_err().to_string();
+        assert!(err.contains("data remaining after parse"), "err: {}", err);
+    }
+
+
+
+
+
 }

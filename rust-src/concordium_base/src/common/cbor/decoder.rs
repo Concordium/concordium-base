@@ -579,7 +579,7 @@ mod test {
         assert_eq!(bytes_decoded, hex::decode("").unwrap());
     }
 
-    // todo ar test wrong length
+
 
     /// Decode using `decode_bytes_exact`
     #[test]
@@ -677,7 +677,40 @@ mod test {
         assert_eq!(text_decoded, "");
     }
 
-    /// Test skipping data items during decode
+    /// Test byte string is longer than CBOR content
+    #[test]
+    fn test_bytes_length_invalid() {
+        let cbor = hex::decode("58ff0102030405").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let error =decoder.decode_bytes().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("failed to fill whole buffer"),
+            "message: {}",
+            error.to_string()
+        );
+
+    }
+
+    /// Test text string is longer than CBOR content
+    #[test]
+    fn test_text_length_invalid() {
+        let cbor = hex::decode("78ff61626364").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let error =decoder.decode_text().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("failed to fill whole buffer"),
+            "message: {}",
+            error.to_string()
+        );
+
+
+    }
+
+
     #[test]
     fn test_skip_data_item() {
         // simple

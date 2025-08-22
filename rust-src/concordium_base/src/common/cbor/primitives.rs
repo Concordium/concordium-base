@@ -744,22 +744,24 @@ mod test {
         assert_eq!(bytes_decoded, bytes);
 
         let err = cbor_decode::<[u8; 4]>(&cbor).unwrap_err().to_string();
-        assert!(err.contains("expected 4 bytes"), "err: {}", err);
+        assert!(err.contains("fixed length byte string destination too short"), "err: {}", err);
+
+        let err = cbor_decode::<[u8; 6]>(&cbor).unwrap_err().to_string();
+        assert!(err.contains("fixed length byte string destination too long"), "err: {}", err);
     }
 
-    /// Test where CBOR is not well-formed: Bytes length in header does not
-    /// match actual data. Test that we get an error and don't panic
-    #[test]
-    fn test_bytes_length_invalid() {
-        let cbor = hex::decode("58ff0102030405").unwrap();
-        cbor_decode::<[u8; 0xff]>(&cbor).expect_err("should give error");
 
-        let cbor = hex::decode("410102030405").unwrap();
-        cbor_decode::<[u8; 0x01]>(&cbor).expect_err("should give error");
+    #[test]
+    fn test_bytes_indefinite_length() {
+        let cbor = hex::decode("5F44aabbccdd43eeff99FF").unwrap();
+        let bytes_decoded: Bytes = cbor_decode(&cbor).unwrap();
+        assert_eq!(bytes_decoded, Bytes(hex::decode("aabbccddeeff99").unwrap()));
     }
 
+
+
     #[test]
-    fn test_text() {
+    fn test_string() {
         let text = "abcd";
 
         let cbor = cbor_encode(&text).unwrap();
@@ -769,7 +771,7 @@ mod test {
     }
 
     #[test]
-    fn test_text_empty() {
+    fn test_string_empty() {
         let text = "";
 
         let cbor = cbor_encode(&text).unwrap();
@@ -778,14 +780,12 @@ mod test {
         assert_eq!(text_decoded, text);
     }
 
-    /// Test where CBOR is not well-formed: Text length in header does not match
-    /// actual data. Test that we get an error and don't panic
     #[test]
-    fn test_text_length_invalid() {
-        let cbor = hex::decode("78ff61626364").unwrap();
-        cbor_decode::<String>(&cbor).expect_err("should give error");
-
-        let cbor = hex::decode("6161626364").unwrap();
-        cbor_decode::<String>(&cbor).expect_err("should give error");
+    fn test_string_indefinite_length() {
+        let cbor = hex::decode("7F646162636463656667FF").unwrap();
+        let text_decoded: String = cbor_decode(&cbor).unwrap();
+        assert_eq!(text_decoded, "abcdefg");
     }
+
+
 }
