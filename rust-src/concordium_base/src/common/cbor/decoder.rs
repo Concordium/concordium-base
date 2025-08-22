@@ -4,11 +4,15 @@ use crate::common::cbor::{
 };
 use anyhow::anyhow;
 use ciborium_ll::Header;
-use std::{fmt::Display, io::Read};
+use std::{
+    fmt::Display,
+    io::{Cursor, Read},
+    iter,
+};
 
 /// CBOR decoder implementation
 pub struct Decoder<R: Read> {
-    inner: ciborium_ll::Decoder<R>,
+    inner:   ciborium_ll::Decoder<R>,
     options: SerializationOptions,
 }
 
@@ -78,12 +82,8 @@ where
     }
 
     fn decode_bytes_exact(self, dest: &mut [u8]) -> CborSerializationResult<()> {
-        match self.inner.pull()? {
-            Header::Bytes(Some(size)) => {
-                if size != dest.len() {
-                    return Err(anyhow!("expected {} bytes, was {}", dest.len(), size).into());
-                }
-            }
+        let size = match self.inner.pull()? {
+            Header::Bytes(size) => size,
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Bytes,
@@ -92,13 +92,17 @@ where
             }
         };
 
-        self.decode_definite_length_bytes(dest)?;
+        let mut cursor = Cursor::new(dest);
+        self.decode_bytes_impl(&mut cursor, size)?;
+        if (cursor.position() as usize) < cursor.get_ref().len() {
+            return Err(anyhow!("fixed length byte string destination too long").into());
+        }
         Ok(())
     }
 
     fn decode_bytes(self) -> CborSerializationResult<Vec<u8>> {
         let size = match self.inner.pull()? {
-            Header::Bytes(Some(size)) => size,
+            Header::Bytes(size) => size,
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Bytes,
@@ -107,14 +111,15 @@ where
             }
         };
 
-        let mut bytes = vec![0; size];
-        self.decode_definite_length_bytes(&mut bytes)?;
-        Ok(bytes)
+        let bytes = Vec::with_capacity(size.unwrap_or_default());
+        let mut cursor = Cursor::new(bytes);
+        self.decode_bytes_impl(&mut cursor, size)?;
+        Ok(cursor.into_inner())
     }
 
     fn decode_text(self) -> CborSerializationResult<Vec<u8>> {
         let size = match self.inner.pull()? {
-            Header::Text(Some(size)) => size,
+            Header::Text(size) => size,
             header => {
                 return Err(CborSerializationError::expected_data_item(
                     DataItemType::Text,
@@ -123,8 +128,8 @@ where
             }
         };
 
-        let mut bytes = vec![0; size];
-        self.decode_definite_length_text(&mut bytes)?;
+        let mut bytes = Vec::with_capacity(size.unwrap_or_default());
+        self.decode_text_impl(&mut bytes, size)?;
         Ok(bytes)
     }
 
@@ -210,62 +215,106 @@ where
         Ok(())
     }
 
-    fn options(&self) -> SerializationOptions {
-        self.options
+    fn options(&self) -> SerializationOptions { self.options }
+}
+
+trait CursorExt {
+    /// Advance the position of the cursor with given `len`, if possible, and
+    /// return the slice covering the advanced positions.  
+    /// Cursors backed by dynamically sized collections like `Vec`
+    /// will append to the collection as needed and will always advance
+    /// the requested `len`. Cursors that cannot append will advance as far
+    /// as possible only.
+    fn advance(&mut self, len: usize) -> &mut [u8];
+}
+
+impl CursorExt for Cursor<Vec<u8>> {
+    fn advance(&mut self, len: usize) -> &mut [u8] { advance_vec(self, len) }
+}
+
+impl CursorExt for Cursor<&mut Vec<u8>> {
+    fn advance(&mut self, len: usize) -> &mut [u8] { advance_vec(self, len) }
+}
+
+fn advance_vec<T: AsRef<Vec<u8>> + AsMut<Vec<u8>>>(
+    cursor: &mut Cursor<T>,
+    len: usize,
+) -> &mut [u8] {
+    let old_position = cursor.position() as usize;
+    let new_position = old_position + len;
+    let old_len = cursor.get_ref().as_ref().len();
+    let new_len = old_len.max(new_position);
+    cursor
+        .get_mut()
+        .as_mut()
+        .extend(iter::repeat(0u8).take(new_len - old_len));
+    cursor.set_position(new_position as u64);
+    &mut cursor.get_mut().as_mut()[old_position..new_position]
+}
+
+impl CursorExt for Cursor<&mut [u8]> {
+    fn advance(&mut self, len: usize) -> &mut [u8] {
+        let old_position = self.position() as usize;
+        let new_position = self.get_ref().len().min(old_position + len);
+        self.set_position(new_position as u64);
+        &mut self.get_mut()[old_position..new_position]
     }
 }
 
 impl<R: Read> Decoder<R> {
     /// Current byte offset for the decoding
-    pub fn offset(&mut self) -> usize {
-        self.inner.offset()
-    }
+    pub fn offset(&mut self) -> usize { self.inner.offset() }
 
     /// Decodes bytes data item into given destination. Length of bytes data
     /// item must match the destination length.
     ///
     /// This function works only for bytes data items of definite length (which
     /// means there is a single segment)
-    fn decode_definite_length_bytes(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
+    fn decode_bytes_impl<T>(
+        &mut self,
+        dest: &mut Cursor<T>,
+        size: Option<usize>,
+    ) -> CborSerializationResult<()>
     where
-        <R as ciborium_io::Read>::Error: Display,
-    {
-        let mut segments = self.inner.bytes(Some(dest.len()));
-        let Some(mut segment) = segments.pull()? else {
-            return Err(anyhow!("must have at least one segment").into());
-        };
+        Cursor<T>: CursorExt,
+        <R as ciborium_io::Read>::Error: Display, {
+        let mut segments = self.inner.bytes(size);
+        while let Some(mut segment) = segments.pull()? {
+            let left = segment.left();
+            if left == 0 {
+                continue;
+            }
+            let advanced = dest.advance(left);
+            if advanced.len() != left {
+                return Err(anyhow!("fixed length byte string destination too short").into());
+            }
+            let length_read = segment.pull(advanced)?.expect("no content").len();
+            assert_eq!(length_read, left);
+        }
 
-        segment.pull(dest)?;
-        if segment.left() != 0 {
-            return Err(anyhow!("remaining data in segment").into());
-        }
-        if segments.pull()?.is_some() {
-            return Err(anyhow!("expected to only one segment").into());
-        }
         Ok(())
     }
 
-    /// Decodes text data item into given destination. Length of text data item
-    /// must match the destination length.
-    ///
-    /// This function works only for text data items of definite length (which
-    /// means there is a single segment)
-    fn decode_definite_length_text(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
+    /// Decodes text data item into given destination.
+    fn decode_text_impl(
+        &mut self,
+        dest: &mut Vec<u8>,
+        size: Option<usize>,
+    ) -> CborSerializationResult<()>
     where
-        <R as ciborium_io::Read>::Error: Display,
-    {
-        let mut segments = self.inner.text(Some(dest.len()));
-        let Some(mut segment) = segments.pull()? else {
-            return Err(anyhow!("must have at least one segment").into());
-        };
+        <R as ciborium_io::Read>::Error: Display, {
+        let mut dest = Cursor::new(dest);
+        let mut segments = self.inner.text(size);
+        while let Some(mut segment) = segments.pull()? {
+            let left = segment.left();
+            if left == 0 {
+                continue;
+            }
+            let advanced = dest.advance(left);
+            let length_read = segment.pull(advanced)?.expect("no content").len();
+            assert_eq!(length_read, left);
+        }
 
-        segment.pull(dest)?;
-        if segment.left() != 0 {
-            return Err(anyhow!("remaining data in segment").into());
-        }
-        if segments.pull()?.is_some() {
-            return Err(anyhow!("expected to only one segment").into());
-        }
         Ok(())
     }
 
@@ -294,10 +343,10 @@ enum MapDecoderStateEnum {
 /// Decoder of CBOR map
 #[must_use]
 pub struct MapDecoder<'a, R: Read> {
-    declared_size: Option<usize>,
+    declared_size:   Option<usize>,
     decoded_entries: usize,
-    decoder: &'a mut Decoder<R>,
-    state: MapDecoderStateEnum,
+    decoder:         &'a mut Decoder<R>,
+    state:           MapDecoderStateEnum,
 }
 
 impl<'a, R: Read> MapDecoder<'a, R> {
@@ -315,9 +364,7 @@ impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> Option<usize> {
-        self.declared_size
-    }
+    fn size(&self) -> Option<usize> { self.declared_size }
 
     fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>> {
         self.state = match self.state {
@@ -378,9 +425,9 @@ where
 /// Decoder of CBOR array
 #[must_use]
 pub struct ArrayDecoder<'a, R: Read> {
-    declared_size: Option<usize>,
+    declared_size:    Option<usize>,
     decoded_elements: usize,
-    decoder: &'a mut Decoder<R>,
+    decoder:          &'a mut Decoder<R>,
 }
 
 impl<'a, R: Read> ArrayDecoder<'a, R> {
@@ -397,9 +444,7 @@ impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> Option<usize> {
-        self.declared_size
-    }
+    fn size(&self) -> Option<usize> { self.declared_size }
 
     fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>> {
         // Arrays of definite length encodes "size" number of data item elements.
@@ -516,12 +561,76 @@ mod test {
     }
 
     #[test]
+    fn test_byte_string_indefinite_length_zero_size_chunk() {
+        // byte string with an empty chunk
+        let cbor = hex::decode("5F44aabbccdd4043eeff99FF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let bytes_decoded = decoder.decode_bytes().unwrap();
+        assert_eq!(bytes_decoded, hex::decode("aabbccddeeff99").unwrap());
+    }
+
+    #[test]
     fn test_byte_string_indefinite_length_zero_chunks() {
         // byte string with zero chunks
         let cbor = hex::decode("5FFF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let bytes_decoded = decoder.decode_bytes().unwrap();
         assert_eq!(bytes_decoded, hex::decode("").unwrap());
+    }
+
+    // todo ar test wrong length
+
+    /// Decode using `decode_bytes_exact`
+    #[test]
+    fn test_byte_string_exact_definite_length() {
+        let cbor = hex::decode("580401020304").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let mut bytes = [0u8; 4];
+        decoder.decode_bytes_exact(&mut bytes).unwrap();
+        assert_eq!(bytes.as_slice(), hex::decode("01020304").unwrap());
+    }
+
+    /// Decode using `decode_bytes_exact`
+    #[test]
+    fn test_byte_string_exact_indefinite_length() {
+        // byte string with two chunks
+        let cbor = hex::decode("5F44aabbccdd43eeff99FF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let mut bytes = [0u8; 7];
+        decoder.decode_bytes_exact(&mut bytes).unwrap();
+        assert_eq!(bytes.as_slice(), hex::decode("aabbccddeeff99").unwrap());
+    }
+
+    /// Decode to array that is too short for string
+    #[test]
+    fn test_byte_string_exact_too_short() {
+        let cbor = hex::decode("580401020304").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let mut bytes = [0u8; 3];
+        let error = decoder.decode_bytes_exact(&mut bytes).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("byte string destination too short"),
+            "message: {}",
+            error.to_string()
+        );
+    }
+
+    /// Decode to array that is too long for string
+    #[test]
+    fn test_byte_string_exact_too_long() {
+        let cbor = hex::decode("580401020304").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let mut bytes = [0u8; 5];
+        let error = decoder.decode_bytes_exact(&mut bytes).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("byte string destination too long"),
+            "message: {}",
+            error.to_string()
+        );
     }
 
     #[test]
@@ -544,6 +653,15 @@ mod test {
     fn test_text_string_indefinite_length() {
         // text string with two chunks
         let cbor = hex::decode("7F646162636463656667FF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
+        assert_eq!(text_decoded, "abcdefg");
+    }
+
+    #[test]
+    fn test_text_string_indefinite_length_zero_size_chunk() {
+        // text string with an empty chunk
+        let cbor = hex::decode("7F64616263646063656667FF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
         assert_eq!(text_decoded, "abcdefg");
