@@ -219,8 +219,8 @@ where
 }
 
 trait CursorExt {
-    /// Advance the position of the cursor with given `len`, if possible, and
-    /// return the slice covering the advanced positions.  
+    /// Advance the position of the cursor with by `len`, or as many positions
+    /// as possible, and return the slice covering the advanced positions.  
     /// Cursors backed by dynamically sized collections like `Vec`
     /// will append to the collection as needed and will always advance
     /// the requested `len`. Cursors that cannot append will advance as far
@@ -288,8 +288,8 @@ impl<R: Read> Decoder<R> {
             if advanced.len() != left {
                 return Err(anyhow!("fixed length byte string destination too short").into());
             }
-            let length_read = segment.pull(advanced)?.expect("no content").len();
-            assert_eq!(length_read, left);
+            let read = segment.pull(advanced)?;
+            debug_assert_eq!(read.map(|bytes| bytes.len()), Some(left));
         }
 
         Ok(())
@@ -311,8 +311,9 @@ impl<R: Read> Decoder<R> {
                 continue;
             }
             let advanced = dest.advance(left);
-            let length_read = segment.pull(advanced)?.expect("no content").len();
-            assert_eq!(length_read, left);
+            debug_assert_eq!(advanced.len(), left);
+            let read = segment.pull(advanced)?;
+            debug_assert_eq!(read.map(|str| str.len()), Some(left));
         }
 
         Ok(())
@@ -748,5 +749,89 @@ mod test {
         decoder.skip_data_item().unwrap();
         assert_eq!(12345, decoder.decode_positive().unwrap());
         assert_eq!(decoder.offset(), bytes.len());
+    }
+
+    /// Test `<Cursor<&mut Vec<u8>> as CursorExt>::advance` for empty `Vec`
+    #[test]
+    fn test_vec_cursor_advance_empty() {
+        /// Test empty vec
+        let mut vec = Vec::new();
+        let mut cursor = Cursor::new(&mut vec);
+
+        let slice = cursor.advance(0);
+        assert_eq!(slice.len(), 0);
+        assert_eq!(cursor.position(), 0);
+        assert_eq!(cursor.get_ref().len(), 0);
+
+        let slice = cursor.advance(2);
+        assert_eq!(slice.len(), 2);
+        slice[0] = 1;
+        slice[1] = 2;
+        assert_eq!(cursor.position(), 2);
+        assert_eq!(cursor.get_ref().len(), 2);
+
+        let slice = cursor.advance(3);
+        assert_eq!(slice.len(), 3);
+        slice[0] = 3;
+        slice[1] = 4;
+        assert_eq!(cursor.position(), 5);
+        assert_eq!(cursor.get_ref().len(), 5);
+
+        assert_eq!(vec, vec![1, 2, 3, 4, 0]);
+    }
+
+    /// Test `<Cursor<&mut Vec<u8>> as CursorExt>::advance` for `Vec` with
+    /// existing content
+    #[test]
+    fn test_vec_cursor_advance_non_empty() {
+        /// Test empty vec
+        let mut vec = vec![11, 12, 13];
+        let mut cursor = Cursor::new(&mut vec);
+
+        let slice = cursor.advance(0);
+        assert_eq!(slice.len(), 0);
+        assert_eq!(cursor.position(), 0);
+        assert_eq!(cursor.get_ref().len(), 3);
+
+        let slice = cursor.advance(2);
+        assert_eq!(slice.len(), 2);
+        slice[0] = 1;
+        slice[1] = 2;
+        assert_eq!(cursor.position(), 2);
+        assert_eq!(cursor.get_ref().len(), 3);
+
+        let slice = cursor.advance(3);
+        assert_eq!(slice.len(), 3);
+        slice[0] = 3;
+        slice[1] = 4;
+        assert_eq!(cursor.position(), 5);
+        assert_eq!(cursor.get_ref().len(), 5);
+
+        assert_eq!(vec, vec![1, 2, 3, 4, 0]);
+    }
+
+    /// Test `<Cursor<&mut [u8]> as CursorExt>::advance`
+    #[test]
+    fn test_slice_cursor_advance() {
+        let mut array = [11, 12, 13, 0];
+        let mut cursor = Cursor::new(array.as_mut_slice());
+
+        let slice = cursor.advance(0);
+        assert_eq!(slice.len(), 0);
+        assert_eq!(cursor.position(), 0);
+
+        let slice = cursor.advance(2);
+        assert_eq!(slice.len(), 2);
+        slice[0] = 1;
+        slice[1] = 2;
+        assert_eq!(cursor.position(), 2);
+
+        let slice = cursor.advance(3);
+        assert_eq!(slice.len(), 2);
+        slice[0] = 3;
+        slice[1] = 4;
+        assert_eq!(cursor.position(), 4);
+
+        assert_eq!(array, [1, 2, 3, 4]);
     }
 }
