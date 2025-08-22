@@ -8,7 +8,7 @@ use std::{fmt::Display, io::Read};
 
 /// CBOR decoder implementation
 pub struct Decoder<R: Read> {
-    inner:   ciborium_ll::Decoder<R>,
+    inner: ciborium_ll::Decoder<R>,
     options: SerializationOptions,
 }
 
@@ -210,12 +210,16 @@ where
         Ok(())
     }
 
-    fn options(&self) -> SerializationOptions { self.options }
+    fn options(&self) -> SerializationOptions {
+        self.options
+    }
 }
 
 impl<R: Read> Decoder<R> {
     /// Current byte offset for the decoding
-    pub fn offset(&mut self) -> usize { self.inner.offset() }
+    pub fn offset(&mut self) -> usize {
+        self.inner.offset()
+    }
 
     /// Decodes bytes data item into given destination. Length of bytes data
     /// item must match the destination length.
@@ -224,7 +228,8 @@ impl<R: Read> Decoder<R> {
     /// means there is a single segment)
     fn decode_definite_length_bytes(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
     where
-        <R as ciborium_io::Read>::Error: Display, {
+        <R as ciborium_io::Read>::Error: Display,
+    {
         let mut segments = self.inner.bytes(Some(dest.len()));
         let Some(mut segment) = segments.pull()? else {
             return Err(anyhow!("must have at least one segment").into());
@@ -247,7 +252,8 @@ impl<R: Read> Decoder<R> {
     /// means there is a single segment)
     fn decode_definite_length_text(&mut self, dest: &mut [u8]) -> CborSerializationResult<()>
     where
-        <R as ciborium_io::Read>::Error: Display, {
+        <R as ciborium_io::Read>::Error: Display,
+    {
         let mut segments = self.inner.text(Some(dest.len()));
         let Some(mut segment) = segments.pull()? else {
             return Err(anyhow!("must have at least one segment").into());
@@ -288,10 +294,10 @@ enum MapDecoderStateEnum {
 /// Decoder of CBOR map
 #[must_use]
 pub struct MapDecoder<'a, R: Read> {
-    declared_size:   Option<usize>,
+    declared_size: Option<usize>,
     decoded_entries: usize,
-    decoder:         &'a mut Decoder<R>,
-    state:           MapDecoderStateEnum,
+    decoder: &'a mut Decoder<R>,
+    state: MapDecoderStateEnum,
 }
 
 impl<'a, R: Read> MapDecoder<'a, R> {
@@ -309,7 +315,9 @@ impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> Option<usize> { self.declared_size }
+    fn size(&self) -> Option<usize> {
+        self.declared_size
+    }
 
     fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>> {
         self.state = match self.state {
@@ -370,9 +378,9 @@ where
 /// Decoder of CBOR array
 #[must_use]
 pub struct ArrayDecoder<'a, R: Read> {
-    declared_size:    Option<usize>,
+    declared_size: Option<usize>,
     decoded_elements: usize,
-    decoder:          &'a mut Decoder<R>,
+    decoder: &'a mut Decoder<R>,
 }
 
 impl<'a, R: Read> ArrayDecoder<'a, R> {
@@ -389,7 +397,9 @@ impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> Option<usize> { self.declared_size }
+    fn size(&self) -> Option<usize> {
+        self.declared_size
+    }
 
     fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>> {
         // Arrays of definite length encodes "size" number of data item elements.
@@ -478,6 +488,74 @@ mod test {
         assert_eq!(entry3, None);
         assert_eq!(map_decoder.size(), None);
         assert_eq!(decoder.inner.offset(), bytes.len());
+    }
+
+    #[test]
+    fn test_byte_string_zero_length() {
+        let cbor = hex::decode("40").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let bytes_decoded = decoder.decode_bytes().unwrap();
+        assert_eq!(bytes_decoded, hex::decode("").unwrap());
+    }
+
+    #[test]
+    fn test_byte_string_definite_length() {
+        let cbor = hex::decode("580401020304").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let bytes_decoded = decoder.decode_bytes().unwrap();
+        assert_eq!(bytes_decoded, hex::decode("01020304").unwrap());
+    }
+
+    #[test]
+    fn test_byte_string_indefinite_length() {
+        // byte string with two chunks
+        let cbor = hex::decode("5F44aabbccdd43eeff99FF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let bytes_decoded = decoder.decode_bytes().unwrap();
+        assert_eq!(bytes_decoded, hex::decode("aabbccddeeff99").unwrap());
+    }
+
+    #[test]
+    fn test_byte_string_indefinite_length_zero_chunks() {
+        // byte string with zero chunks
+        let cbor = hex::decode("5FFF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let bytes_decoded = decoder.decode_bytes().unwrap();
+        assert_eq!(bytes_decoded, hex::decode("").unwrap());
+    }
+
+    #[test]
+    fn test_text_string_zero_length() {
+        let cbor = hex::decode("60").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
+        assert_eq!(text_decoded, "");
+    }
+
+    #[test]
+    fn test_text_string_definite_length() {
+        let cbor = hex::decode("780461626364").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
+        assert_eq!(text_decoded, "abcd");
+    }
+
+    #[test]
+    fn test_text_string_indefinite_length() {
+        // text string with two chunks
+        let cbor = hex::decode("7F646162636463656667FF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
+        assert_eq!(text_decoded, "abcdefg");
+    }
+
+    #[test]
+    fn test_text_string_indefinite_length_zero_chunks() {
+        // text string with zero chunks
+        let cbor = hex::decode("7FFF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
+        assert_eq!(text_decoded, "");
     }
 
     /// Test skipping data items during decode
