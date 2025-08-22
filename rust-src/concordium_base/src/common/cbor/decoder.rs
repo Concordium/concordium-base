@@ -551,7 +551,7 @@ mod test {
 
     #[test]
     fn test_byte_string_indefinite_length() {
-        // byte string with two chunks
+        // byte string with two segments
         let cbor = hex::decode("5F44aabbccdd43eeff99FF").unwrap();
         let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
         let bytes_decoded = decoder.decode_bytes().unwrap();
