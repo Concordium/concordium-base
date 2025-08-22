@@ -1,6 +1,9 @@
 ## Unreleased
 
+- Add support for additional fields in `TokenModuleInitializationParameters`
+- Make `name`, `metadata` and `governanceAccount` optional in `TokenModuleInitializationParameters` and `TokenModuleState`
 - Support decoding unsigned and negative CBOR bignums to fixed-size machine integers (`i8`, ..., `i64`, `u8`, ..., `u64`)
+
 
 ## 8.0.0 (2025-08-18)
 
