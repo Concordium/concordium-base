@@ -309,8 +309,10 @@ impl<R: Read> Decoder<R> {
             }
             let advanced = dest.advance(left);
             debug_assert_eq!(advanced.len(), left);
-            let read = segment.pull(advanced)?;
-            debug_assert_eq!(read.map(|str| str.len()), Some(left));
+            segment.pull(advanced)?;
+            if segment.left() != 0 {
+                return Err(anyhow!("invalid UTF-8").into());
+            }
         }
 
         Ok(())
@@ -693,6 +695,41 @@ mod test {
         let error = decoder.decode_text().unwrap_err();
         assert!(
             error.to_string().contains("failed to fill whole buffer"),
+            "message: {}",
+            error.to_string()
+        );
+    }
+
+    /// Test decode UTF-8 two byte code point c2bd
+    #[test]
+    fn test_text_two_byte_code_point() {
+        let cbor = hex::decode("780461c2bd64").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let text_decoded = String::from_utf8(decoder.decode_text().unwrap()).unwrap();
+        assert_eq!(text_decoded, "a\u{bd}d");
+    }
+
+    /// Test decode where UTF-8 two byte code point is incomplete
+    #[test]
+    fn test_text_invalid_code_point() {
+        let cbor = hex::decode("780261c2").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let error = decoder.decode_text().unwrap_err();
+        assert!(
+            error.to_string().contains("invalid UTF-8"),
+            "message: {}",
+            error.to_string()
+        );
+    }
+
+    /// Test decode UTF-8 two byte code point c2bd that spans two segments
+    #[test]
+    fn test_text_string_indefinite_length_two_byte_code_point_slit_across_segments() {
+        let cbor = hex::decode("7F6261c262bd67FF").unwrap();
+        let mut decoder = Decoder::new(cbor.as_slice(), SerializationOptions::default());
+        let error = decoder.decode_text().unwrap_err();
+        assert!(
+            error.to_string().contains("invalid UTF-8"),
             "message: {}",
             error.to_string()
         );
