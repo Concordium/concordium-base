@@ -311,7 +311,7 @@ impl<R: Read> Decoder<R> {
             debug_assert_eq!(advanced.len(), left);
             segment.pull(advanced)?;
             if segment.left() != 0 {
-                return Err(anyhow!("invalid UTF-8").into());
+                return Err(anyhow!("invalid UTF-8 in byte string").into());
             }
         }
 
