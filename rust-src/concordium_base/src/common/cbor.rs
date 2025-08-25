@@ -539,19 +539,13 @@ pub trait CborDecoder {
     }
 
     /// Decode bytes.
-    ///
-    /// Works only for definite length bytes.
     fn decode_bytes(self) -> CborSerializationResult<Vec<u8>>;
 
     /// Decode bytes into given `destination`. The length of the bytes data item
     /// must match the `destination` length, else an error is returned.
-    ///
-    /// Works only for definite length bytes.
     fn decode_bytes_exact(self, destination: &mut [u8]) -> CborSerializationResult<()>;
 
     /// Decode text and return UTF8 encoding.
-    ///
-    /// Works only for definite length text.
     fn decode_text(self) -> CborSerializationResult<Vec<u8>>;
 
     /// Decode simple value, see <https://www.rfc-editor.org/rfc/rfc8949.html#name-floating-point-numbers-and->
@@ -1356,5 +1350,13 @@ mod test {
         assert_eq!(hex::encode(&cbor), "f6");
         let value_decoded: Option<u64> = cbor_decode(&cbor).unwrap();
         assert_eq!(value_decoded, value);
+    }
+
+    /// Test that `cbor_decode` fails if there is remaining data
+    #[test]
+    fn test_remaining_data() {
+        let cbor = hex::decode("f4f4").unwrap();
+        let err = cbor_decode::<bool>(&cbor).unwrap_err().to_string();
+        assert!(err.contains("data remaining after parse"), "err: {}", err);
     }
 }
