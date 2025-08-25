@@ -1,12 +1,13 @@
 use super::{Deserial, ParseResult, Serial};
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, derive_more::Into)]
-#[serde(transparent)]
 /// Encoded data `A` using the Concordium specific serialization
 /// [`Serial`]/[`Deserial`].
 ///
 /// This is a simple wrapper around [`Vec<u8>`](Vec) with bespoke serialization
 /// and provides [`serde`] implementation as a hex string.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, derive_more::Into)]
+#[serde(transparent)]
+#[repr(transparent)]
 pub struct Encoded<A> {
     #[serde(with = "crate::internal::byte_array_hex")]
     pub(crate) bytes: Vec<u8>,
@@ -14,7 +15,7 @@ pub struct Encoded<A> {
 }
 
 impl<A> Encoded<A> {
-    /// Serialize `A` into Encoded<A>.
+    /// Serialize `A` into `Encoded<A>`.
     pub fn encode(item: &A) -> Self
     where
         A: Serial, {

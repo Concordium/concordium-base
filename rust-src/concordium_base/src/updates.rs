@@ -910,7 +910,7 @@ impl EncodedUpdatePayload {
     /// Get the size of the payload.
     pub fn size(&self) -> PayloadSize {
         PayloadSize {
-            size: u32::try_from(self.bytes.len()).expect(""),
+            size: self.bytes.len() as u32,
         }
     }
 }
@@ -952,7 +952,7 @@ impl common::Deserial for UpdateInstruction {
                 "Unable to read the expected number of bytes from the update payload, expected \
                  {usize_len}B but only got {read_len}"
             );
-            bytes.try_into()?
+            EncodedUpdatePayload::from(bytes)
         };
         let signatures = source.get()?;
         Ok(Self {
