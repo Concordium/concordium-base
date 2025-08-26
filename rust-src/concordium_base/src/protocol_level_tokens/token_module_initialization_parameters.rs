@@ -1,7 +1,7 @@
-use concordium_base_derive::{CborDeserialize, CborSerialize};
-
 use super::{MetadataUrl, TokenAmount};
-use crate::protocol_level_tokens::token_holder::CborTokenHolder;
+use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborHolderAccount};
+use concordium_base_derive::{CborDeserialize, CborSerialize};
+use std::collections::HashMap;
 
 /// These parameters are passed to the token module to initialize the token.
 /// The token initialization update will also include the ticker symbol,
@@ -9,11 +9,11 @@ use crate::protocol_level_tokens::token_holder::CborTokenHolder;
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct TokenModuleInitializationParameters {
     /// The name of the token
-    pub name:               String,
+    pub name:               Option<String>,
     // /// A URL pointing to the token metadata
-    pub metadata:           MetadataUrl,
+    pub metadata:           Option<MetadataUrl>,
     /// The governance account of the token.
-    pub governance_account: CborTokenHolder,
+    pub governance_account: Option<CborHolderAccount>,
     /// Whether the token supports an allow list.
     pub allow_list:         Option<bool>,
     /// Whether the token supports a deny list.
@@ -25,6 +25,9 @@ pub struct TokenModuleInitializationParameters {
     pub mintable:           Option<bool>,
     /// Whether the token is burnable.
     pub burnable:           Option<bool>,
+    /// Additional fields.
+    #[cbor(other)]
+    pub additional:         HashMap<String, value::Value>,
 }
 
 #[cfg(test)]
@@ -42,13 +45,13 @@ mod test {
     #[test]
     fn test_token_module_state_cbor() {
         let token_module_initialization_parameters = TokenModuleInitializationParameters {
-            name:               "TK1".to_string(),
-            metadata:           MetadataUrl {
+            name:               Some("TK1".to_string()),
+            metadata:           Some(MetadataUrl {
                 url:              "https://tokenurl1".to_string(),
                 checksum_sha_256: Some(Hash::from(TEST_HASH)),
                 additional:       Default::default(),
-            },
-            governance_account: CborTokenHolder::Account(CborHolderAccount {
+            }),
+            governance_account: Some(CborHolderAccount {
                 address:   TEST_ADDRESS,
                 coin_info: Some(CoinInfo::CCD),
             }),
@@ -57,6 +60,7 @@ mod test {
             initial_supply:     Some(TokenAmount::from_raw(10000000, 8)),
             mintable:           Some(true),
             burnable:           Some(true),
+            additional:         Default::default(),
         };
 
         let cbor = cbor::cbor_encode(&token_module_initialization_parameters).unwrap();
