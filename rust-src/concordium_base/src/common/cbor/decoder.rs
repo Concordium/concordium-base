@@ -219,7 +219,7 @@ where
 }
 
 trait CursorExt {
-    /// Advance the position of the cursor with by `len`, or as many positions
+    /// Advance the position of the cursor by `len`, or as many positions
     /// as possible, and return the slice covering the advanced positions.  
     /// Cursors backed by dynamically sized collections like `Vec`
     /// will append to the collection as needed and will always advance
