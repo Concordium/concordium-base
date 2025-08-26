@@ -12,30 +12,6 @@ const COIN_INFO_TAG: u64 = 40305;
 /// Concordiums listing in https://github.com/satoshilabs/slips/blob/master/slip-0044.md
 const CONCORDIUM_SLIP_0044_CODE: u64 = 919;
 
-/// An entity that can receive and hold protocol level tokens.
-/// Currently, this can only be a Concordium account address.
-/// The type is used in the transaction payload, in reject reasons, and in the
-/// `TokenModuleEvent`. This type shouldn't be confused with the `TokenHolder`
-/// type that in contrast is used in the `TokenTransfer`, `TokenMint`, and
-/// `TokenBurn` events.
-#[derive(
-    Debug,
-    Eq,
-    PartialEq,
-    Clone,
-    serde::Serialize,
-    serde::Deserialize,
-    CborSerialize,
-    CborDeserialize,
-)]
-#[serde(tag = "type")]
-#[serde(rename_all = "camelCase")]
-#[cbor(tagged)]
-pub enum CborTokenHolder {
-    #[cbor(peek_tag = ACCOUNT_HOLDER_TAG)]
-    Account(CborHolderAccount),
-}
-
 /// Account address that holds protocol level tokens
 #[derive(
     Debug,
@@ -129,30 +105,30 @@ mod test {
 
     #[test]
     fn test_token_holder_cbor_no_coin_info() {
-        let token_holder = CborTokenHolder::Account(CborHolderAccount {
+        let token_holder = CborHolderAccount {
             address:   ADDRESS,
             coin_info: None,
-        });
+        };
 
         let cbor = cbor::cbor_encode(&token_holder).unwrap();
         assert_eq!(
             hex::encode(&cbor),
             "d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         );
-        let token_holder_decoded: CborTokenHolder = cbor::cbor_decode(&cbor).unwrap();
+        let token_holder_decoded: CborHolderAccount = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_holder_decoded, token_holder);
     }
 
     #[test]
     fn test_token_holder_cbor() {
-        let token_holder = CborTokenHolder::Account(CborHolderAccount {
+        let token_holder = CborHolderAccount {
             address:   ADDRESS,
             coin_info: Some(CoinInfo::CCD),
-        });
+        };
 
         let cbor = cbor::cbor_encode(&token_holder).unwrap();
         assert_eq!(hex::encode(&cbor), "d99d73a201d99d71a1011903970358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
-        let token_holder_decoded: CborTokenHolder = cbor::cbor_decode(&cbor).unwrap();
+        let token_holder_decoded: CborHolderAccount = cbor::cbor_decode(&cbor).unwrap();
         assert_eq!(token_holder_decoded, token_holder);
     }
 }

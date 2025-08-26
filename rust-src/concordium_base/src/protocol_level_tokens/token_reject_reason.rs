@@ -1,7 +1,7 @@
 use crate::{
     common::{cbor, cbor::CborSerializationResult},
     protocol_level_tokens::{
-        token_holder::CborTokenHolder, RawCbor, TokenAmount, TokenId,
+        token_holder::CborHolderAccount, RawCbor, TokenAmount, TokenId,
         TokenModuleCborTypeDiscriminator,
     },
 };
@@ -89,7 +89,7 @@ pub struct AddressNotFoundRejectReason {
     /// The index in the list of operations of the failing operation.
     pub index:   usize,
     /// The address that could not be resolved.
-    pub address: CborTokenHolder,
+    pub address: CborHolderAccount,
 }
 
 /// The balance of tokens on the sender account is insufficient
@@ -176,7 +176,7 @@ pub struct OperationNotPermittedRejectReason {
     pub index:   usize,
     /// (Optionally) the address that does not have the necessary permissions to
     /// perform the operation.
-    pub address: Option<CborTokenHolder>,
+    pub address: Option<CborHolderAccount>,
     /// The reason why the operation is not permitted.
     pub reason:  Option<String>,
 }
@@ -217,10 +217,10 @@ mod test {
     fn test_address_not_found_reject_reason_cbor() {
         let variant = AddressNotFoundRejectReason {
             index:   3,
-            address: CborTokenHolder::Account(CborHolderAccount {
+            address: CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
-            }),
+            },
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a265696e646578036761646472657373d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
@@ -305,10 +305,10 @@ mod test {
     fn test_operation_not_permitted_reject_reason_cbor() {
         let variant = OperationNotPermittedRejectReason {
             index:   0,
-            address: Some(CborTokenHolder::Account(CborHolderAccount {
+            address: Some(CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
-            })),
+            }),
             reason:  Some("testfailture".to_string()),
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();

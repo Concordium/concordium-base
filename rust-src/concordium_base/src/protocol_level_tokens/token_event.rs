@@ -5,7 +5,7 @@ use crate::{
 use concordium_base_derive::{CborDeserialize, CborSerialize};
 use concordium_contracts_common::AccountAddress;
 
-use super::{cbor::RawCbor, CborTokenHolder, TokenAmount, TokenId};
+use super::{cbor::RawCbor, TokenAmount, TokenId, CborHolderAccount};
 
 /// An event produced from the effect of a token transaction.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -99,7 +99,7 @@ pub enum TokenModuleEventType {
 #[serde(rename_all = "camelCase")]
 pub struct TokenListUpdateEventDetails {
     /// The account that was added or removed from an allow or deny list
-    pub target: CborTokenHolder,
+    pub target: CborHolderAccount,
 }
 
 /// An event emitted when the token is paused or unpaused.
@@ -120,7 +120,7 @@ pub struct TokenPauseEventDetails {}
 /// The type is used in the `TokenTransfer`, `TokenMint`, and `TokenBurn`
 /// events. Currently, this can only be a Concordium account address.
 /// The type can be extended to e.g. support smart contracts in the future.
-/// This type shouldn't be confused with the `CborTokenHolder` type that in
+/// This type shouldn't be confused with the `CborHolderAccount` type that in
 /// contrast is used in the transaction payload, in reject reasons, and in the
 /// `TokenModuleEvent`.
 #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -222,10 +222,10 @@ mod test {
     #[test]
     fn test_decode_add_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::Account(CborHolderAccount {
+            target: CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
-            }),
+            },
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
@@ -244,10 +244,10 @@ mod test {
     #[test]
     fn test_decode_remove_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::Account(CborHolderAccount {
+            target: CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
-            }),
+            },
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
@@ -266,10 +266,10 @@ mod test {
     #[test]
     fn test_decode_add_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::Account(CborHolderAccount {
+            target: CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
-            }),
+            },
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
@@ -288,10 +288,10 @@ mod test {
     #[test]
     fn test_decode_remove_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
-            target: CborTokenHolder::Account(CborHolderAccount {
+            target: CborHolderAccount {
                 address:   token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
-            }),
+            },
         };
         let cbor = cbor::cbor_encode(&variant).unwrap();
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
