@@ -1,8 +1,6 @@
 use crate::{
     common::cbor::{self, value, CborSerializationResult},
-    protocol_level_tokens::{
-        CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId,
-    },
+    protocol_level_tokens::{CborHolderAccount, CoinInfo, RawCbor, TokenAmount, TokenId},
     transactions::Memo,
 };
 use concordium_base_derive::{CborDeserialize, CborSerialize};
