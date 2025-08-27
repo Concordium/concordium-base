@@ -15,7 +15,7 @@ on:
   workflow_dispatch: # allows manual trigger
 
 env:
-  RUST_FMT: nightly-2023-04-01-x86_64-unknown-linux-gnu
+  RUST_FMT: 1.82
   RUST_CLIPPY: 1.82
 
 jobs:
