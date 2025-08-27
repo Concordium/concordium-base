@@ -26,7 +26,7 @@ use concordium_std::*;
 #[derive(Clone, Serialize, SchemaType)]
 struct TransferRequest {
     /// The amount of CCD to transfer from the contract to the target_account
-    amount:         Amount,
+    amount: Amount,
     /// The account to transfer to
     target_account: AccountAddress,
 }
@@ -45,14 +45,14 @@ struct InitParams {
     /// The amount of CCD allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
     /// The duration in which recently accepted recent_transfers are checked
-    time_limit:           Duration,
+    time_limit: Duration,
 }
 
 #[contract_state(contract = "rate-limited")]
 #[derive(Serialize, SchemaType)]
 pub struct State {
     /// The initiating parameters
-    init_params:      InitParams,
+    init_params: InitParams,
     /// The recently accepted transfers.
     /// Used to check whether a new transfer request should be accepted
     /// according to the time_limit and timed_withdraw_limit.
@@ -85,7 +85,12 @@ fn contract_receive_deposit<A: HasActions>(
     Ok(A::accept())
 }
 
-#[receive(contract = "rate-limited", name = "receive", payable, parameter = "TransferRequest")]
+#[receive(
+    contract = "rate-limited",
+    name = "receive",
+    payable,
+    parameter = "TransferRequest"
+)]
 /// Allows the owner of the contract to transfer CCD from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<A: HasActions>(
@@ -109,11 +114,16 @@ fn contract_receive_transfer<A: HasActions>(
     };
 
     // Remove requests before the time_window_start
-    state.recent_transfers.retain(|r| r.time_of_transfer >= time_window_start);
+    state
+        .recent_transfers
+        .retain(|r| r.time_of_transfer >= time_window_start);
 
     // Calculate sum of recent_transfers within time limit
-    let amount_transferred_in_window: Amount =
-        state.recent_transfers.iter().map(|r| r.transfer_request.amount).sum();
+    let amount_transferred_in_window: Amount = state
+        .recent_transfers
+        .iter()
+        .map(|r| r.transfer_request.amount)
+        .sum();
 
     ensure!(
         transfer.transfer_request.amount <= ctx.self_balance()
@@ -166,21 +176,21 @@ mod tests {
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(6),
+                    amount: Amount::from_micro_ccd(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(2),
+                    amount: Amount::from_micro_ccd(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(3),
+                    amount: Amount::from_micro_ccd(3),
                     target_account: account1,
                 },
             },
@@ -188,7 +198,7 @@ mod tests {
 
         let init_params = InitParams {
             timed_withdraw_limit: Amount::from_micro_ccd(10),
-            time_limit:           Duration::from_millis(9),
+            time_limit: Duration::from_millis(9),
         };
 
         let mut state = State {
@@ -251,21 +261,21 @@ mod tests {
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(6),
+                    amount: Amount::from_micro_ccd(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(2),
+                    amount: Amount::from_micro_ccd(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(3),
+                    amount: Amount::from_micro_ccd(3),
                     target_account: account2,
                 },
             },
@@ -273,7 +283,7 @@ mod tests {
 
         let init_params = InitParams {
             timed_withdraw_limit: Amount::from_micro_ccd(10),
-            time_limit:           Duration::from_millis(10),
+            time_limit: Duration::from_millis(10),
         };
 
         let mut state = State {
@@ -286,15 +296,21 @@ mod tests {
             contract_receive_transfer(&ctx, Amount::zero(), &mut state);
 
         // Test
-        claim!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
+        claim!(
+            res.is_err(),
+            "Contract receive transfer succeeded, but it should not have."
+        );
         claim_eq!(
             state.recent_transfers.len(),
             3,
             "No recent transfers should have been removed, and the new one should not be added."
         );
 
-        let recent_transfers_amounts: Vec<u64> =
-            state.recent_transfers.iter().map(|t| t.transfer_request.amount.micro_ccd).collect();
+        let recent_transfers_amounts: Vec<u64> = state
+            .recent_transfers
+            .iter()
+            .map(|t| t.transfer_request.amount.micro_ccd)
+            .collect();
         claim_eq!(
             recent_transfers_amounts,
             vec![6, 2, 3],
@@ -332,21 +348,21 @@ mod tests {
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(0),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(1),
+                    amount: Amount::from_micro_ccd(1),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(1),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(1),
+                    amount: Amount::from_micro_ccd(1),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: Timestamp::from_timestamp_millis(2),
                 transfer_request: TransferRequest {
-                    amount:         Amount::from_micro_ccd(1),
+                    amount: Amount::from_micro_ccd(1),
                     target_account: account2,
                 },
             },
@@ -354,7 +370,7 @@ mod tests {
 
         let init_params = InitParams {
             timed_withdraw_limit: Amount::from_micro_ccd(10),
-            time_limit:           Duration::from_millis(1000),
+            time_limit: Duration::from_millis(1000),
         };
 
         let mut state = State {
@@ -367,6 +383,9 @@ mod tests {
             contract_receive_transfer(&ctx, Amount::zero(), &mut state);
 
         // Test
-        claim!(res.is_ok(), "Contract receive transfer failed, but it should not have.");
+        claim!(
+            res.is_ok(),
+            "Contract receive transfer failed, but it should not have."
+        );
     }
 }

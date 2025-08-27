@@ -35,7 +35,9 @@ impl<I> Host<I> for TestHost {
     type Interrupt = NoInterrupt;
 
     // In this test, we don't care about charging for execution, so we do nothing.
-    fn tick_initial_memory(&mut self, _num_pages: u32) -> crate::machine::RunResult<()> { Ok(()) }
+    fn tick_initial_memory(&mut self, _num_pages: u32) -> crate::machine::RunResult<()> {
+        Ok(())
+    }
 
     // Do not allow any external calls.
     // In particular this means that this host cannot be used after the metering

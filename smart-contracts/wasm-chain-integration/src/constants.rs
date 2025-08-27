@@ -38,13 +38,17 @@ pub const BASE_SIMPLE_TRANSFER_ACTION_COST: u64 = BASE_ACTION_COST + 40000;
 /// contract state) to the Wasm memory. The 10 is to account for copying empty
 /// buffers and is based on benchmarks.
 #[inline(always)]
-pub fn copy_from_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
+pub fn copy_from_host_cost(x: u32) -> u64 {
+    10 + u64::from(x)
+}
 
 /// Cost of copying the given amount of bytes to the host (e.g., contract state)
 /// from the Wasm to host memory. The 10 is to account for
 /// copying empty buffers and is based on benchmarks.
 #[inline(always)]
-pub fn copy_to_host_cost(x: u32) -> u64 { 10 + u64::from(x) }
+pub fn copy_to_host_cost(x: u32) -> u64 {
+    10 + u64::from(x)
+}
 
 /// Cost of copying a V1 parameter between the Wasm memory and the host in
 /// either direction.
@@ -73,7 +77,9 @@ pub fn copy_parameter_cost(len: u32) -> u64 {
 /// number of additional bytes. The `/100` guarantees that with 3_000_000NRG
 /// we can produce at most 30MB additional contract state per block.
 #[inline(always)]
-pub fn additional_state_size_cost(x: u64) -> u64 { x / 100 }
+pub fn additional_state_size_cost(x: u64) -> u64 {
+    x / 100
+}
 
 /// Cost of logging an event of a given size.
 #[inline(always)]
@@ -149,7 +155,9 @@ pub const INVOKE_BASE_COST: u64 = 500;
 /// Cost of delete_prefix which accounts for finding the prefix. It is
 /// parametrized by the length of the key.
 #[inline(always)]
-pub fn delete_prefix_find_cost(len: u32) -> u64 { 10 * u64::from(len) }
+pub fn delete_prefix_find_cost(len: u32) -> u64 {
+    10 * u64::from(len)
+}
 
 /// Cost of a new iterator. This accounts for tree traversal as well
 /// as the storage the execution engine needs to keep for the iterator.
@@ -163,7 +171,9 @@ pub fn delete_prefix_find_cost(len: u32) -> u64 { 10 * u64::from(len) }
 /// charge adequately so that memory use is bounded. This is the reason for the
 /// 100 factor.
 #[inline(always)]
-pub fn new_iterator_cost(len: u32) -> u64 { 80 + 100 * u64::from(len) }
+pub fn new_iterator_cost(len: u32) -> u64 {
+    80 + 100 * u64::from(len)
+}
 
 /// Basic administrative cost that is charged when an invalid iterator is
 /// attempted to be deleted.
@@ -173,7 +183,9 @@ pub const DELETE_ITERATOR_BASE_COST: u64 = 10;
 /// cost is based on the length of the key. The exact factor of 32 is estimated
 /// based on benchmarks.
 #[inline(always)]
-pub fn delete_iterator_cost(len: u32) -> u64 { 32 + 32 * u64::from(len) }
+pub fn delete_iterator_cost(len: u32) -> u64 {
+    32 + 32 * u64::from(len)
+}
 
 /// Cost of return the size of the iterator key. This is constant since the
 /// iterator key is readily available.
@@ -219,7 +231,9 @@ pub const MAX_KEY_SIZE: usize = 1 << 30;
 /// With `100` we have at most 30MB of memory allocated with 3000000NRG. We can
 /// relax this a bit, but not much.
 #[inline(always)]
-pub fn additional_entry_size_cost(x: u64) -> u64 { 100 * x }
+pub fn additional_entry_size_cost(x: u64) -> u64 {
+    100 * x
+}
 
 /// Cost of querying entry size.
 pub const ENTRY_SIZE_COST: u64 = 32;
@@ -227,25 +241,35 @@ pub const ENTRY_SIZE_COST: u64 = 32;
 /// Cost of copying the given amount of bytes from the host (e.g., parameter or
 /// contract state) to the Wasm memory.
 #[inline(always)]
-pub fn read_entry_cost(x: u32) -> u64 { 32 + u64::from(x / 8) }
+pub fn read_entry_cost(x: u32) -> u64 {
+    32 + u64::from(x / 8)
+}
 /// Cost of copying the given amount of bytes to the host (e.g., parameter or
 /// contract state) from the Wasm to host memory.
 #[inline(always)]
-pub fn write_entry_cost(x: u32) -> u64 { 32 + u64::from(x / 8) }
+pub fn write_entry_cost(x: u32) -> u64 {
+    32 + u64::from(x / 8)
+}
 
 /// Cost of writing the given bytes of the return value.
 #[inline(always)]
-pub fn write_output_cost(x: u32) -> u64 { 10 + u64::from(x) }
+pub fn write_output_cost(x: u32) -> u64 {
+    10 + u64::from(x)
+}
 
 /// Cost of adding an additional byte to the output. With the factor of 30
 /// and 3000000NRG there can be at most 100MB of output produced.
 #[inline(always)]
-pub fn additional_output_size_cost(x: u64) -> u64 { 30 * x }
+pub fn additional_output_size_cost(x: u64) -> u64 {
+    30 * x
+}
 
 /// Cost (in interpreter energy) of verification of an ed25519 with the Zebra
 /// implementation. The cost depends on the size of the message and is based on
 /// benchmarking.
-pub fn verify_ed25519_cost(message_len: u32) -> u64 { 100_000 + 100 * u64::from(message_len) }
+pub fn verify_ed25519_cost(message_len: u32) -> u64 {
+    100_000 + 100 * u64::from(message_len)
+}
 
 /// Cost of verification of an ecdsa over secp256k1 with the bitcoin-core
 /// implementation. Since signature verification only works on 32 byte messages
@@ -253,10 +277,16 @@ pub fn verify_ed25519_cost(message_len: u32) -> u64 { 100_000 + 100 * u64::from(
 pub const VERIFY_ECDSA_SECP256K1_COST: u64 = 100_000;
 
 /// Cost of computing a SHA2-256 digest of the message of the given length.
-pub fn hash_sha2_256_cost(data_len: u32) -> u64 { 500 + 7 * u64::from(data_len) }
+pub fn hash_sha2_256_cost(data_len: u32) -> u64 {
+    500 + 7 * u64::from(data_len)
+}
 
 /// Cost of computing a SHA3-256 digest of the message of the given length.
-pub fn hash_sha3_256_cost(data_len: u32) -> u64 { 500 + 5 * u64::from(data_len) }
+pub fn hash_sha3_256_cost(data_len: u32) -> u64 {
+    500 + 5 * u64::from(data_len)
+}
 
 /// Cost of computing a Keccak-256 digest of the message of the given length.
-pub fn hash_keccak_256_cost(data_len: u32) -> u64 { 500 + 5 * u64::from(data_len) }
+pub fn hash_keccak_256_cost(data_len: u32) -> u64 {
+    500 + 5 * u64::from(data_len)
+}
