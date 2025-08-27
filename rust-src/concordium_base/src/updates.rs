@@ -17,7 +17,7 @@ use crate::{
 };
 use derive_more::*;
 
-#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone)]
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 /// A generic protocol update. This is essentially an announcement of the
 /// update. The details of the update will be communicated in some off-chain
@@ -904,6 +904,10 @@ impl UpdatePayload {
 }
 
 /// The Concordium specific byte encoding of the [`UpdatePayload`].
+///
+/// Note this type cannot implement [`common::Deserial`] directly, but is
+/// implemented as part of [`UpdateInstruction`] since the payload byte length
+/// information is stored in [`UpdateHeader`].
 pub type EncodedUpdatePayload = common::Encoded<UpdatePayload>;
 
 impl EncodedUpdatePayload {
@@ -1232,5 +1236,28 @@ impl Deserial for UpdatePayload {
             24u8 => Ok(UpdatePayload::CreatePlt(source.get()?)),
             tag => anyhow::bail!("Unknown update payload tag {}", tag),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_payload_encode_decode() {
+        let update = ProtocolUpdate {
+            message: "Protocol update 5".to_string(),
+            specification_url: "https://some-url.com".to_string(),
+            specification_hash: [12u8; 32].into(),
+            specification_auxiliary_data: Vec::new(),
+        };
+        let payload = UpdatePayload::Protocol(update.clone());
+        let decoded = EncodedUpdatePayload::encode(&payload)
+            .decode()
+            .expect("Failed decoding UpdatePayload");
+        let UpdatePayload::Protocol(decoded) = decoded else {
+            panic!("Unexpected update payload type");
+        };
+        assert_eq!(update, decoded);
     }
 }

@@ -58,3 +58,26 @@ impl<A> From<Vec<u8>> for Encoded<A> {
 impl<A> AsRef<[u8]> for Encoded<A> {
     fn as_ref(&self) -> &[u8] { &self.bytes }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Ensure encoding and decoding produces the same item.
+    #[test]
+    fn test_encode_decode() {
+        let item = vec![1, 2, 4, 3, 4, 5, 6, 8, 4, 89, 5];
+        let encoded = Encoded::encode(&item);
+        let item_decoded = encoded.decode().expect("Failed decoding a vec");
+        assert_eq!(item, item_decoded)
+    }
+
+    /// Ensure the decoding fails when decoding does not consume every byte.
+    #[test]
+    fn test_decode_fails_when_leftover_bytes() {
+        let item = vec![0, 0, 0, 0, 32];
+        let encoded = Encoded::<u32>::from(item);
+        let result = encoded.decode();
+        assert!(result.is_err())
+    }
+}
