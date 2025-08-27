@@ -61,7 +61,9 @@ pub struct CredentialIndex {
 }
 
 impl Serial for Amount {
-    fn serial<B: super::Buffer>(&self, out: &mut B) { self.micro_ccd().serial(out) }
+    fn serial<B: super::Buffer>(&self, out: &mut B) {
+        self.micro_ccd().serial(out)
+    }
 }
 
 impl Deserial for Amount {
@@ -143,7 +145,9 @@ impl Serial for ReceiveName<'_> {
 
 impl Serial for OwnedReceiveName {
     #[inline]
-    fn serial<B: Buffer>(&self, x: &mut B) { self.as_receive_name().serial(x) }
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        self.as_receive_name().serial(x)
+    }
 }
 
 impl Deserial for OwnedReceiveName {
@@ -166,7 +170,9 @@ impl Serial for ContractName<'_> {
 
 impl Serial for OwnedContractName {
     #[inline]
-    fn serial<B: Buffer>(&self, x: &mut B) { self.as_contract_name().serial(x) }
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        self.as_contract_name().serial(x)
+    }
 }
 
 impl Deserial for OwnedContractName {
@@ -188,7 +194,9 @@ impl Serial for Parameter<'_> {
 
 impl Serial for OwnedParameter {
     #[inline]
-    fn serial<B: Buffer>(&self, out: &mut B) { self.as_parameter().serial(out) }
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.as_parameter().serial(out)
+    }
 }
 
 impl Deserial for OwnedParameter {
@@ -213,7 +221,7 @@ impl Deserial for OwnedParameter {
 #[derive(Debug, SerdeDeserialize, SerdeSerialize, Serial, Clone, Copy)]
 #[serde(try_from = "rust_decimal::Decimal", into = "rust_decimal::Decimal")]
 pub struct Ratio {
-    numerator:   u64,
+    numerator: u64,
     denominator: u64,
 }
 
@@ -254,10 +262,14 @@ impl Ratio {
     }
 
     /// Get the numerator of the ratio.
-    pub fn numerator(&self) -> u64 { self.numerator }
+    pub fn numerator(&self) -> u64 {
+        self.numerator
+    }
 
     /// Get the denominator of the ratio.
-    pub fn denominator(&self) -> u64 { self.denominator }
+    pub fn denominator(&self) -> u64 {
+        self.denominator
+    }
 }
 
 impl Deserial for Ratio {
@@ -300,7 +312,9 @@ impl TryFrom<rust_decimal::Decimal> for Ratio {
 }
 
 impl From<Ratio> for num::rational::Ratio<u64> {
-    fn from(ratio: Ratio) -> Self { Self::new_raw(ratio.numerator, ratio.denominator) }
+    fn from(ratio: Ratio) -> Self {
+        Self::new_raw(ratio.numerator, ratio.denominator)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -340,7 +354,8 @@ impl Deserial for Signature {
 impl SerdeSerialize for Signature {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer, {
+        S: serde::Serializer,
+    {
         serializer.serialize_str(&hex::encode(&self.sig))
     }
 }
@@ -348,7 +363,8 @@ impl SerdeSerialize for Signature {
 impl<'de> SerdeDeserialize<'de> for Signature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>, {
+        D: serde::Deserializer<'de>,
+    {
         let s = String::deserialize(deserializer)?;
         let sig = hex::decode(s).map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
         if sig.len() <= 65535 {
@@ -360,7 +376,9 @@ impl<'de> SerdeDeserialize<'de> for Signature {
 }
 
 impl AsRef<[u8]> for Signature {
-    fn as_ref(&self) -> &[u8] { &self.sig }
+    fn as_ref(&self) -> &[u8] {
+        &self.sig
+    }
 }
 
 /// Transaction signature structure, to match the one on the Haskell side.
@@ -429,7 +447,9 @@ pub struct TransactionTime {
 
 impl TransactionTime {
     /// Construct a timestamp from seconds since the unix epoch.
-    pub fn from_seconds(seconds: u64) -> Self { Self { seconds } }
+    pub fn from_seconds(seconds: u64) -> Self {
+        Self { seconds }
+    }
 
     /// Construct a timestamp that is the given amount of seconds in the future.
     pub fn seconds_after(seconds: u32) -> Self {
@@ -437,14 +457,20 @@ impl TransactionTime {
     }
 
     /// Construct a timestamp that is the given amount of minutes in the future.
-    pub fn minutes_after(minutes: u32) -> Self { Self::seconds_after(minutes * 60) }
+    pub fn minutes_after(minutes: u32) -> Self {
+        Self::seconds_after(minutes * 60)
+    }
 
     /// Construct a timestamp that is the given amount of hours in the future.
-    pub fn hours_after(hours: u32) -> Self { Self::minutes_after(hours * 60) }
+    pub fn hours_after(hours: u32) -> Self {
+        Self::minutes_after(hours * 60)
+    }
 }
 
 impl From<u64> for TransactionTime {
-    fn from(seconds: u64) -> Self { Self { seconds } }
+    fn from(seconds: u64) -> Self {
+        Self { seconds }
+    }
 }
 
 impl FromStr for TransactionTime {
@@ -474,7 +500,9 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
-    pub fn public(&self) -> ed25519_dalek::VerifyingKey { self.inner.verifying_key() }
+    pub fn public(&self) -> ed25519_dalek::VerifyingKey {
+        self.inner.verifying_key()
+    }
 }
 
 mod key_pair_json {
@@ -525,7 +553,9 @@ impl KeyPair {
 
 impl KeyPair {
     /// Sign the given message with the keypair.
-    pub fn sign(&self, msg: &[u8]) -> ed25519_dalek::Signature { self.inner.sign(msg) }
+    pub fn sign(&self, msg: &[u8]) -> ed25519_dalek::Signature {
+        self.inner.sign(msg)
+    }
 }
 
 #[cfg(test)]

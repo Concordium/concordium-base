@@ -16,7 +16,8 @@ pub(crate) mod byte_array_hex {
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
-                E: serde::de::Error, {
+                E: serde::de::Error,
+            {
                 let r = hex::decode(v).map_err(serde::de::Error::custom)?;
                 Ok(r)
             }
@@ -34,7 +35,8 @@ pub(crate) mod deserialize_non_default {
     pub fn deserialize<'de, D, A>(des: D) -> Result<A, D::Error>
     where
         D: serde::Deserializer<'de>,
-        A: SerdeDeserialize<'de> + Default + PartialEq + Eq, {
+        A: SerdeDeserialize<'de> + Default + PartialEq + Eq,
+    {
         let s = A::deserialize(des)?;
         if s == A::default() {
             return Err(serde::de::Error::custom("Expected a non-default value."));

@@ -43,7 +43,9 @@ pub struct TokenAmount(pub BigUint);
 
 impl TokenAmount {
     /// Check whether the amount is 0.
-    pub fn is_zero(&self) -> bool { self.0.is_zero() }
+    pub fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
 
     /// Display using `_` as a separator between thousands for better
     /// readability.
@@ -93,7 +95,7 @@ pub struct TokenAddress {
     /// Address of the instance to which the token belongs.
     contract: ContractAddress,
     /// The id of the token inside the instance.
-    id:       TokenId,
+    id: TokenId,
 }
 
 #[derive(Debug, Error)]
@@ -107,7 +109,9 @@ pub enum ParseTokenAddressError {
 }
 
 impl TokenAddress {
-    pub fn new(contract: ContractAddress, id: TokenId) -> Self { Self { contract, id } }
+    pub fn new(contract: ContractAddress, id: TokenId) -> Self {
+        Self { contract, id }
+    }
 }
 
 impl TryFrom<&str> for TokenAddress {
@@ -158,78 +162,110 @@ impl Display for TokenAddress {
 impl FromStr for TokenAddress {
     type Err = ParseTokenAddressError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
 }
 
 impl TryFrom<String> for TokenAmount {
     type Error = num_bigint::ParseBigIntError;
 
     #[inline]
-    fn try_from(value: String) -> Result<Self, Self::Error> { value.parse() }
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
 }
 
 impl From<TokenAmount> for String {
-    fn from(ta: TokenAmount) -> Self { ta.to_string() }
+    fn from(ta: TokenAmount) -> Self {
+        ta.to_string()
+    }
 }
 
 impl From<TokenAmount> for BigUint {
-    fn from(v: TokenAmount) -> BigUint { v.0 }
+    fn from(v: TokenAmount) -> BigUint {
+        v.0
+    }
 }
 
 impl From<u8> for TokenAmount {
-    fn from(v: u8) -> TokenAmount { TokenAmount(v.into()) }
+    fn from(v: u8) -> TokenAmount {
+        TokenAmount(v.into())
+    }
 }
 
 impl From<u16> for TokenAmount {
-    fn from(v: u16) -> TokenAmount { TokenAmount(v.into()) }
+    fn from(v: u16) -> TokenAmount {
+        TokenAmount(v.into())
+    }
 }
 
 impl From<u32> for TokenAmount {
-    fn from(v: u32) -> TokenAmount { TokenAmount(v.into()) }
+    fn from(v: u32) -> TokenAmount {
+        TokenAmount(v.into())
+    }
 }
 
 impl From<u64> for TokenAmount {
-    fn from(v: u64) -> TokenAmount { TokenAmount(v.into()) }
+    fn from(v: u64) -> TokenAmount {
+        TokenAmount(v.into())
+    }
 }
 
 impl ops::Add<Self> for TokenAmount {
     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output { TokenAmount(self.0 + rhs.0) }
+    fn add(self, rhs: Self) -> Self::Output {
+        TokenAmount(self.0 + rhs.0)
+    }
 }
 
 impl ops::AddAssign for TokenAmount {
-    fn add_assign(&mut self, other: Self) { self.0 += other.0 }
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0
+    }
 }
 
 impl ops::Sub<Self> for TokenAmount {
     type Output = Self;
 
-    fn sub(self, rhs: Self) -> Self::Output { TokenAmount(self.0 - rhs.0) }
+    fn sub(self, rhs: Self) -> Self::Output {
+        TokenAmount(self.0 - rhs.0)
+    }
 }
 
 impl ops::SubAssign for TokenAmount {
-    fn sub_assign(&mut self, other: Self) { self.0 -= other.0 }
+    fn sub_assign(&mut self, other: Self) {
+        self.0 -= other.0
+    }
 }
 
 impl ops::Mul<Self> for TokenAmount {
     type Output = Self;
 
-    fn mul(self, rhs: Self) -> Self::Output { TokenAmount(self.0 * rhs.0) }
+    fn mul(self, rhs: Self) -> Self::Output {
+        TokenAmount(self.0 * rhs.0)
+    }
 }
 
 impl ops::MulAssign for TokenAmount {
-    fn mul_assign(&mut self, other: Self) { self.0 *= other.0 }
+    fn mul_assign(&mut self, other: Self) {
+        self.0 *= other.0
+    }
 }
 
 impl ops::Div<Self> for TokenAmount {
     type Output = Self;
 
-    fn div(self, rhs: Self) -> Self::Output { TokenAmount(self.0 / rhs.0) }
+    fn div(self, rhs: Self) -> Self::Output {
+        TokenAmount(self.0 / rhs.0)
+    }
 }
 
 impl ops::DivAssign for TokenAmount {
-    fn div_assign(&mut self, other: Self) { self.0 /= other.0 }
+    fn div_assign(&mut self, other: Self) {
+        self.0 /= other.0
+    }
 }
 
 impl Serial for TokenAmount {
@@ -301,27 +337,39 @@ impl TokenId {
 
     /// Construct a new [`Self`].
     /// Without ensuring the length of the provided bytes are within `u8::MAX`.
-    pub fn new_unchecked(bytes: Vec<u8>) -> Self { TokenId(bytes) }
+    pub fn new_unchecked(bytes: Vec<u8>) -> Self {
+        TokenId(bytes)
+    }
 
     /// Construct a new [`Self`] from a 128-bit integer. This id will always be
     /// 16 bytes.
-    pub fn new_u128(id: u128) -> Self { Self(id.to_le_bytes().to_vec()) }
+    pub fn new_u128(id: u128) -> Self {
+        Self(id.to_le_bytes().to_vec())
+    }
 
     /// Construct a new [`Self`] from a 64-bit integer. This id will always be 8
     /// bytes.
-    pub fn new_u64(id: u64) -> Self { Self(id.to_le_bytes().to_vec()) }
+    pub fn new_u64(id: u64) -> Self {
+        Self(id.to_le_bytes().to_vec())
+    }
 
     /// Construct a new [`Self`] from a 32-bit integer. This id will always be 4
     /// bytes.
-    pub fn new_u32(id: u32) -> Self { Self(id.to_le_bytes().to_vec()) }
+    pub fn new_u32(id: u32) -> Self {
+        Self(id.to_le_bytes().to_vec())
+    }
 
     /// Construct a new [`Self`] from a 16-bit integer. This id will always be 2
     /// bytes.
-    pub fn new_u16(id: u16) -> Self { Self(id.to_le_bytes().to_vec()) }
+    pub fn new_u16(id: u16) -> Self {
+        Self(id.to_le_bytes().to_vec())
+    }
 
     /// Construct a new [`Self`] from an 8-bit integer. This id will always be 1
     /// byte.
-    pub fn new_u8(id: u8) -> Self { Self(vec![id]) }
+    pub fn new_u8(id: u8) -> Self {
+        Self(vec![id])
+    }
 }
 
 /// Error from parsing a token ID bytes from a hex encoded string.
@@ -348,7 +396,9 @@ impl TryFrom<String> for TokenId {
     type Error = ParseTokenIdVecError;
 
     #[inline]
-    fn try_from(value: String) -> Result<Self, Self::Error> { value.parse() }
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
 }
 
 /// Display the token ID as a hex string.
@@ -362,7 +412,9 @@ impl std::fmt::Display for TokenId {
 }
 
 impl From<TokenId> for String {
-    fn from(ti: TokenId) -> Self { ti.to_string() }
+    fn from(ti: TokenId) -> Self {
+        ti.to_string()
+    }
 }
 
 /// Serialize the token ID according to CIS2 specification.
@@ -442,7 +494,9 @@ impl AdditionalData {
 
     /// Construct a new AdditionalData.
     /// Without ensuring the length of the provided bytes are within `u16::MAX`.
-    pub fn new_unchecked(data: Vec<u8>) -> Self { AdditionalData { data } }
+    pub fn new_unchecked(data: Vec<u8>) -> Self {
+        AdditionalData { data }
+    }
 }
 
 /// Serialization for the additional data, serialized as according to the CIS2
@@ -507,13 +561,13 @@ pub struct Transfer {
     /// The ID of the token type to transfer.
     pub token_id: TokenId,
     /// The amount of tokens to transfer.
-    pub amount:   TokenAmount,
+    pub amount: TokenAmount,
     /// The address currently owning the tokens being transferred.
-    pub from:     Address,
+    pub from: Address,
     /// The receiver for the tokens being transferred.
-    pub to:       Receiver,
+    pub to: Receiver,
     /// Additional data to include for the transfer.
-    pub data:     AdditionalData,
+    pub data: AdditionalData,
 }
 
 /// Serialization of a transfer, according to the CIS2 specification.
@@ -550,7 +604,9 @@ impl TransferParams {
     /// Construct a new TransferParams.
     /// Without ensuring the length of the provided tranfers are within
     /// `u16::MAX`.
-    pub fn new_unchecked(transfers: Vec<Transfer>) -> Self { Self(transfers) }
+    pub fn new_unchecked(transfers: Vec<Transfer>) -> Self {
+        Self(transfers)
+    }
 }
 
 /// Serialization of the transfer parameter, according to the CIS2
@@ -599,7 +655,7 @@ impl Deserial for OperatorUpdate {
 #[derive(Debug, Clone, Copy)]
 pub struct UpdateOperator {
     /// The update for this operator.
-    pub update:   OperatorUpdate,
+    pub update: OperatorUpdate,
     /// The address which is either added or removed as an operator.
     /// Note: The address for whom this will become an operator is the sender of
     /// the contract transaction.
@@ -637,7 +693,9 @@ impl UpdateOperatorParams {
     /// Construct a new UpdateOperatorParams.
     /// Without ensuring the length of the provided updates are within
     /// `u16::MAX`.
-    pub fn new_unchecked(updates: Vec<UpdateOperator>) -> Self { Self(updates) }
+    pub fn new_unchecked(updates: Vec<UpdateOperator>) -> Self {
+        Self(updates)
+    }
 }
 
 /// Serialization of the updateOperator parameter, according to the CIS2
@@ -656,7 +714,7 @@ pub struct BalanceOfQuery {
     /// The ID of the token for which to query the balance of.
     pub token_id: TokenId,
     /// The address for which to query the balance of.
-    pub address:  Address,
+    pub address: Address,
 }
 
 /// Serialization of a balanceOf query, according to the CIS2
@@ -691,7 +749,9 @@ impl BalanceOfQueryParams {
     /// Construct a new BalanceOfQueryParams.
     /// Without ensuring the length of the provided queries are within
     /// `u16::MAX`.
-    pub fn new_unchecked(queries: Vec<BalanceOfQuery>) -> Self { Self(queries) }
+    pub fn new_unchecked(queries: Vec<BalanceOfQuery>) -> Self {
+        Self(queries)
+    }
 }
 
 /// Serialization of the balanceOf parameter, according to the CIS2
@@ -729,7 +789,9 @@ impl BalanceOfQueryResponse {
     /// Construct a new BalanceOfQueryResponse.
     /// Without ensuring the length of the provided results is within
     /// `u16::MAX`.
-    pub fn new_unchecked(results: Vec<TokenAmount>) -> Self { Self(results) }
+    pub fn new_unchecked(results: Vec<TokenAmount>) -> Self {
+        Self(results)
+    }
 }
 
 /// Deserialization for BalanceOfQueryResponse according to the CIS2
@@ -749,7 +811,7 @@ impl Deserial for BalanceOfQueryResponse {
 #[derive(Debug, Clone)]
 pub struct OperatorOfQuery {
     /// The address of the owner of the tokens.
-    pub owner:   Address,
+    pub owner: Address,
     /// The potential operator of the `owner` address.
     pub address: Address,
 }
@@ -787,7 +849,9 @@ impl OperatorOfQueryParams {
     /// Construct a new OperatorOfQueryParams.
     /// Without ensuring the length of the provided queries are within
     /// `u16::MAX`.
-    pub fn new_unchecked(queries: Vec<OperatorOfQuery>) -> Self { Self(queries) }
+    pub fn new_unchecked(queries: Vec<OperatorOfQuery>) -> Self {
+        Self(queries)
+    }
 }
 
 /// Serialization of the operatorOf parameter, according to the CIS2
@@ -826,7 +890,9 @@ impl OperatorOfQueryResponse {
     /// Construct a new OperatorOfQueryResponse.
     /// Without ensuring the length of the provided results is within
     /// `u16::MAX`.
-    pub fn new_unchecked(results: Vec<bool>) -> Self { Self(results) }
+    pub fn new_unchecked(results: Vec<bool>) -> Self {
+        Self(results)
+    }
 }
 
 /// Deserialization for OperatorOfQueryResponse according to the CIS2
@@ -868,7 +934,9 @@ impl TokenMetadataQueryParams {
     /// Construct a new TokenMetadataQueryParams.
     /// Without ensuring the length of the provided queries are within
     /// `u16::MAX`.
-    pub fn new_unchecked(queries: Vec<TokenMetadataQuery>) -> Self { Self(queries) }
+    pub fn new_unchecked(queries: Vec<TokenMetadataQuery>) -> Self {
+        Self(queries)
+    }
 }
 
 /// Serialization of the operatorOf parameter, according to the CIS2
@@ -906,7 +974,9 @@ impl TokenMetadataQueryResponse {
     /// Construct a new TokenMetadataQueryResponse.
     /// Without ensuring the length of the provided results is within
     /// `u16::MAX`.
-    pub fn new_unchecked(results: Vec<MetadataUrl>) -> Self { Self(results) }
+    pub fn new_unchecked(results: Vec<MetadataUrl>) -> Self {
+        Self(results)
+    }
 }
 
 /// Deserialization for TokenMetadataQueryResponse according to the CIS2
@@ -927,7 +997,7 @@ impl Deserial for TokenMetadataQueryResponse {
 pub struct MetadataUrl {
     /// The url encoded according to CIS2.
     #[concordium(size_length = 2)]
-    url:  String,
+    url: String,
     /// An optional checksum of the content found at the URL.
     hash: Option<Hash>,
 }
@@ -950,13 +1020,19 @@ impl MetadataUrl {
 
     /// Construct a new MetadataUrl.
     /// Without ensuring the length of the url is within `u16::MAX`.
-    pub fn new_unchecked(url: String, hash: Option<Hash>) -> Self { Self { url, hash } }
+    pub fn new_unchecked(url: String, hash: Option<Hash>) -> Self {
+        Self { url, hash }
+    }
 
     /// Get the metadata content url.
-    pub fn url(&self) -> &str { &self.url }
+    pub fn url(&self) -> &str {
+        &self.url
+    }
 
     /// Get the metadata content hash.
-    pub fn hash(&self) -> Option<Hash> { self.hash }
+    pub fn hash(&self) -> Option<Hash> {
+        self.hash
+    }
 }
 
 /// Smart contract logged event, part of the CIS2 specification.
@@ -972,9 +1048,9 @@ pub enum Event {
     )]
     Transfer {
         token_id: TokenId,
-        amount:   TokenAmount,
-        from:     Address,
-        to:       Address,
+        amount: TokenAmount,
+        from: Address,
+        to: Address,
     },
     /// Minting an amount of tokens
     #[display(
@@ -985,8 +1061,8 @@ pub enum Event {
     )]
     Mint {
         token_id: TokenId,
-        amount:   TokenAmount,
-        owner:    Address,
+        amount: TokenAmount,
+        owner: Address,
     },
     /// Burning an amount of tokens
     #[display(
@@ -997,14 +1073,14 @@ pub enum Event {
     )]
     Burn {
         token_id: TokenId,
-        amount:   TokenAmount,
-        owner:    Address,
+        amount: TokenAmount,
+        owner: Address,
     },
     /// Add/Remove an address as operator for some other address.
     #[display(fmt = "{} {} as operator for {}", update, "operator", "owner")]
     UpdateOperator {
-        update:   OperatorUpdate,
-        owner:    Address,
+        update: OperatorUpdate,
+        owner: Address,
         operator: Address,
     },
     /// Provide an URL with the metadata for a certain token.
@@ -1015,7 +1091,7 @@ pub enum Event {
         token_id
     )]
     TokenMetadata {
-        token_id:     TokenId,
+        token_id: TokenId,
         metadata_url: MetadataUrl,
     },
     /// Custom event outside of the CIS2 specification.
@@ -1038,27 +1114,27 @@ impl Deserial for Event {
         match discriminant {
             255 => Ok(Event::Transfer {
                 token_id: TokenId::deserial(source)?,
-                amount:   TokenAmount::deserial(source)?,
-                from:     Address::deserial(source)?,
-                to:       Address::deserial(source)?,
+                amount: TokenAmount::deserial(source)?,
+                from: Address::deserial(source)?,
+                to: Address::deserial(source)?,
             }),
             254 => Ok(Event::Mint {
                 token_id: TokenId::deserial(source)?,
-                amount:   TokenAmount::deserial(source)?,
-                owner:    Address::deserial(source)?,
+                amount: TokenAmount::deserial(source)?,
+                owner: Address::deserial(source)?,
             }),
             253 => Ok(Event::Burn {
                 token_id: TokenId::deserial(source)?,
-                amount:   TokenAmount::deserial(source)?,
-                owner:    Address::deserial(source)?,
+                amount: TokenAmount::deserial(source)?,
+                owner: Address::deserial(source)?,
             }),
             252 => Ok(Event::UpdateOperator {
-                update:   OperatorUpdate::deserial(source)?,
-                owner:    Address::deserial(source)?,
+                update: OperatorUpdate::deserial(source)?,
+                owner: Address::deserial(source)?,
                 operator: Address::deserial(source)?,
             }),
             251 => Ok(Event::TokenMetadata {
-                token_id:     TokenId::deserial(source)?,
+                token_id: TokenId::deserial(source)?,
                 metadata_url: MetadataUrl::deserial(source)?,
             }),
             _ => Ok(Event::Unknown),
@@ -1199,31 +1275,31 @@ mod test {
     fn test_token_address_string_examples() {
         let addr = TokenAddress {
             contract: ContractAddress::new(0, 0),
-            id:       "".parse().unwrap(),
+            id: "".parse().unwrap(),
         };
         assert_eq!(addr.to_string(), "5Pxr5EUtU",);
 
         let addr = TokenAddress {
             contract: ContractAddress::new(0, 0),
-            id:       "aa".parse().unwrap(),
+            id: "aa".parse().unwrap(),
         };
         assert_eq!(addr.to_string(), "LQMMu3bAg7",);
 
         let addr = TokenAddress {
             contract: ContractAddress::new(1, 0),
-            id:       "".parse().unwrap(),
+            id: "".parse().unwrap(),
         };
         assert_eq!(addr.to_string(), "5QTdu98KF",);
 
         let addr = TokenAddress {
             contract: ContractAddress::new(1, 0),
-            id:       "aa".parse().unwrap(),
+            id: "aa".parse().unwrap(),
         };
         assert_eq!(addr.to_string(), "LSYqgoQcb6",);
 
         let addr = TokenAddress {
             contract: ContractAddress::new(1, 0),
-            id:       "0a".parse().unwrap(),
+            id: "0a".parse().unwrap(),
         };
         assert_eq!(addr.to_string(), "LSYXivPSWP",);
     }

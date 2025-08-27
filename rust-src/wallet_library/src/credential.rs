@@ -25,16 +25,16 @@ type JsonString = String;
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsignedCredentialInput {
-    ip_info:                IpInfo<constants::IpPairing>,
-    global_context:         GlobalContext<constants::ArCurve>,
-    ars_infos:              BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
+    ip_info: IpInfo<constants::IpPairing>,
+    global_context: GlobalContext<constants::ArCurve>,
+    ars_infos: BTreeMap<ArIdentity, ArInfo<constants::ArCurve>>,
     id_object: IdentityObjectV1<constants::IpPairing, constants::ArCurve, AttributeKind>,
-    revealed_attributes:    Vec<AttributeTag>,
-    cred_number:            u8,
-    id_cred_sec:            PedersenValue<ArCurve>,
-    prf_key:                prf::SecretKey<ArCurve>,
-    blinding_randomness:    String,
-    attribute_randomness:   BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>,
+    revealed_attributes: Vec<AttributeTag>,
+    cred_number: u8,
+    id_cred_sec: PedersenValue<ArCurve>,
+    prf_key: prf::SecretKey<ArCurve>,
+    blinding_randomness: String,
+    attribute_randomness: BTreeMap<AttributeTag, PedersenRandomness<ArCurve>>,
     credential_public_keys: CredentialPublicKeys,
 }
 
@@ -44,7 +44,7 @@ pub struct UnsignedCredentialInput {
 #[serde(rename_all = "camelCase")]
 struct UnsignedCredentialDeploymentInfoWithRandomness {
     unsigned_cdi: UnsignedCredentialDeploymentInfo<constants::IpPairing, ArCurve, AttributeKind>,
-    randomness:   CommitmentsRandomness<ArCurve>,
+    randomness: CommitmentsRandomness<ArCurve>,
 }
 
 /// Creates unsigned credential deployment information and the corresponding
@@ -58,7 +58,7 @@ pub fn create_unsigned_credential_v1_aux(input: UnsignedCredentialInput) -> Resu
 
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
-        prf_key:          input.prf_key,
+        prf_key: input.prf_key,
     };
 
     let blinding_randomness: Value<constants::ArCurve> = concordium_base::common::from_bytes(
@@ -89,7 +89,7 @@ pub fn create_unsigned_credential_v1_aux(input: UnsignedCredentialInput) -> Resu
 
     let result = UnsignedCredentialDeploymentInfoWithRandomness {
         unsigned_cdi: cdi,
-        randomness:   rand,
+        randomness: rand,
     };
     let response = json!(result);
 
@@ -122,7 +122,7 @@ fn build_policy(
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialDeploymentDetails {
-    expiry:       TransactionTime,
+    expiry: TransactionTime,
     unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
 }
 
@@ -145,7 +145,7 @@ pub fn compute_credential_deployment_hash_to_sign(
 #[serde(rename_all = "camelCase")]
 pub struct CredentialDeploymentPayload {
     unsigned_cdi: UnsignedCredentialDeploymentInfo<IpPairing, ArCurve, AttributeKind>,
-    signatures:   BTreeMap<KeyIndex, AccountOwnershipSignature>,
+    signatures: BTreeMap<KeyIndex, AccountOwnershipSignature>,
 }
 
 /// Serializes the credential deployment payload. The result of this
@@ -239,7 +239,7 @@ mod tests {
         let credential_keys_threshold = NonZeroThresholdU8::ONE;
         let credential_public_keys: CredentialPublicKeys = CredentialPublicKeys {
             threshold: credential_keys_threshold,
-            keys:      key_map,
+            keys: key_map,
         };
 
         let input = UnsignedCredentialInput {

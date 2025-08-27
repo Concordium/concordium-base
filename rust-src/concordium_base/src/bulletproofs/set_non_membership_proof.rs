@@ -16,19 +16,19 @@ use std::iter::once;
 pub struct SetNonMembershipProof<C: Curve> {
     /// Commitments to the multiplicative inverse of `v-s_i` for each `i`, and
     /// the all-`v` vector.
-    A:        C,
+    A: C,
     /// Commitment to the blinding factors in `s_L` and `s_R`
-    S:        C,
+    S: C,
     /// Commitment to the `t_1` coefficient of polynomial `t(X)`
-    T_1:      C,
+    T_1: C,
     /// Commitment to the `t_2` coefficient of polynomial `t(X)`
-    T_2:      C,
+    T_2: C,
     /// Evaluation of `t(X)` at the challenge point `x`
-    tx:       C::Scalar,
+    tx: C::Scalar,
     /// Blinding factor for the commitment to `tx`
     tx_tilde: C::Scalar,
     /// Blinding factor for the commitment to the inner-product arguments
-    e_tilde:  C::Scalar,
+    e_tilde: C::Scalar,
     /// Inner product proof
     ip_proof: InnerProductProof<C>,
 }

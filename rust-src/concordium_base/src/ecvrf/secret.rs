@@ -16,7 +16,9 @@ use zeroize::Zeroize;
 pub struct SecretKey(pub(crate) [u8; SECRET_KEY_LENGTH]);
 
 impl ConstantTimeEq for SecretKey {
-    fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
 }
 
 impl Serial for SecretKey {
@@ -45,21 +47,29 @@ impl Debug for SecretKey {
 
 /// Overwrite secret key material with null bytes when it goes out of scope.
 impl Drop for SecretKey {
-    fn drop(&mut self) { self.0.zeroize(); }
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
 }
 
 impl AsRef<[u8]> for SecretKey {
-    fn as_ref(&self) -> &[u8] { self.as_bytes() }
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
 }
 
 impl SecretKey {
     /// Convert this secret key to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { Box::new(self.0) }
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        Box::new(self.0)
+    }
 
     /// View this secret key as a byte array.
     #[inline]
-    pub fn as_bytes(&self) -> &'_ [u8; SECRET_KEY_LENGTH] { &self.0 }
+    pub fn as_bytes(&self) -> &'_ [u8; SECRET_KEY_LENGTH] {
+        &self.0
+    }
 
     /// Construct a `SecretKey` from a slice of bytes.
     ///
@@ -69,7 +79,7 @@ impl SecretKey {
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey, ProofError> {
         if bytes.len() != SECRET_KEY_LENGTH {
             return Err(ProofError(InternalError::BytesLength {
-                name:   "SecretKey",
+                name: "SecretKey",
                 length: SECRET_KEY_LENGTH,
             }));
         }
@@ -87,7 +97,8 @@ impl SecretKey {
     /// Generate a `SecretKey` from a `csprng`.
     pub fn generate<T>(csprng: &mut T) -> SecretKey
     where
-        T: CryptoRng + Rng, {
+        T: CryptoRng + Rng,
+    {
         let mut sk: SecretKey = SecretKey([0u8; 32]);
 
         csprng.fill_bytes(&mut sk.0);
@@ -99,7 +110,7 @@ impl SecretKey {
 /// An "expanded" secret key used internally as a step from a secret key to
 /// signing.
 pub(crate) struct ExpandedSecretKey {
-    pub(crate) key:   Scalar,
+    pub(crate) key: Scalar,
     pub(crate) nonce: [u8; 32],
 }
 
@@ -127,7 +138,7 @@ impl From<&SecretKey> for ExpandedSecretKey {
         upper.copy_from_slice(&hash[32..64]);
 
         ExpandedSecretKey {
-            key:   Scalar::from_bytes_mod_order(clamp_integer(lower)),
+            key: Scalar::from_bytes_mod_order(clamp_integer(lower)),
             nonce: upper,
         }
     }

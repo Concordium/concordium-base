@@ -29,7 +29,8 @@ pub trait AcceptableAtomicStatement<
     C: Curve,
     TagType: AttributeTagType,
     AttributeType: Attribute<C::Scalar>,
-> {
+>
+{
     /// Method to check that the statement is acceptable given the provided
     /// rules.
     fn acceptable_atomic_statement(
@@ -46,7 +47,7 @@ pub struct WalletConfig<'a, C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Rules that statements on web3Id credentials should satisfy. If a
     /// statement uses a contract index without an entry, it should only
     /// consider for basic, global, rules.
-    pub web3_rules:     BTreeMap<ContractAddress, WalletConfigRules<'a, C, String, AttributeType>>,
+    pub web3_rules: BTreeMap<ContractAddress, WalletConfigRules<'a, C, String, AttributeType>>,
 }
 
 pub struct WalletConfigRules<
@@ -56,13 +57,13 @@ pub struct WalletConfigRules<
     AttributeType: Attribute<C::Scalar>,
 > {
     /// The set of tags, which are allowed to be used for range statements.
-    pub range_tags:      HashSet<TagType>,
+    pub range_tags: HashSet<TagType>,
     /// The set of tags, which are allowed to be used for membership and
     /// nonMembership statements.
-    pub set_tags:        HashSet<TagType>,
+    pub set_tags: HashSet<TagType>,
     /// A function to check attributes using custom behaviour.
     pub attribute_check: AttributeCheck<'a, TagType, AttributeType>,
-    pub _marker:         PhantomData<C>,
+    pub _marker: PhantomData<C>,
 }
 
 pub trait AttributeTagType: Serialize + Ord + Hash + Display {}
@@ -246,9 +247,9 @@ mod tests {
         let statement = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(3),
-                lower:         constants::AttributeKind::from(20150101),
-                upper:         constants::AttributeKind::from(20140101),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                lower: constants::AttributeKind::from(20150101),
+                upper: constants::AttributeKind::from(20140101),
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
         assert!(matches!(
@@ -262,9 +263,9 @@ mod tests {
         let statement = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(3),
-                lower:         constants::AttributeKind::from(20144040),
-                upper:         constants::AttributeKind::from(20154040),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                lower: constants::AttributeKind::from(20144040),
+                upper: constants::AttributeKind::from(20154040),
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
         assert!(matches!(
@@ -278,15 +279,15 @@ mod tests {
         let good_statement = AtomicStatement::AttributeInSet {
             statement: AttributeInSetStatement {
                 attribute_tag: AttributeTag(5),
-                set:           BTreeSet::from([constants::AttributeKind("GB".into())]),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                set: BTreeSet::from([constants::AttributeKind("GB".into())]),
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
         let bad_statement = AtomicStatement::AttributeInSet {
             statement: AttributeInSetStatement {
                 attribute_tag: AttributeTag(5),
-                set:           BTreeSet::from([constants::AttributeKind("HI".into())]),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                set: BTreeSet::from([constants::AttributeKind("HI".into())]),
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
 
@@ -308,11 +309,11 @@ mod tests {
         let statement = AtomicStatement::AttributeInSet {
             statement: AttributeInSetStatement {
                 attribute_tag: AttributeTag(8),
-                set:           BTreeSet::from([
+                set: BTreeSet::from([
                     constants::AttributeKind("DK-81".into()),
                     constants::AttributeKind("GB-UKM".into()),
                 ]),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
         assert!(
@@ -332,9 +333,9 @@ mod tests {
         > = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(3),
-                lower:         constants::AttributeKind::from(20140101),
-                upper:         constants::AttributeKind::from(20150101),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                lower: constants::AttributeKind::from(20140101),
+                upper: constants::AttributeKind::from(20150101),
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
 
@@ -345,9 +346,9 @@ mod tests {
         > = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(2),
-                lower:         constants::AttributeKind::from(20140101),
-                upper:         constants::AttributeKind::from(20150101),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                lower: constants::AttributeKind::from(20140101),
+                upper: constants::AttributeKind::from(20150101),
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
         assert!(
@@ -382,9 +383,9 @@ mod tests {
         > = AtomicStatement::AttributeInRange {
             statement: AttributeInRangeStatement {
                 attribute_tag: AttributeTag(3),
-                lower:         constants::AttributeKind::from(5),
-                upper:         constants::AttributeKind::from(10),
-                _phantom:      PhantomData::<constants::ArCurve>,
+                lower: constants::AttributeKind::from(5),
+                upper: constants::AttributeKind::from(10),
+                _phantom: PhantomData::<constants::ArCurve>,
             },
         };
 

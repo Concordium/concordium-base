@@ -395,9 +395,9 @@ mod tests {
 
         let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let input_amount = AggregatedDecryptedAmount {
-            agg_amount:           Amount::from_micro_ccd(s),
+            agg_amount: Amount::from_micro_ccd(s),
             agg_encrypted_amount: S_in_chunks.0.clone(),
-            agg_index:            index,
+            agg_index: index,
         };
         #[allow(deprecated)]
         let transfer_data = make_transfer_data(
@@ -443,9 +443,9 @@ mod tests {
 
         let index = csprng.gen::<u64>().into(); // index is only important for on-chain stuff, not for proofs.
         let input_amount = AggregatedDecryptedAmount {
-            agg_amount:           Amount::from_micro_ccd(s),
+            agg_amount: Amount::from_micro_ccd(s),
             agg_encrypted_amount: S_in_chunks.0.clone(),
-            agg_index:            index,
+            agg_index: index,
         };
 
         let transfer_data = make_sec_to_pub_transfer_data(

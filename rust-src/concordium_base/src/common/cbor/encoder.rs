@@ -14,7 +14,9 @@ pub struct Encoder<W: Write> {
 }
 
 impl<W: Write> Encoder<W> {
-    pub fn new(write: W) -> Self { Self { write } }
+    pub fn new(write: W) -> Self {
+        Self { write }
+    }
 
     fn encode_raw(&mut self, bytes: &[u8]) -> CborSerializationResult<()> {
         Ok(self.write.write_all(bytes)?)
@@ -74,11 +76,11 @@ where
 /// CBOR map encoder
 #[must_use]
 pub struct MapEncoder<'a, W: Write> {
-    declared_size:   usize,
-    current_size:    usize,
-    encoder:         &'a mut Encoder<W>,
+    declared_size: usize,
+    current_size: usize,
+    encoder: &'a mut Encoder<W>,
     /// Temporary buffer for unordered map entries
-    buffer:          Vec<u8>,
+    buffer: Vec<u8>,
     /// Indexes for each entry in the buffer
     entries_indexes: Vec<Range<usize>>,
 }
@@ -135,8 +137,8 @@ where
 #[must_use]
 pub struct ArrayEncoder<'a, W: Write> {
     declared_size: usize,
-    current_size:  usize,
-    encoder:       &'a mut Encoder<W>,
+    current_size: usize,
+    encoder: &'a mut Encoder<W>,
 }
 
 impl<'a, W: Write> ArrayEncoder<'a, W> {

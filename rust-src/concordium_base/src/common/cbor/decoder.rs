@@ -12,7 +12,7 @@ use std::{
 
 /// CBOR decoder implementation
 pub struct Decoder<R: Read> {
-    inner:   ciborium_ll::Decoder<R>,
+    inner: ciborium_ll::Decoder<R>,
     options: SerializationOptions,
 }
 
@@ -215,7 +215,9 @@ where
         Ok(())
     }
 
-    fn options(&self) -> SerializationOptions { self.options }
+    fn options(&self) -> SerializationOptions {
+        self.options
+    }
 }
 
 trait CursorExt {
@@ -229,11 +231,15 @@ trait CursorExt {
 }
 
 impl CursorExt for Cursor<Vec<u8>> {
-    fn advance(&mut self, len: usize) -> &mut [u8] { advance_vec(self, len) }
+    fn advance(&mut self, len: usize) -> &mut [u8] {
+        advance_vec(self, len)
+    }
 }
 
 impl CursorExt for Cursor<&mut Vec<u8>> {
-    fn advance(&mut self, len: usize) -> &mut [u8] { advance_vec(self, len) }
+    fn advance(&mut self, len: usize) -> &mut [u8] {
+        advance_vec(self, len)
+    }
 }
 
 fn advance_vec<T: AsRef<Vec<u8>> + AsMut<Vec<u8>>>(
@@ -263,7 +269,9 @@ impl CursorExt for Cursor<&mut [u8]> {
 
 impl<R: Read> Decoder<R> {
     /// Current byte offset for the decoding
-    pub fn offset(&mut self) -> usize { self.inner.offset() }
+    pub fn offset(&mut self) -> usize {
+        self.inner.offset()
+    }
 
     /// Decodes bytes data item into given destination. Destination will
     /// be extended as needed (or an error returned)
@@ -274,7 +282,8 @@ impl<R: Read> Decoder<R> {
     ) -> CborSerializationResult<()>
     where
         Cursor<T>: CursorExt,
-        <R as ciborium_io::Read>::Error: Display, {
+        <R as ciborium_io::Read>::Error: Display,
+    {
         let mut segments = self.inner.bytes(size);
         while let Some(mut segment) = segments.pull()? {
             let left = segment.left();
@@ -299,7 +308,8 @@ impl<R: Read> Decoder<R> {
         size: Option<usize>,
     ) -> CborSerializationResult<()>
     where
-        <R as ciborium_io::Read>::Error: Display, {
+        <R as ciborium_io::Read>::Error: Display,
+    {
         let mut dest = Cursor::new(dest);
         let mut segments = self.inner.text(size);
         while let Some(mut segment) = segments.pull()? {
@@ -343,10 +353,10 @@ enum MapDecoderStateEnum {
 /// Decoder of CBOR map
 #[must_use]
 pub struct MapDecoder<'a, R: Read> {
-    declared_size:   Option<usize>,
+    declared_size: Option<usize>,
     decoded_entries: usize,
-    decoder:         &'a mut Decoder<R>,
-    state:           MapDecoderStateEnum,
+    decoder: &'a mut Decoder<R>,
+    state: MapDecoderStateEnum,
 }
 
 impl<'a, R: Read> MapDecoder<'a, R> {
@@ -364,7 +374,9 @@ impl<R: Read> CborMapDecoder for MapDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> Option<usize> { self.declared_size }
+    fn size(&self) -> Option<usize> {
+        self.declared_size
+    }
 
     fn deserialize_key<K: CborDeserialize>(&mut self) -> CborSerializationResult<Option<K>> {
         self.state = match self.state {
@@ -425,9 +437,9 @@ where
 /// Decoder of CBOR array
 #[must_use]
 pub struct ArrayDecoder<'a, R: Read> {
-    declared_size:    Option<usize>,
+    declared_size: Option<usize>,
     decoded_elements: usize,
-    decoder:          &'a mut Decoder<R>,
+    decoder: &'a mut Decoder<R>,
 }
 
 impl<'a, R: Read> ArrayDecoder<'a, R> {
@@ -444,7 +456,9 @@ impl<R: Read> CborArrayDecoder for ArrayDecoder<'_, R>
 where
     <R as ciborium_io::Read>::Error: Display,
 {
-    fn size(&self) -> Option<usize> { self.declared_size }
+    fn size(&self) -> Option<usize> {
+        self.declared_size
+    }
 
     fn deserialize_element<T: CborDeserialize>(&mut self) -> CborSerializationResult<Option<T>> {
         // Arrays of definite length encodes "size" number of data item elements.

@@ -15,7 +15,9 @@ pub struct ArkField<F>(pub(crate) F);
 /// Serialization is implemented by delegating the functionality to the wrapped
 /// type.
 impl<F: Serial> Serial for ArkField<F> {
-    fn serial<B: crate::common::Buffer>(&self, out: &mut B) { self.0.serial(out) }
+    fn serial<B: crate::common::Buffer>(&self, out: &mut B) {
+        self.0.serial(out)
+    }
 }
 
 /// Deserialization is implemented by delegating the functionality to the
@@ -35,29 +37,51 @@ impl<F: ark_ff::Field> Field for ArkField<F> {
         F::rand(rng).into()
     }
 
-    fn zero() -> Self { F::zero().into() }
+    fn zero() -> Self {
+        F::zero().into()
+    }
 
-    fn one() -> Self { F::one().into() }
+    fn one() -> Self {
+        F::one().into()
+    }
 
-    fn is_zero(&self) -> bool { F::is_zero(&self.0) }
+    fn is_zero(&self) -> bool {
+        F::is_zero(&self.0)
+    }
 
-    fn square(&mut self) { self.0.square_in_place(); }
+    fn square(&mut self) {
+        self.0.square_in_place();
+    }
 
-    fn double(&mut self) { self.0.double_in_place(); }
+    fn double(&mut self) {
+        self.0.double_in_place();
+    }
 
-    fn negate(&mut self) { self.0.neg_in_place(); }
+    fn negate(&mut self) {
+        self.0.neg_in_place();
+    }
 
-    fn add_assign(&mut self, other: &Self) { self.0 += other.0 }
+    fn add_assign(&mut self, other: &Self) {
+        self.0 += other.0
+    }
 
-    fn sub_assign(&mut self, other: &Self) { self.0 -= other.0 }
+    fn sub_assign(&mut self, other: &Self) {
+        self.0 -= other.0
+    }
 
-    fn mul_assign(&mut self, other: &Self) { self.0 *= other.0 }
+    fn mul_assign(&mut self, other: &Self) {
+        self.0 *= other.0
+    }
 
-    fn inverse(&self) -> Option<Self> { self.0.inverse().map(|x| x.into()) }
+    fn inverse(&self) -> Option<Self> {
+        self.0.inverse().map(|x| x.into())
+    }
 }
 
 impl<F: ark_ff::Field> ArkField<F> {
-    pub fn into_ark(&self) -> &F { &self.0 }
+    pub fn into_ark(&self) -> &F {
+        &self.0
+    }
 }
 
 /// A blanket implementation of the `PrimeField` trait using the functionality
@@ -67,7 +91,9 @@ impl<F: ark_ff::PrimeField> PrimeField for ArkField<F> {
     const CAPACITY: u32 = Self::NUM_BITS - 1;
     const NUM_BITS: u32 = F::MODULUS_BIT_SIZE;
 
-    fn into_repr(self) -> Vec<u64> { self.0.into_bigint().as_ref().to_vec() }
+    fn into_repr(self) -> Vec<u64> {
+        self.0.into_bigint().as_ref().to_vec()
+    }
 
     fn from_repr(repr: &[u64]) -> Result<Self, super::CurveDecodingError> {
         let mut buffer = Vec::with_capacity(8 * repr.len());
@@ -92,7 +118,9 @@ impl<F: ark_ff::PrimeField> PrimeField for ArkField<F> {
 pub struct ArkGroup<G>(pub(crate) G);
 
 impl<G: ark_ec::CurveGroup> ArkGroup<G> {
-    pub fn into_ark(&self) -> &G { &self.0 }
+    pub fn into_ark(&self) -> &G {
+        &self.0
+    }
 }
 
 /// Serialization is implemented by delegating the functionality to the
@@ -116,7 +144,9 @@ impl<G: ark_ec::CurveGroup> Deserial for ArkGroup<G> {
 }
 
 impl From<HashToCurveError> for CurveDecodingError {
-    fn from(_value: HashToCurveError) -> Self { CurveDecodingError::NotOnCurve }
+    fn from(_value: HashToCurveError) -> Self {
+        CurveDecodingError::NotOnCurve
+    }
 }
 
 /// Curve configuration.
@@ -151,29 +181,49 @@ where
     const GROUP_ELEMENT_LENGTH: usize = G::GROUP_ELEMENT_LENGTH;
     const SCALAR_LENGTH: usize = G::SCALAR_LENGTH;
 
-    fn zero_point() -> Self { ArkGroup(G::zero()) }
+    fn zero_point() -> Self {
+        ArkGroup(G::zero())
+    }
 
-    fn one_point() -> Self { ArkGroup(G::generator()) }
+    fn one_point() -> Self {
+        ArkGroup(G::generator())
+    }
 
-    fn is_zero_point(&self) -> bool { self.0.is_zero() }
+    fn is_zero_point(&self) -> bool {
+        self.0.is_zero()
+    }
 
-    fn inverse_point(&self) -> Self { ArkGroup(-self.0) }
+    fn inverse_point(&self) -> Self {
+        ArkGroup(-self.0)
+    }
 
-    fn double_point(&self) -> Self { ArkGroup(self.0.double()) }
+    fn double_point(&self) -> Self {
+        ArkGroup(self.0.double())
+    }
 
-    fn plus_point(&self, other: &Self) -> Self { ArkGroup(self.0 + other.0) }
+    fn plus_point(&self, other: &Self) -> Self {
+        ArkGroup(self.0 + other.0)
+    }
 
-    fn minus_point(&self, other: &Self) -> Self { ArkGroup(self.0 - other.0) }
+    fn minus_point(&self, other: &Self) -> Self {
+        ArkGroup(self.0 - other.0)
+    }
 
-    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self { ArkGroup(self.0 * scalar.0) }
+    fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
+        ArkGroup(self.0 * scalar.0)
+    }
 
-    fn generate<R: rand::prelude::Rng>(rng: &mut R) -> Self { ArkGroup(G::rand(rng)) }
+    fn generate<R: rand::prelude::Rng>(rng: &mut R) -> Self {
+        ArkGroup(G::rand(rng))
+    }
 
     fn generate_scalar<R: rand::prelude::Rng>(rng: &mut R) -> Self::Scalar {
         <G::ScalarField as ark_ff::UniformRand>::rand(rng).into()
     }
 
-    fn scalar_from_u64(n: u64) -> Self::Scalar { ArkField(G::ScalarField::from(n)) }
+    fn scalar_from_u64(n: u64) -> Self::Scalar {
+        ArkField(G::ScalarField::from(n))
+    }
 
     fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar {
         // Traverse at most `ceil(CAPACITY / 64)` 8-byte chunks.

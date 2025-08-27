@@ -9,25 +9,25 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct TokenModuleInitializationParameters {
     /// The name of the token
-    pub name:               Option<String>,
+    pub name: Option<String>,
     // /// A URL pointing to the token metadata
-    pub metadata:           Option<MetadataUrl>,
+    pub metadata: Option<MetadataUrl>,
     /// The governance account of the token.
     pub governance_account: Option<CborHolderAccount>,
     /// Whether the token supports an allow list.
-    pub allow_list:         Option<bool>,
+    pub allow_list: Option<bool>,
     /// Whether the token supports a deny list.
-    pub deny_list:          Option<bool>,
+    pub deny_list: Option<bool>,
     /// The initial supply of the token. If not present, no tokens are minted
     /// initially.
-    pub initial_supply:     Option<TokenAmount>,
+    pub initial_supply: Option<TokenAmount>,
     /// Whether the token is mintable.
-    pub mintable:           Option<bool>,
+    pub mintable: Option<bool>,
     /// Whether the token is burnable.
-    pub burnable:           Option<bool>,
+    pub burnable: Option<bool>,
     /// Additional fields.
     #[cbor(other)]
-    pub additional:         HashMap<String, value::Value>,
+    pub additional: HashMap<String, value::Value>,
 }
 
 #[cfg(test)]
@@ -45,22 +45,22 @@ mod test {
     #[test]
     fn test_token_module_state_cbor() {
         let token_module_initialization_parameters = TokenModuleInitializationParameters {
-            name:               Some("TK1".to_string()),
-            metadata:           Some(MetadataUrl {
-                url:              "https://tokenurl1".to_string(),
+            name: Some("TK1".to_string()),
+            metadata: Some(MetadataUrl {
+                url: "https://tokenurl1".to_string(),
                 checksum_sha_256: Some(Hash::from(TEST_HASH)),
-                additional:       Default::default(),
+                additional: Default::default(),
             }),
             governance_account: Some(CborHolderAccount {
-                address:   TEST_ADDRESS,
+                address: TEST_ADDRESS,
                 coin_info: Some(CoinInfo::CCD),
             }),
-            allow_list:         Some(true),
-            deny_list:          Some(true),
-            initial_supply:     Some(TokenAmount::from_raw(10000000, 8)),
-            mintable:           Some(true),
-            burnable:           Some(true),
-            additional:         Default::default(),
+            allow_list: Some(true),
+            deny_list: Some(true),
+            initial_supply: Some(TokenAmount::from_raw(10000000, 8)),
+            mintable: Some(true),
+            burnable: Some(true),
+            additional: Default::default(),
         };
 
         let cbor = cbor::cbor_encode(&token_module_initialization_parameters).unwrap();

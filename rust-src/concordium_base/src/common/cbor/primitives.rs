@@ -19,7 +19,8 @@ impl<const N: usize> CborSerialize for [u8; N] {
 impl<const N: usize> CborDeserialize for [u8; N] {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         let mut dest = [0; N];
         decoder.decode_bytes_exact(&mut dest)?;
         Ok(dest)
@@ -40,7 +41,9 @@ impl CborSerialize for [u8] {
 pub struct Bytes(pub Vec<u8>);
 
 impl AsRef<[u8]> for Bytes {
-    fn as_ref(&self) -> &[u8] { &self.0 }
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 impl CborSerialize for Bytes {
@@ -52,7 +55,8 @@ impl CborSerialize for Bytes {
 impl CborDeserialize for Bytes {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(Bytes(decoder.decode_bytes()?))
     }
 }
@@ -66,7 +70,8 @@ impl CborSerialize for bool {
 impl CborDeserialize for bool {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         let value = decoder.decode_simple()?;
         match value {
             simple::TRUE => Ok(true),
@@ -94,7 +99,8 @@ macro_rules! serialize_deserialize_unsigned_integer {
         impl CborDeserialize for $t {
             fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
             where
-                Self: Sized, {
+                Self: Sized,
+            {
                 let value = match decoder.peek_data_item_header()? {
                     // support the non-preferred bignum encoding as long as we are within range
                     DataItemHeader::Tag(UNSIGNED_BIGNUM_TAG) => {
@@ -147,7 +153,8 @@ macro_rules! serialize_deserialize_signed_integer {
         impl CborDeserialize for $t {
             fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
             where
-                Self: Sized, {
+                Self: Sized,
+            {
                 fn convert_positive(value: u64) -> anyhow::Result<$t> {
                     <$t>::try_from(value).context(concat!("convert positive to ", stringify!($t)))
                 }
@@ -203,7 +210,8 @@ impl CborSerialize for f64 {
 impl CborDeserialize for f64 {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         decoder.decode_float()
     }
 }
@@ -229,7 +237,8 @@ impl CborSerialize for String {
 impl CborDeserialize for String {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         Ok(String::from_utf8(decoder.decode_text()?)
             .context("text data item not valid UTF8 encoding")?)
     }
@@ -243,11 +252,15 @@ pub enum MapKey {
 }
 
 impl From<String> for MapKey {
-    fn from(value: String) -> Self { Self::Text(value) }
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
 }
 
 impl From<u64> for MapKey {
-    fn from(value: u64) -> Self { Self::Positive(value) }
+    fn from(value: u64) -> Self {
+        Self::Positive(value)
+    }
 }
 
 impl TryFrom<MapKey> for String {
@@ -300,7 +313,8 @@ impl CborSerialize for MapKeyRef<'_> {
 impl CborDeserialize for MapKey {
     fn deserialize<C: CborDecoder>(mut decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         match decoder.peek_data_item_header()?.to_type() {
             DataItemType::Positive => Ok(Self::Positive(u64::deserialize(decoder)?)),
             DataItemType::Text => Ok(Self::Text(String::deserialize(decoder)?)),

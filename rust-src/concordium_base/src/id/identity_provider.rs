@@ -94,9 +94,9 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Additionally verify that RegID = PRF(key_PRF, 0):
     let verifier_prf_regid = com_eq::ComEq {
         commitment: pre_id_obj.cmm_prf,
-        y:          context.global_context.on_chain_commitment_key.g,
-        g:          pub_info_for_ip.reg_id,
-        cmm_key:    verifier.first.second.cmm_key_1,
+        y: context.global_context.on_chain_commitment_key.g,
+        g: pub_info_for_ip.reg_id,
+        cmm_key: verifier.first.second.cmm_key_1,
     };
     let prf_regid_response = pre_id_obj.poks.prf_regid_proof.clone();
 
@@ -203,16 +203,16 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let id_cred_sec_verifier = dlog::Dlog {
         public: *id_cred_pub,
-        coeff:  context.global_context.on_chain_commitment_key.g,
+        coeff: context.global_context.on_chain_commitment_key.g,
     };
     let id_cred_sec_response = poks_common.id_cred_sec_response;
 
     // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
     let id_cred_sec_eq_verifier = com_eq::ComEq {
         commitment: *common_fields.cmm_sc,
-        y:          *id_cred_pub,
-        cmm_key:    commitment_key_sc,
-        g:          context.global_context.on_chain_commitment_key.g,
+        y: *id_cred_pub,
+        cmm_key: commitment_key_sc,
+        g: context.global_context.on_chain_commitment_key.g,
     };
 
     // TODO: Figure out whether we can somehow get rid of this clone.
@@ -273,8 +273,8 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             .cmm_prf_sharing_coeff
             .first()
             .expect("Precondition checked."),
-        cmm_key_1:    commitment_key_prf,
-        cmm_key_2:    *ar_ck,
+        cmm_key_1: commitment_key_prf,
+        cmm_key_2: *ar_ck,
     };
     let response_prf_same = poks_common.commitments_prf_same;
 
@@ -292,7 +292,7 @@ fn validate_request_common<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
 
     let verifier = AndAdapter {
-        first:  id_cred_sec_verifier,
+        first: id_cred_sec_verifier,
         second: id_cred_sec_eq_verifier,
     };
     let verifier = verifier
@@ -536,10 +536,10 @@ pub fn create_initial_cdi<
 ) -> InitialCredentialDeploymentInfo<C, AttributeType> {
     // The initial policy is empty, apart from the expiry date of the credential.
     let policy: Policy<C, AttributeType> = Policy {
-        valid_to:   alist.valid_to,
+        valid_to: alist.valid_to,
         created_at: alist.created_at,
         policy_vec: BTreeMap::new(),
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
     let cred_values = InitialCredentialDeploymentValues {
         reg_id: pub_info_for_ip.reg_id,
@@ -662,7 +662,7 @@ pub fn validate_id_recovery_request<P: Pairing, C: Curve<Scalar = P::ScalarField
 ) -> bool {
     let verifier = dlog::Dlog::<C> {
         public: request.id_cred_pub,
-        coeff:  context.on_chain_commitment_key.g,
+        coeff: context.on_chain_commitment_key.g,
     };
     let mut transcript = RandomOracle::domain("IdRecoveryProof");
     transcript.append_message(b"ctx", &context);
@@ -747,7 +747,7 @@ mod tests {
 
         let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
@@ -868,7 +868,7 @@ mod tests {
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
@@ -921,7 +921,7 @@ mod tests {
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let id_use_data = test_create_id_use_data(&mut csprng);
         let acc_data = InitialAccountData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));

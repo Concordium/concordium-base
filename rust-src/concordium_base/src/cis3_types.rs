@@ -12,13 +12,13 @@ pub struct PermitMessage {
     /// The address of the intended contract.
     pub contract_address: ContractAddress,
     /// A nonce to prevent replay attacks.
-    pub nonce:            u64,
+    pub nonce: u64,
     /// The timestamp of the message.
-    pub timestamp:        Timestamp,
+    pub timestamp: Timestamp,
     /// The entry point to be invoked.
-    pub entry_point:      OwnedEntrypointName,
+    pub entry_point: OwnedEntrypointName,
     /// The parameters to be passed to the entry point.
-    pub payload:          OwnedParameter,
+    pub payload: OwnedParameter,
 }
 
 /// The parameters for a `permit` invokation, part of the CIS3 specification.
@@ -27,9 +27,9 @@ pub struct PermitParams {
     /// The signature of the sponsoree.
     pub signature: AccountSignatures,
     /// The address of the sponsoree.
-    pub signer:    AccountAddress,
+    pub signer: AccountAddress,
     /// The message to be signed.
-    pub message:   PermitMessage,
+    pub message: PermitMessage,
 }
 
 /// Error for constructing a new [`SupportsPermitQueryParams`].
@@ -56,7 +56,9 @@ impl SupportsPermitQueryParams {
 
     /// Create a new `SupportsPermitQueryParams` without checking that the
     /// length of the provided entry points is within `u16::MAX`.
-    pub fn new_unchecked(entry_points: Vec<OwnedEntrypointName>) -> Self { Self(entry_points) }
+    pub fn new_unchecked(entry_points: Vec<OwnedEntrypointName>) -> Self {
+        Self(entry_points)
+    }
 }
 
 /// The response type for the `supportsPermit` contract function.
@@ -75,7 +77,7 @@ pub enum Event {
         nonce
     )]
     Nonce {
-        nonce:     u64,
+        nonce: u64,
         sponsoree: AccountAddress,
     },
     /// Custom event outside of the CIS3 specification.
@@ -89,7 +91,7 @@ impl Deserial for Event {
         let discriminant = u8::deserial(source)?;
         match discriminant {
             250 => Ok(Event::Nonce {
-                nonce:     u64::deserial(source)?,
+                nonce: u64::deserial(source)?,
                 sponsoree: AccountAddress::deserial(source)?,
             }),
             _ => Ok(Event::Unknown),

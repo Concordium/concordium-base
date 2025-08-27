@@ -53,7 +53,9 @@ impl Deserial for PublicKey {
 }
 
 impl AsRef<[u8]> for PublicKey {
-    fn as_ref(&self) -> &[u8] { self.as_bytes() }
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
 }
 
 impl From<&SecretKey> for PublicKey {
@@ -80,7 +82,9 @@ impl From<&ExpandedSecretKey> for PublicKey {
 impl PublicKey {
     /// View this public key as a byte array.
     #[inline]
-    pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
+    pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] {
+        &(self.0).0
+    }
 
     /// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.4.1.1>
     /// The failure should not happen in practice, expected number of iterations
@@ -113,7 +117,9 @@ impl PublicKey {
         None
     }
 
-    pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
+    pub fn verify_key(&self) -> bool {
+        !self.1.is_small_order()
+    }
 
     /// Implements <https://tools.ietf.org/html/draft-irtf-cfrg-vrf-07.html#section-5.3>
     #[allow(clippy::many_single_char_names)]

@@ -94,7 +94,7 @@ impl Deserial for ProtocolUpdate {
 /// Update the transaction fee distribution to the specified value.
 pub struct TransactionFeeDistribution {
     /// The fraction that goes to the baker of the block.
-    pub baker:       AmountFraction,
+    pub baker: AmountFraction,
     /// The fraction that goes to the gas account. The remaining fraction will
     /// go to the foundation.
     pub gas_account: AmountFraction,
@@ -117,7 +117,7 @@ mod transaction_fee_distribution {
     #[derive(SerdeDeserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct TransactionFeeDistributionUnchecked {
-        baker:       AmountFraction,
+        baker: AmountFraction,
         gas_account: AmountFraction,
     }
 
@@ -127,7 +127,7 @@ mod transaction_fee_distribution {
         fn try_from(value: TransactionFeeDistributionUnchecked) -> Result<Self, Self::Error> {
             if (value.baker + value.gas_account).is_some() {
                 Ok(TransactionFeeDistribution {
-                    baker:       value.baker,
+                    baker: value.baker,
                     gas_account: value.gas_account,
                 })
             } else {
@@ -144,16 +144,16 @@ mod transaction_fee_distribution {
 pub struct GASRewards {
     /// `BakerPrevTransFrac`: fraction of the previous gas account paid to the
     /// baker.
-    pub baker:              AmountFraction,
+    pub baker: AmountFraction,
     /// `FeeAddFinalisationProof`: fraction paid for including a finalization
     /// proof in a block.
     pub finalization_proof: AmountFraction,
     /// `FeeAccountCreation`: fraction paid for including each account creation
     /// transaction in a block.
-    pub account_creation:   AmountFraction,
+    pub account_creation: AmountFraction,
     /// `FeeUpdate`: fraction paid for including an update transaction in a
     /// block.
-    pub chain_update:       AmountFraction,
+    pub chain_update: AmountFraction,
 }
 
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Clone)]
@@ -164,13 +164,13 @@ pub struct GASRewards {
 pub struct GASRewardsV1 {
     /// `BakerPrevTransFrac`: fraction of the previous gas account paid to the
     /// baker.
-    pub baker:            AmountFraction,
+    pub baker: AmountFraction,
     /// `FeeAccountCreation`: fraction paid for including each account creation
     /// transaction in a block.
     pub account_creation: AmountFraction,
     /// `FeeUpdate`: fraction paid for including an update transaction in a
     /// block.
-    pub chain_update:     AmountFraction,
+    pub chain_update: AmountFraction,
 }
 
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, Clone)]
@@ -328,7 +328,7 @@ pub enum Level1KeysKind {}
 /// contexts.
 pub struct HigherLevelAccessStructure<Kind> {
     #[size_length = 2]
-    pub keys:      Vec<UpdatePublicKey>,
+    pub keys: Vec<UpdatePublicKey>,
     pub threshold: UpdateKeysThreshold,
     #[serde(skip)] // use default when deserializing
     pub _phantom: PhantomData<Kind>,
@@ -359,7 +359,7 @@ impl<Kind> Deserial for HigherLevelAccessStructure<Kind> {
 pub struct AccessStructure {
     #[set_size_length = 2]
     pub authorized_keys: BTreeSet<UpdateKeysIndex>,
-    pub threshold:       UpdateKeysThreshold,
+    pub threshold: UpdateKeysThreshold,
 }
 
 impl Deserial for AccessStructure {
@@ -427,7 +427,8 @@ impl AuthorizationsV0 {
         actual_keys: impl IntoIterator<Item = K>,
     ) -> Option<BTreeMap<UpdateKeysIndex, K>>
     where
-        UpdatePublicKey: for<'a> From<&'a K>, {
+        UpdatePublicKey: for<'a> From<&'a K>,
+    {
         construct_update_signer_worker(&self.keys, update_key_indices, actual_keys)
     }
 }
@@ -439,7 +440,8 @@ fn construct_update_signer_worker<K>(
     actual_keys: impl IntoIterator<Item = K>,
 ) -> Option<BTreeMap<UpdateKeysIndex, K>>
 where
-    UpdatePublicKey: for<'a> From<&'a K>, {
+    UpdatePublicKey: for<'a> From<&'a K>,
+{
     let mut signer = BTreeMap::new();
     for kp in actual_keys {
         let known_key = &UpdatePublicKey::from(&kp);
@@ -465,13 +467,13 @@ where
 /// with the context giving all the possible keys.
 pub struct AuthorizationsV1 {
     #[serde(flatten)]
-    pub v0:                  AuthorizationsV0,
+    pub v0: AuthorizationsV0,
     /// Keys for changing cooldown periods related to baking and delegating.
     pub cooldown_parameters: AccessStructure,
     /// Keys for changing the length of the reward period.
-    pub time_parameters:     AccessStructure,
+    pub time_parameters: AccessStructure,
     /// Keys for creating a protocol level token.
-    pub create_plt:          Option<AccessStructure>,
+    pub create_plt: Option<AccessStructure>,
 }
 
 impl AuthorizationsV1 {
@@ -486,7 +488,8 @@ impl AuthorizationsV1 {
         actual_keys: impl IntoIterator<Item = K>,
     ) -> Option<BTreeMap<UpdateKeysIndex, K>>
     where
-        UpdatePublicKey: for<'a> From<&'a K>, {
+        UpdatePublicKey: for<'a> From<&'a K>,
+    {
         construct_update_signer_worker(&self.v0.keys, update_key_indices, actual_keys)
     }
 }
@@ -576,7 +579,7 @@ pub struct CooldownParameters {
     pub pool_owner_cooldown: DurationSeconds,
     /// Number of seconds that a delegator must cooldown
     /// when reducing their delegated stake.
-    pub delegator_cooldown:  DurationSeconds,
+    pub delegator_cooldown: DurationSeconds,
 }
 
 /// Parameters controlling consensus timeouts for the consensus protocol version
@@ -584,7 +587,7 @@ pub struct CooldownParameters {
 #[derive(Debug, common::Serial, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
 pub struct TimeoutParameters {
     /// The base value for triggering a timeout.
-    pub base:     concordium_contracts_common::Duration,
+    pub base: concordium_contracts_common::Duration,
     /// Factor for increasing the timeout. Must be greater than 1.
     pub increase: Ratio,
     /// Factor for decreasing the timeout. Must be between 0 and 1.
@@ -671,7 +674,9 @@ pub struct RewardPeriodLength {
 }
 
 impl RewardPeriodLength {
-    pub fn reward_period_epochs(&self) -> Epoch { self.reward_period_epochs }
+    pub fn reward_period_epochs(&self) -> Epoch {
+        self.reward_period_epochs
+    }
 }
 
 #[derive(Debug, SerdeSerialize, SerdeDeserialize, common::Serialize, Copy, Clone)]
@@ -681,7 +686,7 @@ impl RewardPeriodLength {
 /// a change to either affects the overall rate of minting.
 pub struct TimeParameters {
     pub reward_period_length: RewardPeriodLength,
-    pub mint_per_payday:      MintRate,
+    pub mint_per_payday: MintRate,
 }
 
 #[derive(Debug, common::Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
@@ -692,20 +697,20 @@ pub struct PoolParameters {
     /// Fraction of finalization rewards charged by the passive delegation.
     pub passive_finalization_commission: AmountFraction,
     /// Fraction of baking rewards charged by the passive delegation.
-    pub passive_baking_commission:       AmountFraction,
+    pub passive_baking_commission: AmountFraction,
     /// Fraction of transaction rewards charged by the L-pool.
-    pub passive_transaction_commission:  AmountFraction,
+    pub passive_transaction_commission: AmountFraction,
     /// Bounds on the commission rates that may be charged by bakers.
     #[serde(flatten)]
-    pub commission_bounds:               CommissionRanges,
+    pub commission_bounds: CommissionRanges,
     /// Minimum equity capital required for a new baker.
-    pub minimum_equity_capital:          Amount,
+    pub minimum_equity_capital: Amount,
     /// Maximum fraction of the total staked capital of that a new baker can
     /// have.
-    pub capital_bound:                   CapitalBound,
+    pub capital_bound: CapitalBound,
     /// The maximum leverage that a baker can have as a ratio of total stake
     /// to equity capital.
-    pub leverage_bound:                  LeverageFactor,
+    pub leverage_bound: LeverageFactor,
 }
 
 #[derive(Debug, common::Serialize, Clone, Copy, SerdeSerialize, SerdeDeserialize)]
@@ -791,13 +796,13 @@ pub enum UpdatePayload {
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlt {
     /// The symbol of the token.
-    pub token_id:                  protocol_level_tokens::TokenId,
+    pub token_id: protocol_level_tokens::TokenId,
     /// A SHA256 hash that identifies the token module implementation.
-    pub token_module:              protocol_level_tokens::TokenModuleRef,
+    pub token_module: protocol_level_tokens::TokenModuleRef,
     /// The number of decimal places used in the representation of amounts of
     /// this token. This determines the smallest representable fraction of the
     /// token.
-    pub decimals:                  u8,
+    pub decimals: u8,
     /// The initialization parameters of the token, encoded in CBOR.
     pub initialization_parameters: protocol_level_tokens::RawCbor,
 }
@@ -904,8 +909,8 @@ impl UpdatePayload {
 
 #[derive(Debug, Clone, common::Serialize)]
 pub struct UpdateInstruction {
-    pub header:     UpdateHeader,
-    pub payload:    UpdatePayload,
+    pub header: UpdateHeader,
+    pub payload: UpdatePayload,
     pub signatures: UpdateInstructionSignature,
 }
 
@@ -948,13 +953,13 @@ impl UpdateSigner for &[(UpdateKeysIndex, UpdateKeyPair)] {
 pub struct UpdateHeader {
     /// Sequence number of the update. Each update queue maintains its own
     /// sequence number.
-    pub seq_number:     UpdateSequenceNumber,
+    pub seq_number: UpdateSequenceNumber,
     /// An effective time of the update. 0 is used to mean "immediate".
     pub effective_time: TransactionTime,
     /// Timeout of the update. The timeout must not be after the effective time.
-    pub timeout:        TransactionTime,
+    pub timeout: TransactionTime,
     /// Size of the update instruction payload.
-    pub payload_size:   PayloadSize,
+    pub payload_size: PayloadSize,
 }
 
 #[derive(Debug, Clone, common::Serial, Into)]

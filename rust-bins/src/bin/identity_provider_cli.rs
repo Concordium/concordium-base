@@ -28,31 +28,31 @@ struct IpV0 {
         long = "request",
         help = "File with the identity object request received from the user."
     )]
-    pio:                PathBuf,
+    pio: PathBuf,
     #[structopt(
         long = "ip-data",
         help = "Possibly encrypted file with all information about the identity provider (public \
                 and private)."
     )]
-    ip_data:            PathBuf,
+    ip_data: PathBuf,
     #[structopt(long = "id-out", help = "File to write the signed identity object to.")]
-    out_file:           PathBuf,
+    out_file: PathBuf,
     #[structopt(
         long = "ar-record-out",
         help = "File to write anonymity revocation record to."
     )]
-    ar_record:          PathBuf,
+    ar_record: PathBuf,
     #[structopt(
         long = "initial-account-out",
         help = "File to output the payload of the initial account creation transaction."
     )]
-    out_icdi:           PathBuf,
+    out_icdi: PathBuf,
     #[structopt(
         name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:             PathBuf,
+    global: PathBuf,
     #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
     anonymity_revokers: PathBuf,
     #[structopt(
@@ -60,18 +60,18 @@ struct IpV0 {
         help = "Expiry time of the initial credential transaction. In seconds from __now__.",
         default_value = "900"
     )]
-    expiry:             u64,
+    expiry: u64,
     #[structopt(
         long = "id-object-expiry",
         help = "Expiry time of the identity object. As YYYYMM."
     )]
-    id_expiry:          Option<YearMonth>,
+    id_expiry: Option<YearMonth>,
     #[structopt(
         long = "max-accounts",
         help = "Maximum number of accounts that can be created from the identity object.",
         default_value = "25"
     )]
-    max_accounts:       u8,
+    max_accounts: u8,
 }
 
 #[derive(StructOpt)]
@@ -86,39 +86,39 @@ struct IpV1 {
         long = "request",
         help = "File with the identity object request received from the user."
     )]
-    pio:                PathBuf,
+    pio: PathBuf,
     #[structopt(
         long = "ip-data",
         help = "Possibly encrypted file with all information about the identity provider (public \
                 and private)."
     )]
-    ip_data:            PathBuf,
+    ip_data: PathBuf,
     #[structopt(long = "id-out", help = "File to write the signed identity object to.")]
-    out_file:           PathBuf,
+    out_file: PathBuf,
     #[structopt(
         long = "ar-record-out",
         help = "File to write anonymity revocation record to."
     )]
-    ar_record:          PathBuf,
+    ar_record: PathBuf,
     #[structopt(
         name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:             PathBuf,
+    global: PathBuf,
     #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
     anonymity_revokers: PathBuf,
     #[structopt(
         long = "id-object-expiry",
         help = "Expiry time of the identity object. As YYYYMM."
     )]
-    id_expiry:          Option<YearMonth>,
+    id_expiry: Option<YearMonth>,
     #[structopt(
         long = "max-accounts",
         help = "Maximum number of accounts that can be created from the identity object.",
         default_value = "25"
     )]
-    max_accounts:       u8,
+    max_accounts: u8,
 }
 
 #[derive(StructOpt)]
@@ -163,7 +163,7 @@ struct ValidateIdRecoveryRequest {
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:  PathBuf,
+    global: PathBuf,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -226,7 +226,7 @@ fn handle_sign_pio_v0(app: IpV0) -> anyhow::Result<()> {
         Some(exp) => exp,
         None => {
             let default_value = YearMonth {
-                year:  created_at.year + 5,
+                year: created_at.year + 5,
                 month: created_at.month,
             };
             let input: String = Input::new()
@@ -275,12 +275,15 @@ fn handle_sign_pio_v0(app: IpV0) -> anyhow::Result<()> {
         &ip_data.ip_secret_key,
         &ip_data.ip_cdi_secret_key,
     );
-    let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub:  pio.pub_info_for_ip.id_cred_pub,
-        ar_data:      pio.ip_ar_data.clone(),
-        max_accounts: attributes.max_accounts,
-        threshold:    pio.choice_ar_parameters.threshold,
-    });
+    let ar_record = Versioned::new(
+        VERSION_0,
+        AnonymityRevocationRecord {
+            id_cred_pub: pio.pub_info_for_ip.id_cred_pub,
+            ar_data: pio.ip_ar_data.clone(),
+            max_accounts: attributes.max_accounts,
+            threshold: pio.choice_ar_parameters.threshold,
+        },
+    );
 
     let (signature, icdi) = vf.map_err(|e| {
         anyhow::anyhow!(
@@ -388,7 +391,7 @@ fn handle_sign_pio_v1(app: IpV1) -> anyhow::Result<()> {
         Some(exp) => exp,
         None => {
             let default_value = YearMonth {
-                year:  created_at.year + 5,
+                year: created_at.year + 5,
                 month: created_at.month,
             };
             let input: String = Input::new()
@@ -427,12 +430,15 @@ fn handle_sign_pio_v1(app: IpV1) -> anyhow::Result<()> {
         &global_ctx,
     );
     let vf = verify_credentials_v1(&pio, context, &attributes, &ip_data.ip_secret_key);
-    let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub:  pio.id_cred_pub,
-        ar_data:      pio.ip_ar_data.clone(),
-        max_accounts: attributes.max_accounts,
-        threshold:    pio.choice_ar_parameters.threshold,
-    });
+    let ar_record = Versioned::new(
+        VERSION_0,
+        AnonymityRevocationRecord {
+            id_cred_pub: pio.id_cred_pub,
+            ar_data: pio.ip_ar_data.clone(),
+            max_accounts: attributes.max_accounts,
+            threshold: pio.choice_ar_parameters.threshold,
+        },
+    );
 
     let signature = vf.map_err(|e| {
         anyhow::anyhow!(

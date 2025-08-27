@@ -133,8 +133,8 @@ fn validate_request(
         parse_exact_versioned_pio_from_request(request_bytes)?;
 
     let context = IpContext {
-        ip_info:        &ip_info,
-        ars_infos:      &ars_infos.anonymity_revokers,
+        ip_info: &ip_info,
+        ars_infos: &ars_infos.anonymity_revokers,
         global_context: &global_context,
     };
     let addr = account_address_from_registration_id(&request.pub_info_for_ip.reg_id);
@@ -159,8 +159,8 @@ fn validate_request_v1(
         parse_exact_versioned_pio_from_request_v1(request_bytes)?;
 
     let context = IpContext {
-        ip_info:        &ip_info,
-        ars_infos:      &ars_infos.anonymity_revokers,
+        ip_info: &ip_info,
+        ars_infos: &ars_infos.anonymity_revokers,
         global_context: &global_context,
     };
     if let Err(e) = ip_validate_request_v1(&request, context) {
@@ -172,16 +172,16 @@ fn validate_request_v1(
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityCreation {
-    id_obj:          Versioned<IdentityObject<Bls12, ExampleCurve, AttributeKind>>,
-    ar_record:       Versioned<AnonymityRevocationRecord<ExampleCurve>>,
-    request:         Versioned<AccountCredentialMessage<Bls12, ExampleCurve, AttributeKind>>,
+    id_obj: Versioned<IdentityObject<Bls12, ExampleCurve, AttributeKind>>,
+    ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>>,
+    request: Versioned<AccountCredentialMessage<Bls12, ExampleCurve, AttributeKind>>,
     account_address: AccountAddress,
 }
 
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityCreationV1 {
-    id_obj:    Versioned<IdentityObjectV1<Bls12, ExampleCurve, AttributeKind>>,
+    id_obj: Versioned<IdentityObjectV1<Bls12, ExampleCurve, AttributeKind>>,
     ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>>,
 }
 
@@ -214,12 +214,15 @@ fn create_identity_object(
         Err(e) => anyhow::bail!("Signing failed, {}", e),
     };
 
-    let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub:  request.pub_info_for_ip.id_cred_pub,
-        ar_data:      request.ip_ar_data.clone(),
-        max_accounts: alist.max_accounts,
-        threshold:    request.choice_ar_parameters.threshold,
-    });
+    let ar_record = Versioned::new(
+        VERSION_0,
+        AnonymityRevocationRecord {
+            id_cred_pub: request.pub_info_for_ip.id_cred_pub,
+            ar_data: request.ip_ar_data.clone(),
+            max_accounts: alist.max_accounts,
+            threshold: request.choice_ar_parameters.threshold,
+        },
+    );
 
     let icdi = create_initial_cdi(
         &ip_info,
@@ -241,7 +244,7 @@ fn create_identity_object(
 
     let message = AccountCredentialMessage {
         message_expiry: TransactionTime { seconds: expiry },
-        credential:     AccountCredential::Initial::<id::constants::IpPairing, _, _> { icdi },
+        credential: AccountCredential::Initial::<id::constants::IpPairing, _, _> { icdi },
     };
     let v_initial_cdi = Versioned::new(VERSION_0, message);
 
@@ -278,12 +281,15 @@ fn create_identity_object_v1(
         Err(e) => anyhow::bail!("Signing failed, {}", e),
     };
 
-    let ar_record = Versioned::new(VERSION_0, AnonymityRevocationRecord {
-        id_cred_pub:  request.id_cred_pub,
-        ar_data:      request.ip_ar_data.clone(),
-        max_accounts: alist.max_accounts,
-        threshold:    request.choice_ar_parameters.threshold,
-    });
+    let ar_record = Versioned::new(
+        VERSION_0,
+        AnonymityRevocationRecord {
+            id_cred_pub: request.id_cred_pub,
+            ar_data: request.ip_ar_data.clone(),
+            max_accounts: alist.max_accounts,
+            threshold: request.choice_ar_parameters.threshold,
+        },
+    );
 
     let id = IdentityObjectV1 {
         pre_identity_object: request,
