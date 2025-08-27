@@ -17,6 +17,7 @@ use concordium_contracts_common::{AccountAddress, Address, Amount, ContractAddre
 use derive_more::*;
 use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
+use std::num::TryFromIntError;
 
 /// **Deprecated:** Replaced by [`OwnedParameter`] for consistency. Use it
 /// instead.
@@ -190,7 +191,7 @@ impl ContractTraceElement {
 /// possibly some transfers.
 pub struct InstanceUpdatedEvent {
     #[serde(default)]
-    pub contract_version: WasmVersion,
+    pub contract_version: SmartContractVersion,
     /// Address of the affected instance.
     pub address:          ContractAddress,
     /// The origin of the message to the smart contract. This can be either
@@ -256,5 +257,29 @@ impl ContractEvent {
             return Err(ParseError::default());
         }
         Ok(res)
+    }
+}
+
+/// Represents the smart contract version as a u8
+#[derive(SerdeSerialize, SerdeDeserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct SmartContractVersion(pub u8);
+
+
+/// Convert the smart contract version from i32 to u8
+impl TryFrom<i32> for SmartContractVersion {
+    type Error = TryFromIntError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        u8::try_from(value).map(SmartContractVersion)
+    }
+}
+
+/// Convert from WasmVersion to our Smart Contract Version
+impl From<WasmVersion> for SmartContractVersion {
+    fn from(value: WasmVersion) -> Self {
+        // can cast value as u8 as its defined as u8 in source and target
+        SmartContractVersion(value as u8)
     }
 }
