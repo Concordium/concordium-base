@@ -13,11 +13,10 @@ pub use concordium_contracts_common::{
     self, ContractName, ExceedsParameterSize, ModuleReference, OwnedContractName, OwnedParameter,
     OwnedReceiveName, ReceiveName,
 };
-use concordium_contracts_common::{AccountAddress, Address, Amount, ContractAddress};
+use concordium_contracts_common::{AccountAddress, Address, Amount, ContractAddress, U8WasmVersionConvertError};
 use derive_more::*;
 use sha2::Digest;
 use std::convert::{TryFrom, TryInto};
-use std::num::TryFromIntError;
 
 /// **Deprecated:** Replaced by [`OwnedParameter`] for consistency. Use it
 /// instead.
@@ -191,7 +190,7 @@ impl ContractTraceElement {
 /// possibly some transfers.
 pub struct InstanceUpdatedEvent {
     #[serde(default)]
-    pub contract_version: SmartContractVersion,
+    pub contract_version: WasmVersionInt,
     /// Address of the affected instance.
     pub address:          ContractAddress,
     /// The origin of the message to the smart contract. This can be either
@@ -260,26 +259,33 @@ impl ContractEvent {
     }
 }
 
-/// Represents the smart contract version as a u8
-#[derive(SerdeSerialize, SerdeDeserialize, Default, Debug, Clone, PartialEq, Eq)]
+/// Represents the wasm version (smart contract version) as a u8
+/// Copy, PartialOrd, Ord and Hash
+#[derive(SerdeSerialize, SerdeDeserialize, Debug, Clone, PartialEq, Eq, Copy, PartialOrd, Ord, Hash, derive_more::Display,)]
 #[serde(transparent)]
 #[repr(transparent)]
-pub struct SmartContractVersion(pub u8);
+#[display(fmt = "V{_0}")]
+pub struct WasmVersionInt(pub u8);
 
-
-/// Convert the smart contract version from i32 to u8
-impl TryFrom<i32> for SmartContractVersion {
-    type Error = TryFromIntError;
-
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        u8::try_from(value).map(SmartContractVersion)
+/// Convert from WasmVersion to our Smart Contract Version
+impl From<WasmVersion> for WasmVersionInt {
+    fn from(value: WasmVersion) -> Self {
+        // can cast value as u8 as its defined as u8 in source and target
+        WasmVersionInt(value as u8)
     }
 }
 
-/// Convert from WasmVersion to our Smart Contract Version
-impl From<WasmVersion> for SmartContractVersion {
-    fn from(value: WasmVersion) -> Self {
-        // can cast value as u8 as its defined as u8 in source and target
-        SmartContractVersion(value as u8)
+/// Try convert from WasmVersionInt to WasmVersion
+impl TryFrom<WasmVersionInt> for WasmVersion {
+    type Error = U8WasmVersionConvertError;
+    fn try_from(value: WasmVersionInt) -> Result<Self, Self::Error> {
+        WasmVersion::try_from(value.0)
+    }
+}
+
+// Default value for WasmVersionInt
+impl Default for WasmVersionInt {
+    fn default() -> Self {
+        Self { 0: Default::default() }
     }
 }
