@@ -16,14 +16,14 @@ use itertools::izip;
 use std::rc::Rc;
 
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
-    pub dlog:            Dlog<C>,
+    pub dlog: Dlog<C>,
     pub aggregate_dlogs: Vec<AggregateDlog<C>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Response<C: Curve> {
     #[size_length = 4]
-    responses:       Vec<Vec<C::Scalar>>,
+    responses: Vec<Vec<C::Scalar>>,
     response_common: C::Scalar, // For equality
 }
 
@@ -185,26 +185,29 @@ mod test {
         let gx = g.mul_by_scalar(&x);
         let dlog = Dlog {
             public: gx,
-            coeff:  g,
+            coeff: g,
         };
         let g1xh1x1f1y1 = multiexp(&[g1, h1, f1], &[x, x1, y1]);
         let g2xh2x2f2y2 = multiexp(&[g2, h2, f2], &[x, x2, y2]);
         let agg1 = AggregateDlog {
             public: g1xh1x1f1y1,
-            coeff:  vec![g1, h1, f1],
+            coeff: vec![g1, h1, f1],
         };
         let agg2 = AggregateDlog {
             public: g2xh2x2f2y2,
-            coeff:  vec![g2, h2, f2],
+            coeff: vec![g2, h2, f2],
         };
         let protocol = DlogAndAggregateDlogsEqual {
             dlog,
             aggregate_dlogs: vec![agg1, agg2],
         };
-        let secret = (Rc::new(x), vec![vec![Rc::new(x1), Rc::new(y1)], vec![
-            Rc::new(x2),
-            Rc::new(y2),
-        ]]);
+        let secret = (
+            Rc::new(x),
+            vec![
+                vec![Rc::new(x1), Rc::new(y1)],
+                vec![Rc::new(x2), Rc::new(y2)],
+            ],
+        );
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let mut ro = RandomOracle::domain(challenge_prefix);
         let proof = prove(&mut ro.split(), &protocol, secret, &mut csprng).unwrap();

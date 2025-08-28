@@ -25,7 +25,7 @@ use crate::{
 pub struct Response<C: Curve> {
     // The response consists of a com_mult response and a commitment.
     com_mult_response: SigmaProof<ComMultResponse<C>>,
-    aux_com:           Commitment<C>,
+    aux_com: Commitment<C>,
 }
 
 /// Function for proving that a committed value `value` is different from
@@ -73,19 +73,19 @@ pub fn prove_com_ineq<R: rand::Rng, C: Curve>(
     // that the product of the values in the first two commitments equals the one in
     // the last commitment.
     let prover = ComMult {
-        cmms:    [cmm_1, cmm_2, cmm_3],
+        cmms: [cmm_1, cmm_2, cmm_3],
         cmm_key: *com_key,
     };
 
     let secret = ComMultSecret {
         values: [diff_val, diff_inv_val],
-        rands:  [value_tilde.clone(), r_2, Randomness::<C>::zero()],
+        rands: [value_tilde.clone(), r_2, Randomness::<C>::zero()],
     };
 
     let partial_proof = sigma_prove(&mut transcript, &prover, secret, csprng)?;
     Some(Response {
         com_mult_response: partial_proof,
-        aux_com:           cmm_2,
+        aux_com: cmm_2,
     })
 }
 
@@ -123,7 +123,7 @@ pub fn verify_com_ineq<C: Curve>(
     let cmm_3 = Commitment(com_key.g);
 
     let com_mult = ComMult {
-        cmms:    [Commitment(cmm_1), *aux_com, cmm_3],
+        cmms: [Commitment(cmm_1), *aux_com, cmm_3],
         cmm_key: *com_key,
     };
     sigma_verify(&mut transcript, &com_mult, com_mult_response)
@@ -173,7 +173,7 @@ mod tests {
         let wrong_com_key = CommitmentKey::<G1>::generate(&mut csprng);
         let wrong_pub_value = Fr::from_str("20000102").unwrap();
         let wrong_proof = Response {
-            aux_com:           Commitment(G1::generate(&mut csprng)),
+            aux_com: Commitment(G1::generate(&mut csprng)),
             com_mult_response: proof.com_mult_response.clone(),
         };
 

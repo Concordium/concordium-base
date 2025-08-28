@@ -639,7 +639,7 @@ mod test {
         let randomness = crate::ps_sig::SigRetrievalRandomness::generate_non_zero(&mut csprng);
         let id_use_data = IdObjectUseData { aci, randomness };
         let acc_data = InitialAccountData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));

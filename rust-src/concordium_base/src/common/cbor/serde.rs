@@ -15,7 +15,8 @@ pub mod map_hex_cbor_values {
         serializer: S,
     ) -> Result<S::Ok, S::Error>
     where
-        S: Serializer, {
+        S: Serializer,
+    {
         let mut hex_map = HashMap::new();
         for (key, value) in map {
             let cbor_bytes = cbor_encode(value).map_err(serde::ser::Error::custom)?;
@@ -27,7 +28,8 @@ pub mod map_hex_cbor_values {
     /// Deserialize a `HashMap<String, value::Value>` from hex-encoded CBOR.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<String, value::Value>, D::Error>
     where
-        D: Deserializer<'de>, {
+        D: Deserializer<'de>,
+    {
         let hex_map: HashMap<String, String> = HashMap::deserialize(deserializer)?;
         let mut map = HashMap::new();
         for (key, hex_str) in hex_map {

@@ -348,7 +348,7 @@ mod tests {
         let mut csprng = thread_rng();
 
         let cred_data = CredentialData {
-            keys:      {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), KeyPair::generate(&mut csprng));
@@ -561,22 +561,22 @@ mod tests {
         let set2 = BTreeSet::from([de, uk]);
         let set_statement = AttributeInSetStatement::<G1, _, AttributeKind> {
             attribute_tag: AttributeTag::from(4u8),
-            _phantom:      PhantomData::default(),
-            set:           set.clone(),
+            _phantom: PhantomData::default(),
+            set: set.clone(),
         };
 
         // DOB in range
         let range_statement = AttributeInRangeStatement {
             attribute_tag: AttributeTag::from(3u8),
-            lower:         AttributeKind(String::from("19950505")),
-            upper:         AttributeKind(String::from("19990505")),
-            _phantom:      PhantomData::default(),
+            lower: AttributeKind(String::from("19950505")),
+            upper: AttributeKind(String::from("19990505")),
+            _phantom: PhantomData::default(),
         };
 
         // full statement
         let full_statement = StatementWithContext {
             credential: point,
-            statement:  Statement {
+            statement: Statement {
                 statements: vec![
                     AtomicStatement::RevealAttribute {
                         statement: reveal_statement,
@@ -605,7 +605,7 @@ mod tests {
             .unwrap();
         let full_statement2 = StatementWithContext {
             credential: point,
-            statement:  statement2,
+            statement: statement2,
         };
 
         // Commitments and secret randomness

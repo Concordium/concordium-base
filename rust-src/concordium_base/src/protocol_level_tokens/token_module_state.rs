@@ -9,25 +9,25 @@ use crate::{common::cbor::value, protocol_level_tokens::token_holder::CborHolder
 #[derive(Debug, Clone, PartialEq, CborSerialize, CborDeserialize)]
 pub struct TokenModuleState {
     /// The name of the token
-    pub name:               Option<String>,
+    pub name: Option<String>,
     // /// A URL pointing to the token metadata
-    pub metadata:           Option<MetadataUrl>,
+    pub metadata: Option<MetadataUrl>,
     /// The governance account of the token.
     pub governance_account: Option<CborHolderAccount>,
     /// Whether the token supports an allow list.
-    pub allow_list:         Option<bool>,
+    pub allow_list: Option<bool>,
     /// Whether the token supports a deny list.
-    pub deny_list:          Option<bool>,
+    pub deny_list: Option<bool>,
     /// Whether the token is mintable.
-    pub mintable:           Option<bool>,
+    pub mintable: Option<bool>,
     /// Whether the token is burnable.
-    pub burnable:           Option<bool>,
+    pub burnable: Option<bool>,
     /// Whether the execution of certain token operations is paused.
-    pub paused:             Option<bool>,
+    pub paused: Option<bool>,
     /// Additional state information may be provided under further text keys,
     /// the meaning of which are not defined in the present specification.
     #[cbor(other)]
-    pub additional:         HashMap<String, value::Value>,
+    pub additional: HashMap<String, value::Value>,
 }
 
 #[cfg(test)]
@@ -45,22 +45,22 @@ mod test {
     #[test]
     fn test_token_module_state_cbor() {
         let mut token_module_state = TokenModuleState {
-            name:               Some("TK1".to_string()),
-            metadata:           Some(MetadataUrl {
-                url:              "https://tokenurl1".to_string(),
+            name: Some("TK1".to_string()),
+            metadata: Some(MetadataUrl {
+                url: "https://tokenurl1".to_string(),
                 checksum_sha_256: Some(Hash::from(TEST_HASH)),
-                additional:       Default::default(),
+                additional: Default::default(),
             }),
             governance_account: Some(CborHolderAccount {
-                address:   TEST_ADDRESS,
+                address: TEST_ADDRESS,
                 coin_info: Some(CoinInfo::CCD),
             }),
-            allow_list:         Some(true),
-            deny_list:          Some(true),
-            mintable:           Some(true),
-            burnable:           Some(true),
-            paused:             Some(false),
-            additional:         vec![("other1".to_string(), value::Value::Positive(2))]
+            allow_list: Some(true),
+            deny_list: Some(true),
+            mintable: Some(true),
+            burnable: Some(true),
+            paused: Some(false),
+            additional: vec![("other1".to_string(), value::Value::Positive(2))]
                 .into_iter()
                 .collect(),
         };

@@ -27,8 +27,8 @@ pub(crate) type OwnedPolicyBytes = Vec<u8>;
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 #[serde(rename_all = "camelCase")]
 pub struct InitContext<Policies = Vec<OwnedPolicy>> {
-    pub metadata:        ChainMetadata,
-    pub init_origin:     AccountAddress,
+    pub metadata: ChainMetadata,
+    pub init_origin: AccountAddress,
     pub sender_policies: Policies,
 }
 
@@ -37,8 +37,8 @@ pub struct InitContext<Policies = Vec<OwnedPolicy>> {
 impl<'a> From<InitContext<PolicyBytes<'a>>> for InitContext<OwnedPolicyBytes> {
     fn from(borrowed: InitContext<PolicyBytes<'a>>) -> Self {
         Self {
-            metadata:        borrowed.metadata,
-            init_origin:     borrowed.init_origin,
+            metadata: borrowed.metadata,
+            init_origin: borrowed.init_origin,
             sender_policies: borrowed.sender_policies.into(),
         }
     }
@@ -49,12 +49,12 @@ impl<'a> From<InitContext<PolicyBytes<'a>>> for InitContext<OwnedPolicyBytes> {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "fuzz", derive(Arbitrary))]
 pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
-    pub metadata:        ChainMetadata,
-    pub invoker:         AccountAddress,  //32 bytes
-    pub self_address:    ContractAddress, // 16 bytes
-    pub self_balance:    Amount,          // 8 bytes
-    pub sender:          Address,         // 9 or 33 bytes
-    pub owner:           AccountAddress,  // 32 bytes
+    pub metadata: ChainMetadata,
+    pub invoker: AccountAddress,       //32 bytes
+    pub self_address: ContractAddress, // 16 bytes
+    pub self_balance: Amount,          // 8 bytes
+    pub sender: Address,               // 9 or 33 bytes
+    pub owner: AccountAddress,         // 32 bytes
     pub sender_policies: Policies,
 }
 
@@ -63,41 +63,57 @@ pub struct ReceiveContext<Policies = Vec<OwnedPolicy>> {
 impl<'a> From<ReceiveContext<PolicyBytes<'a>>> for ReceiveContext<OwnedPolicyBytes> {
     fn from(borrowed: ReceiveContext<PolicyBytes<'a>>) -> Self {
         Self {
-            metadata:        borrowed.metadata,
-            invoker:         borrowed.invoker,
-            self_address:    borrowed.self_address,
-            self_balance:    borrowed.self_balance,
-            sender:          borrowed.sender,
-            owner:           borrowed.owner,
+            metadata: borrowed.metadata,
+            invoker: borrowed.invoker,
+            self_address: borrowed.self_address,
+            self_balance: borrowed.self_balance,
+            sender: borrowed.sender,
+            owner: borrowed.owner,
             sender_policies: borrowed.sender_policies.into(),
         }
     }
 }
 
 impl<Policies> InitContext<Policies> {
-    pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
+    pub fn init_origin(&self) -> &AccountAddress {
+        &self.init_origin
+    }
 
     /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
+    pub fn get_time(&self) -> u64 {
+        self.metadata.slot_time.timestamp_millis()
+    }
 }
 
 impl<Policies> ReceiveContext<Policies> {
-    pub fn sender(&self) -> &Address { &self.sender }
+    pub fn sender(&self) -> &Address {
+        &self.sender
+    }
 
     /// Who invoked this transaction.
-    pub fn invoker(&self) -> &AccountAddress { &self.invoker }
+    pub fn invoker(&self) -> &AccountAddress {
+        &self.invoker
+    }
 
     /// Get time in milliseconds at the beginning of this block.
-    pub fn get_time(&self) -> u64 { self.metadata.slot_time.timestamp_millis() }
+    pub fn get_time(&self) -> u64 {
+        self.metadata.slot_time.timestamp_millis()
+    }
 
     /// Who is the owner of this contract.
-    pub fn owner(&self) -> &AccountAddress { &self.owner }
+    pub fn owner(&self) -> &AccountAddress {
+        &self.owner
+    }
 
     /// Balance on the smart contract when it was invoked.
-    pub fn self_balance(&self) -> Amount { self.self_balance }
+    pub fn self_balance(&self) -> Amount {
+        self.self_balance
+    }
 
     /// Address of the smart contract.
-    pub fn self_address(&self) -> &ContractAddress { &self.self_address }
+    pub fn self_address(&self) -> &ContractAddress {
+        &self.self_address
+    }
 }
 
 #[cfg(feature = "enable-ffi")]
@@ -163,16 +179,16 @@ pub enum InitResult {
     /// Initialization succeeded.
     Success {
         /// The initial state of the instance.
-        state:            State,
+        state: State,
         /// The logs produced by the `init` function.
-        logs:             Logs,
+        logs: Logs,
         /// The remaining interpreter energy.
         remaining_energy: InterpreterEnergy,
     },
     /// The init function rejected the invocation due to its own logic.
     Reject {
         /// The error code that the `init` function signalled.
-        reason:           i32,
+        reason: i32,
         /// Remaining energy left after execution.
         remaining_energy: InterpreterEnergy,
     },
@@ -216,11 +232,11 @@ impl InitResult {
 #[derive(Debug)]
 pub struct SendAction {
     /// Address of the receiving contract.
-    pub to_addr:   ContractAddress,
+    pub to_addr: ContractAddress,
     /// The name of the entrypoint to send a message to.
-    pub name:      OwnedReceiveName,
+    pub name: OwnedReceiveName,
     /// An amount to be transferred with the call.
-    pub amount:    Amount,
+    pub amount: Amount,
     /// Parameter to send.
     pub parameter: OwnedParameter,
 }
@@ -232,7 +248,7 @@ pub struct SimpleTransferAction {
     /// Receiver address.
     pub to_addr: AccountAddress, // 32 bytes
     /// An amount to be transferred.
-    pub amount:  Amount, // 8 bytes
+    pub amount: Amount, // 8 bytes
 }
 
 /// Actions produced by running a receive function.
@@ -248,9 +264,7 @@ pub struct SimpleTransferAction {
 #[derive(Clone, Debug)]
 pub enum Action {
     /// Send a message to a smart contract instance.
-    Send {
-        data: std::rc::Rc<SendAction>,
-    },
+    Send { data: std::rc::Rc<SendAction> },
     /// Send a transfer to an account.
     SimpleTransfer {
         data: std::rc::Rc<SimpleTransferAction>,
@@ -258,18 +272,12 @@ pub enum Action {
     /// Combine two actions. Both are executed, first `l` and then `r`.
     /// If any of them fail the entire action fails.
     /// The left and right actions are given as indices in a stack of actions.
-    And {
-        l: u32,
-        r: u32,
-    },
+    And { l: u32, r: u32 },
     /// Combine two actions. The second one is executed only if the first one
     /// fails. The result is either the successful result of the first action,
     /// or if the first action fails, the result of the second action.
     /// The left and right actions are given as indices in a stack of actions.
-    Or {
-        l: u32,
-        r: u32,
-    },
+    Or { l: u32, r: u32 },
     /// An empty action that has no effects.
     Accept,
 }
@@ -282,9 +290,7 @@ impl Action {
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
         use Action::*;
         match self {
-            Send {
-                data,
-            } => {
+            Send { data } => {
                 let name = data.name.as_receive_name().get_chain_name().as_bytes();
                 let name_len = name.len();
                 let param_len = data.parameter.as_ref().len();
@@ -299,29 +305,21 @@ impl Action {
                 out.extend_from_slice(data.parameter.as_ref());
                 out
             }
-            SimpleTransfer {
-                data,
-            } => {
+            SimpleTransfer { data } => {
                 let mut out = Vec::with_capacity(1 + 32 + 8);
                 out.push(1);
                 out.extend_from_slice(&data.to_addr.0);
                 out.extend_from_slice(&data.amount.micro_ccd.to_be_bytes());
                 out
             }
-            Or {
-                l,
-                r,
-            } => {
+            Or { l, r } => {
                 let mut out = Vec::with_capacity(9);
                 out.push(2);
                 out.extend_from_slice(&l.to_be_bytes());
                 out.extend_from_slice(&r.to_be_bytes());
                 out
             }
-            And {
-                l,
-                r,
-            } => {
+            And { l, r } => {
                 let mut out = Vec::with_capacity(9);
                 out.push(3);
                 out.extend_from_slice(&l.to_be_bytes());
@@ -339,18 +337,18 @@ pub enum ReceiveResult {
     /// Invocation succeeded.
     Success {
         /// The final state of the instance.
-        state:            State,
+        state: State,
         /// The logs produced by the execution.
-        logs:             Logs,
+        logs: Logs,
         /// The actions returned by the entrypoint.
-        actions:          Vec<Action>,
+        actions: Vec<Action>,
         /// The remaining energy left over from execution.
         remaining_energy: InterpreterEnergy,
     },
     /// Invocation of the entrypoint failed.
     Reject {
         /// The reason for failure returned by the entrypoint.
-        reason:           i32,
+        reason: i32,
         /// The remaining energy left over from execution.
         remaining_energy: InterpreterEnergy,
     },
@@ -468,8 +466,12 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ImportFunc {
             17 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineAnd)),
             18 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::CombineOr)),
             19 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveInvoker)),
-            20 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfAddress)),
-            21 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSelfBalance)),
+            20 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfAddress,
+            )),
+            21 => Ok(ImportFunc::ReceiveOnly(
+                ReceiveOnlyFunc::GetReceiveSelfBalance,
+            )),
             22 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveSender)),
             23 => Ok(ImportFunc::ReceiveOnly(ReceiveOnlyFunc::GetReceiveOwner)),
             tag => bail!("Unexpected ImportFunc tag {}.", tag),
@@ -518,7 +520,7 @@ impl Output for ImportFunc {
 /// into an enum with integer tags.
 pub struct ProcessedImports {
     pub(crate) tag: ImportFunc,
-    ty:             FunctionType,
+    ty: FunctionType,
 }
 
 impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
@@ -528,10 +530,7 @@ impl<'a, Ctx: Copy> Parseable<'a, Ctx> for ProcessedImports {
     ) -> concordium_wasm::parse::ParseResult<Self> {
         let tag = cursor.next(ctx)?;
         let ty = cursor.next(ctx)?;
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 }
 
@@ -660,18 +659,15 @@ impl TryFromImport for ProcessedImports {
             bail!("Unsupported import module {}.", m)
         };
         let ty = match import.description {
-            concordium_wasm::types::ImportDescription::Func {
-                type_idx,
-            } => ctx
+            concordium_wasm::types::ImportDescription::Func { type_idx } => ctx
                 .get(type_idx as usize)
                 .ok_or_else(|| anyhow::anyhow!("Unknown type, this should not happen."))?
                 .clone(),
         };
-        Ok(Self {
-            tag,
-            ty,
-        })
+        Ok(Self { tag, ty })
     }
 
-    fn ty(&self) -> &FunctionType { &self.ty }
+    fn ty(&self) -> &FunctionType {
+        &self.ty
+    }
 }

@@ -72,7 +72,7 @@ impl<'de> SerdeDeserialize<'de> for AmountDelta {
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct RetrievalInput {
-    account_address:       AccountAddress,
+    account_address: AccountAddress,
     /// An optional secret key. If present amounts will be decrypted, otherwise
     /// they will not.
     encryption_secret_key: Option<elgamal::SecretKey<id::constants::ArCurve>>,
@@ -81,8 +81,8 @@ struct RetrievalInput {
 /// A success response from the accTransactions endpoint of the wallet-proxy.
 #[derive(SerdeDeserialize)]
 struct GoodResponse {
-    limit:        u64,
-    count:        u64,
+    limit: u64,
+    count: u64,
     transactions: Vec<TransactionResponse>,
 }
 
@@ -107,21 +107,21 @@ enum OriginType {
 struct Origin {
     #[serde(rename = "type")]
     origin_type: OriginType,
-    address:     Option<AccountAddress>,
+    address: Option<AccountAddress>,
 }
 
 /// Interesting parts of the response for a single transaction.
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransactionResponse {
-    id:               u64,
-    origin:           Origin,
-    block_hash:       BlockHash,
-    block_time:       f64,
+    id: u64,
+    origin: Origin,
+    block_hash: BlockHash,
+    block_time: f64,
     transaction_hash: Option<TransactionHash>,
-    details:          Details,
-    subtotal:         Option<AmountDelta>,
-    total:            Option<AmountDelta>,
+    details: Details,
+    subtotal: Option<AmountDelta>,
+    total: Option<AmountDelta>,
 }
 /// Outcome of a transaction.
 #[derive(SerdeDeserialize, Eq, PartialEq, Debug)]
@@ -136,7 +136,7 @@ enum Outcome {
 /// specific, and are thus handled by the enumeration `AdditionalDetails`.
 #[derive(SerdeDeserialize)]
 struct Details {
-    outcome:            Option<Outcome>,
+    outcome: Option<Outcome>,
     #[serde(flatten)]
     additional_details: AdditionalDetails,
 }
@@ -176,18 +176,18 @@ enum AdditionalDetails {
 #[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SimpleTransfer {
-    transfer_source:      AccountAddress,
+    transfer_source: AccountAddress,
     transfer_destination: AccountAddress,
-    transfer_amount:      Amount,
+    transfer_amount: Amount,
 }
 
 #[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedTransfer {
-    transfer_source:           AccountAddress,
-    transfer_destination:      AccountAddress,
-    encrypted_amount:          EncryptedAmount,
-    input_encrypted_amount:    EncryptedAmount,
+    transfer_source: AccountAddress,
+    transfer_destination: AccountAddress,
+    encrypted_amount: EncryptedAmount,
+    input_encrypted_amount: EncryptedAmount,
     new_self_encrypted_amount: EncryptedAmount,
 }
 
@@ -195,23 +195,23 @@ pub struct EncryptedTransfer {
 #[serde(rename_all = "camelCase")]
 pub struct TransferWithSchedule {
     transfer_destination: AccountAddress,
-    transfer_amount:      Amount,
+    transfer_amount: Amount,
 }
 
 #[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferToEncrypted {
-    pub transfer_source:           AccountAddress,
-    pub amount_subtracted:         Amount,
+    pub transfer_source: AccountAddress,
+    pub amount_subtracted: Amount,
     pub new_self_encrypted_amount: EncryptedAmount,
 }
 
 #[derive(SerdeDeserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferToPublic {
-    pub transfer_source:           AccountAddress,
-    pub amount_added:              Amount,
-    pub input_encrypted_amount:    EncryptedAmount,
+    pub transfer_source: AccountAddress,
+    pub amount_added: Amount,
+    pub input_encrypted_amount: EncryptedAmount,
     pub new_self_encrypted_amount: EncryptedAmount,
 }
 
@@ -219,7 +219,7 @@ pub struct TransferToPublic {
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct AccBalanceResponse {
-    current_balance:   Option<serde_json::Value>,
+    current_balance: Option<serde_json::Value>,
     finalized_balance: Option<serde_json::Value>,
 }
 
@@ -237,7 +237,7 @@ enum Mode {
     #[structopt(about = "Trace a single account.", name = "single")]
     Single {
         #[structopt(help = "Account address to trace.", long = "address")]
-        address:        AccountAddress,
+        address: AccountAddress,
         #[structopt(
             help = "Optionally a decryption key to decrypt encrypted transfers.",
             long = "decryption-key"
@@ -259,7 +259,7 @@ struct Trace {
         help = "File to output the account trace to. If not provided the data is printed to \
                 stdout."
     )]
-    out:    Option<PathBuf>,
+    out: Option<PathBuf>,
     #[structopt(
         long = "source",
         help = "URL to the wallet-proxy instance.",
@@ -267,7 +267,7 @@ struct Trace {
     )]
     source: url::Url,
     #[structopt(subcommand)]
-    mode:   Mode,
+    mode: Mode,
 }
 
 fn main() {
@@ -333,7 +333,7 @@ fn main() {
                     }
                 }
                 None => RetrievalInput {
-                    account_address:       address,
+                    account_address: address,
                     encryption_secret_key: None,
                 },
             };

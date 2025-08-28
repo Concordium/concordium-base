@@ -14,7 +14,7 @@ pub struct TokenEvent {
     /// The unique symbol of the token, which produced this event.
     pub token_id: TokenId,
     /// The type of the event.
-    pub event:    TokenEventDetails,
+    pub event: TokenEventDetails,
 }
 
 /// The type of the token event.
@@ -41,7 +41,7 @@ pub struct TokenModuleEvent {
     #[serde(rename = "type")]
     pub event_type: TokenModuleCborTypeDiscriminator,
     /// The details of the event produced, in the raw byte encoded form.
-    pub details:    RawCbor,
+    pub details: RawCbor,
 }
 
 impl TokenModuleEvent {
@@ -135,14 +135,14 @@ pub enum TokenHolder {
 #[serde(rename_all = "camelCase")]
 pub struct TokenTransferEvent {
     /// The token holder from which the tokens are transferred.
-    pub from:   TokenHolder,
+    pub from: TokenHolder,
     /// The token holder to which the tokens are transferred.
-    pub to:     TokenHolder,
+    pub to: TokenHolder,
     /// The amount of tokens transferred.
     pub amount: TokenAmount,
     /// An optional memo field that can be used to attach a message to the token
     /// transfer.
-    pub memo:   Option<Memo>,
+    pub memo: Option<Memo>,
 }
 
 /// An event emitted when the token supply is updated, i.e. by minting/burning
@@ -183,13 +183,17 @@ pub struct TypeFromStringError {
 }
 
 impl AsRef<str> for TokenModuleCborTypeDiscriminator {
-    fn as_ref(&self) -> &str { self.value.as_str() }
+    fn as_ref(&self) -> &str {
+        self.value.as_str()
+    }
 }
 
 impl std::str::FromStr for TokenModuleCborTypeDiscriminator {
     type Err = TypeFromStringError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { s.to_owned().try_into() }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.to_owned().try_into()
+    }
 }
 
 impl TryFrom<String> for TokenModuleCborTypeDiscriminator {
@@ -208,7 +212,9 @@ impl TryFrom<String> for TokenModuleCborTypeDiscriminator {
 }
 
 impl From<TokenModuleCborTypeDiscriminator> for String {
-    fn from(event_type: TokenModuleCborTypeDiscriminator) -> Self { event_type.value }
+    fn from(event_type: TokenModuleCborTypeDiscriminator) -> Self {
+        event_type.value
+    }
 }
 
 #[cfg(test)]
@@ -223,7 +229,7 @@ mod test {
     fn test_decode_add_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
             target: CborHolderAccount {
-                address:   token_holder::test_fixtures::ADDRESS,
+                address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
@@ -231,7 +237,7 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "addAllowList".to_string().try_into().unwrap(),
-            details:    cbor.into(),
+            details: cbor.into(),
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
@@ -245,7 +251,7 @@ mod test {
     fn test_decode_remove_allow_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
             target: CborHolderAccount {
-                address:   token_holder::test_fixtures::ADDRESS,
+                address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
@@ -253,7 +259,7 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "removeAllowList".to_string().try_into().unwrap(),
-            details:    cbor.into(),
+            details: cbor.into(),
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
@@ -267,7 +273,7 @@ mod test {
     fn test_decode_add_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
             target: CborHolderAccount {
-                address:   token_holder::test_fixtures::ADDRESS,
+                address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
@@ -275,7 +281,7 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "addDenyList".to_string().try_into().unwrap(),
-            details:    cbor.into(),
+            details: cbor.into(),
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
@@ -289,7 +295,7 @@ mod test {
     fn test_decode_remove_deny_list_event_cbor() {
         let variant = TokenListUpdateEventDetails {
             target: CborHolderAccount {
-                address:   token_holder::test_fixtures::ADDRESS,
+                address: token_holder::test_fixtures::ADDRESS,
                 coin_info: None,
             },
         };
@@ -297,7 +303,7 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a166746172676574d99d73a10358200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
         let module_event = TokenModuleEvent {
             event_type: "removeDenyList".to_string().try_into().unwrap(),
-            details:    cbor.into(),
+            details: cbor.into(),
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
@@ -314,7 +320,7 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a0");
         let module_event = TokenModuleEvent {
             event_type: "pause".to_string().try_into().unwrap(),
-            details:    cbor.into(),
+            details: cbor.into(),
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();
@@ -328,7 +334,7 @@ mod test {
         assert_eq!(hex::encode(&cbor), "a0");
         let module_event = TokenModuleEvent {
             event_type: "unpause".to_string().try_into().unwrap(),
-            details:    cbor.into(),
+            details: cbor.into(),
         };
 
         let module_event_type = module_event.decode_token_module_event().unwrap();

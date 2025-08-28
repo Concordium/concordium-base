@@ -146,7 +146,9 @@ pub struct InterpreterEnergy {
 }
 
 impl PartialEq<u64> for InterpreterEnergy {
-    fn eq(&self, other: &u64) -> bool { self.energy.eq(other) }
+    fn eq(&self, other: &u64) -> bool {
+        self.energy.eq(other)
+    }
 }
 
 impl PartialOrd<u64> for InterpreterEnergy {
@@ -157,9 +159,7 @@ impl PartialOrd<u64> for InterpreterEnergy {
 
 impl InterpreterEnergy {
     pub const fn new(energy: u64) -> Self {
-        Self {
-            energy,
-        }
+        Self { energy }
     }
 
     /// Subtract the given amount from the energy, bottoming out at 0.
@@ -176,7 +176,9 @@ impl InterpreterEnergy {
 
     #[cfg(feature = "enable-ffi")]
     /// Serialized in big-endian representation.
-    pub fn to_be_bytes(self) -> [u8; 8] { self.energy.to_be_bytes() }
+    pub fn to_be_bytes(self) -> [u8; 8] {
+        self.energy.to_be_bytes()
+    }
 
     /// Saturating interpreter energy subtraction.
     ///
@@ -188,7 +190,9 @@ impl InterpreterEnergy {
     }
 
     /// Internal helper to add amount when we know it will not overflow.
-    fn add(&mut self, other: Self) { self.energy += other.energy; }
+    fn add(&mut self, other: Self) {
+        self.energy += other.energy;
+    }
 
     pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
         if self.energy >= amount {
@@ -222,5 +226,7 @@ impl InterpreterEnergy {
 pub struct OutOfEnergy;
 
 impl std::fmt::Display for OutOfEnergy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { "Out of energy".fmt(f) }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        "Out of energy".fmt(f)
+    }
 }

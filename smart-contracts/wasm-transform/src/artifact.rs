@@ -32,22 +32,22 @@ use std::{
 #[repr(C)]
 pub union StackValue {
     pub short: i32,
-    pub long:  i64,
+    pub long: i64,
 }
 
 /// The debug implementation does not print the actual value. Instead it always
 /// displays `StackValue`. It exists so that structures containing stack values
 /// can have useful [`Debug`] implementations.
 impl std::fmt::Debug for StackValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("StackValue") }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StackValue")
+    }
 }
 
 impl From<i32> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(short: i32) -> Self {
-        Self {
-            short,
-        }
+        Self { short }
     }
 }
 
@@ -63,18 +63,14 @@ impl From<u32> for StackValue {
 impl From<i64> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(long: i64) -> Self {
-        Self {
-            long,
-        }
+        Self { long }
     }
 }
 
 impl From<u64> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(long: u64) -> Self {
-        Self {
-            long: long as i64,
-        }
+        Self { long: long as i64 }
     }
 }
 
@@ -82,12 +78,8 @@ impl From<GlobalInit> for StackValue {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
     fn from(g: GlobalInit) -> Self {
         match g {
-            GlobalInit::I32(short) => Self {
-                short,
-            },
-            GlobalInit::I64(long) => Self {
-                long,
-            },
+            GlobalInit::I32(short) => Self { short },
+            GlobalInit::I64(long) => Self { long },
         }
     }
 }
@@ -118,14 +110,14 @@ pub struct ArtifactData {
     /// Where to start initializing.
     pub offset: i32,
     /// The bytes to initialize with.
-    pub init:   Vec<u8>,
+    pub init: Vec<u8>,
 }
 
 impl From<Data> for ArtifactData {
     fn from(d: Data) -> Self {
         Self {
             offset: d.offset,
-            init:   d.init,
+            init: d.init,
         }
     }
 }
@@ -136,8 +128,8 @@ impl From<Data> for ArtifactData {
 /// [constants::MAX_NUM_PAGES](../constants/constant.MAX_NUM_PAGES.html)
 pub struct ArtifactMemory {
     pub init_size: u32,
-    pub max_size:  u32,
-    pub init:      Vec<ArtifactData>,
+    pub max_size: u32,
+    pub init: Vec<ArtifactData>,
 }
 
 /// A local variable declaration in a function.
@@ -146,7 +138,7 @@ pub struct ArtifactMemory {
 #[derive(Debug, Clone, Copy)]
 pub struct ArtifactLocal {
     pub(crate) multiplicity: u16,
-    pub(crate) ty:           ValueType,
+    pub(crate) ty: ValueType,
 }
 
 impl From<ValueType> for ArtifactLocal {
@@ -173,22 +165,22 @@ impl TryFrom<Local> for ArtifactLocal {
 #[derive(Debug, Clone)]
 /// A function which has been processed into a form suitable for execution.
 pub struct CompiledFunction {
-    type_idx:      TypeIndex,
-    return_type:   BlockType,
+    type_idx: TypeIndex,
+    return_type: BlockType,
     /// Parameters of the function.
-    params:        Vec<ValueType>,
+    params: Vec<ValueType>,
     /// Number of locals, cached, but should match what is in the
     /// locals vector below.
-    num_locals:    u32,
+    num_locals: u32,
     /// Vector of types of locals. This __does not__ include function
     /// parameters.
-    locals:        Vec<ArtifactLocal>,
+    locals: Vec<ArtifactLocal>,
     /// Maximum number of locations needed. This includes parameters,
     /// locals, and any extra locations needed to preserve values.
     num_registers: u32,
     /// The constants in the function.
-    constants:     Vec<i64>,
-    code:          Instructions,
+    constants: Vec<i64>,
+    code: Instructions,
 }
 
 #[derive(Debug)]
@@ -196,36 +188,36 @@ pub struct CompiledFunction {
 /// that does not own the body and locals. This is used to make deserialization
 /// of artifacts cheaper.
 pub struct CompiledFunctionBytes<'a> {
-    pub(crate) type_idx:      TypeIndex,
-    pub(crate) return_type:   BlockType,
-    pub(crate) params:        &'a [ValueType],
+    pub(crate) type_idx: TypeIndex,
+    pub(crate) return_type: BlockType,
+    pub(crate) params: &'a [ValueType],
     /// Vector of types of locals. This __does not__ include
     /// parameters.
     /// FIXME: It would be ideal to have this as a zero-copy structure,
     /// but it likely does not matter, and it would be more error-prone.
-    pub(crate) num_locals:    u32,
-    pub(crate) locals:        Vec<ArtifactLocal>,
+    pub(crate) num_locals: u32,
+    pub(crate) locals: Vec<ArtifactLocal>,
     /// Maximum number of locations needed. This includes parameters,
     /// locals, and any extra locations needed to preserve values.
     pub(crate) num_registers: u32,
     /// The constants in the function. In principle we could make this zero-copy
     /// (with some complexity due to alignment) but the added complexity is
     /// not worth it.
-    pub(crate) constants:     Vec<i64>,
-    pub(crate) code:          &'a [u8],
+    pub(crate) constants: Vec<i64>,
+    pub(crate) code: &'a [u8],
 }
 
 impl<'a> From<CompiledFunctionBytes<'a>> for CompiledFunction {
     fn from(cfb: CompiledFunctionBytes<'a>) -> Self {
         Self {
-            type_idx:      cfb.type_idx,
-            return_type:   cfb.return_type,
-            params:        cfb.params.to_vec(),
-            num_locals:    cfb.num_locals,
-            locals:        cfb.locals,
+            type_idx: cfb.type_idx,
+            return_type: cfb.return_type,
+            params: cfb.params.to_vec(),
+            num_locals: cfb.num_locals,
+            locals: cfb.locals,
             num_registers: cfb.num_registers,
-            constants:     cfb.constants,
-            code:          cfb.code.to_vec().into(),
+            constants: cfb.constants,
+            code: cfb.code.to_vec().into(),
         }
     }
 }
@@ -242,9 +234,9 @@ pub trait TryFromImport: Sized {
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{}.{}", mod_name, item_name)]
 pub struct ArtifactNamedImport {
-    pub(crate) mod_name:  Name,
+    pub(crate) mod_name: Name,
     pub(crate) item_name: Name,
-    pub(crate) ty:        FunctionType,
+    pub(crate) ty: FunctionType,
 }
 
 impl ArtifactNamedImport {
@@ -252,17 +244,19 @@ impl ArtifactNamedImport {
         self.mod_name.as_ref() == mod_name && self.item_name.as_ref() == item_name
     }
 
-    pub fn get_mod_name(&self) -> &str { self.mod_name.as_ref() }
+    pub fn get_mod_name(&self) -> &str {
+        self.mod_name.as_ref()
+    }
 
-    pub fn get_item_name(&self) -> &str { self.item_name.as_ref() }
+    pub fn get_item_name(&self) -> &str {
+        self.item_name.as_ref()
+    }
 }
 
 impl TryFromImport for ArtifactNamedImport {
     fn try_from_import(ty: &[FunctionType], import: Import) -> CompileResult<Self> {
         match import.description {
-            ImportDescription::Func {
-                type_idx,
-            } => {
+            ImportDescription::Func { type_idx } => {
                 let ty = ty
                     .get(type_idx as usize)
                     .ok_or_else(|| anyhow!("Unknown type index."))?
@@ -276,18 +270,20 @@ impl TryFromImport for ArtifactNamedImport {
         }
     }
 
-    fn ty(&self) -> &FunctionType { &self.ty }
+    fn ty(&self) -> &FunctionType {
+        &self.ty
+    }
 }
 
 /// An iterator over local variables.
 pub struct LocalsIterator<'a> {
     /// Number of locals that are still going to be yielded from the iterator.
-    remaining_items:      u32,
-    pub(crate) locals:    &'a [ArtifactLocal],
+    remaining_items: u32,
+    pub(crate) locals: &'a [ArtifactLocal],
     /// Current position in the locals list. Each local in the list can have a
     /// multiplicity. This is the shorthand Wasm uses for declaring multiple
     /// local variables of the same type.
-    current_item:         usize,
+    current_item: usize,
     /// Current multiplicity of the `current_item`.
     /// When advancing the iterator we keep increasing this until we exhaust the
     /// local.
@@ -326,12 +322,17 @@ impl<'a> Iterator for LocalsIterator<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remaining_items as usize, Some(self.remaining_items as usize))
+        (
+            self.remaining_items as usize,
+            Some(self.remaining_items as usize),
+        )
     }
 }
 
 impl<'a> ExactSizeIterator for LocalsIterator<'a> {
-    fn len(&self) -> usize { self.remaining_items as usize }
+    fn len(&self) -> usize {
+        self.remaining_items as usize
+    }
 }
 
 /// A trait encapsulating the properties that are needed to run a function.
@@ -366,60 +367,96 @@ pub trait RunnableCode {
 
 impl RunnableCode for CompiledFunction {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn num_params(&self) -> u32 { self.params.len() as u32 }
+    fn num_params(&self) -> u32 {
+        self.params.len() as u32
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn num_registers(&self) -> u32 { self.num_registers }
+    fn num_registers(&self) -> u32 {
+        self.num_registers
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn constants(&self) -> &[i64] { &self.constants }
+    fn constants(&self) -> &[i64] {
+        &self.constants
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn type_idx(&self) -> TypeIndex { self.type_idx }
+    fn type_idx(&self) -> TypeIndex {
+        self.type_idx
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn return_type(&self) -> BlockType { self.return_type }
+    fn return_type(&self) -> BlockType {
+        self.return_type
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn params(&self) -> &[ValueType] { &self.params }
+    fn params(&self) -> &[ValueType] {
+        &self.params
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn num_locals(&self) -> u32 { self.num_locals }
+    fn num_locals(&self) -> u32 {
+        self.num_locals
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn locals(&self) -> LocalsIterator { LocalsIterator::new(self.num_locals, &self.locals) }
+    fn locals(&self) -> LocalsIterator {
+        LocalsIterator::new(self.num_locals, &self.locals)
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn code(&self) -> &[u8] { &self.code.bytes }
+    fn code(&self) -> &[u8] {
+        &self.code.bytes
+    }
 }
 
 impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn num_params(&self) -> u32 { self.params.len() as u32 }
+    fn num_params(&self) -> u32 {
+        self.params.len() as u32
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn num_registers(&self) -> u32 { self.num_registers }
+    fn num_registers(&self) -> u32 {
+        self.num_registers
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn constants(&self) -> &[i64] { &self.constants }
+    fn constants(&self) -> &[i64] {
+        &self.constants
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn type_idx(&self) -> TypeIndex { self.type_idx }
+    fn type_idx(&self) -> TypeIndex {
+        self.type_idx
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn return_type(&self) -> BlockType { self.return_type }
+    fn return_type(&self) -> BlockType {
+        self.return_type
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn params(&self) -> &[ValueType] { self.params }
+    fn params(&self) -> &[ValueType] {
+        self.params
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn num_locals(&self) -> u32 { self.num_locals }
+    fn num_locals(&self) -> u32 {
+        self.num_locals
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn locals(&self) -> LocalsIterator { LocalsIterator::new(self.num_locals, &self.locals) }
+    fn locals(&self) -> LocalsIterator {
+        LocalsIterator::new(self.num_locals, &self.locals)
+    }
 
     #[cfg_attr(not(feature = "fuzz-coverage"), inline(always))]
-    fn code(&self) -> &[u8] { self.code }
+    fn code(&self) -> &[u8] {
+        self.code
+    }
 }
 
 /// Version of the artifact. We only support one version at present in this
@@ -458,20 +495,20 @@ pub struct Artifact<ImportFunc, CompiledCode> {
     pub imports: Vec<ImportFunc>,
     /// Types of the module. These are needed for dynamic dispatch, i.e.,
     /// call-indirect.
-    pub ty:      Vec<FunctionType>,
+    pub ty: Vec<FunctionType>,
     /// A fully instantiated table.
-    pub table:   InstantiatedTable,
+    pub table: InstantiatedTable,
     /// The memory of the artifact.
-    pub memory:  Option<ArtifactMemory>,
+    pub memory: Option<ArtifactMemory>,
     /// Globals initialized with initial values.
-    pub global:  InstantiatedGlobals,
+    pub global: InstantiatedGlobals,
     /// The exported functions.
     /// Validation should ensure that an exported function is a defined one,
     /// and not one of the imported ones.
     /// Thus the index refers to the index in the code section.
-    pub export:  BTreeMap<Name, FuncIndex>,
+    pub export: BTreeMap<Name, FuncIndex>,
     /// The list of functions in the module.
-    pub code:    Vec<CompiledCode>,
+    pub code: Vec<CompiledCode>,
 }
 
 /// Ar artifact which does not own the code to run. The code is only a reference
@@ -502,7 +539,10 @@ impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<Im
             memory,
             global,
             export,
-            code: code.into_iter().map(CompiledFunction::from).collect::<Vec<_>>(),
+            code: code
+                .into_iter()
+                .map(CompiledFunction::from)
+                .collect::<Vec<_>>(),
         }
     }
 }
@@ -510,7 +550,9 @@ impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for OwnedArtifact<Im
 /// Convert a borrowed artifact to an owned one inside an `Arc`. This allocates
 /// memory for all the code of the artifact so it should be used sparingly.
 impl<'a, ImportFunc> From<BorrowedArtifact<'a, ImportFunc>> for Arc<OwnedArtifact<ImportFunc>> {
-    fn from(a: BorrowedArtifact<'a, ImportFunc>) -> Self { Arc::new(a.into()) }
+    fn from(a: BorrowedArtifact<'a, ImportFunc>) -> Self {
+        Arc::new(a.into())
+    }
 }
 
 /// Internal opcode. This is mostly the same as [`OpCode`], but with control
@@ -645,15 +687,25 @@ pub struct Instructions {
 }
 
 impl Instructions {
-    fn push(&mut self, opcode: InternalOpcode) { self.bytes.push(opcode as u8) }
+    fn push(&mut self, opcode: InternalOpcode) {
+        self.bytes.push(opcode as u8)
+    }
 
-    fn push_u16(&mut self, x: u16) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+    fn push_u16(&mut self, x: u16) {
+        self.bytes.extend_from_slice(&x.to_le_bytes());
+    }
 
-    fn push_u32(&mut self, x: u32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+    fn push_u32(&mut self, x: u32) {
+        self.bytes.extend_from_slice(&x.to_le_bytes());
+    }
 
-    fn push_i32(&mut self, x: i32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+    fn push_i32(&mut self, x: i32) {
+        self.bytes.extend_from_slice(&x.to_le_bytes());
+    }
 
-    fn current_offset(&self) -> usize { self.bytes.len() }
+    fn current_offset(&self) -> usize {
+        self.bytes.len()
+    }
 
     fn back_patch(&mut self, back_loc: usize, to_write: u32) -> CompileResult<()> {
         let mut place: &mut [u8] = &mut self.bytes[back_loc..];
@@ -668,9 +720,7 @@ enum JumpTarget {
     /// We know the position in the instruction sequence where the jump should
     /// resolve to. This is used in the case of loops since jumps to a loop
     /// block jump to the beginning of the block.
-    Known {
-        pos: usize,
-    },
+    Known { pos: usize },
     /// We do not yet know where in the instruction sequence we will jump to.
     /// We record the list of places at which we need to back-patch the location
     /// when we get to it.
@@ -682,7 +732,7 @@ enum JumpTarget {
         /// then this is the location where the value must be available
         /// after every exit (either via jump or via terminating the block by
         /// reaching the end of execution) of the block.
-        result:              Option<Provider>,
+        result: Option<Provider>,
     },
 }
 
@@ -709,9 +759,7 @@ impl JumpTarget {
 
     /// Construct a new known location `JumpTarget`.
     pub fn new_known(pos: usize) -> Self {
-        JumpTarget::Known {
-            pos,
-        }
+        JumpTarget::Known { pos }
     }
 }
 
@@ -722,10 +770,14 @@ struct BackPatchStack {
 }
 
 impl BackPatchStack {
-    pub fn push(&mut self, target: JumpTarget) { self.stack.push(target) }
+    pub fn push(&mut self, target: JumpTarget) {
+        self.stack.push(target)
+    }
 
     pub fn pop(&mut self) -> CompileResult<JumpTarget> {
-        self.stack.pop().ok_or_else(|| anyhow!("Attempt to pop from an empty backpatch stack."))
+        self.stack
+            .pop()
+            .ok_or_else(|| anyhow!("Attempt to pop from an empty backpatch stack."))
     }
 
     pub fn get_mut(&mut self, n: LabelIndex) -> CompileResult<&mut JumpTarget> {
@@ -734,7 +786,9 @@ impl BackPatchStack {
             "Attempt to access label beyond the size of the stack."
         );
         let lookup_idx = self.stack.len() - n as usize - 1;
-        self.stack.get_mut(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
+        self.stack
+            .get_mut(lookup_idx)
+            .ok_or_else(|| anyhow!("Attempt to access unknown label."))
     }
 
     pub fn get(&self, n: LabelIndex) -> CompileResult<&JumpTarget> {
@@ -743,7 +797,9 @@ impl BackPatchStack {
             "Attempt to access label beyond the size of the stack."
         );
         let lookup_idx = self.stack.len() - n as usize - 1;
-        self.stack.get(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
+        self.stack
+            .get(lookup_idx)
+            .ok_or_else(|| anyhow!("Attempt to access unknown label."))
     }
 }
 
@@ -751,7 +807,7 @@ impl BackPatchStack {
 /// execution.
 struct DynamicLocations {
     /// The next location to give out if there are no reusable locations.
-    next_location:      i32,
+    next_location: i32,
     /// A set of locations that are available for use again.
     /// The two operations that are needed are getting a location out,
     /// and returning it for reuse. We choose a set here so that we can also
@@ -813,7 +869,7 @@ struct ProvidersStack {
     /// The stack of providers. This is meant to correspond to the validation
     /// stack but instead of types it has locations of where the value for
     /// the instruction will be found at runtime.
-    stack:             Vec<Provider>,
+    stack: Vec<Provider>,
     /// An auxiliary structure used to keep track of available dynamic
     /// locations. These locations are recycled when they no longer appear
     /// on the stack.
@@ -823,7 +879,7 @@ struct ProvidersStack {
     ///
     /// Note that we coerce i32 constants to i64 constants and only keep track
     /// of i64 values.
-    constants:         BTreeMap<i64, i32>,
+    constants: BTreeMap<i64, i32>,
 }
 
 impl ProvidersStack {
@@ -883,7 +939,9 @@ impl ProvidersStack {
     }
 
     /// Return the number of values on the provider stack.
-    pub fn len(&self) -> usize { self.stack.len() }
+    pub fn len(&self) -> usize {
+        self.stack.len()
+    }
 
     /// Push a constant onto the provider stack.
     pub fn push_constant(&mut self, c: i64) -> CompileResult<()> {
@@ -907,18 +965,18 @@ impl ProvidersStack {
 /// An intermediate structure of the instruction sequence plus any pending
 /// backpatch locations we need to resolve.
 struct BackPatch {
-    out:              Instructions,
+    out: Instructions,
     /// The list of locations we need to backpatch, that is, insert jump
     /// locations at once we know where those jumps end, which is typically at
     /// the `End` of a block.
-    backpatch:        BackPatchStack,
+    backpatch: BackPatchStack,
     /// The provider stack. This mimics the operand stack but it additionally
     /// records the register locations where the values are available for
     /// instructions so that those registers can be added as immediate
     /// arguments to instructions.
-    providers_stack:  ProvidersStack,
+    providers_stack: ProvidersStack,
     /// The return type of the function.
-    return_type:      Option<ValueType>,
+    return_type: Option<ValueType>,
     /// If the last instruction produced something
     /// in the dynamic area record the location here
     /// so we can short-circuit the LocalSet that immediately
@@ -935,7 +993,9 @@ impl BackPatch {
             out: Default::default(),
             backpatch: BackPatchStack {
                 // The return value of a function, if any, will always be at index 0.
-                stack: vec![JumpTarget::new_unknown(return_type.map(|_| RETURN_VALUE_LOCATION))],
+                stack: vec![JumpTarget::new_unknown(
+                    return_type.map(|_| RETURN_VALUE_LOCATION),
+                )],
             },
             providers_stack: ProvidersStack::new(num_locals, return_type),
             return_type,
@@ -965,10 +1025,7 @@ impl BackPatch {
     fn insert_jump_location(&mut self, label_idx: LabelIndex) -> CompileResult<()> {
         let target = self.backpatch.get_mut(label_idx)?;
         match target {
-            JumpTarget::Known {
-                pos,
-                ..
-            } => {
+            JumpTarget::Known { pos, .. } => {
                 self.out.push_u32(*pos as u32);
             }
             JumpTarget::Unknown {
@@ -1164,9 +1221,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             OpCode::End => {
                 let jump_target = self.backpatch.pop()?;
                 match jump_target {
-                    JumpTarget::Known {
-                        ..
-                    } => {
+                    JumpTarget::Known { .. } => {
                         // this is the end of a loop. Meaning the only way we
                         // can get to this location is by executing
                         // instructions in a sequence. This end cannot be jumped
@@ -1248,11 +1303,10 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // In contrast to a `Block` or `If`, the only way an end of a block is reached
                 // is through direct execution. Jumps cannot target it. Thus we
                 // don't need to insert any copies or reserve any locations.
-                self.backpatch.push(JumpTarget::new_known(self.out.current_offset()))
+                self.backpatch
+                    .push(JumpTarget::new_known(self.out.current_offset()))
             }
-            OpCode::If {
-                ty,
-            } => {
+            OpCode::If { ty } => {
                 self.out.push(If);
                 self.push_consume()?;
                 // Like for `Block`, we need to reserve a location that will have the resulting
@@ -1263,7 +1317,10 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 } else {
                     None
                 };
-                self.backpatch.push(JumpTarget::new_unknown_loc(self.out.current_offset(), result));
+                self.backpatch.push(JumpTarget::new_unknown_loc(
+                    self.out.current_offset(),
+                    result,
+                ));
                 self.out.push_u32(0);
             }
             OpCode::Else => {
@@ -1305,10 +1362,7 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 self.push_br_if_jump(*label_idx)?;
                 self.push_loc(condition_source);
             }
-            OpCode::BrTable {
-                labels,
-                default,
-            } => {
+            OpCode::BrTable { labels, default } => {
                 // We split the BrTable into two instructions, `BrTable` and `BrTableCarry`.
                 // The former applies where the target of the jump does not expect any value at
                 // the top of the stack, whereas the latter one applies when a single value is
@@ -1321,8 +1375,10 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 // In the case of BrTableCarry we need to insert additional Copy instructions to
                 // make sure that when execution resumes after the jump the value is available
                 // in the correct register.
-                let target_frame =
-                    state.ctrls.get(*default).context("Could not get jump target frame.")?;
+                let target_frame = state
+                    .ctrls
+                    .get(*default)
+                    .context("Could not get jump target frame.")?;
                 if let BlockType::EmptyType = target_frame.label_type {
                     self.out.push(BrTable);
                     let _condition_source = self.push_consume()?;
@@ -1417,7 +1473,8 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
             }
             OpCode::LocalGet(idx) => {
                 // the as i32 is safe because idx < NUM_ALLOWED_LOCALS <= 2^15
-                self.providers_stack.provide_existing(Provider::Local((*idx) as i32));
+                self.providers_stack
+                    .provide_existing(Provider::Local((*idx) as i32));
                 // No instruction
             }
             OpCode::LocalSet(idx) | OpCode::LocalTee(idx) => {
@@ -1802,12 +1859,19 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
         }
         // This opcode handler maintains the invariant that the providers stack is the
         // same size as the operand stack.
-        assert_eq!(self.providers_stack.stack.len(), state.opds.stack.len(), "{opcode:?}");
+        assert_eq!(
+            self.providers_stack.stack.len(),
+            state.opds.stack.len(),
+            "{opcode:?}"
+        );
         Ok(())
     }
 
     fn finish(self, _state: &ValidationState) -> CompileResult<Self::Outcome> {
-        ensure!(self.backpatch.stack.is_empty(), "There are still jumps to backpatch.");
+        ensure!(
+            self.backpatch.stack.is_empty(),
+            "There are still jumps to backpatch."
+        );
         let mut constants = vec![0; self.providers_stack.constants.len()];
         for (value, place) in self.providers_stack.constants {
             *constants
@@ -1815,14 +1879,18 @@ impl<Ctx: HasValidationContext> Handler<Ctx, &OpCode> for BackPatch {
                 .context("Invariant violation. All locations are meant to be consecutive.")? =
                 value;
         }
-        Ok((self.out, self.providers_stack.dynamic_locations.next_location, constants))
+        Ok((
+            self.out,
+            self.providers_stack.dynamic_locations.next_location,
+            constants,
+        ))
     }
 }
 
 struct ModuleContext<'a> {
     module: &'a Module,
     locals: &'a [LocalsRange],
-    code:   &'a Code,
+    code: &'a Code,
 }
 
 impl<'a> HasValidationContext for ModuleContext<'a> {
@@ -1849,16 +1917,18 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
         }
     }
 
-    fn memory_exists(&self) -> bool { self.module.memory.memory_type.is_some() }
+    fn memory_exists(&self) -> bool {
+        self.module.memory.memory_type.is_some()
+    }
 
-    fn table_exists(&self) -> bool { self.module.table.table_type.is_some() }
+    fn table_exists(&self) -> bool {
+        self.module.table.table_type.is_some()
+    }
 
     fn get_func(&self, idx: FuncIndex) -> CompileResult<&std::rc::Rc<FunctionType>> {
         if (idx as usize) < self.module.import.imports.len() {
             match self.module.import.imports[idx as usize].description {
-                ImportDescription::Func {
-                    type_idx,
-                } => self
+                ImportDescription::Func { type_idx } => self
                     .module
                     .ty
                     .get(type_idx)
@@ -1882,7 +1952,9 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
             .ok_or_else(|| anyhow!("Attempting to get non-existing type."))
     }
 
-    fn return_type(&self) -> BlockType { BlockType::from(self.code.ty.result) }
+    fn return_type(&self) -> BlockType {
+        BlockType::from(self.code.ty.result)
+    }
 }
 
 /// Compile a module into an artifact, failing if there are problems.
@@ -1948,21 +2020,25 @@ impl Module {
             code_out.push(result)
         }
 
-        let ty = self.ty.types.into_iter().map(|x| (*x).clone()).collect::<Vec<FunctionType>>();
+        let ty = self
+            .ty
+            .types
+            .into_iter()
+            .map(|x| (*x).clone())
+            .collect::<Vec<FunctionType>>();
         let table = {
             if let Some(tt) = self.table.table_type {
                 let mut functions = vec![None; tt.limits.min as usize];
                 for init in self.element.elements.iter() {
                     // validation has already ensured that inits are within bounds.
-                    for (place, value) in
-                        functions[init.offset as usize..].iter_mut().zip(init.inits.iter())
+                    for (place, value) in functions[init.offset as usize..]
+                        .iter_mut()
+                        .zip(init.inits.iter())
                     {
                         *place = Some(*value)
                     }
                 }
-                InstantiatedTable {
-                    functions,
-                }
+                InstantiatedTable { functions }
             } else {
                 InstantiatedTable {
                     functions: Vec::new(),
@@ -1973,12 +2049,12 @@ impl Module {
             if let Some(mt) = self.memory.memory_type {
                 Some(ArtifactMemory {
                     init_size: mt.limits.min,
-                    max_size:  mt
+                    max_size: mt
                         .limits
                         .max
                         .map(|x| std::cmp::min(x, MAX_NUM_PAGES))
                         .unwrap_or(MAX_NUM_PAGES),
-                    init:      self
+                    init: self
                         .data
                         .sections
                         .into_iter()
@@ -1990,17 +2066,19 @@ impl Module {
             }
         };
         let global = InstantiatedGlobals {
-            inits: self.global.globals.iter().map(|x| x.init).collect::<Vec<_>>(),
+            inits: self
+                .global
+                .globals
+                .iter()
+                .map(|x| x.init)
+                .collect::<Vec<_>>(),
         };
         let export = self
             .export
             .exports
             .into_iter()
             .filter_map(|export| {
-                if let ExportDescription::Func {
-                    index,
-                } = export.description
-                {
+                if let ExportDescription::Func { index } = export.description {
                     Some((export.name, index))
                 } else {
                     None

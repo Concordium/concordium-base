@@ -82,9 +82,9 @@ pub enum IdentifierType {
     Credential { cred_id: CredentialRegistrationID },
     /// Reference to a specific smart contract instance.
     ContractData {
-        address:    ContractAddress,
+        address: ContractAddress,
         entrypoint: OwnedEntrypointName,
-        parameter:  OwnedParameter,
+        parameter: OwnedParameter,
     },
     /// Reference to a specific Ed25519 public key.
     PublicKey { key: ed25519_dalek::VerifyingKey },
@@ -132,7 +132,7 @@ pub struct Method {
     /// The network part of the method.
     pub network: Network,
     /// The remaining identifier.
-    pub ty:      IdentifierType,
+    pub ty: IdentifierType,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -161,13 +161,17 @@ impl<'a> TryFrom<&'a str> for Method {
 impl TryFrom<String> for Method {
     type Error = MethodFromStrError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> { Self::try_from(value.as_str()) }
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
 }
 
 impl std::str::FromStr for Method {
     type Err = MethodFromStrError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
 }
 
 impl std::fmt::Display for Method {
@@ -206,7 +210,9 @@ impl std::fmt::Display for Method {
 }
 
 impl From<Method> for String {
-    fn from(value: Method) -> Self { value.to_string() }
+    fn from(value: Method) -> Self {
+        value.to_string()
+    }
 }
 
 fn prefix(input: &str) -> IResult<&str, ()> {
@@ -297,11 +303,14 @@ fn ty<'a>(input: &'a str) -> IResult<&'a str, IdentifierType> {
                 Some(d) => (input, d),
             }
         };
-        Ok((input, IdentifierType::ContractData {
-            address: ContractAddress::new(index, subindex),
-            entrypoint,
-            parameter,
-        }))
+        Ok((
+            input,
+            IdentifierType::ContractData {
+                address: ContractAddress::new(index, subindex),
+                entrypoint,
+                parameter,
+            },
+        ))
     };
     let pkc = |input| {
         let (input, _) = tag("pkc:")(input)?;
@@ -340,7 +349,7 @@ mod tests {
         let address = "3kBx2h5Y2veb4hZgAJWPrr8RyQESKm5TjzF3ti1QQ4VSYLwK1G".parse()?;
         let target = Method {
             network: Network::Mainnet,
-            ty:      IdentifierType::Account { address },
+            ty: IdentifierType::Account { address },
         };
         assert_eq!(format!("did:ccd:acc:{address}").parse::<Method>()?, target);
         assert_eq!(
@@ -370,10 +379,10 @@ mod tests {
         let parameter = OwnedParameter::new_unchecked(vec![123, 11, 0, 0, 13]);
         let target = Method {
             network: Network::Mainnet,
-            ty:      IdentifierType::ContractData {
-                address:    ContractAddress::new(index, subindex),
+            ty: IdentifierType::ContractData {
+                address: ContractAddress::new(index, subindex),
                 entrypoint: entrypoint.clone(),
-                parameter:  parameter.clone(),
+                parameter: parameter.clone(),
             },
         };
         assert_eq!(
@@ -409,10 +418,10 @@ mod tests {
         let parameter = OwnedParameter::new_unchecked(vec![]);
         let target = Method {
             network: Network::Mainnet,
-            ty:      IdentifierType::ContractData {
-                address:    ContractAddress::new(index, subindex),
+            ty: IdentifierType::ContractData {
+                address: ContractAddress::new(index, subindex),
                 entrypoint: entrypoint.clone(),
-                parameter:  parameter.clone(),
+                parameter: parameter.clone(),
             },
         };
         assert_eq!(
@@ -466,7 +475,7 @@ mod tests {
         let cred_id = "a5bedc6d92d6cc8333684aa69091095c425d0b5971f554964a6ac8e297a3074748d25268f1d217234c400f3103669f90".parse()?;
         let target = Method {
             network: Network::Mainnet,
-            ty:      IdentifierType::Credential { cred_id },
+            ty: IdentifierType::Credential { cred_id },
         };
         assert_eq!(format!("did:ccd:cred:{cred_id}").parse::<Method>()?, target);
         assert_eq!(
@@ -493,7 +502,7 @@ mod tests {
         let key = "9cb20e36766a8c1fee1cae8e09eca75785f3bfda220f83b2f0d865cc8a44cd86";
         let target = Method {
             network: Network::Mainnet,
-            ty:      IdentifierType::PublicKey {
+            ty: IdentifierType::PublicKey {
                 key: base16_decode_string(key)?,
             },
         };
@@ -520,7 +529,7 @@ mod tests {
         let idp_identity = "37".parse()?;
         let target = Method {
             network: Network::Mainnet,
-            ty:      IdentifierType::Idp { idp_identity },
+            ty: IdentifierType::Idp { idp_identity },
         };
         assert_eq!(
             format!("did:ccd:idp:{idp_identity}").parse::<Method>()?,

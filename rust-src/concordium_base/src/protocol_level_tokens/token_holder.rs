@@ -31,7 +31,7 @@ pub struct CborHolderAccount {
     pub coin_info: Option<CoinInfo>,
     /// Concordium address
     #[cbor(key = 3)]
-    pub address:   AccountAddress,
+    pub address: AccountAddress,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -61,7 +61,8 @@ impl CborSerialize for CoinInfo {
 impl CborDeserialize for CoinInfo {
     fn deserialize<C: CborDecoder>(decoder: C) -> CborSerializationResult<Self>
     where
-        Self: Sized, {
+        Self: Sized,
+    {
         let cbor = CoinInfoCbor::deserialize(decoder)?;
         let coin_info = match cbor.coin_info_code {
             CONCORDIUM_SLIP_0044_CODE => CoinInfo::CCD,
@@ -106,7 +107,7 @@ mod test {
     #[test]
     fn test_token_holder_cbor_no_coin_info() {
         let token_holder = CborHolderAccount {
-            address:   ADDRESS,
+            address: ADDRESS,
             coin_info: None,
         };
 
@@ -122,7 +123,7 @@ mod test {
     #[test]
     fn test_token_holder_cbor() {
         let token_holder = CborHolderAccount {
-            address:   ADDRESS,
+            address: ADDRESS,
             coin_info: Some(CoinInfo::CCD),
         };
 

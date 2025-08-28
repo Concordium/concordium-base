@@ -13,9 +13,13 @@ use serde::Deserialize as SerdeDeserialize;
 pub struct Web3IdSecretKey(#[serde(deserialize_with = "base16_decode")] ed25519_dalek::SecretKey);
 
 impl Web3IdSigner for Web3IdSecretKey {
-    fn id(&self) -> ed25519_dalek::VerifyingKey { self.0.id() }
+    fn id(&self) -> ed25519_dalek::VerifyingKey {
+        self.0.id()
+    }
 
-    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature { self.0.sign(msg) }
+    fn sign(&self, msg: &impl AsRef<[u8]>) -> ed25519_dalek::Signature {
+        self.0.sign(msg)
+    }
 }
 
 /// The input used for creating a web3Id proof. It requires the request itself,
@@ -24,8 +28,8 @@ impl Web3IdSigner for Web3IdSecretKey {
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Web3IdProofInput {
-    request:           Request<constants::ArCurve, Web3IdAttribute>,
-    global_context:    GlobalContext<constants::ArCurve>,
+    request: Request<constants::ArCurve, Web3IdAttribute>,
+    global_context: GlobalContext<constants::ArCurve>,
     commitment_inputs:
         Vec<OwnedCommitmentInputs<constants::ArCurve, Web3IdAttribute, Web3IdSecretKey>>,
 }

@@ -22,7 +22,7 @@ pub struct TokenModuleAccountState {
     pub allow_list: Option<bool>,
     /// Whether the account is on the deny list.
     /// If `None`, the token does not support a deny list.
-    pub deny_list:  Option<bool>,
+    pub deny_list: Option<bool>,
     /// Additional state information may be provided under further text keys,
     /// the meaning of which are not defined in the present specification.
     #[cbor(other)]
@@ -38,7 +38,7 @@ mod test {
     fn test_token_module_account_state_cbor() {
         let mut token_module_account_state = TokenModuleAccountState {
             allow_list: Some(true),
-            deny_list:  None,
+            deny_list: None,
             additional: Default::default(),
         };
 

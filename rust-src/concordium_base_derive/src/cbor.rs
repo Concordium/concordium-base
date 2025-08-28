@@ -12,7 +12,7 @@ use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma};
 pub struct CborFieldOpts {
     /// Set key to be used for key in map. If not specified the field
     /// name in camel case is used as key as a text data item.
-    key:   Option<Expr>,
+    key: Option<Expr>,
     /// Deserialize fields in CBOR map that is not present in the struct
     /// to the field with this attribute.
     #[darling(default)]
@@ -25,9 +25,9 @@ pub struct CborVariantOpts {
     /// Deserialize unknown variants in CBOR to the variant with this
     /// attribute.
     #[darling(default)]
-    other:    bool,
+    other: bool,
     /// CBOR tag to add to data item in the variant.
-    tag:      Option<Expr>,
+    tag: Option<Expr>,
     /// CBOR tag to use to decided which variant to deserialize to.
     /// The difference between specifying `cbor(tag)` and this attribute
     /// is that the tag is not serialized as part of serializing the variant
@@ -43,23 +43,23 @@ pub struct CborOpts {
     #[darling(default)]
     transparent: bool,
     /// Add CBOR tag to data item <https://www.rfc-editor.org/rfc/rfc8949.html#name-tagging-of-items>.
-    tag:         Option<Expr>,
+    tag: Option<Expr>,
     /// Serialize enum as a map with a single entry. The variant
     /// name in camel case is used as the key as a text data item.
     #[darling(default)]
-    map:         bool,
+    map: bool,
     /// Serialize enum as a tagged data item. Each variant but have a
     /// `cbor(tag)` attribute - except for at most one variant which can be
     /// untagged.
     #[darling(default)]
-    tagged:      bool,
+    tagged: bool,
 }
 
 #[derive(Debug)]
 struct CborField {
     member: Member,
-    ty:     Type,
-    opts:   CborFieldOpts,
+    ty: Type,
+    opts: CborFieldOpts,
 }
 
 #[derive(Debug)]
@@ -143,7 +143,7 @@ impl CborFields {
 #[derive(Debug)]
 struct CborVariant {
     ident: Ident,
-    opts:  CborVariantOpts,
+    opts: CborVariantOpts,
 }
 
 #[derive(Debug)]

@@ -31,44 +31,44 @@ struct StartIp {
         long = "ip-info",
         help = "File with information about the identity provider."
     )]
-    ip_info:            PathBuf,
+    ip_info: PathBuf,
     #[structopt(
         long = "initial-keys-out",
         help = "File to write the private keys of the user's initial account."
     )]
-    initial_keys:       PathBuf,
+    initial_keys: PathBuf,
     #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
     anonymity_revokers: PathBuf,
     #[structopt(
         long = "id-use-data-out",
         help = "File to write the identity object use data to. This contains some private keys."
     )]
-    private:            PathBuf,
+    private: PathBuf,
     #[structopt(
         long = "request-out",
         help = "File to write the request to that is to be sent to the identity provider."
     )]
-    public:             PathBuf,
+    public: PathBuf,
     #[structopt(
         name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:             PathBuf,
+    global: PathBuf,
     #[structopt(
         name = "ar-threshold",
         long = "ar-threshold",
         help = "Anonymity revocation threshold.",
         requires = "selected-ars"
     )]
-    threshold:          Option<u8>,
+    threshold: Option<u8>,
     #[structopt(
         long = "selected-ars",
         help = "Indices of selected ars. If none are provided an interactive choice will be \
                 presented.",
         requires = "ar-threshold"
     )]
-    selected_ars:       Vec<u32>,
+    selected_ars: Vec<u32>,
 }
 
 #[derive(StructOpt)]
@@ -77,39 +77,39 @@ struct StartIpV1 {
         long = "use-existing-phrase",
         help = "Use existing seed phrase. Otherwise, fresh keys are generated."
     )]
-    recover:            bool,
+    recover: bool,
     #[structopt(
         long = "ip-info",
         help = "File with information about the identity provider."
     )]
-    ip_info:            PathBuf,
+    ip_info: PathBuf,
     #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
     anonymity_revokers: PathBuf,
     #[structopt(
         long = "request-out",
         help = "File to write the request to that is to be sent to the identity provider."
     )]
-    public:             PathBuf,
+    public: PathBuf,
     #[structopt(
         name = "cryptographic-parameters",
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:             PathBuf,
+    global: PathBuf,
     #[structopt(
         name = "ar-threshold",
         long = "ar-threshold",
         help = "Anonymity revocation threshold.",
         requires = "selected-ars"
     )]
-    threshold:          Option<u8>,
+    threshold: Option<u8>,
     #[structopt(
         long = "selected-ars",
         help = "Indices of selected ars. If none are provided an interactive choice will be \
                 presented.",
         requires = "ar-threshold"
     )]
-    selected_ars:       Vec<u32>,
+    selected_ars: Vec<u32>,
 }
 
 #[derive(StructOpt)]
@@ -118,7 +118,7 @@ struct GenerateIdRecoveryRequest {
         long = "ip-info",
         help = "File with information about the identity provider."
     )]
-    ip_info:      PathBuf,
+    ip_info: PathBuf,
     #[structopt(
         long = "request-out",
         help = "File to write the request to that is to be sent to the identity provider."
@@ -129,7 +129,7 @@ struct GenerateIdRecoveryRequest {
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:       PathBuf,
+    global: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -138,7 +138,7 @@ struct CreateCredential {
         long = "id-object",
         help = "File with the JSON encoded identity object."
     )]
-    id_object:   PathBuf,
+    id_object: PathBuf,
     #[structopt(long = "id-use-data", help = "File with private identity object data.")]
     id_use_data: PathBuf,
     #[structopt(
@@ -146,13 +146,13 @@ struct CreateCredential {
         help = "Account address onto which the credential should be deployed.",
         requires = "key-index"
     )]
-    account:     Option<AccountAddress>,
+    account: Option<AccountAddress>,
     #[structopt(
         long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
         default_value = "900"
     )]
-    expiry:      u64,
+    expiry: u64,
     #[structopt(
         name = "key-index",
         long = "key-index",
@@ -160,13 +160,13 @@ struct CreateCredential {
         requires = "account",
         conflicts_with = "expiry"
     )]
-    key_index:   Option<u8>,
+    key_index: Option<u8>,
     #[structopt(long = "credential-out", help = "File to output the credential to.")]
-    out:         PathBuf,
+    out: PathBuf,
     #[structopt(long = "keys-out", help = "File to output account keys to.")]
-    keys_out:    PathBuf,
+    keys_out: PathBuf,
     #[structopt(long = "index", help = "Index of the account to be created.")]
-    index:       Option<u8>,
+    index: Option<u8>,
 }
 
 #[derive(StructOpt)]
@@ -175,12 +175,12 @@ struct CreateCredentialV1 {
         long = "id-object",
         help = "File with the JSON encoded identity object."
     )]
-    id_object:          PathBuf,
+    id_object: PathBuf,
     #[structopt(
         long = "ip-info",
         help = "File with information about the identity provider."
     )]
-    ip_info:            PathBuf,
+    ip_info: PathBuf,
     #[structopt(long = "ars", help = "File with a list of anonymity revokers.")]
     anonymity_revokers: PathBuf,
     #[structopt(
@@ -188,19 +188,19 @@ struct CreateCredentialV1 {
         long = "cryptographic-parameters",
         help = "File with cryptographic parameters."
     )]
-    global:             PathBuf,
+    global: PathBuf,
     #[structopt(
         long = "account",
         help = "Account address onto which the credential should be deployed.",
         requires = "key-index"
     )]
-    account:            Option<AccountAddress>,
+    account: Option<AccountAddress>,
     #[structopt(
         long = "message-expiry",
         help = "Expiry time of the credential message. In seconds from __now__.",
         default_value = "900"
     )]
-    expiry:             u64,
+    expiry: u64,
     #[structopt(
         name = "key-index",
         long = "key-index",
@@ -208,16 +208,16 @@ struct CreateCredentialV1 {
         requires = "account",
         conflicts_with = "expiry"
     )]
-    key_index:          Option<u8>,
+    key_index: Option<u8>,
     #[structopt(long = "credential-out", help = "File to output the credential to.")]
-    out:                PathBuf,
+    out: PathBuf,
     #[structopt(long = "keys-out", help = "File to output account keys to.")]
-    keys_out:           PathBuf,
+    keys_out: PathBuf,
     #[structopt(
         long = "index",
         help = "Index of the account/credential to be created."
     )]
-    index:              Option<u8>,
+    index: Option<u8>,
 }
 
 #[derive(StructOpt)]
@@ -387,7 +387,7 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
     let initial_acc_data = InitialAccountData {
-        keys:      {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), KeyPair::generate(&mut csprng));
             keys
@@ -404,7 +404,7 @@ fn handle_start_ip(sip: StartIp) -> anyhow::Result<()> {
 
     let secret_key = elgamal::SecretKey {
         generator: *global_ctx.elgamal_generator(),
-        scalar:    enc_key,
+        scalar: enc_key,
     };
 
     // initial account information. We don't have the credential and
@@ -684,9 +684,9 @@ fn handle_start_ip_v1(sip: StartIpV1) -> anyhow::Result<()> {
 /// Data stored by the user after generating the identity object request so that
 /// they can use the identity object.
 struct StoredData {
-    ars:         ArInfos<id::constants::ArCurve>,
-    ip_info:     IpInfo<id::constants::IpPairing>,
-    global_ctx:  GlobalContext<id::constants::ArCurve>,
+    ars: ArInfos<id::constants::ArCurve>,
+    ip_info: IpInfo<id::constants::IpPairing>,
+    global_ctx: GlobalContext<id::constants::ArCurve>,
     id_use_data: IdObjectUseData<id::constants::IpPairing, id::constants::ArCurve>,
 }
 
@@ -956,10 +956,10 @@ fn prepare_credential_input(
         }
     }
     let policy: Policy<id::constants::ArCurve, ExampleAttribute> = Policy {
-        valid_to:   id_object.get_attribute_list().valid_to,
+        valid_to: id_object.get_attribute_list().valid_to,
         created_at: id_object.get_attribute_list().created_at,
         policy_vec: revealed_attributes,
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
 
     // We ask what regid index they would like to use.
@@ -990,15 +990,15 @@ struct CredentialHelperArguments {
         ExampleAttribute,
     >,
     commitments_randomness: CommitmentsRandomness<id::constants::ArCurve>,
-    id_use_data:            IdObjectUseData<id::constants::IpPairing, id::constants::ArCurve>,
-    global_ctx:             GlobalContext<id::constants::ArCurve>,
-    maybe_key_index:        Option<u8>,
-    keys_out:               PathBuf,
-    out:                    PathBuf,
-    account:                Option<AccountAddress>,
-    acc_data:               CredentialData,
-    cred_counter:           u8,
-    new_or_existing:        either::Either<TransactionTime, AccountAddress>,
+    id_use_data: IdObjectUseData<id::constants::IpPairing, id::constants::ArCurve>,
+    global_ctx: GlobalContext<id::constants::ArCurve>,
+    maybe_key_index: Option<u8>,
+    keys_out: PathBuf,
+    out: PathBuf,
+    account: Option<AccountAddress>,
+    acc_data: CredentialData,
+    cred_counter: u8,
+    new_or_existing: either::Either<TransactionTime, AccountAddress>,
 }
 
 fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<()> {
@@ -1010,7 +1010,7 @@ fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<(
         let mut credentials = BTreeMap::new();
         let mut randomness = BTreeMap::new();
         let cdvp = AccountCredentialWithoutProofs::Normal {
-            cdv:         args.cdi.values.clone(),
+            cdv: args.cdi.values.clone(),
             commitments: args.cdi.proofs.id_proofs.commitments.clone(),
         };
         credentials.insert(ki, cdvp);
@@ -1029,7 +1029,7 @@ fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<(
 
     let secret_key = elgamal::SecretKey {
         generator: *args.global_ctx.elgamal_generator(),
-        scalar:    enc_key,
+        scalar: enc_key,
     };
 
     if let Some(addr) = args.account {
@@ -1081,10 +1081,13 @@ fn output_credential_helper(args: CredentialHelperArguments) -> anyhow::Result<(
     let (expiry, cdi_json_value) = match args.new_or_existing {
         Left(tt) => (
             Some(tt),
-            to_value(Versioned::new(VERSION_0, AccountCredentialMessage {
-                message_expiry: tt,
-                credential:     cdi,
-            }))
+            to_value(Versioned::new(
+                VERSION_0,
+                AccountCredentialMessage {
+                    message_expiry: tt,
+                    credential: cdi,
+                },
+            ))
             .expect("Cannot fail."),
         ),
         Right(_) => (
@@ -1165,7 +1168,7 @@ fn handle_recovery(girr: GenerateIdRecoveryRequest) -> anyhow::Result<()> {
     let request = generate_id_recovery_request(&ip_info, &global_ctx, &id_cred_sec, timestamp);
     let json = Versioned {
         version: Version::from(0),
-        value:   request,
+        value: request,
     };
     write_json_to_file(&girr.request_file, &json).context(format!(
         "Could not write id recovery request to to {}.",

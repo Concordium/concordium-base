@@ -55,11 +55,11 @@ type Bls12 = IpPairing;
 #[derive(common::SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransferContext {
-    pub from:   AccountAddress,
-    pub to:     Option<AccountAddress>,
+    pub from: AccountAddress,
+    pub to: Option<AccountAddress>,
     pub expiry: TransactionTime,
-    pub nonce:  Nonce,
-    pub keys:   AccountKeys,
+    pub nonce: Nonce,
+    pub keys: AccountKeys,
     #[allow(dead_code)] // this is no longer used since
     // the library knows about energy costs.
     pub energy: Energy,
@@ -271,17 +271,17 @@ enum JSONPayload {
         #[serde(flatten)]
         payload: InitContractPayload,
         #[serde(flatten)]
-        energy:  SpecifiedEnergy,
+        energy: SpecifiedEnergy,
     },
     Update {
         #[serde(flatten)]
         payload: UpdateContractPayload,
         #[serde(flatten)]
-        energy:  SpecifiedEnergy,
+        energy: SpecifiedEnergy,
     },
     Transfer {
         amount: Amount,
-        to:     AccountAddress,
+        to: AccountAddress,
     },
 }
 
@@ -289,12 +289,12 @@ enum JSONPayload {
 #[derive(common::SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TransactionContext {
-    pub from:    AccountAddress,
-    pub expiry:  TransactionTime,
-    pub nonce:   Nonce,
+    pub from: AccountAddress,
+    pub expiry: TransactionTime,
+    pub nonce: Nonce,
     #[serde(flatten)]
     pub payload: JSONPayload,
-    pub keys:    AccountKeys,
+    pub keys: AccountKeys,
 }
 
 fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
@@ -350,9 +350,9 @@ fn create_account_transaction_aux(input: &str) -> anyhow::Result<String> {
 #[derive(common::SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct TokenTransferContext {
-    pub from:     AccountAddress,
-    pub to:       AccountAddress,
-    pub amount:   cis2_types::TokenAmount,
+    pub from: AccountAddress,
+    pub to: AccountAddress,
+    pub amount: cis2_types::TokenAmount,
     pub token_id: cis2_types::TokenId,
 }
 
@@ -363,10 +363,10 @@ fn serialize_token_transfer_parameters_aux(input: &str) -> anyhow::Result<String
     let params = cis2_types::TransferParams::new_unchecked(
         [cis2_types::Transfer {
             token_id: ctx.token_id,
-            amount:   ctx.amount,
-            from:     Address::Account(ctx.from),
-            to:       cis2_types::Receiver::Account(ctx.to),
-            data:     AdditionalData::default(),
+            amount: ctx.amount,
+            from: Address::Account(ctx.from),
+            to: cis2_types::Receiver::Account(ctx.to),
+            data: AdditionalData::default(),
         }]
         .to_vec(),
     );
@@ -592,7 +592,9 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> anyhow::Result<String> {
     Ok(to_string(&response)?)
 }
 
-fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
+fn check_account_address_aux(input: &str) -> bool {
+    input.parse::<AccountAddress>().is_ok()
+}
 
 /// Aggregate two encrypted amounts together into one.
 fn combine_encrypted_amounts_aux(left: &str, right: &str) -> anyhow::Result<String> {
@@ -699,7 +701,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> anyhow::Result<String>
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
         // the unwrap is safe since we've generated the RegID successfully above.
-        scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
+        scalar: id_use_data.aci.prf_key.prf_exponent(0).unwrap(),
     };
 
     let response = serde_json::json!({
@@ -867,12 +869,12 @@ fn create_credential_aux(input: &str) -> anyhow::Result<String> {
     let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
-        scalar:    enc_key,
+        scalar: enc_key,
     };
 
     let credential_message = AccountCredentialMessage {
         message_expiry: expiry,
-        credential:     AccountCredential::Normal { cdi },
+        credential: AccountCredential::Normal { cdi },
     };
 
     let response = serde_json::json!({
@@ -993,12 +995,12 @@ fn create_credential_v1_aux(input: &str) -> anyhow::Result<String> {
     let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
     let secret_key = elgamal::SecretKey {
         generator: *global_context.elgamal_generator(),
-        scalar:    enc_key,
+        scalar: enc_key,
     };
 
     let credential_message = AccountCredentialMessage {
         message_expiry: expiry,
-        credential:     AccountCredential::Normal { cdi },
+        credential: AccountCredential::Normal { cdi },
     };
 
     let response = serde_json::json!({
@@ -1109,7 +1111,7 @@ fn generate_accounts_aux(input: &str) -> anyhow::Result<String> {
             let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
             let secret_key = elgamal::SecretKey {
                 generator: *global_context.elgamal_generator(),
-                scalar:    enc_key,
+                scalar: enc_key,
             };
             let address = account_address_from_registration_id(&reg_id);
             response.push(serde_json::json!({
