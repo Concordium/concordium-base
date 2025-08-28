@@ -21,7 +21,6 @@ name: Clippy & fmt
 
 env:
   RUST_VERSION: "1.82"
-  RUST_FMT: "1.82"
 
 defaults:
   run:
@@ -37,7 +36,7 @@ jobs:
 
       - name: Run cargo fmt
         run: |
-          rustup default ${{ env.RUST_FMT }}
+          rustup default ${{ env.RUST_VERSION }}
           rustup component add rustfmt
           cargo fmt --all --check
 

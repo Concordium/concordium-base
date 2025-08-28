@@ -15,8 +15,7 @@ on:
   workflow_dispatch: # allows manual trigger
 
 env:
-  RUST_FMT: 1.82
-  RUST_CLIPPY: 1.82
+  RUST_VERSION: 1.82
 
 jobs:
 
@@ -47,7 +46,7 @@ jobs:
       - name: Format
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
-          rustup default ${{ env.RUST_FMT }}
+          rustup default ${{ env.RUST_VERSION }}
           rustup component add rustfmt
           cargo fmt -- --color=always --check
 
@@ -69,7 +68,7 @@ jobs:
       - name: Format
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
-          rustup default ${{ env.RUST_CLIPPY }}
+          rustup default ${{ env.RUST_VERSION }}
           rustup component add rust-docs
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
@@ -94,7 +93,7 @@ jobs:
       - name: Format
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
-          rustup default ${{ env.RUST_FMT }}
+          rustup default ${{ env.RUST_VERSION }}
           rustup component add rustfmt
           cargo fmt -- --color=always --check
 
@@ -116,7 +115,7 @@ jobs:
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_CLIPPY }}
+          rustup default ${{ env.RUST_VERSION }}
           rustup component add clippy
           cargo clippy --color=always --tests --benches -- -Dclippy::all
 
@@ -142,7 +141,7 @@ jobs:
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_CLIPPY }}
+          rustup default ${{ env.RUST_VERSION }}
           rustup component add clippy
           cargo clippy --locked --features ${{ matrix.features }} --no-default-features --color=always --tests --benches -- -Dclippy::all
 
@@ -168,7 +167,7 @@ jobs:
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_CLIPPY }}
+          rustup default ${{ env.RUST_VERSION }}
           rustup component add clippy
           rustup target add wasm32-unknown-unknown
           cargo clippy --locked --color=always --tests -- -Dclippy::all
@@ -189,7 +188,7 @@ jobs:
       - name: Test
         working-directory: smart-contracts/${{ matrix.build-dir }}
         run: |
-          rustup default ${{ env.RUST_CLIPPY }}
+          rustup default ${{ env.RUST_VERSION }}
           cargo test
 
   "cargo_test_example_contracts":
@@ -215,7 +214,7 @@ jobs:
         working-directory: smart-contracts/rust-contracts/example-contracts/${{ matrix.example-contract }}
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          rustup default ${{ env.RUST_CLIPPY }}
+          rustup default ${{ env.RUST_VERSION }}
           cargo test --target x86_64-unknown-linux-gnu
 
   "wasm-core-spec_cargo_test":
@@ -229,6 +228,6 @@ jobs:
       - name: Test
         working-directory: smart-contracts/wasm-test
         run: |
-          rustup default ${{ env.RUST_CLIPPY }}
+          rustup default ${{ env.RUST_VERSION }}
           cargo build
           ./target/debug/wasm-test --dir ../testdata/wasm-spec-test-suite/core/
