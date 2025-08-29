@@ -299,7 +299,5 @@ impl TryFrom<WasmVersionInt> for WasmVersion {
 
 /// Wasm version int fallback definition
 impl WasmVersionInt {
-    pub const fn zero_version() -> WasmVersionInt{
-        WasmVersionInt(0)
-    }
+    pub const fn zero_version() -> WasmVersionInt { WasmVersionInt(0) }
 }
