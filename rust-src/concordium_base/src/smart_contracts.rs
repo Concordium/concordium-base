@@ -191,7 +191,7 @@ impl ContractTraceElement {
 /// transaction will generate one or more of these events, together with
 /// possibly some transfers.
 pub struct InstanceUpdatedEvent {
-    #[serde(default = "wasm_version_fallback")]
+    #[serde(default = "WasmVersionInt::zero_version")]
     pub contract_version: WasmVersionInt,
     /// Address of the affected instance.
     pub address:          ContractAddress,
@@ -297,5 +297,9 @@ impl TryFrom<WasmVersionInt> for WasmVersion {
     }
 }
 
-/// fallback version for the WasmVersionInt
-pub fn wasm_version_fallback() -> WasmVersionInt { WasmVersionInt(0) }
+/// Wasm version int fallback definition
+impl WasmVersionInt {
+    pub const fn zero_version() -> WasmVersionInt{
+        WasmVersionInt(0)
+    }
+}
